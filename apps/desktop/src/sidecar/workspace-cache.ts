@@ -33,6 +33,9 @@ export interface WorkspaceCachePartition {
 
 export interface WorkspaceRemoteObject {
   key: string;
+  eTag?: string;
+  size?: number;
+  lastModified?: string;
 }
 
 export interface WorkspaceObjectStore {
@@ -56,17 +59,21 @@ export interface WorkspaceSyncResult {
   deleted: number;
   total: number;
   cacheHit?: boolean;
+  cacheStale?: boolean;
 }
 
 export interface WorkspaceCacheOptions {
   cacheTtlMs?: number;
   now?: () => Date;
+  backgroundRefresh?: (refresh: () => Promise<void>) => void;
+  onBackgroundRefreshError?: (err: unknown) => void;
 }
 
 interface WorkspaceCacheManifest {
   prefix: string;
   syncedAt: string;
   total: number;
+  objects?: Record<string, string>;
 }
 
 export class WorkspaceBoundaryError extends Error {
@@ -105,26 +112,60 @@ export class WorkspaceCache {
       };
     }
 
+    const staleManifest = await this.readCacheManifest(localDir, prefix);
+    if (staleManifest && (await hasLocalWorkspaceFiles(localDir))) {
+      this.refreshInBackground(input, localDir, prefix);
+      await this.evictOldPartitions(input.partition.stage);
+      return {
+        localDir,
+        prefix,
+        synced: 0,
+        deleted: 0,
+        total: staleManifest.total,
+        cacheHit: true,
+        cacheStale: true,
+      };
+    }
+
+    return this.refreshFromRemote(input, localDir, prefix);
+  }
+
+  private async refreshFromRemote(
+    input: WorkspaceSyncInput,
+    localDir: string,
+    prefix: string,
+  ): Promise<WorkspaceSyncResult> {
     const remote = (
       await this.store.listObjects({
         bucket: input.bucket,
         prefix,
       })
-    )
-      .map((obj) => obj.key)
-      .filter((key) => key.startsWith(prefix))
-      .map((key) => key.slice(prefix.length))
-      .filter((rel) => rel && !SKIP_FILES.has(rel));
-    const remoteSet = new Set(remote);
+    );
+    const remoteEntries = remote
+      .filter((obj) => obj.key.startsWith(prefix))
+      .map((obj) => ({
+        key: obj.key,
+        rel: obj.key.slice(prefix.length),
+        signature: remoteObjectSignature(obj),
+      }))
+      .filter(({ rel }) => rel && !SKIP_FILES.has(rel));
+    const remoteSet = new Set(remoteEntries.map(({ rel }) => rel));
 
     let synced = 0;
-    for (const rel of remote) {
+    const priorObjects =
+      (await this.readCacheManifest(localDir, prefix))?.objects ?? {};
+    const nextObjects: Record<string, string> = {};
+    for (const { key, rel, signature } of remoteEntries) {
       assertSafeRelativePath(rel);
       const localPath = path.join(localDir, rel);
+      nextObjects[rel] = signature;
+      if (priorObjects[rel] === signature && (await fileExists(localPath))) {
+        continue;
+      }
       await mkdir(path.dirname(localPath), { recursive: true });
       const bytes = await this.store.getObjectBytes({
         bucket: input.bucket,
-        key: `${prefix}${rel}`,
+        key,
       });
       await writeFile(localPath, bytes);
       synced++;
@@ -132,27 +173,39 @@ export class WorkspaceCache {
 
     let deleted = 0;
     for (const rel of await listLocalFiles(localDir)) {
+      if (rel === CACHE_MANIFEST_FILE) continue;
       if (remoteSet.has(rel)) continue;
       await rm(path.join(localDir, rel), { force: true });
       deleted++;
     }
     await pruneEmptyDirs(localDir, localDir);
-    await writeFile(
-      path.join(localDir, CACHE_MANIFEST_FILE),
-      JSON.stringify(
-        {
-          prefix,
-          syncedAt: (this.options.now?.() ?? new Date()).toISOString(),
-          total: remote.length,
-        } satisfies WorkspaceCacheManifest,
-        null,
-        2,
-      ),
-      "utf8",
-    );
+    await this.writeManifest(localDir, {
+      prefix,
+      syncedAt: (this.options.now?.() ?? new Date()).toISOString(),
+      total: remoteEntries.length,
+      objects: nextObjects,
+    });
     await this.evictOldPartitions(input.partition.stage);
 
-    return { localDir, prefix, synced, deleted, total: remote.length };
+    return { localDir, prefix, synced, deleted, total: remoteEntries.length };
+  }
+
+  private refreshInBackground(
+    input: WorkspaceSyncInput,
+    localDir: string,
+    prefix: string,
+  ): void {
+    const refresh = async () => {
+      await this.refreshFromRemote(input, localDir, prefix);
+    };
+    const run = this.options.backgroundRefresh;
+    if (run) {
+      run(refresh);
+      return;
+    }
+    void refresh().catch((err) => {
+      this.options.onBackgroundRefreshError?.(err);
+    });
   }
 
   partitionPath(partition: WorkspaceCachePartition): string {
@@ -193,6 +246,22 @@ export class WorkspaceCache {
     const cacheTtlMs = this.options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     if (cacheTtlMs <= 0) return null;
 
+    const manifest = await this.readCacheManifest(localDir, prefix);
+    if (!manifest) return null;
+    const syncedAt = Date.parse(manifest.syncedAt);
+    if (!Number.isFinite(syncedAt)) return null;
+    const ageMs = (this.options.now?.() ?? new Date()).getTime() - syncedAt;
+    if (ageMs < 0 || ageMs > cacheTtlMs) return null;
+
+    const files = await listLocalFiles(localDir);
+    files.delete(CACHE_MANIFEST_FILE);
+    return files.size > 0 ? manifest : null;
+  }
+
+  private async readCacheManifest(
+    localDir: string,
+    prefix: string,
+  ): Promise<WorkspaceCacheManifest | null> {
     let manifest: WorkspaceCacheManifest;
     try {
       manifest = JSON.parse(
@@ -204,14 +273,18 @@ export class WorkspaceCache {
     if (manifest.prefix !== prefix || !Number.isFinite(manifest.total)) {
       return null;
     }
-    const syncedAt = Date.parse(manifest.syncedAt);
-    if (!Number.isFinite(syncedAt)) return null;
-    const ageMs = (this.options.now?.() ?? new Date()).getTime() - syncedAt;
-    if (ageMs < 0 || ageMs > cacheTtlMs) return null;
+    return manifest;
+  }
 
-    const files = await listLocalFiles(localDir);
-    files.delete(CACHE_MANIFEST_FILE);
-    return files.size > 0 ? manifest : null;
+  private async writeManifest(
+    localDir: string,
+    manifest: WorkspaceCacheManifest,
+  ): Promise<void> {
+    await writeFile(
+      path.join(localDir, CACHE_MANIFEST_FILE),
+      JSON.stringify(manifest, null, 2),
+      "utf8",
+    );
   }
 }
 
@@ -263,7 +336,14 @@ export function createS3WorkspaceObjectStore(
           }),
         );
         for (const obj of response.Contents ?? []) {
-          if (obj.Key) out.push({ key: obj.Key });
+          if (obj.Key) {
+            out.push({
+              key: obj.Key,
+              eTag: obj.ETag,
+              size: obj.Size,
+              lastModified: obj.LastModified?.toISOString(),
+            });
+          }
         }
         continuationToken = response.IsTruncated
           ? response.NextContinuationToken
@@ -301,6 +381,30 @@ async function listLocalFiles(localDir: string): Promise<Set<string>> {
   }
   await walk(localDir);
   return out;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    const info = await stat(filePath);
+    return info.isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function hasLocalWorkspaceFiles(localDir: string): Promise<boolean> {
+  const files = await listLocalFiles(localDir);
+  files.delete(CACHE_MANIFEST_FILE);
+  return files.size > 0;
+}
+
+function remoteObjectSignature(obj: WorkspaceRemoteObject): string {
+  return [
+    obj.key,
+    obj.eTag ?? "",
+    Number.isFinite(obj.size) ? String(obj.size) : "",
+    obj.lastModified ?? "",
+  ].join("\t");
 }
 
 async function pruneEmptyDirs(root: string, dir: string): Promise<void> {

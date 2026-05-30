@@ -31,6 +31,7 @@ export interface McpServerConfig {
   transport: "streamable-http" | "sse";
   auth?: { type: string; token: string };
   tools?: string[];
+  availableTools?: string[];
 }
 
 const db = getDb();
@@ -56,6 +57,7 @@ export async function buildMcpConfigs(
       transport: tenantMcpServers.transport,
       auth_type: tenantMcpServers.auth_type,
       auth_config: tenantMcpServers.auth_config,
+      tools: tenantMcpServers.tools,
       server_enabled: tenantMcpServers.enabled,
       server_status: tenantMcpServers.status,
       server_url_hash: tenantMcpServers.url_hash,
@@ -304,15 +306,20 @@ export async function buildMcpConfigs(
     }
 
     const assignCfg = (mcp.assignment_config as Record<string, unknown>) || {};
+    const toolAllowlist = Array.isArray(assignCfg.toolAllowlist)
+      ? (assignCfg.toolAllowlist as string[]).filter(
+          (tool): tool is string => typeof tool === "string",
+        )
+      : undefined;
+    const availableTools = extractMcpToolNames(mcp.tools);
     mcpConfigs.push({
       name: mcp.slug,
       url: mcp.url,
       transport:
         (mcp.transport as "streamable-http" | "sse") || "streamable-http",
       auth: token ? { type: "bearer", token } : undefined,
-      tools: Array.isArray(assignCfg.toolAllowlist)
-        ? (assignCfg.toolAllowlist as string[])
-        : undefined,
+      tools: toolAllowlist,
+      availableTools: availableTools.length > 0 ? availableTools : undefined,
     });
   }
 
@@ -323,4 +330,19 @@ export async function buildMcpConfigs(
   }
 
   return mcpConfigs;
+}
+
+function extractMcpToolNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const names = value
+    .map((tool) => {
+      if (typeof tool === "string") return tool;
+      if (!tool || typeof tool !== "object" || Array.isArray(tool)) {
+        return "";
+      }
+      const name = (tool as Record<string, unknown>).name;
+      return typeof name === "string" ? name : "";
+    })
+    .filter((name) => name.length > 0);
+  return [...new Set(names)];
 }

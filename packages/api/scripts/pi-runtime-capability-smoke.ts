@@ -284,7 +284,7 @@ async function sendMessage(args: Args, threadId: string, content: string) {
         threadId,
         role: "USER",
         content,
-        senderType: args.senderId ? "human" : "user",
+        senderType: "user",
         senderId: args.senderId,
       },
     },

@@ -22,6 +22,10 @@ class FakeStore implements WorkspaceObjectStore {
 
   constructor(private readonly files: Record<string, string>) {}
 
+  setFile(key: string, value: string): void {
+    this.files[key] = value;
+  }
+
   async listObjects(input: {
     bucket: string;
     prefix: string;
@@ -30,7 +34,11 @@ class FakeStore implements WorkspaceObjectStore {
     expect(input.bucket).toBe("workspace-bucket");
     return Object.keys(this.files)
       .filter((key) => key.startsWith(input.prefix))
-      .map((key) => ({ key }));
+      .map((key) => ({
+        key,
+        eTag: `fake-${this.files[key]}`,
+        size: new TextEncoder().encode(this.files[key]).byteLength,
+      }));
   }
 
   async getObjectBytes(input: {
@@ -120,6 +128,90 @@ describe("WorkspaceCache", () => {
     });
     expect(store.listCalls).toBe(1);
     expect(store.getCalls).toBe(1);
+  });
+
+  it("serves stale local files immediately and refreshes unchanged files in the background", async () => {
+    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    let now = new Date("2026-05-28T12:00:00.000Z");
+    const refreshes: Array<() => Promise<void>> = [];
+    const store = new FakeStore({
+      [`${prefix}AGENTS.md`]: "# Agent",
+      [`${prefix}space/SPACE.md`]: "# Space",
+    });
+    const cache = new WorkspaceCache(root, store, {
+      now: () => now,
+      backgroundRefresh: (refresh) => refreshes.push(refresh),
+    });
+
+    await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+    now = new Date("2026-05-28T12:10:00.000Z");
+    const cached = await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+
+    expect(cached).toMatchObject({
+      prefix,
+      synced: 0,
+      deleted: 0,
+      total: 2,
+      cacheHit: true,
+      cacheStale: true,
+    });
+    expect(refreshes).toHaveLength(1);
+    expect(store.listCalls).toBe(1);
+    expect(store.getCalls).toBe(2);
+
+    await refreshes[0]();
+    expect(store.listCalls).toBe(2);
+    expect(store.getCalls).toBe(2);
+  });
+
+  it("redownloads only changed remote objects during background refresh", async () => {
+    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    let now = new Date("2026-05-28T12:00:00.000Z");
+    const refreshes: Array<() => Promise<void>> = [];
+    const store = new FakeStore({
+      [`${prefix}AGENTS.md`]: "# Agent",
+      [`${prefix}space/SPACE.md`]: "# Space",
+    });
+    const cache = new WorkspaceCache(root, store, {
+      now: () => now,
+      backgroundRefresh: (refresh) => refreshes.push(refresh),
+    });
+
+    await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+    store.setFile(`${prefix}AGENTS.md`, "# Agent v2");
+    now = new Date("2026-05-28T12:10:00.000Z");
+    const cached = await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+
+    expect(cached).toMatchObject({
+      prefix,
+      synced: 0,
+      deleted: 0,
+      total: 2,
+      cacheHit: true,
+      cacheStale: true,
+    });
+    expect(refreshes).toHaveLength(1);
+    await refreshes[0]();
+    expect(store.getCalls).toBe(3);
+    await expect(readFile(join(cached.localDir, "AGENTS.md"), "utf8")).resolves.toBe(
+      "# Agent v2",
+    );
   });
 
   it("rejects rendered prefixes outside the tenant and agent scope", async () => {

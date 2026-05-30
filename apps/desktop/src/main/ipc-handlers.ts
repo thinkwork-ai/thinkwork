@@ -10,6 +10,7 @@ import {
   GET_PI_STATUS_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
+  PREWARM_PI_WORKSPACE_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   START_PI_TURN_CHANNEL,
   RAISE_THREAD_NOTIFICATION_CHANNEL,
@@ -22,6 +23,7 @@ import {
   GetUpdateStateRequestSchema,
   InstallUpdateRequestSchema,
   PiCancelTurnRequestSchema,
+  PiPrewarmWorkspaceRequestSchema,
   PiStartTurnRequestSchema,
   ReportInstallOutcomeRequestSchema,
   RaiseThreadNotificationRequestSchema,
@@ -43,7 +45,10 @@ import {
   createPiSidecarDiagnostics,
   disabledPiSidecarState,
 } from "./pi-sidecar-diagnostics.js";
-import { createPiRuntimeSessionPreparer } from "./pi-runtime-session-client.js";
+import {
+  createPiRuntimeSessionPreparer,
+  createPiWorkspacePrewarmPreparer,
+} from "./pi-runtime-session-client.js";
 import { createDesktopUpdatesController } from "./updates.js";
 
 export interface RegisterDesktopIpcHandlersOptions {
@@ -102,6 +107,10 @@ export async function registerDesktopIpcHandlers(
     (options.env.desktopLocalPiEnabled
       ? createPiSidecarController({
           prepareTurn: createPiRuntimeSessionPreparer({
+            env: options.env,
+            tokenSnapshot: () => storage.snapshot(),
+          }),
+          prepareWorkspacePrewarm: createPiWorkspacePrewarmPreparer({
             env: options.env,
             tokenSnapshot: () => storage.snapshot(),
           }),
@@ -169,6 +178,14 @@ export async function registerDesktopIpcHandlers(
       throw new Error("Desktop local Pi is disabled for this stage");
     }
     return piSidecar.startTurn(request);
+  });
+  ipcMain.handle(PREWARM_PI_WORKSPACE_CHANNEL, async (event, payload) => {
+    assertSafeSenderFrame(event);
+    const request = PiPrewarmWorkspaceRequestSchema.parse(payload);
+    if (!piSidecar) {
+      throw new Error("Desktop local Pi is disabled for this stage");
+    }
+    return piSidecar.prewarmWorkspace(request);
   });
   ipcMain.handle(CANCEL_PI_TURN_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);

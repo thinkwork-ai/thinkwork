@@ -570,11 +570,17 @@ describe("TaskThreadView", () => {
 
   it("reserves thread width for the info panel with details and downloadable attachments", async () => {
     const onDownloadAttachment = vi.fn();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
 
     render(
       <TaskThreadView
         thread={{
           id: "thread-1",
+          identifier: "CHAT-831",
           title: "CRM pipeline risk",
           lifecycleStatus: "COMPLETED",
           messages: [
@@ -588,6 +594,8 @@ describe("TaskThreadView", () => {
         infoPanelState={{
           isOpen: true,
           onOpenChange: vi.fn(),
+          threadId: "thread-1",
+          threadIdentifier: "CHAT-831",
           startedAt: "2026-05-18T20:50:00.000Z",
           startedBy: "Eric Odom",
           agents: ["Executive"],
@@ -653,6 +661,16 @@ describe("TaskThreadView", () => {
     expect(panel.className).toContain("overflow-hidden");
     expect(panel.className).toContain("md:grid");
     expect(within(panel).getByText(/May 18, 2026/)).toBeTruthy();
+    expect(within(panel).getByText("CHAT-831")).toBeTruthy();
+    expect(within(panel).getByText("thread-1")).toBeTruthy();
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Copy Thread number" }),
+    );
+    expect(writeText).toHaveBeenCalledWith("CHAT-831");
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Copy Thread ID" }),
+    );
+    expect(writeText).toHaveBeenCalledWith("thread-1");
     expect(within(panel).getByText("Triggered by Eric Odom")).toBeTruthy();
     expect(within(panel).queryByText("Agents involved")).toBeNull();
     expect(within(panel).queryByText("Executive")).toBeNull();

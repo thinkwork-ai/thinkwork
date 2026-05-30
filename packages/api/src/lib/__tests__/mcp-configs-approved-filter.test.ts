@@ -57,6 +57,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     transport: "tenantMcpServers.transport",
     auth_type: "tenantMcpServers.auth_type",
     auth_config: "tenantMcpServers.auth_config",
+    tools: "tenantMcpServers.tools",
     enabled: "tenantMcpServers.enabled",
     status: "tenantMcpServers.status",
     url_hash: "tenantMcpServers.url_hash",
@@ -112,6 +113,7 @@ function baseRow(over: Record<string, unknown> = {}) {
     server_enabled: true,
     server_status: "approved",
     server_url_hash: null,
+    tools: null,
     assignment_enabled: true,
     assignment_config: null,
     ...over,
@@ -199,6 +201,27 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
     const configs = await buildMcpConfigs("agent-1", null);
     expect(configs).toHaveLength(0);
     warn.mockRestore();
+  });
+
+  it("includes cached MCP tool names so desktop Pi can enforce allowlist exclusions", async () => {
+    mockRowsForJoin.mockReturnValue([
+      baseRow({
+        auth_type: "none",
+        assignment_config: { toolAllowlist: ["opportunities_list"] },
+        tools: [
+          { name: "opportunities_list", description: "List opportunities" },
+          { name: "accounts_list", description: "List accounts" },
+        ],
+      }),
+    ]);
+
+    const configs = await buildMcpConfigs("agent-1", null);
+
+    expect(configs[0]).toMatchObject({
+      name: "test-server",
+      tools: ["opportunities_list"],
+      availableTools: ["opportunities_list", "accounts_list"],
+    });
   });
 
   it("per-user OAuth looks up the active token by user_id and returns bearer auth", async () => {

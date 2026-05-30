@@ -6,6 +6,8 @@ import type {
   PiCancelTurnRequest,
   PiCancelTurnResponse,
   PiDiagnosticEvent,
+  PiPrewarmWorkspaceRequest,
+  PiPrewarmWorkspaceResponse,
   PiSidecarState,
   PiSidecarStatus,
   PiStartTurnRequest,
@@ -29,6 +31,9 @@ export type Unsubscribe = () => void;
 export interface PiBridge {
   status: PiSidecarStatus;
   getStatus(): Promise<PiSidecarState>;
+  prewarmWorkspace(
+    request: PiPrewarmWorkspaceRequest,
+  ): Promise<PiPrewarmWorkspaceResponse>;
   startTurn(request: PiStartTurnRequest): Promise<PiStartTurnResponse>;
   cancelTurn(request: PiCancelTurnRequest): Promise<PiCancelTurnResponse>;
   onStatusChanged(listener: (state: PiSidecarState) => void): Unsubscribe;

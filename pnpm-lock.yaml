@@ -328,6 +328,9 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 0.76.0
         version: 0.76.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
       '@thinkwork/desktop-ipc':
         specifier: workspace:*
         version: link:../../packages/desktop-ipc
@@ -340,6 +343,9 @@ importers:
       electron-updater:
         specifier: 6.8.3
         version: 6.8.3
+      pi-mcp-adapter:
+        specifier: 2.8.0
+        version: 2.8.0(@cfworker/json-schema@4.1.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(ws@8.20.0)(zod@4.3.6)
       typebox:
         specifier: ^1.1.38
         version: 1.1.38
@@ -3261,6 +3267,11 @@ packages:
     resolution: {integrity: sha512-gNfR+ScnyAKr/13K8129svRBwO48jIK4jBHZRLaj3l4inKRkCRyCGs6hZnyQCYeiVNbBt1Jcjvb7osss44Q9xw==}
     engines: {node: '>=22.19.0'}
 
+  '@earendil-works/pi-ai@0.74.2':
+    resolution: {integrity: sha512-ukQBHGDm20k9ZUS2cGjNN9vDJp/48r35xmvgSx3paCaC06r2N/PLuRZoJmwQ1ZM7f8T3072odv9YPWn+77w0LA==}
+    engines: {node: '>=20.0.0'}
+    hasBin: true
+
   '@earendil-works/pi-ai@0.76.0':
     resolution: {integrity: sha512-RO/L80iTxkK/nM2s5IVuirjH04UBsVzFfAT0qVcP/VwtDe9pjpqL+BVqb3XTyfitTD9tBo/hQuKmagN8Ep5qZA==}
     engines: {node: '>=22.19.0'}
@@ -3270,6 +3281,10 @@ packages:
     resolution: {integrity: sha512-vTnKbgw1rDQq2MD+vcWgyYvEPMV4mMb07tZZMS7FOvlS5t/jzIX9smC+k97YGpfl8dT+L9Uj+MYyvYSBXVaEHw==}
     engines: {node: '>=22.19.0'}
     hasBin: true
+
+  '@earendil-works/pi-tui@0.74.2':
+    resolution: {integrity: sha512-valQPz74qbdydRqII6t9rJ46YANMOOJeDhKm25a1ZrWvWwdjAaAEu6s3ur/LWz84Wkkwcbub2ZkVjzCZi8gFGA==}
+    engines: {node: '>=20.0.0'}
 
   '@earendil-works/pi-tui@0.76.0':
     resolution: {integrity: sha512-TWQEWqc38gVRYr/VTrlfePQPpJk938gNNLL1xuv0M+9cTkVr880/Q3baZQrxKoLrmN/MmVx7TyR8knYZGxTqqg==}
@@ -5137,6 +5152,20 @@ packages:
   '@mistralai/mistralai@2.2.1':
     resolution: {integrity: sha512-uKU8CZmL2RzYKmplsU01hii4p3pe4HqJefpWNRWXm1Tcm0Sm4xXfwSLIy4k7ZCPlbETCGcp69E7hZs+WOJ5itQ==}
 
+  '@modelcontextprotocol/ext-apps@1.7.2':
+    resolution: {integrity: sha512-OOWKDxdAjYDcgHkmzVzccyyag3FK+jBWPaWu4WvTxFsU4R/cgOX4eep66zPRA5n4v6WfxUNibPyvX4iJ7egYTg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@modelcontextprotocol/sdk': ^1.29.0
+      react: ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
+
   '@modelcontextprotocol/sdk@1.29.0':
     resolution: {integrity: sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==}
     engines: {node: '>=18'}
@@ -5382,6 +5411,10 @@ packages:
     resolution: {integrity: sha512-8eOCmB8lnpyvwz+HrcTXLuBxhj7UseAFh6KGEXRe8UCcAfVQih+qPy/4akJRezViI+ONijz9oi7HpMkw9rdtBg==}
     cpu: [x64]
     os: [win32]
+
+  '@pkgr/core@0.1.2':
+    resolution: {integrity: sha512-fdDH1LSGfZdTH2sxdpVMw31BanV28K/Gry0cVFxaNP77neJSkd82mM8ErPNYs9e+0O7SdHBLTDzDgwUuy18RnQ==}
+    engines: {node: ^12.20.0 || ^14.18.0 || >=16.0.0}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -10842,6 +10875,9 @@ packages:
     resolution: {integrity: sha512-dhG34DXATL5hSxJbIexCft8FChFXtmskoZYnoPWjXQuebWYCNkVeV3KkGegCK9CP1oswI/vQibS2GY7Em/sJJA==}
     engines: {node: '>= 8'}
 
+  koffi@2.16.2:
+    resolution: {integrity: sha512-owU0MRwv6xkrVqCd+33uw6BaYppkTRXbO/rVdJNI2dvZG0gzyRhYwW25eWtc5pauwK8TGh3AbkFONSezdykfSA==}
+
   lan-network@0.1.7:
     resolution: {integrity: sha512-mnIlAEMu4OyEvUNdzco9xpuB9YVcPkQec+QsgycBCtPZvEqWPCDPfbAE4OJMdBBWpZWtpCn1xw9jJYlwjWI5zQ==}
     hasBin: true
@@ -12252,6 +12288,12 @@ packages:
   pgpass@1.0.5:
     resolution: {integrity: sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==}
 
+  pi-mcp-adapter@2.8.0:
+    resolution: {integrity: sha512-xkmfRJiJ79Yfffuk3cl37KCkqhPys3/yKUo2kk4o9Te04i45I/mSdgWsHTtAsuat5QcvQCXBkvEPGwK/t7UdYA==}
+    hasBin: true
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+
   piccolore@0.1.3:
     resolution: {integrity: sha512-o8bTeDWjE086iwKrROaDf31K0qC/BENdm15/uH9usSC/uZjJOKb2YGiVHfLY4GhwsERiPI1jmwI2XrA7ACOxVw==}
 
@@ -12803,6 +12845,33 @@ packages:
     peerDependencies:
       react: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  recheck-jar@4.5.0:
+    resolution: {integrity: sha512-Ad7oCQmY8cQLzd3QVNXjzZ+S6MbImGhR4AaW2yiGzteOfMV45522rt6nSzFyt8p3mCEaMcm/4MoZrMSxUcCbrA==}
+
+  recheck-linux-x64@4.5.0:
+    resolution: {integrity: sha512-52kXsR/v+IbGIKYYFZfSZcgse/Ci9IA2HnuzrtvRRcfODkcUGe4n72ESQ8nOPwrdHFg9i4j9/YyPh1HWWgpJ6A==}
+    cpu: [x64]
+    os: [linux]
+
+  recheck-macos-arm64@4.5.0:
+    resolution: {integrity: sha512-qIyK3dRuLkORQvv0b59fZZRXweSmjjWaoA4K8Kgifz0anMBH4pqsDV6plBlgjcRmW9yC12wErIRzifREaKnk2w==}
+    cpu: [arm64]
+    os: [darwin]
+
+  recheck-macos-x64@4.5.0:
+    resolution: {integrity: sha512-1wp/eiLxcjC/Ex4wurlrS/LGzt8IiF4TiK5sEjldu4HVAKdNCnnmsS9a5vFpfcikDz4ZuZlLlTi1VbQTxHlwZg==}
+    cpu: [x64]
+    os: [darwin]
+
+  recheck-windows-x64@4.5.0:
+    resolution: {integrity: sha512-ekBKwAp0oKkMULn5zgmHEYLwSJfkfb95AbTtbDkQazNkqYw9PRD/mVyFUR6Ff2IeRyZI0gxy+N2AKBISWydhug==}
+    cpu: [x64]
+    os: [win32]
+
+  recheck@4.5.0:
+    resolution: {integrity: sha512-kPnbOV6Zfx9a25AZ++28fI1q78L/UVRQmmuazwVRPfiiqpMs+WbOU69Shx820XgfKWfak0JH75PUvZMFtRGSsw==}
+    engines: {node: '>=20'}
 
   recma-build-jsx@1.0.0:
     resolution: {integrity: sha512-8GtdyqaBcDfva+GUKDr3nev3VpKAhup1+RvkMvUxURHpW7QyIvk9F5wz7Vzo06CEMSilw6uArgRqhpiUcWp8ew==}
@@ -13573,6 +13642,10 @@ packages:
   sync-fetch@0.6.0-2:
     resolution: {integrity: sha512-c7AfkZ9udatCuAy9RSfiGPpeOKKUAUK5e1cXadLOGUjasdxqYqAK0jTNkM/FSEyJ3a5Ra27j/tw/PS0qLmaF/A==}
     engines: {node: '>=18'}
+
+  synckit@0.9.2:
+    resolution: {integrity: sha512-vrozgXDQwYO72vHjUb/HnFbQx1exDjoKzqx23aXEg2a9VIg2TSFZ8FmeZpTjUCFMYw7mpX4BE2SFu8wI7asYsw==}
+    engines: {node: ^14.18.0 || >=16.0.0}
 
   tagged-tag@1.0.0:
     resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
@@ -18674,6 +18747,25 @@ snapshots:
       - ws
       - zod
 
+  '@earendil-works/pi-ai@0.74.2(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.91.1(zod@4.3.6)
+      '@aws-sdk/client-bedrock-runtime': 3.1048.0
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))
+      '@mistralai/mistralai': 2.2.1
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
+      openai: 6.26.0(ws@8.20.0)(zod@4.3.6)
+      partial-json: 0.1.7
+      typebox: 1.1.38
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
+
   '@earendil-works/pi-ai@0.76.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.91.1(zod@4.3.6)
@@ -18722,6 +18814,13 @@ snapshots:
       - utf-8-validate
       - ws
       - zod
+
+  '@earendil-works/pi-tui@0.74.2':
+    dependencies:
+      get-east-asian-width: 1.6.0
+      marked: 15.0.12
+    optionalDependencies:
+      koffi: 2.16.2
 
   '@earendil-works/pi-tui@0.76.0':
     dependencies:
@@ -20742,6 +20841,15 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  '@modelcontextprotocol/ext-apps@1.7.2(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(zod@4.3.6)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
+      '@standard-schema/spec': 1.1.0
+      zod: 4.3.6
+    optionalDependencies:
+      react: 19.1.0
+      react-dom: 19.1.0(react@19.1.0)
+
   '@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)':
     dependencies:
       '@hono/node-server': 1.19.13(hono@4.12.12)
@@ -21012,6 +21120,8 @@ snapshots:
 
   '@pagefind/windows-x64@1.5.0':
     optional: true
+
+  '@pkgr/core@0.1.2': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -27658,6 +27768,9 @@ snapshots:
 
   klona@2.0.6: {}
 
+  koffi@2.16.2:
+    optional: true
+
   lan-network@0.1.7: {}
 
   langium@4.2.3:
@@ -29282,7 +29395,6 @@ snapshots:
       define-lazy-prop: 3.0.0
       is-inside-container: 1.0.0
       wsl-utils: 0.1.0
-    optional: true
 
   open@11.0.0:
     dependencies:
@@ -29576,6 +29688,25 @@ snapshots:
   pgpass@1.0.5:
     dependencies:
       split2: 4.2.0
+
+  pi-mcp-adapter@2.8.0(@cfworker/json-schema@4.1.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(ws@8.20.0)(zod@4.3.6):
+    dependencies:
+      '@earendil-works/pi-ai': 0.74.2(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
+      '@earendil-works/pi-tui': 0.74.2
+      '@modelcontextprotocol/ext-apps': 1.7.2(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
+      open: 10.2.0
+      recheck: 4.5.0
+      typebox: 1.1.38
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - bufferutil
+      - react
+      - react-dom
+      - supports-color
+      - utf-8-validate
+      - ws
 
   piccolore@0.1.3: {}
 
@@ -30271,6 +30402,31 @@ snapshots:
       recharts-scale: 0.4.5
       tiny-invariant: 1.3.3
       victory-vendor: 36.9.2
+
+  recheck-jar@4.5.0:
+    optional: true
+
+  recheck-linux-x64@4.5.0:
+    optional: true
+
+  recheck-macos-arm64@4.5.0:
+    optional: true
+
+  recheck-macos-x64@4.5.0:
+    optional: true
+
+  recheck-windows-x64@4.5.0:
+    optional: true
+
+  recheck@4.5.0:
+    dependencies:
+      synckit: 0.9.2
+    optionalDependencies:
+      recheck-jar: 4.5.0
+      recheck-linux-x64: 4.5.0
+      recheck-macos-arm64: 4.5.0
+      recheck-macos-x64: 4.5.0
+      recheck-windows-x64: 4.5.0
 
   recma-build-jsx@1.0.0:
     dependencies:
@@ -31312,6 +31468,11 @@ snapshots:
       node-fetch: 3.3.2
       timeout-signal: 2.0.0
       whatwg-mimetype: 4.0.0
+
+  synckit@0.9.2:
+    dependencies:
+      '@pkgr/core': 0.1.2
+      tslib: 2.8.1
 
   tagged-tag@1.0.0: {}
 
@@ -32449,7 +32610,6 @@ snapshots:
   wsl-utils@0.1.0:
     dependencies:
       is-wsl: 3.1.1
-    optional: true
 
   wsl-utils@0.3.1:
     dependencies:

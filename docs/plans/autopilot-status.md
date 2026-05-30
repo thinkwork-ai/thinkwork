@@ -177,6 +177,84 @@ Target branch: `main`
   and deleted the remote/local U10 branch.
 - Autopilot run complete: U7, U8, U9, and U10 are merged into `main`.
 
+### Post-Run Desktop Smoke Follow-Up
+
+- 2026-05-30 Desktop app smoke found the first local Pi bash check failed:
+  the desktop sidecar passed only read-only workspace built-ins
+  (`read`, `grep`, `find`, `ls`) into the Pi SDK allowlist, and the desktop
+  system prompt still told Local Pi not to shell out. The activity drawer
+  displayed the lifecycle and gated console log correctly, but the turn was a
+  product failure because the model could not call `bash`.
+- Follow-up branch `codex/pi-e2e-smoke` fixes Desktop Local Pi to use the
+  shared `BUILTIN_TOOL_NAMES` allowlist and updates the desktop system prompt
+  to allow `bash` inside the rendered app workspace while preserving local
+  filesystem/clipboard/screenshot restrictions.
+- Verified from the actual Desktop app:
+  Local Pi thread `CHAT-868` (`05338601-751c-418d-8ded-7877e6b334ce`) called
+  `bash` and replied `LOCAL_PI_BASH_SMOKE_102530`; managed AgentCore Pi thread
+  `CHAT-869` (`028bec6b-0999-4893-a661-748e49fc9ff5`) called `bash` and replied
+  `AGENTCORE_PI_BASH_SMOKE_102800`.
+- The Desktop thread Info Panel now shows copyable `thread.identifier`
+  (`CHAT-*`) and `thread.id` (UUID) rows, verified in-app by copying both
+  values to the macOS clipboard.
+- Desktop Local Pi performance follow-up found that a stale workspace cache
+  caused turn preparation to re-list and rehydrate the whole rendered workspace
+  (`343` synced files in `CHAT-870`) on the critical turn path. The branch now
+  adds a transparent workspace prewarm request when the New Thread view loads,
+  plus stale-while-revalidate cache behavior and object signatures so turns can
+  use an existing local cache immediately while remote refresh happens in the
+  background.
+- Focused verification for the performance follow-up passed:
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/handlers/desktop-workspace-prewarm.test.ts src/handlers/desktop-runtime-session.test.ts`,
+  `pnpm --filter @thinkwork/spaces test -- src/components/workbench/SpacesWorkbench.test.tsx`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/spaces typecheck`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/desktop-ipc typecheck`, and `git diff --check`.
+- Desktop dev-server E2E verification passed against the worktree Electron app
+  (not Canary): Local Pi warmed-cache thread `CHAT-871`
+  (`578d8e36-3d23-43a6-9b15-c74637585f32`) replied exactly
+  `LOCAL_PI_WARMED_CACHE_SMOKE_105730`, recorded `duration_ms = 3445`, and
+  called no tools. Sidecar logs for the turn showed
+  `synced:0`, `total:343`, `cacheHit:true`, and `cacheStale:true`, confirming
+  that the stale 343-file workspace refresh no longer blocks the turn path.
+- The speculative New Thread workspace prewarm is best-effort. Until the new
+  API route is deployed, the dev app logs the missing route as
+  `workspace prewarm skipped` instead of surfacing an IPC failure.
+- Desktop Local Pi MCP smoke before the adapter pivot proved the direct bridge
+  could register/call the CRM MCP tool but failed authentication:
+  thread `CHAT-872` (`8a1b11ff-83ae-4324-9749-a291081c9ab0`) first turn
+  `848373f4-e8a2-45ff-89a9-4181d08f6d63` called
+  `mcp_lastmile-crm_opportunities_list` and returned
+  `LOCAL_PI_MCP_TOOL_FAILED_110500`; follow-up turn
+  `19a1f0fa-d85e-4bd1-9f5c-8c27fa07f4bd` called
+  `mcp_lastmile-crm_crm_schema` and surfaced
+  `Invalid Authorization header format (expected Bearer token)`. Root cause:
+  the desktop direct MCP bridge leaked its internal auth-handle scheme through
+  the production transport instead of resolving it to a Bearer token at the
+  actual MCP server request.
+- MCP direction updated to a thin ThinkWork wrapper around
+  `pi-mcp-adapter@2.8.0`: Desktop writes an ephemeral per-turn
+  `.thinkwork-pi/mcp.json`, loads a generated resource-loader extension that
+  imports `pi-mcp-adapter`, passes connector bearer tokens only through unique
+  process env var names, and cleans those env vars after the turn. No bearer
+  token is written to disk.
+- MCP policy enforcement is fail-closed for assigned servers with an explicit
+  tool allowlist but no cached inventory. When cached tool names are available,
+  Desktop computes `excludeTools` from the server inventory minus the
+  assignment allowlist, so `pi-mcp-adapter` filters proxy search/list/describe
+  as well as direct-tool views.
+- Local adapter-wrapper verification passed:
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/handlers/desktop-workspace-prewarm.test.ts src/handlers/desktop-runtime-session.test.ts src/lib/__tests__/mcp-configs-approved-filter.test.ts`,
+  `pnpm --filter @thinkwork/spaces test -- src/components/workbench/SpacesWorkbench.test.tsx`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/spaces typecheck`,
+  `pnpm --filter @thinkwork/desktop-ipc typecheck`, and `git diff --check`.
+
 ## Prior Run: Desktop Local Pi Sidecar
 
 Plan:
@@ -2544,6 +2622,70 @@ Target branch: `main`
 ## Blockers
 
 None.
+
+# Pi Extensions U7 Desktop E2E Smoke - 2026-05-30
+
+## Status
+
+- Branch: `codex/pi-e2e-smoke`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/1859
+- Latest pushed commit after rebasing onto `origin/main`: `fix(pi): enable desktop local MCP adapter`
+- Focus: Desktop Local Pi runtime smoke coverage for U7 capability extensions, especially MCP.
+
+## MCP Adapter Direction
+
+- Switched Desktop Local Pi MCP from a direct ThinkWork bridge to a thin ThinkWork wrapper around `pi-mcp-adapter@2.8.0`.
+- ThinkWork writes a per-turn `.thinkwork-pi/mcp.json` plus a generated `extensions/thinkwork-mcp-adapter.ts` wrapper.
+- Bearer tokens are resolved into unique per-turn environment variables and removed after cleanup; the generated config only contains `bearerTokenEnv`, not bearer secrets.
+- MCP server allowlists are enforced by converting the prepared assignment tools plus cached server inventory into `excludeTools`; if cached inventory is missing for an allowlisted server, the local adapter config rejects the server fail-closed.
+
+## Debug Notes
+
+- Direct MCP bridge smoke failed in `CHAT-872` / `8a1b11ff-83ae-4324-9749-a291081c9ab0`: `opportunities_list` initially failed with `LOCAL_PI_MCP_TOOL_FAILED_110500`; follow-up `crm_schema` showed the direct bridge leaked an auth handle into the server as `Authorization: Handle <uuid>` instead of `Bearer <token>`.
+- First adapter smoke exposed the `mcp` proxy tool but returned `MCP not initialized`.
+- Root cause: Desktop supplied `sessionStartEvent` metadata to the Pi SDK without `type: "session_start"`, so `bindExtensions()` emitted an event with no type and `pi-mcp-adapter` never ran its `session_start` lifecycle hook. The adapter tool was registered at load time, but its state stayed null.
+- Fix: Desktop Local Pi now includes `type: "session_start"` and `reason: "startup"` in the SDK `sessionStartEvent`.
+- Observability fix: when Desktop Local Pi routes an unsupported selected model such as `moonshotai.kimi-k2.5` to Bedrock fallback, the finalize payload now records the resolved Bedrock model id so the activity UI does not imply Kimi served the turn.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts` - passed.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts test/sidecar/local-turn-runner.test.ts` - passed.
+- `pnpm --filter @thinkwork/api test -- src/handlers/desktop-workspace-prewarm.test.ts src/handlers/desktop-runtime-session.test.ts src/lib/__tests__/mcp-configs-approved-filter.test.ts` - passed.
+- `pnpm --filter @thinkwork/spaces test -- src/components/workbench/SpacesWorkbench.test.tsx` - passed.
+- `pnpm --filter @thinkwork/spaces typecheck` - passed.
+- `pnpm --filter @thinkwork/desktop-ipc typecheck` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `git diff --check` - passed.
+- Post-rebase `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts` - passed.
+- Post-rebase `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- Post-rebase `git diff --check` - passed.
+- Desktop dev app smoke from the Electron dev server, not Canary:
+  - Thread `CHAT-875` / `b4758da9-94ad-4d0f-949f-ac0d70890ee8`
+  - Turn `7d26625d-6abe-4821-b3a7-ecc27df48cd6`
+  - Prompt sent as a real user message through the Desktop UI.
+  - Activity drawer: `Local Pi · moonshotai.kimi-k2.5 · succeeded · 37.7s · 12 in / 716 out`, `Using mcp`.
+  - Sidecar activity showed transparent cache behavior: `synced:0`, `total:343`, `cacheHit:true`, `cacheStale:true`.
+  - Assistant response: `LOCAL_PI_MCP_ADAPTER_OK_114100 50`.
+  - DB row: status `succeeded`, runtime `pi`, `tools_called=["mcp"]`, `duration_ms=36148`.
+- Desktop Local Pi natural-language CRM smoke, same Desktop dev app thread:
+  - Turn `39f67e0c-d35d-40b2-920a-a61bdd15b9a1`
+  - Prompt asked for the 5 most recent opportunities using only MCP.
+  - Activity drawer: `Worked for 26s`, `Using mcp`.
+  - Sidecar activity again showed `synced:0`, `total:343`, `cacheHit:true`.
+  - DB row: status `succeeded`, `tools_called=["mcp"]`, `duration_ms=24770`.
+  - Assistant returned exactly five opportunity ids/names:
+    1. `task_d5adjuus73codrintddm4a6h - Harlow food stores`
+    2. `task_x95tbzro3xmdo0vxqrsitj4b - Anderson Columbia`
+    3. `task_lhd4n6xu0pe5841t1y0d6pu6 - SHC Aware HS 46 Hydaulic Oil`
+    4. `task_jt37s0zbj4o2fcwor0252ofe - Aldape auto center`
+    5. `task_oamnqop2yecj0i53fzm5h0dm - Border Tire`
+
+## Remaining Follow-Up
+
+- Performance is still not at the target. Workspace sync is no longer blocking the turn, but the live Local Pi smoke still took about 38s, mostly after prompt start. Need break down Pi SDK/model startup, Bedrock fallback latency, adapter lazy connect, and first MCP metadata refresh.
+- Need run the equivalent AgentCore Pi smoke after the local MCP path is stable.
 
 # Customer Onboarding Progress Follow-Up - 2026-05-25
 

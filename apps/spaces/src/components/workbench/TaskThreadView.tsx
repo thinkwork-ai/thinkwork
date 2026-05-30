@@ -9,6 +9,7 @@ import {
   ChevronUp,
   CircleDashed,
   Code2,
+  Copy,
   Database,
   Download,
   FileText,
@@ -148,6 +149,7 @@ export interface CurrentUserIdentity {
 
 export interface TaskThread {
   id: string;
+  identifier?: string | null;
   title?: string | null;
   status?: string | null;
   lifecycleStatus?: string | null;
@@ -213,6 +215,8 @@ export interface TaskThreadArtifactPanelState {
 export interface TaskThreadInfoPanelState {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  threadId?: string | null;
+  threadIdentifier?: string | null;
   startedAt?: string | null;
   startedBy?: string | null;
   agents: string[];
@@ -654,6 +658,15 @@ function ThreadInfoPanel({
           <section className="border-t border-white/10 pt-4">
             <h2 className="mb-3 text-sm font-medium text-white/55">Thread</h2>
             <div className="space-y-3">
+              {state.threadIdentifier ? (
+                <InfoPanelCopyRow
+                  label="Thread number"
+                  value={state.threadIdentifier}
+                />
+              ) : null}
+              {state.threadId ? (
+                <InfoPanelCopyRow label="Thread ID" value={state.threadId} />
+              ) : null}
               <InfoPanelInlineRow
                 icon={<CalendarDays className="size-4" />}
                 value={startedAt || "Unknown"}
@@ -1285,6 +1298,53 @@ function InfoPanelInlineRow({
       <span className="shrink-0 text-white/45">{icon}</span>
       <span className="truncate">{value}</span>
     </div>
+  );
+}
+
+function InfoPanelCopyRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API is unavailable.");
+      }
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch (err) {
+      console.warn("[ThreadInfoPanel] clipboard write failed", err);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className="group flex min-w-0 items-center gap-2 text-left text-sm text-white/75 transition hover:text-white"
+      aria-label={`Copy ${label}`}
+      title={`Copy ${label}`}
+      onClick={handleCopy}
+    >
+      <span className="shrink-0 text-white/45 group-hover:text-white/65">
+        <Copy className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[11px] uppercase tracking-normal text-white/35">
+          {label}
+        </span>
+        <span className="block truncate font-mono text-xs text-white/80">
+          {value}
+        </span>
+      </span>
+      {copied ? (
+        <span className="shrink-0 text-xs text-white/45">Copied</span>
+      ) : null}
+    </button>
   );
 }
 

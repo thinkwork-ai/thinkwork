@@ -1,4 +1,8 @@
-import type { PiStartTurnRequest } from "@thinkwork/desktop-ipc";
+import type {
+  PiPrewarmWorkspaceRequest,
+  PiStartTurnRequest,
+} from "@thinkwork/desktop-ipc";
+import type { PreparedDesktopPiWorkspacePrewarmSession } from "./pi-sidecar-session.js";
 import type { PreparedDesktopPiRuntimeSession } from "@thinkwork/pi-runtime-core";
 import type { DesktopEnvSnapshot } from "./env.js";
 
@@ -11,6 +15,10 @@ export interface PiRuntimeSessionClientOptions {
 export type PreparePiRuntimeSession = (
   request: PiStartTurnRequest,
 ) => Promise<PreparedDesktopPiRuntimeSession>;
+
+export type PreparePiWorkspacePrewarmSession = (
+  request: PiPrewarmWorkspaceRequest,
+) => Promise<PreparedDesktopPiWorkspacePrewarmSession>;
 
 export function createPiRuntimeSessionPreparer(
   options: PiRuntimeSessionClientOptions,
@@ -57,6 +65,48 @@ export function createPiRuntimeSessionPreparer(
   };
 }
 
+export function createPiWorkspacePrewarmPreparer(
+  options: PiRuntimeSessionClientOptions,
+): PreparePiWorkspacePrewarmSession {
+  return async (request) => {
+    const apiUrl = options.env.apiUrl?.replace(/\/$/, "");
+    if (!apiUrl) {
+      throw new Error("Desktop API URL is not configured");
+    }
+    const idToken = resolveCognitoIdToken(
+      options.tokenSnapshot(),
+      options.env.cognito.clientId,
+    );
+    if (!idToken) {
+      throw new Error("No authenticated Cognito desktop session is available");
+    }
+
+    const response = await (options.fetchImpl ?? fetch)(
+      `${apiUrl}/api/desktop/workspace-prewarm`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          agentId: request.agentId,
+          spaceId: request.spaceId,
+        }),
+      },
+    );
+    const json = (await response.json()) as unknown;
+    if (!response.ok || !isPreparedWorkspacePrewarmResponse(json)) {
+      const error = readRecord(json);
+      throw new Error(
+        stringValue(error?.error) ??
+          `Desktop workspace prewarm preparation failed (${response.status})`,
+      );
+    }
+    return json.session;
+  };
+}
+
 export function resolveCognitoIdToken(
   items: Record<string, string>,
   clientId: string | null,
@@ -83,6 +133,25 @@ function isPreparedSessionResponse(
     typeof invocation.assistant_id === "string" &&
     typeof invocation.thread_id === "string" &&
     invocation.runtime_host === "desktop-local"
+  );
+}
+
+function isPreparedWorkspacePrewarmResponse(
+  value: unknown,
+): value is { ok: true; session: PreparedDesktopPiWorkspacePrewarmSession } {
+  const obj = readRecord(value);
+  const session = readRecord(obj?.session);
+  const workspace = readRecord(session?.workspace);
+  const partition = readRecord(session?.partition);
+  return (
+    obj?.ok === true &&
+    typeof session?.expiresAt === "string" &&
+    typeof workspace?.bucket === "string" &&
+    typeof workspace.renderedPrefix === "string" &&
+    typeof partition?.tenantSlug === "string" &&
+    typeof partition.agentSlug === "string" &&
+    typeof partition.spaceId === "string" &&
+    typeof partition.userId === "string"
   );
 }
 

@@ -9,9 +9,35 @@ export interface PiSidecarTurnPayload {
   workspaceCacheRoot: string;
 }
 
+export interface PreparedDesktopPiWorkspacePrewarmSession {
+  expiresAt: string;
+  sidecarCredentials: unknown;
+  workspace: {
+    bucket: string;
+    renderedPrefix: string;
+  };
+  partition: {
+    stage?: string;
+    tenantSlug: string;
+    agentSlug: string;
+    spaceId: string;
+    userId: string;
+  };
+}
+
+export interface PiSidecarWorkspacePrewarmPayload {
+  session: PreparedDesktopPiWorkspacePrewarmSession;
+  workspaceCacheRoot: string;
+}
+
 export type PiSidecarParentMessage =
   | {
       type: "ping";
+    }
+  | {
+      type: "prewarm-workspace";
+      requestId: string;
+      payload: PiSidecarWorkspacePrewarmPayload;
     }
   | {
       type: "start-turn";
@@ -29,11 +55,11 @@ export function isPiSidecarParentMessage(
   if (!message || typeof message !== "object") return false;
   const candidate = message as { type?: unknown; requestId?: unknown };
   if (candidate.type === "ping") return true;
-  if (
-    (candidate.type === "start-turn" || candidate.type === "cancel-turn") &&
-    typeof candidate.requestId === "string"
-  ) {
-    return candidate.type === "cancel-turn" || isPiSidecarTurnPayload(message);
+  if (typeof candidate.requestId !== "string") return false;
+  if (candidate.type === "cancel-turn") return true;
+  if (candidate.type === "start-turn") return isPiSidecarTurnPayload(message);
+  if (candidate.type === "prewarm-workspace") {
+    return isPiSidecarWorkspacePrewarmPayload(message);
   }
   return false;
 }
@@ -49,6 +75,10 @@ export type PiSidecarChildMessage =
     }
   | {
       type: "turn-accepted";
+      requestId: string;
+    }
+  | {
+      type: "workspace-prewarm-accepted";
       requestId: string;
     }
   | {
@@ -104,6 +134,36 @@ function isPiSidecarTurnPayload(
   return (
     typeof candidate.workspaceCacheRoot === "string" &&
     candidate.session?.invocation?.runtime_host === "desktop-local"
+  );
+}
+
+function isPiSidecarWorkspacePrewarmPayload(
+  message: unknown,
+): message is { payload: PiSidecarWorkspacePrewarmPayload } {
+  const payload = (message as { payload?: unknown }).payload;
+  if (!payload || typeof payload !== "object") return false;
+  const candidate = payload as {
+    workspaceCacheRoot?: unknown;
+    session?: {
+      expiresAt?: unknown;
+      workspace?: { bucket?: unknown; renderedPrefix?: unknown };
+      partition?: {
+        tenantSlug?: unknown;
+        agentSlug?: unknown;
+        spaceId?: unknown;
+        userId?: unknown;
+      };
+    };
+  };
+  return (
+    typeof candidate.workspaceCacheRoot === "string" &&
+    typeof candidate.session?.expiresAt === "string" &&
+    typeof candidate.session.workspace?.bucket === "string" &&
+    typeof candidate.session.workspace.renderedPrefix === "string" &&
+    typeof candidate.session.partition?.tenantSlug === "string" &&
+    typeof candidate.session.partition.agentSlug === "string" &&
+    typeof candidate.session.partition.spaceId === "string" &&
+    typeof candidate.session.partition.userId === "string"
   );
 }
 

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  BUILTIN_TOOL_NAMES,
   DESKTOP_PI_SDK_EMBEDDING_CONTRACT,
   type PreparedDesktopPiRuntimeSession,
 } from "@thinkwork/pi-runtime-core";
@@ -107,7 +108,7 @@ describe("runLocalDesktopTurn", () => {
     const sdk: PiSdkModuleLike = {
       createAgentSession: vi.fn(async (options) => {
         expect(options?.cwd).toContain("acme");
-        expect(options?.tools).toEqual(["read", "grep", "find", "ls"]);
+        expect(options?.tools).toEqual([...BUILTIN_TOOL_NAMES]);
         return {
           session: {
             messages: [
@@ -278,6 +279,7 @@ describe("runLocalDesktopTurn", () => {
 
   it("routes unsupported hosted models through the Bedrock SDK model fallback", async () => {
     let optionsSeen: Record<string, unknown> | undefined;
+    let finalizeBody: Record<string, unknown> | undefined;
     const authStorage = { setRuntimeApiKey: vi.fn() };
     const sdk: PiSdkModuleLike = {
       AuthStorage: { create: vi.fn(() => authStorage) },
@@ -315,9 +317,13 @@ describe("runLocalDesktopTurn", () => {
         now: () => new Date("2026-05-28T12:00:00.000Z"),
         loadPiSdk: async () => sdk,
         workspaceStore: new FakeStore(),
-        fetchImpl: vi.fn(async () =>
-          Response.json({ ok: true }),
-        ) as typeof fetch,
+        fetchImpl: vi.fn(async (_url, init) => {
+          finalizeBody = JSON.parse(String(init?.body)) as Record<
+            string,
+            unknown
+          >;
+          return Response.json({ ok: true });
+        }) as typeof fetch,
       },
     );
 
@@ -330,6 +336,12 @@ describe("runLocalDesktopTurn", () => {
     expect(authStorage.setRuntimeApiKey).toHaveBeenCalledWith(
       "amazon-bedrock",
       "aws-sdk-default-credential-chain",
+    );
+    expect(finalizeBody?.agent_model).toBe(
+      "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    );
+    expect((finalizeBody?.response as { model?: string })?.model).toBe(
+      "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     );
   });
 
@@ -509,6 +521,185 @@ describe("runLocalDesktopTurn", () => {
     );
   });
 
+  it("adapts prepared MCP configs into desktop local Pi tools", async () => {
+    let optionsSeen: Record<string, unknown> | undefined;
+    const sdk: PiSdkModuleLike = {
+      defineTool: vi.fn((definition) => definition),
+      DefaultResourceLoader: class {
+        async reload() {}
+      },
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "CRM checked." }],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+    const connectMcpServer = vi.fn(async (args) => {
+      expect(args.url).toBe("https://mcp.example.com/crm");
+      expect(args.serverName).toBe("crm");
+      expect(args.toolWhitelist).toEqual(["opportunities_list"]);
+      expect(args.headers.Authorization).toMatch(/^Handle /);
+      expect(args.headers.Authorization).not.toContain("mcp_secret");
+      return [
+        {
+          name: "mcp_crm_opportunities_list",
+          label: "crm: opportunities_list",
+          description: "List CRM opportunities.",
+          parameters: { type: "object", properties: {} },
+          executionMode: "sequential" as const,
+          execute: vi.fn(async () => ({
+            content: [{ type: "text", text: "opportunity-1" }],
+          })),
+        },
+      ];
+    });
+
+    await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            mcp_configs: [
+              {
+                name: "crm",
+                url: "https://mcp.example.com/crm",
+                transport: "streamable-http",
+                auth: { type: "bearer", token: "mcp_secret" },
+                tools: ["opportunities_list"],
+              },
+            ],
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: vi.fn(async () =>
+          Response.json({ ok: true }),
+        ) as typeof fetch,
+        connectMcpServer,
+      },
+    );
+
+    expect(connectMcpServer).toHaveBeenCalledOnce();
+    expect(optionsSeen?.tools).toEqual(
+      expect.arrayContaining([
+        "delegate_to_managed_agent",
+        "mcp_crm_opportunities_list",
+      ]),
+    );
+    expect(optionsSeen?.customTools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "mcp_crm_opportunities_list" }),
+      ]),
+    );
+    expect(sdk.defineTool).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp_crm_opportunities_list" }),
+    );
+  });
+
+  it("loads pi-mcp-adapter through a no-secret resource-loader wrapper", async () => {
+    let loaderOptions: Record<string, unknown> | undefined;
+    let optionsSeen: Record<string, unknown> | undefined;
+    let adapterConfigText = "";
+    let adapterWrapperText = "";
+    let envKey = "";
+    const bindExtensions = vi.fn(async () => {});
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    const sdk: PiSdkModuleLike = {
+      DefaultResourceLoader: class {
+        constructor(options: Record<string, unknown>) {
+          loaderOptions = options;
+        }
+
+        async reload() {
+          const agentDir = String(loaderOptions?.agentDir ?? "");
+          adapterConfigText = await readFile(join(agentDir, "mcp.json"), "utf8");
+          const extensionPaths = loaderOptions?.additionalExtensionPaths as
+            | string[]
+            | undefined;
+          expect(extensionPaths).toHaveLength(1);
+          adapterWrapperText = await readFile(extensionPaths![0], "utf8");
+        }
+      },
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            bindExtensions,
+            messages: [{ role: "assistant", content: "CRM checked." }],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+
+    await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            mcp_configs: [
+              {
+                name: "lastmile-crm",
+                url: "https://mcp.example.com/crm",
+                transport: "streamable-http",
+                auth: { type: "bearer", token: "mcp_secret" },
+                tools: ["opportunities_list"],
+                availableTools: ["opportunities_list", "accounts_list"],
+              },
+            ],
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: vi.fn(async () =>
+          Response.json({ ok: true }),
+        ) as typeof fetch,
+      },
+    );
+
+    const parsed = JSON.parse(adapterConfigText) as {
+      mcpServers: Record<
+        string,
+        { bearerTokenEnv?: string; bearerToken?: string; excludeTools?: string[] }
+      >;
+    };
+    const server = parsed.mcpServers["lastmile-crm"];
+    envKey = server.bearerTokenEnv ?? "";
+    expect(server.bearerToken).toBeUndefined();
+    expect(server.excludeTools).toEqual(["accounts_list"]);
+    expect(adapterConfigText).not.toContain("mcp_secret");
+    expect(adapterWrapperText).toContain("pi-mcp-adapter");
+    expect(adapterWrapperText).toContain("index.ts");
+    expect(optionsSeen?.tools).toEqual(
+      expect.arrayContaining(["delegate_to_managed_agent", "mcp"]),
+    );
+    expect(optionsSeen?.sessionStartEvent).toEqual(
+      expect.objectContaining({
+        type: "session_start",
+        reason: "startup",
+        source: "thinkwork-desktop-local-pi",
+      }),
+    );
+    expect(optionsSeen?.customTools).toEqual([]);
+    expect(bindExtensions).toHaveBeenCalledWith(
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+    expect(process.env[envKey]).toBeUndefined();
+    expect(process.env.PI_CODING_AGENT_DIR).toBe(previousAgentDir);
+  });
+
   it("registers shared memory tools through the desktop Hindsight provider", async () => {
     let optionsSeen: Record<string, unknown> | undefined;
     const sdk: PiSdkModuleLike = {
@@ -672,6 +863,8 @@ describe("runLocalDesktopTurn", () => {
     );
     expect(bundle).toContain("## Composed System Prompt");
     expect(bundle).toContain("You are running inside the ThinkWork desktop");
+    expect(bundle).toContain("Use bash for shell commands");
+    expect(bundle).not.toContain("shell out");
     expect(bundle).toContain("### AGENTS.md");
     expect(bundle).toContain("# Agent");
   });
