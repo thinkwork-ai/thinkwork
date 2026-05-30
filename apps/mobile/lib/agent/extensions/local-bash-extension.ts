@@ -5,15 +5,45 @@
 // in the same place the mobile agent lives, while still letting the agent call public
 // internet endpoints through curl/wget when a task needs it.
 
-import { Bash } from "just-bash/browser";
-import type { BashOptions } from "just-bash/browser";
+import { Bash } from "just-bash";
+import type { BashOptions } from "just-bash";
 import { defineExtension } from "./define-extension";
 import type { ExtensionFactory } from "./types";
 import type { ToolResult } from "../types";
+import {
+  assertSafeRelativePath,
+  type WorkspaceCache,
+  type WorkspaceCachePartition,
+} from "../workspace-cache";
+import type { WorkspaceTarget } from "@/lib/workspace-api";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_RESPONSE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_OUTPUT_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_TOOL_RESULT_CHARS = 64 * 1024;
+const SNAPSHOT_KEY_PREFIX = "thinkwork:mobile-pi:bash-snapshot:";
+
+export interface BashSnapshotStorage {
+  getItem(key: string): Promise<string | null>;
+  setItem(key: string, value: string): Promise<void>;
+  removeItem?(key: string): Promise<void>;
+}
+
+export class MemoryBashSnapshotStorage implements BashSnapshotStorage {
+  private readonly values = new Map<string, string>();
+
+  async getItem(key: string): Promise<string | null> {
+    return this.values.get(key) ?? null;
+  }
+
+  async setItem(key: string, value: string): Promise<void> {
+    this.values.set(key, value);
+  }
+
+  async removeItem(key: string): Promise<void> {
+    this.values.delete(key);
+  }
+}
 
 export interface LocalBashExtensionOptions {
   /**
@@ -24,12 +54,27 @@ export interface LocalBashExtensionOptions {
   /** Public internet access for curl/wget. Enabled by default per the mobile Pi contract. */
   network?: boolean;
   timeoutMs?: number;
+  /**
+   * Optional rendered ThinkWork workspace cache. When provided, cached files are mounted
+   * into /workspace before each command and command-created files are snapshotted after.
+   */
+  workspace?: {
+    cache: WorkspaceCache;
+    partition: WorkspaceCachePartition;
+    targets: readonly WorkspaceTarget[];
+  };
+  /** Test seam for durable per-thread shell file snapshots. Defaults to AsyncStorage. */
+  snapshotStorage?: BashSnapshotStorage;
 }
 
 const sandboxes = new Map<string, Bash>();
 
 function sandboxKey(sessionId?: string): string {
   return sessionId?.trim() || "mobile-default";
+}
+
+function snapshotKey(key: string): string {
+  return `${SNAPSHOT_KEY_PREFIX}${key}`;
 }
 
 function createBash(network: boolean): Bash {
@@ -72,14 +117,109 @@ function getBash(sessionId: string | undefined, network: boolean): Bash {
   return bash;
 }
 
+function createAsyncStorageAdapter(): BashSnapshotStorage {
+  return {
+    async getItem(key) {
+      const storage = await import("@react-native-async-storage/async-storage");
+      return storage.default.getItem(key);
+    },
+    async setItem(key, value) {
+      const storage = await import("@react-native-async-storage/async-storage");
+      await storage.default.setItem(key, value);
+    },
+    async removeItem(key) {
+      const storage = await import("@react-native-async-storage/async-storage");
+      await storage.default.removeItem(key);
+    },
+  };
+}
+
+function parentDir(absolutePath: string): string {
+  const index = absolutePath.lastIndexOf("/");
+  return index <= 0 ? "/" : absolutePath.slice(0, index);
+}
+
+async function writeWorkspaceFile(
+  bash: Bash,
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  const safePath = assertSafeRelativePath(relativePath);
+  const absolutePath = `/workspace/${safePath}`;
+  await bash.fs.mkdir(parentDir(absolutePath), { recursive: true });
+  await bash.writeFile(absolutePath, content);
+}
+
+async function hydrateWorkspace(
+  bash: Bash,
+  key: string,
+  options: LocalBashExtensionOptions,
+): Promise<void> {
+  await bash.fs.mkdir("/workspace", { recursive: true });
+
+  const storage = options.snapshotStorage ?? createAsyncStorageAdapter();
+  const raw = await storage.getItem(snapshotKey(key));
+  if (raw) {
+    try {
+      const files = JSON.parse(raw) as Record<string, string>;
+      for (const [path, content] of Object.entries(files)) {
+        if (typeof content === "string") {
+          await writeWorkspaceFile(bash, path, content);
+        }
+      }
+      return;
+    } catch {
+      await storage.removeItem?.(snapshotKey(key));
+    }
+  }
+
+  if (options.workspace) {
+    await options.workspace.cache.sync({
+      partition: options.workspace.partition,
+      targets: options.workspace.targets,
+    });
+    const files = await options.workspace.cache.listFiles(
+      options.workspace.partition,
+    );
+    for (const file of files) {
+      await writeWorkspaceFile(bash, file.path, file.content);
+    }
+  }
+}
+
+async function snapshotWorkspace(
+  bash: Bash,
+  key: string,
+  storage: BashSnapshotStorage,
+): Promise<void> {
+  const files: Record<string, string> = {};
+  for (const path of bash.fs.getAllPaths()) {
+    if (!path.startsWith("/workspace/")) continue;
+    const relativePath = path.slice("/workspace/".length);
+    try {
+      const stat = await bash.fs.stat(path);
+      if (!stat.isFile) continue;
+      files[assertSafeRelativePath(relativePath)] = await bash.readFile(path);
+    } catch {
+      // Snapshot best effort: a concurrently removed or non-text file should not fail the turn.
+    }
+  }
+  await storage.setItem(snapshotKey(key), JSON.stringify(files));
+}
+
+function truncate(value: string): string {
+  if (value.length <= MAX_TOOL_RESULT_CHARS) return value;
+  return `${value.slice(0, MAX_TOOL_RESULT_CHARS)}\n[truncated after ${MAX_TOOL_RESULT_CHARS} characters]`;
+}
+
 function formatResult(result: {
   stdout: string;
   stderr: string;
   exitCode: number;
 }): ToolResult {
   const parts = [];
-  if (result.stdout) parts.push(result.stdout);
-  if (result.stderr) parts.push(`stderr:\n${result.stderr}`);
+  if (result.stdout) parts.push(truncate(result.stdout));
+  if (result.stderr) parts.push(`stderr:\n${truncate(result.stderr)}`);
   if (result.exitCode !== 0) parts.push(`exitCode: ${result.exitCode}`);
 
   return {
@@ -97,6 +237,8 @@ export function localBashExtension(
 ): ExtensionFactory {
   const network = options.network ?? true;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const snapshotStorage =
+    options.snapshotStorage ?? createAsyncStorageAdapter();
 
   return defineExtension({
     name: "local-bash",
@@ -138,10 +280,16 @@ export function localBashExtension(
           });
 
           try {
-            const bash = getBash(options.sessionId ?? ctx.sessionId, network);
+            const key = sandboxKey(ctx.sessionId ?? options.sessionId);
+            const bash = getBash(key, network);
+            await hydrateWorkspace(bash, key, {
+              ...options,
+              snapshotStorage,
+            });
             const result = await bash.exec(command, {
               signal: controller.signal,
             });
+            await snapshotWorkspace(bash, key, snapshotStorage);
             return formatResult(result);
           } catch (err) {
             const message =
@@ -161,8 +309,12 @@ export function localBashExtension(
       });
 
       pi.on("before_agent_start", (e) => ({
-        systemPrompt: `${e.systemPrompt}\n\nYou have a local \`bash\` tool. It runs inside an in-memory sandbox in the mobile app, with public internet access enabled for commands like curl and wget. Private/loopback network ranges are blocked, and it cannot access arbitrary native device files. Use it for command output, lightweight file work in the sandbox, builds/tests only when appropriate, and internet checks when the user asks. Do not claim command output unless it came from the bash tool.`,
+        systemPrompt: `${e.systemPrompt}\n\nYou have a local \`bash\` tool. It runs inside a durable per-thread /workspace sandbox in the mobile app, preloaded with the cached ThinkWork workspace files when they are available. Public internet access is enabled for commands like curl and wget; private/loopback network ranges are blocked, and it cannot access arbitrary native device files. Use it for command output, lightweight file work in /workspace, builds/tests only when appropriate, and internet checks when the user asks. Do not claim command output unless it came from the bash tool.`,
       }));
     },
   });
+}
+
+export function resetLocalBashSandboxesForTests(): void {
+  sandboxes.clear();
 }
