@@ -1488,7 +1488,11 @@ function ChatThreadRow({
               })}
               className={cn(
                 "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                onPin || onUnpin ? "pr-12" : "pr-10",
+                confirmingDelete
+                  ? "pr-20"
+                  : onPin || onUnpin
+                    ? "pr-12"
+                    : "pr-10",
                 active && "bg-sidebar-accent text-sidebar-accent-foreground",
               )}
               onClick={onActivate}
