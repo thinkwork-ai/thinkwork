@@ -3,10 +3,10 @@
 ## 2026-05-30 Closeout Audit
 
 - Plan: `docs/plans/2026-05-30-004-feat-mobile-pi-compatible-host-plan.md`
-- Status: active until deployed-stage all-capability smokes and TestFlight/on-device validation are recorded.
+- Status: active until Apple finishes TestFlight processing and on-device validation is recorded.
 - Target branch: `main`
-- Last closeout PR: <https://github.com/thinkwork-ai/thinkwork/pull/1885>
-- Active final-gates branch: `codex/mobile-pi-host-smoke-tools`
+- Last closeout PR: <https://github.com/thinkwork-ai/thinkwork/pull/1886>
+- Active final-gates branch: `codex/mobile-pi-testflight-closeout`
 
 ### Merged Implementation Units
 
@@ -23,6 +23,7 @@
 - Mention picker anchoring follow-up: PR <https://github.com/thinkwork-ai/thinkwork/pull/1883>, merge `4f74efad75699f6bb3e17eaf9e8b3d9643d469cd`.
 - Smoke harness `just-bash` packaging follow-up: PR <https://github.com/thinkwork-ai/thinkwork/pull/1884>, merge `b47e849e38d036278f633d31dd8487c56a167c9c`.
 - CLI OAuth loopback callback follow-up: PR <https://github.com/thinkwork-ai/thinkwork/pull/1885>, merge `a842729871878a6a0512336414553b621989a087`.
+- Final harness, mention picker, and deployed smoke closeout: PR <https://github.com/thinkwork-ai/thinkwork/pull/1886>, merge `3665461ed0882ac8c99ef8e3dd3ea4db8361bf72`.
 
 ### Closeout Findings
 
@@ -53,6 +54,8 @@ us-east-1` now completes through the normal Cognito loopback flow, and
 - The mention picker follow-up was visually rechecked in the iOS simulator. The
   picker now renders inside the composer surface with no gap above the text
   field. Screenshot: `/tmp/thinkwork-screens/mention-picker-composer-flush.png`.
+- PR #1886 merged and the `main` deploy run `26697889314` completed
+  successfully on 2026-05-30.
 
 ### Current Verification
 
@@ -106,9 +109,20 @@ us-east-1` now completes through the normal Cognito loopback flow, and
 - `eas whoami` - authenticated as `eric@thinkwork.ai`; latest finished iOS
   production build is build 17 from commit `17493262690be21267fffb8f33a404d332ac2549`,
   so TestFlight still needs a current-main build after deployed smokes pass.
+- PR #1886 CI passed (`cla`, `lint`, `test`, `typecheck`, `verify`) and was
+  squash-merged to `main`.
+- Deploy run `26697889314` passed after #1886 merged.
+- Current-main iOS production build was created and submitted:
+  - EAS build: `5779d0dd-2aec-46e4-939c-e691a4a80c95`
+  - App version: `1.0.0`
+  - Build number: `18`
+  - Commit: `3665461ed0882ac8c99ef8e3dd3ea4db8361bf72`
+  - Submission: `082ac8d2-1cae-4415-ac1c-e816753d336e`
+  - Artifact: `https://expo.dev/artifacts/eas/bNvynB3acLzR3BqQFYu3iT.ipa`
+  - Result: uploaded to App Store Connect; Apple processing pending.
 
 ### Remaining Gates
 
-- PR, CI, merge, and deploy the current harness/mention-picker follow-up branch
-  `codex/mobile-pi-host-smoke-tools`.
-- iOS TestFlight/on-device matrix from `apps/mobile/scripts/pi-device-smoke.md`, including image/file attachment and abort validation on a real device.
+- Apple TestFlight processing for build 18 must finish.
+- iOS TestFlight/on-device matrix from `apps/mobile/scripts/pi-device-smoke.md`,
+  including image/file attachment and abort validation on a real device.
