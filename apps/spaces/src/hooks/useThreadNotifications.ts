@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSubscription } from "urql";
 import { graphql } from "../gql";
 import { useTenant } from "../context/TenantContext";
-import { useThreadId } from "./useThreadId";
-import { getDesktopBridge } from "../lib/desktop-bridge";
+import { getDesktopBridge } from "../lib/desktop-runtime";
 
 const THREAD_ACTIVITY_SUBSCRIPTION = graphql(`
   subscription SpacesThreadActivity($userId: ID!) {
@@ -82,6 +81,11 @@ interface CoalesceEntry {
 export interface UseThreadNotificationsOptions {
   /** U7 global on/off toggle. Defaults to enabled. */
   enabled?: boolean;
+  /**
+   * The thread the user is actively viewing (route param), used by the R5
+   * focused-thread suppression gate. Null when not on a thread route.
+   */
+  activeThreadId?: string | null;
 }
 
 /**
@@ -92,9 +96,8 @@ export interface UseThreadNotificationsOptions {
 export function useThreadNotifications(
   options: UseThreadNotificationsOptions = {},
 ): void {
-  const { enabled = true } = options;
+  const { enabled = true, activeThreadId = null } = options;
   const { userId } = useTenant();
-  const activeThreadId = useThreadId();
   const bridge = useMemo(() => getDesktopBridge(), []);
 
   // App-focus state pushed from the main process. Defaults to focused (so the

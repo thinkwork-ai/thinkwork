@@ -16,6 +16,7 @@ import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/
 type Documents = {
     "\n  query AppletState($appId: ID!, $instanceId: ID!, $key: String!) {\n    appletState(appId: $appId, instanceId: $instanceId, key: $key) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n": typeof types.AppletStateDocument,
     "\n  mutation SaveAppletState($input: SaveAppletStateInput!) {\n    saveAppletState(input: $input) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n": typeof types.SaveAppletStateDocument,
+    "\n  subscription SpacesThreadActivity($userId: ID!) {\n    onThreadActivity(userId: $userId) {\n      userId\n      tenantId\n      threadId\n      messageId\n      authorId\n      authorType\n      snippet\n      threadTitle\n      createdAt\n    }\n  }\n": typeof types.SpacesThreadActivityDocument,
     "\n  query SettingsTenantDetail($id: ID!) {\n    tenant(id: $id) {\n      id\n      name\n      slug\n      plan\n      issuePrefix\n      issueCounter\n      settings {\n        id\n        defaultModel\n      }\n      createdAt\n    }\n  }\n": typeof types.SettingsTenantDetailDocument,
     "\n  query SettingsDeploymentStatus {\n    deploymentStatus {\n      stage\n      source\n      region\n      accountId\n      bucketName\n      databaseEndpoint\n      ecrUrl\n      adminUrl\n      docsUrl\n      apiEndpoint\n      appsyncUrl\n      appsyncRealtimeUrl\n      hindsightEndpoint\n      agentcoreStatus\n      hindsightEnabled\n      managedMemoryEnabled\n    }\n  }\n": typeof types.SettingsDeploymentStatusDocument,
     "\n  mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n": typeof types.SettingsRenameTenantSlugDocument,
@@ -41,6 +42,7 @@ type Documents = {
 const documents: Documents = {
     "\n  query AppletState($appId: ID!, $instanceId: ID!, $key: String!) {\n    appletState(appId: $appId, instanceId: $instanceId, key: $key) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n": types.AppletStateDocument,
     "\n  mutation SaveAppletState($input: SaveAppletStateInput!) {\n    saveAppletState(input: $input) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n": types.SaveAppletStateDocument,
+    "\n  subscription SpacesThreadActivity($userId: ID!) {\n    onThreadActivity(userId: $userId) {\n      userId\n      tenantId\n      threadId\n      messageId\n      authorId\n      authorType\n      snippet\n      threadTitle\n      createdAt\n    }\n  }\n": types.SpacesThreadActivityDocument,
     "\n  query SettingsTenantDetail($id: ID!) {\n    tenant(id: $id) {\n      id\n      name\n      slug\n      plan\n      issuePrefix\n      issueCounter\n      settings {\n        id\n        defaultModel\n      }\n      createdAt\n    }\n  }\n": types.SettingsTenantDetailDocument,
     "\n  query SettingsDeploymentStatus {\n    deploymentStatus {\n      stage\n      source\n      region\n      accountId\n      bucketName\n      databaseEndpoint\n      ecrUrl\n      adminUrl\n      docsUrl\n      apiEndpoint\n      appsyncUrl\n      appsyncRealtimeUrl\n      hindsightEndpoint\n      agentcoreStatus\n      hindsightEnabled\n      managedMemoryEnabled\n    }\n  }\n": types.SettingsDeploymentStatusDocument,
     "\n  mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n": types.SettingsRenameTenantSlugDocument,
@@ -86,6 +88,10 @@ export function graphql(source: "\n  query AppletState($appId: ID!, $instanceId:
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation SaveAppletState($input: SaveAppletStateInput!) {\n    saveAppletState(input: $input) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation SaveAppletState($input: SaveAppletStateInput!) {\n    saveAppletState(input: $input) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  subscription SpacesThreadActivity($userId: ID!) {\n    onThreadActivity(userId: $userId) {\n      userId\n      tenantId\n      threadId\n      messageId\n      authorId\n      authorType\n      snippet\n      threadTitle\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  subscription SpacesThreadActivity($userId: ID!) {\n    onThreadActivity(userId: $userId) {\n      userId\n      tenantId\n      threadId\n      messageId\n      authorId\n      authorType\n      snippet\n      threadTitle\n      createdAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
