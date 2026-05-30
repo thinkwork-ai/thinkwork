@@ -1,22 +1,36 @@
 #!/usr/bin/env tsx
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 
 import { BedrockModelProvider } from "../lib/agent/providers/bedrock";
 import { runThreadHarnessTurn } from "../lib/agent/thread-turn";
 import { mcpToolsExtension } from "../lib/agent/extensions/mcp-tools-extension";
 import { workspaceContextExtension } from "../lib/agent/extensions/workspace-context-extension";
+import { loadExtensions } from "../lib/agent/extensions/load-extensions";
 import { recordTurn } from "../lib/agent/persist-turn";
-import type { AgentEvent, ImagePart } from "../lib/agent/types";
+import { createAgentSession } from "../lib/agent/session";
+import type { MobileNativeEvidence } from "../lib/agent/extensions/mobile-native";
+import type {
+  AgentEvent,
+  ImagePart,
+  Message,
+  ModelProvider,
+  ModelRequest,
+  ModelResponse,
+} from "../lib/agent/types";
 import type { WorkspaceTarget } from "../lib/workspace-api";
 
 type Capability =
   | "plain"
   | "workspace"
+  | "workspace_tools"
   | "mcp"
+  | "mcp_auth_failure"
   | "execute_code"
   | "bash"
-  | "image";
+  | "image"
+  | "file"
+  | "abort";
 
 interface Args {
   tenantId: string;
@@ -31,7 +45,9 @@ interface Args {
   capabilities: Capability[];
   timeoutMs: number;
   imagePath?: string;
+  filePath?: string;
   json: boolean;
+  dryRun: boolean;
 }
 
 interface Thread {
@@ -77,15 +93,20 @@ function usage(exitCode = 2): never {
   pnpm --filter @thinkwork/mobile smoke:pi-harness -- \\
     --tenant-id <tenant-id> --agent-id <agent-id> --user-id <user-id> \\
     --id-token <cognito-id-token> \\
-    [--space-id <space-id>] [--capabilities plain,workspace,mcp,execute_code,bash,image] \\
-    [--image-path ./fixtures/card.png] [--timeout 90000] [--json]
+    [--space-id <space-id>] [--capabilities plain,workspace,workspace_tools,mcp,mcp_auth_failure,execute_code,bash,image,file,abort] \\
+    [--image-path ./fixtures/card.png] [--file-path ./fixtures/note.txt] [--timeout 90000] [--json]
+
+  pnpm --filter @thinkwork/mobile smoke:pi-harness -- --dry-run --capabilities all --json
 
 Environment fallbacks:
   MOBILE_PI_SMOKE_ID_TOKEN / THINKWORK_ID_TOKEN
+  MOBILE_PI_SMOKE_IMAGE_PATH, MOBILE_PI_SMOKE_FILE_PATH
   THINKWORK_TENANT_ID, THINKWORK_AGENT_ID, THINKWORK_USER_ID, THINKWORK_SPACE_ID
   THINKWORK_GRAPHQL_URL / VITE_GRAPHQL_HTTP_URL
   THINKWORK_GRAPHQL_API_KEY / VITE_GRAPHQL_API_KEY
-  apps/admin/.env and apps/mobile/.env are read when present`);
+  apps/admin/.env and apps/mobile/.env are read when present
+
+Use --dry-run to validate the smoke matrix shape without deployed credentials.`);
   process.exit(exitCode);
 }
 
@@ -117,7 +138,9 @@ function parseArgs(): Args {
   let capabilityValue = process.env.MOBILE_PI_SMOKE_CAPABILITIES ?? "plain";
   let timeoutMs = Number(process.env.MOBILE_PI_SMOKE_TIMEOUT_MS ?? 90_000);
   let imagePath = process.env.MOBILE_PI_SMOKE_IMAGE_PATH;
+  let filePath = process.env.MOBILE_PI_SMOKE_FILE_PATH;
   let json = false;
+  let dryRun = false;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -134,17 +157,23 @@ function parseArgs(): Args {
       capabilityValue = argv[++i] ?? "";
     else if (arg === "--timeout") timeoutMs = Number(argv[++i] ?? timeoutMs);
     else if (arg === "--image-path") imagePath = argv[++i];
+    else if (arg === "--file-path") filePath = argv[++i];
     else if (arg === "--json") json = true;
+    else if (arg === "--dry-run") dryRun = true;
     else usage();
   }
 
   const all: Capability[] = [
     "plain",
     "workspace",
+    "workspace_tools",
     "mcp",
+    "mcp_auth_failure",
     "execute_code",
     "bash",
     "image",
+    "file",
+    "abort",
   ];
   const capabilities =
     capabilityValue === "all"
@@ -160,7 +189,10 @@ function parseArgs(): Args {
     }
   }
 
-  if (!tenantId || !agentId || !userId || !graphqlUrl || !apiKey || !idToken)
+  if (
+    !dryRun &&
+    (!tenantId || !agentId || !userId || !graphqlUrl || !apiKey || !idToken)
+  )
     usage();
   return {
     tenantId,
@@ -175,7 +207,9 @@ function parseArgs(): Args {
     capabilities: capabilities as Capability[],
     timeoutMs,
     imagePath,
+    filePath,
     json,
+    dryRun,
   };
 }
 
@@ -263,14 +297,22 @@ function promptFor(capability: Capability, token: string): string {
       return `Plain mobile Pi smoke. Reply exactly: ${token}`;
     case "workspace":
       return `Use USER.md workspace context to answer. Reply with ${token} and my name.`;
+    case "workspace_tools":
+      return `Use cached workspace tools read, grep, find, or ls to inspect USER.md or nearby workspace files. Reply with ${token} and the tool name you used.`;
     case "mcp":
       return `Use one connected MCP tool for a safe read-only call. Reply with ${token} and the tool name.`;
+    case "mcp_auth_failure":
+      return `Exercise the bounded MCP gateway with invalid credentials. Reply with ${token} and the credential failure message.`;
     case "execute_code":
       return `Use execute_code or a code interpreter tool to compute sum(i*i for i in range(1, 11)). Reply exactly: ${token} 385. Do not calculate mentally.`;
     case "bash":
       return `Use bash or a shell tool to run: printf '${token} 385'. Reply exactly with the command output. Do not answer without the tool result.`;
     case "image":
       return `Inspect the attached image. Reply with ${token} and a short description.`;
+    case "file":
+      return `Use the attached file evidence. Reply with ${token} and the attached filename.`;
+    case "abort":
+      return `Abort smoke. This turn should be canceled before assistant output: ${token}`;
   }
 }
 
@@ -286,6 +328,21 @@ function imagePart(path: string | undefined): ImagePart | undefined {
         ? "webp"
         : "jpeg";
   return { format, data: bytes.toString("base64") };
+}
+
+function fileEvidence(
+  path: string | undefined,
+): MobileNativeEvidence | undefined {
+  if (!path) return undefined;
+  const bytes = readFileSync(resolve(path));
+  return {
+    type: "mobile_native_capability",
+    source: "file",
+    name: basename(path),
+    mimeType: "text/plain",
+    sizeBytes: bytes.byteLength,
+    textExtracted: true,
+  };
 }
 
 function toolCalls(events: AgentEvent[]): string[] {
@@ -316,13 +373,29 @@ function evaluate(
   if (
     capability === "plain" ||
     capability === "workspace" ||
-    capability === "image"
+    capability === "image" ||
+    capability === "file"
   ) {
     return { status: "PASS", reason: "assistant_response_matched" };
   }
+  if (capability === "workspace_tools") {
+    const usedWorkspaceTool = calls.some((name) =>
+      /^(read|grep|find|ls)$/.test(name),
+    );
+    if (!usedWorkspaceTool) {
+      return {
+        status: "FAIL",
+        reason: "expected_workspace_tool_was_not_called",
+      };
+    }
+    if (failedToolResults(events).length > 0) {
+      return { status: "FAIL", reason: "tool_result_failed" };
+    }
+    return { status: "PASS", reason: "workspace_tool_observed" };
+  }
   const wants =
     capability === "mcp"
-      ? calls.length > 0
+      ? calls.includes("mcp")
       : capability === "execute_code"
         ? calls.some((name) =>
             /execute_code|code_interpreter|python/.test(name),
@@ -335,6 +408,118 @@ function evaluate(
   return { status: "PASS", reason: "tool_call_observed" };
 }
 
+async function runMcpAuthFailure(
+  args: Args,
+  thread: Thread,
+): Promise<SmokeResult> {
+  const events: AgentEvent[] = [];
+  const loaded = await loadExtensions([
+    mcpToolsExtension({
+      agentId: args.agentId,
+      deps: {
+        apiBase: args.apiBase,
+        getToken: async () => "invalid-mobile-pi-smoke-token",
+      },
+    }),
+  ]);
+  const tool = loaded.tools.find((candidate) => candidate.name === "mcp");
+  if (!tool) {
+    return {
+      capability: "mcp_auth_failure",
+      status: "FAIL",
+      reason: "mcp_tool_not_registered",
+      threadId: thread.id,
+      threadIdentifier: thread.identifier,
+      events,
+    };
+  }
+  const result = await tool.execute({ list: true }, { sessionId: thread.id });
+  const isCredentialFailure =
+    result.isError === true &&
+    /auth|credential|token|reconnect|connection|401|403/i.test(result.content);
+  return {
+    capability: "mcp_auth_failure",
+    status: isCredentialFailure ? "PASS" : "FAIL",
+    reason: isCredentialFailure
+      ? "mcp_auth_failure_observed"
+      : "mcp_auth_failure_not_observed",
+    threadId: thread.id,
+    threadIdentifier: thread.identifier,
+    assistantText: result.content,
+    events,
+  };
+}
+
+class AbortSmokeProvider implements ModelProvider {
+  readonly id = "abort-smoke";
+
+  generate(
+    _request: ModelRequest,
+    signal?: AbortSignal,
+  ): Promise<ModelResponse> {
+    return new Promise<ModelResponse>((_resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error("AbortError"));
+        return;
+      }
+      const abort = () => reject(new Error("AbortError"));
+      signal?.addEventListener("abort", abort, { once: true });
+      setTimeout(() => reject(new Error("abort smoke timed out")), 5_000);
+    });
+  }
+}
+
+async function runAbortCapability(
+  args: Args,
+  thread: Thread,
+): Promise<SmokeResult> {
+  const token = `MOBILE-PI-ABORT-${Date.now()}`;
+  const events: AgentEvent[] = [];
+  const session = createAgentSession({
+    modelProvider: new AbortSmokeProvider(),
+    sessionId: thread.id,
+    messages: [] satisfies Message[],
+  });
+  const unsubscribe = session.subscribe((event) => events.push(event));
+  try {
+    const turn = session.prompt(promptFor("abort", token));
+    setTimeout(() => session.abort(), 25);
+    const result = await turn;
+    const assistantText = result.finalText || "";
+    await recordTurn(
+      {
+        threadId: thread.id,
+        userText: promptFor("abort", token),
+        assistantText,
+        toolResults: [
+          {
+            type: "mobile_session",
+            stopReason: result.stopReason,
+            transcript: result.messages,
+            events,
+          },
+        ],
+        usage: result.usage,
+      },
+      { apiBase: args.apiBase, getToken: async () => args.idToken },
+    );
+    return {
+      capability: "abort",
+      status: result.stopReason === "aborted" ? "PASS" : "FAIL",
+      reason:
+        result.stopReason === "aborted"
+          ? "abort_stop_reason_observed"
+          : `unexpected_stop_reason_${result.stopReason}`,
+      threadId: thread.id,
+      threadIdentifier: thread.identifier,
+      assistantText,
+      events,
+    };
+  } finally {
+    unsubscribe();
+  }
+}
+
 async function runCapability(
   args: Args,
   capability: Capability,
@@ -342,7 +527,16 @@ async function runCapability(
   if (capability === "image" && !args.imagePath) {
     return { capability, status: "SKIP", reason: "image-path not provided" };
   }
+  if (capability === "file" && !args.filePath) {
+    return { capability, status: "SKIP", reason: "file-path not provided" };
+  }
   const thread = await createThread(args, capability);
+  if (capability === "mcp_auth_failure") {
+    return runMcpAuthFailure(args, thread);
+  }
+  if (capability === "abort") {
+    return runAbortCapability(args, thread);
+  }
   const token = `MOBILE-PI-${capability.toUpperCase().replace(/_/g, "-")}-${Date.now()}`;
   const events: AgentEvent[] = [];
   try {
@@ -361,6 +555,8 @@ async function runCapability(
         agentName: args.agentName,
         images:
           capability === "image" ? [imagePart(args.imagePath)!] : undefined,
+        nativeAttachments:
+          capability === "file" ? [fileEvidence(args.filePath)!] : undefined,
       },
       {
         modelProvider: provider,
@@ -384,7 +580,9 @@ async function runCapability(
             apiBase: args.apiBase,
             getToken: async () => args.idToken,
           }),
-        onEvent: (event) => events.push(event),
+        onEvent: (event) => {
+          events.push(event);
+        },
       },
     );
     const verdict = evaluate(capability, token, result.assistantText, events);
@@ -408,8 +606,40 @@ async function runCapability(
   }
 }
 
+function dryRunResults(args: Args): SmokeResult[] {
+  return args.capabilities.map((capability, index) => ({
+    capability,
+    status: "SKIP",
+    reason: "dry_run_matrix_only",
+    threadId: `dry-run-thread-${index + 1}`,
+    threadIdentifier: `DRY-${String(index + 1).padStart(3, "0")}`,
+  }));
+}
+
+function printResult(result: SmokeResult, json: boolean): void {
+  if (json) {
+    console.log(JSON.stringify(result));
+    return;
+  }
+  console.log(
+    `${result.status}: ${result.capability} thread=${
+      result.threadIdentifier ?? result.threadId ?? "n/a"
+    } reason=${result.reason}`,
+  );
+}
+
 async function main() {
   const args = parseArgs();
+  if (args.dryRun) {
+    const results = dryRunResults(args);
+    for (const result of results) printResult(result, args.json);
+    if (!args.json) {
+      console.log(
+        `Mobile Pi harness dry run: ${results.length} capability rows covered`,
+      );
+    }
+    return;
+  }
   const results: SmokeResult[] = [];
   for (const capability of args.capabilities) {
     const timeout = new Promise<SmokeResult>((resolve) => {
@@ -423,12 +653,7 @@ async function main() {
       timeout,
     ]);
     results.push(result);
-    if (args.json) console.log(JSON.stringify(result));
-    else {
-      console.log(
-        `${result.status}: ${capability} thread=${result.threadIdentifier ?? result.threadId ?? "n/a"} reason=${result.reason}`,
-      );
-    }
+    printResult(result, args.json);
   }
   const failed = results.filter((result) => result.status === "FAIL");
   if (!args.json) {

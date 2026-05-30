@@ -179,6 +179,30 @@ describe("runAgentTurn", () => {
     ).toBe(true);
   });
 
+  it("returns aborted when the provider rejects because the signal was aborted", async () => {
+    const provider = {
+      id: "abort-aware",
+      generate: (_request: unknown, signal?: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new Error("AbortError")),
+          );
+          setTimeout(() => reject(new Error("should have aborted")), 10_000);
+        }),
+    };
+    const controller = new AbortController();
+
+    const turn = runAgentTurn({
+      provider,
+      tools: [],
+      messages: [user("hi")],
+      signal: controller.signal,
+    });
+    controller.abort();
+
+    await expect(turn).resolves.toMatchObject({ stopReason: "aborted" });
+  });
+
   it("accumulates usage across steps and does not mutate the caller's messages", async () => {
     const seed = [user("hi")];
     const provider = new MockModelProvider([
