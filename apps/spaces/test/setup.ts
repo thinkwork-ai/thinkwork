@@ -83,3 +83,32 @@ class ResizeObserverStub {
 }
 
 globalThis.ResizeObserver = ResizeObserverStub;
+
+// jsdom in this config doesn't expose a working localStorage; install a
+// Map-backed Storage so preference modules (editor-prefs, etc.) work in tests.
+// Tests that need their own (auth.test.ts) override and restore around this.
+if (
+  typeof window !== "undefined" &&
+  typeof window.localStorage?.getItem !== "function"
+) {
+  const store = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+      setItem: (key: string, value: string) => {
+        store.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+      key: (index: number) => Array.from(store.keys())[index] ?? null,
+      get length() {
+        return store.size;
+      },
+    },
+  });
+}

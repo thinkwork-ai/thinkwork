@@ -2,6 +2,7 @@
 
 import {
   Button,
+  cn,
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -19,6 +20,7 @@ import {
   FileTreeFile,
   FileTreeFolder,
 } from "@/components/ai-elements/file-tree";
+import { useEditorFontSize, useEditorWrap } from "@/lib/editor-prefs";
 import {
   type LocalWorkspaceBridge,
   useLocalWorkspace,
@@ -180,6 +182,9 @@ function WorkspaceContentPane({
 }: {
   ws: ReturnType<typeof useLocalWorkspace>;
 }) {
+  const wrap = useEditorWrap();
+  const fontSize = useEditorFontSize();
+
   if (ws.selectionMissing) {
     return (
       <Centered>
@@ -204,14 +209,19 @@ function WorkspaceContentPane({
       // Borderless, edge-to-edge editor that fills the pane. Overrides on the
       // shared CodeBlock: drop its border/rounding, stretch it + its pre
       // wrappers to full height (`:not(:last-child)` excludes the absolute copy
-      // button so its hit area isn't expanded), and tighten the pre's left
-      // padding so line numbers sit close to the edge.
+      // button so its hit area isn't expanded), tighten the pre's left padding,
+      // and inherit the user's font size (overrides CodeBlock's text-sm). Wrap
+      // toggles soft-wrapping vs the default horizontal scroll.
       return (
         <CodeBlock
           code={ws.file.content}
           language={ws.file.language as BundledLanguage}
           showLineNumbers
-          className="h-full rounded-none border-0 [&>div]:h-full [&>div>div:not(:last-child)]:h-full [&_pre]:min-h-full [&_pre]:!pl-2"
+          style={{ fontSize: `${fontSize}px` }}
+          className={cn(
+            "h-full rounded-none border-0 [&>div]:h-full [&>div>div:not(:last-child)]:h-full [&_pre]:min-h-full [&_pre]:!pl-2 [&_code]:![font-size:inherit] [&_pre]:![font-size:inherit]",
+            wrap && "[&_pre]:break-words [&_pre]:whitespace-pre-wrap",
+          )}
         >
           <CodeBlockCopyButton />
         </CodeBlock>
