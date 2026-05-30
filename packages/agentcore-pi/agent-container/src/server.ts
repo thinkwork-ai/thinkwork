@@ -45,6 +45,7 @@ import http from "node:http";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
   createMemoryExtension,
+  createSystemPromptExtension,
   toExtensionFactory,
   type ExtensionFactory,
 } from "@thinkwork/pi-extensions";
@@ -103,7 +104,6 @@ import {
 import { resolveSandboxFactory } from "./runtime/sandbox-factory.js";
 import { bootstrapWorkspace } from "./runtime/bootstrap-workspace.js";
 import { createS3SessionStore } from "./runtime/session-store.js";
-import { composeSystemPrompt } from "./runtime/system-prompt.js";
 import {
   buildFileReadTool,
   cleanupMessageAttachments,
@@ -244,6 +244,13 @@ export interface AssembledToolBundle {
    * to `DefaultResourceLoader.extensionFactories`.
    */
   extensionFactories: ExtensionFactory[];
+  /**
+   * Tool names registered by the loaded extensions (e.g. memory's
+   * `recall`/`reflect`). The agent loop folds these into the
+   * `createAgentSession` allowlist — without them the SDK gates extension tools
+   * out (they register but never reach the model). U6.
+   */
+  extensionToolNames: string[];
   cleanup: Array<() => Promise<void>>;
   workspaceSkills: WorkspaceSkill[];
   handleStore: HandleStore;
@@ -437,6 +444,7 @@ export async function assembleTools(
   // recall/reflect AgentTools. The managed AgentCore-Memory path stays as custom
   // tools until the firming plan's single-engine cutover retires it.
   const extensionFactories: ExtensionFactory[] = [];
+  const extensionToolNames: string[] = [];
   const evalMode = args.payload.eval_mode === true;
   if (evalMode) {
     logStructured({
@@ -488,6 +496,9 @@ export async function assembleTools(
     extensionFactories.push(
       toExtensionFactory(memoryExtension, { memory: memoryProvider }),
     );
+    // Fold the extension's tool names into the allowlist or recall/reflect
+    // register but never reach the model (the SDK gates to the allowlist).
+    extensionToolNames.push(...(memoryExtension.toolNames ?? []));
     logStructured({
       level: "info",
       event: "memory_extension_loaded",
@@ -592,6 +603,7 @@ export async function assembleTools(
   return {
     tools,
     extensionFactories,
+    extensionToolNames,
     cleanup,
     workspaceSkills: args.workspaceSkills,
     handleStore,
@@ -1133,19 +1145,32 @@ export async function handleInvocation(
   const attachmentPreamble = formatMessageAttachmentsPreamble(
     stagedAttachments.staged,
   );
-  const systemPromptBase = await composeSystemPrompt({
-    payload: args.payload,
-    workspaceDir: env.workspaceDir,
-    availableToolNames: bundle.tools.map((tool) => tool.name),
-    workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
-  });
-  const systemPrompt = attachmentPreamble
-    ? `${systemPromptBase}\n\n---\n\n${attachmentPreamble}`
-    : systemPromptBase;
   const fileReadTool = buildFileReadTool(stagedAttachments.staged);
   if (fileReadTool) {
     bundle.tools.push(fileReadTool);
   }
+  // Plan §004 U6 — system-prompt composition runs inside the session via a
+  // `before_agent_start` extension hook instead of being hand-built here and
+  // passed as a string. The hook composes from workspace defaults + tool policy
+  // + skills (+ the attachment preamble as suffix) and reports the final prompt
+  // back through `onComposed` so we can still surface it as
+  // `composed_system_prompt` on the response.
+  let composedSystemPrompt = "";
+  bundle.extensionFactories.push(
+    toExtensionFactory(
+      createSystemPromptExtension({
+        payload: args.payload,
+        workspaceDir: env.workspaceDir,
+        availableToolNames: bundle.tools.map((tool) => tool.name),
+        workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
+        suffix: attachmentPreamble || undefined,
+        onComposed: (prompt) => {
+          composedSystemPrompt = prompt;
+        },
+      }),
+      {},
+    ),
+  );
   try {
     // The current invocation's model id is what pi-ai's Agent will use
     // to serialize history → Bedrock for THIS turn. We use the same id on
@@ -1175,12 +1200,16 @@ export async function handleInvocation(
           args.payload.messages_history,
           currentModelId,
         ),
-        systemPrompt,
+        // U6 — no prebuilt system prompt; the system-prompt extension's
+        // before_agent_start hook composes and sets it for the turn.
         tools: bundle.tools,
         // Plan §004 U5 — load thinkwork capabilities (memory first) as Pi
         // extensions over the resource loader, additive to the built-ins +
         // custom tools.
         extensionFactories: bundle.extensionFactories,
+        // U6 — fold extension tool names into the allowlist so they're actually
+        // enabled (the SDK gates to the allowlist).
+        extensionToolNames: bundle.extensionToolNames,
         modelId: args.payload.model,
         threadId: identity.threadId,
         gitSha: env.gitSha,
@@ -1235,7 +1264,7 @@ export async function handleInvocation(
       const finalized = await postFinalizeCallback({
         payload: args.payload,
         identity,
-        systemPrompt,
+        systemPrompt: composedSystemPrompt,
         result: { status: "error", error: runError, latencyMs },
         fetchImpl,
         logger: logStructured,
@@ -1310,7 +1339,7 @@ export async function handleInvocation(
     const finalized = await postFinalizeCallback({
       payload: args.payload,
       identity,
-      systemPrompt,
+      systemPrompt: composedSystemPrompt,
       result: { status: "ok", runResult, latencyMs },
       fetchImpl,
       logger: logStructured,
@@ -1346,7 +1375,7 @@ export async function handleInvocation(
 
   const responseBody: InvocationResponse = {
     runtime: "pi",
-    composed_system_prompt: systemPrompt,
+    composed_system_prompt: composedSystemPrompt,
     pi_usage: runResult.usage,
     pi_retain: retainOutcome.error
       ? { retained: retainOutcome.retained, error: retainOutcome.error }

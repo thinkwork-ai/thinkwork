@@ -83,7 +83,12 @@ export interface RunAgentLoopDeps {
 
 export interface OpenSessionInputs {
   cwd: string;
-  systemPrompt: string;
+  /**
+   * Prebuilt system prompt to override the resource loader's default with. U6
+   * makes this optional: when a system-prompt extension composes the prompt via
+   * `before_agent_start`, the host omits this and the override is not installed.
+   */
+  systemPrompt?: string;
   modelId: string;
   toolAllowlist: string[];
   customTools: ToolDefinition[];
@@ -186,16 +191,22 @@ export function toToolDefinition(tool: AgentTool<any>): ToolDefinition {
 
 /**
  * Build the `createAgentSession` tool allowlist. Because the allowlist gates
- * custom tools as well as built-ins, the platform tool names must be appended
- * to the full built-in set. De-duplicated so a custom tool that happens to
- * reuse a built-in name does not appear twice (it would then shadow the
- * built-in by name — acceptable, but the list itself stays unique).
+ * custom tools AND extension-registered tools as well as built-ins (the SDK
+ * enables ONLY listed names when an allowlist is provided), all three must be
+ * enumerated: the full built-in set, the custom AgentTool names, and the names
+ * of tools registered by loaded extensions (declared by the host — extension
+ * tools register during load and would otherwise be silently gated out).
+ * De-duplicated so a name appearing in more than one source is listed once.
  */
-export function buildToolAllowlist(customTools: ToolDefinition[]): string[] {
+export function buildToolAllowlist(
+  customTools: ToolDefinition[],
+  extensionToolNames: readonly string[] = [],
+): string[] {
   return [
     ...new Set([
       ...BUILTIN_TOOL_NAMES,
       ...customTools.map((tool) => tool.name),
+      ...extensionToolNames,
     ]),
   ];
 }
@@ -248,15 +259,20 @@ async function defaultOpenSession(
     modelRegistry.find("amazon-bedrock", inputs.modelId) ??
     modelRegistry.find("amazon-bedrock", DEFAULT_BEDROCK_MODEL_ID);
 
-  // Transitional system-prompt injection: U6 moves composition into a
-  // `before_agent_start` extension hook. Until then, override the resource
-  // loader's prompt with our already-composed string (desktop-proven path).
+  // System-prompt source: when the host passes a prebuilt `systemPrompt`,
+  // override the resource loader's default with it (the transitional /
+  // desktop-proven path). U6: when omitted, the system-prompt extension composes
+  // the prompt via its `before_agent_start` hook instead, so no override is
+  // installed and the hook's returned prompt governs the turn.
   const agentDir = path.join(inputs.cwd, PI_AGENT_DIR);
   await mkdir(agentDir, { recursive: true });
+  const systemPromptValue = inputs.systemPrompt;
   const resourceLoader = new DefaultResourceLoader({
     cwd: inputs.cwd,
     agentDir,
-    systemPromptOverride: () => inputs.systemPrompt,
+    ...(systemPromptValue !== undefined
+      ? { systemPromptOverride: () => systemPromptValue }
+      : {}),
     // U5 — load thinkwork capabilities as Pi extensions via factory injection
     // (no filesystem discovery; the U1-resolved serverless mechanism). The host
     // built these closed over its provider bundle. Omitted/empty → no-op.
@@ -333,7 +349,10 @@ export async function runAgentLoop(
   const toolInvocations: RunAgentLoopResult["toolInvocations"] = [];
 
   const customTools = args.tools.map(toToolDefinition);
-  const toolAllowlist = buildToolAllowlist(customTools);
+  const toolAllowlist = buildToolAllowlist(
+    customTools,
+    args.extensionToolNames,
+  );
   const requestedModelId = resolveModelIdString(args.modelId);
 
   const { session, modelId, durable, persistSession } = await openSession({

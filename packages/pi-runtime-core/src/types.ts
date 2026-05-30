@@ -71,7 +71,12 @@ export interface PiInvocationIdentity {
 export interface RunAgentLoopArgs {
   message: string;
   history: Message[];
-  systemPrompt: string;
+  /**
+   * Prebuilt system prompt. Optional as of U6: when a system-prompt extension
+   * composes the prompt via `before_agent_start`, the host omits this and the
+   * loop installs no override.
+   */
+  systemPrompt?: string;
   tools: AgentTool<any>[];
   modelId: unknown;
   threadId: string;
@@ -97,6 +102,13 @@ export interface RunAgentLoopArgs {
    * bundle; the loop stays host-agnostic and only forwards them. U5.
    */
   extensionFactories?: ExtensionFactory[];
+  /**
+   * Names of tools registered by the loaded extensions. Folded into the
+   * `createAgentSession` allowlist so extension tools (e.g. memory's
+   * `recall`/`reflect`) are actually enabled — the SDK gates to the allowlist,
+   * so extension tools omitted from it register but never reach the model. U6.
+   */
+  extensionToolNames?: string[];
 }
 
 export interface RunAgentLoopResult {
