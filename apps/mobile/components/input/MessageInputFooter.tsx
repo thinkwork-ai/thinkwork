@@ -229,7 +229,7 @@ export const MessageInputFooter = forwardRef<
       style={{
         borderTopLeftRadius: 16,
         borderTopRightRadius: 16,
-        overflow: "visible",
+        overflow: "hidden",
         position: "relative",
         paddingBottom: keyboardVisible
           ? 4
@@ -238,13 +238,6 @@ export const MessageInputFooter = forwardRef<
             : insets.bottom,
       }}
     >
-      <MentionAutocomplete
-        query={mentionQuery ?? ""}
-        candidates={mentionCandidates}
-        onSelect={handleMentionSelect}
-        visible={autocompleteVisible}
-      />
-
       {/* Workspace chips row */}
       {hasWorkspaces && (
         <ScrollView
@@ -327,6 +320,13 @@ export const MessageInputFooter = forwardRef<
           </View>
         </View>
       ) : null}
+
+      <MentionAutocomplete
+        query={mentionQuery ?? ""}
+        candidates={mentionCandidates}
+        onSelect={handleMentionSelect}
+        visible={autocompleteVisible}
+      />
 
       {/* Text input */}
       <View className="px-4 pt-3">
