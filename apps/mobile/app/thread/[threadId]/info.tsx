@@ -165,11 +165,10 @@ export default function ThreadInfoRoute() {
   });
   const agentName = useMemo(() => {
     if (!thread?.agentId) return "Agent";
-    const agent = ((agentsData?.agents ?? []) as any[]).find(
-      (a: any) => a.id === thread.agentId,
-    );
+    const agent = agentsData?.agent;
+    if (agent?.id !== thread.agentId) return "Agent";
     return agent?.name || "Agent";
-  }, [agentsData?.agents, thread?.agentId]);
+  }, [agentsData?.agent, thread?.agentId]);
 
   const [propertiesExpanded, setPropertiesExpanded] = useState(true);
 

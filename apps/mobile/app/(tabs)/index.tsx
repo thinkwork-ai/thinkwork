@@ -338,10 +338,10 @@ export default function ThreadsScreen() {
     [spacesData?.spaces],
   );
   // The tenant's default space. The Space type has no `isDefault` flag, so we
-  // match by slug/name the same way the desktop composer does
-  // (SpacesWorkbench.isDefaultSpace), falling back to the first space. When the
+  // mirror desktop's two-step heuristic: prefer the primary "Default" space,
+  // then fall back to legacy "General", then the first active space. When the
   // user hasn't explicitly picked a space, new threads go HERE — not the
-  // server's "General" fallback, which is what a null spaceId resolves to.
+  // server's null-space fallback.
   const defaultSpace = useMemo(() => {
     const isDefaultSpace = (s: SpaceOption) => {
       const slug = s.slug?.toLowerCase();
@@ -353,7 +353,17 @@ export default function ThreadsScreen() {
         name === "general"
       );
     };
-    return spaces.find(isDefaultSpace) ?? spaces[0] ?? null;
+    const isPrimaryDefaultSpace = (s: SpaceOption) => {
+      const slug = s.slug?.toLowerCase();
+      const name = s.name?.toLowerCase();
+      return slug === "default" || name === "default";
+    };
+    return (
+      spaces.find(isPrimaryDefaultSpace) ??
+      spaces.find(isDefaultSpace) ??
+      spaces[0] ??
+      null
+    );
   }, [spaces]);
   // Scope reviews to the calling user. The resolver chain-walks
   // `parent_agent_id` so this also surfaces sub-agent reviews routed via the
@@ -568,7 +578,8 @@ export default function ThreadsScreen() {
     () => ({
       id: effectiveSpaceId,
       name:
-        spaces.find((space) => space.id === effectiveSpaceId)?.name ?? "Default",
+        spaces.find((space) => space.id === effectiveSpaceId)?.name ??
+        "Default",
     }),
     [effectiveSpaceId, spaces],
   );
@@ -790,7 +801,9 @@ export default function ThreadsScreen() {
             threadId: newThread.id,
             userText: messageContent,
             priorMessages: [],
-            agentName: selectedComputer?.name,
+            agentName: selectedComputer?.name ?? undefined,
+            userId: currentUser?.id,
+            spaceId: effectiveSpaceId ?? undefined,
             // Selects which tenant MCP tools the on-device agent can call
             // (mcp-tools extension + proxy). Agent toggle off → no agentId,
             // so the first turn runs with no platform tools (plain message).
@@ -801,6 +814,8 @@ export default function ThreadsScreen() {
           reexecute({ requestPolicy: "network-only" });
         } catch (err) {
           console.error("[harness] new-thread first turn failed:", err);
+        } finally {
+          clearThreadActive(newThread.id);
         }
       } catch (e: any) {
         console.error("[Threads] Failed to create thread:", e);
@@ -821,8 +836,12 @@ export default function ThreadsScreen() {
       reexecute,
       markRead,
       markThreadActive,
+      clearThreadActive,
       user?.sub,
       selectedComputer?.name,
+      effectiveSpaceId,
+      newThreadImage,
+      newThreadAgentEnabled,
     ],
   );
 

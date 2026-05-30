@@ -17,20 +17,27 @@ const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
 export type WorkspaceTarget =
   | { agentId: string }
   | { templateId: string }
+  | { spaceId: string }
+  | { userId: string }
   | { defaults: true };
 
 export type ComposeSource =
+  | "agent"
+  | "template"
+  | "space"
+  | "user"
+  | "defaults"
+  | "catalog"
   | "agent-override"
   | "agent-override-pinned"
-  | "template"
-  | "template-pinned"
-  | "defaults";
+  | "template-pinned";
 
 export interface WorkspaceFileMeta {
   path: string;
   source: ComposeSource;
   sha256: string;
   overridden: boolean;
+  content?: string;
 }
 
 async function request(body: Record<string, unknown>): Promise<unknown> {
@@ -56,8 +63,13 @@ async function request(body: Record<string, unknown>): Promise<unknown> {
 
 export async function listWorkspaceFiles(
   target: WorkspaceTarget,
+  options: { includeContent?: boolean } = {},
 ): Promise<{ files: WorkspaceFileMeta[] }> {
-  return (await request({ action: "list", ...target })) as {
+  return (await request({
+    action: "list",
+    ...target,
+    includeContent: options.includeContent === true,
+  })) as {
     files: WorkspaceFileMeta[];
   };
 }

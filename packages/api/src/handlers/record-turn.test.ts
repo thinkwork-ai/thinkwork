@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
-const { mockAuthenticate, mockSelectLimit, mockReturning } = vi.hoisted(() => ({
+const {
+  mockAuthenticate,
+  mockSelectLimit,
+  mockReturning,
+  mockUpdateSet,
+  mockUpdateWhere,
+} = vi.hoisted(() => ({
   mockAuthenticate: vi.fn(),
   mockSelectLimit: vi.fn(),
   mockReturning: vi.fn(),
+  mockUpdateSet: vi.fn(),
+  mockUpdateWhere: vi.fn(),
 }));
 
 vi.mock("../lib/cognito-auth.js", () => ({ authenticate: mockAuthenticate }));
@@ -23,13 +31,30 @@ vi.mock("../lib/db.js", () => ({
         returning: () => Promise.resolve(mockReturning() as unknown[]),
       }),
     }),
+    update: () => ({
+      set: (values: unknown) => {
+        mockUpdateSet(values);
+        return {
+          where: (condition: unknown) => {
+            mockUpdateWhere(condition);
+            return Promise.resolve([]);
+          },
+        };
+      },
+    }),
   },
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
   schema: {
     users: { email: "users.email" },
-    threads: { id: "threads.id", tenant_id: "threads.tenant_id" },
+    threads: {
+      id: "threads.id",
+      tenant_id: "threads.tenant_id",
+      last_turn_completed_at: "threads.last_turn_completed_at",
+      last_response_preview: "threads.last_response_preview",
+      updated_at: "threads.updated_at",
+    },
     messages: { id: "messages.id" },
   },
 }));
@@ -55,6 +80,8 @@ beforeEach(() => {
   mockAuthenticate.mockReset();
   mockSelectLimit.mockReset();
   mockReturning.mockReset();
+  mockUpdateSet.mockReset();
+  mockUpdateWhere.mockReset();
   mockAuthenticate.mockResolvedValue({
     principalId: "p1",
     tenantId: null,
@@ -82,6 +109,11 @@ describe("record-turn handler", () => {
       threadId: "thr_1",
       userMessageId: "um_1",
       assistantMessageId: "am_1",
+    });
+    expect(mockUpdateSet).toHaveBeenCalledWith({
+      last_turn_completed_at: expect.any(Date),
+      last_response_preview: "hi there",
+      updated_at: expect.any(Date),
     });
   });
 

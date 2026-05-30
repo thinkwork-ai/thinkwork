@@ -119,6 +119,16 @@ export async function handler(
     })
     .returning({ id: messages.id });
 
+  const completedAt = new Date();
+  await db
+    .update(threads)
+    .set({
+      last_turn_completed_at: completedAt,
+      last_response_preview: body.assistantText.slice(0, 500),
+      updated_at: completedAt,
+    })
+    .where(and(eq(threads.id, body.threadId), eq(threads.tenant_id, tenantId)));
+
   return json({
     threadId: body.threadId,
     userMessageId: userMessage.id,

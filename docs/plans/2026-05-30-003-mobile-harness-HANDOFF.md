@@ -13,7 +13,22 @@ in the iOS sim: "What's my name?" pulled real CRM opportunities through the prox
 extension architecture + MCP proxy + image input + composer UI are all shipped or in an
 open PR. **Three known bugs remain** — one needs a plan, two are bounded. Details below.
 
+**Continuation update (Codex, 2026-05-30):** PR #1863 now also carries fixes for the
+mobile parity bugs found during simulator validation:
+
+- Mobile harness turns load user/space/agent workspace context through a Hermes-safe
+  `workspace-context` extension, including user-scoped `USER.md` for identity questions.
+- `/api/threads/record-turn` stamps `last_turn_completed_at` and
+  `last_response_preview`, giving mobile the same durable completion signal used by the
+  active/Working indicator.
+- New-thread composer default-space selection now matches desktop: prefer primary
+  `Default`, then legacy `General`, then the first active space.
+- Verified locally with `apps/mobile` agent tests (74), API `record-turn` +
+  `model-converse` tests (19), and iOS simulator visual validation of the composer
+  showing `Default`.
+
 ### Git state at handoff
+
 - Branch: `feat/mobile-composer-ui` → **PR #1863 (OPEN)**: https://github.com/thinkwork-ai/thinkwork/pull/1863
 - Working tree: clean. All commits pushed. 72 agent tests green.
 - Already merged to `main`: **PR #1862** (U1–U4 core: extension seam, MCP proxy, MCP-tools
@@ -28,6 +43,7 @@ open PR. **Three known bugs remain** — one needs a plan, two are bounded. Deta
 ## What's DONE (shipped or in PR #1863)
 
 **Merged to main (PR #1862):**
+
 - **Extension seam** (`apps/mobile/lib/agent/extensions/`) — Hermes-pure mirror of Pi's
   `ExtensionAPI` (`registerTool` + `on(event)` bus + `before_agent_start` system-prompt
   composition). `createAgentSession({ extensions })` loads them; tools additive.
@@ -41,6 +57,7 @@ open PR. **Three known bugs remain** — one needs a plan, two are bounded. Deta
   (lazy-loaded, crash-safe).
 
 **In PR #1863 (composer UI — NEEDS on-device validation before merge):**
+
 - Attach (paperclip) + agent toggle (Bot) on BOTH home + thread composers.
 - Pending-image chip; image-or-text send gate.
 - Removed the experimental "+" workspace button.
@@ -53,13 +70,15 @@ open PR. **Three known bugs remain** — one needs a plan, two are bounded. Deta
 
 ## REMAINING WORK (in priority order)
 
-### 1. Workspace context — the "What's my name?" bug  ← BIGGEST, needs /ce-plan
+### 1. Workspace context — the "What's my name?" bug ← BIGGEST, needs /ce-plan
+
 **Symptom:** agent answers identity/context questions wrong ("I don't have access to your
 name") because the on-device harness runs with only a **bare base system prompt** — it never
 loads the user's rendered S3 workspace (USER.md / MEMORY / AGENTS.md) the way the cloud agent
 does.
 
 **Cloud reference (how it's done right):**
+
 - `packages/api/src/handlers/chat-agent-invoke.ts` → `renderWorkspaceTupleForInvoke()` calls
   the **workspace-renderer Lambda** (`WORKSPACE_RENDERER_FUNCTION_NAME`) to render the
   tenant/user/space tuple to an S3 prefix, then the runtime fetches `/api/workspaces/files`
@@ -70,6 +89,7 @@ does.
   `agents-md-composer.ts`, `repository.ts`, `s3-store.ts`).
 
 **Decision needed (the reason this is /ce-plan, not a patch):**
+
 - **Option A — server injects:** extend `model-converse` (or a new endpoint) to render +
   inject the agent's workspace context server-side given `agentId`, returned as the system
   prompt the device uses.
@@ -79,9 +99,11 @@ does.
 - User explicitly asked to **/ce-plan this** before building.
 
 ### 2. Sticky "Working…" indicator — bounded, ready to build
+
 **Symptom:** "Working… 5s" stays visible AFTER the assistant answer has already rendered.
 
 **Desktop already solved this — PR #1864.** Apply the same principle to mobile:
+
 - Keep the optimistic "working" state alive after the user message persists.
 - Do NOT clear it just because the first durable object arrived; clear only when the **next
   durable state replaces it** (turn row / assistant message) or an **error is surfaced**.
@@ -98,6 +120,7 @@ does.
   races. Investigate the lifecycle against the desktop pattern; do NOT just shorten timers.
 
 ### 3. iOS native build / EAS gotchas (operational, not a bug)
+
 - Adding any native module (like `expo-image-picker`) requires a **dev-client rebuild**
   (`expo run:ios`) or a fresh TestFlight build — JS reload is not enough. Imports of native
   modules must be **lazy** (see `tools/image-picker.ts`) so a stale binary degrades instead
@@ -108,18 +131,20 @@ does.
 ---
 
 ## U5 verification status (live)
+
 - **Tool path: PROVEN in sim** — message → on-device harness → mcp-proxy → tenant MCP → answer
   with real CRM data. Watch logs:
   `/aws/lambda/thinkwork-dev-api-{model-converse,mcp-proxy,record-turn}` (note the `-api-`
   infix; mcp-proxy group exists only after first invocation).
 - **Camera + business-card→CRM: NOT yet** — sim has no camera; needs TestFlight.
   Build: `cd apps/mobile && EAS_BUILD_NO_EXPO_GO_WARNING=true npx -y eas-cli@latest build
-  --platform ios --profile production --non-interactive --no-wait --auto-submit`
+--platform ios --profile production --non-interactive --no-wait --auto-submit`
   (EAS must be logged into the `thinkwork-ai` account, not `homecareintel`).
 
 ---
 
 ## Process notes / landmines for the next agent (learned the hard way this session)
+
 - **Bracketed/paren paths garble in Read/sed/awk** (`app/(tabs)/index.tsx`,
   `app/thread/[threadId]/index.tsx`). Copy to a clean `/tmp/x.tsx` to read; `grep -c` and the
   Edit tool are reliable on the real path. Don't "diagnose corruption" from garbled Read output.

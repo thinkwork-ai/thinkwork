@@ -671,11 +671,11 @@ export default function ThreadDetailRoute() {
   });
   const agentMap = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const a of (agentsData?.agents ?? []) as any[]) {
+    for (const a of agentsData?.agent ? [agentsData.agent as any] : []) {
       map[a.id] = a.name || "Agent";
     }
     return map;
-  }, [agentsData?.agents]);
+  }, [agentsData?.agent]);
 
   // ── Thread data ──
   const [{ data: threadData, fetching: fetchingThread }, reexecuteThread] =
@@ -1169,6 +1169,8 @@ export default function ThreadDetailRoute() {
         // call (mcp-tools extension + proxy). Agent toggle off → no agentId, so the
         // turn runs with no platform tools (plain message).
         agentId: agentEnabled ? (thread?.agentId ?? undefined) : undefined,
+        userId: currentUser?.id,
+        spaceId: thread?.spaceId ?? undefined,
         // Attached image is model-vision input on the user turn.
         images: image ? [image] : undefined,
         // `messages` comes back newest-first (resolver orders desc(created_at));
@@ -1196,6 +1198,8 @@ export default function ThreadDetailRoute() {
     threadId,
     messages,
     thread?.agentId,
+    thread?.spaceId,
+    currentUser?.id,
     reexecuteThread,
     reexecuteMessages,
     reexecuteTurns,
