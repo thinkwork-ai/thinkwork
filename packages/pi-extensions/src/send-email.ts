@@ -17,6 +17,7 @@ export interface SendEmailConfig {
   agentId?: unknown;
   tenantId?: unknown;
   threadId?: unknown;
+  threadTurnId?: unknown;
   inboundMessageId?: unknown;
   inboundFrom?: unknown;
   inboundBody?: unknown;
@@ -110,6 +111,7 @@ export function createSendEmailExtension(
       if (!enabled || !config) return;
 
       const defaultThreadId = asString(config.threadId);
+      const threadTurnId = asString(config.threadTurnId);
       const inboundMessageId = asString(config.inboundMessageId);
       const inboundFrom = asString(config.inboundFrom);
       const inboundBody = asString(config.inboundBody);
@@ -236,6 +238,7 @@ export function createSendEmailExtension(
               "Content-Type": "application/json",
               "x-tenant-id": tenantId,
               "x-agent-id": agentId,
+              ...(threadTurnId ? { "x-thread-turn-id": threadTurnId } : {}),
               "User-Agent": "Thinkwork-AgentCore-Pi/1.0",
             },
             body: JSON.stringify(requestPayload),
