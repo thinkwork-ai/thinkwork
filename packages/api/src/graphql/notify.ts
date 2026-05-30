@@ -3,20 +3,29 @@
  * Fires mutations on AppSync to trigger @aws_subscribe fan-out to WebSocket clients.
  */
 
-const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
+// Read AppSync config at CALL time, not module load. AgentCore warm containers
+// can boot before env injection, and tests set env after import — capturing at
+// module load locks in stale/empty values. See feedback_vitest_env_capture_timing
+// + project_agentcore_deploy_race_env.
+function appsyncConfig(): { endpoint: string; apiKey: string } {
+  return {
+    endpoint: process.env.APPSYNC_ENDPOINT || "",
+    apiKey: process.env.APPSYNC_API_KEY || "",
+  };
+}
 
 async function postToAppSync(
   mutation: string,
   variables: Record<string, unknown>,
 ): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) return;
+  const { endpoint, apiKey } = appsyncConfig();
+  if (!endpoint || !apiKey) return;
   try {
-    const response = await fetch(APPSYNC_ENDPOINT, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ query: mutation, variables }),
     });
