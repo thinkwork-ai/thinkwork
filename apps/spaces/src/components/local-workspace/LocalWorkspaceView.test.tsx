@@ -115,7 +115,12 @@ describe("LocalWorkspaceView", () => {
         path: "dev/GOAL.md",
       }),
     );
-    expect(await screen.findByText("dev/GOAL.md")).toBeTruthy();
+    // The ok file rendered: the "select a file" placeholder is gone.
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/select a file to view its contents/i),
+      ).toBeNull(),
+    );
   });
 
   it("publishes no Refresh action when unavailable", () => {
@@ -184,7 +189,12 @@ describe("LocalWorkspaceView", () => {
     });
     render(<Harness bridge={bridge} />);
     fireEvent.click(await screen.findByText("GOAL.md"));
-    expect(await screen.findByText("dev/GOAL.md")).toBeTruthy();
+    // The ok file rendered: the "select a file" placeholder is gone.
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/select a file to view its contents/i),
+      ).toBeNull(),
+    );
 
     tree = { status: "empty" };
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
