@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAgentSession, defineTool } from "./session";
+import { defineExtension } from "./extensions/define-extension";
 import {
   MockModelProvider,
   textResponse,
@@ -13,6 +14,15 @@ function echoTool(): Tool {
     description: "echo",
     parameters: { type: "object", properties: { v: { type: "string" } } },
     execute: async (a) => ({ content: `echo:${String(a.v)}` }),
+  });
+}
+
+function toolNamed(name: string): Tool {
+  return defineTool({
+    name,
+    description: `tool ${name}`,
+    parameters: { type: "object" },
+    execute: async () => ({ content: name }),
   });
 }
 
@@ -117,5 +127,56 @@ describe("createAgentSession", () => {
     unsub();
     await session.prompt("two");
     expect(events.length).toBe(countAfterFirst);
+  });
+
+  it("loads extensions: tools appended (additive) + system prompt composed", async () => {
+    const provider = new MockModelProvider([textResponse("ok")]);
+    const ext = defineExtension({
+      name: "demo",
+      register: (pi) => {
+        pi.registerTool(toolNamed("connected_tool"));
+        pi.on("before_agent_start", (e) => ({
+          systemPrompt: `${e.systemPrompt}\n\nYou have connected tools.`,
+        }));
+      },
+    });
+    const session = createAgentSession({
+      modelProvider: provider,
+      systemPrompt: "base identity",
+      tools: [echoTool()],
+      extensions: [ext],
+    });
+
+    await session.ready();
+    expect(session.tools.map((t) => t.name)).toEqual([
+      "echo",
+      "connected_tool",
+    ]);
+    expect(session.systemPrompt).toContain("base identity");
+    expect(session.systemPrompt).toContain("You have connected tools.");
+
+    await session.prompt("go");
+    expect(provider.requests[0].system).toContain("You have connected tools.");
+    expect(provider.requests[0].tools.map((t) => t.name)).toContain(
+      "connected_tool",
+    );
+  });
+
+  it("prompt() loads extensions implicitly when ready() was not called", async () => {
+    const provider = new MockModelProvider([textResponse("ok")]);
+    const ext = defineExtension({
+      name: "demo",
+      register: (pi) => {
+        pi.registerTool(toolNamed("late_tool"));
+      },
+    });
+    const session = createAgentSession({
+      modelProvider: provider,
+      extensions: [ext],
+    });
+    await session.prompt("go");
+    expect(provider.requests[0].tools.map((t) => t.name)).toContain(
+      "late_tool",
+    );
   });
 });
