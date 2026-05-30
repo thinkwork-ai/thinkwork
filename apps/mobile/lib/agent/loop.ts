@@ -137,6 +137,9 @@ export async function runAgentTurn(
         signal,
       );
     } catch (err) {
+      if (signal?.aborted) {
+        return finish("aborted");
+      }
       const message = err instanceof Error ? err.message : String(err);
       await emit({ type: "error", error: message });
       return finish("error");

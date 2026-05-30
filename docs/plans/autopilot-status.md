@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U8 mobile-native capability extensions
-- Active branch: `codex/mobile-pi-host-u8-native-extensions`
+- Active unit: U9 E2E parity harness and TestFlight release checklist
+- Active branch: `codex/mobile-pi-host-u9-e2e-smokes`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u8-native-extensions`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u9-e2e-smokes`
 - Started: 2026-05-30
-- Latest merged PR: [#1877](https://github.com/thinkwork-ai/thinkwork/pull/1877)
-- Active PR: [#1878](https://github.com/thinkwork-ai/thinkwork/pull/1878)
+- Latest merged PR: [#1878](https://github.com/thinkwork-ai/thinkwork/pull/1878)
+- Active PR: [#1879](https://github.com/thinkwork-ai/thinkwork/pull/1879)
 - CI: pending
 
 ### Active Unit Notes
@@ -232,6 +232,36 @@ Target branch: `main`
   The broad mobile `tsc --noEmit` command still exits `2` on existing mobile
   diagnostics outside this unit; no diagnostics matched the U8 touched files.
 - Opened PR [#1878](https://github.com/thinkwork-ai/thinkwork/pull/1878).
+- PR [#1878](https://github.com/thinkwork-ai/thinkwork/pull/1878) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and the remote/local U8 branch plus worktree were deleted. Merge commit:
+  `b20e7b38e5aee154fc13610e502091db8ec22b24`.
+- Synced from `origin/main` and created isolated U9 branch/worktree
+  `codex/mobile-pi-host-u9-e2e-smokes`.
+- Goal for U9: make the mobile Pi parity smoke matrix executable and
+  repeatable across local dry-run, deployed-stage harness runs, simulator, and
+  TestFlight/on-device validation.
+- Implemented harness matrix coverage for `plain`, `workspace`,
+  `workspace_tools`, `mcp`, `mcp_auth_failure`, `execute_code`, `bash`,
+  `image`, `file`, and `abort`, with thread UUID and thread identifier captured
+  for every deployed smoke result.
+- Added a credential-free `smoke:pi-harness:dry-run` script so CI and local
+  verification can prove matrix coverage without deployed identity inputs.
+- Added the mobile device smoke checklist and durable smoke-matrix solution doc.
+- Focused U9 verification passed:
+  `pnpm --filter @thinkwork/mobile smoke:pi-harness:dry-run`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/loop.test.ts`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent`,
+  `pnpm --filter @thinkwork/mobile test`,
+  `pnpm --filter @thinkwork/react-native-sdk build`,
+  `pnpm --filter @thinkwork/mobile build:web`, touched-file TypeScript
+  diagnostic filter, touched-file Prettier check, and `git diff --check`.
+- The broad mobile `tsc --noEmit` command still exits `2` on existing mobile
+  diagnostics outside this unit; no diagnostics matched the U9 touched files.
+- Real deployed all-capability smoke and TestFlight/on-device validation remain
+  documented checklist steps pending operator-provided Cognito identity inputs
+  and device build execution.
+- Opened PR [#1879](https://github.com/thinkwork-ai/thinkwork/pull/1879).
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 
