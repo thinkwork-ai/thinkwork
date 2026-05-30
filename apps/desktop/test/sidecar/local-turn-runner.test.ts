@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  BUILTIN_TOOL_NAMES,
   DESKTOP_PI_SDK_EMBEDDING_CONTRACT,
   type PreparedDesktopPiRuntimeSession,
 } from "@thinkwork/pi-runtime-core";
@@ -107,7 +108,7 @@ describe("runLocalDesktopTurn", () => {
     const sdk: PiSdkModuleLike = {
       createAgentSession: vi.fn(async (options) => {
         expect(options?.cwd).toContain("acme");
-        expect(options?.tools).toEqual(["read", "grep", "find", "ls"]);
+        expect(options?.tools).toEqual([...BUILTIN_TOOL_NAMES]);
         return {
           session: {
             messages: [
@@ -672,6 +673,8 @@ describe("runLocalDesktopTurn", () => {
     );
     expect(bundle).toContain("## Composed System Prompt");
     expect(bundle).toContain("You are running inside the ThinkWork desktop");
+    expect(bundle).toContain("Use bash for shell commands");
+    expect(bundle).not.toContain("shell out");
     expect(bundle).toContain("### AGENTS.md");
     expect(bundle).toContain("# Agent");
   });

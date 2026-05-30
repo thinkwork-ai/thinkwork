@@ -177,6 +177,27 @@ Target branch: `main`
   and deleted the remote/local U10 branch.
 - Autopilot run complete: U7, U8, U9, and U10 are merged into `main`.
 
+### Post-Run Desktop Smoke Follow-Up
+
+- 2026-05-30 Desktop app smoke found the first local Pi bash check failed:
+  the desktop sidecar passed only read-only workspace built-ins
+  (`read`, `grep`, `find`, `ls`) into the Pi SDK allowlist, and the desktop
+  system prompt still told Local Pi not to shell out. The activity drawer
+  displayed the lifecycle and gated console log correctly, but the turn was a
+  product failure because the model could not call `bash`.
+- Follow-up branch `codex/pi-e2e-smoke` fixes Desktop Local Pi to use the
+  shared `BUILTIN_TOOL_NAMES` allowlist and updates the desktop system prompt
+  to allow `bash` inside the rendered app workspace while preserving local
+  filesystem/clipboard/screenshot restrictions.
+- Verified from the actual Desktop app:
+  Local Pi thread `CHAT-868` (`05338601-751c-418d-8ded-7877e6b334ce`) called
+  `bash` and replied `LOCAL_PI_BASH_SMOKE_102530`; managed AgentCore Pi thread
+  `CHAT-869` (`028bec6b-0999-4893-a661-748e49fc9ff5`) called `bash` and replied
+  `AGENTCORE_PI_BASH_SMOKE_102800`.
+- The Desktop thread Info Panel now shows copyable `thread.identifier`
+  (`CHAT-*`) and `thread.id` (UUID) rows, verified in-app by copying both
+  values to the macOS clipboard.
+
 ## Prior Run: Desktop Local Pi Sidecar
 
 Plan:

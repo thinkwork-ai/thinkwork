@@ -75,6 +75,7 @@ interface OptimisticMessage {
 interface ThreadResult {
   thread: {
     id: string;
+    identifier?: string | null;
     agentId?: string | null;
     userId?: string | null;
     computerId?: string | null;
@@ -823,6 +824,8 @@ export function SpacesThreadDetailRoute({
           setFilesModeOpen(false);
         }
       },
+      threadId: routeThread?.id ?? threadId,
+      threadIdentifier: routeThread?.identifier ?? null,
       startedAt: routeThread?.createdAt ?? null,
       startedBy: resolveStartedBy(routeThread),
       agents: resolveAgentsInvolved(routeThread),
@@ -1704,6 +1707,7 @@ function dispatchDesktopLocalPiEvent(status: "running" | "idle" | "fallback") {
 function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
   return {
     id: thread.id,
+    identifier: thread.identifier,
     title: thread.title,
     status: thread.status,
     lifecycleStatus: thread.lifecycleStatus,

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  BUILTIN_TOOL_NAMES,
   PI_APPLICATION_SDK_MIN_VERSION,
   PI_APPLICATION_SDK_PACKAGE,
   postFinalizeCallback,
@@ -99,7 +100,6 @@ export interface LocalTurnRunnerResult {
   workspace?: WorkspaceSyncResult;
 }
 
-const READ_ONLY_WORKSPACE_TOOLS = ["read", "grep", "find", "ls"] as const;
 const HINDSIGHT_RECALL_MAX_TOKENS = 1_500;
 const PROMPT_SOURCE_FILENAMES = new Set(["AGENTS.md", "SPACE.md", "USER.md"]);
 const LOCAL_PI_AGENT_DIR = ".thinkwork-pi";
@@ -360,7 +360,7 @@ async function createSdkSession(
   const bedrock = createBedrockRuntimeAdapter(prepared);
   const modelConfig = createPiSdkModelConfig(sdk, invocation, logger);
   const hindsight = createHindsightRuntimeAdapter(prepared);
-  const tools = [...READ_ONLY_WORKSPACE_TOOLS, ...extensions.toolNames];
+  const tools = [...BUILTIN_TOOL_NAMES, ...extensions.toolNames];
 
   logger.info("local Pi SDK session creating", {
     tools,
@@ -908,7 +908,8 @@ function buildSystemPrompt(invocation: DesktopPiRuntimeInvocation): string {
 You are running inside the ThinkWork desktop local Pi sidecar.
 Use only the rendered app workspace mounted as the current working directory.
 The SDK agent directory is .thinkwork-pi; it contains local copies of AGENTS.md, SPACE.md, USER.md, and PROMPT_SOURCES.md for this turn.
-Do not attempt to read arbitrary local folders, shell out, access the clipboard, or use screenshots.
+Use bash for shell commands, repository work, package scripts, builds, tests, and command output inside the rendered app workspace.
+Do not attempt to read arbitrary local folders, access the clipboard, or use screenshots.
 Use web_search for current facts and browser_automation for inspecting a specific public page when those tools are available.
 When work needs hosted isolation, long runtime, cloud-only tools, or consequential user-visible execution, use delegate_to_managed_agent instead of trying to perform that work locally.
 If the user asks for local filesystem or OS access outside the rendered app workspace, refuse briefly and explain that desktop local Pi v1 is limited to the approved ThinkWork app workspace.`;
