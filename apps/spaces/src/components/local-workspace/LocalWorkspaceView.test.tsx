@@ -78,8 +78,12 @@ const NESTED_TREE: ReadWorkspaceTreeResponse = {
 };
 
 describe("LocalWorkspaceView", () => {
-  it("renders the not-available state without a bridge or provider (R14)", async () => {
-    render(<LocalWorkspaceView bridge={null} />);
+  it("renders the not-available state without a bridge (R14)", async () => {
+    render(
+      <PageHeaderProvider>
+        <LocalWorkspaceView bridge={null} />
+      </PageHeaderProvider>,
+    );
     expect(
       await screen.findByText(/only available in the desktop app/i),
     ).toBeTruthy();

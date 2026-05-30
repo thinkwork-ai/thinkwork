@@ -54,9 +54,7 @@ interface PageHeaderContextValue {
   setActions: (actions: PageHeaderActions | null) => void;
 }
 
-export const PageHeaderContext = createContext<PageHeaderContextValue | null>(
-  null,
-);
+const PageHeaderContext = createContext<PageHeaderContextValue | null>(null);
 
 export function PageHeaderProvider({ children }: { children: ReactNode }) {
   const [actions, setActionsState] = useState<PageHeaderActions | null>(null);

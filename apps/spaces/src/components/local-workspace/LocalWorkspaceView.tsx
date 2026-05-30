@@ -8,9 +8,8 @@ import {
 } from "@thinkwork/ui";
 import type { BundledLanguage } from "shiki";
 import { Loader2Icon, RefreshCwIcon } from "lucide-react";
-import { useContext, useEffect, useRef } from "react";
 import type { WorkspaceTreeNode } from "@thinkwork/desktop-ipc";
-import { PageHeaderContext } from "@/context/PageHeaderContext";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   CodeBlock,
   CodeBlockCopyButton,
@@ -71,39 +70,28 @@ export function LocalWorkspaceView({ bridge }: LocalWorkspaceViewProps) {
   const ws = useLocalWorkspace(bridge);
 
   // Publish the section title + an icon-only Refresh into the settings header
-  // bar (no second in-view header). Provider-tolerant: when rendered outside a
-  // PageHeaderProvider (e.g. unit tests, web), this is a no-op.
-  // Hold setActions in a ref so the publish effect keys on stable primitives
-  // (refresh/treeLoading/available) rather than the provider's setActions
-  // identity — depending on the latter can re-run the effect every render.
-  const headerCtx = useContext(PageHeaderContext);
-  const setActionsRef = useRef(headerCtx?.setActions);
-  setActionsRef.current = headerCtx?.setActions;
+  // bar — no second in-view header. The PageHeaderProvider lives at the app
+  // root (main.tsx), so it's always present for this route.
   const { refresh, treeLoading, available } = ws;
-  useEffect(() => {
-    const setActions = setActionsRef.current;
-    if (!setActions) return;
-    setActions({
-      title: "Local Workspace",
-      breadcrumbs: [{ label: "Local Workspace" }],
-      action: available ? (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={refresh}
-          disabled={treeLoading}
-          aria-label="Refresh"
-          title="Refresh"
-        >
-          <RefreshCwIcon
-            className={treeLoading ? "size-4 animate-spin" : "size-4"}
-          />
-        </Button>
-      ) : undefined,
-      actionKey: `local-workspace:${available ? "on" : "off"}:${treeLoading}`,
-    });
-    return () => setActions(null);
-  }, [refresh, treeLoading, available]);
+  usePageHeaderActions({
+    title: "Local Workspace",
+    breadcrumbs: [{ label: "Local Workspace" }],
+    action: available ? (
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={refresh}
+        disabled={treeLoading}
+        aria-label="Refresh"
+        title="Refresh"
+      >
+        <RefreshCwIcon
+          className={treeLoading ? "size-4 animate-spin" : "size-4"}
+        />
+      </Button>
+    ) : undefined,
+    actionKey: `local-workspace:${available ? "on" : "off"}:${treeLoading}`,
+  });
 
   if (!available) {
     return (
