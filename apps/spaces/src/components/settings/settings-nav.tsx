@@ -38,6 +38,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   },
   { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
   {
+    label: "Evaluations",
+    to: "/settings/evaluations",
+    icon: ShieldCheck,
+    operatorOnly: true,
+  },
+  {
     label: "Skills",
     to: "/settings/skills",
     icon: Sparkles,
@@ -84,12 +90,6 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Webhooks",
     to: "/settings/webhooks",
     icon: Webhook,
-    operatorOnly: true,
-  },
-  {
-    label: "Evaluations",
-    to: "/settings/evaluations",
-    icon: ShieldCheck,
     operatorOnly: true,
   },
   {

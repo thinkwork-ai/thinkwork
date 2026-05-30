@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Download, Loader2, Plus, Trash2 } from "lucide-react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -12,7 +12,11 @@ import {
   EvalTestCasesQuery,
   SeedEvalTestCasesMutation,
 } from "@/lib/evaluation-queries";
-import { relativeTime } from "@/lib/utils";
+import { cn, relativeTime } from "@/lib/utils";
+import {
+  desktopToolbarButtonClassName,
+  desktopToolbarGapClassName,
+} from "@/lib/desktop-chrome";
 
 export interface EvalStudioTestCaseRow {
   id: string;
@@ -178,10 +182,13 @@ export function SettingsEvalStudio() {
       { label: "Studio" },
     ],
     action: tenantId ? (
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className={cn("flex items-center", desktopToolbarGapClassName)}>
         <Button
-          variant="outline"
-          size="sm"
+          variant="ghost"
+          size="icon-sm"
+          title="Import starter pack"
+          aria-label="Import starter pack"
+          className={desktopToolbarButtonClassName}
           disabled={seedState.fetching}
           onClick={async () => {
             if (
@@ -205,12 +212,22 @@ export function SettingsEvalStudio() {
             }
           }}
         >
-          <Download className="mr-1 h-4 w-4" />{" "}
-          {seedState.fetching ? "Importing…" : "Import starter pack"}
+          {seedState.fetching ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Download className="size-4" />
+          )}
         </Button>
-        <Button asChild size="sm">
+        <Button
+          asChild
+          variant="ghost"
+          size="icon-sm"
+          title="New test case"
+          aria-label="New test case"
+          className={desktopToolbarButtonClassName}
+        >
           <Link to="/settings/evaluations/studio/new">
-            <Plus className="mr-1 h-4 w-4" /> New test case
+            <Plus className="size-4" />
           </Link>
         </Button>
       </div>
