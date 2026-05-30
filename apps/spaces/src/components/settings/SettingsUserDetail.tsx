@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import {
   Button,
@@ -10,10 +9,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
   Textarea,
 } from "@thinkwork/ui";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
 import {
@@ -23,7 +23,6 @@ import {
   SettingsUpdateUserProfileMutation,
 } from "@/lib/settings-queries";
 import {
-  SettingsHeader,
   SettingsPane,
   SettingsRow,
   SettingsSection,
@@ -49,21 +48,48 @@ export function SettingsUserDetail() {
       ),
     [result.data, memberId],
   );
+  const user = member?.user ?? null;
+
+  // Title + back navigation live in the settings header bar as nested
+  // breadcrumbs (Users > <name> [> Workspace]). Must be called unconditionally
+  // before any early return.
+  const displayName = user
+    ? (user.name ?? user.email)
+    : result.fetching
+      ? "User"
+      : "User not found";
+  usePageHeaderActions({
+    title: displayName,
+    breadcrumbs:
+      user && filesOpen
+        ? [
+            { label: "Users", href: "/settings/users" },
+            { label: displayName, href: `/settings/users/${memberId}` },
+            { label: "Workspace" },
+          ]
+        : [{ label: "Users", href: "/settings/users" }, { label: displayName }],
+    subtitle: user && !filesOpen ? (user.email ?? undefined) : undefined,
+    action: filesOpen ? (
+      <Button variant="ghost" size="sm" onClick={() => setFilesOpen(false)}>
+        Done
+      </Button>
+    ) : undefined,
+    actionKey: filesOpen ? `user-files:${memberId}` : undefined,
+  });
 
   if (result.fetching && !result.data) {
     return (
       <SettingsPane>
-        <SettingsHeader title="User" />
-        <Skeleton className="h-64 w-full rounded-xl" />
+        <div className="flex items-center justify-center py-24">
+          <LoadingShimmer />
+        </div>
       </SettingsPane>
     );
   }
 
-  if (!member || !member.user) {
+  if (!member || !user) {
     return (
       <SettingsPane>
-        <BackToUsers />
-        <SettingsHeader title="User not found" />
         <p className="text-sm text-muted-foreground">
           This member could not be loaded — they may have been removed.
         </p>
@@ -71,19 +97,9 @@ export function SettingsUserDetail() {
     );
   }
 
-  const user = member.user;
-
   if (filesOpen) {
     return (
       <div className="flex h-full min-h-0 w-full flex-col p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {user.name ?? user.email} · workspace
-          </h1>
-          <Button variant="ghost" size="sm" onClick={() => setFilesOpen(false)}>
-            Done
-          </Button>
-        </div>
         <WorkspaceFileEditor
           target={{ userId: user.id }}
           targetKey={`user:${user.id}`}
@@ -100,12 +116,6 @@ export function SettingsUserDetail() {
 
   return (
     <SettingsPane>
-      <BackToUsers />
-      <SettingsHeader
-        title={user.name ?? user.email}
-        description={user.email}
-      />
-
       <ProfileSection
         userId={user.id}
         name={user.name ?? ""}
@@ -122,18 +132,6 @@ export function SettingsUserDetail() {
         callerIsOwner={callerIsOwner}
       />
     </SettingsPane>
-  );
-}
-
-function BackToUsers() {
-  return (
-    <Link
-      to="/settings/users"
-      className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
-    >
-      <ArrowLeft className="size-4" />
-      Users
-    </Link>
   );
 }
 

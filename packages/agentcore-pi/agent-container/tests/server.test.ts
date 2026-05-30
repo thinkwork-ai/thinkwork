@@ -956,6 +956,89 @@ describe("assembleTools — Pi built-in tools", () => {
     expect(bundle.tools.map((tool) => tool.name)).toContain("execute_code");
   });
 
+  it("loads the memory extension (not hand-assembled tools) on the hindsight engine", async () => {
+    const bundle = await assembleTools({
+      payload: { message: "what do you remember about me?" },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "https://hindsight.dev.example.com",
+        memoryEngine: "hindsight",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    // Memory is loaded as an extension, not as hand-assembled recall/reflect
+    // AgentTools (U5 retires the buildHindsightTools wiring on this path).
+    expect(bundle.extensionFactories).toHaveLength(1);
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain("recall");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain("reflect");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
+      "hindsight_recall",
+    );
+  });
+
+  it("skips the memory extension in eval mode (user-less)", async () => {
+    const bundle = await assembleTools({
+      payload: { message: "hi", eval_mode: true },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "https://hindsight.dev.example.com",
+        memoryEngine: "hindsight",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    expect(bundle.extensionFactories).toHaveLength(0);
+  });
+
   it("registers browser_automation when browser automation is enabled", async () => {
     const bundle = await assembleTools({
       payload: {

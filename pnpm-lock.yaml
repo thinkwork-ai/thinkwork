@@ -877,6 +877,9 @@ importers:
       '@thinkwork/pi-aws':
         specifier: workspace:*
         version: link:../pi-aws
+      '@thinkwork/pi-extensions':
+        specifier: workspace:*
+        version: link:../pi-extensions
       '@thinkwork/pi-runtime-core':
         specifier: workspace:*
         version: link:../pi-runtime-core

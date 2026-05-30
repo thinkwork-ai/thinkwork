@@ -465,6 +465,19 @@ describe("runAgentLoop", () => {
     expect(captured?.seedHistory).toHaveLength(1);
   });
 
+  it("forwards extension factories through to openSession (U5 loading seam)", async () => {
+    let captured: OpenSessionInputs | undefined;
+    const session = makeFakeSession({ messages: [assistantMessage("ok")] });
+    const factory = () => {};
+    await runAgentLoop(baseArgs({ extensionFactories: [factory] }), {
+      openSession: async (inputs) => {
+        captured = inputs;
+        return { session, modelId: inputs.modelId };
+      },
+    });
+    expect(captured?.extensionFactories).toEqual([factory]);
+  });
+
   it("sends only the new message (no history prepend) and persists when durable", async () => {
     const session = makeFakeSession({ messages: [assistantMessage("ok")] });
     let persisted = 0;

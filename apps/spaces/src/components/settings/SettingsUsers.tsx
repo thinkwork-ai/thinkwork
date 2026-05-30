@@ -19,7 +19,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Skeleton,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -29,6 +28,8 @@ import {
 import {
   SettingsHeader,
   SettingsPane,
+  SettingsTablePane,
+  settingsLinkActionClassName,
 } from "@/components/settings/SettingsContent";
 
 type UserRow = {
@@ -145,15 +146,6 @@ export function SettingsUsers() {
     [],
   );
 
-  if (result.fetching && !result.data) {
-    return (
-      <SettingsPane className="max-w-5xl">
-        <SettingsHeader title="Users" />
-        <Skeleton className="h-72 w-full rounded-xl" />
-      </SettingsPane>
-    );
-  }
-
   if (result.error) {
     return (
       <SettingsPane className="max-w-5xl">
@@ -175,26 +167,35 @@ export function SettingsUsers() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
-      <SettingsHeader
-        title="Users"
-        actions={
-          <Button onClick={() => setInviteOpen(true)}>+ Invite member</Button>
-        }
-      />
-      <div className="mb-4">
+    <SettingsTablePane
+      title="Users"
+      loading={result.fetching && !result.data}
+      actions={
+        <button
+          type="button"
+          onClick={() => setInviteOpen(true)}
+          className={settingsLinkActionClassName}
+        >
+          + Invite member
+        </button>
+      }
+      toolbar={
         <Input
           placeholder="Search by name or email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-      </div>
+      }
+    >
       <DataTable
         columns={columns}
         data={rows}
         filterValue={search}
-        pageSize={20}
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={25}
+        tableClassName="table-fixed"
         onRowClick={(row) =>
           navigate({
             to: "/settings/users/$userId",
@@ -216,7 +217,7 @@ export function SettingsUsers() {
           setInviteOpen(false);
         }}
       />
-    </SettingsPane>
+    </SettingsTablePane>
   );
 }
 
