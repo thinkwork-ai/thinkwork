@@ -16,14 +16,14 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U7 — Port the remaining capabilities to extensions
-- Active branch: `codex/pi-extensions-u7`
+- Active unit: U8 — Built-in overlap reconciliation
+- Active branch: `codex/pi-extensions-u8`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/pi-extensions-u7`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/pi-extensions-u8`
 - Started: 2026-05-30
-- Latest merged PR: none in this run
-- Active PR: [#1852](https://github.com/thinkwork-ai/thinkwork/pull/1852)
-- CI: pending (local verification passed)
+- Latest merged PR: [#1852](https://github.com/thinkwork-ai/thinkwork/pull/1852)
+- Active PR: [#1853](https://github.com/thinkwork-ai/thinkwork/pull/1853)
+- CI: pending
 
 ### Active Unit Notes
 
@@ -65,6 +65,43 @@ Target branch: `main`
   `pnpm -r --workspace-concurrency=1 --if-present test` (3,221 passed, 9
   skipped).
 - Opened PR [#1852](https://github.com/thinkwork-ai/thinkwork/pull/1852).
+- PR [#1852](https://github.com/thinkwork-ai/thinkwork/pull/1852) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, then required a rebase
+  because `main` advanced. Rebased cleanly, reran focused
+  `pi-extensions`/`agentcore-pi` tests and typechecks, passed CI again,
+  squash-merged into `main`, and deleted the remote/local U7 branch.
+- Started U8 from updated `origin/main` at
+  `25884ffd5c1976fa26fc8113d9286a54d4a9a6ed`.
+- U8 local implementation complete: reconciled built-in/custom overlap without
+  disabling Pi's built-in `bash`. `bash` remains part of the active built-in
+  allowlist and is explicitly preferred for shell commands, repository work,
+  package scripts, builds, tests, and command output. `execute_code` remains as
+  the narrower Thinkwork Code Interpreter sandbox. The system-prompt extension
+  now receives built-in tool names and explicitly distinguishes `bash` from
+  `execute_code` so the model treats them as separate execution environments
+  rather than duplicate generic code tools.
+- U8 focused verification passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test -- test/agent-loop.test.ts`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/pi-extensions test -- test/system-prompt.test.ts`,
+  `pnpm --filter @thinkwork/pi-extensions typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/server.test.ts`,
+  and `pnpm --filter @thinkwork/agentcore-pi typecheck`.
+- U8 broader verification passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test`,
+  `pnpm --filter @thinkwork/pi-runtime-core build`,
+  `pnpm --filter @thinkwork/pi-extensions test`,
+  `pnpm --filter @thinkwork/pi-extensions build`,
+  `pnpm --filter @thinkwork/agentcore-pi test`,
+  `pnpm --filter @thinkwork/agentcore-pi build`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`,
+  touched-file Prettier check, and `git diff --check`.
+- U8 full sequential workspace verification passed on rerun:
+  `pnpm -r --workspace-concurrency=1 --if-present test` (3,238 passed, 9
+  skipped). The first full run hit the known local Electron extraction race in
+  `apps/desktop`; rerunning the failed desktop/mobile packages and then the full
+  sequential suite passed cleanly.
+- Opened PR [#1853](https://github.com/thinkwork-ai/thinkwork/pull/1853).
 
 ## Prior Run: Desktop Local Pi Sidecar
 

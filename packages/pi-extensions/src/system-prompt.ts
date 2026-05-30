@@ -123,6 +123,7 @@ function buildFallback(payload: PiInvocationPayload): string {
 
 function buildRuntimeToolPolicy(toolNames: string[] | undefined): string {
   const tools = new Set(toolNames ?? []);
+  const bashAvailable = tools.has("bash");
   const executeCodeAvailable = tools.has("execute_code");
   const sendEmailAvailable = tools.has("send_email");
 
@@ -130,11 +131,17 @@ function buildRuntimeToolPolicy(toolNames: string[] | undefined): string {
     "## Runtime Tool Policy",
     "",
     "### Code execution",
+    bashAvailable
+      ? "- The Pi built-in `bash` tool is available. Prefer it for shell commands, repository work, package scripts, builds, tests, and command output."
+      : "- The Pi built-in `bash` tool is not available for this turn.",
     executeCodeAvailable
-      ? "- The `execute_code` tool is available. Use it for Python execution, script validation, data analysis, calculations, and generated output from code."
-      : "- The `execute_code` tool is not available for this turn. Do not run code, simulate code execution, or claim generated output from code.",
-    "- Never claim that code ran, tests passed, a script produced output, or calculated code results unless those facts came from an `execute_code` tool result in this turn.",
-    "- You may provide source code as text without running it, but if the user asks to run, execute, test, debug, calculate with, or provide output from code and `execute_code` is unavailable, say the Code Sandbox is not enabled for this agent instead of inventing results.",
+      ? "- The `execute_code` tool is available as a Thinkwork Code Interpreter sandbox for isolated Python/data-analysis work and generated output from that sandbox."
+      : "- The `execute_code` tool is not available for this turn.",
+    "- Treat `bash` and `execute_code` as distinct execution environments, not duplicates: use `bash` for the Pi workspace/shell, and `execute_code` only when the tenant Code Interpreter sandbox is the right isolation boundary.",
+    "- Never claim that code ran, tests passed, a command produced output, or calculated code results unless those facts came from a `bash` or `execute_code` tool result in this turn.",
+    !bashAvailable && !executeCodeAvailable
+      ? "- You may provide source code as text, but do not run code, simulate execution, or invent command output."
+      : "",
     "",
     "### Email",
     sendEmailAvailable

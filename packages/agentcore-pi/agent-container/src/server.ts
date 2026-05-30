@@ -63,6 +63,7 @@ import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
 import {
+  BUILTIN_TOOL_NAMES,
   collectToolCosts,
   type DelegationProvider,
   isFinalizeCallbackConfigured,
@@ -1208,6 +1209,7 @@ export async function handleInvocation(
         payload: args.payload,
         workspaceDir: env.workspaceDir,
         availableToolNames: [
+          ...BUILTIN_TOOL_NAMES,
           ...bundle.tools.map((tool) => tool.name),
           ...bundle.extensionToolNames,
         ],

@@ -156,7 +156,7 @@ describe("toToolDefinition", () => {
 });
 
 describe("buildToolAllowlist", () => {
-  it("activates all seven built-ins plus the custom tool names", () => {
+  it("keeps all seven built-ins plus the custom tool names, including bash with execute_code", () => {
     const customs = [
       toToolDefinition(fakeAgentTool("web_search")),
       toToolDefinition(fakeAgentTool("execute_code")),
