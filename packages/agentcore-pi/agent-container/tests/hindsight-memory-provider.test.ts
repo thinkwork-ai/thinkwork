@@ -31,13 +31,28 @@ describe("createHindsightMemoryProvider", () => {
     ).toThrow(/userId/);
   });
 
-  it("rejects a non-https endpoint at construction", () => {
+  it("allows an http endpoint (dev Hindsight is an internal plaintext ELB)", () => {
     expect(() =>
       createHindsightMemoryProvider({
         ...baseOptions,
-        endpoint: "http://hindsight.dev.example.com",
+        endpoint: "http://tw-dev-hindsight.elb.amazonaws.com",
       }),
-    ).toThrow(/https/);
+    ).not.toThrow();
+  });
+
+  it("rejects a non-http(s) endpoint scheme at construction", () => {
+    expect(() =>
+      createHindsightMemoryProvider({
+        ...baseOptions,
+        endpoint: "file:///etc/passwd",
+      }),
+    ).toThrow(/http/);
+  });
+
+  it("rejects a malformed endpoint URL at construction", () => {
+    expect(() =>
+      createHindsightMemoryProvider({ ...baseOptions, endpoint: "not a url" }),
+    ).toThrow(/not a valid URL/);
   });
 
   it("recall posts to the user's bank and normalizes memory units", async () => {
