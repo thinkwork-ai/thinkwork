@@ -271,6 +271,8 @@ variable "admin_callback_urls" {
     "http://localhost:5174/auth/callback",
     "http://localhost:5175",
     "http://localhost:5175/auth/callback",
+    "http://127.0.0.1:42010/callback",
+    "http://localhost:42010/callback",
   ]
 }
 

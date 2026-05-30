@@ -17,14 +17,15 @@ Target branch: `main`
 
 - Status: active; implementation units U1-U10 are merged, closeout validation is
   still in progress.
-- Active unit: closeout audit and smoke/TestFlight gates
-- Active branch: `codex/mobile-pi-host-closeout-status`
+- Active unit: deployed smoke/TestFlight gates and Cognito callback prerequisite
+- Active branch: `codex/mobile-pi-host-final-gates`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-compatible-host-audit`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-final-gates`
 - Started: 2026-05-30
-- Latest merged PR: [#1883](https://github.com/thinkwork-ai/thinkwork/pull/1883)
-- Active PR: [#1884](https://github.com/thinkwork-ai/thinkwork/pull/1884)
-- CI: passed before final doc-status update; recheck pending after final push
+- Latest merged PR: [#1884](https://github.com/thinkwork-ai/thinkwork/pull/1884)
+- Active PR: pending
+- CI: latest `main` checks for `b47e849e` passed (`Lint`, `Supply Chain`,
+  `Typecheck`, `Test`, and `Deploy`).
 
 ### Closeout Audit Notes
 
@@ -42,6 +43,19 @@ Target branch: `main`
   `docs/plans/2026-05-30-004-mobile-pi-compatible-host-autopilot-status.md`.
 - Remaining gates before marking the plan complete: deployed all-capability
   harness smoke with current identity tokens and TestFlight/on-device validation.
+- Follow-up final-gates audit found a deployed Cognito prerequisite for the
+  smoke-token path: `thinkwork login --stage dev` currently fails with
+  `redirect_mismatch` because the live `ThinkworkAdmin` client is missing
+  `http://127.0.0.1:42010/callback`. The lower foundation module default has
+  the URL, but the top-level `terraform/modules/thinkwork` default overrides the
+  list without the CLI loopback URL. The active branch restores that default and
+  adds a regression fixture test; the fix must merge and deploy before the CLI
+  login path can mint a current Cognito token for the deployed mobile smoke.
+- EAS access is available (`eas whoami` returns `eric@thinkwork.ai` in the
+  `thinkwork-ai` owner account). Latest finished iOS production build is build
+  17 from commit `17493262690be21267fffb8f33a404d332ac2549`, not current
+  `origin/main`; a new TestFlight build remains pending until deployed smokes
+  pass.
 
 ### Active Unit Notes
 

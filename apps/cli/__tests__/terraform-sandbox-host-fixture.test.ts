@@ -83,6 +83,12 @@ describe("U3 — static-site response-headers extension", () => {
 });
 
 describe("Spaces U1 — app domain compatibility", () => {
+  it("thinkwork module keeps CLI OAuth loopback callbacks in the admin client defaults", () => {
+    const source = read(THINKWORK_VARS);
+    expect(source).toMatch(/"http:\/\/127\.0\.0\.1:42010\/callback"/);
+    expect(source).toMatch(/"http:\/\/localhost:42010\/callback"/);
+  });
+
   it("static-site supports compatibility aliases and a viewer-request function", () => {
     const source = read(STATIC_SITE_MAIN);
     expect(source).toMatch(/variable "custom_domain_aliases"/);
