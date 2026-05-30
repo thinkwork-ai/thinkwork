@@ -217,6 +217,9 @@ function createBridge(state: UpdateState): ThinkworkBridge {
     onUpdateState: vi.fn(() => () => {}),
     onUpdateTelemetry: vi.fn(() => () => {}),
     reportInstallOutcome: vi.fn(),
+    raiseThreadNotification: vi.fn(),
+    onOpenThread: vi.fn(() => () => {}),
+    onWindowFocusChange: vi.fn(() => () => {}),
   };
 }
 
