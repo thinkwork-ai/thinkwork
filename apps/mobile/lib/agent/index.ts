@@ -19,6 +19,10 @@ export { defineExtension } from "./extensions/define-extension";
 export { loadExtensions } from "./extensions/load-extensions";
 export { workspaceContextExtension } from "./extensions/workspace-context-extension";
 export {
+  WORKSPACE_TOOL_NAMES,
+  workspaceToolsExtension,
+} from "./extensions/workspace-tools-extension";
+export {
   adaptThinkworkExtension,
   adaptThinkworkExtensions,
   adaptThinkworkTool,
@@ -60,6 +64,33 @@ export type { BedrockModelProviderOptions } from "./providers/bedrock";
 // Tools.
 export { createMcpTool } from "./tools/mcp-tool";
 export type { McpToolDef, McpCall } from "./tools/mcp-tool";
+export { createReadTool } from "./tools/read-tool";
+export { createGrepTool } from "./tools/grep-tool";
+export { createFindTool } from "./tools/find-tool";
+export { createLsTool } from "./tools/ls-tool";
+
+// Rendered workspace cache.
+export {
+  MemoryWorkspaceCacheStorage,
+  WorkspaceBoundaryError,
+  WorkspaceCache,
+  assertSafeRelativePath,
+  cacheKeyForPartition,
+  createWorkspaceCachePartition,
+  getDefaultWorkspaceCache,
+  prewarmWorkspaceCache,
+  workspaceTargetsForContext,
+} from "./workspace-cache";
+export type {
+  WorkspaceCachedFile,
+  WorkspaceCacheManifest,
+  WorkspaceCacheOptions,
+  WorkspaceCachePartition,
+  WorkspaceCacheSource,
+  WorkspaceCacheStorage,
+  WorkspaceCacheSyncInput,
+  WorkspaceCacheSyncResult,
+} from "./workspace-cache";
 
 // Image capture (pure mapper; the native expo launcher lives in tools/image-picker).
 export { pickImage, mimeToImageFormat } from "./capture-image";

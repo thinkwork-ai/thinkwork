@@ -13,7 +13,14 @@ import { buildTurnContext } from "./turn-context";
 import { localBashExtension } from "./extensions/local-bash-extension";
 import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
 import { workspaceContextExtension } from "./extensions/workspace-context-extension";
+import { workspaceToolsExtension } from "./extensions/workspace-tools-extension";
 import { recordTurn } from "./persist-turn";
+import {
+  createWorkspaceCachePartition,
+  getDefaultWorkspaceCache,
+  workspaceTargetsForContext,
+  type WorkspaceCache,
+} from "./workspace-cache";
 import type { ExtensionFactory } from "./extensions/types";
 import type {
   AgentEvent,
@@ -45,6 +52,8 @@ export interface RunThreadHarnessTurnInput {
   /** Current human display fields, used in the shared requester context. */
   userName?: string | null;
   userEmail?: string | null;
+  tenantId?: string | null;
+  stage?: string | null;
   /** Active Space id, used to load direct Space workspace context when available. */
   spaceId?: string;
   tools?: Tool[];
@@ -66,6 +75,8 @@ export interface RunThreadHarnessTurnDeps {
   extensions?: ExtensionFactory[];
   /** Observability hook for smoke tests or future activity UI. */
   onEvent?: (event: AgentEvent) => void;
+  /** Test seam for the durable rendered workspace cache. */
+  workspaceCache?: WorkspaceCache;
 }
 
 export interface ThreadHarnessTurnResult {
@@ -103,6 +114,35 @@ export async function runThreadHarnessTurn(
     agentName: input.agentName,
     tools: input.tools,
   });
+  const workspaceTargets = workspaceTargetsForContext(input);
+  const workspaceCache = deps.workspaceCache ?? getDefaultWorkspaceCache();
+  const workspacePartition = createWorkspaceCachePartition({
+    stage: input.stage,
+    tenantId: input.tenantId,
+    agentId: input.agentId,
+    spaceId: input.spaceId,
+    userId: input.userId,
+  });
+  const workspaceReader =
+    workspaceTargets.length > 0
+      ? {
+          getWorkspaceFile: async (_target: unknown, path: string) => {
+            await workspaceCache.sync({
+              partition: workspacePartition,
+              targets: workspaceTargets,
+            });
+            const file = await workspaceCache.readFile(
+              workspacePartition,
+              path,
+            );
+            return {
+              content: file?.content ?? null,
+              source: file?.source ?? "cache",
+              sha256: file?.sha256 ?? "",
+            };
+          },
+        }
+      : undefined;
   // The agent's tenant MCP tools arrive as the first Pi-style extension. Default
   // when an agentId is known; tests inject their own (or none). Built-ins/`tools`
   // are preserved — extensions are additive.
@@ -116,6 +156,14 @@ export async function runThreadHarnessTurn(
             userEmail: input.userEmail,
             agentId: input.agentId,
             spaceId: input.spaceId,
+            deps: workspaceReader,
+          })
+        : null,
+      workspaceTargets.length > 0
+        ? workspaceToolsExtension({
+            cache: workspaceCache,
+            partition: workspacePartition,
+            targets: workspaceTargets,
           })
         : null,
       localBashExtension({ sessionId: input.threadId }),

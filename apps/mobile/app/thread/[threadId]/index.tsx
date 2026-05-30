@@ -55,6 +55,7 @@ import {
 } from "@/components/chat/WebViewSheet";
 import { useAuth } from "@/lib/auth-context";
 import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
+import { prewarmWorkspaceCache } from "@/lib/agent/workspace-cache";
 import {
   clearPendingThreadStart,
   getPendingThreadStart,
@@ -722,6 +723,24 @@ export default function ThreadDetailRoute() {
     ? agentMap[thread.agentId] || "Agent"
     : "Agent";
 
+  useEffect(() => {
+    if (!thread?.agentId && !thread?.spaceId && !currentUser?.id) return;
+    void prewarmWorkspaceCache({
+      tenantId: currentUser?.tenantId ?? tenantId,
+      agentId: thread?.agentId,
+      spaceId: thread?.spaceId,
+      userId: currentUser?.id,
+    }).catch((err) => {
+      console.warn("[workspace-cache] thread prewarm failed:", err);
+    });
+  }, [
+    currentUser?.id,
+    currentUser?.tenantId,
+    tenantId,
+    thread?.agentId,
+    thread?.spaceId,
+  ]);
+
   // ── Messages (separate query to include toolResults for GenUI) ──
   const [
     { data: messagesData, fetching: fetchingMessages },
@@ -1257,6 +1276,7 @@ export default function ThreadDetailRoute() {
         userId: currentUser?.id,
         userName: currentUser?.name,
         userEmail: currentUser?.email,
+        tenantId: currentUser?.tenantId ?? tenantId,
         spaceId: thread?.spaceId ?? undefined,
         // Attached image is model-vision input on the user turn.
         images: image ? [image] : undefined,

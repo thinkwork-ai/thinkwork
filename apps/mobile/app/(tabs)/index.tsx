@@ -55,6 +55,7 @@ import {
 } from "@/components/threads/ThreadFilterBar";
 import { ThreadRow } from "@/components/threads/ThreadRow";
 import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
+import { prewarmWorkspaceCache } from "@/lib/agent/workspace-cache";
 import {
   clearPendingThreadStart,
   setPendingThreadStart,
@@ -597,6 +598,24 @@ export default function ThreadsScreen() {
     }
   }, [selectedSpaceId, spaces]);
 
+  useEffect(() => {
+    if (!selectedComputer?.id && !currentUser?.id && !effectiveSpaceId) return;
+    void prewarmWorkspaceCache({
+      tenantId: currentUser?.tenantId ?? tenantId,
+      agentId: selectedComputer?.id,
+      spaceId: effectiveSpaceId,
+      userId: currentUser?.id,
+    }).catch((err) => {
+      console.warn("[workspace-cache] prewarm failed:", err);
+    });
+  }, [
+    currentUser?.id,
+    currentUser?.tenantId,
+    effectiveSpaceId,
+    selectedComputer?.id,
+    tenantId,
+  ]);
+
   // One-time cleanup: earlier builds persisted an offline capture queue
   // at this key. We removed that surface entirely, so purge any leftover
   // sync_pending entries so they stop hanging around on the device.
@@ -827,6 +846,7 @@ export default function ThreadsScreen() {
               userId: currentUser?.id,
               userName: currentUser?.name,
               userEmail: currentUser?.email,
+              tenantId: currentUser?.tenantId ?? tenantId,
               spaceId: effectiveSpaceId ?? undefined,
               // Selects which tenant MCP tools the on-device agent can call
               // (mcp-tools extension + proxy). Agent toggle off → no agentId,

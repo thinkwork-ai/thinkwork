@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U3 shared system prompt and workspace context parity
-- Active branch: `codex/mobile-pi-host-u3-system-prompt`
+- Active unit: U4 rendered workspace cache and read-only built-ins
+- Active branch: `codex/mobile-pi-host-u4-workspace-cache`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u3-system-prompt`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u4-workspace-cache`
 - Started: 2026-05-30
-- Latest merged PR: [#1872](https://github.com/thinkwork-ai/thinkwork/pull/1872)
-- Active PR: [#1873](https://github.com/thinkwork-ai/thinkwork/pull/1873)
+- Latest merged PR: [#1873](https://github.com/thinkwork-ai/thinkwork/pull/1873)
+- Active PR: [#1874](https://github.com/thinkwork-ai/thinkwork/pull/1874)
 - CI: pending
 
 ### Active Unit Notes
@@ -90,6 +90,27 @@ Target branch: `main`
   `pnpm --filter @thinkwork/react-native-sdk build`, and
   `pnpm --filter @thinkwork/mobile build:web`.
 - Opened PR [#1873](https://github.com/thinkwork-ai/thinkwork/pull/1873).
+- PR [#1873](https://github.com/thinkwork-ai/thinkwork/pull/1873) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and the remote/local U3 branch plus worktree were deleted. Merge commit:
+  `7b85b8c2ae031e17456b0b5467fbe7053cd6f044`.
+- Synced from `origin/main` and created isolated U4 branch/worktree
+  `codex/mobile-pi-host-u4-workspace-cache`.
+- Implemented an AsyncStorage-backed mobile rendered workspace cache with TTL,
+  stale-while-refresh, safe relative path validation, target merging for
+  agent/space/user workspace files, and bounded partition eviction.
+- Added Pi-style read-only `read`, `grep`, `find`, and `ls` tools over the
+  cached workspace and wired them into default mobile harness turns when
+  workspace context exists.
+- Mobile New Thread and Thread Detail now prewarm the rendered workspace cache
+  transparently when active agent/space/user context is available, keeping sync
+  out of the visible thread turn when the cache is warm.
+- Focused U4 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/workspace-cache.test.ts lib/agent/tools/workspace-tools.test.ts lib/agent/thread-turn.test.ts lib/agent/extensions/__tests__/workspace-context-extension.test.ts lib/agent/compat/pi-contract.test.ts`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent`,
+  `pnpm --filter @thinkwork/react-native-sdk build`, and
+  `pnpm --filter @thinkwork/mobile build:web`.
+- Opened PR [#1874](https://github.com/thinkwork-ai/thinkwork/pull/1874).
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 
