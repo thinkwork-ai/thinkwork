@@ -1,6 +1,6 @@
 ---
 date: 2026-05-30
-status: active
+status: completed
 type: feat
 origin: docs/brainstorms/2026-05-30-desktop-local-workspace-view-requirements.md
 ---
