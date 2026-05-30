@@ -16,18 +16,69 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: mobile Pi harness smoke coverage and MCP/bash execution hardening
-- Active branch: `codex/mobile-pi-e2e-smokes`
+- Active unit: mobile optimistic new-thread detail navigation
+- Active branch: `codex/mobile-optimistic-thread-route`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-e2e-smokes`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-file-attachments`
 - Started: 2026-05-30
 - Latest merged PR:
-  [#1863](https://github.com/thinkwork-ai/thinkwork/pull/1863)
-- Active PR: [#1867](https://github.com/thinkwork-ai/thinkwork/pull/1867)
-- CI: pending
+  [#1867](https://github.com/thinkwork-ai/thinkwork/pull/1867)
+- Active PR: [#1868](https://github.com/thinkwork-ai/thinkwork/pull/1868)
+- CI: `cla`, `lint`, `typecheck`, and `verify` passed; `test` pending
 
 ### Active Unit Notes
 
+- PR [#1867](https://github.com/thinkwork-ai/thinkwork/pull/1867) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and its local/remote branch was deleted. The iOS simulator smoke confirmed
+  local mobile bash by returning `MOBILE-PI-BASH-SMOKE-OK` in thread
+  `CHAT-883`.
+- Synced from `origin/main` and created isolated branch/worktree
+  `codex/mobile-optimistic-thread-route` for the next mobile parity unit.
+- Goal for this unit: make mobile new-thread submission feel like Desktop Local
+  Pi by creating the thread, registering an optimistic first-message scaffold,
+  navigating immediately to thread detail, and letting the on-device harness run
+  in the background while the detail timeline keeps the user message and
+  `Working...` state visible.
+- Implemented mobile pending-thread-start registry and wired the new-thread
+  composer to register a pending first message, navigate to
+  `/thread/<threadId>` immediately after `createThread`, and dispatch the
+  on-device harness in a background task.
+- Updated thread detail to render pending starts before the thread query
+  returns, keep `Working...` visible until a persisted assistant message is
+  observed, and clear the pending scaffold once durable messages replace it.
+- Focused verification passed:
+  `pnpm exec vitest run lib/pending-thread-starts.test.ts`,
+  `git diff --check`, `pnpm --filter @thinkwork/react-native-sdk build`, and a
+  changed-file TypeScript diagnostic filter for the touched mobile files.
+- Full `pnpm exec tsc --noEmit --pretty false` from `apps/mobile` still fails
+  on broad pre-existing mobile type errors outside this unit; no diagnostics
+  matched the touched files.
+- iOS simulator verification from the local Expo dev build passed: creating a
+  new thread with prompt `Optimistic route smoke 2026-05-30T1126. Reply exactly
+MOBILE-ROUTE-OK.` navigated directly into the new detail screen with the
+  optimistic user message plus `Working...` visible, then replaced the scaffold
+  with persisted messages and assistant response `MOBILE-ROUTE-OK`.
+- Follow-up hardening: deferred the post-create list refresh and route push by
+  one tick to match the existing thread-row navigation pattern and avoid the
+  React dev warning observed during simulator smoke (`ThreadsScreen` updating
+  while `ThreadDetailRoute` renders).
+- Opened PR [#1868](https://github.com/thinkwork-ai/thinkwork/pull/1868) for
+  the mobile optimistic new-thread route unit.
+- Scheduled EAS production iOS build with auto-submit for TestFlight:
+  build
+  [d57d8031-6080-48cc-a9a9-dd8e259eeaa6](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/builds/d57d8031-6080-48cc-a9a9-dd8e259eeaa6),
+  submission
+  [ddaac04b-3468-45c2-a786-11a3bed383dd](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/submissions/ddaac04b-3468-45c2-a786-11a3bed383dd),
+  app version `1.0.0`, build number `16`. This build was superseded after the
+  navigation-warning hardening commit.
+- Scheduled replacement EAS production iOS build with auto-submit for
+  TestFlight from commit `17493262`: build
+  [104cef5a-5d73-4f68-807b-fae294a32338](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/builds/104cef5a-5d73-4f68-807b-fae294a32338),
+  submission
+  [5a1f219c-025c-4ad3-b028-7aa15e1af77a](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/submissions/5a1f219c-025c-4ad3-b028-7aa15e1af77a),
+  app version `1.0.0`, build number `17`. This build was still in progress at
+  the latest check.
 - Merged prior mobile composer parity PR
   [#1863](https://github.com/thinkwork-ai/thinkwork/pull/1863) into `main`.
   Merge commit: `9a7dfb84d7ced38ba6ced3ec51e9e42d72c75689`.

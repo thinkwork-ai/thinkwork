@@ -55,6 +55,10 @@ import {
 } from "@/components/threads/ThreadFilterBar";
 import { ThreadRow } from "@/components/threads/ThreadRow";
 import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
+import {
+  clearPendingThreadStart,
+  setPendingThreadStart,
+} from "@/lib/pending-thread-starts";
 import { pickImage } from "@/lib/agent/capture-image";
 import {
   launchImagePicker,
@@ -773,6 +777,9 @@ export default function ThreadsScreen() {
           : undefined;
 
       try {
+        const threadTitle =
+          (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image";
+
         // Create the thread WITHOUT firstMessage so the cloud agent is NOT triggered —
         // the on-device Pi-inspired harness handles the first message instead.
         const newThread = await createThread({
@@ -781,8 +788,7 @@ export default function ThreadsScreen() {
           // Resolve to the explicit pick or the tenant default — never null, which
           // the server would route to "General" instead of the shown "Default".
           ...(effectiveSpaceId ? { spaceId: effectiveSpaceId } : {}),
-          title:
-            (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image",
+          title: threadTitle,
           channel: "CHAT",
           createdByType: "user",
           createdById: currentUser?.id || user?.sub,
@@ -792,31 +798,49 @@ export default function ThreadsScreen() {
         console.log("[Threads] Thread created:", newThread.id);
         markRead(newThread.id);
         markThreadActive(newThread.id);
-        reexecute({ requestPolicy: "network-only" });
+        setPendingThreadStart({
+          threadId: newThread.id,
+          title: threadTitle,
+          content: text || "Image",
+          persistedContent: messageContent,
+          expectAssistantResponse: true,
+          userId: currentUser?.id || user?.sub,
+          createdAt: new Date().toISOString(),
+        });
+        setTimeout(() => {
+          reexecute({ requestPolicy: "network-only" });
+          router.push({
+            pathname: `/thread/${newThread.id}`,
+            params: { title: threadTitle },
+          });
+        }, 0);
 
         // First message runs through the on-device harness (loop in Hermes → Bedrock via
         // /api/model/converse), persisted into the new thread via record-turn.
-        try {
-          await runThreadHarnessTurn({
-            threadId: newThread.id,
-            userText: messageContent,
-            priorMessages: [],
-            agentName: selectedComputer?.name ?? undefined,
-            userId: currentUser?.id,
-            spaceId: effectiveSpaceId ?? undefined,
-            // Selects which tenant MCP tools the on-device agent can call
-            // (mcp-tools extension + proxy). Agent toggle off → no agentId,
-            // so the first turn runs with no platform tools (plain message).
-            agentId: newThreadAgentEnabled ? selectedComputer.id : undefined,
-            // Attached image is model-vision input on the first turn.
-            images: image ? [image] : undefined,
-          });
-          reexecute({ requestPolicy: "network-only" });
-        } catch (err) {
-          console.error("[harness] new-thread first turn failed:", err);
-        } finally {
-          clearThreadActive(newThread.id);
-        }
+        void (async () => {
+          try {
+            await runThreadHarnessTurn({
+              threadId: newThread.id,
+              userText: messageContent,
+              priorMessages: [],
+              agentName: selectedComputer?.name ?? undefined,
+              userId: currentUser?.id,
+              spaceId: effectiveSpaceId ?? undefined,
+              // Selects which tenant MCP tools the on-device agent can call
+              // (mcp-tools extension + proxy). Agent toggle off → no agentId,
+              // so the first turn runs with no platform tools (plain message).
+              agentId: newThreadAgentEnabled ? selectedComputer.id : undefined,
+              // Attached image is model-vision input on the first turn.
+              images: image ? [image] : undefined,
+            });
+            reexecute({ requestPolicy: "network-only" });
+          } catch (err) {
+            console.error("[harness] new-thread first turn failed:", err);
+            clearPendingThreadStart(newThread.id);
+          } finally {
+            clearThreadActive(newThread.id);
+          }
+        })();
       } catch (e: any) {
         console.error("[Threads] Failed to create thread:", e);
         Alert.alert(
@@ -834,6 +858,7 @@ export default function ThreadsScreen() {
       currentUser?.id,
       createThread,
       reexecute,
+      router,
       markRead,
       markThreadActive,
       clearThreadActive,
