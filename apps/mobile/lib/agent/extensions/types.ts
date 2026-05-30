@@ -36,6 +36,8 @@ export interface BeforeAgentStartEvent {
   systemPrompt: string;
   /** The active agent's display name, when known. */
   agentName?: string;
+  /** Model-visible tools available after extension registration for this turn. */
+  toolNames?: readonly string[];
 }
 
 /** A `before_agent_start` handler returns a replacement system prompt (or nothing). */

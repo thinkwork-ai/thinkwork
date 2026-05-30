@@ -90,6 +90,7 @@ export function createAgentSession(config: AgentSessionConfig): AgentSession {
       const composed = await loaded.dispatch("before_agent_start", {
         systemPrompt: systemPrompt ?? "",
         agentName: config.agentName,
+        toolNames: tools.map((tool) => tool.name),
       });
       systemPrompt = composed.systemPrompt;
     })();

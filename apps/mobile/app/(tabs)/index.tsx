@@ -825,6 +825,8 @@ export default function ThreadsScreen() {
               priorMessages: [],
               agentName: selectedComputer?.name ?? undefined,
               userId: currentUser?.id,
+              userName: currentUser?.name,
+              userEmail: currentUser?.email,
               spaceId: effectiveSpaceId ?? undefined,
               // Selects which tenant MCP tools the on-device agent can call
               // (mcp-tools extension + proxy). Agent toggle off → no agentId,
