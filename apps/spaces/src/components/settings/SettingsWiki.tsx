@@ -56,7 +56,10 @@ export function SettingsWiki() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<WikiGraphHandle>(null);
-  usePageHeaderActions({ title: "Wiki", breadcrumbs: [{ label: "Wiki" }] });
+  usePageHeaderActions({
+    title: "Wiki Memory",
+    breadcrumbs: [{ label: "Wiki Memory" }],
+  });
 
   const requesterUserId = null;
   const effectiveTenantId = tenantId ?? null;

@@ -62,7 +62,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   },
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
   {
-    label: "Wiki",
+    label: "Wiki Memory",
     to: "/settings/wiki",
     icon: NotebookText,
     operatorOnly: true,
