@@ -53,6 +53,8 @@ interface MessageInputFooterProps {
   onAttach?: () => void;
   /** A local URI for the pending attached image, shown as a removable chip above the input. */
   attachedImageUri?: string | null;
+  /** Display name for a pending attached file. */
+  attachedFileName?: string | null;
   /** Remove the pending attached image. */
   onRemoveAttachment?: () => void;
   /**
@@ -90,6 +92,7 @@ export const MessageInputFooter = forwardRef<
     skipBottomInset,
     onAttach,
     attachedImageUri,
+    attachedFileName,
     onRemoveAttachment,
     agentEnabled,
     onToggleAgent,
@@ -123,14 +126,16 @@ export const MessageInputFooter = forwardRef<
     };
   }, []);
 
-  // A turn is sendable with text OR an attached image (an image-only turn is valid —
-  // "make an opportunity from this card" with just the photo).
-  const canSubmit = !disabled && (value.trim().length > 0 || !!attachedImageUri);
+  // A turn is sendable with text OR a visible native attachment.
+  const canSubmit =
+    !disabled &&
+    (value.trim().length > 0 || !!attachedImageUri || !!attachedFileName);
 
   const handleSubmit = useCallback(() => {
-    if (disabled || (!value.trim() && !attachedImageUri)) return;
+    if (disabled || (!value.trim() && !attachedImageUri && !attachedFileName))
+      return;
     onSubmit();
-  }, [disabled, value, attachedImageUri, onSubmit]);
+  }, [disabled, value, attachedImageUri, attachedFileName, onSubmit]);
 
   const hasWorkspaces = selectedWorkspaces && selectedWorkspaces.length > 0;
 
@@ -197,6 +202,34 @@ export const MessageInputFooter = forwardRef<
                 }}
               >
                 <X size={14} color="#ffffff" strokeWidth={2.5} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
+
+      {attachedFileName ? (
+        <View className="px-4 pt-3">
+          <View
+            className="flex-row items-center gap-2 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800"
+            style={{
+              alignSelf: "flex-start",
+              borderRadius: 12,
+              paddingHorizontal: 10,
+              paddingVertical: 8,
+              maxWidth: "85%",
+            }}
+          >
+            <Paperclip size={16} color={colors.mutedForeground} />
+            <Text
+              numberOfLines={1}
+              style={{ color: colors.foreground, fontSize: 14, maxWidth: 220 }}
+            >
+              {attachedFileName}
+            </Text>
+            {onRemoveAttachment ? (
+              <Pressable onPress={onRemoveAttachment} hitSlop={8}>
+                <X size={16} color={colors.mutedForeground} strokeWidth={2.5} />
               </Pressable>
             ) : null}
           </View>
@@ -320,9 +353,7 @@ export const MessageInputFooter = forwardRef<
               <ArrowUp
                 size={20}
                 strokeWidth={2.5}
-                color={
-                  canSubmit ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"
-                }
+                color={canSubmit ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
               />
             </Pressable>
           </View>

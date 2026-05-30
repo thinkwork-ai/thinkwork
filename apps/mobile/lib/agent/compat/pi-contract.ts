@@ -34,7 +34,7 @@ export interface MobilePiCompatibilityContract {
 }
 
 export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
-  version: "2026-05-30.u7",
+  version: "2026-05-30.u8",
   host: "thinkwork-mobile-hermes",
   upstreamSdkEmbedding: {
     status: "out_of_scope",
@@ -207,6 +207,15 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
       ownerUnit: "U7",
       notes:
         "Mobile records structured session events/transcripts in turn evidence and has deterministic session-store compaction helpers for long transcripts.",
+    },
+    {
+      id: "mobile-native-host-extensions",
+      status: "implemented",
+      upstreamSurface: "host-provided tools/extensions",
+      mobileSurface: "apps/mobile/lib/agent/extensions/mobile-native",
+      ownerUnit: "U8",
+      notes:
+        "Mobile models photo, file, and clipboard powers as explicit host extensions with visible permission/picker affordances and structured capability evidence.",
     },
     {
       id: "upstream-sdk-on-ios",

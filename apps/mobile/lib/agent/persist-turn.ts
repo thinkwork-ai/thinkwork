@@ -7,6 +7,7 @@
 // fetch are injectable so this is testable without the Expo auth module.
 
 import type { AgentEvent, AgentStopReason, Message } from "./types";
+import type { MobileNativeEvidence } from "./extensions/mobile-native";
 
 const DEFAULT_API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
   /\/graphql$/,
@@ -18,6 +19,7 @@ export interface MobileSessionTurnEvidence {
   stopReason: AgentStopReason;
   transcript: Message[];
   events: AgentEvent[];
+  attachments?: MobileNativeEvidence[];
 }
 
 export interface RecordTurnInput {
