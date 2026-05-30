@@ -11,6 +11,7 @@ import {
   Users,
   Webhook,
   Wrench,
+  Zap,
 } from "lucide-react";
 import { IconChartBar, IconPlanet } from "@tabler/icons-react";
 
@@ -64,6 +65,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Wiki",
     to: "/settings/wiki",
     icon: NotebookText,
+    operatorOnly: true,
+  },
+  {
+    label: "Automations",
+    to: "/settings/automations",
+    icon: Zap,
     operatorOnly: true,
   },
   {
