@@ -63,6 +63,20 @@ async function waitForFile(
   expect(await fileExists(path)).toBe(expected);
 }
 
+async function waitForJsonFile<T>(path: string, timeoutMs = 250): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      return JSON.parse((await readFile(path)).toString()) as T;
+    } catch (error) {
+      lastError = error;
+      await sleep(5);
+    }
+  }
+  throw lastError;
+}
+
 describe("SafeStorageCognitoStorage", () => {
   let userDataDir: string;
   let warnings: unknown[];
@@ -103,9 +117,8 @@ describe("SafeStorageCognitoStorage", () => {
     const storage = await createStorage();
 
     storage.setItem("foo", "bar");
-    await waitForFile(storage.vaultPath, true);
 
-    const vault = JSON.parse((await readFile(storage.vaultPath)).toString());
+    const vault = await waitForJsonFile(storage.vaultPath);
     expect(vault).toEqual({ foo: "bar" });
   });
 

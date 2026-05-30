@@ -2663,6 +2663,13 @@ None.
 - `pnpm --filter @thinkwork/api test -- src/lib/chat-finalize/process-finalize.test.ts` - passed, 6 tests.
 - `pnpm --filter @thinkwork/pi-runtime-core typecheck` - passed.
 - `pnpm --filter @thinkwork/api typecheck` - passed.
+- After rebasing on `origin/main`, GitHub `test` failed in
+  `apps/desktop/test/main/cognito-storage.test.ts` because the test waited only
+  for the vault file to exist, then parsed it while CI observed an empty
+  in-progress write (`Unexpected end of JSON input`). Fixed the test to wait for
+  parseable JSON before asserting the vault contents.
+- `pnpm --filter @thinkwork/desktop test -- test/main/cognito-storage.test.ts`
+  - passed, 9 tests.
 - `pnpm dlx prettier@3.8.2 --check ...` against touched files - passed.
 - `git diff --check` - passed.
 - Root `pnpm format:check` is blocked in this worktree because the root script
