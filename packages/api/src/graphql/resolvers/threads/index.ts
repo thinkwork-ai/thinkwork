@@ -11,6 +11,7 @@ import { pinnedThreads } from "./pinnedThreads.query.js";
 
 import { createThread } from "./createThread.mutation.js";
 import { updateThread } from "./updateThread.mutation.js";
+import { markThreadsRead } from "./markThreadsRead.mutation.js";
 import { deleteThread } from "./deleteThread.mutation.js";
 import { checkoutThread } from "./checkoutThread.mutation.js";
 import { releaseThread } from "./releaseThread.mutation.js";
@@ -43,6 +44,7 @@ export const threadQueries = {
 export const threadMutations = {
   createThread,
   updateThread,
+  markThreadsRead,
   deleteThread,
   checkoutThread,
   releaseThread,

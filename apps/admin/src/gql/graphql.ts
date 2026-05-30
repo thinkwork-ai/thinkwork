@@ -1377,6 +1377,21 @@ export type LinkedThread = {
   title: Scalars['String']['output'];
 };
 
+/**
+ * Batch mark a caller's threads read or unread. The tenant is resolved from the
+ * authenticated caller (never the input); only the caller's own
+ * thread_participants rows are written. read: false marks unread.
+ */
+export type MarkThreadsReadInput = {
+  read?: Scalars['Boolean']['input'];
+  threadIds: Array<Scalars['ID']['input']>;
+};
+
+export type MarkThreadsReadResult = {
+  __typename?: 'MarkThreadsReadResult';
+  updated: Scalars['Int']['output'];
+};
+
 export type MemoryContent = {
   __typename?: 'MemoryContent';
   text?: Maybe<Scalars['String']['output']>;
@@ -1750,6 +1765,7 @@ export type Mutation = {
   escalateThread: Thread;
   importN8nRoutine: Routine;
   inviteMember: TenantMember;
+  markThreadsRead: MarkThreadsReadResult;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
   notifyEvalRunUpdate?: Maybe<EvalRunUpdateEvent>;
@@ -2209,6 +2225,11 @@ export type MutationImportN8nRoutineArgs = {
 export type MutationInviteMemberArgs = {
   input: InviteMemberInput;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type MutationMarkThreadsReadArgs = {
+  input: MarkThreadsReadInput;
 };
 
 
