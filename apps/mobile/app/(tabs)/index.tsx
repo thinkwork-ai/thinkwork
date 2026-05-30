@@ -337,6 +337,24 @@ export default function ThreadsScreen() {
       })),
     [spacesData?.spaces],
   );
+  // The tenant's default space. The Space type has no `isDefault` flag, so we
+  // match by slug/name the same way the desktop composer does
+  // (SpacesWorkbench.isDefaultSpace), falling back to the first space. When the
+  // user hasn't explicitly picked a space, new threads go HERE — not the
+  // server's "General" fallback, which is what a null spaceId resolves to.
+  const defaultSpace = useMemo(() => {
+    const isDefaultSpace = (s: SpaceOption) => {
+      const slug = s.slug?.toLowerCase();
+      const name = s.name?.toLowerCase();
+      return (
+        slug === "default" ||
+        slug === "general" ||
+        name === "default" ||
+        name === "general"
+      );
+    };
+    return spaces.find(isDefaultSpace) ?? spaces[0] ?? null;
+  }, [spaces]);
   // Scope reviews to the calling user. The resolver chain-walks
   // `parent_agent_id` so this also surfaces sub-agent reviews routed via the
   // user's owned-agent chain (covers AE2). Pause until both `tenantId` and
@@ -541,13 +559,18 @@ export default function ThreadsScreen() {
     SelectedWorkspace[]
   >([]);
 
+  // The space a new thread will actually be created in: the user's explicit pick,
+  // else the tenant default. Used for BOTH the composer label and createThread, so
+  // the label can't lie (it showed "Default" while sending null → "General").
+  const effectiveSpaceId = selectedSpaceId ?? defaultSpace?.id ?? null;
+
   const selectedSpace = useMemo<SelectedSpace>(
     () => ({
-      id: selectedSpaceId,
+      id: effectiveSpaceId,
       name:
-        spaces.find((space) => space.id === selectedSpaceId)?.name ?? "Default",
+        spaces.find((space) => space.id === effectiveSpaceId)?.name ?? "Default",
     }),
-    [selectedSpaceId, spaces],
+    [effectiveSpaceId, spaces],
   );
 
   useEffect(() => {
@@ -703,7 +726,7 @@ export default function ThreadsScreen() {
       console.log("[handleCreateThread]", {
         text: text.slice(0, 20),
         agentId: selectedComputer?.id,
-        spaceId: selectedSpaceId,
+        spaceId: effectiveSpaceId,
         tenantId,
         userId: currentUser?.id,
         workspaceCount: workspaces.length,
@@ -744,7 +767,9 @@ export default function ThreadsScreen() {
         const newThread = await createThread({
           tenantId,
           agentId: selectedComputer.id,
-          ...(selectedSpaceId ? { spaceId: selectedSpaceId } : {}),
+          // Resolve to the explicit pick or the tenant default — never null, which
+          // the server would route to "General" instead of the shown "Default".
+          ...(effectiveSpaceId ? { spaceId: effectiveSpaceId } : {}),
           title:
             (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image",
           channel: "CHAT",
