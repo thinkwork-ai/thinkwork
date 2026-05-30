@@ -15,15 +15,33 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active
-- Active unit: U10 standardize host-contained bash on just-bash
-- Active branch: `codex/mobile-pi-host-u10-just-bash`
+- Status: active; implementation units U1-U10 are merged, closeout validation is
+  still in progress.
+- Active unit: closeout audit and smoke/TestFlight gates
+- Active branch: `codex/mobile-pi-host-closeout-status`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u10-just-bash`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-compatible-host-audit`
 - Started: 2026-05-30
-- Latest merged PR: [#1879](https://github.com/thinkwork-ai/thinkwork/pull/1879)
-- Active PR: [#1880](https://github.com/thinkwork-ai/thinkwork/pull/1880)
-- CI: pending
+- Latest merged PR: [#1883](https://github.com/thinkwork-ai/thinkwork/pull/1883)
+- Active PR: [#1884](https://github.com/thinkwork-ai/thinkwork/pull/1884)
+- CI: passed before final doc-status update; recheck pending after final push
+
+### Closeout Audit Notes
+
+- U1-U10 all merged into `main` via PRs
+  [#1871](https://github.com/thinkwork-ai/thinkwork/pull/1871) through
+  [#1880](https://github.com/thinkwork-ai/thinkwork/pull/1880); the mention
+  picker anchoring follow-up merged as
+  [#1883](https://github.com/thinkwork-ai/thinkwork/pull/1883).
+- Closeout audit found and fixed a smoke harness packaging gap:
+  `just-bash/browser` works as an ESM/Metro target, but the Node `tsx` harness
+  path can hit CommonJS resolution where that subpath is not exported. Mobile now
+  imports the `just-bash` package root and Metro maps both root and
+  `just-bash/browser` to the browser bundle.
+- Current closeout verification is recorded in
+  `docs/plans/2026-05-30-004-mobile-pi-compatible-host-autopilot-status.md`.
+- Remaining gates before marking the plan complete: deployed all-capability
+  harness smoke with current identity tokens and TestFlight/on-device validation.
 
 ### Active Unit Notes
 
