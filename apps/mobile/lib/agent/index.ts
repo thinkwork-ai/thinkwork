@@ -19,6 +19,12 @@ export { defineExtension } from "./extensions/define-extension";
 export { loadExtensions } from "./extensions/load-extensions";
 export { workspaceContextExtension } from "./extensions/workspace-context-extension";
 export {
+  mobileClipboardExtension,
+  mobileFileExtension,
+  mobileNativeExtensions,
+  mobilePhotoExtension,
+} from "./extensions/mobile-native";
+export {
   WORKSPACE_TOOL_NAMES,
   workspaceToolsExtension,
 } from "./extensions/workspace-tools-extension";
@@ -46,6 +52,20 @@ export type {
   ThinkworkExtensionLike,
   ThinkworkToolDefinitionLike,
 } from "./extensions/thinkwork-extension-adapter";
+export type {
+  ConfirmClipboardRead,
+  MobileClipboardExtensionOptions,
+  MobileFileExtensionOptions,
+  MobileNativeEvidence,
+  MobileNativeExtensionOptions,
+  MobileNativeSource,
+  MobilePhotoExtensionOptions,
+  PickedMobileFile,
+  PickedMobilePhoto,
+  PickMobileFile,
+  PickMobilePhoto,
+  ReadClipboardText,
+} from "./extensions/mobile-native";
 
 // Lower-level engine (advanced use; createAgentSession wraps it).
 export { runAgentTurn } from "./loop";
@@ -95,6 +115,12 @@ export type {
 // Image capture (pure mapper; the native expo launcher lives in tools/image-picker).
 export { pickImage, mimeToImageFormat } from "./capture-image";
 export type { LaunchPicker, PickerResult, PickedAsset } from "./capture-image";
+export { launchDocumentPicker } from "./tools/file-picker";
+export type {
+  DocumentPickerResult,
+  LaunchDocumentPicker,
+  PickedDocument,
+} from "./tools/file-picker";
 
 // Turn assembly + session storage.
 export { buildTurnContext } from "./turn-context";

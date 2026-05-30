@@ -66,7 +66,12 @@ import {
   launchImagePicker,
   launchCamera,
 } from "@/lib/agent/tools/image-picker";
+import {
+  launchDocumentPicker,
+  type PickedDocument,
+} from "@/lib/agent/tools/file-picker";
 import type { ImagePart } from "@/lib/agent/types";
+import type { MobileNativeEvidence } from "@/lib/agent/extensions/mobile-native";
 import {
   useNewMessageSubscription,
   useThreadUpdatedSubscription,
@@ -1217,6 +1222,7 @@ export default function ThreadDetailRoute() {
   // Pending image attachment (model-vision input for the next turn) + agent toggle.
   const [attachedImage, setAttachedImage] = useState<ImagePart | null>(null);
   const [attachedImageUri, setAttachedImageUri] = useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = useState<PickedDocument | null>(null);
   const [agentEnabled, setAgentEnabled] = useState(true);
   const [, executeSendMessage] = useMutation(SendMessageMutation);
 
@@ -1242,6 +1248,14 @@ export default function ThreadDetailRoute() {
           }
         },
       },
+      {
+        text: "File",
+        onPress: async () => {
+          const result = await launchDocumentPicker();
+          const file = result.canceled ? null : result.assets?.[0];
+          if (file) setAttachedFile(file);
+        },
+      },
       { text: "Cancel", style: "cancel" },
     ]);
   }, []);
@@ -1249,10 +1263,12 @@ export default function ThreadDetailRoute() {
   const handleSend = useCallback(async () => {
     const text = messageText.trim();
     const image = attachedImage;
-    if ((!text && !image) || !threadId) return;
+    const file = attachedFile;
+    if ((!text && !image && !file) || !threadId) return;
     setMessageText("");
     setAttachedImage(null);
     setAttachedImageUri(null);
+    setAttachedFile(null);
     Keyboard.dismiss();
     // Real messages run through the on-device Pi-inspired harness (the agent loop runs in
     // Hermes → Bedrock via /api/model/converse), and the completed turn is persisted into
@@ -1266,9 +1282,26 @@ export default function ThreadDetailRoute() {
     // the cloud path does (see the onNewMessage effect) — we own the lifecycle here.
     markThreadActive(threadId);
     try {
+      const nativeAttachments: MobileNativeEvidence[] = file
+        ? [
+            {
+              type: "mobile_native_capability",
+              source: "file",
+              name: file.name,
+              mimeType: file.mimeType ?? null,
+              sizeBytes: file.sizeBytes ?? null,
+              textExtracted: false,
+            },
+          ]
+        : [];
+      const userText =
+        text ||
+        (file
+          ? `Attached file: ${file.name}.`
+          : "Attached image for this turn.");
       await runThreadHarnessTurn({
         threadId,
-        userText: text,
+        userText,
         // The thread's agent selects which tenant MCP tools the on-device agent can
         // call (mcp-tools extension + proxy). Agent toggle off → no agentId, so the
         // turn runs with no platform tools (plain message).
@@ -1280,6 +1313,7 @@ export default function ThreadDetailRoute() {
         spaceId: thread?.spaceId ?? undefined,
         // Attached image is model-vision input on the user turn.
         images: image ? [image] : undefined,
+        nativeAttachments,
         // `messages` comes back newest-first (resolver orders desc(created_at));
         // the harness needs chronological order so prior turns alternate correctly.
         priorMessages: [...messages]
@@ -1301,12 +1335,17 @@ export default function ThreadDetailRoute() {
   }, [
     messageText,
     attachedImage,
+    attachedFile,
     agentEnabled,
     threadId,
     messages,
     thread?.agentId,
     thread?.spaceId,
     currentUser?.id,
+    currentUser?.name,
+    currentUser?.email,
+    currentUser?.tenantId,
+    tenantId,
     reexecuteThread,
     reexecuteMessages,
     reexecuteTurns,
@@ -1500,9 +1539,11 @@ export default function ThreadDetailRoute() {
           isDark={isDark}
           onAttach={handleAttach}
           attachedImageUri={attachedImageUri}
+          attachedFileName={attachedFile?.name ?? null}
           onRemoveAttachment={() => {
             setAttachedImage(null);
             setAttachedImageUri(null);
+            setAttachedFile(null);
           }}
           agentEnabled={agentEnabled}
           onToggleAgent={() => setAgentEnabled((v) => !v)}

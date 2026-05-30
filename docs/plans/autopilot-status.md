@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U7 mobile session semantics
-- Active branch: `codex/mobile-pi-host-u7-session-semantics`
+- Active unit: U8 mobile-native capability extensions
+- Active branch: `codex/mobile-pi-host-u8-native-extensions`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u7-session-semantics`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u8-native-extensions`
 - Started: 2026-05-30
-- Latest merged PR: [#1876](https://github.com/thinkwork-ai/thinkwork/pull/1876)
-- Active PR: [#1877](https://github.com/thinkwork-ai/thinkwork/pull/1877)
+- Latest merged PR: [#1877](https://github.com/thinkwork-ai/thinkwork/pull/1877)
+- Active PR: [#1878](https://github.com/thinkwork-ai/thinkwork/pull/1878)
 - CI: pending
 
 ### Active Unit Notes
@@ -204,6 +204,34 @@ Target branch: `main`
   The broad mobile `tsc --noEmit` command still exits `2` on existing mobile
   diagnostics outside this unit; no diagnostics matched the U7 touched files.
 - Opened PR [#1877](https://github.com/thinkwork-ai/thinkwork/pull/1877).
+- PR [#1877](https://github.com/thinkwork-ai/thinkwork/pull/1877) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and the remote/local U7 branch plus worktree were deleted. Merge commit:
+  `b594a49f4e9a28e75fa5a99d4c9bbcc0878f5943`.
+- Synced from `origin/main` and created isolated U8 branch/worktree
+  `codex/mobile-pi-host-u8-native-extensions`.
+- Goal for U8: model mobile-only photo, file, and clipboard powers as explicit
+  host extensions with visible OS permission/picker affordances and structured
+  capability evidence.
+- Implemented U8 mobile-native capabilities: added `mobile_photo`,
+  `mobile_file`, and `mobile_clipboard` host extensions with injectable
+  providers, visible picker/approval semantics, recoverable denial/cancel tool
+  results, and structured `mobile_native_capability` evidence.
+- Added a lazy `expo-document-picker` file picker and composer file chip so the
+  mobile thread UI can attach a visible file alongside existing image
+  attachments. Manually attached images/files are persisted into the U7
+  `mobile_session` evidence block for the completed turn.
+- Updated the mobile Pi compatibility contract to version `2026-05-30.u8` and
+  marked `mobile-native-host-extensions` implemented.
+- Focused U8 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/extensions/mobile-native lib/agent/thread-turn.test.ts lib/agent/compat/pi-contract.test.ts lib/agent/persist-turn.test.ts lib/agent/capture-image.test.ts`.
+- Broader U8 verification passed: `pnpm --filter @thinkwork/mobile test -- lib/agent`
+  (117 tests), `pnpm --filter @thinkwork/react-native-sdk build`,
+  `pnpm --filter @thinkwork/mobile build:web`, touched-file TypeScript
+  diagnostic filter, touched-file Prettier check, and `git diff --check`.
+  The broad mobile `tsc --noEmit` command still exits `2` on existing mobile
+  diagnostics outside this unit; no diagnostics matched the U8 touched files.
+- Opened PR [#1878](https://github.com/thinkwork-ai/thinkwork/pull/1878).
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 

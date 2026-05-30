@@ -216,6 +216,13 @@ describe("runThreadHarnessTurn", () => {
     );
 
     expect(provider.requests[0].tools.map((t) => t.name)).toContain("bash");
+    expect(provider.requests[0].tools.map((t) => t.name)).toEqual(
+      expect.arrayContaining([
+        "mobile_photo",
+        "mobile_file",
+        "mobile_clipboard",
+      ]),
+    );
     expect(provider.requests[0].system).toContain("local `bash` tool");
   });
 
@@ -261,6 +268,13 @@ describe("runThreadHarnessTurn", () => {
 
     const sent = provider.requests[0].messages;
     expect(sent.at(-1)?.images).toEqual([{ format: "jpeg", data: "QUJD" }]);
+    expect(recordTurnFn.mock.calls[0][0].toolResults[0].attachments).toEqual([
+      expect.objectContaining({
+        type: "mobile_native_capability",
+        source: "photo_library",
+        mimeType: "image/jpeg",
+      }),
+    ]);
   });
 
   it("reports ok=false when the turn errors", async () => {

@@ -12,6 +12,7 @@ import { createAgentSession } from "./session";
 import { buildTurnContext } from "./turn-context";
 import { localBashExtension } from "./extensions/local-bash-extension";
 import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
+import { mobileNativeExtensions } from "./extensions/mobile-native";
 import { workspaceContextExtension } from "./extensions/workspace-context-extension";
 import { workspaceToolsExtension } from "./extensions/workspace-tools-extension";
 import { recordTurn, type MobileSessionTurnEvidence } from "./persist-turn";
@@ -29,6 +30,7 @@ import type {
   ModelProvider,
   Tool,
 } from "./types";
+import type { MobileNativeEvidence } from "./extensions/mobile-native";
 
 /** Loose shape of the thread's rendered messages (role + content). */
 export interface PriorMessage {
@@ -63,6 +65,8 @@ export interface RunThreadHarnessTurnInput {
    * the user turn via session.prompt(userText, images).
    */
   images?: ImagePart[];
+  /** Host-native attachment evidence collected by the mobile UI before the turn. */
+  nativeAttachments?: MobileNativeEvidence[];
 }
 
 export interface RunThreadHarnessTurnDeps {
@@ -177,6 +181,7 @@ export async function runThreadHarnessTurn(
               }
             : undefined,
       }),
+      ...mobileNativeExtensions(),
       input.agentId ? mcpToolsExtension({ agentId: input.agentId }) : null,
     ].filter((ext): ext is ExtensionFactory => Boolean(ext));
   const session = createAgentSession({
@@ -205,6 +210,17 @@ export async function runThreadHarnessTurn(
     stopReason: result.stopReason,
     transcript: result.messages,
     events,
+    attachments: [
+      ...(input.nativeAttachments ?? []),
+      ...(input.images ?? []).map((image, index) => ({
+        type: "mobile_native_capability" as const,
+        source: "photo_library" as const,
+        name: `image-${index + 1}.${image.format}`,
+        mimeType: `image/${image.format}`,
+        sizeBytes: Math.ceil((image.data.length * 3) / 4),
+        textExtracted: false,
+      })),
+    ],
   };
 
   // Persist the completed turn into the thread (append-only). A persistence failure

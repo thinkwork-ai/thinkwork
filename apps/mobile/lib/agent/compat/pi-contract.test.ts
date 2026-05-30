@@ -77,6 +77,7 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
         "extension-lifecycle-loop-dispatch",
         "in-flight-abort-follow-up-steer",
         "durable-session-compaction",
+        "mobile-native-host-extensions",
       ]),
     );
     expect(deferredPiCompatibilityFeatureIds()).toEqual([]);
