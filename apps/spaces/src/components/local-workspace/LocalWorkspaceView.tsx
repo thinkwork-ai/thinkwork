@@ -94,9 +94,7 @@ export function LocalWorkspaceView({ bridge }: LocalWorkspaceViewProps) {
   });
 
   if (!available) {
-    return (
-      <Centered>Workspace is only available in the desktop app.</Centered>
-    );
+    return <Centered>Workspace is only available in the desktop app.</Centered>;
   }
 
   return (
@@ -204,14 +202,19 @@ function WorkspaceContentPane({
   switch (ws.file.status) {
     case "ok":
       return (
-        <div className="p-3">
+        <div className="flex h-full flex-col p-3">
           <div className="mb-2 px-1 font-mono text-xs text-muted-foreground">
             {ws.selectedPath}
           </div>
+          {/* Fill the pane: stretch CodeBlock + its pre wrappers to full height
+              so the editor surface (border + background) reaches the bottom.
+              `:not(:last-child)` excludes the absolutely-positioned copy button
+              so its hit area isn't expanded. */}
           <CodeBlock
             code={ws.file.content}
             language={ws.file.language as BundledLanguage}
             showLineNumbers
+            className="min-h-0 flex-1 [&>div]:h-full [&>div>div:not(:last-child)]:h-full [&_pre]:min-h-full"
           >
             <CodeBlockCopyButton />
           </CodeBlock>
