@@ -57,6 +57,7 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     expect(prompt).toContain("<current_requester>");
     expect(prompt).toContain("ada@example.com");
     expect(prompt).toContain("## Runtime Tool Policy");
+    expect(prompt).toContain("`bash` tool is not available");
     expect(prompt).toContain("`execute_code` tool is available");
     expect(prompt).toContain("AGENTS BODY");
     expect(prompt).toContain("USER BODY");
@@ -75,6 +76,21 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
       fileReader: readerFor({ AGENTS_unused: "x", "USER.md": "USER BODY" }),
     });
     expect(prompt).not.toContain("USER BODY");
+  });
+
+  it("distinguishes built-in bash from execute_code when both are available", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      availableToolNames: ["bash", "execute_code"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+
+    expect(prompt).toContain("Pi built-in `bash` tool is available");
+    expect(prompt).toContain("Treat `bash` and `execute_code` as distinct");
+    expect(prompt).toContain("use `bash` for the Pi workspace/shell");
+    expect(prompt).toContain("tenant Code Interpreter sandbox");
   });
 });
 
