@@ -25,10 +25,8 @@ export interface Logger {
 }
 
 // ── Lifecycle events (Pi-named) ──────────────────────────────────────────────
-// v1 dispatches `before_agent_start` (system-prompt composition) from the session.
-// The remaining events are part of the typed surface and the bus dispatches to any
-// registered handler, but the loop does not yet emit them — they gain loop wiring as
-// real consumers arrive (a tool-activity hook is the obvious next one).
+// The session dispatches `before_agent_start` during prompt composition and bridges the
+// loop's agent/tool lifecycle events into this bus during each turn.
 
 /** Fires once before the first model call so extensions can shape the system prompt. */
 export interface BeforeAgentStartEvent {
@@ -48,6 +46,8 @@ export interface BeforeAgentStartResult {
 /** Fires when the agent turn starts. */
 export interface AgentStartEvent {
   agentName?: string;
+  toolNames?: readonly string[];
+  model?: string;
 }
 
 /** Fires when the agent turn ends. */

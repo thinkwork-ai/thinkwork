@@ -55,11 +55,17 @@ describe("runThreadHarnessTurn", () => {
     );
 
     expect(res).toEqual({ assistantText: "on it", ok: true });
-    expect(recordTurnFn).toHaveBeenCalledWith({
-      threadId: "thr_1",
-      userText: "hello",
-      assistantText: "on it",
-      usage: { inputTokens: 0, outputTokens: 0 },
+    expect(recordTurnFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: "thr_1",
+        userText: "hello",
+        assistantText: "on it",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      }),
+    );
+    expect(recordTurnFn.mock.calls[0][0].toolResults[0]).toMatchObject({
+      type: "mobile_session",
+      stopReason: "completed",
     });
   });
 
@@ -157,10 +163,13 @@ describe("runThreadHarnessTurn", () => {
     );
 
     expect(events).toEqual([
+      "agent_start",
       "assistant_text",
       "tool_call",
       "tool_result",
+      "after_tool_call",
       "assistant_text",
+      "agent_end",
       "done",
     ]);
   });

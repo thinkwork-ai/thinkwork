@@ -166,7 +166,9 @@ describe("runAgentTurn", () => {
       provider,
       tools: [],
       messages: [user("hi")],
-      onEvent: (e) => events.push(e),
+      onEvent: (e) => {
+        events.push(e);
+      },
     });
 
     expect(result.stopReason).toBe("error");
@@ -204,7 +206,7 @@ describe("runAgentTurn", () => {
     expect(seed).toEqual([user("hi")]);
   });
 
-  it("emits assistant_text, tool_call, tool_result, and done events in order", async () => {
+  it("emits Pi-shaped lifecycle and tool events in order", async () => {
     const provider = new MockModelProvider([
       toolResponse("c1", "echo", { value: "z" }, "checking"),
       textResponse("all set"),
@@ -220,10 +222,13 @@ describe("runAgentTurn", () => {
 
     const kinds = onEvent.mock.calls.map((c) => (c[0] as AgentEvent).type);
     expect(kinds).toEqual([
+      "agent_start",
       "assistant_text",
       "tool_call",
       "tool_result",
+      "after_tool_call",
       "assistant_text",
+      "agent_end",
       "done",
     ]);
   });

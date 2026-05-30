@@ -9,6 +9,7 @@
 import type {
   AgentEvent,
   AgentRunResult,
+  AgentStopReason,
   Message,
   ModelProvider,
   Tool,
@@ -34,7 +35,7 @@ export interface RunAgentTurnOptions {
   sessionId?: string;
   signal?: AbortSignal;
   /** Observability / UI streaming hook. Thrown errors here are ignored. */
-  onEvent?: (event: AgentEvent) => void;
+  onEvent?: (event: AgentEvent) => void | Promise<void>;
 }
 
 const DEFAULT_MAX_STEPS = 8;
@@ -81,10 +82,10 @@ export async function runAgentTurn(
     onEvent,
   } = options;
 
-  const emit = (event: AgentEvent): void => {
+  const emit = async (event: AgentEvent): Promise<void> => {
     if (!onEvent) return;
     try {
-      onEvent(event);
+      await onEvent(event);
     } catch {
       // Observability must never break the turn.
     }
@@ -96,15 +97,28 @@ export async function runAgentTurn(
   let finalText = "";
   let steps = 0;
 
+  const finish = async (
+    stopReason: AgentStopReason,
+  ): Promise<AgentRunResult> => {
+    await emit({ type: "agent_end", stopReason, steps, usage: { ...usage } });
+    await emit({ type: "done", stopReason, steps });
+    return { messages, finalText, steps, stopReason, usage };
+  };
+
+  await emit({
+    type: "agent_start",
+    step: 0,
+    toolNames: tools.map((tool) => tool.name),
+    model,
+  });
+
   while (true) {
     if (signal?.aborted) {
-      emit({ type: "done", stopReason: "aborted", steps });
-      return { messages, finalText, steps, stopReason: "aborted", usage };
+      return finish("aborted");
     }
 
     if (steps >= maxSteps) {
-      emit({ type: "done", stopReason: "max_steps", steps });
-      return { messages, finalText, steps, stopReason: "max_steps", usage };
+      return finish("max_steps");
     }
 
     let response;
@@ -124,26 +138,24 @@ export async function runAgentTurn(
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      emit({ type: "error", error: message });
-      emit({ type: "done", stopReason: "error", steps });
-      return { messages, finalText, steps, stopReason: "error", usage };
+      await emit({ type: "error", error: message });
+      return finish("error");
     }
 
     steps += 1;
     addUsage(usage, response.usage);
 
     if (response.stopReason === "error") {
-      emit({
+      await emit({
         type: "error",
         error: response.text || "model returned error stop reason",
       });
-      emit({ type: "done", stopReason: "error", steps });
-      return { messages, finalText, steps, stopReason: "error", usage };
+      return finish("error");
     }
 
     if (response.text) {
       finalText = response.text;
-      emit({ type: "assistant_text", text: response.text, step: steps });
+      await emit({ type: "assistant_text", text: response.text, step: steps });
     }
 
     messages.push({
@@ -153,20 +165,25 @@ export async function runAgentTurn(
     });
 
     if (response.toolCalls.length === 0) {
-      emit({ type: "done", stopReason: "completed", steps });
-      return { messages, finalText, steps, stopReason: "completed", usage };
+      return finish("completed");
     }
 
     for (const call of response.toolCalls) {
-      emit({ type: "tool_call", call, step: steps });
+      await emit({ type: "tool_call", call, step: steps });
       const result = await executeTool(tools, call.name, call.arguments, {
         signal,
         sessionId,
       });
-      emit({
+      await emit({
         type: "tool_result",
         toolCallId: call.id,
         name: call.name,
+        result,
+        step: steps,
+      });
+      await emit({
+        type: "after_tool_call",
+        call,
         result,
         step: steps,
       });

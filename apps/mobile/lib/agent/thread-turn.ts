@@ -14,7 +14,7 @@ import { localBashExtension } from "./extensions/local-bash-extension";
 import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
 import { workspaceContextExtension } from "./extensions/workspace-context-extension";
 import { workspaceToolsExtension } from "./extensions/workspace-tools-extension";
-import { recordTurn } from "./persist-turn";
+import { recordTurn, type MobileSessionTurnEvidence } from "./persist-turn";
 import {
   createWorkspaceCachePartition,
   getDefaultWorkspaceCache,
@@ -189,13 +189,23 @@ export async function runThreadHarnessTurn(
     messages: toHarnessMessages(input.priorMessages),
   });
 
-  const unsubscribe = deps.onEvent ? session.subscribe(deps.onEvent) : null;
+  const events: AgentEvent[] = [];
+  const unsubscribe = session.subscribe((event) => {
+    events.push(event);
+    deps.onEvent?.(event);
+  });
   const result = await session
     .prompt(input.userText, input.images)
     .finally(() => {
-      unsubscribe?.();
+      unsubscribe();
     });
   const assistantText = result.finalText || "";
+  const evidence: MobileSessionTurnEvidence = {
+    type: "mobile_session",
+    stopReason: result.stopReason,
+    transcript: result.messages,
+    events,
+  };
 
   // Persist the completed turn into the thread (append-only). A persistence failure
   // shouldn't lose the fact that the turn ran — surface via the returned ok flag.
@@ -203,6 +213,7 @@ export async function runThreadHarnessTurn(
     threadId: input.threadId,
     userText: input.userText,
     assistantText,
+    toolResults: [evidence],
     usage: result.usage,
   });
 

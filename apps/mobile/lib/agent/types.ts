@@ -139,6 +139,12 @@ export function toToolSpec(tool: Tool): ToolSpec {
 
 /** Streaming/observability events emitted across a turn. */
 export type AgentEvent =
+  | {
+      type: "agent_start";
+      step: number;
+      toolNames: string[];
+      model?: string;
+    }
   | { type: "assistant_text"; text: string; step: number }
   | { type: "tool_call"; call: ToolCall; step: number }
   | {
@@ -147,6 +153,18 @@ export type AgentEvent =
       name: string;
       result: ToolResult;
       step: number;
+    }
+  | {
+      type: "after_tool_call";
+      call: ToolCall;
+      result: ToolResult;
+      step: number;
+    }
+  | {
+      type: "agent_end";
+      stopReason: AgentStopReason;
+      steps: number;
+      usage: Usage;
     }
   | { type: "done"; stopReason: AgentStopReason; steps: number }
   | { type: "error"; error: string };

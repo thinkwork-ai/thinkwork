@@ -99,8 +99,18 @@ export type { LaunchPicker, PickerResult, PickedAsset } from "./capture-image";
 // Turn assembly + session storage.
 export { buildTurnContext } from "./turn-context";
 export type { TurnContext, TurnContextInput } from "./turn-context";
-export { InMemorySessionStore } from "./session-store";
-export type { SessionStore, SessionRecord } from "./session-store";
+export {
+  DEFAULT_SESSION_COMPACTION_MESSAGE_THRESHOLD,
+  InMemorySessionStore,
+  compactSessionRecord,
+  shouldCompactSession,
+} from "./session-store";
+export type {
+  SessionAppendMetadata,
+  SessionCompaction,
+  SessionRecord,
+  SessionStore,
+} from "./session-store";
 export { runThreadHarnessTurn } from "./thread-turn";
 export type {
   RunThreadHarnessTurnInput,
@@ -109,7 +119,8 @@ export type {
 } from "./thread-turn";
 export { recordTurn } from "./persist-turn";
 export type {
+  MobileSessionTurnEvidence,
   RecordTurnInput,
-  RecordTurnResult,
   RecordTurnDeps,
+  RecordTurnResult,
 } from "./persist-turn";

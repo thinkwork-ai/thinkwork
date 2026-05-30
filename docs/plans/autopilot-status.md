@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U6 bounded MCP proxy tool for mobile
-- Active branch: `codex/mobile-pi-host-u6-mcp-proxy`
+- Active unit: U7 mobile session semantics
+- Active branch: `codex/mobile-pi-host-u7-session-semantics`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u6-mcp-proxy`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u7-session-semantics`
 - Started: 2026-05-30
-- Latest merged PR: [#1875](https://github.com/thinkwork-ai/thinkwork/pull/1875)
-- Active PR: [#1876](https://github.com/thinkwork-ai/thinkwork/pull/1876)
+- Latest merged PR: [#1876](https://github.com/thinkwork-ai/thinkwork/pull/1876)
+- Active PR: [#1877](https://github.com/thinkwork-ai/thinkwork/pull/1877)
 - CI: pending
 
 ### Active Unit Notes
@@ -176,6 +176,34 @@ Target branch: `main`
   (`tenantId`, `agentId`, `userId`, Cognito id token), so real deployed MCP
   smoke remains pending on those credentials.
 - Opened PR [#1876](https://github.com/thinkwork-ai/thinkwork/pull/1876).
+- PR [#1876](https://github.com/thinkwork-ai/thinkwork/pull/1876) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and the remote/local U6 branch plus worktree were deleted. Merge commit:
+  `51fe2a01c154996944dcc0b1894ca86977e14b34`.
+- Synced from `origin/main` and created isolated U7 branch/worktree
+  `codex/mobile-pi-host-u7-session-semantics`.
+- Goal for U7: align mobile session semantics with Pi by making lifecycle
+  events observable, bridging loop events into extension handlers, queueing
+  follow-up/steering prompts, persisting structured turn evidence, and adding
+  deterministic session compaction hooks.
+- Implemented U7 session semantics: the mobile loop now emits `agent_start`,
+  `after_tool_call`, and `agent_end` around the existing assistant/tool/done
+  stream; `createAgentSession` dispatches those lifecycle events to
+  extensions; `prompt`, `followUp`, and `steer` serialize through one transcript
+  queue while `abort` cancels the active turn.
+- Thread turns now persist a structured `mobile_session` evidence object in
+  `toolResults`, including the final stop reason, structured transcript, and
+  full local event stream. The in-memory session store now records events and
+  stop reason and exposes deterministic compaction helpers for long transcripts.
+- Focused U7 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/session.test.ts lib/agent/loop.test.ts lib/agent/thread-turn.test.ts lib/agent/persist-turn.test.ts lib/agent/session-store.test.ts lib/agent/compat/pi-contract.test.ts`.
+- Broader U7 verification passed: `pnpm --filter @thinkwork/mobile test -- lib/agent`
+  (112 tests), `pnpm --filter @thinkwork/react-native-sdk build`,
+  `pnpm --filter @thinkwork/mobile build:web`, touched-file TypeScript
+  diagnostic filter, touched-file Prettier check, and `git diff --check`.
+  The broad mobile `tsc --noEmit` command still exits `2` on existing mobile
+  diagnostics outside this unit; no diagnostics matched the U7 touched files.
+- Opened PR [#1877](https://github.com/thinkwork-ai/thinkwork/pull/1877).
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 
