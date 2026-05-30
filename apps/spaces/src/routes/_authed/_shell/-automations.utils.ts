@@ -19,6 +19,8 @@ export type ScheduledJobRow = {
   last_run_at: string | null;
   next_run_at: string | null;
   created_at: string;
+  created_by_type: string | null;
+  created_by_id: string | null;
 };
 
 export type ThreadTurnRow = {

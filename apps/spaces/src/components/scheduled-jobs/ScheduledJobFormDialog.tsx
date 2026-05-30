@@ -50,13 +50,16 @@ interface ScheduledJobFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
-  /** The Computer that owns this job. Required — apps/spaces only edits its own Computer's jobs. */
-  computerId: string;
   /**
-   * The agent that fires the job. Resolved upstream from
-   * the selected assigned Computer's source agent. The list/detail routes disable the
-   * "Add Job" / "Edit" affordance when this is null, so the dialog itself
-   * can rely on a non-null value.
+   * Legacy Computer association. Optional — the Computer concept was removed,
+   * so jobs created from spaces are owned by the tenant platform agent and
+   * carry no computer_id.
+   */
+  computerId?: string;
+  /**
+   * The agent that fires the job (the tenant platform agent). The list/detail
+   * routes disable the "Add Job" / "Edit" affordance when this is null, so the
+   * dialog itself can rely on a non-null value.
    */
   agentId: string;
   initial?: Partial<ScheduledJobFormData>;
@@ -126,7 +129,7 @@ export function ScheduledJobFormDialog({
         name: values.name.trim(),
         trigger_type: triggerType,
         agent_id: agentId,
-        computer_id: computerId,
+        computer_id: computerId ?? null,
         prompt: values.prompt?.trim() || undefined,
         schedule_type: scheduleValue.scheduleType,
         schedule_expression: scheduleValue.scheduleExpression,
