@@ -722,6 +722,9 @@ export default function ThreadsScreen() {
             userText: messageContent,
             priorMessages: [],
             agentName: selectedComputer?.name,
+            // Selects which tenant MCP tools the on-device agent can call
+            // (mcp-tools extension + proxy) on the first turn of a new thread.
+            agentId: selectedComputer.id,
           });
           reexecute({ requestPolicy: "network-only" });
         } catch (err) {
