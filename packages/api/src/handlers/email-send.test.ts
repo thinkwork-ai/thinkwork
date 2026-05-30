@@ -299,6 +299,26 @@ describe("email-send HTTP agent invocation", () => {
     expect(insertedReplyTokens).toHaveLength(0);
   });
 
+  it("rejects a malformed recipient with a clear 400 before hitting SES", async () => {
+    // An unresolved alias / bare name (no @domain) used to reach SES and 500
+    // with an opaque "server error" (InvalidParameterValue: Missing final
+    // '@domain'). It must now be rejected with an actionable message.
+    const result = await handler(
+      emailSendEvent({
+        agentId,
+        to: "me",
+        subject: "Things to do in Austin",
+        body: "Here is what I found.",
+      }),
+    );
+
+    expect(result).toMatchObject({ statusCode: 400 });
+    expect(JSON.parse(result.body as string).error).toContain(
+      "not a valid email address",
+    );
+    expect(mockSesSend).not.toHaveBeenCalled();
+  });
+
   it("does not persist a reply token when SES rejects the send", async () => {
     selectRows.push(
       [
