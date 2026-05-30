@@ -10,7 +10,9 @@
 import { BedrockModelProvider } from "./providers/bedrock";
 import { createAgentSession } from "./session";
 import { buildTurnContext } from "./turn-context";
+import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
 import { recordTurn } from "./persist-turn";
+import type { ExtensionFactory } from "./extensions/types";
 import type { Message, ModelProvider, Tool } from "./types";
 
 /** Loose shape of the thread's rendered messages (role + content). */
@@ -24,12 +26,23 @@ export interface RunThreadHarnessTurnInput {
   userText: string;
   priorMessages: PriorMessage[];
   agentName?: string;
+  /**
+   * The thread's agent id — selects which tenant MCP tools the on-device agent can
+   * call (via the mcp-tools extension + U2 proxy). When omitted, the turn runs with
+   * no platform tools (plain chat); built-ins still apply.
+   */
+  agentId?: string;
   tools?: Tool[];
 }
 
 export interface RunThreadHarnessTurnDeps {
   modelProvider?: ModelProvider;
   recordTurnFn?: typeof recordTurn;
+  /**
+   * Override the extensions loaded for the turn. Defaults to [mcpToolsExtension]
+   * when `agentId` is set. Injected in tests to avoid the proxy/auth modules.
+   */
+  extensions?: ExtensionFactory[];
 }
 
 export interface ThreadHarnessTurnResult {
@@ -67,10 +80,18 @@ export async function runThreadHarnessTurn(
     agentName: input.agentName,
     tools: input.tools,
   });
+  // The agent's tenant MCP tools arrive as the first Pi-style extension. Default
+  // when an agentId is known; tests inject their own (or none). Built-ins/`tools`
+  // are preserved — extensions are additive.
+  const extensions =
+    deps.extensions ??
+    (input.agentId ? [mcpToolsExtension({ agentId: input.agentId })] : []);
   const session = createAgentSession({
     modelProvider: provider,
     systemPrompt: system,
     tools,
+    extensions,
+    agentName: input.agentName,
     messages: toHarnessMessages(input.priorMessages),
   });
 

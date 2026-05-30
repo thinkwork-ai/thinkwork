@@ -6,6 +6,7 @@ import {
   toolResponse,
 } from "./providers/mock";
 import { defineTool } from "./session";
+import { defineExtension } from "./extensions/define-extension";
 import type { Tool } from "./types";
 
 function crmTool(): Tool {
@@ -109,6 +110,34 @@ describe("runThreadHarnessTurn", () => {
 
     expect(res.assistantText).toBe("created opp_1");
     expect(recordTurnFn.mock.calls[0][0].assistantText).toBe("created opp_1");
+  });
+
+  it("runs a tool supplied by an extension and reflects it in the answer", async () => {
+    const provider = new MockModelProvider([
+      toolResponse("c1", "ext_tool", { q: "acme" }, "looking"),
+      textResponse("found acme"),
+    ]);
+    const recordTurnFn = vi.fn().mockResolvedValue({});
+    const ext = defineExtension({
+      name: "test-ext",
+      register: (pi) => {
+        pi.registerTool({
+          name: "ext_tool",
+          description: "an extension-supplied tool",
+          parameters: { type: "object" },
+          execute: async () => ({ content: "acme inc" }),
+        });
+      },
+    });
+
+    const res = await runThreadHarnessTurn(
+      { threadId: "t", userText: "find acme", priorMessages: [] },
+      { modelProvider: provider, recordTurnFn, extensions: [ext] },
+    );
+
+    expect(res.assistantText).toBe("found acme");
+    // The extension's tool was advertised to the model.
+    expect(provider.requests[0].tools.map((t) => t.name)).toContain("ext_tool");
   });
 
   it("reports ok=false when the turn errors", async () => {
