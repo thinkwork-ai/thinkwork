@@ -14,9 +14,18 @@ import {
   Platform,
   Keyboard,
   ScrollView,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowUp, Plus, Zap, Mic, ChevronDown } from "lucide-react-native";
+import {
+  ArrowUp,
+  Plus,
+  Mic,
+  ChevronDown,
+  Paperclip,
+  Bot,
+  X,
+} from "lucide-react-native";
 import { IconPlanet } from "@tabler/icons-react-native";
 import { COLORS } from "@/lib/theme";
 import { VoiceDictationBar } from "./VoiceDictationBar";
@@ -39,13 +48,20 @@ interface MessageInputFooterProps {
   placeholder?: string;
   colors: (typeof COLORS)["dark"];
   isDark: boolean;
-  /** Show the quick actions button (Zap icon) */
-  onQuickActions?: () => void;
-  /** Render the quick actions button dimmed and swallow presses. Used by
-   *  the Tasks footer until Task-scoped Quick Actions ship. */
-  quickActionsDisabled?: boolean;
   /** Skip bottom safe area inset (when parent already handles it) */
   skipBottomInset?: boolean;
+  /** Open the image attach flow (paperclip). Library/Camera choice is owned by the parent. */
+  onAttach?: () => void;
+  /** A local URI for the pending attached image, shown as a removable chip above the input. */
+  attachedImageUri?: string | null;
+  /** Remove the pending attached image. */
+  onRemoveAttachment?: () => void;
+  /**
+   * Agent toggle (Bot). When provided, renders the toggle: on = the agent
+   * responds (harness turn); off = plain message (no agent). Omit to hide.
+   */
+  agentEnabled?: boolean;
+  onToggleAgent?: () => void;
   /** Open workspace picker (+ button) */
   onPlusPress?: () => void;
   /** Render the plus button dimmed and swallow presses. */
@@ -77,8 +93,11 @@ export const MessageInputFooter = forwardRef<
     colors,
     isDark,
     skipBottomInset,
-    onQuickActions,
-    quickActionsDisabled,
+    onAttach,
+    attachedImageUri,
+    onRemoveAttachment,
+    agentEnabled,
+    onToggleAgent,
     onPlusPress,
     plusDisabled,
     onSpacePress,
@@ -111,10 +130,14 @@ export const MessageInputFooter = forwardRef<
     };
   }, []);
 
+  // A turn is sendable with text OR an attached image (an image-only turn is valid —
+  // "make an opportunity from this card" with just the photo).
+  const canSubmit = !disabled && (value.trim().length > 0 || !!attachedImageUri);
+
   const handleSubmit = useCallback(() => {
-    if (disabled || !value.trim()) return;
+    if (disabled || (!value.trim() && !attachedImageUri)) return;
     onSubmit();
-  }, [disabled, value, onSubmit]);
+  }, [disabled, value, attachedImageUri, onSubmit]);
 
   const hasWorkspaces = selectedWorkspaces && selectedWorkspaces.length > 0;
 
@@ -148,6 +171,44 @@ export const MessageInputFooter = forwardRef<
           ))}
         </ScrollView>
       )}
+
+      {/* Pending attached image chip */}
+      {attachedImageUri ? (
+        <View className="px-4 pt-3">
+          <View
+            style={{
+              alignSelf: "flex-start",
+              borderRadius: 12,
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            <Image
+              source={{ uri: attachedImageUri }}
+              style={{ width: 64, height: 64, borderRadius: 12 }}
+            />
+            {onRemoveAttachment ? (
+              <Pressable
+                onPress={onRemoveAttachment}
+                hitSlop={8}
+                style={{
+                  position: "absolute",
+                  top: 2,
+                  right: 2,
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "rgba(0,0,0,0.6)",
+                }}
+              >
+                <X size={14} color="#ffffff" strokeWidth={2.5} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
 
       {/* Text input */}
       <View className="px-4 pt-3">
@@ -188,6 +249,32 @@ export const MessageInputFooter = forwardRef<
       ) : (
         <View className="flex-row items-center justify-between px-4 pt-1 pb-2">
           <View className="flex-row items-center gap-4">
+            {onToggleAgent && (
+              <Pressable
+                onPress={disabled ? undefined : onToggleAgent}
+                disabled={disabled}
+                accessibilityLabel="Send to agent"
+                accessibilityState={{ selected: agentEnabled }}
+                className="p-1 active:opacity-70"
+                style={{ opacity: disabled ? 0.35 : 1 }}
+              >
+                <Bot
+                  size={24}
+                  color={agentEnabled ? "#54a9ff" : colors.mutedForeground}
+                />
+              </Pressable>
+            )}
+            {onAttach && (
+              <Pressable
+                onPress={disabled ? undefined : onAttach}
+                disabled={disabled}
+                accessibilityLabel="Attach image"
+                className="p-1 active:opacity-70"
+                style={{ opacity: disabled ? 0.35 : 1 }}
+              >
+                <Paperclip size={22} color={colors.mutedForeground} />
+              </Pressable>
+            )}
             {onPlusPress && (
               <Pressable
                 onPress={plusDisabled || disabled ? undefined : onPlusPress}
@@ -196,18 +283,6 @@ export const MessageInputFooter = forwardRef<
                 style={{ opacity: plusDisabled || disabled ? 0.35 : 1 }}
               >
                 <Plus size={26} color={colors.mutedForeground} />
-              </Pressable>
-            )}
-            {onQuickActions && (
-              <Pressable
-                onPress={
-                  quickActionsDisabled || disabled ? undefined : onQuickActions
-                }
-                disabled={quickActionsDisabled || disabled}
-                className="p-1 active:opacity-70"
-                style={{ opacity: quickActionsDisabled || disabled ? 0.35 : 1 }}
-              >
-                <Zap size={24} color={colors.mutedForeground} />
               </Pressable>
             )}
             {onSpacePress && (
@@ -250,30 +325,25 @@ export const MessageInputFooter = forwardRef<
             </Pressable>
             <Pressable
               onPress={handleSubmit}
-              disabled={disabled || !value.trim()}
+              disabled={!canSubmit}
               style={{
                 width: 36,
                 height: 36,
                 borderRadius: 18,
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor:
-                  !disabled && value.trim()
-                    ? colors.primary
-                    : isDark
-                      ? "#404040"
-                      : "#d4d4d4",
+                backgroundColor: canSubmit
+                  ? colors.primary
+                  : isDark
+                    ? "#404040"
+                    : "#d4d4d4",
               }}
             >
               <ArrowUp
                 size={20}
                 strokeWidth={2.5}
                 color={
-                  !disabled && value.trim()
-                    ? "#ffffff"
-                    : isDark
-                      ? "#737373"
-                      : "#a3a3a3"
+                  canSubmit ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"
                 }
               />
             </Pressable>

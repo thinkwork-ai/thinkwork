@@ -55,6 +55,12 @@ import {
 } from "@/components/chat/WebViewSheet";
 import { useAuth } from "@/lib/auth-context";
 import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
+import { pickImage } from "@/lib/agent/capture-image";
+import {
+  launchImagePicker,
+  launchCamera,
+} from "@/lib/agent/tools/image-picker";
+import type { ImagePart } from "@/lib/agent/types";
 import {
   useNewMessageSubscription,
   useThreadUpdatedSubscription,
@@ -1104,12 +1110,45 @@ export default function ThreadDetailRoute() {
 
   // ── Send message ──
   const [messageText, setMessageText] = useState("");
+  // Pending image attachment (model-vision input for the next turn) + agent toggle.
+  const [attachedImage, setAttachedImage] = useState<ImagePart | null>(null);
+  const [attachedImageUri, setAttachedImageUri] = useState<string | null>(null);
+  const [agentEnabled, setAgentEnabled] = useState(true);
   const [, executeSendMessage] = useMutation(SendMessageMutation);
+
+  const handleAttach = useCallback(() => {
+    Alert.alert("Attach image", undefined, [
+      {
+        text: "Photo Library",
+        onPress: async () => {
+          const img = await pickImage(launchImagePicker);
+          if (img) {
+            setAttachedImage(img);
+            setAttachedImageUri(`data:image/${img.format};base64,${img.data}`);
+          }
+        },
+      },
+      {
+        text: "Camera",
+        onPress: async () => {
+          const img = await pickImage(launchCamera);
+          if (img) {
+            setAttachedImage(img);
+            setAttachedImageUri(`data:image/${img.format};base64,${img.data}`);
+          }
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, []);
 
   const handleSend = useCallback(async () => {
     const text = messageText.trim();
-    if (!text || !threadId) return;
+    const image = attachedImage;
+    if ((!text && !image) || !threadId) return;
     setMessageText("");
+    setAttachedImage(null);
+    setAttachedImageUri(null);
     Keyboard.dismiss();
     // Real messages run through the on-device Pi-inspired harness (the agent loop runs in
     // Hermes → Bedrock via /api/model/converse), and the completed turn is persisted into
@@ -1126,6 +1165,12 @@ export default function ThreadDetailRoute() {
       await runThreadHarnessTurn({
         threadId,
         userText: text,
+        // The thread's agent selects which tenant MCP tools the on-device agent can
+        // call (mcp-tools extension + proxy). Agent toggle off → no agentId, so the
+        // turn runs with no platform tools (plain message).
+        agentId: agentEnabled ? (thread?.agentId ?? undefined) : undefined,
+        // Attached image is model-vision input on the user turn.
+        images: image ? [image] : undefined,
         // `messages` comes back newest-first (resolver orders desc(created_at));
         // the harness needs chronological order so prior turns alternate correctly.
         priorMessages: [...messages]
@@ -1146,6 +1191,8 @@ export default function ThreadDetailRoute() {
     reexecuteTurns({ requestPolicy: "network-only" });
   }, [
     messageText,
+    attachedImage,
+    agentEnabled,
     threadId,
     messages,
     thread?.agentId,
@@ -1336,7 +1383,14 @@ export default function ThreadDetailRoute() {
           placeholder="Message..."
           colors={colors}
           isDark={isDark}
-          onQuickActions={() => quickActionsRef.current?.present()}
+          onAttach={handleAttach}
+          attachedImageUri={attachedImageUri}
+          onRemoveAttachment={() => {
+            setAttachedImage(null);
+            setAttachedImageUri(null);
+          }}
+          agentEnabled={agentEnabled}
+          onToggleAgent={() => setAgentEnabled((v) => !v)}
         />
       )}
 
