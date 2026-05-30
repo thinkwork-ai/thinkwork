@@ -1141,6 +1141,7 @@ export default function ThreadDetailRoute() {
     reexecuteMessages,
     reexecuteTurns,
     markThreadActive,
+    clearThreadActive,
   ]);
 
   // Don't render stale content — wait until the correct thread is loaded
