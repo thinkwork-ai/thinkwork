@@ -7,6 +7,7 @@ import {
   Plug,
   Repeat,
   Settings as SettingsIcon,
+  ShieldCheck,
   Sparkles,
   Users,
   Webhook,
@@ -83,6 +84,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Webhooks",
     to: "/settings/webhooks",
     icon: Webhook,
+    operatorOnly: true,
+  },
+  {
+    label: "Evaluations",
+    to: "/settings/evaluations",
+    icon: ShieldCheck,
     operatorOnly: true,
   },
   {
