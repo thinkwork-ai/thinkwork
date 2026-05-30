@@ -1,7 +1,7 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-18
-status: active
+status: complete
 ---
 
 # Autopilot Status Ledger
@@ -15,15 +15,15 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active
-- Active unit: U10 — Retire hand-assembled tool/prompt wiring
-- Active branch: `codex/pi-extensions-u10`
-- Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/pi-extensions-u10`
+- Status: complete
+- Active unit: none
+- Active branch: none
+- Active worktree: none
 - Started: 2026-05-30
-- Latest merged PR: [#1854](https://github.com/thinkwork-ai/thinkwork/pull/1854)
-- Active PR: [#1855](https://github.com/thinkwork-ai/thinkwork/pull/1855)
-- CI: pending
+- Completed: 2026-05-30
+- Latest merged PR: [#1855](https://github.com/thinkwork-ai/thinkwork/pull/1855)
+- Active PR: none
+- CI: passed
 
 ### Active Unit Notes
 
@@ -172,6 +172,10 @@ Target branch: `main`
   `apps/desktop`; rerunning `pnpm --filter @thinkwork/desktop test` passed, and
   the full sequential suite then passed cleanly.
 - Opened PR [#1855](https://github.com/thinkwork-ai/thinkwork/pull/1855).
+- PR [#1855](https://github.com/thinkwork-ai/thinkwork/pull/1855) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and deleted the remote/local U10 branch.
+- Autopilot run complete: U7, U8, U9, and U10 are merged into `main`.
 
 ## Prior Run: Desktop Local Pi Sidecar
 
