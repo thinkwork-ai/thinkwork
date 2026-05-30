@@ -34,7 +34,7 @@ export interface MobilePiCompatibilityContract {
 }
 
 export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
-  version: "2026-05-30.u1",
+  version: "2026-05-30.u2",
   host: "thinkwork-mobile-hermes",
   upstreamSdkEmbedding: {
     status: "out_of_scope",
@@ -136,13 +136,12 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
     },
     {
       id: "shared-thinkwork-extension-adapter",
-      status: "deferred",
+      status: "implemented",
       upstreamSurface: "Pi extension factories plus provider bundle",
       mobileSurface:
         "apps/mobile/lib/agent/extensions/thinkwork-extension-adapter.ts",
-      ownerUnit: "U2",
       notes:
-        "Portable ThinkWork extensions are not loaded by mobile until the adapter lands.",
+        "Mobile can adapt structurally compatible ThinkWork extensions without runtime-importing the upstream Pi SDK.",
     },
     {
       id: "shared-system-prompt-composition",
