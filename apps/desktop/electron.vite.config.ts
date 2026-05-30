@@ -63,6 +63,10 @@ export default defineConfig(async (env) => {
             rootDir,
             "../../packages/pi-runtime-core/src/index.ts",
           ),
+          "@thinkwork/pi-extensions": resolve(
+            rootDir,
+            "../../packages/pi-extensions/src/index.ts",
+          ),
         },
       },
       define: {
@@ -75,7 +79,11 @@ export default defineConfig(async (env) => {
       },
       build: {
         externalizeDeps: {
-          exclude: ["@thinkwork/desktop-ipc", "@thinkwork/pi-runtime-core"],
+          exclude: [
+            "@thinkwork/desktop-ipc",
+            "@thinkwork/pi-extensions",
+            "@thinkwork/pi-runtime-core",
+          ],
         },
         outDir: "out/main",
         rollupOptions: {

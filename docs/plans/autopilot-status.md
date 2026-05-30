@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U8 — Built-in overlap reconciliation
-- Active branch: `codex/pi-extensions-u8`
+- Active unit: U9 — Desktop host adopts the shared extension package
+- Active branch: `codex/pi-extensions-u9`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/pi-extensions-u8`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/pi-extensions-u9`
 - Started: 2026-05-30
-- Latest merged PR: [#1852](https://github.com/thinkwork-ai/thinkwork/pull/1852)
-- Active PR: [#1853](https://github.com/thinkwork-ai/thinkwork/pull/1853)
+- Latest merged PR: [#1853](https://github.com/thinkwork-ai/thinkwork/pull/1853)
+- Active PR: [#1854](https://github.com/thinkwork-ai/thinkwork/pull/1854)
 - CI: pending
 
 ### Active Unit Notes
@@ -102,6 +102,41 @@ Target branch: `main`
   `apps/desktop`; rerunning the failed desktop/mobile packages and then the full
   sequential suite passed cleanly.
 - Opened PR [#1853](https://github.com/thinkwork-ai/thinkwork/pull/1853).
+- PR [#1853](https://github.com/thinkwork-ai/thinkwork/pull/1853) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and deleted the remote/local U8 branch.
+- Started U9 from updated `origin/main` at
+  `6d0324eeec6d6c727cc363740db3e2528cfc95ad`.
+- U9 local implementation complete: the desktop sidecar now depends on
+  `@thinkwork/pi-extensions`, builds its host tool surface from the shared
+  web-search, browser, Context Engine, send-email, memory, and delegation
+  extensions, and feeds the real Pi SDK via
+  `DefaultResourceLoader.extensionFactories`. Test SDKs without a resource
+  loader still materialize the same shared extension tool definitions into
+  `customTools`, preserving the local unit-test seam without reintroducing
+  desktop-specific tool assembly.
+- U9 shared extension compatibility update: Context Engine and send-email
+  extensions can carry the desktop `x-thread-turn-id` auth header while
+  preserving the cloud tenant/user/agent header path.
+- U9 focused verification passed:
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/pi-extensions test -- test/capabilities.test.ts`,
+  `pnpm --filter @thinkwork/desktop typecheck`, and
+  `pnpm --filter @thinkwork/pi-extensions typecheck`.
+- U9 package verification passed:
+  `pnpm --filter @thinkwork/pi-extensions test`,
+  `pnpm --filter @thinkwork/pi-extensions build`,
+  `pnpm --filter @thinkwork/desktop test`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/desktop run build`, and
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`. The first full desktop
+  package test run hit the known local Electron extraction race; rerunning
+  `pnpm --filter @thinkwork/desktop test` passed cleanly.
+- U9 broader verification passed: `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, `git diff --check`, and
+  `pnpm -r --workspace-concurrency=1 --if-present test` (3,238 passed, 9
+  skipped).
+- Opened PR [#1854](https://github.com/thinkwork-ai/thinkwork/pull/1854).
 
 ## Prior Run: Desktop Local Pi Sidecar
 

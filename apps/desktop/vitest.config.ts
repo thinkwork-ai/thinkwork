@@ -8,6 +8,10 @@ export default defineConfig({
         __dirname,
         "../../packages/pi-runtime-core/src/index.ts",
       ),
+      "@thinkwork/pi-extensions": path.resolve(
+        __dirname,
+        "../../packages/pi-extensions/src/index.ts",
+      ),
     },
   },
   test: {

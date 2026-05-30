@@ -123,6 +123,43 @@ describe("U7 capability extensions", () => {
     );
   });
 
+  it("send_email can carry a desktop thread-turn auth header", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ ok: true }));
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(
+      createSendEmailExtension({
+        sendEmailConfig: {
+          apiUrl: "https://api.example.com",
+          apiSecret: "desktop-token",
+          agentId: "agent-1",
+          tenantId: "tenant-1",
+          threadTurnId: "turn-1",
+        },
+        payload: {
+          current_user_email: "eric@example.com",
+          tenant_slug: "acme",
+          turn_context: { spaceSlug: "finance" },
+        },
+        fetchImpl,
+      }),
+      {},
+    )(api);
+
+    await getTool(tools, "send_email").execute(
+      "call-1",
+      { to: "me", subject: "Hello", body: "Body" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    const fetchCalls = fetchImpl.mock.calls as unknown as FetchCall[];
+    expect(fetchCalls[0]![1]?.headers).toMatchObject({
+      Authorization: "Bearer desktop-token",
+      "x-thread-turn-id": "turn-1",
+    });
+  });
+
   it("context-engine registers all query tools and calls the MCP facade", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({
@@ -170,6 +207,45 @@ describe("U7 capability extensions", () => {
     expect((result.content?.[0] as { text: string }).text).toBe(
       "company brain result",
     );
+  });
+
+  it("context-engine can authorize with a desktop thread-turn token", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        result: { content: [{ type: "text", text: "desktop context" }] },
+      }),
+    );
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(
+      createContextEngineExtension({
+        enabled: true,
+        apiUrl: "https://api.example.com",
+        apiSecret: "desktop-token",
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadTurnId: "turn-1",
+        fetchImpl,
+      }),
+      {},
+    )(api);
+
+    await getTool(tools, "query_context").execute(
+      "call-1",
+      { query: "desktop context" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    const fetchCalls = fetchImpl.mock.calls as unknown as FetchCall[];
+    expect(fetchCalls[0]![1]?.headers).toMatchObject({
+      authorization: "Bearer desktop-token",
+      "x-thread-turn-id": "turn-1",
+    });
+    expect(fetchCalls[0]![1]?.headers).not.toMatchObject({
+      "x-user-id": "user-1",
+    });
   });
 
   it("browser_automation delegates execution to the host runner", async () => {

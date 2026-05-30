@@ -331,6 +331,9 @@ importers:
       '@thinkwork/desktop-ipc':
         specifier: workspace:*
         version: link:../../packages/desktop-ipc
+      '@thinkwork/pi-extensions':
+        specifier: workspace:^
+        version: link:../../packages/pi-extensions
       '@thinkwork/pi-runtime-core':
         specifier: workspace:^
         version: link:../../packages/pi-runtime-core

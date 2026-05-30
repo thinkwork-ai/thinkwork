@@ -18,6 +18,7 @@ export interface ContextEngineExtensionOptions {
   tenantId: string;
   userId: string;
   agentId: string;
+  threadTurnId?: string;
   contextEngineConfig?: Record<string, unknown>;
   fetchImpl?: FetchLike;
 }
@@ -98,19 +99,26 @@ export function createContextEngineExtension(
         args: Record<string, unknown>,
       ): Promise<Record<string, unknown> | string> {
         if (!apiUrl || !apiSecret) return NOT_ENABLED;
-        if (!options.tenantId || !options.userId) return MISSING_IDENTITY;
+        if (!options.threadTurnId && (!options.tenantId || !options.userId)) {
+          return MISSING_IDENTITY;
+        }
 
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         try {
+          const authHeaders: Record<string, string> = options.threadTurnId
+            ? { "x-thread-turn-id": options.threadTurnId }
+            : {
+                "x-tenant-id": options.tenantId,
+                "x-user-id": options.userId,
+                "x-agent-id": options.agentId,
+              };
           const response = await fetchImpl(`${apiUrl}/mcp/context-engine`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
               authorization: `Bearer ${apiSecret}`,
-              "x-tenant-id": options.tenantId,
-              "x-user-id": options.userId,
-              "x-agent-id": options.agentId,
+              ...authHeaders,
             },
             body: JSON.stringify({
               jsonrpc: "2.0",
