@@ -8,6 +8,7 @@
 import { runAgentTurn } from "./loop";
 import { loadExtensions } from "./extensions/load-extensions";
 import type { ExtensionFactory } from "./extensions/types";
+import type { LoadedExtensions } from "./extensions/load-extensions";
 import type {
   AgentEvent,
   AgentRunResult,
@@ -56,6 +57,10 @@ export interface AgentSession {
   subscribe(listener: (event: AgentEvent) => void): () => void;
   /** Run one turn from a user message (with optional images). Resolves when the turn ends. */
   prompt(input: string, images?: ImagePart[]): Promise<AgentRunResult>;
+  /** Queue a follow-up after the current turn, preserving transcript order. */
+  followUp(input: string, images?: ImagePart[]): Promise<AgentRunResult>;
+  /** Mobile has no separate live steering UI yet; steer is modeled as a queued follow-up. */
+  steer(input: string, images?: ImagePart[]): Promise<AgentRunResult>;
   /**
    * Await extension loading (tools + composed system prompt) without sending a turn.
    * `prompt()` awaits this implicitly; call it directly to pre-warm or to read the
@@ -73,6 +78,8 @@ export function createAgentSession(config: AgentSessionConfig): AgentSession {
   let systemPrompt = config.systemPrompt;
   const listeners = new Set<(event: AgentEvent) => void>();
   let controller: AbortController | null = null;
+  let loadedExtensions: LoadedExtensions | null = null;
+  let promptTail: Promise<void> = Promise.resolve();
 
   // Extensions load once, lazily, before the first prompt. createAgentSession stays
   // synchronous (Pi's surface is sync) by deferring the async load to a memoized promise
@@ -87,9 +94,9 @@ export function createAgentSession(config: AgentSessionConfig): AgentSession {
       return readyPromise;
     }
     readyPromise = (async () => {
-      const loaded = await loadExtensions(factories);
-      tools.push(...loaded.tools);
-      const composed = await loaded.dispatch("before_agent_start", {
+      loadedExtensions = await loadExtensions(factories);
+      tools.push(...loadedExtensions.tools);
+      const composed = await loadedExtensions.dispatch("before_agent_start", {
         systemPrompt: systemPrompt ?? "",
         agentName: config.agentName,
         toolNames: tools.map((tool) => tool.name),
@@ -107,6 +114,85 @@ export function createAgentSession(config: AgentSessionConfig): AgentSession {
         // A listener must never break the turn.
       }
     }
+  };
+
+  const dispatchExtensionEvent = async (event: AgentEvent): Promise<void> => {
+    const loaded = loadedExtensions;
+    if (!loaded) return;
+    switch (event.type) {
+      case "agent_start":
+        await loaded.dispatch("agent_start", {
+          agentName: config.agentName,
+          toolNames: event.toolNames,
+          model: event.model,
+        });
+        return;
+      case "tool_call":
+        await loaded.dispatch("tool_call", {
+          name: event.call.name,
+          arguments: event.call.arguments,
+        });
+        return;
+      case "after_tool_call":
+        await loaded.dispatch("after_tool_call", {
+          name: event.call.name,
+          isError: Boolean(event.result.isError),
+        });
+        return;
+      case "agent_end":
+        await loaded.dispatch("agent_end", {
+          stopReason: event.stopReason,
+          steps: event.steps,
+        });
+        return;
+      default:
+        return;
+    }
+  };
+
+  const publish = async (event: AgentEvent): Promise<void> => {
+    emit(event);
+    await dispatchExtensionEvent(event);
+  };
+
+  const runPrompt = async (
+    input: string,
+    images?: ImagePart[],
+  ): Promise<AgentRunResult> => {
+    // Block the first turn on extension loading (tools + composed system prompt).
+    await ensureReady();
+    messages = [...messages, { role: "user", content: input, images }];
+    controller = new AbortController();
+    try {
+      const result = await runAgentTurn({
+        provider: config.modelProvider,
+        tools,
+        system: systemPrompt,
+        model: config.model,
+        maxSteps: config.maxSteps,
+        sessionId: config.sessionId,
+        messages,
+        signal: controller.signal,
+        onEvent: publish,
+      });
+      // result.messages includes the user turn plus the assistant + tool messages.
+      messages = result.messages;
+      return result;
+    } finally {
+      controller = null;
+    }
+  };
+
+  const enqueuePrompt = (
+    input: string,
+    images?: ImagePart[],
+  ): Promise<AgentRunResult> => {
+    const run = promptTail.then(() => runPrompt(input, images));
+    promptTail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   };
 
   return {
@@ -129,25 +215,14 @@ export function createAgentSession(config: AgentSessionConfig): AgentSession {
     abort() {
       controller?.abort();
     },
-    async prompt(input, images) {
-      // Block the first turn on extension loading (tools + composed system prompt).
-      await ensureReady();
-      messages = [...messages, { role: "user", content: input, images }];
-      controller = new AbortController();
-      const result = await runAgentTurn({
-        provider: config.modelProvider,
-        tools,
-        system: systemPrompt,
-        model: config.model,
-        maxSteps: config.maxSteps,
-        sessionId: config.sessionId,
-        messages,
-        signal: controller.signal,
-        onEvent: emit,
-      });
-      // result.messages includes the user turn plus the assistant + tool messages.
-      messages = result.messages;
-      return result;
+    prompt(input, images) {
+      return enqueuePrompt(input, images);
+    },
+    followUp(input, images) {
+      return enqueuePrompt(input, images);
+    },
+    steer(input, images) {
+      return enqueuePrompt(input, images);
     },
   };
 }

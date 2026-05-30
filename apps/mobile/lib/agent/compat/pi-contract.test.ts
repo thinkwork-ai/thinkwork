@@ -44,6 +44,8 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
       "ready",
       "subscribe",
       "abort",
+      "followUp",
+      "steer",
     ]);
     expect(MOBILE_PI_COMPATIBILITY_CONTRACT.publicSurface.extensionApi).toEqual(
       ["registerTool", "on", "logger"],
@@ -72,14 +74,12 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
         "workspace-backed-built-ins",
         "workspace-backed-bash-durability",
         "bounded-mcp-proxy-tool",
-      ]),
-    );
-    expect(deferredPiCompatibilityFeatureIds()).toEqual(
-      expect.arrayContaining([
         "extension-lifecycle-loop-dispatch",
+        "in-flight-abort-follow-up-steer",
         "durable-session-compaction",
       ]),
     );
+    expect(deferredPiCompatibilityFeatureIds()).toEqual([]);
     expect(piCompatibilityStatus("upstream-sdk-on-ios")).toBe("out_of_scope");
   });
 });
@@ -201,12 +201,14 @@ describe("mobile Pi contract golden behavior", () => {
       tools: [],
       messages: [{ role: "user", content: "stop" }],
       signal: AbortSignal.abort(),
-      onEvent: (event) => events.push(event),
+      onEvent: (event) => {
+        events.push(event);
+      },
     });
 
     expect(result.stopReason).toBe("aborted");
     expect(result.steps).toBe(0);
     expect(provider.requests).toEqual([]);
-    expect(eventTypes(events)).toEqual(["done"]);
+    expect(eventTypes(events)).toEqual(["agent_start", "agent_end", "done"]);
   });
 });

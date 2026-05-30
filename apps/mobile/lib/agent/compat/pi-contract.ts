@@ -34,7 +34,7 @@ export interface MobilePiCompatibilityContract {
 }
 
 export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
-  version: "2026-05-30.u6",
+  version: "2026-05-30.u7",
   host: "thinkwork-mobile-hermes",
   upstreamSdkEmbedding: {
     status: "out_of_scope",
@@ -55,6 +55,8 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
       "ready",
       "subscribe",
       "abort",
+      "followUp",
+      "steer",
     ],
     modelProvider: ["id", "generate"],
     tool: ["name", "description", "parameters", "execute"],
@@ -69,10 +71,13 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
   },
   goldenSequences: {
     toolTurnEventTypes: [
+      "agent_start",
       "assistant_text",
       "tool_call",
       "tool_result",
+      "after_tool_call",
       "assistant_text",
+      "agent_end",
       "done",
     ],
     toolTurnRoles: ["user", "assistant", "tool", "assistant"],
@@ -124,7 +129,7 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
       upstreamSurface: "session event stream",
       mobileSurface: "apps/mobile/lib/agent/loop.ts",
       notes:
-        "Mobile emits assistant_text, tool_call, tool_result, done, and error events through subscribe/onEvent.",
+        "Mobile emits agent_start, assistant_text, tool_call, tool_result, after_tool_call, agent_end, done, and error events through subscribe/onEvent.",
     },
     {
       id: "pre-model-abort",
@@ -178,30 +183,30 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
     },
     {
       id: "extension-lifecycle-loop-dispatch",
-      status: "deferred",
+      status: "implemented",
       upstreamSurface: "agent/tool lifecycle extension events",
       mobileSurface: "apps/mobile/lib/agent/loop.ts",
       ownerUnit: "U7",
       notes:
-        "The mobile event bus can dispatch lifecycle events, but the loop only wires before_agent_start today.",
+        "The mobile session bridges loop events into extension handlers for agent_start, tool_call, after_tool_call, and agent_end.",
     },
     {
       id: "in-flight-abort-follow-up-steer",
-      status: "deferred",
+      status: "implemented",
       upstreamSurface: "abort, steer, followUp",
       mobileSurface: "apps/mobile/lib/agent/session.ts",
       ownerUnit: "U7",
       notes:
-        "Mobile exposes abort but does not yet provide full Pi-style in-flight steering or follow-up queues.",
+        "Mobile aborts the active turn and serializes prompt/followUp/steer calls through one transcript queue; steer is a queued follow-up until the UI grows a separate live steering affordance.",
     },
     {
       id: "durable-session-compaction",
-      status: "deferred",
+      status: "implemented",
       upstreamSurface: "SessionManager files and compaction entries",
       mobileSurface: "apps/mobile/lib/agent/session-store.ts",
       ownerUnit: "U7",
       notes:
-        "Mobile persists flattened thread turns today; structured durable session transcript and compaction land in U7.",
+        "Mobile records structured session events/transcripts in turn evidence and has deterministic session-store compaction helpers for long transcripts.",
     },
     {
       id: "upstream-sdk-on-ios",

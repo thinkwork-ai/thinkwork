@@ -6,10 +6,19 @@
 // existing CreateThread path (it owns space_id + the per-tenant number sequence). getToken /
 // fetch are injectable so this is testable without the Expo auth module.
 
+import type { AgentEvent, AgentStopReason, Message } from "./types";
+
 const DEFAULT_API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
   /\/graphql$/,
   "",
 );
+
+export interface MobileSessionTurnEvidence {
+  type: "mobile_session";
+  stopReason: AgentStopReason;
+  transcript: Message[];
+  events: AgentEvent[];
+}
 
 export interface RecordTurnInput {
   threadId: string;

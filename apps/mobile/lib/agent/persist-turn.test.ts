@@ -19,6 +19,14 @@ describe("recordTurn", () => {
         threadId: "thr_1",
         userText: "hi",
         assistantText: "hello",
+        toolResults: [
+          {
+            type: "mobile_session",
+            stopReason: "completed",
+            transcript: [],
+            events: [],
+          },
+        ],
         usage: { inputTokens: 3, outputTokens: 2 },
       },
       {
@@ -41,6 +49,10 @@ describe("recordTurn", () => {
     const sent = JSON.parse((init as RequestInit).body as string);
     expect(sent.threadId).toBe("thr_1");
     expect(sent.assistantText).toBe("hello");
+    expect(sent.toolResults[0]).toMatchObject({
+      type: "mobile_session",
+      stopReason: "completed",
+    });
   });
 
   it("throws on a non-ok response", async () => {
