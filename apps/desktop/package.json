@@ -22,6 +22,7 @@
     "@thinkwork/pi-extensions": "workspace:^",
     "@thinkwork/pi-runtime-core": "workspace:^",
     "electron-updater": "6.8.3",
+    "just-bash": "3.0.1",
     "pi-mcp-adapter": "2.8.0",
     "typebox": "^1.1.38"
   },

@@ -7,6 +7,10 @@ export interface MentionCandidate {
   id: string;
   name: string;
   type: "member" | "assistant";
+  targetId?: string;
+  targetType?: "USER" | "AGENT";
+  displayName?: string;
+  rawText?: string;
 }
 
 interface MentionAutocompleteProps {
@@ -39,15 +43,15 @@ export function MentionAutocomplete({
     <View
       style={{
         position: "absolute",
-        bottom: "100%",
+        bottom: 156,
         left: 8,
         right: 8,
         backgroundColor: dark ? "#1c1c1e" : "#ffffff",
         borderRadius: 12,
         borderWidth: 1,
         borderColor: dark ? "#333" : "#e0e0e0",
-        marginBottom: 4,
         overflow: "hidden",
+        zIndex: 10,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: -2 },
         shadowOpacity: 0.15,
@@ -57,76 +61,39 @@ export function MentionAutocomplete({
       }}
     >
       <ScrollView keyboardShouldPersistTaps="always">
-        {filtered.map((candidate, i) => {
-          const isAssistant = candidate.type === "assistant";
-          const badgeBg = isAssistant
-            ? dark
-              ? "rgba(249,115,22,0.15)"
-              : "rgba(249,115,22,0.1)"
-            : dark
-              ? "rgba(99,102,241,0.15)"
-              : "rgba(99,102,241,0.1)";
-          const badgeText = isAssistant
-            ? dark
-              ? "#38bdf8"
-              : "#0284c7"
-            : dark
-              ? "#818cf8"
-              : "#4f46e5";
-
-          return (
-            <Pressable key={candidate.id} onPress={() => onSelect(candidate)}>
-              {({ pressed }) => (
-                <View
+        {filtered.map((candidate, i) => (
+          <Pressable key={candidate.id} onPress={() => onSelect(candidate)}>
+            {({ pressed }) => (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                  borderBottomWidth: i < filtered.length - 1 ? 1 : 0,
+                  borderBottomColor: dark ? "#2a2a2a" : "#f0f0f0",
+                  backgroundColor: pressed
+                    ? dark
+                      ? "#2a2a2a"
+                      : "#f5f5f5"
+                    : "transparent",
+                }}
+              >
+                <Text
+                  numberOfLines={1}
                   style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    borderBottomWidth: i < filtered.length - 1 ? 1 : 0,
-                    borderBottomColor: dark ? "#2a2a2a" : "#f0f0f0",
-                    backgroundColor: pressed
-                      ? dark
-                        ? "#2a2a2a"
-                        : "#f5f5f5"
-                      : "transparent",
+                    flex: 1,
+                    color: colors.foreground,
+                    fontSize: 16,
+                    fontWeight: "500",
                   }}
                 >
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      flex: 1,
-                      color: colors.foreground,
-                      fontSize: 16,
-                      fontWeight: "500",
-                    }}
-                  >
-                    {candidate.name}
-                  </Text>
-                  <View
-                    style={{
-                      marginLeft: 12,
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                      borderRadius: 6,
-                      backgroundColor: badgeBg,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: "600",
-                        color: badgeText,
-                      }}
-                    >
-                      {isAssistant ? "Agent" : "Member"}
-                    </Text>
-                  </View>
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
+                  {candidate.name}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        ))}
       </ScrollView>
     </View>
   );

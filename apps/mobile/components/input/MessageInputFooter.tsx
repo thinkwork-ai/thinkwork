@@ -10,6 +10,8 @@ import {
   View,
   Text,
   TextInput,
+  type NativeSyntheticEvent,
+  type TextInputSelectionChangeEventData,
   Pressable,
   Platform,
   Keyboard,
@@ -29,6 +31,10 @@ import { IconPlanet } from "@tabler/icons-react-native";
 import { COLORS } from "@/lib/theme";
 import { VoiceDictationBar } from "./VoiceDictationBar";
 import { WorkspaceChip } from "./WorkspaceChip";
+import {
+  MentionAutocomplete,
+  type MentionCandidate,
+} from "@/components/chat/MentionAutocomplete";
 
 export interface SelectedWorkspace {
   id: string;
@@ -38,6 +44,15 @@ export interface SelectedWorkspace {
 export interface SelectedSpace {
   id: string | null;
   name: string;
+}
+
+export interface MessageInputMention {
+  id: string;
+  targetType: "USER" | "AGENT";
+  targetId: string;
+  displayName: string;
+  rawText: string;
+  type: "member" | "assistant";
 }
 
 interface MessageInputFooterProps {
@@ -51,6 +66,10 @@ interface MessageInputFooterProps {
   skipBottomInset?: boolean;
   /** Open the image attach flow (paperclip). Library/Camera choice is owned by the parent. */
   onAttach?: () => void;
+  /** Mention candidates exposed by the current thread or tenant context. */
+  mentionCandidates?: MentionCandidate[];
+  selectedMentions?: MessageInputMention[];
+  onMentionsChange?: (mentions: MessageInputMention[]) => void;
   /** A local URI for the pending attached image, shown as a removable chip above the input. */
   attachedImageUri?: string | null;
   /** Display name for a pending attached file. */
@@ -91,6 +110,9 @@ export const MessageInputFooter = forwardRef<
     isDark,
     skipBottomInset,
     onAttach,
+    mentionCandidates = [],
+    selectedMentions = [],
+    onMentionsChange,
     attachedImageUri,
     attachedFileName,
     onRemoveAttachment,
@@ -107,6 +129,7 @@ export const MessageInputFooter = forwardRef<
   const inputRef = useRef<TextInput>(null);
   useImperativeHandle(ref, () => ({ focus: () => inputRef.current?.focus() }));
   const [isDictating, setIsDictating] = useState(false);
+  const [cursorPos, setCursorPos] = useState(value.length);
   const insets = useSafeAreaInsets();
 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -138,6 +161,67 @@ export const MessageInputFooter = forwardRef<
   }, [disabled, value, attachedImageUri, attachedFileName, onSubmit]);
 
   const hasWorkspaces = selectedWorkspaces && selectedWorkspaces.length > 0;
+  const mentionQuery =
+    mentionCandidates.length > 0 ? currentMentionQuery(value, cursorPos) : null;
+  const autocompleteVisible = mentionQuery !== null;
+
+  useEffect(() => {
+    if (!onMentionsChange || selectedMentions.length === 0) return;
+    const filtered = selectedMentions.filter((mention) =>
+      value.includes(mention.rawText),
+    );
+    if (filtered.length !== selectedMentions.length) {
+      onMentionsChange(filtered);
+    }
+  }, [onMentionsChange, selectedMentions, value]);
+
+  function handleMentionSelect(candidate: MentionCandidate) {
+    const before = value.slice(0, cursorPos);
+    const after = value.slice(cursorPos);
+    const atIndex = before.lastIndexOf("@");
+    if (atIndex === -1) return;
+
+    const displayName = candidate.displayName ?? candidate.name;
+    const rawText = `@${displayName}`;
+    const nextValue = `${before.slice(0, atIndex)}${rawText} ${after}`;
+    const nextCursor = atIndex + rawText.length + 1;
+    onChangeText(nextValue);
+    setCursorPos(nextCursor);
+
+    const targetType =
+      candidate.targetType ??
+      (candidate.type === "assistant" ? "AGENT" : "USER");
+    const targetId = candidate.targetId ?? candidate.id;
+    const mention: MessageInputMention = {
+      id: candidate.id,
+      targetType,
+      targetId,
+      displayName,
+      rawText,
+      type: candidate.type,
+    };
+    const nextMentions = selectedMentions.some(
+      (item) =>
+        item.targetType === mention.targetType &&
+        item.targetId === mention.targetId,
+    )
+      ? selectedMentions
+      : [...selectedMentions, mention];
+    onMentionsChange?.(nextMentions);
+
+    setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setNativeProps({
+        selection: { start: nextCursor, end: nextCursor },
+      });
+    }, 10);
+  }
+
+  function handleSelectionChange(
+    event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
+  ) {
+    setCursorPos(event.nativeEvent.selection.end);
+  }
 
   return (
     <View
@@ -145,7 +229,8 @@ export const MessageInputFooter = forwardRef<
       style={{
         borderTopLeftRadius: 16,
         borderTopRightRadius: 16,
-        overflow: "hidden",
+        overflow: "visible",
+        position: "relative",
         paddingBottom: keyboardVisible
           ? 4
           : skipBottomInset
@@ -153,6 +238,13 @@ export const MessageInputFooter = forwardRef<
             : insets.bottom,
       }}
     >
+      <MentionAutocomplete
+        query={mentionQuery ?? ""}
+        candidates={mentionCandidates}
+        onSelect={handleMentionSelect}
+        visible={autocompleteVisible}
+      />
+
       {/* Workspace chips row */}
       {hasWorkspaces && (
         <ScrollView
@@ -242,6 +334,7 @@ export const MessageInputFooter = forwardRef<
           ref={inputRef}
           value={value}
           onChangeText={onChangeText}
+          onSelectionChange={handleSelectionChange}
           placeholder={placeholder}
           placeholderTextColor={colors.mutedForeground}
           multiline
@@ -308,7 +401,11 @@ export const MessageInputFooter = forwardRef<
                 // Borderless/transparent to match the desktop composer's space picker —
                 // it sits inline with the other toolbar icons, no filled pill.
                 className="flex-row items-center gap-1.5 active:opacity-70"
-                style={{ minHeight: 32, opacity: disabled ? 0.35 : 1 }}
+                style={{
+                  minHeight: 32,
+                  paddingTop: 2,
+                  opacity: disabled ? 0.35 : 1,
+                }}
               >
                 <IconPlanet size={24} color={colors.mutedForeground} />
                 <Text
@@ -362,3 +459,9 @@ export const MessageInputFooter = forwardRef<
     </View>
   );
 });
+
+function currentMentionQuery(text: string, cursorPos: number): string | null {
+  const before = text.slice(0, cursorPos);
+  const match = /(?:^|\s)@([\w.'-]*)$/u.exec(before);
+  return match ? match[1] : null;
+}

@@ -74,9 +74,8 @@ describe("workspaceContextExtension", () => {
     expect(composed.systemPrompt).toContain("Current date:");
     expect(composed.systemPrompt).toContain("<current_requester>");
     expect(composed.systemPrompt).toContain("eric@example.com");
-    expect(composed.systemPrompt).toContain(
-      "Pi built-in `bash` tool is available",
-    );
+    expect(composed.systemPrompt).toContain("Pi host `bash` tool is available");
+    expect(composed.systemPrompt).toContain("contained workspace sandbox");
     expect(composed.systemPrompt).toContain("`execute_code` tool is available");
     expect(composed.systemPrompt).toContain("AGENTS BODY");
     expect(composed.systemPrompt).toContain("GUARDRAILS BODY");

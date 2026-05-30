@@ -45,6 +45,7 @@ import { COLORS } from "@/lib/theme";
 import { getGenUIComponent } from "@/lib/genui-registry";
 import { RefreshGenUIMutation } from "@/lib/graphql-queries";
 import { TurnExecutionTimeline } from "@/components/threads/TurnExecutionTimeline";
+import { resolveHumanMessageDisplay } from "@/lib/thread-message-display";
 
 const RESPONSE_COLOR = "#06b6d4";
 
@@ -87,6 +88,12 @@ interface Message {
   content: string;
   senderType: string;
   senderId: string;
+  sender?: {
+    type?: string | null;
+    id?: string | null;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+  } | null;
   createdAt: string;
   toolResults?: Array<Record<string, unknown>> | null;
   metadata?: any;
@@ -407,18 +414,21 @@ function TimelineRow({
 function UserMessageContent({
   item,
   colors,
+  currentUserId,
   onLinkPress,
 }: {
   item: Message;
   colors: (typeof COLORS)["dark"];
+  currentUserId?: string;
   onLinkPress?: (url: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const senderDisplay = resolveHumanMessageDisplay(item, currentUserId);
 
   const header = (
     <View className="flex-row items-center justify-between">
       <View className="flex-row items-center gap-1">
-        <Text className="text-base font-medium">You</Text>
+        <Text className="text-base font-medium">{senderDisplay.label}</Text>
         {expanded ? (
           <ChevronDown size={14} color={colors.mutedForeground} />
         ) : (
@@ -1099,8 +1109,29 @@ export function ActivityTimeline({
           ((item.data.role || "").toLowerCase() === "user" ||
             (item.data.senderType || "").toLowerCase() === "user");
         if (isUser) {
-          const userColor = "#3b82f6";
-          icon = <User size={16} color={userColor} />;
+          const senderDisplay = resolveHumanMessageDisplay(
+            item.data,
+            currentUserId,
+          );
+          const userColor = senderDisplay.isCurrentUser
+            ? "#3b82f6"
+            : isDark
+              ? "#a3a3a3"
+              : "#525252";
+          icon = senderDisplay.initials ? (
+            <Text
+              style={{
+                color: userColor,
+                fontSize: 12,
+                fontWeight: "700",
+                lineHeight: 16,
+              }}
+            >
+              {senderDisplay.initials}
+            </Text>
+          ) : (
+            <User size={16} color={userColor} />
+          );
           iconBorder = userColor;
         } else {
           icon = <Bot size={16} color={RESPONSE_COLOR} />;
@@ -1130,6 +1161,7 @@ export function ActivityTimeline({
             <UserMessageContent
               item={item.data}
               colors={colors}
+              currentUserId={currentUserId}
               onLinkPress={onLinkPress}
             />
           );

@@ -103,8 +103,8 @@ function buildRuntimeToolPolicy(
     "",
     "### Code execution",
     bashAvailable
-      ? "- The Pi built-in `bash` tool is available. Prefer it for shell commands, repository work, package scripts, builds, tests, and command output."
-      : "- The Pi built-in `bash` tool is not available for this turn.",
+      ? "- The Pi host `bash` tool is available. It runs inside the host's contained workspace sandbox. Prefer it for shell commands, repository work, package scripts, builds, tests, and command output."
+      : "- The Pi host `bash` tool is not available for this turn.",
     executeCodeAvailable
       ? "- The `execute_code` tool is available as a Thinkwork Code Interpreter sandbox for isolated Python/data-analysis work and generated output from that sandbox."
       : "- The `execute_code` tool is not available for this turn.",

@@ -23,7 +23,6 @@ import { useAuth } from "@/lib/auth-context";
 import {
   useAgents,
   useCreateThread,
-  useSendMessage,
   useThreadTurnUpdatedSubscription,
   useThreadUpdatedSubscription,
   useUpdateThread,
@@ -31,7 +30,7 @@ import {
 } from "@thinkwork/react-native-sdk";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { useMe } from "@/lib/hooks/use-users";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 // AgentWorkspacesQuery isn't in the SDK (host-domain concern), so keep it
 // here. ThreadsQuery stays local because the dashboard accesses richer
 // fields (`description`, `assignee { id name }`, `labels`, `metadata`,
@@ -41,6 +40,8 @@ import {
   AgentWorkspacesQuery,
   AgentWorkspaceReviewsQuery,
   SpacesQuery,
+  NewThreadMentionTargetsQuery,
+  SendMessageMutation,
 } from "@/lib/graphql-queries";
 import {
   activeAssignedComputers,
@@ -89,6 +90,7 @@ import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
 import {
   MessageInputFooter,
+  type MessageInputMention,
   type MessageInputFooterRef,
   type SelectedWorkspace,
   type SelectedSpace,
@@ -127,6 +129,11 @@ import {
   type QuickAction,
 } from "@/lib/hooks/use-quick-actions";
 import { getThreadHeaderLabel } from "@/lib/thread-display";
+import { deriveThreadAgentDefault } from "@/lib/thread-agent-mode";
+import {
+  mentionCandidatesForTargets,
+  sendMessageMentionsForInput,
+} from "@/lib/thread-mentions";
 import {
   hitlThreadPreview,
   pendingHitlByThreadId,
@@ -144,6 +151,10 @@ function resolveApiUrl(): string {
     /\/$/,
     "",
   );
+}
+
+function hasDefaultAgentMentionAlias(content: string) {
+  return /(?:^|\s)@(agent|think)\b/iu.test(content);
 }
 
 type HomeComputer = {
@@ -341,6 +352,25 @@ export default function ThreadsScreen() {
         icon: space.icon,
       })),
     [spacesData?.spaces],
+  );
+  const [{ data: newThreadMentionTargetsData }] = useQuery({
+    query: NewThreadMentionTargetsQuery,
+    variables: { tenantId: tenantId! },
+    pause: !tenantId,
+  });
+  const newThreadMentionCandidates = useMemo(
+    () =>
+      mentionCandidatesForTargets(
+        (
+          (newThreadMentionTargetsData?.tenantMentionTargets ?? []) as any[]
+        ).map((target) => ({
+          id: target.id,
+          targetType: target.targetType,
+          targetId: target.targetId,
+          displayName: target.displayName,
+        })),
+      ),
+    [newThreadMentionTargetsData?.tenantMentionTargets],
   );
   // The tenant's default space. The Space type has no `isDefault` flag, so we
   // mirror desktop's two-step heuristic: prefer the primary "Default" space,
@@ -563,7 +593,27 @@ export default function ThreadsScreen() {
   const [newThreadImageUri, setNewThreadImageUri] = useState<string | null>(
     null,
   );
-  const [newThreadAgentEnabled, setNewThreadAgentEnabled] = useState(true);
+  const [newThreadMentions, setNewThreadMentions] = useState<
+    MessageInputMention[]
+  >([]);
+  const newThreadAgentDefaultOn = useMemo(
+    () =>
+      deriveThreadAgentDefault({
+        currentUserId: currentUser?.id,
+        draftMentions: newThreadMentions.map((mention) => ({
+          targetType: mention.targetType,
+          targetId: mention.targetId,
+        })),
+      }).agentDefaultOn,
+    [currentUser?.id, newThreadMentions],
+  );
+  const [newThreadAgentEnabled, setNewThreadAgentEnabled] = useState(
+    newThreadAgentDefaultOn,
+  );
+  const newThreadAgentOverriddenRef = useRef(false);
+  const newThreadAgentForcedOn = hasDefaultAgentMentionAlias(newThreadText);
+  const effectiveNewThreadAgentEnabled =
+    newThreadAgentForcedOn || newThreadAgentEnabled;
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const quickActionFormRef = useRef<QuickActionFormSheetRef>(null);
   const spacePickerRef = useRef<SpacePickerSheetRef>(null);
@@ -578,6 +628,16 @@ export default function ThreadsScreen() {
   // else the tenant default. Used for BOTH the composer label and createThread, so
   // the label can't lie (it showed "Default" while sending null → "General").
   const effectiveSpaceId = selectedSpaceId ?? defaultSpace?.id ?? null;
+
+  useEffect(() => {
+    if (newThreadAgentForcedOn) setNewThreadAgentEnabled(true);
+  }, [newThreadAgentForcedOn]);
+
+  useEffect(() => {
+    if (!newThreadAgentOverriddenRef.current) {
+      setNewThreadAgentEnabled(newThreadAgentDefaultOn);
+    }
+  }, [newThreadAgentDefaultOn]);
 
   const selectedSpace = useMemo<SelectedSpace>(
     () => ({
@@ -706,7 +766,7 @@ export default function ThreadsScreen() {
     return map;
   }, [subAgents]);
   const createThread = useCreateThread();
-  const sendMessage = useSendMessage();
+  const [, executeSendMessage] = useMutation(SendMessageMutation);
   const executeUpdateThread = useUpdateThread();
 
   const handleArchive = useCallback(
@@ -780,6 +840,12 @@ export default function ThreadsScreen() {
       setSelectedWorkspaces([]);
       setNewThreadImage(null);
       setNewThreadImageUri(null);
+      const mentions = newThreadMentions.filter((mention) =>
+        text.includes(mention.rawText),
+      );
+      setNewThreadMentions([]);
+      newThreadAgentOverriddenRef.current = false;
+      setNewThreadAgentEnabled(true);
       Keyboard.dismiss();
 
       // Build routing hint if workspaces are selected
@@ -816,13 +882,12 @@ export default function ThreadsScreen() {
 
         console.log("[Threads] Thread created:", newThread.id);
         markRead(newThread.id);
-        markThreadActive(newThread.id);
         setPendingThreadStart({
           threadId: newThread.id,
           title: threadTitle,
           content: text || "Image",
           persistedContent: messageContent,
-          expectAssistantResponse: true,
+          expectAssistantResponse: effectiveNewThreadAgentEnabled,
           userId: currentUser?.id || user?.sub,
           createdAt: new Date().toISOString(),
         });
@@ -833,6 +898,24 @@ export default function ThreadsScreen() {
             params: { title: threadTitle },
           });
         }, 0);
+
+        if (!effectiveNewThreadAgentEnabled) {
+          await executeSendMessage({
+            input: {
+              threadId: newThread.id,
+              role: "USER" as any,
+              content: messageContent || "Image",
+              senderType: "human",
+              senderId: currentUser?.id || user?.sub,
+              agentRequested: false,
+              mentions: sendMessageMentionsForInput(mentions) as any,
+            },
+          });
+          reexecute({ requestPolicy: "network-only" });
+          return;
+        }
+
+        markThreadActive(newThread.id);
 
         // First message runs through the on-device harness (loop in Hermes → Bedrock via
         // /api/model/converse), persisted into the new thread via record-turn.
@@ -849,9 +932,8 @@ export default function ThreadsScreen() {
               tenantId: currentUser?.tenantId ?? tenantId,
               spaceId: effectiveSpaceId ?? undefined,
               // Selects which tenant MCP tools the on-device agent can call
-              // (mcp-tools extension + proxy). Agent toggle off → no agentId,
-              // so the first turn runs with no platform tools (plain message).
-              agentId: newThreadAgentEnabled ? selectedComputer.id : undefined,
+              // (mcp-tools extension + proxy).
+              agentId: selectedComputer.id,
               // Attached image is model-vision input on the first turn.
               images: image ? [image] : undefined,
             });
@@ -874,11 +956,14 @@ export default function ThreadsScreen() {
     [
       newThreadText,
       selectedWorkspaces,
-      selectedSpaceId,
       selectedComputer?.id,
       tenantId,
       currentUser?.id,
+      currentUser?.name,
+      currentUser?.email,
+      currentUser?.tenantId,
       createThread,
+      executeSendMessage,
       reexecute,
       router,
       markRead,
@@ -888,7 +973,8 @@ export default function ThreadsScreen() {
       selectedComputer?.name,
       effectiveSpaceId,
       newThreadImage,
-      newThreadAgentEnabled,
+      newThreadMentions,
+      effectiveNewThreadAgentEnabled,
     ],
   );
 
@@ -1315,8 +1401,14 @@ export default function ThreadsScreen() {
               setNewThreadImage(null);
               setNewThreadImageUri(null);
             }}
-            agentEnabled={newThreadAgentEnabled}
-            onToggleAgent={() => setNewThreadAgentEnabled((v) => !v)}
+            agentEnabled={effectiveNewThreadAgentEnabled}
+            onToggleAgent={() => {
+              newThreadAgentOverriddenRef.current = true;
+              setNewThreadAgentEnabled((v) => !v);
+            }}
+            mentionCandidates={newThreadMentionCandidates}
+            selectedMentions={newThreadMentions}
+            onMentionsChange={setNewThreadMentions}
             selectedSpace={selectedSpace}
             onSpacePress={() => {
               Keyboard.dismiss();

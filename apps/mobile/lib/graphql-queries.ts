@@ -237,6 +237,12 @@ export const MessagesQuery = graphql(`
           content
           senderType
           senderId
+          sender {
+            type
+            id
+            displayName
+            avatarUrl
+          }
           toolCalls
           toolResults
           metadata
@@ -848,6 +854,36 @@ export const SpacesQuery = gql`
   }
 `;
 
+export const NewThreadMentionTargetsQuery = graphql(`
+  query NewThreadMentionTargets($tenantId: ID!) {
+    tenantMentionTargets(tenantId: $tenantId) {
+      id
+      targetType
+      targetId
+      displayName
+      aliases
+      isDefaultAgent
+      avatarUrl
+      role
+    }
+  }
+`);
+
+export const ThreadMentionTargetsQuery = graphql(`
+  query ThreadMentionTargets($threadId: ID!) {
+    threadMentionTargets(threadId: $threadId) {
+      id
+      targetType
+      targetId
+      displayName
+      aliases
+      isDefaultAgent
+      avatarUrl
+      role
+    }
+  }
+`);
+
 export const ThreadQuery = graphql(`
   query Thread($id: ID!) {
     thread(id: $id) {
@@ -875,6 +911,12 @@ export const ThreadQuery = graphql(`
             content
             senderType
             senderId
+            sender {
+              type
+              id
+              displayName
+              avatarUrl
+            }
             createdAt
             durableArtifact {
               id
