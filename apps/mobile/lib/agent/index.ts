@@ -14,6 +14,22 @@ export * from "./types";
 export { createAgentSession, defineTool } from "./session";
 export type { AgentSession, AgentSessionConfig } from "./session";
 
+// Pi-style extensions (the customization seam — registerTool + on(event) + logger).
+export { defineExtension } from "./extensions/define-extension";
+export { loadExtensions } from "./extensions/load-extensions";
+export type { LoadedExtensions } from "./extensions/load-extensions";
+export type {
+  ExtensionAPI,
+  Extension,
+  ExtensionFactory,
+  ExtensionEventName,
+  ExtensionEvents,
+  ExtensionHandler,
+  Logger,
+  BeforeAgentStartEvent,
+  BeforeAgentStartResult,
+} from "./extensions/types";
+
 // Lower-level engine (advanced use; createAgentSession wraps it).
 export { runAgentTurn } from "./loop";
 export type { RunAgentTurnOptions } from "./loop";

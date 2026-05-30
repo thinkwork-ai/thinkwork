@@ -1148,6 +1148,7 @@ export default function ThreadDetailRoute() {
     messageText,
     threadId,
     messages,
+    thread?.agentId,
     reexecuteThread,
     reexecuteMessages,
     reexecuteTurns,

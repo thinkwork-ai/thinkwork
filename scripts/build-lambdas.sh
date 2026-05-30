@@ -157,6 +157,13 @@ build_handler "model-converse" \
 build_handler "record-turn" \
   "$REPO_ROOT/packages/api/src/handlers/record-turn.ts"
 
+# Mobile harness MCP proxy: tenant-scoped tools/list + tools/call over the
+# signed-in user's Cognito idToken. Plain fetch JSON-RPC to the tenant MCP
+# server — no MCP SDK, so the default (externalized @aws-sdk/*) flags apply;
+# NOT in the bundled-SDK list. OPTIONS handled before auth.
+build_handler "mcp-proxy" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-proxy.ts"
+
 build_handler "chat-agent-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-finalize.ts"
 

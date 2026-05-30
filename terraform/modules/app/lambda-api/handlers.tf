@@ -247,6 +247,10 @@ resource "aws_lambda_function" "handler" {
     # aws_lambda_function.handler, NOT derived from api_routes).
     "model-converse",
     "record-turn",
+    # Mobile agent harness MCP proxy. tools/list + tools/call routes live in
+    # local.api_routes; the function name must also be listed here (this set
+    # is the for_each source for aws_lambda_function.handler).
+    "mcp-proxy",
     # Desktop-local Pi sidecar setup endpoint. Cognito-authenticated
     # Electron shell callers receive a prepared invocation envelope and a
     # per-turn finalizer token, not the backend service secret.
@@ -797,6 +801,14 @@ locals {
     # handled inside the Lambda before auth.
     "POST /api/threads/record-turn"    = "record-turn"
     "OPTIONS /api/threads/record-turn" = "record-turn"
+
+    # Mobile agent harness MCP proxy — tenant-scoped tools/list + tools/call
+    # over the signed-in user's Cognito idToken. One Lambda, two routes;
+    # OPTIONS handled inside the Lambda before auth.
+    "POST /api/mcp/tools/list"    = "mcp-proxy"
+    "OPTIONS /api/mcp/tools/list" = "mcp-proxy"
+    "POST /api/mcp/tools/call"    = "mcp-proxy"
+    "OPTIONS /api/mcp/tools/call" = "mcp-proxy"
 
     # Messages
     "ANY /api/messages/{proxy+}" = "messages"

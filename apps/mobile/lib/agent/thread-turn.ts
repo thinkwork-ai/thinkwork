@@ -10,8 +10,10 @@
 import { BedrockModelProvider } from "./providers/bedrock";
 import { createAgentSession } from "./session";
 import { buildTurnContext } from "./turn-context";
+import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
 import { recordTurn } from "./persist-turn";
-import type { Message, ModelProvider, Tool } from "./types";
+import type { ExtensionFactory } from "./extensions/types";
+import type { ImagePart, Message, ModelProvider, Tool } from "./types";
 
 /** Loose shape of the thread's rendered messages (role + content). */
 export interface PriorMessage {
@@ -24,12 +26,29 @@ export interface RunThreadHarnessTurnInput {
   userText: string;
   priorMessages: PriorMessage[];
   agentName?: string;
+  /**
+   * The thread's agent id — selects which tenant MCP tools the on-device agent can
+   * call (via the mcp-tools extension + U2 proxy). When omitted, the turn runs with
+   * no platform tools (plain chat); built-ins still apply.
+   */
+  agentId?: string;
   tools?: Tool[];
+  /**
+   * Images attached to this user message (model-vision input — e.g. a business
+   * card the model reads, then calls a tool with the extracted fields). Sent on
+   * the user turn via session.prompt(userText, images).
+   */
+  images?: ImagePart[];
 }
 
 export interface RunThreadHarnessTurnDeps {
   modelProvider?: ModelProvider;
   recordTurnFn?: typeof recordTurn;
+  /**
+   * Override the extensions loaded for the turn. Defaults to [mcpToolsExtension]
+   * when `agentId` is set. Injected in tests to avoid the proxy/auth modules.
+   */
+  extensions?: ExtensionFactory[];
 }
 
 export interface ThreadHarnessTurnResult {
@@ -67,14 +86,22 @@ export async function runThreadHarnessTurn(
     agentName: input.agentName,
     tools: input.tools,
   });
+  // The agent's tenant MCP tools arrive as the first Pi-style extension. Default
+  // when an agentId is known; tests inject their own (or none). Built-ins/`tools`
+  // are preserved — extensions are additive.
+  const extensions =
+    deps.extensions ??
+    (input.agentId ? [mcpToolsExtension({ agentId: input.agentId })] : []);
   const session = createAgentSession({
     modelProvider: provider,
     systemPrompt: system,
     tools,
+    extensions,
+    agentName: input.agentName,
     messages: toHarnessMessages(input.priorMessages),
   });
 
-  const result = await session.prompt(input.userText);
+  const result = await session.prompt(input.userText, input.images);
   const assistantText = result.finalText || "";
 
   // Persist the completed turn into the thread (append-only). A persistence failure
