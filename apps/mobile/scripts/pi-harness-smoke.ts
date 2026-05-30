@@ -4,11 +4,27 @@ import { basename, resolve } from "node:path";
 
 import { BedrockModelProvider } from "../lib/agent/providers/bedrock";
 import { runThreadHarnessTurn } from "../lib/agent/thread-turn";
+import {
+  MemoryBashSnapshotStorage,
+  localBashExtension,
+} from "../lib/agent/extensions/local-bash-extension";
 import { mcpToolsExtension } from "../lib/agent/extensions/mcp-tools-extension";
+import {
+  mobileNativeExtensions,
+  type PickedMobileFile,
+} from "../lib/agent/extensions/mobile-native";
 import { workspaceContextExtension } from "../lib/agent/extensions/workspace-context-extension";
+import { workspaceToolsExtension } from "../lib/agent/extensions/workspace-tools-extension";
 import { loadExtensions } from "../lib/agent/extensions/load-extensions";
+import type { ExtensionFactory } from "../lib/agent/extensions/types";
 import { recordTurn } from "../lib/agent/persist-turn";
 import { createAgentSession } from "../lib/agent/session";
+import {
+  MemoryWorkspaceCacheStorage,
+  WorkspaceCache,
+  createWorkspaceCachePartition,
+  workspaceTargetsForContext,
+} from "../lib/agent/workspace-cache";
 import type { MobileNativeEvidence } from "../lib/agent/extensions/mobile-native";
 import type {
   AgentEvent,
@@ -18,7 +34,7 @@ import type {
   ModelRequest,
   ModelResponse,
 } from "../lib/agent/types";
-import type { WorkspaceTarget } from "../lib/workspace-api";
+import type { WorkspaceFileMeta, WorkspaceTarget } from "../lib/workspace-api";
 
 type Capability =
   | "plain"
@@ -103,7 +119,7 @@ Environment fallbacks:
   MOBILE_PI_SMOKE_IMAGE_PATH, MOBILE_PI_SMOKE_FILE_PATH
   THINKWORK_TENANT_ID, THINKWORK_AGENT_ID, THINKWORK_USER_ID, THINKWORK_SPACE_ID
   THINKWORK_GRAPHQL_URL / VITE_GRAPHQL_HTTP_URL
-  THINKWORK_GRAPHQL_API_KEY / VITE_GRAPHQL_API_KEY
+  THINKWORK_GRAPHQL_API_KEY / VITE_GRAPHQL_API_KEY / EXPO_PUBLIC_GRAPHQL_API_KEY
   apps/admin/.env and apps/mobile/.env are read when present
 
 Use --dry-run to validate the smoke matrix shape without deployed credentials.`);
@@ -133,6 +149,7 @@ function parseArgs(): Args {
   let apiKey =
     process.env.THINKWORK_GRAPHQL_API_KEY ??
     process.env.VITE_GRAPHQL_API_KEY ??
+    mobileEnv.EXPO_PUBLIC_GRAPHQL_API_KEY ??
     adminEnv.VITE_GRAPHQL_API_KEY ??
     "";
   let capabilityValue = process.env.MOBILE_PI_SMOKE_CAPABILITIES ?? "plain";
@@ -169,7 +186,6 @@ function parseArgs(): Args {
     "workspace_tools",
     "mcp",
     "mcp_auth_failure",
-    "execute_code",
     "bash",
     "image",
     "file",
@@ -291,6 +307,30 @@ async function getWorkspaceFile(
   };
 }
 
+async function listWorkspaceFiles(
+  args: Args,
+  target: WorkspaceTarget,
+): Promise<{ files: WorkspaceFileMeta[] }> {
+  const response = await fetch(`${args.apiBase}/api/workspaces/files`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${args.idToken}`,
+    },
+    body: JSON.stringify({ action: "list", ...target, includeContent: true }),
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    files?: WorkspaceFileMeta[];
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(
+      `workspace list ${response.status}: ${body.error ?? "failed"}`,
+    );
+  }
+  return { files: body.files ?? [] };
+}
+
 function promptFor(capability: Capability, token: string): string {
   switch (capability) {
     case "plain":
@@ -310,7 +350,7 @@ function promptFor(capability: Capability, token: string): string {
     case "image":
       return `Inspect the attached image. Reply with ${token} and a short description.`;
     case "file":
-      return `Use the attached file evidence. Reply with ${token} and the attached filename.`;
+      return `Use the mobile_file tool to inspect the attached file. Reply with ${token} and the attached filename.`;
     case "abort":
       return `Abort smoke. This turn should be canceled before assistant output: ${token}`;
   }
@@ -345,6 +385,104 @@ function fileEvidence(
   };
 }
 
+function pickedFile(path: string | undefined): PickedMobileFile | null {
+  if (!path) return null;
+  const bytes = readFileSync(resolve(path));
+  return {
+    name: basename(path),
+    mimeType: "text/plain",
+    sizeBytes: bytes.byteLength,
+    text: bytes.toString("utf8"),
+  };
+}
+
+function fallbackAssistantText(
+  stopReason: string,
+  events: AgentEvent[],
+): string {
+  const error = events.find(
+    (event): event is Extract<AgentEvent, { type: "error" }> =>
+      event.type === "error",
+  );
+  if (error)
+    return `Mobile Pi turn failed before assistant output: ${error.error}`;
+  if (stopReason === "aborted") {
+    return "Mobile Pi turn was aborted before assistant output.";
+  }
+  return `Mobile Pi turn ended with ${stopReason} before assistant output.`;
+}
+
+function createSmokeWorkspaceCache(args: Args): WorkspaceCache {
+  return new WorkspaceCache(
+    new MemoryWorkspaceCacheStorage(),
+    {
+      listFiles: (target) => listWorkspaceFiles(args, target),
+    },
+    { cacheTtlMs: 0 },
+  );
+}
+
+function smokeExtensions(
+  args: Args,
+  threadId: string,
+): {
+  extensions: ExtensionFactory[];
+  workspaceCache: WorkspaceCache;
+} {
+  const workspaceCache = createSmokeWorkspaceCache(args);
+  const partition = createWorkspaceCachePartition({
+    stage: "dev",
+    tenantId: args.tenantId,
+    agentId: args.agentId,
+    spaceId: args.spaceId,
+    userId: args.userId,
+  });
+  const targets = workspaceTargetsForContext({
+    agentId: args.agentId,
+    spaceId: args.spaceId,
+    userId: args.userId,
+  });
+  return {
+    workspaceCache,
+    extensions: [
+      workspaceContextExtension({
+        userId: args.userId,
+        agentId: args.agentId,
+        spaceId: args.spaceId,
+        deps: {
+          getWorkspaceFile: (target, path) =>
+            getWorkspaceFile(args, target, path),
+        },
+      }),
+      workspaceToolsExtension({
+        cache: workspaceCache,
+        partition,
+        targets,
+      }),
+      localBashExtension({
+        sessionId: threadId,
+        workspace: { cache: workspaceCache, partition, targets },
+        snapshotStorage: new MemoryBashSnapshotStorage(),
+      }),
+      ...mobileNativeExtensions({
+        file: {
+          pickFile: async () => pickedFile(args.filePath),
+        },
+        photo: {
+          pickPhoto: async () => {
+            const image = imagePart(args.imagePath);
+            return image ? { image, mimeType: `image/${image.format}` } : null;
+          },
+        },
+      }),
+      mcpToolsExtension({
+        agentId: args.agentId,
+        deps: { apiBase: args.apiBase, getToken: async () => args.idToken },
+      }),
+    ],
+  };
+}
+
 function toolCalls(events: AgentEvent[]): string[] {
   return events
     .filter(
@@ -373,10 +511,18 @@ function evaluate(
   if (
     capability === "plain" ||
     capability === "workspace" ||
-    capability === "image" ||
-    capability === "file"
+    capability === "image"
   ) {
     return { status: "PASS", reason: "assistant_response_matched" };
+  }
+  if (capability === "file") {
+    if (!calls.includes("mobile_file")) {
+      return { status: "FAIL", reason: "expected_mobile_file_was_not_called" };
+    }
+    if (failedToolResults(events).length > 0) {
+      return { status: "FAIL", reason: "tool_result_failed" };
+    }
+    return { status: "PASS", reason: "mobile_file_tool_observed" };
   }
   if (capability === "workspace_tools") {
     const usedWorkspaceTool = calls.some((name) =>
@@ -485,7 +631,8 @@ async function runAbortCapability(
     const turn = session.prompt(promptFor("abort", token));
     setTimeout(() => session.abort(), 25);
     const result = await turn;
-    const assistantText = result.finalText || "";
+    const assistantText =
+      result.finalText || fallbackAssistantText(result.stopReason, events);
     await recordTurn(
       {
         threadId: thread.id,
@@ -544,6 +691,7 @@ async function runCapability(
       apiBase: args.apiBase,
       getToken: async () => args.idToken,
     });
+    const smoke = smokeExtensions(args, thread.id);
     const result = await runThreadHarnessTurn(
       {
         threadId: thread.id,
@@ -551,6 +699,8 @@ async function runCapability(
         priorMessages: [],
         agentId: args.agentId,
         userId: args.userId,
+        tenantId: args.tenantId,
+        stage: "dev",
         spaceId: args.spaceId,
         agentName: args.agentName,
         images:
@@ -560,21 +710,8 @@ async function runCapability(
       },
       {
         modelProvider: provider,
-        extensions: [
-          workspaceContextExtension({
-            userId: args.userId,
-            agentId: args.agentId,
-            spaceId: args.spaceId,
-            deps: {
-              getWorkspaceFile: (target, path) =>
-                getWorkspaceFile(args, target, path),
-            },
-          }),
-          mcpToolsExtension({
-            agentId: args.agentId,
-            deps: { apiBase: args.apiBase, getToken: async () => args.idToken },
-          }),
-        ],
+        extensions: smoke.extensions,
+        workspaceCache: smoke.workspaceCache,
         recordTurnFn: (input) =>
           recordTurn(input, {
             apiBase: args.apiBase,

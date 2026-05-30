@@ -329,7 +329,10 @@ export const MessageInputFooter = forwardRef<
       />
 
       {/* Text input */}
-      <View className="px-4 pt-3">
+      <View
+        className="px-4"
+        style={{ paddingTop: autocompleteVisible ? 0 : 12 }}
+      >
         <TextInput
           ref={inputRef}
           value={value}

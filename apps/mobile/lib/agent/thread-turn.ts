@@ -88,6 +88,23 @@ export interface ThreadHarnessTurnResult {
   ok: boolean;
 }
 
+function fallbackAssistantText(
+  stopReason: string,
+  events: AgentEvent[],
+): string {
+  const error = events.find(
+    (event): event is Extract<AgentEvent, { type: "error" }> =>
+      event.type === "error",
+  );
+  if (error) {
+    return `I encountered an error before I could complete the turn: ${error.error}`;
+  }
+  if (stopReason === "aborted") {
+    return "This turn was canceled before I could complete a response.";
+  }
+  return `This turn ended before I could complete a response (${stopReason}).`;
+}
+
 function toHarnessMessages(prior: PriorMessage[]): Message[] {
   const out: Message[] = [];
   for (const m of prior) {
@@ -204,7 +221,8 @@ export async function runThreadHarnessTurn(
     .finally(() => {
       unsubscribe();
     });
-  const assistantText = result.finalText || "";
+  const assistantText =
+    result.finalText || fallbackAssistantText(result.stopReason, events);
   const evidence: MobileSessionTurnEvidence = {
     type: "mobile_session",
     stopReason: result.stopReason,

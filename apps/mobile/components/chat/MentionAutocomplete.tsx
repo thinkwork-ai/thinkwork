@@ -43,8 +43,8 @@ export function MentionAutocomplete({
     <View
       style={{
         marginHorizontal: 16,
-        marginTop: 12,
-        marginBottom: 8,
+        marginTop: 0,
+        marginBottom: 0,
         backgroundColor: dark ? "#1c1c1e" : "#ffffff",
         borderRadius: 12,
         borderWidth: 1,
