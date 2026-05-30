@@ -70,7 +70,14 @@ MOBILE-ROUTE-OK.` navigated directly into the new detail screen with the
   [d57d8031-6080-48cc-a9a9-dd8e259eeaa6](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/builds/d57d8031-6080-48cc-a9a9-dd8e259eeaa6),
   submission
   [ddaac04b-3468-45c2-a786-11a3bed383dd](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/submissions/ddaac04b-3468-45c2-a786-11a3bed383dd),
-  app version `1.0.0`, build number `16`. This build was still in progress at
+  app version `1.0.0`, build number `16`. This build was superseded after the
+  navigation-warning hardening commit.
+- Scheduled replacement EAS production iOS build with auto-submit for
+  TestFlight from commit `17493262`: build
+  [104cef5a-5d73-4f68-807b-fae294a32338](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/builds/104cef5a-5d73-4f68-807b-fae294a32338),
+  submission
+  [5a1f219c-025c-4ad3-b028-7aa15e1af77a](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/submissions/5a1f219c-025c-4ad3-b028-7aa15e1af77a),
+  app version `1.0.0`, build number `17`. This build was still in progress at
   the latest check.
 - Merged prior mobile composer parity PR
   [#1863](https://github.com/thinkwork-ai/thinkwork/pull/1863) into `main`.
