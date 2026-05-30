@@ -1,5 +1,5 @@
 import { and, eq, isNotNull } from "drizzle-orm";
-import { threadParticipants } from "@thinkwork/database-pg";
+import { threadParticipants } from "@thinkwork/database-pg/schema";
 
 type DbLike = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,14 +22,14 @@ export async function selectThreadParticipantUserIds({
   threadId: string;
 }): Promise<string[]> {
   const rows: Array<{ userId: string | null }> = await db
-    .select({ userId: threadParticipants.userId })
+    .select({ userId: threadParticipants.user_id })
     .from(threadParticipants)
     .where(
       and(
-        eq(threadParticipants.tenantId, tenantId),
-        eq(threadParticipants.threadId, threadId),
-        eq(threadParticipants.participantType, "user"),
-        isNotNull(threadParticipants.userId),
+        eq(threadParticipants.tenant_id, tenantId),
+        eq(threadParticipants.thread_id, threadId),
+        eq(threadParticipants.participant_type, "user"),
+        isNotNull(threadParticipants.user_id),
       ),
     );
 

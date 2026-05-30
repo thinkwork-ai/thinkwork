@@ -4,14 +4,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 process.env.APPSYNC_ENDPOINT = "https://appsync.test/graphql";
 process.env.APPSYNC_API_KEY = "test-key";
 
-const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+const fetchSpy = vi.fn(
+  async (_url: string, _init?: RequestInit) => new Response("{}", { status: 200 }),
+);
 vi.stubGlobal("fetch", fetchSpy);
 
 const { notifyThreadActivity } = await import("./notify.js");
 
 function lastBody() {
   const call = fetchSpy.mock.calls.at(-1)!;
-  const init = call[1] as RequestInit;
+  const init = call[1]!;
   return JSON.parse(init.body as string) as {
     query: string;
     variables: Record<string, unknown>;
