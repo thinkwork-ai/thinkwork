@@ -292,7 +292,7 @@ describe("handleInvocation — happy path", () => {
       }
     }
     expect(composed).toContain("Files attached to this turn:");
-    expect(composed).toContain("Pi built-in `bash` tool is available");
+    expect(composed).toContain("Pi host `bash` tool is available");
     expect(composed).toContain("/tmp/pi-turn-test/attachments/brief.md");
     expect(composed).toContain("Revenue grew 12%.");
   });

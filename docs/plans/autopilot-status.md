@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U9 E2E parity harness and TestFlight release checklist
-- Active branch: `codex/mobile-pi-host-u9-e2e-smokes`
+- Active unit: U10 standardize host-contained bash on just-bash
+- Active branch: `codex/mobile-pi-host-u10-just-bash`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u9-e2e-smokes`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u10-just-bash`
 - Started: 2026-05-30
-- Latest merged PR: [#1878](https://github.com/thinkwork-ai/thinkwork/pull/1878)
-- Active PR: [#1879](https://github.com/thinkwork-ai/thinkwork/pull/1879)
+- Latest merged PR: [#1879](https://github.com/thinkwork-ai/thinkwork/pull/1879)
+- Active PR: [#1880](https://github.com/thinkwork-ai/thinkwork/pull/1880)
 - CI: pending
 
 ### Active Unit Notes
@@ -262,6 +262,63 @@ Target branch: `main`
   documented checklist steps pending operator-provided Cognito identity inputs
   and device build execution.
 - Opened PR [#1879](https://github.com/thinkwork-ai/thinkwork/pull/1879).
+- PR [#1879](https://github.com/thinkwork-ai/thinkwork/pull/1879) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and the remote/local U9 branch plus worktree were deleted. Merge commit:
+  `8e18a31e20a58f8b0cf58127577fc007936f4078`.
+- Synced from `origin/main` and created isolated U10 branch/worktree
+  `codex/mobile-pi-host-u10-just-bash`.
+- Goal for U10: standardize Desktop Local Pi and Mobile Pi around
+  host-contained `just-bash` semantics so `bash` remains powerful without
+  granting arbitrary native OS shell access.
+- Added a U10 section to the plan from the user's just-bash update because the
+  branch version of the plan stopped at U9.
+- Implemented desktop-local `just-bash` as a custom `bash` tool over the
+  rendered workspace, with public network access enabled and private/loopback
+  ranges denied, matching the mobile Pi local bash posture.
+- Desktop Local Pi now allowlists the other upstream Pi file/search built-ins
+  but supplies `bash` as the host custom tool, rather than exposing the SDK's
+  native bash built-in.
+- Updated shared runtime prompt wording to describe `bash` as a host-contained
+  workspace sandbox, and documented the pattern in
+  `docs/solutions/architecture-patterns/pi-host-contained-bash-2026-05-30.md`.
+- U10 local verification passed:
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/extensions/__tests__/local-bash-extension.test.ts`,
+  `pnpm --filter @thinkwork/pi-extensions test -- system-prompt`,
+  `pnpm --filter @thinkwork/desktop test`,
+  `pnpm --filter @thinkwork/desktop build`,
+  `pnpm --filter @thinkwork/pi-extensions test`,
+  `pnpm dlx prettier --write ...`, and `git diff --check`.
+- Opened PR [#1880](https://github.com/thinkwork-ai/thinkwork/pull/1880).
+- PR [#1880](https://github.com/thinkwork-ai/thinkwork/pull/1880)
+  initially exposed stale prompt assertions in CI; updated the mobile workspace
+  context and AgentCore Pi prompt/server tests to expect the new
+  host-contained `bash` wording.
+- Desktop dev E2E passed from the U10 worktree via Electron on port `5176`:
+  Local Pi answered exactly `DESKTOP-JUST-BASH-SMOKE-OK`, and sidecar logs
+  showed the host custom tool surface included `bash`.
+- iOS simulator E2E initially caught a Hermes bundling failure from importing
+  the Node entrypoint of `just-bash`; mobile now imports `just-bash/browser`.
+  After rebuilding the Expo dev client, the simulator smoke passed with the
+  assistant response exactly `MOBILE-JUST-BASH-SMOKE-OK`.
+- Added a small mobile composer polish from visual verification: the Space
+  picker now has `2px` extra top padding so it sits correctly against adjacent
+  toolbar icons.
+- Fixed mobile collaborative thread avatars to match the desktop participant
+  treatment: message queries now fetch `sender` metadata, current-user messages
+  stay labeled `You` in blue, and other human participants render their display
+  name plus neutral initials in the timeline circle. Simulator visual
+  verification on the Scott Hertel thread confirmed gray `SH` avatars and
+  `Scott Hertel` labels render correctly.
+- Post-E2E focused verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/thread-message-display.test.ts lib/agent/extensions/__tests__/local-bash-extension.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/system-prompt.test.ts agent-container/tests/server.test.ts`,
+  `pnpm --filter @thinkwork/mobile test` (172 tests),
+  `pnpm --filter @thinkwork/mobile build:web`,
+  `pnpm --filter @thinkwork/mobile codegen`,
+  `pnpm dlx prettier --write ...`, and `git diff --check`.
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 

@@ -9,7 +9,6 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Type, type TSchema } from "typebox";
 import {
-  BUILTIN_TOOL_NAMES,
   PI_APPLICATION_SDK_MIN_VERSION,
   PI_APPLICATION_SDK_PACKAGE,
   postFinalizeCallback,
@@ -31,6 +30,11 @@ import {
   type ProviderBundle,
   type ThinkworkExtension,
 } from "@thinkwork/pi-extensions";
+import {
+  DESKTOP_JUST_BASH_TOOL_NAMES,
+  DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
+  createDesktopJustBashTool,
+} from "./just-bash-tool.js";
 import { createManagedDelegationClient } from "./managed-delegation-client.js";
 import { createBedrockRuntimeAdapter } from "./runtime-adapters/bedrock.js";
 import { createHindsightRuntimeAdapter } from "./runtime-adapters/hindsight.js";
@@ -550,11 +554,19 @@ async function createSdkSession(
       createPiSdkModelConfig(sdk, invocation, logger),
     );
     const hindsight = createHindsightRuntimeAdapter(prepared);
-    const tools = [...BUILTIN_TOOL_NAMES, ...extensions.toolNames];
+    const desktopBashTool = defineDesktopTool(
+      sdk,
+      createDesktopJustBashTool({ workspaceDir }),
+    );
+    const tools = [
+      ...DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
+      ...DESKTOP_JUST_BASH_TOOL_NAMES,
+      ...extensions.toolNames,
+    ];
 
     logger.info("local Pi SDK session creating", {
       tools,
-      customToolCount: extensions.customTools.length,
+      customToolCount: extensions.customTools.length + 1,
       extensionFactoryCount: extensions.extensionFactories.length,
       webSearchEnabled: extensions.toolNames.includes("web_search"),
       browserAutomationEnabled:
@@ -572,7 +584,7 @@ async function createSdkSession(
       sdk.createAgentSession({
         cwd: workspaceDir,
         tools,
-        customTools: extensions.customTools,
+        customTools: [desktopBashTool, ...extensions.customTools],
         resourceLoader,
         sessionManager: sdk.SessionManager?.inMemory(),
         settingsManager,
@@ -1073,10 +1085,7 @@ async function buildDesktopMcpTools(
   return tools;
 }
 
-function defineDesktopTool(
-  sdk: PiSdkModuleLike,
-  tool: DesktopMcpTool,
-): unknown {
+function defineDesktopTool(sdk: PiSdkModuleLike, tool: object): unknown {
   return sdk.defineTool?.(tool as unknown as Record<string, unknown>) ?? tool;
 }
 
@@ -1703,7 +1712,7 @@ function buildSystemPrompt(invocation: DesktopPiRuntimeInvocation): string {
 You are running inside the ThinkWork desktop local Pi sidecar.
 Use only the rendered app workspace mounted as the current working directory.
 The SDK agent directory is .thinkwork-pi; it contains local copies of AGENTS.md, SPACE.md, USER.md, and PROMPT_SOURCES.md for this turn.
-Use bash for shell commands, repository work, package scripts, builds, tests, and command output inside the rendered app workspace.
+Use bash for shell commands, repository work, package scripts, builds, tests, and command output inside the rendered app workspace. The desktop bash tool is backed by just-bash and is not native macOS shell access.
 Do not attempt to read arbitrary local folders, access the clipboard, or use screenshots.
 Use web_search for current facts and browser_automation for inspecting a specific public page when those tools are available.
 When work needs hosted isolation, long runtime, cloud-only tools, or consequential user-visible execution, use delegate_to_managed_agent instead of trying to perform that work locally.

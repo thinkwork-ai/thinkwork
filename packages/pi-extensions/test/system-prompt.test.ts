@@ -78,7 +78,7 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     expect(prompt).not.toContain("USER BODY");
   });
 
-  it("distinguishes built-in bash from execute_code when both are available", async () => {
+  it("distinguishes host-contained bash from execute_code when both are available", async () => {
     const prompt = await composeSystemPrompt({
       payload: {},
       workspaceDir: "/ws",
@@ -87,7 +87,8 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
       fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
     });
 
-    expect(prompt).toContain("Pi built-in `bash` tool is available");
+    expect(prompt).toContain("Pi host `bash` tool is available");
+    expect(prompt).toContain("contained workspace sandbox");
     expect(prompt).toContain("Treat `bash` and `execute_code` as distinct");
     expect(prompt).toContain("use `bash` for the Pi workspace/shell");
     expect(prompt).toContain("tenant Code Interpreter sandbox");

@@ -3,10 +3,13 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  BUILTIN_TOOL_NAMES,
   DESKTOP_PI_SDK_EMBEDDING_CONTRACT,
   type PreparedDesktopPiRuntimeSession,
 } from "@thinkwork/pi-runtime-core";
+import {
+  DESKTOP_JUST_BASH_TOOL_NAMES,
+  DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
+} from "../../src/sidecar/just-bash-tool";
 import {
   runLocalDesktopTurn,
   validatePreparedSession,
@@ -108,7 +111,13 @@ describe("runLocalDesktopTurn", () => {
     const sdk: PiSdkModuleLike = {
       createAgentSession: vi.fn(async (options) => {
         expect(options?.cwd).toContain("acme");
-        expect(options?.tools).toEqual([...BUILTIN_TOOL_NAMES]);
+        expect(options?.tools).toEqual([
+          ...DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
+          ...DESKTOP_JUST_BASH_TOOL_NAMES,
+        ]);
+        expect(options?.customTools).toEqual([
+          expect.objectContaining({ name: "bash" }),
+        ]);
         return {
           session: {
             messages: [
@@ -166,6 +175,60 @@ describe("runLocalDesktopTurn", () => {
     expect(store.fetched).toEqual([
       "tenants/acme/rendered/marco/sales/user-1/AGENTS.md",
     ]);
+  });
+
+  it("uses the desktop just-bash custom tool instead of native SDK bash", async () => {
+    const sdk: PiSdkModuleLike = {
+      defineTool: vi.fn((definition) => definition),
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [{ role: "assistant", content: "Done" }],
+          prompt: vi.fn(async () => {}),
+        },
+      })),
+    };
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ ok: true }, { status: 200 }),
+    );
+
+    await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    const optionsSeen = vi.mocked(sdk.createAgentSession).mock.calls[0]?.[0];
+    expect(optionsSeen?.tools).toEqual([
+      ...DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
+      ...DESKTOP_JUST_BASH_TOOL_NAMES,
+      "delegate_to_managed_agent",
+    ]);
+    expect(
+      (optionsSeen?.tools as string[]).filter((name) => name === "bash"),
+    ).toHaveLength(1);
+    const customTools = optionsSeen?.customTools as Array<{
+      name?: string;
+      description?: string;
+      execute?: (
+        toolCallId: string,
+        params: Record<string, unknown>,
+        signal?: AbortSignal,
+      ) => Promise<{ content?: Array<{ text?: string }>; isError?: boolean }>;
+    }>;
+    const bashTool = customTools.find((tool) => tool.name === "bash");
+    expect(bashTool?.description).toContain("just-bash /workspace sandbox");
+    expect(bashTool?.description).not.toContain("native macOS shell access");
+
+    const result = await bashTool!.execute!("call-1", {
+      command: "cat AGENTS.md",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content?.[0]?.text).toBe("# Agent");
   });
 
   it("fails expired sessions before invoking the Pi SDK and finalizes failure", async () => {
@@ -271,7 +334,12 @@ describe("runLocalDesktopTurn", () => {
     );
 
     expect(optionsSeen?.tools).toContain("delegate_to_managed_agent");
-    expect(optionsSeen?.customTools).toHaveLength(1);
+    expect(optionsSeen?.customTools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "bash" }),
+        expect.objectContaining({ name: "delegate_to_managed_agent" }),
+      ]),
+    );
     expect(sdk.defineTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: "delegate_to_managed_agent" }),
     );
@@ -507,7 +575,9 @@ describe("runLocalDesktopTurn", () => {
     expect(optionsSeen?.tools).toEqual(
       expect.arrayContaining(["web_search", "delegate_to_managed_agent"]),
     );
-    expect(optionsSeen?.customTools).toEqual([]);
+    expect(optionsSeen?.customTools).toEqual([
+      expect.objectContaining({ name: "bash" }),
+    ]);
     const factories = loaderOptions?.extensionFactories as Array<
       (pi: { registerTool: (tool: { name?: string }) => void }) => void
     >;
@@ -596,6 +666,7 @@ describe("runLocalDesktopTurn", () => {
     );
     expect(optionsSeen?.customTools).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ name: "bash" }),
         expect.objectContaining({ name: "mcp_crm_opportunities_list" }),
       ]),
     );
@@ -620,7 +691,10 @@ describe("runLocalDesktopTurn", () => {
 
         async reload() {
           const agentDir = String(loaderOptions?.agentDir ?? "");
-          adapterConfigText = await readFile(join(agentDir, "mcp.json"), "utf8");
+          adapterConfigText = await readFile(
+            join(agentDir, "mcp.json"),
+            "utf8",
+          );
           const extensionPaths = loaderOptions?.additionalExtensionPaths as
             | string[]
             | undefined;
@@ -672,7 +746,11 @@ describe("runLocalDesktopTurn", () => {
     const parsed = JSON.parse(adapterConfigText) as {
       mcpServers: Record<
         string,
-        { bearerTokenEnv?: string; bearerToken?: string; excludeTools?: string[] }
+        {
+          bearerTokenEnv?: string;
+          bearerToken?: string;
+          excludeTools?: string[];
+        }
       >;
     };
     const server = parsed.mcpServers["lastmile-crm"];
@@ -692,7 +770,9 @@ describe("runLocalDesktopTurn", () => {
         source: "thinkwork-desktop-local-pi",
       }),
     );
-    expect(optionsSeen?.customTools).toEqual([]);
+    expect(optionsSeen?.customTools).toEqual([
+      expect.objectContaining({ name: "bash" }),
+    ]);
     expect(bindExtensions).toHaveBeenCalledWith(
       expect.objectContaining({ onError: expect.any(Function) }),
     );
@@ -864,6 +944,7 @@ describe("runLocalDesktopTurn", () => {
     expect(bundle).toContain("## Composed System Prompt");
     expect(bundle).toContain("You are running inside the ThinkWork desktop");
     expect(bundle).toContain("Use bash for shell commands");
+    expect(bundle).toContain("backed by just-bash");
     expect(bundle).not.toContain("shell out");
     expect(bundle).toContain("### AGENTS.md");
     expect(bundle).toContain("# Agent");

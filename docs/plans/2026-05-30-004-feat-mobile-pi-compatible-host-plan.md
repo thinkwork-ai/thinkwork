@@ -489,6 +489,44 @@ unit explicitly says otherwise.
   - `pnpm --filter @thinkwork/mobile ios` simulator validation
   - EAS build and TestFlight submission only after local + deployed smokes pass.
 
+### U10. Standardize Host-Contained Bash On just-bash
+
+- **Goal:** Make Desktop Local Pi and Mobile Pi expose the same contained
+  `just-bash` semantics for the `bash` tool instead of letting one host drift
+  toward arbitrary native shell access.
+- **Requirements:** R5, R6, R7, R13, R20.
+- **Dependencies:** U5, U7, U9.
+- **Files:**
+  - `apps/desktop/src/sidecar/just-bash-tool.ts` (new)
+  - `apps/desktop/src/sidecar/local-turn-runner.ts`
+  - `apps/desktop/test/sidecar/local-turn-runner.test.ts`
+  - `apps/desktop/package.json`
+  - `apps/mobile/lib/agent/extensions/local-bash-extension.ts`
+  - `packages/pi-extensions/src/system-prompt-compose.ts`
+  - `docs/solutions/architecture-patterns/pi-host-contained-bash-2026-05-30.md`
+    (new)
+- **Approach:** Keep mobile's local `just-bash` tool as the reference and add a
+  desktop-local `just-bash` custom `bash` tool over the rendered workspace.
+  Desktop Local Pi should no longer expose the upstream SDK's native `bash`
+  built-in; it should allowlist the other Pi file/search built-ins plus the
+  host-provided `bash` custom tool. Both hosts should describe `bash` as a
+  contained workspace sandbox with public network enabled and private/loopback
+  ranges denied.
+- **Test scenarios:**
+  - Desktop Local Pi passes `bash` as a host custom tool and removes native SDK
+    `bash` from the built-in allowlist.
+  - Desktop `bash` reads rendered workspace files from `/workspace`.
+  - Desktop `bash` cannot read arbitrary host files through native shell access.
+  - Shared system-prompt policy says `bash` is host-contained, not a generic
+    native shell.
+  - Mobile local-bash tests still pass with the same public-network/private-deny
+    containment semantics.
+- **Verification:**
+  - `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts`
+  - `pnpm --filter @thinkwork/desktop typecheck`
+  - `pnpm --filter @thinkwork/mobile test -- lib/agent/extensions/__tests__/local-bash-extension.test.ts`
+  - `pnpm --filter @thinkwork/pi-extensions test -- system-prompt`
+
 ## Cross-Cutting Verification
 
 Run the smallest meaningful tests per unit, then broaden:

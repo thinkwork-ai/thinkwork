@@ -40,7 +40,10 @@ import {
   getExternalProviderLabel,
   getThreadHeaderLabel,
 } from "@/lib/thread-display";
-import { MessageInputFooter } from "@/components/input/MessageInputFooter";
+import {
+  MessageInputFooter,
+  type MessageInputMention,
+} from "@/components/input/MessageInputFooter";
 import {
   QuickActionsSheet,
   type QuickActionsSheetRef,
@@ -61,6 +64,11 @@ import {
   getPendingThreadStart,
   type PendingThreadStart,
 } from "@/lib/pending-thread-starts";
+import { deriveThreadAgentDefault } from "@/lib/thread-agent-mode";
+import {
+  mentionCandidatesForTargets,
+  sendMessageMentionsForInput,
+} from "@/lib/thread-mentions";
 import { pickImage } from "@/lib/agent/capture-image";
 import {
   launchImagePicker,
@@ -101,6 +109,7 @@ import {
   MeQuery,
   AgentsQuery,
   ThreadTurnsForThreadQuery,
+  ThreadMentionTargetsQuery,
   SendMessageMutation,
   MessagesQuery,
   UpdateThreadMutation,
@@ -780,6 +789,26 @@ export default function ThreadDetailRoute() {
     });
   }, [messagesData]);
 
+  const [{ data: mentionTargetsData }] = useQuery({
+    query: ThreadMentionTargetsQuery,
+    variables: { threadId: threadId! },
+    pause: !threadId,
+  });
+  const mentionCandidates = useMemo(
+    () =>
+      mentionCandidatesForTargets(
+        ((mentionTargetsData?.threadMentionTargets ?? []) as any[]).map(
+          (target) => ({
+            id: target.id,
+            targetType: target.targetType,
+            targetId: target.targetId,
+            displayName: target.displayName,
+          }),
+        ),
+      ),
+    [mentionTargetsData?.threadMentionTargets],
+  );
+
   const messages = useMemo(() => {
     return rawMessages.filter((m: any) => {
       const role = (m.role || "").toLowerCase();
@@ -1223,8 +1252,40 @@ export default function ThreadDetailRoute() {
   const [attachedImage, setAttachedImage] = useState<ImagePart | null>(null);
   const [attachedImageUri, setAttachedImageUri] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<PickedDocument | null>(null);
-  const [agentEnabled, setAgentEnabled] = useState(true);
+  const [selectedMentions, setSelectedMentions] = useState<
+    MessageInputMention[]
+  >([]);
+  const agentDefaultOn = useMemo(
+    () =>
+      deriveThreadAgentDefault({
+        currentUserId: currentUser?.id,
+        messages,
+        draftMentions: selectedMentions.map((mention) => ({
+          targetType: mention.targetType,
+          targetId: mention.targetId,
+        })),
+      }).agentDefaultOn,
+    [currentUser?.id, messages, selectedMentions],
+  );
+  const [agentEnabled, setAgentEnabled] = useState(agentDefaultOn);
+  const agentOverriddenRef = useRef(false);
+  const agentForcedOn = hasDefaultAgentMentionAlias(messageText);
+  const effectiveAgentEnabled = agentForcedOn || agentEnabled;
   const [, executeSendMessage] = useMutation(SendMessageMutation);
+
+  useEffect(() => {
+    if (agentForcedOn) setAgentEnabled(true);
+  }, [agentForcedOn]);
+
+  useEffect(() => {
+    agentOverriddenRef.current = false;
+    setAgentEnabled(agentDefaultOn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!agentOverriddenRef.current) setAgentEnabled(agentDefaultOn);
+  }, [agentDefaultOn]);
 
   const handleAttach = useCallback(() => {
     Alert.alert("Attach image", undefined, [
@@ -1269,6 +1330,10 @@ export default function ThreadDetailRoute() {
     setAttachedImage(null);
     setAttachedImageUri(null);
     setAttachedFile(null);
+    const mentions = selectedMentions.filter((mention) =>
+      (text || mention.rawText).includes(mention.rawText),
+    );
+    setSelectedMentions([]);
     Keyboard.dismiss();
     // Real messages run through the on-device Pi-inspired harness (the agent loop runs in
     // Hermes → Bedrock via /api/model/converse), and the completed turn is persisted into
@@ -1276,11 +1341,6 @@ export default function ThreadDetailRoute() {
     // subscription. (No production users yet — this is the on-device agent handling live
     // mobile messages.)
     //
-    // Show the "Working…" indicator for the duration of the on-device turn and
-    // always clear it when the turn settles. record-turn inserts the messages
-    // directly, so there's no onNewMessage subscription event to clear it the way
-    // the cloud path does (see the onNewMessage effect) — we own the lifecycle here.
-    markThreadActive(threadId);
     try {
       const nativeAttachments: MobileNativeEvidence[] = file
         ? [
@@ -1299,13 +1359,34 @@ export default function ThreadDetailRoute() {
         (file
           ? `Attached file: ${file.name}.`
           : "Attached image for this turn.");
+      if (!effectiveAgentEnabled) {
+        await executeSendMessage({
+          input: {
+            threadId,
+            role: "USER" as any,
+            content: userText,
+            senderType: "human",
+            senderId: currentUser?.id,
+            agentRequested: false,
+            mentions: sendMessageMentionsForInput(mentions) as any,
+          },
+        });
+        reexecuteThread({ requestPolicy: "network-only" });
+        reexecuteMessages({ requestPolicy: "network-only" });
+        reexecuteTurns({ requestPolicy: "network-only" });
+        return;
+      }
+      // Show the "Working…" indicator for the duration of the on-device turn and
+      // always clear it when the turn settles. record-turn inserts the messages
+      // directly, so there's no onNewMessage subscription event to clear it the way
+      // the cloud path does (see the onNewMessage effect) — we own the lifecycle here.
+      markThreadActive(threadId);
       await runThreadHarnessTurn({
         threadId,
         userText,
         // The thread's agent selects which tenant MCP tools the on-device agent can
-        // call (mcp-tools extension + proxy). Agent toggle off → no agentId, so the
-        // turn runs with no platform tools (plain message).
-        agentId: agentEnabled ? (thread?.agentId ?? undefined) : undefined,
+        // call (mcp-tools extension + proxy).
+        agentId: thread?.agentId ?? undefined,
         userId: currentUser?.id,
         userName: currentUser?.name,
         userEmail: currentUser?.email,
@@ -1336,7 +1417,8 @@ export default function ThreadDetailRoute() {
     messageText,
     attachedImage,
     attachedFile,
-    agentEnabled,
+    selectedMentions,
+    effectiveAgentEnabled,
     threadId,
     messages,
     thread?.agentId,
@@ -1346,6 +1428,7 @@ export default function ThreadDetailRoute() {
     currentUser?.email,
     currentUser?.tenantId,
     tenantId,
+    executeSendMessage,
     reexecuteThread,
     reexecuteMessages,
     reexecuteTurns,
@@ -1538,6 +1621,9 @@ export default function ThreadDetailRoute() {
           colors={colors}
           isDark={isDark}
           onAttach={handleAttach}
+          mentionCandidates={mentionCandidates}
+          selectedMentions={selectedMentions}
+          onMentionsChange={setSelectedMentions}
           attachedImageUri={attachedImageUri}
           attachedFileName={attachedFile?.name ?? null}
           onRemoveAttachment={() => {
@@ -1545,8 +1631,11 @@ export default function ThreadDetailRoute() {
             setAttachedImageUri(null);
             setAttachedFile(null);
           }}
-          agentEnabled={agentEnabled}
-          onToggleAgent={() => setAgentEnabled((v) => !v)}
+          agentEnabled={effectiveAgentEnabled}
+          onToggleAgent={() => {
+            agentOverriddenRef.current = true;
+            setAgentEnabled((v) => !v);
+          }}
         />
       )}
 
@@ -1596,4 +1685,8 @@ export default function ThreadDetailRoute() {
       <SaveRecipeSheet ref={saveRecipeRef} onSave={handleSaveRecipeConfirm} />
     </KeyboardAvoidingView>
   );
+}
+
+function hasDefaultAgentMentionAlias(content: string) {
+  return /(?:^|\s)@(agent|think)\b/iu.test(content);
 }
