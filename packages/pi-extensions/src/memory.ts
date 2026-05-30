@@ -74,6 +74,9 @@ export function createMemoryExtension(
 ): ThinkworkExtension {
   return defineExtension({
     name: "thinkwork-memory",
+    // Must be folded into the createAgentSession allowlist or these tools
+    // register but never reach the model (the SDK gates to the allowlist).
+    toolNames: ["recall", "reflect"],
     register(pi, providers) {
       // Fail loud at load if the host forgot the provider — better than a
       // silent no-op mid-turn (the all-optional ProviderBundle invites that).

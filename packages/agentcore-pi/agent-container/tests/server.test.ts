@@ -162,9 +162,17 @@ describe("handleInvocation — happy path", () => {
     });
   });
 
-  it("stages message attachments, exposes them in the prompt, and adds file_read", async () => {
-    let seenSystemPrompt = "";
+  it("stages message attachments, feeds them to the system-prompt extension, and adds file_read", async () => {
+    // U6: the system prompt is composed inside the session by the system-prompt
+    // extension's before_agent_start hook, not prebuilt and passed to runLoop.
+    // The attachment preamble is handed to that extension as its `suffix`. The
+    // loop stub bypasses extension execution, so we capture the bundle and drive
+    // the system-prompt extension's hook directly to verify the preamble lands.
+    let seenSystemPrompt: string | undefined = "unset";
     let seenTools: AgentTool<any>[] = [];
+    let capturedBundle:
+      | import("../src/server.js").AssembledToolBundle
+      | undefined;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
         message: "Summarize the file attached in Slack.",
@@ -192,6 +200,9 @@ describe("handleInvocation — happy path", () => {
             },
           ],
         }),
+        onHandlerComplete: (bundle) => {
+          capturedBundle = bundle;
+        },
         runAgentLoop: async ({ systemPrompt, tools }) => {
           seenSystemPrompt = systemPrompt;
           seenTools = tools;
@@ -206,13 +217,39 @@ describe("handleInvocation — happy path", () => {
     });
 
     expect(result.statusCode).toBe(200);
-    expect(seenSystemPrompt).toContain("Files attached to this turn:");
-    expect(seenSystemPrompt).toContain("Do not say that no file is attached");
-    expect(seenSystemPrompt).toContain(
-      "/tmp/pi-turn-test/attachments/brief.md",
-    );
-    expect(seenSystemPrompt).toContain("Revenue grew 12%.");
+    // U6 contract: no prebuilt system prompt is passed to the loop.
+    expect(seenSystemPrompt).toBeUndefined();
     expect(seenTools.some((tool) => tool.name === "file_read")).toBe(true);
+
+    // Drive the system-prompt extension's before_agent_start to confirm the
+    // attachment preamble was wired in as the composed prompt's suffix.
+    const factories = capturedBundle?.extensionFactories ?? [];
+    let composed = "";
+    for (const factory of factories) {
+      const handlers = new Map<string, (...a: unknown[]) => unknown>();
+      const fakePi = {
+        registerTool: () => {},
+        on: (event: string, handler: (...a: unknown[]) => unknown) =>
+          handlers.set(event, handler),
+      } as never;
+      await factory(fakePi);
+      const hook = handlers.get("before_agent_start");
+      if (hook) {
+        const r = (await hook(
+          {
+            type: "before_agent_start",
+            prompt: "",
+            systemPrompt: "",
+            systemPromptOptions: {},
+          },
+          undefined,
+        )) as { systemPrompt?: string } | undefined;
+        if (r?.systemPrompt) composed = r.systemPrompt;
+      }
+    }
+    expect(composed).toContain("Files attached to this turn:");
+    expect(composed).toContain("/tmp/pi-turn-test/attachments/brief.md");
+    expect(composed).toContain("Revenue grew 12%.");
   });
 
   it("skill_run invocation fires the completion callback exactly once with the camelCase shape + HMAC header", async () => {
