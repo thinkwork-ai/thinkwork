@@ -5,8 +5,8 @@
 // in the same place the mobile agent lives, while still letting the agent call public
 // internet endpoints through curl/wget when a task needs it.
 
-import { Bash } from "just-bash/browser";
-import type { BashOptions } from "just-bash/browser";
+import { Bash } from "just-bash";
+import type { BashOptions } from "just-bash";
 import { defineExtension } from "./define-extension";
 import type { ExtensionFactory } from "./types";
 import type { ToolResult } from "../types";
