@@ -1069,13 +1069,6 @@ function SectionHeaderControls({
           onCloseAutoFocus={(event) => event.preventDefault()}
         >
           <DropdownMenuItem
-            disabled={!onMarkSectionRead || unreadThreadIds.length === 0}
-            onSelect={() => onMarkSectionRead?.(unreadThreadIds)}
-          >
-            <CheckCheck className="size-4" />
-            Mark all as read
-          </DropdownMenuItem>
-          <DropdownMenuItem
             onSelect={() => setSectionUnreadFilter(sectionId, !filterOn)}
           >
             {filterOn ? (
@@ -1084,6 +1077,13 @@ function SectionHeaderControls({
               <ListFilter className="size-4" />
             )}
             {filterOn ? "Show all" : "Show unread"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!onMarkSectionRead || unreadThreadIds.length === 0}
+            onSelect={() => onMarkSectionRead?.(unreadThreadIds)}
+          >
+            <CheckCheck className="size-4" />
+            Mark all as read
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
