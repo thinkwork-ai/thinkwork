@@ -147,12 +147,10 @@ export class WorkspaceCache {
     localDir: string,
     prefix: string,
   ): Promise<WorkspaceSyncResult> {
-    const remote = (
-      await this.store.listObjects({
-        bucket: input.bucket,
-        prefix,
-      })
-    );
+    const remote = await this.store.listObjects({
+      bucket: input.bucket,
+      prefix,
+    });
     const remoteEntries = remote
       .filter((obj) => obj.key.startsWith(prefix))
       .map((obj) => ({

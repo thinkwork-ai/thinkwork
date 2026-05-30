@@ -37,11 +37,7 @@ export const FileTree = ({
   ...props
 }: FileTreeProps) => (
   <FileTreeContext.Provider value={{ selectedPath, onSelect }}>
-    <div
-      className={cn("font-mono text-sm", className)}
-      role="tree"
-      {...props}
-    >
+    <div className={cn("font-mono text-sm", className)} role="tree" {...props}>
       {children}
     </div>
   </FileTreeContext.Provider>

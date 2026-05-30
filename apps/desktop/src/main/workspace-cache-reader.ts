@@ -35,7 +35,8 @@ export function resolveCacheRoot(app: AppPathLike): string {
 }
 
 function hasUnsafeSegments(relPath: string): boolean {
-  if (!relPath || relPath.startsWith("/") || relPath.includes("\\")) return true;
+  if (!relPath || relPath.startsWith("/") || relPath.includes("\\"))
+    return true;
   if (path.isAbsolute(relPath)) return true;
   return relPath
     .split("/")
@@ -234,7 +235,8 @@ export async function readCacheFile(
   try {
     absPath = await resolveWithinCacheRoot(root, relPath);
   } catch (err) {
-    if (err instanceof PathEscapeError) return { status: "error", code: "EACCES" };
+    if (err instanceof PathEscapeError)
+      return { status: "error", code: "EACCES" };
     if (errno(err) === "ENOENT") return { status: "vanished" };
     return { status: "error", code: errno(err) };
   }

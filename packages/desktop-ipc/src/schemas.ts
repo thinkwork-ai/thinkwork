@@ -359,16 +359,17 @@ export interface WorkspaceTreeNode {
   truncated?: boolean;
 }
 
-export const WorkspaceTreeNodeSchema: z.ZodType<WorkspaceTreeNode> = z.lazy(() =>
-  z
-    .object({
-      name: z.string(),
-      path: z.string(),
-      kind: z.enum(["file", "dir"]),
-      children: z.array(WorkspaceTreeNodeSchema).optional(),
-      truncated: z.boolean().optional(),
-    })
-    .strict(),
+export const WorkspaceTreeNodeSchema: z.ZodType<WorkspaceTreeNode> = z.lazy(
+  () =>
+    z
+      .object({
+        name: z.string(),
+        path: z.string(),
+        kind: z.enum(["file", "dir"]),
+        children: z.array(WorkspaceTreeNodeSchema).optional(),
+        truncated: z.boolean().optional(),
+      })
+      .strict(),
 );
 
 export const ReadWorkspaceTreeRequestSchema = EmptyRequestSchema;

@@ -208,7 +208,9 @@ export async function registerDesktopIpcHandlers(
   });
   ipcMain.handle(RAISE_THREAD_NOTIFICATION_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);
-    raiseThreadNotification(RaiseThreadNotificationRequestSchema.parse(payload));
+    raiseThreadNotification(
+      RaiseThreadNotificationRequestSchema.parse(payload),
+    );
   });
   ipcMain.handle(READ_WORKSPACE_TREE_CHANNEL, async (event, payload) => {
     assertSafeSenderFrame(event);

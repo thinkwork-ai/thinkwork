@@ -9,7 +9,10 @@ import {
   XIcon,
 } from "lucide-react";
 import type { WorkspaceTreeNode } from "@thinkwork/desktop-ipc";
-import { CodeBlock, CodeBlockCopyButton } from "@/components/ai-elements/code-block";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import {
   FileTree,
   FileTreeFile,
@@ -64,14 +67,15 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function LocalWorkspaceView({ onClose, bridge }: LocalWorkspaceViewProps) {
+export function LocalWorkspaceView({
+  onClose,
+  bridge,
+}: LocalWorkspaceViewProps) {
   const ws = useLocalWorkspace(bridge);
 
   if (!ws.available) {
     return (
-      <Centered>
-        Local Workspace is only available in the desktop app.
-      </Centered>
+      <Centered>Local Workspace is only available in the desktop app.</Centered>
     );
   }
 
@@ -164,7 +168,10 @@ function WorkspaceTreePane({
           Tree truncated — too many entries to show all.
         </p>
       ) : null}
-      <FileTree selectedPath={ws.selectedPath ?? undefined} onSelect={ws.select}>
+      <FileTree
+        selectedPath={ws.selectedPath ?? undefined}
+        onSelect={ws.select}
+      >
         {renderNodes(ws.tree.tree, true)}
       </FileTree>
     </>

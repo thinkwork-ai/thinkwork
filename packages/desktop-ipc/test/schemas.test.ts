@@ -401,7 +401,12 @@ describe("local workspace inspector schemas", () => {
             kind: "dir",
             children: [
               { name: "GOAL.md", path: "dev/GOAL.md", kind: "file" },
-              { name: "skills", path: "dev/skills", kind: "dir", truncated: true },
+              {
+                name: "skills",
+                path: "dev/skills",
+                kind: "dir",
+                truncated: true,
+              },
             ],
           },
         ],
@@ -469,9 +474,7 @@ describe("local workspace inspector schemas", () => {
     expect(() =>
       ChannelSchemas.readWorkspaceFile.request.parse({ path: "" }),
     ).toThrow();
-    expect(() =>
-      ChannelSchemas.readWorkspaceFile.request.parse({}),
-    ).toThrow();
+    expect(() => ChannelSchemas.readWorkspaceFile.request.parse({})).toThrow();
     expect(() =>
       ChannelSchemas.readWorkspaceFile.response.parse({ status: "too-large" }),
     ).toThrow();

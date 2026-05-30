@@ -23,7 +23,11 @@ export function SettingsSidebar() {
 
   // Hide operator items until the role is known, to avoid a flash of operator
   // content for members.
-  const items = visibleSettingsNavItems({ isOperator, roleResolved, isDesktop });
+  const items = visibleSettingsNavItems({
+    isOperator,
+    roleResolved,
+    isDesktop,
+  });
 
   return (
     <aside className="flex h-svh w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">

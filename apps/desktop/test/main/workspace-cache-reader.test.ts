@@ -133,7 +133,9 @@ describe("readCacheFile", () => {
   });
 
   it("returns vanished for a missing file", async () => {
-    expect(await readCacheFile(root, "gone.md")).toEqual({ status: "vanished" });
+    expect(await readCacheFile(root, "gone.md")).toEqual({
+      status: "vanished",
+    });
   });
 
   it("returns error EACCES for a traversal attempt", async () => {

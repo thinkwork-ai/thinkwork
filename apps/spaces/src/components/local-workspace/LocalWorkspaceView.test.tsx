@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ReadWorkspaceFileResponse,
@@ -51,7 +57,11 @@ describe("LocalWorkspaceView", () => {
     const bridge = makeBridge({
       tree: NESTED_TREE,
       files: {
-        "dev/GOAL.md": { status: "ok", content: "# GOAL", language: "markdown" },
+        "dev/GOAL.md": {
+          status: "ok",
+          content: "# GOAL",
+          language: "markdown",
+        },
       },
     });
     render(<LocalWorkspaceView bridge={bridge} />);
@@ -98,7 +108,9 @@ describe("LocalWorkspaceView", () => {
   it("surfaces a tree error with retry rather than empty state", async () => {
     const bridge = makeBridge({ tree: { status: "error", code: "EACCES" } });
     render(<LocalWorkspaceView bridge={bridge} />);
-    expect(await screen.findByText(/couldn't read the local workspace/i)).toBeTruthy();
+    expect(
+      await screen.findByText(/couldn't read the local workspace/i),
+    ).toBeTruthy();
     expect(screen.getByText(/EACCES/)).toBeTruthy();
     expect(screen.queryByText(/nothing synced yet/i)).toBeNull();
   });
@@ -108,7 +120,11 @@ describe("LocalWorkspaceView", () => {
     const bridge = makeBridge({
       tree: () => tree,
       files: {
-        "dev/GOAL.md": { status: "ok", content: "# GOAL", language: "markdown" },
+        "dev/GOAL.md": {
+          status: "ok",
+          content: "# GOAL",
+          language: "markdown",
+        },
       },
     });
     render(<LocalWorkspaceView bridge={bridge} />);
@@ -118,9 +134,7 @@ describe("LocalWorkspaceView", () => {
     // Refresh against a tree that no longer contains the selected file.
     tree = { status: "empty" };
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    expect(
-      await screen.findByText(/no longer in the cache/i),
-    ).toBeTruthy();
+    expect(await screen.findByText(/no longer in the cache/i)).toBeTruthy();
   });
 
   it("fires onClose from the header control (R15)", async () => {

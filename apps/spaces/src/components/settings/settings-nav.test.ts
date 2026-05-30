@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  SETTINGS_NAV_ITEMS,
-  visibleSettingsNavItems,
-} from "./settings-nav";
+import { SETTINGS_NAV_ITEMS, visibleSettingsNavItems } from "./settings-nav";
 
 const LOCAL_WORKSPACE = "/settings/local-workspace";
 
