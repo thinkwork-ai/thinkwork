@@ -55,6 +55,11 @@ import {
 } from "@/components/chat/WebViewSheet";
 import { useAuth } from "@/lib/auth-context";
 import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
+import {
+  clearPendingThreadStart,
+  getPendingThreadStart,
+  type PendingThreadStart,
+} from "@/lib/pending-thread-starts";
 import { pickImage } from "@/lib/agent/capture-image";
 import {
   launchImagePicker,
@@ -636,6 +641,34 @@ function LoadingTitle() {
   return <Text className="text-lg font-semibold">{`Loading${dots}`}</Text>;
 }
 
+function hasPersistedPendingUserMessage(
+  messages: any[],
+  pending: PendingThreadStart | null,
+) {
+  if (!pending) return false;
+  const persistedContent = pending.persistedContent ?? pending.content;
+  return messages.some((message: any) => {
+    const role = String(message.role ?? "").toLowerCase();
+    if (role !== "user") return false;
+    const content = String(message.content ?? "");
+    return content === persistedContent || content === pending.content;
+  });
+}
+
+function hasAssistantAfterPendingStart(
+  messages: any[],
+  pending: PendingThreadStart | null,
+) {
+  if (!pending) return false;
+  const startedAt = new Date(pending.createdAt).getTime();
+  return messages.some((message: any) => {
+    const role = String(message.role ?? "").toLowerCase();
+    if (role !== "assistant") return false;
+    const createdAt = new Date(message.createdAt ?? 0).getTime();
+    return Number.isFinite(createdAt) && createdAt >= startedAt;
+  });
+}
+
 export default function ThreadDetailRoute() {
   const { threadId, title: initialTitle } = useLocalSearchParams<{
     threadId: string;
@@ -933,8 +966,60 @@ export default function ThreadDetailRoute() {
   const isPreSyncExternalTask = false;
   const externalProviderLabel: string | null = null;
   const useTaskFlatList = false;
-  const visibleMessages = messages;
+  const pendingThreadStart = getPendingThreadStart(threadId);
+  const hasPendingStartUserMessage = hasPersistedPendingUserMessage(
+    messages,
+    pendingThreadStart,
+  );
+  const hasPendingStartAssistantMessage = hasAssistantAfterPendingStart(
+    messages,
+    pendingThreadStart,
+  );
+  const optimisticPendingMessage = useMemo(() => {
+    if (!pendingThreadStart || hasPendingStartUserMessage) return null;
+    return {
+      id: `optimistic-${pendingThreadStart.threadId}-first-message`,
+      role: "user",
+      content: pendingThreadStart.content,
+      senderType: "human",
+      senderId: pendingThreadStart.userId ?? currentUser?.id ?? user?.sub ?? "",
+      createdAt: pendingThreadStart.createdAt,
+      metadata: { optimistic: true },
+      toolResults: null,
+    };
+  }, [
+    pendingThreadStart,
+    hasPendingStartUserMessage,
+    currentUser?.id,
+    user?.sub,
+  ]);
+  const visibleMessages = useMemo(
+    () =>
+      optimisticPendingMessage
+        ? [...messages, optimisticPendingMessage]
+        : messages,
+    [messages, optimisticPendingMessage],
+  );
   const visibleTurns = turns;
+  const isOptimisticStartRunning = Boolean(
+    pendingThreadStart?.expectAssistantResponse &&
+    !hasPendingStartAssistantMessage,
+  );
+  useEffect(() => {
+    if (!pendingThreadStart) return;
+    if (
+      hasPendingStartUserMessage &&
+      (!pendingThreadStart.expectAssistantResponse ||
+        hasPendingStartAssistantMessage)
+    ) {
+      clearPendingThreadStart(threadId);
+    }
+  }, [
+    pendingThreadStart,
+    hasPendingStartAssistantMessage,
+    hasPendingStartUserMessage,
+    threadId,
+  ]);
 
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const webViewSheetRef = useRef<WebViewSheetRef>(null);
@@ -1209,6 +1294,7 @@ export default function ThreadDetailRoute() {
 
   // Don't render stale content — wait until the correct thread is loaded
   const isLoaded = thread && thread.id === threadId;
+  const canRenderTimeline = isLoaded || Boolean(pendingThreadStart);
   const showsReviewTabs = isLoaded && Boolean(reviewDetail);
   const showingReviewForm = showsReviewTabs && hitlTab === "review";
 
@@ -1330,8 +1416,8 @@ export default function ThreadDetailRoute() {
 
       {/* Content area */}
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
-        {isLoaded ? (
-          reviewDetail && hitlTab === "review" ? (
+        {canRenderTimeline ? (
+          showsReviewTabs && hitlTab === "review" ? (
             <ThreadHitlPrompt
               review={reviewDetail}
               note={reviewNote}
@@ -1347,7 +1433,10 @@ export default function ThreadDetailRoute() {
               agentName={agentName}
               isAdmin={isAdmin}
               tenantId={tenantId}
-              isAgentRunning={!!threadId && isThreadActive(threadId)}
+              isAgentRunning={
+                !!threadId &&
+                (isThreadActive(threadId) || isOptimisticStartRunning)
+              }
               onLinkPress={handleLinkPress}
               onSaveRecipe={handleSaveRecipe}
               refreshing={pullRefreshing}

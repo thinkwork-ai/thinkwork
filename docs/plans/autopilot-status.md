@@ -16,18 +16,49 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: mobile Pi harness smoke coverage and MCP/bash execution hardening
-- Active branch: `codex/mobile-pi-e2e-smokes`
+- Active unit: mobile optimistic new-thread detail navigation
+- Active branch: `codex/mobile-optimistic-thread-route`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-e2e-smokes`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-file-attachments`
 - Started: 2026-05-30
 - Latest merged PR:
-  [#1863](https://github.com/thinkwork-ai/thinkwork/pull/1863)
-- Active PR: [#1867](https://github.com/thinkwork-ai/thinkwork/pull/1867)
-- CI: pending
+  [#1867](https://github.com/thinkwork-ai/thinkwork/pull/1867)
+- Active PR: none
+- CI: not opened yet
 
 ### Active Unit Notes
 
+- PR [#1867](https://github.com/thinkwork-ai/thinkwork/pull/1867) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and its local/remote branch was deleted. The iOS simulator smoke confirmed
+  local mobile bash by returning `MOBILE-PI-BASH-SMOKE-OK` in thread
+  `CHAT-883`.
+- Synced from `origin/main` and created isolated branch/worktree
+  `codex/mobile-optimistic-thread-route` for the next mobile parity unit.
+- Goal for this unit: make mobile new-thread submission feel like Desktop Local
+  Pi by creating the thread, registering an optimistic first-message scaffold,
+  navigating immediately to thread detail, and letting the on-device harness run
+  in the background while the detail timeline keeps the user message and
+  `Working...` state visible.
+- Implemented mobile pending-thread-start registry and wired the new-thread
+  composer to register a pending first message, navigate to
+  `/thread/<threadId>` immediately after `createThread`, and dispatch the
+  on-device harness in a background task.
+- Updated thread detail to render pending starts before the thread query
+  returns, keep `Working...` visible until a persisted assistant message is
+  observed, and clear the pending scaffold once durable messages replace it.
+- Focused verification passed:
+  `pnpm exec vitest run lib/pending-thread-starts.test.ts`,
+  `git diff --check`, `pnpm --filter @thinkwork/react-native-sdk build`, and a
+  changed-file TypeScript diagnostic filter for the touched mobile files.
+- Full `pnpm exec tsc --noEmit --pretty false` from `apps/mobile` still fails
+  on broad pre-existing mobile type errors outside this unit; no diagnostics
+  matched the touched files.
+- iOS simulator verification from the local Expo dev build passed: creating a
+  new thread with prompt `Optimistic route smoke 2026-05-30T1126. Reply exactly
+MOBILE-ROUTE-OK.` navigated directly into the new detail screen with the
+  optimistic user message plus `Working...` visible, then replaced the scaffold
+  with persisted messages and assistant response `MOBILE-ROUTE-OK`.
 - Merged prior mobile composer parity PR
   [#1863](https://github.com/thinkwork-ai/thinkwork/pull/1863) into `main`.
   Merge commit: `9a7dfb84d7ced38ba6ced3ec51e9e42d72c75689`.
