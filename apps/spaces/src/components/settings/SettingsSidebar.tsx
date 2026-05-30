@@ -8,7 +8,7 @@ import {
   desktopToolbarGapClassName,
 } from "@/lib/desktop-chrome";
 import { getSettingsReturnTo } from "@/lib/settings-return";
-import { SETTINGS_NAV_ITEMS } from "@/components/settings/settings-nav";
+import { visibleSettingsNavItems } from "@/components/settings/settings-nav";
 
 // Matches the main chat-sidebar nav item style (SidebarMenuButton): h-8, p-2,
 // gap-2, text-sm, size-4 icons.
@@ -23,9 +23,7 @@ export function SettingsSidebar() {
 
   // Hide operator items until the role is known, to avoid a flash of operator
   // content for members.
-  const items = SETTINGS_NAV_ITEMS.filter(
-    (item) => !item.operatorOnly || (roleResolved && isOperator),
-  );
+  const items = visibleSettingsNavItems({ isOperator, roleResolved, isDesktop });
 
   return (
     <aside className="flex h-svh w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
