@@ -51,6 +51,11 @@ import {
   getDesktopBridge,
   shouldUseDesktopLocalPiDispatchNow,
 } from "@/lib/desktop-runtime";
+import {
+  clearPendingThreadStart,
+  getPendingThreadStart,
+  type PendingThreadStart,
+} from "@/lib/pending-thread-starts";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { notifyAgentCompletion } from "@/lib/desktop-notifications";
@@ -283,12 +288,15 @@ export function SpacesThreadDetailRoute({
     select: (state) =>
       threadTitleFallbackFromState(state.location.state, threadId),
   });
+  const optimisticThreadStart = getPendingThreadStart(threadId);
   const routeThread = data?.thread?.id === threadId ? data.thread : null;
   const hasMismatchedThreadData = Boolean(data?.thread && !routeThread);
-  const isThreadTitlePending = fetching || hasMismatchedThreadData;
+  const isThreadTitlePending =
+    (fetching && !optimisticThreadStart) || hasMismatchedThreadData;
   const threadTitle =
     routeThread?.title?.trim() ||
     fallbackThreadTitle ||
+    optimisticThreadStart?.title ||
     (isThreadTitlePending ? "Loading..." : "Thread");
 
   // Attached artifacts feed the cascade-delete checkbox in ThreadDetailActions.
@@ -554,19 +562,64 @@ export function SpacesThreadDetailRoute({
     reexecuteTasksQuery,
   ]);
 
-  const thread = routeThread ? toTaskThread(routeThread) : null;
+  const thread = routeThread
+    ? toTaskThread(routeThread)
+    : optimisticThreadStart
+      ? toOptimisticTaskThread(optimisticThreadStart)
+      : null;
+  const threadTurns = [
+    ...toTaskThreadTurns(tasksData?.computerTasks, eventsData?.computerEvents),
+    ...toTaskThreadTurnsFromRows(threadTurnRows),
+  ];
   if (thread) {
-    thread.turns = [
-      ...toTaskThreadTurns(
-        tasksData?.computerTasks,
-        eventsData?.computerEvents,
-      ),
-      ...toTaskThreadTurnsFromRows(threadTurnRows),
-    ];
+    thread.turns = threadTurns;
   }
-  const visibleThread = optimisticMessage
-    ? withOptimisticUserTurn(thread, optimisticMessage.content, {
-        expectAssistantResponse: optimisticMessage.expectAssistantResponse,
+  const hasPersistedPendingStartUserMessage = optimisticThreadStart
+    ? hasPersistedUserMessage(
+        routeThread?.messages?.edges,
+        optimisticThreadStart.content,
+      )
+    : false;
+  const hasPendingStartRealActivity = Boolean(
+    optimisticThreadStart &&
+    (optimisticThreadStart.expectAssistantResponse === false ||
+      threadTurns.length > 0 ||
+      hasDurableAssistantAfterLatestUser(thread)),
+  );
+  const shouldKeepPendingStartSignal = Boolean(
+    optimisticThreadStart && !hasPendingStartRealActivity,
+  );
+
+  useEffect(() => {
+    if (
+      optimisticThreadStart &&
+      hasPersistedPendingStartUserMessage &&
+      hasPendingStartRealActivity
+    ) {
+      clearPendingThreadStart(threadId);
+    }
+  }, [
+    hasPendingStartRealActivity,
+    hasPersistedPendingStartUserMessage,
+    optimisticThreadStart,
+    threadId,
+  ]);
+
+  const routeStateOptimisticMessage =
+    optimisticThreadStart &&
+    (!hasPersistedPendingStartUserMessage || shouldKeepPendingStartSignal)
+      ? {
+          content: optimisticThreadStart.content,
+          expectAssistantResponse:
+            optimisticThreadStart.expectAssistantResponse,
+        }
+      : null;
+  const effectiveOptimisticMessage =
+    optimisticMessage ?? routeStateOptimisticMessage;
+  const visibleThread = effectiveOptimisticMessage
+    ? withOptimisticUserTurn(thread, effectiveOptimisticMessage.content, {
+        expectAssistantResponse:
+          effectiveOptimisticMessage.expectAssistantResponse,
       })
     : thread;
   const threadArtifacts = useMemo(
@@ -1100,7 +1153,10 @@ export function SpacesThreadDetailRoute({
   ) : (
     <TaskThreadView
       thread={visibleThread}
-      isLoading={(fetching && !routeThread) || hasMismatchedThreadData}
+      isLoading={
+        (fetching && !routeThread && !optimisticThreadStart) ||
+        hasMismatchedThreadData
+      }
       error={error?.message ?? null}
       streamingChunks={hasDurableAssistant ? [] : chunks}
       streamState={hasDurableAssistant ? undefined : streamState}
@@ -1667,10 +1723,12 @@ function withOptimisticUserTurn(
       message.role.toUpperCase() === "USER" &&
       message.content?.trim() === content.trim(),
   );
-  if (alreadyPersisted) return thread;
+  const hasOptimisticTurn = (thread.turns ?? []).some(
+    (turn) => turn.id === "optimistic-computer-turn",
+  );
 
   const turns =
-    options.expectAssistantResponse === false
+    options.expectAssistantResponse === false || hasOptimisticTurn
       ? (thread.turns ?? [])
       : [
           {
@@ -1684,14 +1742,16 @@ function withOptimisticUserTurn(
 
   return {
     ...thread,
-    messages: [
-      ...thread.messages,
-      {
-        id: "optimistic-user-message",
-        role: "USER",
-        content,
-      },
-    ],
+    messages: alreadyPersisted
+      ? thread.messages
+      : [
+          ...thread.messages,
+          {
+            id: "optimistic-user-message",
+            role: "USER",
+            content,
+          },
+        ],
     turns,
   };
 }
@@ -1732,6 +1792,18 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
           }
         : null,
     })),
+  };
+}
+
+function toOptimisticTaskThread(start: PendingThreadStart): TaskThread {
+  return {
+    id: start.threadId,
+    title: start.title,
+    status: "in_progress",
+    lifecycleStatus: null,
+    costSummary: null,
+    messages: [],
+    turns: [],
   };
 }
 

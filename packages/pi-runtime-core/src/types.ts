@@ -118,6 +118,7 @@ export interface RunAgentLoopResult {
   toolsCalled: string[];
   toolInvocations: ToolInvocationRecord[];
   toolCosts?: ToolCostRecord[];
+  diagnostics?: Record<string, unknown>;
 }
 
 export interface PiRuntimeLogEntry {

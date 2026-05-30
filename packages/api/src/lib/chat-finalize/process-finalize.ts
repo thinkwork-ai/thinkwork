@@ -80,6 +80,12 @@ export function capturedSystemPromptFromFinalizePayload(
   return null;
 }
 
+export function diagnosticsFromFinalizePayload(
+  payload: Pick<FinalizePayload, "usage" | "response">,
+): Record<string, unknown> | undefined {
+  return payload.usage?.diagnostics ?? payload.response?.diagnostics;
+}
+
 /**
  * Runs the post-AgentCore finalize chain. Idempotent on
  * `thread_turns.finalized_at` — a second call for the same turn returns
@@ -297,6 +303,7 @@ export async function processFinalize(
     input_tokens: usage.inputTokens,
     output_tokens: usage.outputTokens,
     cached_read_tokens: usage.cachedReadTokens,
+    diagnostics: diagnosticsFromFinalizePayload(payload),
     tools_called: invokeResult.tools_called ?? [],
     tool_costs: toolCosts.map((tc) => ({
       event_type: tc.event_type,

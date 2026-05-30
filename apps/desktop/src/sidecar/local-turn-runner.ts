@@ -110,6 +110,38 @@ export interface LocalTurnRunnerResult {
   workspace?: WorkspaceSyncResult;
 }
 
+interface LocalTurnTimings {
+  measure<T>(name: string, run: () => T | Promise<T>): Promise<T>;
+  snapshot(): Record<string, number>;
+}
+
+function createLocalTurnTimings(now: () => Date = () => new Date()) {
+  const startedAtMs = now().getTime();
+  const timings: Record<string, number> = {};
+  const currentMs = () => now().getTime();
+
+  const addTiming = (name: string, durationMs: number) => {
+    timings[name] = Math.max(0, Math.round((timings[name] ?? 0) + durationMs));
+  };
+
+  return {
+    async measure<T>(name: string, run: () => T | Promise<T>): Promise<T> {
+      const phaseStartedAtMs = currentMs();
+      try {
+        return await run();
+      } finally {
+        addTiming(name, currentMs() - phaseStartedAtMs);
+      }
+    },
+    snapshot(): Record<string, number> {
+      return {
+        ...timings,
+        total_ms: Math.max(0, Math.round(currentMs() - startedAtMs)),
+      };
+    },
+  } satisfies LocalTurnTimings;
+}
+
 export async function prewarmLocalWorkspace(
   payload: PiSidecarWorkspacePrewarmPayload,
   deps: Pick<LocalTurnRunnerDeps, "now" | "workspaceStore" | "logger"> = {},
@@ -120,7 +152,9 @@ export async function prewarmLocalWorkspace(
     !Number.isFinite(expiresAtMs) ||
     expiresAtMs <= (deps.now?.() ?? new Date()).getTime()
   ) {
-    throw new Error("Prepared desktop Pi workspace prewarm session has expired");
+    throw new Error(
+      "Prepared desktop Pi workspace prewarm session has expired",
+    );
   }
   const { workspace, partition } = payload.session;
   const cache = new WorkspaceCache(
@@ -168,14 +202,15 @@ export async function runLocalDesktopTurn(
   deps: LocalTurnRunnerDeps = {},
 ): Promise<LocalTurnRunnerResult> {
   const startedAt = deps.now?.() ?? new Date();
+  const timings = createLocalTurnTimings(deps.now);
   const logger = deps.logger ?? createRedactedLogger();
   let workspace: WorkspaceSyncResult | undefined;
   let sdkSession:
     | {
-      session: PiSdkSessionLike;
-      modelFallbackMessage?: string;
-      resolvedModelId?: string;
-      cleanup?: Array<() => Promise<void>>;
+        session: PiSdkSessionLike;
+        modelFallbackMessage?: string;
+        resolvedModelId?: string;
+        cleanup?: Array<() => Promise<void>>;
       }
     | undefined;
   let unbindAbort: (() => void) | undefined;
@@ -186,7 +221,9 @@ export async function runLocalDesktopTurn(
 
   try {
     throwIfAborted(deps.signal);
-    validatePreparedSession(payload.session, deps.now);
+    await timings.measure("session_validation_ms", () =>
+      validatePreparedSession(payload.session, deps.now),
+    );
     logger.info("local Pi turn starting", {
       threadTurnId: payload.session.threadTurnId,
       runtimeHost: payload.session.invocation.runtime_host,
@@ -194,78 +231,105 @@ export async function runLocalDesktopTurn(
       sdkMinimumVersion: payload.session.invocation.pi_sdk.minimumVersion,
     });
     throwIfAborted(deps.signal);
-    workspace = await prepareWorkspace(payload, deps, logger);
+    const preparedWorkspace = await timings.measure("workspace_sync_ms", () =>
+      prepareWorkspace(payload, deps, logger),
+    );
+    workspace = preparedWorkspace;
     logger.info("local Pi workspace synced", {
-      synced: workspace.synced,
-      deleted: workspace.deleted,
-      total: workspace.total,
-      hasWorkspace: Boolean(workspace.prefix),
-      cacheHit: workspace.cacheHit === true,
-      cacheStale: workspace.cacheStale === true,
+      synced: preparedWorkspace.synced,
+      deleted: preparedWorkspace.deleted,
+      total: preparedWorkspace.total,
+      hasWorkspace: Boolean(preparedWorkspace.prefix),
+      cacheHit: preparedWorkspace.cacheHit === true,
+      cacheStale: preparedWorkspace.cacheStale === true,
     });
-    const systemPrompt = buildSystemPrompt(payload.session.invocation);
+    const systemPrompt = await timings.measure("system_prompt_ms", () =>
+      buildSystemPrompt(payload.session.invocation),
+    );
     composedSystemPrompt = systemPrompt;
-    await maybeWriteDebugBundle({
-      payload,
-      workspaceDir: workspace.localDir,
-      systemPrompt,
-      logger,
-      enabled: deps.debug === true,
-    });
+    await timings.measure("debug_bundle_ms", () =>
+      maybeWriteDebugBundle({
+        payload,
+        workspaceDir: preparedWorkspace.localDir,
+        systemPrompt,
+        logger,
+        enabled: deps.debug === true,
+      }),
+    );
     throwIfAborted(deps.signal);
-    const sdk = await (deps.loadPiSdk ?? loadDefaultPiSdk)();
+    const sdk = await timings.measure("sdk_load_ms", () =>
+      (deps.loadPiSdk ?? loadDefaultPiSdk)(),
+    );
     logger.info("local Pi SDK loaded", {
       packageName: payload.session.invocation.pi_sdk.packageName,
       minimumVersion: payload.session.invocation.pi_sdk.minimumVersion,
     });
     throwIfAborted(deps.signal);
-    sdkSession = await createSdkSession(
+    const preparedSdkSession = await createSdkSession(
       sdk,
       payload.session,
-      workspace.localDir,
+      preparedWorkspace.localDir,
       systemPrompt,
       logger,
       deps,
+      timings,
     );
-    unbindAbort = bindAbortSignal(deps.signal, sdkSession.session, logger);
+    sdkSession = preparedSdkSession;
+    unbindAbort = bindAbortSignal(
+      deps.signal,
+      preparedSdkSession.session,
+      logger,
+    );
     const prompt = buildTurnPrompt(payload.session.invocation);
     throwIfAborted(deps.signal);
     logger.info("local Pi SDK prompt starting", {
       promptChars: prompt.length,
       timeoutMs: deps.turnTimeoutMs ?? null,
     });
-    await promptWithTimeout(sdkSession.session, prompt, {
-      signal: deps.signal,
-      logger,
-      timeoutMs: deps.turnTimeoutMs,
-    });
+    await timings.measure("sdk_prompt_ms", () =>
+      promptWithTimeout(preparedSdkSession.session, prompt, {
+        signal: deps.signal,
+        logger,
+        timeoutMs: deps.turnTimeoutMs,
+      }),
+    );
     throwIfAborted(deps.signal);
-    const toolNames = collectToolNames(sdkSession.session.messages ?? []);
+    const toolNames = collectToolNames(
+      preparedSdkSession.session.messages ?? [],
+    );
     logger.info("local Pi SDK prompt completed", {
-      messageCount: sdkSession.session.messages?.length ?? 0,
+      messageCount: preparedSdkSession.session.messages?.length ?? 0,
       toolCount: toolNames.length,
       tools: toolNames,
     });
     const runResult = buildRunResult(
       payload.session.invocation,
-      sdkSession.session,
-      sdkSession.resolvedModelId,
+      preparedSdkSession.session,
+      preparedSdkSession.resolvedModelId,
+      { local_pi_timings_ms: timings.snapshot() },
     );
-
-    const finalized = await finalizeTurn({
-      prepared: payload.session,
-      runResult,
-      status: "ok",
-      systemPrompt: composedSystemPrompt,
-      startedAt,
-      deps,
-      logger,
+    logger.info("local Pi turn timing", {
+      phase: "pre_finalize",
+      timings: runResult.diagnostics?.local_pi_timings_ms,
     });
+
+    const finalized = await timings.measure("finalize_callback_ms", () =>
+      finalizeTurn({
+        prepared: payload.session,
+        runResult,
+        status: "ok",
+        systemPrompt: composedSystemPrompt,
+        startedAt,
+        deps,
+        logger,
+      }),
+    );
     logger.info("local Pi turn finalized", {
       status: "completed",
       finalized,
       toolCount: runResult.toolsCalled.length,
       tools: runResult.toolsCalled,
+      timings: timings.snapshot(),
     });
     return {
       finalized,
@@ -278,19 +342,22 @@ export async function runLocalDesktopTurn(
       error: error instanceof Error ? error.message : String(error),
       threadTurnId: payload.session.threadTurnId,
     });
-    const finalized = await finalizeTurn({
-      prepared: payload.session,
-      error,
-      status: "error",
-      systemPrompt: composedSystemPrompt,
-      startedAt,
-      deps,
-      logger,
-    });
+    const finalized = await timings.measure("finalize_callback_ms", () =>
+      finalizeTurn({
+        prepared: payload.session,
+        error,
+        status: "error",
+        systemPrompt: composedSystemPrompt,
+        startedAt,
+        deps,
+        logger,
+      }),
+    );
     logger.warn("local Pi turn finalized", {
       status: "failed",
       finalized,
       fallbackEligible: !payload.session.invocation.thread_turn_id,
+      timings: timings.snapshot(),
     });
     return {
       finalized,
@@ -413,6 +480,7 @@ async function createSdkSession(
   systemPrompt: string,
   logger: RedactedLogger,
   deps: LocalTurnRunnerDeps,
+  timings: LocalTurnTimings,
 ): Promise<{
   session: PiSdkSessionLike;
   modelFallbackMessage?: string;
@@ -431,29 +499,35 @@ async function createSdkSession(
   const agentDir = path.join(workspaceDir, LOCAL_PI_AGENT_DIR);
   const cleanup: Array<() => Promise<void>> = [];
   try {
-    await syncLocalPiAgentPromptFiles({
-      invocation,
-      workspaceDir,
-      agentDir,
-      systemPrompt,
-      logger,
-    });
+    await timings.measure("agent_prompt_files_ms", () =>
+      syncLocalPiAgentPromptFiles({
+        invocation,
+        workspaceDir,
+        agentDir,
+        systemPrompt,
+        logger,
+      }),
+    );
     const mcpAdapterConfig = deps.connectMcpServer
       ? null
-      : await prepareDesktopMcpAdapter({
-          agentDir,
-          invocation,
-          logger,
-          cleanup,
-        });
-    const extensions = await createDesktopSharedExtensions(
-      sdk,
-      prepared,
-      logger,
-      deps.fetchImpl ?? fetch,
-      deps.connectMcpServer,
-      cleanup,
-      mcpAdapterConfig,
+      : await timings.measure("mcp_adapter_config_ms", () =>
+          prepareDesktopMcpAdapter({
+            agentDir,
+            invocation,
+            logger,
+            cleanup,
+          }),
+        );
+    const extensions = await timings.measure("shared_extensions_ms", () =>
+      createDesktopSharedExtensions(
+        sdk,
+        prepared,
+        logger,
+        deps.fetchImpl ?? fetch,
+        deps.connectMcpServer,
+        cleanup,
+        mcpAdapterConfig,
+      ),
     );
     const resourceLoader = sdk.DefaultResourceLoader
       ? new sdk.DefaultResourceLoader({
@@ -467,10 +541,14 @@ async function createSdkSession(
           extensionFactories: extensions.extensionFactories,
         })
       : undefined;
-    await resourceLoader?.reload?.();
+    await timings.measure("resource_loader_reload_ms", () =>
+      resourceLoader?.reload?.(),
+    );
 
     const bedrock = createBedrockRuntimeAdapter(prepared);
-    const modelConfig = createPiSdkModelConfig(sdk, invocation, logger);
+    const modelConfig = await timings.measure("model_config_ms", () =>
+      createPiSdkModelConfig(sdk, invocation, logger),
+    );
     const hindsight = createHindsightRuntimeAdapter(prepared);
     const tools = [...BUILTIN_TOOL_NAMES, ...extensions.toolNames];
 
@@ -490,37 +568,45 @@ async function createSdkSession(
       modelId: modelConfig.resolvedModelId ?? invocation.model ?? null,
     });
 
-    const session = await sdk.createAgentSession({
-      cwd: workspaceDir,
-      tools,
-      customTools: extensions.customTools,
-      resourceLoader,
-      sessionManager: sdk.SessionManager?.inMemory(),
-      settingsManager,
-      ...modelConfig.options,
-      sessionStartEvent: {
-        type: "session_start",
-        reason: "startup",
-        source: "thinkwork-desktop-local-pi",
-        metadata: {
-          runtime_host: invocation.runtime_host,
-          thread_turn_id: invocation.thread_turn_id,
-          bedrock,
-          hindsight,
+    const session = await timings.measure("sdk_session_create_ms", () =>
+      sdk.createAgentSession({
+        cwd: workspaceDir,
+        tools,
+        customTools: extensions.customTools,
+        resourceLoader,
+        sessionManager: sdk.SessionManager?.inMemory(),
+        settingsManager,
+        ...modelConfig.options,
+        sessionStartEvent: {
+          type: "session_start",
+          reason: "startup",
+          source: "thinkwork-desktop-local-pi",
+          metadata: {
+            runtime_host: invocation.runtime_host,
+            thread_turn_id: invocation.thread_turn_id,
+            bedrock,
+            hindsight,
+          },
         },
-      },
-    });
-    await session.session.bindExtensions?.({
-      onError: (error: unknown) => {
-        const record = readRecord(error);
-        logger.warn("local Pi extension error", {
-          extensionPath: stringValue(record?.extensionPath) ?? null,
-          event: stringValue(record?.event) ?? null,
-          error: stringValue(record?.error) ?? String(error),
-        });
-      },
-    });
-    return { ...session, cleanup, resolvedModelId: modelConfig.resolvedModelId };
+      }),
+    );
+    await timings.measure("bind_extensions_ms", () =>
+      session.session.bindExtensions?.({
+        onError: (error: unknown) => {
+          const record = readRecord(error);
+          logger.warn("local Pi extension error", {
+            extensionPath: stringValue(record?.extensionPath) ?? null,
+            event: stringValue(record?.event) ?? null,
+            error: stringValue(record?.error) ?? String(error),
+          });
+        },
+      }),
+    );
+    return {
+      ...session,
+      cleanup,
+      resolvedModelId: modelConfig.resolvedModelId,
+    };
   } catch (error) {
     for (const cleanupFn of cleanup) {
       try {
@@ -1022,7 +1108,9 @@ function parseDesktopMcpConfigs(value: unknown): DesktopMcpConfig[] {
       toolWhitelist,
       excludedTools: excludedDesktopMcpTools(toolWhitelist, knownToolNames),
       allowlistEnforced:
-        !toolWhitelist || toolWhitelist.length === 0 || knownToolNames.length > 0,
+        !toolWhitelist ||
+        toolWhitelist.length === 0 ||
+        knownToolNames.length > 0,
     });
   }
   return out;
@@ -1074,7 +1162,10 @@ function createDesktopConnectMcpServer(options: {
       transport: args.transport ?? "streamable-http",
       fetchImpl: options.fetchImpl,
     });
-    const client = new Client({ name: "thinkwork-desktop-pi", version: "0.0.0" });
+    const client = new Client({
+      name: "thinkwork-desktop-pi",
+      version: "0.0.0",
+    });
     await client.connect(transport);
     options.cleanup.push(async () => {
       await transport.close();
@@ -1195,7 +1286,10 @@ function findHeaderKey(
   return Object.keys(headers).find((key) => key.toLowerCase() === lower);
 }
 
-function exposedDesktopMcpToolName(serverName: string, toolName: string): string {
+function exposedDesktopMcpToolName(
+  serverName: string,
+  toolName: string,
+): string {
   return `mcp_${sanitizeMcpToolName(serverName)}_${sanitizeMcpToolName(toolName)}`.slice(
     0,
     64,
@@ -1242,9 +1336,9 @@ function textFromMcpContent(content: unknown): string {
     .join("\n");
 }
 
-function validateDesktopMcpUrl(url: string):
-  | { ok: true }
-  | { ok: false; reason: string } {
+function validateDesktopMcpUrl(
+  url: string,
+): { ok: true } | { ok: false; reason: string } {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -1266,8 +1360,7 @@ function validateDesktopMcpUrl(url: string):
     const parts = unbracketed.split(".").map((part) => Number(part));
     const [a, b] = parts;
     if (a === 127) return { ok: false, reason: "loopback-host" };
-    if (a === 169 && b === 254)
-      return { ok: false, reason: "link-local-host" };
+    if (a === 169 && b === 254) return { ok: false, reason: "link-local-host" };
     if (
       a === 10 ||
       (a === 172 && b !== undefined && b >= 16 && b <= 31) ||
@@ -1791,6 +1884,7 @@ function buildRunResult(
   invocation: DesktopPiRuntimeInvocation,
   session: PiSdkSessionLike,
   resolvedModelId?: string,
+  diagnostics?: Record<string, unknown>,
 ): RunAgentLoopResult {
   const assistant = findLastAssistantMessage(session.messages ?? []);
   const content = assistant ? assistantMessageText(assistant) : "";
@@ -1811,6 +1905,7 @@ function buildRunResult(
       "desktop-local-pi",
     toolsCalled: toolNames,
     toolInvocations,
+    diagnostics,
   };
 }
 

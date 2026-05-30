@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -29,6 +30,7 @@ import {
   getDesktopBridge,
   shouldUseDesktopLocalPiDispatchNow,
 } from "@/lib/desktop-runtime";
+import { setPendingThreadStart } from "@/lib/pending-thread-starts";
 
 interface CreateThreadResult {
   createThread: { id: string; agentId?: string | null };
@@ -232,64 +234,31 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
 
     setError(null);
     setBusy(true);
+    let routed = false;
+    const surfaceError = (message: string) => {
+      if (routed) {
+        toast.error(message);
+        return;
+      }
+      setError(message);
+    };
     try {
-      // File-attached path: createThread WITHOUT firstMessage (so the
-      // thread starts empty), upload each file via the U2 presign +
-      // finalize flow against the new threadId, then send the first
-      // user message with metadata.attachments referencing the uploaded
-      // ids. Thread auto-titles from the first user message
-      // (sendMessage.mutation.ts) — so the operator's prompt becomes
-      // the visible title in the threads sidebar.
-      //
-      // Text-only path (no files): keep the existing atomic
-      // createThread-with-firstMessage flow so we don't regress the
-      // one-RT happy path.
       const shouldAttemptDesktopLocalPi =
         agentRequested !== false &&
         runtimePreference !== "managed" &&
         (await shouldUseDesktopLocalPiDispatchNow());
 
-      if (
-        files.length === 0 &&
-        agentRequested !== false &&
-        !shouldAttemptDesktopLocalPi
-      ) {
-        const result = await createThread({
-          input: {
-            tenantId,
-            ...(computerId ? { computerId } : {}),
-            spaceId: targetSpaceId,
-            title: titleFromPrompt(trimmed),
-            channel: "CHAT",
-            firstMessage: trimmed,
-          },
-        });
-        if (result.error) {
-          setError(result.error.message ?? "Failed to start work");
-          return;
-        }
-        const threadId = result.data?.createThread?.id;
-        if (!threadId) {
-          setError("Thread created but no id returned");
-          return;
-        }
-        navigateToCreatedThread(
-          navigate,
-          threadId,
-          targetSpaceId,
-          defaultSpaceId,
-        );
-        return;
-      }
-
-      // Files present, or human-only text: create first, then send the first
-      // message through sendMessage so agentRequested can be honored.
+      // Create the thread first, route immediately, then finish message send
+      // and runtime dispatch in the background. The detail route receives an
+      // optimistic user-message scaffold so a new thread feels instant while
+      // the server persists the first message and starts the agent turn.
+      const title = titleFromPromptWithAttachments(trimmed, files);
       const created = await createThread({
         input: {
           tenantId,
           ...(computerId ? { computerId } : {}),
           spaceId: targetSpaceId,
-          title: titleFromPromptWithAttachments(trimmed, files),
+          title,
           channel: "CHAT",
         },
       });
@@ -309,12 +278,28 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         return;
       }
 
+      if (trimmed) {
+        setPendingThreadStart({
+          threadId,
+          title,
+          content: trimmed,
+          expectAssistantResponse: agentRequested !== false,
+        });
+      }
+      navigateToCreatedThread(
+        navigate,
+        threadId,
+        targetSpaceId,
+        defaultSpaceId,
+      );
+      routed = true;
+
       let attachmentRefs: { attachmentId: string }[] = [];
       if (files.length > 0) {
         const apiUrl = import.meta.env.VITE_API_URL || "";
         const token = await getIdToken();
         if (!apiUrl || !token) {
-          setError("Sign-in required to upload attachments");
+          surfaceError("Sign-in required to upload attachments");
           return;
         }
         const uploadResult = await uploadThreadAttachments({
@@ -327,11 +312,11 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           uploadResult.failures.length > 0
         ) {
           const first = uploadResult.failures[0]!;
-          setError(`Upload failed (${first.stage}): ${first.message}`);
+          surfaceError(`Upload failed (${first.stage}): ${first.message}`);
           return;
         }
         if (uploadResult.failures.length > 0) {
-          setError(
+          toast.warning(
             `${uploadResult.failures.length} attachment${uploadResult.failures.length === 1 ? "" : "s"} could not be uploaded. Sending the files that finished.`,
           );
         }
@@ -360,7 +345,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         input: sendInput,
       });
       if (sent.error) {
-        setError(
+        surfaceError(
           attachmentRefs.length > 0
             ? "Files uploaded, but the first message did not send. Try sending the message again."
             : (sent.error.message ?? "Failed to send the first message"),
@@ -379,22 +364,15 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           });
         } catch (err) {
           dispatchDesktopLocalPiEvent("fallback");
-          setError(
+          surfaceError(
             "Local Pi could not start. The message was saved; use cloud fallback for the next turn.",
           );
           console.warn("[desktop-local-pi] startTurn failed:", err);
           return;
         }
       }
-
-      navigateToCreatedThread(
-        navigate,
-        threadId,
-        targetSpaceId,
-        defaultSpaceId,
-      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start work");
+      surfaceError(err instanceof Error ? err.message : "Failed to start work");
     } finally {
       setBusy(false);
     }
@@ -467,7 +445,10 @@ function navigateToCreatedThread(
     });
     return;
   }
-  navigate({ to: "/threads/$id", params: { id: threadId } });
+  navigate({
+    to: "/threads/$id",
+    params: { id: threadId },
+  });
 }
 
 function titleFromPrompt(prompt: string): string {

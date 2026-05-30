@@ -15,6 +15,10 @@ import {
   SpacesQuery,
 } from "@/lib/graphql-queries";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
+import {
+  clearPendingThreadStart,
+  getPendingThreadStart,
+} from "@/lib/pending-thread-starts";
 import { SpacesWorkbench } from "./SpacesWorkbench";
 
 vi.mock("@tanstack/react-router", async () => {
@@ -57,6 +61,7 @@ beforeEach(() => {
   sendMessage.mockReset();
   prewarmWorkspace.mockReset();
   startTurn.mockReset();
+  clearPendingThreadStart("thread-1");
   prewarmWorkspace.mockResolvedValue({
     accepted: true,
     requestId: "workspace-prewarm-1",
@@ -214,9 +219,53 @@ describe("SpacesWorkbench", () => {
         userMessage: "Use local tools",
       });
     });
-    expect(navigate).toHaveBeenCalledWith({
-      to: "/threads/$id",
-      params: { id: "thread-1" },
+    expect(navigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "/threads/$id",
+        params: { id: "thread-1" },
+      }),
+    );
+    expect(getPendingThreadStart("thread-1")).toMatchObject({
+      threadId: "thread-1",
+      title: "Use local tools",
+      content: "Use local tools",
+      expectAssistantResponse: true,
+    });
+  });
+
+  it("routes to the created thread before the first message send finishes", async () => {
+    let resolveSend:
+      | ((value: { data: { sendMessage: { id: string } } }) => void)
+      | undefined;
+    sendMessage.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSend = resolve;
+      }),
+    );
+
+    render(<SpacesWorkbench />);
+
+    fireEvent.change(screen.getByLabelText("Send message"), {
+      target: { value: "Fast route please" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    await waitFor(() => {
+      expect(createThread).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "/threads/$id",
+          params: { id: "thread-1" },
+        }),
+      );
+    });
+    expect(startTurn).not.toHaveBeenCalled();
+
+    resolveSend?.({ data: { sendMessage: { id: "message-1" } } });
+    await waitFor(() => {
+      expect(startTurn).toHaveBeenCalled();
     });
   });
 });
