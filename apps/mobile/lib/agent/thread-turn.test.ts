@@ -65,6 +65,31 @@ describe("runThreadHarnessTurn", () => {
     ]);
   });
 
+  it("coalesces consecutive same-role prior messages (Bedrock needs alternating roles)", async () => {
+    const provider = new MockModelProvider([textResponse("ok")]);
+    const recordTurnFn = vi.fn().mockResolvedValue({});
+
+    await runThreadHarnessTurn(
+      {
+        threadId: "t",
+        userText: "now",
+        priorMessages: [
+          { role: "USER", content: "first" },
+          { role: "USER", content: "second" },
+          { role: "ASSISTANT", content: "reply" },
+        ],
+      },
+      { modelProvider: provider, recordTurnFn },
+    );
+
+    const sent = provider.requests[0].messages;
+    expect(sent.map((m) => ({ role: m.role, content: m.content }))).toEqual([
+      { role: "user", content: "first\n\nsecond" },
+      { role: "assistant", content: "reply" },
+      { role: "user", content: "now" },
+    ]);
+  });
+
   it("runs tools mid-turn and still persists the final answer", async () => {
     const provider = new MockModelProvider([
       toolResponse("c1", "create_crm_opportunity", {}, "creating"),
