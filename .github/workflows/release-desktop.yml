@@ -141,6 +141,20 @@ jobs:
             gh release upload "v${version}" "$channel_file" --repo "${GITHUB_REPOSITORY}" --clobber
           fi
 
+      - name: Publish desktop release (flip draft -> published)
+        # electron-builder uploads to a DRAFT release (releaseType: draft in
+        # scripts/build-desktop.sh) so the auto-updater can't see a half-uploaded
+        # "latest". Every asset + the *-mac.yml manifests are uploaded by the
+        # steps above, so it is now safe to publish the release. Open apps only
+        # observe a release whose artifacts are fully present, eliminating the
+        # "Retry"/"spins then stops" window on every canary cut.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#desktop-v}"
+          gh release edit "v${version}" --repo "${GITHUB_REPOSITORY}" --draft=false
+
       - name: Build desktop SHA-256 manifest
         run: |
           set -euo pipefail
