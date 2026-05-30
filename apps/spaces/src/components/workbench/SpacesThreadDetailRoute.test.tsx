@@ -22,6 +22,10 @@ import {
   deriveThreadArtifacts,
   resolveThreadArtifactSelection,
 } from "./SpacesThreadDetailRoute";
+import {
+  clearPendingThreadStart,
+  setPendingThreadStart,
+} from "@/lib/pending-thread-starts";
 
 const routerLocationStateMock = vi.hoisted(() => ({
   state: {} as Record<string, unknown>,
@@ -112,6 +116,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(usePageHeaderActions).mockReset();
   routerLocationStateMock.state = {};
+  clearPendingThreadStart("thread-new");
   reexecuteThreadQuery.mockReset();
   reexecuteLinkedTasksQuery.mockReset();
   reexecuteProgressMarkdownQuery.mockReset();
@@ -234,6 +239,28 @@ afterEach(() => {
 });
 
 describe("SpacesThreadDetailRoute", () => {
+  it("renders an optimistic new-thread scaffold from the pending start registry", () => {
+    threadData = null;
+    taskData = { computerTasks: [] };
+    setPendingThreadStart({
+      threadId: "thread-new",
+      title: "Fast route please",
+      content: "Fast route please",
+      expectAssistantResponse: true,
+    });
+
+    render(<SpacesThreadDetailRoute threadId="thread-new" />);
+
+    expect(screen.getByText("Fast route please")).toBeTruthy();
+    expect(screen.queryByText("Thread not found")).toBeNull();
+    expect(usePageHeaderActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: "Fast route please",
+        documentTitle: "Thread · Fast route please",
+      }),
+    );
+  });
+
   it("derives thread artifacts in message order and deduplicates repeated ids", () => {
     const artifacts = deriveThreadArtifacts({
       id: "thread-1",

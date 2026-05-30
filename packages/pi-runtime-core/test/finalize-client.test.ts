@@ -49,6 +49,13 @@ const runResult: RunAgentLoopResult = {
     totalTokens: 14,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
   },
+  diagnostics: {
+    local_pi_timings_ms: {
+      workspace_sync_ms: 12,
+      sdk_prompt_ms: 34,
+      total_ms: 56,
+    },
+  },
 };
 
 describe("buildFinalizeBody", () => {
@@ -90,6 +97,13 @@ describe("buildFinalizeBody", () => {
         input_tokens: 5,
         output_tokens: 7,
         cached_read_tokens: 2,
+        diagnostics: {
+          local_pi_timings_ms: {
+            workspace_sync_ms: 12,
+            sdk_prompt_ms: 34,
+            total_ms: 56,
+          },
+        },
       },
     });
   });

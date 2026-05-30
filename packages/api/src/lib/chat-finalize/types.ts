@@ -64,6 +64,8 @@ export interface FinalizePayload {
       input_tokens: number;
       output_tokens: number;
     }>;
+    /** Runtime-specific diagnostics that are safe to persist on the turn. */
+    diagnostics?: Record<string, unknown>;
     /** Inline guardrail-block payload (mirrored to top-level too). */
     guardrail_block?: GuardrailBlockPayload;
     /**
@@ -86,6 +88,7 @@ export interface FinalizePayload {
     input_tokens?: number;
     output_tokens?: number;
     cached_read_tokens?: number;
+    diagnostics?: Record<string, unknown>;
   };
   /** Guardrail id resolved at dispatch time (when set, blocks are recorded). */
   guardrail_id?: string | null;

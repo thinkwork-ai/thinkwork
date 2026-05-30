@@ -2623,6 +2623,71 @@ Target branch: `main`
 
 None.
 
+# Desktop Local Pi Optimistic Routing + Performance Telemetry - 2026-05-30
+
+## Status
+
+- Branch: `codex/local-pi-performance`
+- Started: `2026-05-30`
+- Target branch: `main`
+- Root cause:
+  - New-thread submit waited for thread creation, first-message send, and Local Pi
+    dispatch before routing to the thread detail view. This made a local Desktop
+    turn feel slow even when the runtime work had not started yet.
+  - Local Pi turns exposed only coarse "Worked for Ns" timing, so workspace sync,
+    SDK/session setup, model prompting, and finalization latency were blended
+    together.
+  - Diagnostics produced by a local runtime were not preserved through finalize
+    into stored turn usage, which prevented a durable timing row in the thread UI.
+- Implemented:
+  - New-thread submit now creates the thread, records a pending optimistic first
+    user message, and routes immediately to the thread detail scaffold while
+    first-message send and Local Pi start continue in the background.
+  - Post-route upload/send/Local Pi start failures surface through toast
+    notifications so optimistic routing does not hide background failures.
+  - Desktop Local Pi now records phase timings for workspace sync, prompt
+    construction, debug bundle, SDK load, prompt-file sync, MCP adapter config,
+    extension binding, SDK prompt, finalize callback, and total turn time.
+  - Finalize payloads now preserve runtime diagnostics in stored usage, and the
+    thread activity UI can render a "Local Pi timings" action row when those
+    diagnostics are present.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/spaces test -- src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx` - passed, 26 tests.
+- `pnpm --filter @thinkwork/spaces typecheck` - passed.
+- `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts` - passed, 14 tests.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- `pnpm --filter @thinkwork/pi-runtime-core test -- test/finalize-client.test.ts` - passed, 4 tests.
+- `pnpm --filter @thinkwork/api test -- src/lib/chat-finalize/process-finalize.test.ts` - passed, 6 tests.
+- `pnpm --filter @thinkwork/pi-runtime-core typecheck` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm dlx prettier@3.8.2 --check ...` against touched files - passed.
+- `git diff --check` - passed.
+- Root `pnpm format:check` is blocked in this worktree because the root script
+  calls `prettier`, but the root package does not install a `prettier` binary
+  into `node_modules/.bin` (`sh: prettier: command not found`). Targeted
+  `pnpm dlx prettier@3.8.2 --check ...` passed instead.
+- Live dev Desktop app smoke, using the worktree Electron app at
+  `localhost:5174` (not Canary):
+  - New-thread submit routed immediately to
+    `/threads/14f3fbbf-19c6-4c12-b647-02fe7bc8abff` with the optimistic user
+    message visible.
+  - Local Pi bash prompt replied exactly `LOCAL-PI-BASH-SMOKE-OK`.
+  - Activity confirmed `toolCount:1`, `tools:["bash"]`, and the "Using bash"
+    row rendered.
+  - Workspace cache was warm: sidecar turn sync logged `synced:0`, `total:343`,
+    `cacheHit:true`.
+  - Timings logged:
+    `workspace_sync_ms:14`, `mcp_adapter_config_ms:1`,
+    `resource_loader_reload_ms:32`, `bind_extensions_ms:1957`,
+    `sdk_prompt_ms:5950`, pre-finalize `total_ms:7970`,
+    `finalize_callback_ms:3152`, final `total_ms:11122`.
+
+## Blockers
+
+None.
+
 # Pi Extensions U7 Desktop E2E Smoke - 2026-05-30
 
 ## Status

@@ -1301,13 +1301,7 @@ function InfoPanelInlineRow({
   );
 }
 
-function InfoPanelCopyRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function InfoPanelCopyRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -3294,6 +3288,8 @@ function actionRowsForTurn(
     .filter(Boolean) as string[];
   const toolInvocations = parseArray(usage.tool_invocations);
   const seen = new Set<string>();
+  const localPiTimingRow = actionRowForLocalPiTimings(usage);
+  if (localPiTimingRow) rows.push(localPiTimingRow);
 
   for (const invocation of toolInvocations) {
     const record = parseRecord(invocation);
@@ -3354,6 +3350,59 @@ function actionRowsForTurn(
   }
 
   return rows;
+}
+
+function actionRowForLocalPiTimings(usage: Record<string, unknown>) {
+  const diagnostics = parseRecord(usage.diagnostics);
+  const timings = parseRecord(diagnostics.local_pi_timings_ms);
+  if (Object.keys(timings).length === 0) return null;
+  const detail = formatLocalPiTimings(timings);
+  if (!detail) return null;
+  return {
+    title: "Local Pi timings",
+    detail,
+    kind: "thinking" as const,
+  };
+}
+
+function formatLocalPiTimings(timings: Record<string, unknown>) {
+  const orderedKeys = [
+    "workspace_sync_ms",
+    "sdk_load_ms",
+    "agent_prompt_files_ms",
+    "mcp_adapter_config_ms",
+    "shared_extensions_ms",
+    "resource_loader_reload_ms",
+    "model_config_ms",
+    "sdk_session_create_ms",
+    "bind_extensions_ms",
+    "sdk_prompt_ms",
+    "finalize_callback_ms",
+    "total_ms",
+  ];
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const key of [
+    ...orderedKeys,
+    ...Object.keys(timings).sort((a, b) => a.localeCompare(b)),
+  ]) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const value = Number(timings[key]);
+    if (!Number.isFinite(value) || value < 0) continue;
+    lines.push(`${humanizeTimingKey(key)}: ${formatTimingMs(value)}`);
+  }
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
+function humanizeTimingKey(key: string) {
+  return key.replace(/_ms$/, "").replace(/_/g, " ");
+}
+
+function formatTimingMs(value: number) {
+  return value < 1000
+    ? `${Math.round(value)}ms`
+    : `${(value / 1000).toFixed(1)}s`;
 }
 
 function actionRowForEvent(event: TaskThreadEvent) {

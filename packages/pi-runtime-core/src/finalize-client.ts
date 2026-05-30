@@ -82,6 +82,7 @@ export function buildFinalizeBody(
         "cacheRead",
         "cached_read_tokens",
       ),
+      ...(runResult?.diagnostics ? { diagnostics: runResult.diagnostics } : {}),
     },
     response: runResult
       ? {
@@ -95,6 +96,9 @@ export function buildFinalizeBody(
           tool_invocations: runResult.toolInvocations,
           tool_costs: toolCosts,
           hindsight_usage: [],
+          ...(runResult.diagnostics
+            ? { diagnostics: runResult.diagnostics }
+            : {}),
         }
       : {
           composed_system_prompt: args.systemPrompt || null,
@@ -150,8 +154,8 @@ export function isFinalizeCallbackConfigured(
 ): boolean {
   return Boolean(
     asString(payload.finalize_callback_url) &&
-      asString(payload.finalize_callback_secret) &&
-      asString(payload.thread_turn_id),
+    asString(payload.finalize_callback_secret) &&
+    asString(payload.thread_turn_id),
   );
 }
 

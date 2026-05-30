@@ -51,6 +51,11 @@ import {
   getDesktopBridge,
   shouldUseDesktopLocalPiDispatchNow,
 } from "@/lib/desktop-runtime";
+import {
+  clearPendingThreadStart,
+  getPendingThreadStart,
+  type PendingThreadStart,
+} from "@/lib/pending-thread-starts";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { notifyAgentCompletion } from "@/lib/desktop-notifications";
@@ -283,12 +288,15 @@ export function SpacesThreadDetailRoute({
     select: (state) =>
       threadTitleFallbackFromState(state.location.state, threadId),
   });
+  const optimisticThreadStart = getPendingThreadStart(threadId);
   const routeThread = data?.thread?.id === threadId ? data.thread : null;
   const hasMismatchedThreadData = Boolean(data?.thread && !routeThread);
-  const isThreadTitlePending = fetching || hasMismatchedThreadData;
+  const isThreadTitlePending =
+    (fetching && !optimisticThreadStart) || hasMismatchedThreadData;
   const threadTitle =
     routeThread?.title?.trim() ||
     fallbackThreadTitle ||
+    optimisticThreadStart?.title ||
     (isThreadTitlePending ? "Loading..." : "Thread");
 
   // Attached artifacts feed the cascade-delete checkbox in ThreadDetailActions.
@@ -528,7 +536,21 @@ export function SpacesThreadDetailRoute({
     ) {
       setOptimisticMessage(null);
     }
-  }, [routeThread?.messages?.edges, optimisticMessage]);
+    if (
+      optimisticThreadStart &&
+      hasPersistedUserMessage(
+        routeThread?.messages?.edges,
+        optimisticThreadStart.content,
+      )
+    ) {
+      clearPendingThreadStart(threadId);
+    }
+  }, [
+    routeThread?.messages?.edges,
+    optimisticMessage,
+    optimisticThreadStart,
+    threadId,
+  ]);
 
   useEffect(() => {
     function handleRunbookDecision() {
@@ -554,7 +576,11 @@ export function SpacesThreadDetailRoute({
     reexecuteTasksQuery,
   ]);
 
-  const thread = routeThread ? toTaskThread(routeThread) : null;
+  const thread = routeThread
+    ? toTaskThread(routeThread)
+    : optimisticThreadStart
+      ? toOptimisticTaskThread(optimisticThreadStart)
+      : null;
   if (thread) {
     thread.turns = [
       ...toTaskThreadTurns(
@@ -564,9 +590,24 @@ export function SpacesThreadDetailRoute({
       ...toTaskThreadTurnsFromRows(threadTurnRows),
     ];
   }
-  const visibleThread = optimisticMessage
-    ? withOptimisticUserTurn(thread, optimisticMessage.content, {
-        expectAssistantResponse: optimisticMessage.expectAssistantResponse,
+  const routeStateOptimisticMessage =
+    optimisticThreadStart &&
+    !hasPersistedUserMessage(
+      routeThread?.messages?.edges,
+      optimisticThreadStart.content,
+    )
+      ? {
+          content: optimisticThreadStart.content,
+          expectAssistantResponse:
+            optimisticThreadStart.expectAssistantResponse,
+        }
+      : null;
+  const effectiveOptimisticMessage =
+    optimisticMessage ?? routeStateOptimisticMessage;
+  const visibleThread = effectiveOptimisticMessage
+    ? withOptimisticUserTurn(thread, effectiveOptimisticMessage.content, {
+        expectAssistantResponse:
+          effectiveOptimisticMessage.expectAssistantResponse,
       })
     : thread;
   const threadArtifacts = useMemo(
@@ -1100,7 +1141,10 @@ export function SpacesThreadDetailRoute({
   ) : (
     <TaskThreadView
       thread={visibleThread}
-      isLoading={(fetching && !routeThread) || hasMismatchedThreadData}
+      isLoading={
+        (fetching && !routeThread && !optimisticThreadStart) ||
+        hasMismatchedThreadData
+      }
       error={error?.message ?? null}
       streamingChunks={hasDurableAssistant ? [] : chunks}
       streamState={hasDurableAssistant ? undefined : streamState}
@@ -1732,6 +1776,18 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
           }
         : null,
     })),
+  };
+}
+
+function toOptimisticTaskThread(start: PendingThreadStart): TaskThread {
+  return {
+    id: start.threadId,
+    title: start.title,
+    status: "in_progress",
+    lifecycleStatus: null,
+    costSummary: null,
+    messages: [],
+    turns: [],
   };
 }
 

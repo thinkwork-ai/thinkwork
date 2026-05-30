@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   capturedSystemPromptFromFinalizePayload,
+  diagnosticsFromFinalizePayload,
   isHiddenDesktopDelegation,
 } from "./process-finalize";
 
@@ -31,6 +32,25 @@ describe("capturedSystemPromptFromFinalizePayload", () => {
         response: { composed_system_prompt: "" },
       }),
     ).toBeNull();
+  });
+});
+
+describe("diagnosticsFromFinalizePayload", () => {
+  it("prefers usage diagnostics because they are persisted on usage_json", () => {
+    expect(
+      diagnosticsFromFinalizePayload({
+        usage: { diagnostics: { local_pi_timings_ms: { total_ms: 123 } } },
+        response: { diagnostics: { local_pi_timings_ms: { total_ms: 999 } } },
+      }),
+    ).toEqual({ local_pi_timings_ms: { total_ms: 123 } });
+  });
+
+  it("falls back to response diagnostics for older runtime payloads", () => {
+    expect(
+      diagnosticsFromFinalizePayload({
+        response: { diagnostics: { local_pi_timings_ms: { total_ms: 456 } } },
+      }),
+    ).toEqual({ local_pi_timings_ms: { total_ms: 456 } });
   });
 });
 
