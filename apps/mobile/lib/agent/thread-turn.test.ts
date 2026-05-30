@@ -140,6 +140,24 @@ describe("runThreadHarnessTurn", () => {
     expect(provider.requests[0].tools.map((t) => t.name)).toContain("ext_tool");
   });
 
+  it("forwards attached images to the model on the user turn", async () => {
+    const provider = new MockModelProvider([textResponse("a business card")]);
+    const recordTurnFn = vi.fn().mockResolvedValue({});
+
+    await runThreadHarnessTurn(
+      {
+        threadId: "t",
+        userText: "make an opportunity from this card",
+        priorMessages: [],
+        images: [{ format: "jpeg", data: "QUJD" }],
+      },
+      { modelProvider: provider, recordTurnFn },
+    );
+
+    const sent = provider.requests[0].messages;
+    expect(sent.at(-1)?.images).toEqual([{ format: "jpeg", data: "QUJD" }]);
+  });
+
   it("reports ok=false when the turn errors", async () => {
     const provider = new MockModelProvider(() => {
       throw new Error("model down");

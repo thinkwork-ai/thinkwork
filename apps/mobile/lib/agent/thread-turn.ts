@@ -13,7 +13,7 @@ import { buildTurnContext } from "./turn-context";
 import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
 import { recordTurn } from "./persist-turn";
 import type { ExtensionFactory } from "./extensions/types";
-import type { Message, ModelProvider, Tool } from "./types";
+import type { ImagePart, Message, ModelProvider, Tool } from "./types";
 
 /** Loose shape of the thread's rendered messages (role + content). */
 export interface PriorMessage {
@@ -33,6 +33,12 @@ export interface RunThreadHarnessTurnInput {
    */
   agentId?: string;
   tools?: Tool[];
+  /**
+   * Images attached to this user message (model-vision input — e.g. a business
+   * card the model reads, then calls a tool with the extracted fields). Sent on
+   * the user turn via session.prompt(userText, images).
+   */
+  images?: ImagePart[];
 }
 
 export interface RunThreadHarnessTurnDeps {
@@ -95,7 +101,7 @@ export async function runThreadHarnessTurn(
     messages: toHarnessMessages(input.priorMessages),
   });
 
-  const result = await session.prompt(input.userText);
+  const result = await session.prompt(input.userText, input.images);
   const assistantText = result.finalText || "";
 
   // Persist the completed turn into the thread (append-only). A persistence failure
