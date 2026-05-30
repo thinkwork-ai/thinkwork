@@ -35,6 +35,14 @@ describe("buildTurnContext", () => {
     expect(ctx.tools).toEqual([]);
   });
 
+  it("does not contradict connected MCP code or shell tools", () => {
+    const ctx = buildTurnContext({ agentName: "Scout" });
+    expect(ctx.system).toContain("code/shell sandboxes");
+    expect(ctx.system).not.toContain("no shell");
+    expect(ctx.system).not.toContain("no ability to run code");
+    expect(ctx.system).toContain("unless that fact came from a tool result");
+  });
+
   it("appends extra guidance after the base prompt", () => {
     const ctx = buildTurnContext({
       extraGuidance: "Prefer the CRM tool for leads.",

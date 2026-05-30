@@ -34,9 +34,29 @@ export interface McpToolsExtensionOptions {
 function toParameters(inputSchema: unknown): JsonSchema {
   if (inputSchema && typeof inputSchema === "object") {
     const schema = inputSchema as JsonSchema;
-    return schema.type ? schema : { type: "object", ...schema };
+    return schema.type ? schema : { ...schema, type: "object" };
   }
   return { type: "object" };
+}
+
+function codeExecutionGuidance(toolNames: string[]): string {
+  const available = new Set(toolNames.map((name) => name.toLowerCase()));
+  const hasBash = available.has("bash") || available.has("shell");
+  const hasExecuteCode =
+    available.has("execute_code") || available.has("code_interpreter");
+  if (!hasBash && !hasExecuteCode) return "";
+
+  const lines = [
+    "Some connected tools can execute code or shell commands.",
+    hasBash
+      ? "Use `bash`/shell tools for command output, repository work, package scripts, builds, and tests when the user asks for them."
+      : "",
+    hasExecuteCode
+      ? "Use `execute_code`/code-interpreter tools for isolated Python, calculations, and data analysis."
+      : "",
+    "Do not calculate code results mentally or claim command output unless the result came from the tool.",
+  ].filter(Boolean);
+  return `\n\n${lines.join(" ")}`;
 }
 
 export function mcpToolsExtension(
@@ -97,10 +117,12 @@ export function mcpToolsExtension(
       // Tell the model it has connected tools (system-prompt contribution via the
       // Pi-faithful before_agent_start event — same mechanism as cloud).
       const names = defs.map((d) => d.name).join(", ");
+      const executionGuidance = codeExecutionGuidance(defs.map((d) => d.name));
       pi.on("before_agent_start", (e) => ({
         systemPrompt:
           `${e.systemPrompt}\n\nYou have access to your team's connected tools: ` +
-          `${names}. Call them when they help complete the user's request.`,
+          `${names}. Call them when they help complete the user's request.` +
+          executionGuidance,
       }));
     },
   });

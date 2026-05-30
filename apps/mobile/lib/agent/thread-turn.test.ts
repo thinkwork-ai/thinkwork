@@ -112,6 +112,37 @@ describe("runThreadHarnessTurn", () => {
     expect(recordTurnFn.mock.calls[0][0].assistantText).toBe("created opp_1");
   });
 
+  it("emits turn events for smoke tests and future activity rendering", async () => {
+    const provider = new MockModelProvider([
+      toolResponse("c1", "create_crm_opportunity", {}, "creating"),
+      textResponse("created opp_1"),
+    ]);
+    const recordTurnFn = vi.fn().mockResolvedValue({});
+    const events: string[] = [];
+
+    await runThreadHarnessTurn(
+      {
+        threadId: "t",
+        userText: "add acme",
+        priorMessages: [],
+        tools: [crmTool()],
+      },
+      {
+        modelProvider: provider,
+        recordTurnFn,
+        onEvent: (event) => events.push(event.type),
+      },
+    );
+
+    expect(events).toEqual([
+      "assistant_text",
+      "tool_call",
+      "tool_result",
+      "assistant_text",
+      "done",
+    ]);
+  });
+
   it("runs a tool supplied by an extension and reflects it in the answer", async () => {
     const provider = new MockModelProvider([
       toolResponse("c1", "ext_tool", { q: "acme" }, "looking"),
@@ -138,6 +169,23 @@ describe("runThreadHarnessTurn", () => {
     expect(res.assistantText).toBe("found acme");
     // The extension's tool was advertised to the model.
     expect(provider.requests[0].tools.map((t) => t.name)).toContain("ext_tool");
+  });
+
+  it("advertises the built-in local bash tool on default thread turns", async () => {
+    const provider = new MockModelProvider([textResponse("ready")]);
+    const recordTurnFn = vi.fn().mockResolvedValue({});
+
+    await runThreadHarnessTurn(
+      {
+        threadId: "t-bash",
+        userText: "can you run shell commands?",
+        priorMessages: [],
+      },
+      { modelProvider: provider, recordTurnFn },
+    );
+
+    expect(provider.requests[0].tools.map((t) => t.name)).toContain("bash");
+    expect(provider.requests[0].system).toContain("local `bash` tool");
   });
 
   it("forwards attached images to the model on the user turn", async () => {
