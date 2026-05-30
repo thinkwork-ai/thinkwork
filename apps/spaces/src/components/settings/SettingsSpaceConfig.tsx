@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
+import { IconFiles, IconInfoCircle } from "@tabler/icons-react";
 import {
   Badge,
   Button,
@@ -11,11 +12,16 @@ import {
   SelectTrigger,
   SelectValue,
   Textarea,
+  cn,
 } from "@thinkwork/ui";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import { SpaceAccessMode } from "@/gql/graphql";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import {
+  desktopToolbarActiveButtonClassName,
+  desktopToolbarButtonClassName,
+} from "@/lib/desktop-chrome";
 import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
 import {
   SettingsSpaceQuery,
@@ -26,10 +32,13 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 
+type SpaceConfigView = "info" | "files";
+
 export function SettingsSpaceConfig() {
   const { spaceId } = useParams({
     from: "/_authed/settings/spaces/$spaceId",
   });
+  const [view, setView] = useState<SpaceConfigView>("info");
 
   const [result, refetch] = useQuery({
     query: SettingsSpaceQuery,
@@ -40,8 +49,8 @@ export function SettingsSpaceConfig() {
   const spaceName =
     space?.name?.trim() || (result.fetching ? "Space" : "Space");
 
-  // Title lives in the settings header bar as nested breadcrumbs; the "Spaces"
-  // crumb links back to the list. A header action opens the Space in the app.
+  // Title lives in the settings header as nested breadcrumbs. The header
+  // action toggles between the Information form and the full workspace files.
   usePageHeaderActions({
     title: spaceName,
     breadcrumbs: [
@@ -49,13 +58,42 @@ export function SettingsSpaceConfig() {
       { label: spaceName },
     ],
     action: (
-      <Button asChild variant="ghost" size="sm">
-        <Link to="/spaces/$spaceId" params={{ spaceId }}>
-          Open in app
-        </Link>
-      </Button>
+      <div className="flex items-center gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Information"
+          title="Information"
+          className={cn(
+            "size-8",
+            view === "info"
+              ? desktopToolbarActiveButtonClassName
+              : desktopToolbarButtonClassName,
+          )}
+          onClick={() => setView("info")}
+        >
+          <IconInfoCircle className="size-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Workspace files"
+          title="Workspace files"
+          className={cn(
+            "size-8",
+            view === "files"
+              ? desktopToolbarActiveButtonClassName
+              : desktopToolbarButtonClassName,
+          )}
+          onClick={() => setView("files")}
+        >
+          <IconFiles className="size-4" />
+        </Button>
+      </div>
     ),
-    actionKey: `space-config:${spaceId}`,
+    actionKey: `space-config:${spaceId}:${view}`,
   });
 
   if (result.fetching && !result.data) {
@@ -76,40 +114,38 @@ export function SettingsSpaceConfig() {
     );
   }
 
-  return (
-    <div className="flex h-full min-h-0 w-full flex-col">
-      <div className="shrink-0 px-6 pt-6">
-        <div className="mx-auto w-full max-w-3xl">
-          <DetailsSection
-            spaceId={spaceId}
-            tenantId={space.tenantId}
-            name={space.name}
-            description={space.description ?? ""}
-            accessMode={(space.accessMode as SpaceAccessMode) ?? null}
-            status={space.status}
-            onSaved={() => refetch({ requestPolicy: "network-only" })}
-          />
-        </div>
+  if (view === "files") {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col p-6">
+        <WorkspaceFileEditor
+          target={{ spaceId }}
+          targetKey={`space:${spaceId}`}
+          client={spacesWorkspaceFilesClient}
+          defaultOpenFile="CONTEXT.md"
+          className="min-h-0 flex-1"
+        />
       </div>
-      <div className="flex min-h-0 flex-1 flex-col px-6 pb-8">
-        <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-          <h2 className="mb-3 shrink-0 text-base font-medium text-foreground">
-            Instructions &amp; files
-          </h2>
-          <WorkspaceFileEditor
-            target={{ spaceId }}
-            targetKey={`space:${spaceId}`}
-            client={spacesWorkspaceFilesClient}
-            defaultOpenFile="CONTEXT.md"
-            className="min-h-0 flex-1"
-          />
-        </div>
+    );
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
+        <InformationSection
+          spaceId={spaceId}
+          tenantId={space.tenantId}
+          name={space.name}
+          description={space.description ?? ""}
+          accessMode={(space.accessMode as SpaceAccessMode) ?? null}
+          status={space.status}
+          onSaved={() => refetch({ requestPolicy: "network-only" })}
+        />
       </div>
     </div>
   );
 }
 
-function DetailsSection({
+function InformationSection({
   spaceId,
   tenantId,
   name,
@@ -167,22 +203,7 @@ function DetailsSection({
   }
 
   return (
-    <SettingsSection
-      label="Space"
-      action={
-        <div className="flex items-center gap-3">
-          {saved ? (
-            <span className="text-sm text-muted-foreground">Saved</span>
-          ) : null}
-          {errorMsg ? (
-            <span className="text-sm text-destructive">{errorMsg}</span>
-          ) : null}
-          <Button onClick={onSave} disabled={saving || !form.name.trim()}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
-      }
-    >
+    <SettingsSection label="Information">
       <div className="space-y-4 p-4">
         <Labeled label="Name">
           <Input
@@ -222,6 +243,17 @@ function DetailsSection({
               <Badge variant="secondary">{titleCase(status)}</Badge>
             </div>
           </div>
+        </div>
+        <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+          {saved ? (
+            <span className="text-sm text-muted-foreground">Saved</span>
+          ) : null}
+          {errorMsg ? (
+            <span className="text-sm text-destructive">{errorMsg}</span>
+          ) : null}
+          <Button onClick={onSave} disabled={saving || !form.name.trim()}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
         </div>
       </div>
     </SettingsSection>
