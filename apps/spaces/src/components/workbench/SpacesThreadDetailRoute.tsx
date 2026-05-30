@@ -536,21 +536,7 @@ export function SpacesThreadDetailRoute({
     ) {
       setOptimisticMessage(null);
     }
-    if (
-      optimisticThreadStart &&
-      hasPersistedUserMessage(
-        routeThread?.messages?.edges,
-        optimisticThreadStart.content,
-      )
-    ) {
-      clearPendingThreadStart(threadId);
-    }
-  }, [
-    routeThread?.messages?.edges,
-    optimisticMessage,
-    optimisticThreadStart,
-    threadId,
-  ]);
+  }, [routeThread?.messages?.edges, optimisticMessage]);
 
   useEffect(() => {
     function handleRunbookDecision() {
@@ -581,21 +567,47 @@ export function SpacesThreadDetailRoute({
     : optimisticThreadStart
       ? toOptimisticTaskThread(optimisticThreadStart)
       : null;
+  const threadTurns = [
+    ...toTaskThreadTurns(tasksData?.computerTasks, eventsData?.computerEvents),
+    ...toTaskThreadTurnsFromRows(threadTurnRows),
+  ];
   if (thread) {
-    thread.turns = [
-      ...toTaskThreadTurns(
-        tasksData?.computerTasks,
-        eventsData?.computerEvents,
-      ),
-      ...toTaskThreadTurnsFromRows(threadTurnRows),
-    ];
+    thread.turns = threadTurns;
   }
+  const hasPersistedPendingStartUserMessage = optimisticThreadStart
+    ? hasPersistedUserMessage(
+        routeThread?.messages?.edges,
+        optimisticThreadStart.content,
+      )
+    : false;
+  const hasPendingStartRealActivity = Boolean(
+    optimisticThreadStart &&
+    (optimisticThreadStart.expectAssistantResponse === false ||
+      threadTurns.length > 0 ||
+      hasDurableAssistantAfterLatestUser(thread)),
+  );
+  const shouldKeepPendingStartSignal = Boolean(
+    optimisticThreadStart && !hasPendingStartRealActivity,
+  );
+
+  useEffect(() => {
+    if (
+      optimisticThreadStart &&
+      hasPersistedPendingStartUserMessage &&
+      hasPendingStartRealActivity
+    ) {
+      clearPendingThreadStart(threadId);
+    }
+  }, [
+    hasPendingStartRealActivity,
+    hasPersistedPendingStartUserMessage,
+    optimisticThreadStart,
+    threadId,
+  ]);
+
   const routeStateOptimisticMessage =
     optimisticThreadStart &&
-    !hasPersistedUserMessage(
-      routeThread?.messages?.edges,
-      optimisticThreadStart.content,
-    )
+    (!hasPersistedPendingStartUserMessage || shouldKeepPendingStartSignal)
       ? {
           content: optimisticThreadStart.content,
           expectAssistantResponse:
@@ -1711,10 +1723,12 @@ function withOptimisticUserTurn(
       message.role.toUpperCase() === "USER" &&
       message.content?.trim() === content.trim(),
   );
-  if (alreadyPersisted) return thread;
+  const hasOptimisticTurn = (thread.turns ?? []).some(
+    (turn) => turn.id === "optimistic-computer-turn",
+  );
 
   const turns =
-    options.expectAssistantResponse === false
+    options.expectAssistantResponse === false || hasOptimisticTurn
       ? (thread.turns ?? [])
       : [
           {
@@ -1728,14 +1742,16 @@ function withOptimisticUserTurn(
 
   return {
     ...thread,
-    messages: [
-      ...thread.messages,
-      {
-        id: "optimistic-user-message",
-        role: "USER",
-        content,
-      },
-    ],
+    messages: alreadyPersisted
+      ? thread.messages
+      : [
+          ...thread.messages,
+          {
+            id: "optimistic-user-message",
+            role: "USER",
+            content,
+          },
+        ],
     turns,
   };
 }

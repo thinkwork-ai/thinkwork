@@ -252,6 +252,7 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-new" />);
 
     expect(screen.getByText("Fast route please")).toBeTruthy();
+    expect(screen.getByText("Working…")).toBeTruthy();
     expect(screen.queryByText("Thread not found")).toBeNull();
     expect(usePageHeaderActions).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -259,6 +260,40 @@ describe("SpacesThreadDetailRoute", () => {
         documentTitle: "Thread · Fast route please",
       }),
     );
+  });
+
+  it("keeps the optimistic working row after the first message persists but before the turn row exists", () => {
+    threadData = {
+      thread: {
+        id: "thread-new",
+        computerId: "computer-1",
+        title: "What's my name?",
+        lifecycleStatus: "RUNNING",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-new",
+                role: "USER",
+                content: "What's my name?",
+              },
+            },
+          ],
+        },
+      },
+    };
+    taskData = { computerTasks: [] };
+    setPendingThreadStart({
+      threadId: "thread-new",
+      title: "What's my name?",
+      content: "What's my name?",
+      expectAssistantResponse: true,
+    });
+
+    render(<SpacesThreadDetailRoute threadId="thread-new" />);
+
+    expect(screen.getByText("What's my name?")).toBeTruthy();
+    expect(screen.getByText("Working…")).toBeTruthy();
   });
 
   it("derives thread artifacts in message order and deduplicates repeated ids", () => {
