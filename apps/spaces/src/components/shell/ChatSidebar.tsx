@@ -1039,18 +1039,19 @@ function SectionHeaderControls({
   filterOn: boolean;
   onMarkSectionRead?: (threadIds: string[]) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     // Filter indicator and "…" menu share one slot: the filter icon shows when
-    // the section is filtered and idle; on hover (or touch / open) it gives way
-    // to the "…" trigger so the two never stack.
+    // the section is filtered and idle; on hover, touch, or while the menu is
+    // open it gives way to the "…" trigger so the two never stack.
     <div className="relative ml-auto size-7 shrink-0">
-      {filterOn ? (
+      {filterOn && !menuOpen ? (
         <ListFilter
           className="pointer-events-none absolute inset-0 m-auto size-4 text-sidebar-foreground/45 transition-opacity group-hover/section-row:opacity-0 [@media(hover:none)]:opacity-0"
           aria-label="Filtered to unread"
         />
       ) : null}
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
