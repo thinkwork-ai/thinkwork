@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U2 shared extension adapter for mobile
-- Active branch: `codex/mobile-pi-host-u2-extension-adapter`
+- Active unit: U3 shared system prompt and workspace context parity
+- Active branch: `codex/mobile-pi-host-u3-system-prompt`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u2-extension-adapter`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u3-system-prompt`
 - Started: 2026-05-30
-- Latest merged PR: [#1871](https://github.com/thinkwork-ai/thinkwork/pull/1871)
-- Active PR: [#1872](https://github.com/thinkwork-ai/thinkwork/pull/1872)
+- Latest merged PR: [#1872](https://github.com/thinkwork-ai/thinkwork/pull/1872)
+- Active PR: [#1873](https://github.com/thinkwork-ai/thinkwork/pull/1873)
 - CI: pending
 
 ### Active Unit Notes
@@ -67,6 +67,29 @@ Target branch: `main`
   `pnpm --filter @thinkwork/react-native-sdk build`, `pnpm --filter @thinkwork/mobile build:web`,
   `pnpm dlx prettier --check ...`, and `git diff --check`.
 - Opened PR [#1872](https://github.com/thinkwork-ai/thinkwork/pull/1872).
+- PR [#1872](https://github.com/thinkwork-ai/thinkwork/pull/1872) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and the remote/local U2 branch plus worktree were deleted. Merge commit:
+  `5e647638074d4ea44760d2fcf94f0de7f40e0af8`.
+- Synced from `origin/main` and created isolated U3 branch/worktree
+  `codex/mobile-pi-host-u3-system-prompt`.
+- Implemented U3 shared system-prompt parity by splitting a portable
+  `composeSystemPromptFromFiles` helper out of `packages/pi-extensions`, then
+  wiring mobile's workspace context extension through that shared composer.
+- Mobile now threads registered tool names into `before_agent_start`, so the
+  shared runtime tool policy can honestly state whether `bash`, `execute_code`,
+  `send_email`, and MCP-backed connected services are available for the turn.
+- Mobile thread turns pass current user name/email into the requester context,
+  while the workspace extension keeps a warm per-agent/space/user file cache so
+  repeated turns do not refetch `USER.md` during prompt composition.
+- Focused U3 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/extensions/__tests__/workspace-context-extension.test.ts lib/agent/turn-context.test.ts`,
+  `pnpm --filter @thinkwork/pi-extensions test -- system-prompt`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent`,
+  `pnpm --filter @thinkwork/pi-extensions typecheck`,
+  `pnpm --filter @thinkwork/react-native-sdk build`, and
+  `pnpm --filter @thinkwork/mobile build:web`.
+- Opened PR [#1873](https://github.com/thinkwork-ai/thinkwork/pull/1873).
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 

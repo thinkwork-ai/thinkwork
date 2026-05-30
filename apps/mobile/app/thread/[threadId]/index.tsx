@@ -1255,6 +1255,8 @@ export default function ThreadDetailRoute() {
         // turn runs with no platform tools (plain message).
         agentId: agentEnabled ? (thread?.agentId ?? undefined) : undefined,
         userId: currentUser?.id,
+        userName: currentUser?.name,
+        userEmail: currentUser?.email,
         spaceId: thread?.spaceId ?? undefined,
         // Attached image is model-vision input on the user turn.
         images: image ? [image] : undefined,

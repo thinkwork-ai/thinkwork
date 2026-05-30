@@ -68,6 +68,7 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
         "observable-tool-turn-events",
         "pre-model-abort",
         "shared-thinkwork-extension-adapter",
+        "shared-system-prompt-composition",
       ]),
     );
     expect(deferredPiCompatibilityFeatureIds()).toEqual(

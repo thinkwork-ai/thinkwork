@@ -42,6 +42,9 @@ export interface RunThreadHarnessTurnInput {
   agentId?: string;
   /** Current human user id, used to load the user-scoped USER.md context. */
   userId?: string;
+  /** Current human display fields, used in the shared requester context. */
+  userName?: string | null;
+  userEmail?: string | null;
   /** Active Space id, used to load direct Space workspace context when available. */
   spaceId?: string;
   tools?: Tool[];
@@ -106,14 +109,16 @@ export async function runThreadHarnessTurn(
   const extensions =
     deps.extensions ??
     [
-      localBashExtension({ sessionId: input.threadId }),
       input.userId || input.agentId || input.spaceId
         ? workspaceContextExtension({
             userId: input.userId,
+            userName: input.userName,
+            userEmail: input.userEmail,
             agentId: input.agentId,
             spaceId: input.spaceId,
           })
         : null,
+      localBashExtension({ sessionId: input.threadId }),
       input.agentId ? mcpToolsExtension({ agentId: input.agentId }) : null,
     ].filter((ext): ext is ExtensionFactory => Boolean(ext));
   const session = createAgentSession({

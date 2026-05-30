@@ -34,7 +34,7 @@ export interface MobilePiCompatibilityContract {
 }
 
 export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
-  version: "2026-05-30.u2",
+  version: "2026-05-30.u3",
   host: "thinkwork-mobile-hermes",
   upstreamSdkEmbedding: {
     status: "out_of_scope",
@@ -145,13 +145,12 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
     },
     {
       id: "shared-system-prompt-composition",
-      status: "deferred",
+      status: "implemented",
       upstreamSurface: "thinkwork-system-prompt extension",
       mobileSurface:
         "apps/mobile/lib/agent/extensions/workspace-context-extension.ts",
-      ownerUnit: "U3",
       notes:
-        "Mobile currently injects a subset of workspace context; shared composition order lands in U3.",
+        "Mobile composes the shared ThinkWork prompt order through packages/pi-extensions/src/system-prompt-compose.ts over its workspace file reader.",
     },
     {
       id: "workspace-backed-built-ins",
