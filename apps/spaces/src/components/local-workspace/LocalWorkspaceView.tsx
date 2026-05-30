@@ -1,14 +1,16 @@
 "use client";
 
-import { Button } from "@thinkwork/ui/button";
-import type { BundledLanguage } from "shiki";
 import {
-  FolderTreeIcon,
-  Loader2Icon,
-  RefreshCwIcon,
-  XIcon,
-} from "lucide-react";
+  Button,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@thinkwork/ui";
+import type { BundledLanguage } from "shiki";
+import { Loader2Icon, RefreshCwIcon } from "lucide-react";
+import { useContext, useEffect, useRef } from "react";
 import type { WorkspaceTreeNode } from "@thinkwork/desktop-ipc";
+import { PageHeaderContext } from "@/context/PageHeaderContext";
 import {
   CodeBlock,
   CodeBlockCopyButton,
@@ -24,8 +26,6 @@ import {
 } from "./useLocalWorkspace";
 
 export interface LocalWorkspaceViewProps {
-  /** Optional return affordance; the route passes a router-back handler. */
-  onClose?: () => void;
   /** Test seam: inject a bridge instead of reading the desktop global. */
   bridge?: LocalWorkspaceBridge | null;
 }
@@ -67,13 +67,45 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function LocalWorkspaceView({
-  onClose,
-  bridge,
-}: LocalWorkspaceViewProps) {
+export function LocalWorkspaceView({ bridge }: LocalWorkspaceViewProps) {
   const ws = useLocalWorkspace(bridge);
 
-  if (!ws.available) {
+  // Publish the section title + an icon-only Refresh into the settings header
+  // bar (no second in-view header). Provider-tolerant: when rendered outside a
+  // PageHeaderProvider (e.g. unit tests, web), this is a no-op.
+  // Hold setActions in a ref so the publish effect keys on stable primitives
+  // (refresh/treeLoading/available) rather than the provider's setActions
+  // identity — depending on the latter can re-run the effect every render.
+  const headerCtx = useContext(PageHeaderContext);
+  const setActionsRef = useRef(headerCtx?.setActions);
+  setActionsRef.current = headerCtx?.setActions;
+  const { refresh, treeLoading, available } = ws;
+  useEffect(() => {
+    const setActions = setActionsRef.current;
+    if (!setActions) return;
+    setActions({
+      title: "Local Workspace",
+      breadcrumbs: [{ label: "Local Workspace" }],
+      action: available ? (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={refresh}
+          disabled={treeLoading}
+          aria-label="Refresh"
+          title="Refresh"
+        >
+          <RefreshCwIcon
+            className={treeLoading ? "size-4 animate-spin" : "size-4"}
+          />
+        </Button>
+      ) : undefined,
+      actionKey: `local-workspace:${available ? "on" : "off"}:${treeLoading}`,
+    });
+    return () => setActions(null);
+  }, [refresh, treeLoading, available]);
+
+  if (!available) {
     return (
       <Centered>Local Workspace is only available in the desktop app.</Centered>
     );
@@ -81,46 +113,25 @@ export function LocalWorkspaceView({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b px-4 py-3">
-        <FolderTreeIcon className="size-4 text-muted-foreground" />
-        <h1 className="text-sm font-medium">Local Workspace</h1>
-        <div className="ml-auto flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={ws.refresh}
-            disabled={ws.treeLoading}
-          >
-            <RefreshCwIcon
-              className={ws.treeLoading ? "size-4 animate-spin" : "size-4"}
-            />
-            Refresh
-          </Button>
-          {onClose ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              aria-label="Close"
-            >
-              <XIcon className="size-4" />
-            </Button>
-          ) : null}
-        </div>
-      </header>
       <p className="border-b bg-muted/30 px-4 py-1.5 text-xs text-muted-foreground">
         Shows every workspace synced to this machine, including any credentials
         stored in workspace files.
       </p>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(220px,320px)_1fr]">
-        <div className="min-h-0 overflow-auto border-r p-2">
+      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+        <ResizablePanel
+          defaultSize="28%"
+          minSize="15%"
+          maxSize="55%"
+          className="min-h-0 overflow-auto p-2"
+        >
           <WorkspaceTreePane ws={ws} />
-        </div>
-        <div className="min-h-0 overflow-auto">
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize="72%" className="min-h-0 overflow-auto">
           <WorkspaceContentPane ws={ws} />
-        </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

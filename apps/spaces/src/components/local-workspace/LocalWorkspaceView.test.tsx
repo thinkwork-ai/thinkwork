@@ -10,7 +10,23 @@ import type {
   ReadWorkspaceFileResponse,
   ReadWorkspaceTreeResponse,
 } from "@thinkwork/desktop-ipc";
+import { PageHeaderProvider, usePageHeader } from "@/context/PageHeaderContext";
 import { LocalWorkspaceView } from "./LocalWorkspaceView";
+
+// react-resizable-panels needs a real ResizeObserver; the shared jsdom stub
+// isn't compatible. The split's drag behavior is verified visually, so mock the
+// primitives to passthroughs and keep the rest of @thinkwork/ui real.
+vi.mock("@thinkwork/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@thinkwork/ui")>();
+  return {
+    ...actual,
+    ResizablePanelGroup: ({ children }: { children?: React.ReactNode }) =>
+      children ?? null,
+    ResizablePanel: ({ children }: { children?: React.ReactNode }) =>
+      children ?? null,
+    ResizableHandle: () => null,
+  };
+});
 
 afterEach(cleanup);
 
@@ -27,6 +43,22 @@ function makeBridge(opts: {
         opts.files?.[path] ?? ({ status: "vanished" } as const),
     ),
   };
+}
+
+// Surfaces the header action the view publishes (Refresh) so tests can click
+// it — in the app this slot is rendered by the settings header bar.
+function HeaderActionProbe() {
+  const { actions } = usePageHeader();
+  return <div data-testid="header-actions">{actions?.action}</div>;
+}
+
+function Harness({ bridge }: { bridge: ReturnType<typeof makeBridge> }) {
+  return (
+    <PageHeaderProvider>
+      <HeaderActionProbe />
+      <LocalWorkspaceView bridge={bridge} />
+    </PageHeaderProvider>
+  );
 }
 
 const NESTED_TREE: ReadWorkspaceTreeResponse = {
@@ -46,14 +78,14 @@ const NESTED_TREE: ReadWorkspaceTreeResponse = {
 };
 
 describe("LocalWorkspaceView", () => {
-  it("renders the not-available state without a bridge (R14)", async () => {
+  it("renders the not-available state without a bridge or provider (R14)", async () => {
     render(<LocalWorkspaceView bridge={null} />);
     expect(
       await screen.findByText(/only available in the desktop app/i),
     ).toBeTruthy();
   });
 
-  it("shows the no-file-selected placeholder, then renders content (AE1, R15)", async () => {
+  it("publishes an icon-only Refresh into the header; no second header (AE1)", async () => {
     const bridge = makeBridge({
       tree: NESTED_TREE,
       files: {
@@ -64,12 +96,13 @@ describe("LocalWorkspaceView", () => {
         },
       },
     });
-    render(<LocalWorkspaceView bridge={bridge} />);
+    render(<Harness bridge={bridge} />);
 
     expect(
       await screen.findByText(/select a file to view its contents/i),
     ).toBeTruthy();
-    // Nested "skills" folder is collapsed; "GOAL.md" under expanded "dev" shows.
+    // Refresh is published as a header action, not a second in-view header.
+    expect(screen.getByRole("button", { name: /refresh/i })).toBeTruthy();
     const goal = await screen.findByText("GOAL.md");
     expect(screen.queryByText("skills")).toBeTruthy();
     fireEvent.click(goal);
@@ -81,25 +114,43 @@ describe("LocalWorkspaceView", () => {
     expect(await screen.findByText("dev/GOAL.md")).toBeTruthy();
   });
 
+  it("publishes no Refresh action when unavailable", () => {
+    render(
+      <PageHeaderProvider>
+        <HeaderActionProbe />
+        <LocalWorkspaceView bridge={null} />
+      </PageHeaderProvider>,
+    );
+    expect(screen.queryByRole("button", { name: /refresh/i })).toBeNull();
+  });
+
   it("shows empty state then repopulates on refresh (AE2)", async () => {
     let tree: ReadWorkspaceTreeResponse = { status: "empty" };
     const bridge = makeBridge({ tree: () => tree });
-    render(<LocalWorkspaceView bridge={bridge} />);
+    render(<Harness bridge={bridge} />);
 
     expect(await screen.findByText(/nothing synced yet/i)).toBeTruthy();
+    // Refresh is disabled while the initial load is in flight; wait for it to
+    // settle enabled before clicking so the click isn't swallowed.
+    await waitFor(() => {
+      const b = screen.getByRole("button", {
+        name: /refresh/i,
+      }) as HTMLButtonElement;
+      expect(b.disabled).toBe(false);
+    });
     tree = NESTED_TREE;
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
     expect(await screen.findByText("GOAL.md")).toBeTruthy();
   });
 
-  it("renders too-large and binary statuses with no copy button", async () => {
+  it("renders too-large status (no copy button)", async () => {
     const bridge = makeBridge({
       tree: NESTED_TREE,
       files: {
         "dev/GOAL.md": { status: "too-large", size: 5 * 1024 * 1024 },
       },
     });
-    render(<LocalWorkspaceView bridge={bridge} />);
+    render(<Harness bridge={bridge} />);
     fireEvent.click(await screen.findByText("GOAL.md"));
     expect(await screen.findByText(/preview unavailable/i)).toBeTruthy();
     expect(screen.getByText(/5\.0 MB/)).toBeTruthy();
@@ -107,7 +158,7 @@ describe("LocalWorkspaceView", () => {
 
   it("surfaces a tree error with retry rather than empty state", async () => {
     const bridge = makeBridge({ tree: { status: "error", code: "EACCES" } });
-    render(<LocalWorkspaceView bridge={bridge} />);
+    render(<Harness bridge={bridge} />);
     expect(
       await screen.findByText(/couldn't read the local workspace/i),
     ).toBeTruthy();
@@ -127,21 +178,12 @@ describe("LocalWorkspaceView", () => {
         },
       },
     });
-    render(<LocalWorkspaceView bridge={bridge} />);
+    render(<Harness bridge={bridge} />);
     fireEvent.click(await screen.findByText("GOAL.md"));
     expect(await screen.findByText("dev/GOAL.md")).toBeTruthy();
 
-    // Refresh against a tree that no longer contains the selected file.
     tree = { status: "empty" };
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
     expect(await screen.findByText(/no longer in the cache/i)).toBeTruthy();
-  });
-
-  it("fires onClose from the header control (R15)", async () => {
-    const onClose = vi.fn();
-    const bridge = makeBridge({ tree: { status: "empty" } });
-    render(<LocalWorkspaceView bridge={bridge} onClose={onClose} />);
-    fireEvent.click(await screen.findByRole("button", { name: /close/i }));
-    expect(onClose).toHaveBeenCalledOnce();
   });
 });

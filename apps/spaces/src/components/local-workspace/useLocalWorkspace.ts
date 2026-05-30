@@ -123,6 +123,10 @@ export function useLocalWorkspace(
     [readFile],
   );
 
+  // Stable identity so callers (e.g. the settings header action) can depend on
+  // it without re-publishing every render.
+  const refreshStable = useCallback(() => void refresh(), [refresh]);
+
   useEffect(() => {
     if (bridge) void refresh();
     // Initial load only; refresh identity is stable for a given bridge.
@@ -137,7 +141,7 @@ export function useLocalWorkspace(
     file,
     fileLoading,
     selectionMissing,
-    refresh: () => void refresh(),
+    refresh: refreshStable,
     select,
   };
 }
