@@ -101,6 +101,14 @@ export const PinnedThreadsQuery = gql`
   }
 `;
 
+export const MarkThreadsReadMutation = gql`
+  mutation MarkThreadsRead($input: MarkThreadsReadInput!) {
+    markThreadsRead(input: $input) {
+      updated
+    }
+  }
+`;
+
 export const PinThreadMutation = gql`
   mutation PinThread($tenantId: ID!, $threadId: ID!) {
     pinThread(tenantId: $tenantId, threadId: $threadId) {

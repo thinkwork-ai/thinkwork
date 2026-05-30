@@ -270,6 +270,7 @@ extend type Query {
 extend type Mutation {
   createThread(input: CreateThreadInput!): Thread!
   updateThread(id: ID!, input: UpdateThreadInput!): Thread!
+  markThreadsRead(input: MarkThreadsReadInput!): MarkThreadsReadResult!
   deleteThread(id: ID!): Boolean!
   pinThread(tenantId: ID!, threadId: ID!): PinnedThread!
   unpinThread(tenantId: ID!, threadId: ID!): Boolean!
@@ -287,6 +288,20 @@ extend type Mutation {
 
   escalateThread(input: EscalateThreadInput!): Thread!
   delegateThread(input: DelegateThreadInput!): Thread!
+}
+
+"""
+Batch mark a caller's threads read or unread. The tenant is resolved from the
+authenticated caller (never the input); only the caller's own
+thread_participants rows are written. read: false marks unread.
+"""
+input MarkThreadsReadInput {
+  threadIds: [ID!]!
+  read: Boolean! = true
+}
+
+type MarkThreadsReadResult {
+  updated: Int!
 }
 
 input EscalateThreadInput {

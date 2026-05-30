@@ -16,6 +16,7 @@ const {
   navigateMock,
   deleteThreadMock,
   updateThreadMock,
+  markThreadsReadMock,
   pinThreadMock,
   unpinThreadMock,
   reorderPinnedThreadsMock,
@@ -32,6 +33,7 @@ const {
   navigateMock: vi.fn(),
   deleteThreadMock: vi.fn(),
   updateThreadMock: vi.fn(),
+  markThreadsReadMock: vi.fn(),
   pinThreadMock: vi.fn(),
   unpinThreadMock: vi.fn(),
   reorderPinnedThreadsMock: vi.fn(),
@@ -66,6 +68,7 @@ const {
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
+    MarkThreadsReadMutation: Symbol("MarkThreadsReadMutation"),
     PinThreadMutation: Symbol("PinThreadMutation"),
     PinnedThreadsQuery: Symbol("PinnedThreadsQuery"),
     ReorderPinnedThreadsMutation: Symbol("ReorderPinnedThreadsMutation"),
@@ -135,6 +138,9 @@ vi.mock("urql", () => ({
     }
     if (mutation === queryDocs.UpdateThreadMutation) {
       return [{ fetching: false }, updateThreadMock];
+    }
+    if (mutation === queryDocs.MarkThreadsReadMutation) {
+      return [{ fetching: false }, markThreadsReadMock];
     }
     if (mutation === queryDocs.PinThreadMutation) {
       return [{ fetching: false }, pinThreadMock];
@@ -286,14 +292,33 @@ vi.mock("@thinkwork/ui", () => ({
   DropdownMenuItem: ({
     children,
     asChild,
+    onSelect,
+    disabled,
     ...props
   }: {
     children: React.ReactNode;
     asChild?: boolean;
-  }) => (asChild ? children : <button {...props}>{children}</button>),
+    onSelect?: (event: Event) => void;
+    disabled?: boolean;
+  }) =>
+    asChild ? (
+      children
+    ) : (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() =>
+          onSelect?.({ preventDefault: vi.fn() } as unknown as Event)
+        }
+        {...props}
+      >
+        {children}
+      </button>
+    ),
   DropdownMenuLabel: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  DropdownMenuSeparator: () => <hr />,
   DropdownMenuTrigger: ({
     children,
     asChild,
@@ -417,6 +442,7 @@ vi.mock("@thinkwork/ui", () => ({
   ),
 }));
 
+import { toast } from "sonner";
 import { selectNextThreadBelowDeleted } from "./chat-sidebar-types";
 import { ChatSidebar } from "./ChatSidebar";
 
@@ -439,6 +465,7 @@ afterEach(() => {
   navigateMock.mockReset();
   deleteThreadMock.mockReset();
   updateThreadMock.mockReset();
+  markThreadsReadMock.mockReset();
   pinThreadMock.mockReset();
   unpinThreadMock.mockReset();
   reorderPinnedThreadsMock.mockReset();
@@ -477,6 +504,9 @@ describe("ChatSidebar", () => {
   beforeEach(() => {
     deleteThreadMock.mockResolvedValue({ data: { deleteThread: true } });
     updateThreadMock.mockResolvedValue({ data: { updateThread: { id: "t" } } });
+    markThreadsReadMock.mockResolvedValue({
+      data: { markThreadsRead: { updated: 1 } },
+    });
     pinThreadMock.mockResolvedValue({
       data: { pinThread: { thread: { id: "t" } } },
     });
@@ -609,6 +639,9 @@ describe("ChatSidebar", () => {
 
     render(<ChatSidebar />);
 
+    // No standalone "Customer Onboarding" list-title heading above the rows
+    // (the section's collapse toggle carries the label + unread badge, so its
+    // accessible name isn't an exact "Customer Onboarding" match).
     expect(
       screen.queryByRole("heading", { name: "Customer Onboarding" }),
     ).toBeNull();
@@ -937,6 +970,266 @@ describe("ChatSidebar", () => {
         id: "unread-thread",
         input: { lastReadAt: expect.any(String) },
       }),
+    );
+  });
+
+  // Scope queries to one section's "…" menu container (the mock renders every
+  // section's DropdownMenu inline, so menu items would otherwise collide).
+  function sectionMenu(triggerName: RegExp) {
+    return screen.getByRole("button", { name: triggerName }).closest("div")!;
+  }
+
+  // The unread badge lives inside the section's collapse toggle, next to the
+  // label (aria-label "Toggle <label>").
+  function sectionToggle(label: RegExp) {
+    return screen.getByRole("button", { name: label });
+  }
+
+  it("shows the Chats unread-count badge and excludes read threads (R1)", () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "u1",
+        title: "Unread one",
+        lastActivityAt: "2026-05-19T19:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "u2",
+        title: "Unread two",
+        lastActivityAt: "2026-05-19T18:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "r1",
+        title: "Read one",
+        lastActivityAt: "2026-05-19T17:00:00Z",
+        lastReadAt: "2026-05-20T00:00:00Z",
+      },
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    // The Chats controls cluster shows "2" (the two unread, not the read one).
+    expect(within(sectionToggle(/toggle chats/i)).getByText("2")).toBeTruthy();
+  });
+
+  it("puts no badge or options menu on action items or the Pinned section (R7)", () => {
+    pinnedThreadItemsMock.push({
+      id: "pinned-1",
+      title: "Pinned thread",
+      lastActivityAt: "2026-05-19T19:00:00Z",
+      lastReadAt: null,
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    expect(
+      screen.queryByRole("button", { name: /new thread options/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /search options/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /pinned options/i }),
+    ).toBeNull();
+    // Chats does get one.
+    expect(screen.getByRole("button", { name: /chats options/i })).toBeTruthy();
+  });
+
+  it("marks the Chats section's unread ids read optimistically (R2, R4)", async () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "u1",
+        title: "Unread one",
+        lastActivityAt: "2026-05-19T19:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "u2",
+        title: "Unread two",
+        lastActivityAt: "2026-05-19T18:00:00Z",
+        lastReadAt: null,
+      },
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    const menu = sectionMenu(/chats options/i);
+    fireEvent.click(
+      within(menu).getByRole("button", { name: /mark all as read/i }),
+    );
+
+    await waitFor(() =>
+      expect(markThreadsReadMock).toHaveBeenCalledWith({
+        input: { threadIds: ["u1", "u2"], read: true },
+      }),
+    );
+    // Optimistic: the badge clears immediately to 0 (no "2" left in the cluster).
+    expect(within(sectionToggle(/toggle chats/i)).queryByText("2")).toBeNull();
+    await waitFor(() =>
+      expect(recentReexecuteMock).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      }),
+    );
+  });
+
+  it("rolls back the optimistic mark-all and toasts when the mutation errors (R4)", async () => {
+    markThreadsReadMock.mockResolvedValue({
+      error: { message: "network down" },
+    });
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "u1",
+        title: "Unread one",
+        lastActivityAt: "2026-05-19T19:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "u2",
+        title: "Unread two",
+        lastActivityAt: "2026-05-19T18:00:00Z",
+        lastReadAt: null,
+      },
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    fireEvent.click(
+      within(sectionMenu(/chats options/i)).getByRole("button", {
+        name: /mark all as read/i,
+      }),
+    );
+
+    // After the rejection the optimistic mark is rolled back: the badge returns.
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("network down"),
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        within(sectionToggle(/toggle chats/i)).getByText("2"),
+      ).toBeTruthy(),
+    );
+  });
+
+  it("filters a section to its unread threads and persists the choice (R5)", () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "u1",
+        title: "Unread one",
+        lastActivityAt: "2026-05-19T19:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "r1",
+        title: "Read one",
+        lastActivityAt: "2026-05-19T17:00:00Z",
+        lastReadAt: "2026-05-20T00:00:00Z",
+      },
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    const { container } = render(<ChatSidebar />);
+
+    expect(screen.getByText("Read one")).toBeTruthy();
+    fireEvent.click(
+      within(sectionMenu(/chats options/i)).getByRole("button", {
+        name: /show unread/i,
+      }),
+    );
+
+    // Only the unread thread remains; filtered indicator + persisted pref.
+    expect(screen.getByText("Unread one")).toBeTruthy();
+    expect(screen.queryByText("Read one")).toBeNull();
+    expect(
+      container.querySelector('[aria-label="Filtered to unread"]'),
+    ).toBeTruthy();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          "thinkwork:sidebar-section-unread-filter",
+        ) ?? "{}",
+      ),
+    ).toEqual({ chats: true });
+  });
+
+  it("shows a 'No unread — Show all' affordance when a filtered section empties (R8)", () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push({
+      id: "r1",
+      title: "Read one",
+      lastActivityAt: "2026-05-19T17:00:00Z",
+      lastReadAt: "2026-05-20T00:00:00Z",
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    fireEvent.click(
+      within(sectionMenu(/chats options/i)).getByRole("button", {
+        name: /show unread/i,
+      }),
+    );
+
+    const restore = screen.getByRole("button", {
+      name: /no unread — show all/i,
+    });
+    expect(restore).toBeTruthy();
+    expect(screen.queryByText("Read one")).toBeNull();
+
+    fireEvent.click(restore);
+    expect(screen.getByText("Read one")).toBeTruthy();
+  });
+
+  it("collects the Space section's loaded unread ids for Mark all as read (R4, Spaces)", async () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push({
+      id: "s-unread",
+      title: "Space unread thread",
+      spaceId: "space-1",
+      space: { id: "space-1", name: "Customer Onboarding" },
+      lastActivityAt: "2026-05-19T19:00:00Z",
+      lastReadAt: null,
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    // Space badge starts at the server unreadThreadCount (2 for space-1).
+    const spaceToggle = () => sectionToggle(/toggle customer onboarding/i);
+    expect(within(spaceToggle()).getByText("2")).toBeTruthy();
+
+    fireEvent.click(
+      within(sectionMenu(/customer onboarding options/i)).getByRole("button", {
+        name: /mark all as read/i,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(markThreadsReadMock).toHaveBeenCalledWith({
+        input: { threadIds: ["s-unread"], read: true },
+      }),
+    );
+    // Optimistic decrement: the one loaded unread thread is marked read, so the
+    // server count of 2 drops to 1 immediately (reconciles fully on refetch).
+    await waitFor(() =>
+      expect(within(spaceToggle()).getByText("1")).toBeTruthy(),
     );
   });
 

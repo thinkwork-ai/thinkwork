@@ -22,11 +22,14 @@ import {
   Anchor,
   Archive,
   ArrowLeft,
+  CheckCheck,
   ChevronDown,
   Clock,
   GitBranch,
   Globe,
   Keyboard,
+  List,
+  ListFilter,
   MessageCirclePlus,
   Monitor,
   MoreHorizontal,
@@ -73,6 +76,7 @@ import { useThreadNotifications } from "@/hooks/useThreadNotifications";
 import { useThreadNotificationsEnabled } from "@/lib/thread-notifications-pref";
 import {
   DeleteThreadMutation,
+  MarkThreadsReadMutation,
   PinThreadMutation,
   PinnedThreadsQuery,
   ReorderPinnedThreadsMutation,
@@ -82,6 +86,10 @@ import {
   UnpinThreadMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
+import {
+  setSectionUnreadFilter,
+  useSectionUnreadFilter,
+} from "@/lib/sidebar-section-prefs";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import {
   clearMissingThreadDeletes,
@@ -90,6 +98,8 @@ import {
 } from "@/lib/pending-thread-deletes";
 import { cn } from "@/lib/utils";
 import {
+  filterUnreadThreads,
+  formatCompactCount,
   formatTinyRelativeDate,
   isThreadUnread,
   selectNextThreadBelowDeleted,
@@ -164,6 +174,7 @@ export function ChatSidebar() {
   const [, executeReorderPinnedThreads] = useMutation(
     ReorderPinnedThreadsMutation,
   );
+  const [, executeMarkThreadsRead] = useMutation(MarkThreadsReadMutation);
   const pinStorageKey = useMemo(
     () => threadPinsStorageKey(tenantId, userId),
     [tenantId, userId],
@@ -193,13 +204,15 @@ export function ChatSidebar() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const [{ data: spacesData, fetching: spacesFetching, error: spacesError }] =
-    useQuery<SpacesResult>({
-      query: SpacesQuery,
-      variables: { tenantId: tenantId ?? "" },
-      pause: !tenantId,
-      requestPolicy: "cache-and-network",
-    });
+  const [
+    { data: spacesData, fetching: spacesFetching, error: spacesError },
+    reexecuteSpacesQuery,
+  ] = useQuery<SpacesResult>({
+    query: SpacesQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
 
   const spaces = spacesData?.spaces ?? [];
   const defaultSpaceIds = useMemo(
@@ -283,6 +296,52 @@ export function ChatSidebar() {
       return next;
     });
   }, []);
+
+  // "Mark all as read" for a section: optimistically clear the badge/dots for
+  // the section's unread ids, fire the batch mutation, then refetch all three
+  // list sources to reconcile (recent + pinned + Spaces — the Space badge reads
+  // the server unreadThreadCount, so SpacesQuery must re-run or the badge holds
+  // its optimistic value).
+  const markSectionThreadsRead = useCallback(
+    (threadIds: string[]) => {
+      if (threadIds.length === 0) return;
+      setLocallyReadThreadIds((current) => {
+        const next = new Set(current);
+        for (const id of threadIds) next.add(id);
+        return next;
+      });
+      void executeMarkThreadsRead({
+        input: { threadIds, read: true },
+      }).then((result) => {
+        if (result.error) {
+          setLocallyReadThreadIds((current) => {
+            const next = new Set(current);
+            for (const id of threadIds) {
+              // Keep any id a concurrent thread-open already persisted as read
+              // (activateThread → persistThreadRead seeds persistedReadThreadIdsRef),
+              // so a failed mark-all can't strip a thread the user just opened.
+              if (!persistedReadThreadIdsRef.current.has(id)) next.delete(id);
+            }
+            return next;
+          });
+          toast.error(`Couldn't mark all as read: ${result.error.message}`);
+          return;
+        }
+        // These threads are read server-side now; record them so a later open
+        // doesn't fire a redundant per-thread updateThread.
+        for (const id of threadIds) persistedReadThreadIdsRef.current.add(id);
+        reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
+        reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
+        reexecuteSpacesQuery({ requestPolicy: "network-only" });
+      });
+    },
+    [
+      executeMarkThreadsRead,
+      reexecutePinnedThreadsQuery,
+      reexecuteRecentThreadsQuery,
+      reexecuteSpacesQuery,
+    ],
+  );
 
   useEffect(() => {
     if (routeThreadId) {
@@ -725,8 +784,7 @@ export function ChatSidebar() {
                   {pinnedError.message}
                 </p>
               ) : null}
-              <ThreadListSection
-                label="Pinned"
+              <PinnedThreadListSection
                 threads={pinnedThreads}
                 selectedThreadId={selectedThreadId}
                 locallyReadThreadIds={locallyReadThreadIds}
@@ -736,12 +794,14 @@ export function ChatSidebar() {
               />
               <ThreadListSection
                 label="Chats"
+                sectionId="chats"
                 threads={genericThreads}
                 selectedThreadId={selectedThreadId}
                 defaultOpen
                 locallyReadThreadIds={locallyReadThreadIds}
                 onActivate={activateThread}
                 onPin={pinThread}
+                onMarkSectionRead={markSectionThreadsRead}
               />
               <div className="space-y-1">
                 {spacesError ? (
@@ -767,6 +827,7 @@ export function ChatSidebar() {
                       locallyReadThreadIds={locallyReadThreadIds}
                       onActivate={activateThread}
                       onPin={pinThread}
+                      onMarkSectionRead={markSectionThreadsRead}
                     />
                   ))
                 )}
@@ -949,63 +1010,161 @@ function orderPinnedThreads(
   ];
 }
 
+/** Unread-count chip, rendered immediately after a section's label. */
+function SectionUnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="shrink-0 rounded-full bg-sidebar-accent px-1.5 text-[10px] leading-5 text-sidebar-accent-foreground">
+      {formatCompactCount(count)}
+    </span>
+  );
+}
+
+/**
+ * Trailing controls for a thread-grouped section header: a filtered indicator
+ * and a hover/focus-revealed "…" menu (Mark all as read; Show unread / Show
+ * all). Rendered as a SIBLING of the collapse trigger so opening the menu never
+ * toggles the section (R2). The unread badge sits next to the label, not here.
+ */
+function SectionHeaderControls({
+  sectionId,
+  label,
+  unreadThreadIds,
+  filterOn,
+  onMarkSectionRead,
+}: {
+  sectionId: string;
+  label: string;
+  unreadThreadIds: string[];
+  filterOn: boolean;
+  onMarkSectionRead?: (threadIds: string[]) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    // Filter indicator and "…" menu share one slot: the filter icon shows when
+    // the section is filtered and idle; on hover, touch, or while the menu is
+    // open it gives way to the "…" trigger so the two never stack.
+    <div className="relative ml-auto size-7 shrink-0">
+      {filterOn && !menuOpen ? (
+        <ListFilter
+          className="pointer-events-none absolute inset-0 m-auto size-4 text-sidebar-foreground/45 transition-opacity group-hover/section-row:opacity-0 [@media(hover:none)]:opacity-0"
+          aria-label="Filtered to unread"
+        />
+      ) : null}
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={`${label} options`}
+            className="absolute inset-0 flex size-7 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          side="bottom"
+          align="start"
+          sideOffset={4}
+          className="z-[1000] w-44"
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <DropdownMenuItem
+            onSelect={() => setSectionUnreadFilter(sectionId, !filterOn)}
+          >
+            {filterOn ? (
+              <List className="size-4" />
+            ) : (
+              <ListFilter className="size-4" />
+            )}
+            {filterOn ? "Show all" : "Show unread"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!onMarkSectionRead || unreadThreadIds.length === 0}
+            onSelect={() => onMarkSectionRead?.(unreadThreadIds)}
+          >
+            <CheckCheck className="size-4" />
+            Mark all as read
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 function ThreadListSection({
   label,
+  sectionId,
   threads,
   selectedThreadId,
   defaultOpen = true,
   locallyReadThreadIds,
   onActivate,
   onPin,
-  onUnpin,
-  onReorder,
+  onMarkSectionRead,
 }: {
   label: string;
+  sectionId: string;
   threads: ChatThreadSummary[];
   selectedThreadId?: string;
   defaultOpen?: boolean;
   locallyReadThreadIds: ReadonlySet<string>;
   onActivate: (threadId: string) => void;
   onPin?: (threadId: string) => void;
-  onUnpin?: (threadId: string) => void;
-  onReorder?: (threadIds: string[]) => void;
+  onMarkSectionRead?: (threadIds: string[]) => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
-  if (label === "Pinned") {
-    return (
-      <PinnedThreadListSection
-        threads={threads}
-        selectedThreadId={selectedThreadId}
-        locallyReadThreadIds={locallyReadThreadIds}
-        onActivate={onActivate}
-        onUnpin={onUnpin}
-        onReorder={onReorder}
-      />
-    );
-  }
+  const filterOn = useSectionUnreadFilter(sectionId);
+  // Reset pagination when the filter mode flips, so a "Show more" count from one
+  // mode can't truncate the other's list.
+  useEffect(() => {
+    setVisibleCount(SECTION_THREAD_LIMIT);
+  }, [filterOn]);
 
-  const visibleThreads = threads.slice(0, visibleCount);
-  const hiddenCount = threads.length - visibleThreads.length;
+  // Unread set drives the badge, the mark-all target, and the filter — one
+  // source so the badge reaches zero after a mark-all (KTD-2).
+  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadIds);
+  const unreadThreadIds = unreadThreads.map((thread) => thread.id);
+  const displayedThreads = filterOn ? unreadThreads : threads;
+  const visibleThreads = displayedThreads.slice(0, visibleCount);
+  const hiddenCount = displayedThreads.length - visibleThreads.length;
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/thread-section">
-      <CollapsibleTrigger asChild>
-        <SidebarGroupLabel
-          asChild
-          className="group/section-trigger w-full cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50"
-        >
-          <button type="button" aria-label={`Toggle ${label}`}>
-            <span>{label}</span>
-            <ChevronDown className="h-4 w-4 opacity-0 transition-all duration-150 ease-out group-hover/section-trigger:opacity-100 group-data-[state=closed]/thread-section:-rotate-90" />
-          </button>
-        </SidebarGroupLabel>
-      </CollapsibleTrigger>
+      <div className="group/section-row flex w-full items-center gap-1">
+        <CollapsibleTrigger asChild>
+          <SidebarGroupLabel
+            asChild
+            className="group/section-trigger min-w-0 flex-1 cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50"
+          >
+            <button type="button" aria-label={`Toggle ${label}`}>
+              <span className="min-w-0 truncate text-left">{label}</span>
+              <SectionUnreadBadge count={unreadThreadIds.length} />
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-all duration-150 ease-out group-hover/section-trigger:opacity-100 group-data-[state=closed]/thread-section:-rotate-90" />
+            </button>
+          </SidebarGroupLabel>
+        </CollapsibleTrigger>
+        <SectionHeaderControls
+          sectionId={sectionId}
+          label={label}
+          unreadThreadIds={unreadThreadIds}
+          filterOn={filterOn}
+          onMarkSectionRead={onMarkSectionRead}
+        />
+      </div>
       <CollapsibleContent>
         <SidebarGroupContent>
           {threads.length === 0 ? (
             <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
               No threads yet
             </p>
+          ) : filterOn && displayedThreads.length === 0 ? (
+            <button
+              type="button"
+              className="px-2 py-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
+              onClick={() => setSectionUnreadFilter(sectionId, false)}
+            >
+              No unread — Show all
+            </button>
           ) : (
             <div className="space-y-0.5">
               {visibleThreads.map((thread) => (
@@ -1024,7 +1183,10 @@ function ThreadListSection({
                   className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
                   onClick={() =>
                     setVisibleCount((count) =>
-                      Math.min(count + SECTION_THREAD_LIMIT, threads.length),
+                      Math.min(
+                        count + SECTION_THREAD_LIMIT,
+                        displayedThreads.length,
+                      ),
                     )
                   }
                 >
@@ -1184,6 +1346,7 @@ function SpaceJumpMenu({
         align="start"
         sideOffset={4}
         className="z-[1000] w-56"
+        onCloseAutoFocus={(event) => event.preventDefault()}
       >
         <DropdownMenuLabel>Open Space</DropdownMenuLabel>
         {isLoading && spaces.length === 0 ? (
@@ -1218,6 +1381,7 @@ function SpaceThreadSection({
   locallyReadThreadIds,
   onActivate,
   onPin,
+  onMarkSectionRead,
 }: {
   space: SpaceNavSummary;
   threads: ChatThreadSummary[];
@@ -1226,38 +1390,63 @@ function SpaceThreadSection({
   locallyReadThreadIds: ReadonlySet<string>;
   onActivate: (threadId: string) => void;
   onPin?: (threadId: string) => void;
+  onMarkSectionRead?: (threadIds: string[]) => void;
 }) {
   const label = space.name ?? space.slug ?? "Space";
   const isActiveSpace = activeSpaceId === space.id;
+  const sectionId = `space:${space.id}`;
+  const filterOn = useSectionUnreadFilter(sectionId);
   const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
-  const visibleThreads = threads.slice(0, visibleCount);
-  const hiddenCount = threads.length - visibleThreads.length;
+  // Reset pagination when the filter mode flips (see ThreadListSection).
+  useEffect(() => {
+    setVisibleCount(SECTION_THREAD_LIMIT);
+  }, [filterOn]);
+
+  // Loaded unread drives the mark-all target and the filter. The BADGE keeps
+  // the server's true total (`unreadThreadCount`, which may exceed the loaded
+  // window) minus an optimistic decrement for loaded threads we just marked
+  // read locally, so it drops on mark-all and reconciles on refetch (KTD-5).
+  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadIds);
+  const unreadThreadIds = unreadThreads.map((thread) => thread.id);
+  const optimisticallyRead = threads.filter(
+    (thread) => isThreadUnread(thread) && locallyReadThreadIds.has(thread.id),
+  ).length;
+  const badgeCount = Math.max(
+    0,
+    (space.unreadThreadCount ?? 0) - optimisticallyRead,
+  );
+  const displayedThreads = filterOn ? unreadThreads : threads;
+  const visibleThreads = displayedThreads.slice(0, visibleCount);
+  const hiddenCount = displayedThreads.length - visibleThreads.length;
 
   return (
     <Collapsible
       defaultOpen={isActiveSpace || threads.length > 0}
       className="group/space"
     >
-      <div className="flex w-full items-center gap-1">
+      <div className="group/section-row flex w-full items-center gap-1">
         <CollapsibleTrigger asChild>
           <SidebarGroupLabel
             asChild
             className={cn(
-              "group/space-trigger w-full min-w-0 cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50",
+              "group/space-trigger min-w-0 flex-1 cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50",
               isActiveSpace && "text-sidebar-foreground/70",
             )}
           >
             <button type="button" aria-label={`Toggle ${label}`}>
               <span className="min-w-0 truncate text-left">{label}</span>
-              {space.unreadThreadCount ? (
-                <span className="mr-1 rounded-full bg-sidebar-accent px-1.5 text-[10px] text-sidebar-accent-foreground">
-                  {space.unreadThreadCount}
-                </span>
-              ) : null}
+              <SectionUnreadBadge count={badgeCount} />
               <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-all duration-150 ease-out group-hover/space-trigger:opacity-100 group-data-[state=closed]/space:-rotate-90" />
             </button>
           </SidebarGroupLabel>
         </CollapsibleTrigger>
+        <SectionHeaderControls
+          sectionId={sectionId}
+          label={label}
+          unreadThreadIds={unreadThreadIds}
+          filterOn={filterOn}
+          onMarkSectionRead={onMarkSectionRead}
+        />
       </div>
       <CollapsibleContent>
         <SidebarGroupContent>
@@ -1273,6 +1462,14 @@ function SpaceThreadSection({
             >
               <span className="truncate">{label}</span>
             </Link>
+          ) : filterOn && displayedThreads.length === 0 ? (
+            <button
+              type="button"
+              className="px-2 py-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
+              onClick={() => setSectionUnreadFilter(sectionId, false)}
+            >
+              No unread — Show all
+            </button>
           ) : (
             <div className="space-y-0.5">
               {visibleThreads.map((thread) => (
@@ -1292,7 +1489,10 @@ function SpaceThreadSection({
                   className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
                   onClick={() =>
                     setVisibleCount((count) =>
-                      Math.min(count + SECTION_THREAD_LIMIT, threads.length),
+                      Math.min(
+                        count + SECTION_THREAD_LIMIT,
+                        displayedThreads.length,
+                      ),
                     )
                   }
                 >
