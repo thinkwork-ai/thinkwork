@@ -1,7 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { Type } from "typebox";
 
 export interface WorkspaceSkill {
   slug: string;
@@ -104,41 +102,4 @@ export function formatWorkspaceSkills(skills: WorkspaceSkill[]): string {
       (skill) => `- ${skill.slug}: ${skill.description || skill.name}`,
     ),
   ].join("\n");
-}
-
-export function buildWorkspaceSkillTool(
-  skills: WorkspaceSkill[],
-): AgentTool<any> | null {
-  if (!skills.length) return null;
-  const bySlug = new Map(skills.map((skill) => [skill.slug, skill]));
-  return {
-    name: "workspace_skill",
-    label: "Workspace Skill",
-    description:
-      "Read a skill installed in this agent's copied workspace/skills folder before using its instructions.",
-    parameters: Type.Object({
-      slug: Type.String({ description: "Workspace skill slug." }),
-    }),
-    executionMode: "sequential",
-    execute: async (_toolCallId, params) => {
-      const slug = String((params as { slug?: unknown }).slug || "").trim();
-      const skill = bySlug.get(slug);
-      if (!skill) {
-        throw new Error(
-          `Unknown workspace skill '${slug}'. Available: ${skills
-            .map((item) => item.slug)
-            .join(", ")}`,
-        );
-      }
-      return {
-        content: [{ type: "text", text: skill.content }],
-        details: {
-          slug: skill.slug,
-          name: skill.name,
-          description: skill.description,
-          path: skill.skillPath,
-        },
-      };
-    },
-  };
 }
