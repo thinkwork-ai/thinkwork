@@ -4,11 +4,11 @@ import { useMutation, useQuery, useSubscription } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
-  Beaker,
   CalendarClock,
   Loader2,
   Play,
   ShieldCheck,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   CartesianGrid,
@@ -52,6 +52,10 @@ import {
   StartEvalRunMutation,
 } from "@/lib/evaluation-queries";
 import { cn, relativeTime } from "@/lib/utils";
+import {
+  desktopToolbarButtonClassName,
+  desktopToolbarGapClassName,
+} from "@/lib/desktop-chrome";
 
 function passRateColor(rate: number): string {
   if (rate >= 90) return "text-green-500";
@@ -317,10 +321,17 @@ export function SettingsEvaluations() {
     title: "Evaluations",
     breadcrumbs: [{ label: "Evaluations" }],
     action: tenantId ? (
-      <div className="flex gap-2">
-        <Button asChild variant="outline" size="sm">
+      <div className={cn("flex items-center", desktopToolbarGapClassName)}>
+        <Button
+          asChild
+          variant="ghost"
+          size="icon-sm"
+          title="Studio"
+          aria-label="Studio"
+          className={desktopToolbarButtonClassName}
+        >
           <Link to="/settings/evaluations/studio">
-            <Beaker className="mr-1 h-4 w-4" /> Studio
+            <SlidersHorizontal className="size-4" />
           </Link>
         </Button>
         <RunEvaluationButton
@@ -474,8 +485,14 @@ function RunEvaluationButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">
-          <Play className="mr-1 h-4 w-4" /> Run Evaluation
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Run evaluation"
+          aria-label="Run evaluation"
+          className={desktopToolbarButtonClassName}
+        >
+          <Play className="size-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
