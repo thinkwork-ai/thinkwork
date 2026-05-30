@@ -6,6 +6,47 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Pi-Compatible Mobile Host
+
+Plan:
+`docs/plans/2026-05-30-004-feat-mobile-pi-compatible-host-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active
+- Active unit: U1 mobile Pi compatibility contract and baseline tests
+- Active branch: `codex/mobile-pi-host-u1-contract`
+- Active worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u1-contract`
+- Started: 2026-05-30
+- Latest merged PR: [#1870](https://github.com/thinkwork-ai/thinkwork/pull/1870)
+- Active PR: none yet
+- CI: not started
+
+### Active Unit Notes
+
+- Read `AGENTS.md`.
+- Read the Pi-compatible mobile host plan and confirmed U1 is the first
+  implementation unit.
+- Created isolated U1 worktree from `origin/main` at merged plan commit
+  `14e6f216`.
+- Main checkout has pre-existing unrelated dirty files; no unrelated changes
+  are being touched.
+- Implemented a typed mobile Pi compatibility contract at
+  `apps/mobile/lib/agent/compat/pi-contract.ts`.
+- Added golden contract tests for the committed mobile host surface,
+  extension/prompt composition, tool-turn event order, transcript shape, and
+  pre-model abort behavior.
+- Added durable architecture-pattern documentation at
+  `docs/solutions/architecture-patterns/mobile-pi-compatible-host-contract-2026-05-30.md`.
+- Focused verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/compat/pi-contract.test.ts lib/agent/session.test.ts lib/agent/loop.test.ts`
+  (24 tests), `pnpm dlx prettier --check ...`, and `git diff --check`.
+- `pnpm --filter @thinkwork/mobile typecheck` has no selected package script;
+  CI `typecheck` remains the broader gate.
+
 ## Current Run: Mobile Pi Parity and E2E Smokes
 
 Plan:
