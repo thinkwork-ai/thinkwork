@@ -45,6 +45,37 @@ export async function notifyThreadUpdate(payload: {
   );
 }
 
+export async function notifyThreadActivity(payload: {
+  userId: string;
+  tenantId: string;
+  threadId: string;
+  messageId: string;
+  authorId?: string | null;
+  authorType: string;
+  snippet?: string | null;
+  threadTitle?: string | null;
+  createdAt?: string | null;
+}): Promise<void> {
+  await postToAppSync(
+    `mutation($userId: ID!, $tenantId: ID!, $threadId: ID!, $messageId: ID!, $authorId: ID, $authorType: String!, $snippet: String, $threadTitle: String, $createdAt: AWSDateTime) {
+			notifyThreadActivity(userId: $userId, tenantId: $tenantId, threadId: $threadId, messageId: $messageId, authorId: $authorId, authorType: $authorType, snippet: $snippet, threadTitle: $threadTitle, createdAt: $createdAt) {
+				userId threadId messageId authorId authorType snippet threadTitle createdAt
+			}
+		}`,
+    {
+      userId: payload.userId,
+      tenantId: payload.tenantId,
+      threadId: payload.threadId,
+      messageId: payload.messageId,
+      authorId: payload.authorId ?? null,
+      authorType: payload.authorType,
+      snippet: payload.snippet ?? null,
+      threadTitle: payload.threadTitle ?? null,
+      createdAt: payload.createdAt ?? null,
+    },
+  );
+}
+
 export async function notifyNewMessage(payload: {
   messageId: string;
   threadId: string;
