@@ -77,6 +77,22 @@ export function isThreadUnread(thread: ChatThreadSummary): boolean {
   return new Date(thread.lastReadAt).getTime() < new Date(activity).getTime();
 }
 
+/**
+ * The threads in a section the caller hasn't read yet, honoring optimistic
+ * client-side reads (`locallyReadThreadIds`). The single source of truth for a
+ * section's unread badge count, its unread filter, and the id set "Mark all as
+ * read" targets — keeping all three consistent so the badge reaches zero after
+ * a mark-all (see plan KTD-2).
+ */
+export function filterUnreadThreads(
+  threads: ChatThreadSummary[],
+  locallyReadThreadIds: ReadonlySet<string>,
+): ChatThreadSummary[] {
+  return threads.filter(
+    (thread) => isThreadUnread(thread) && !locallyReadThreadIds.has(thread.id),
+  );
+}
+
 function activityTime(thread: ChatThreadSummary): number {
   const activity = threadActivityAt(thread);
   if (!activity) return 0;

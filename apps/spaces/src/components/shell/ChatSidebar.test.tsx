@@ -16,6 +16,7 @@ const {
   navigateMock,
   deleteThreadMock,
   updateThreadMock,
+  markThreadsReadMock,
   pinThreadMock,
   unpinThreadMock,
   reorderPinnedThreadsMock,
@@ -32,6 +33,7 @@ const {
   navigateMock: vi.fn(),
   deleteThreadMock: vi.fn(),
   updateThreadMock: vi.fn(),
+  markThreadsReadMock: vi.fn(),
   pinThreadMock: vi.fn(),
   unpinThreadMock: vi.fn(),
   reorderPinnedThreadsMock: vi.fn(),
@@ -66,6 +68,7 @@ const {
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
+    MarkThreadsReadMutation: Symbol("MarkThreadsReadMutation"),
     PinThreadMutation: Symbol("PinThreadMutation"),
     PinnedThreadsQuery: Symbol("PinnedThreadsQuery"),
     ReorderPinnedThreadsMutation: Symbol("ReorderPinnedThreadsMutation"),
@@ -135,6 +138,9 @@ vi.mock("urql", () => ({
     }
     if (mutation === queryDocs.UpdateThreadMutation) {
       return [{ fetching: false }, updateThreadMock];
+    }
+    if (mutation === queryDocs.MarkThreadsReadMutation) {
+      return [{ fetching: false }, markThreadsReadMock];
     }
     if (mutation === queryDocs.PinThreadMutation) {
       return [{ fetching: false }, pinThreadMock];
@@ -286,14 +292,33 @@ vi.mock("@thinkwork/ui", () => ({
   DropdownMenuItem: ({
     children,
     asChild,
+    onSelect,
+    disabled,
     ...props
   }: {
     children: React.ReactNode;
     asChild?: boolean;
-  }) => (asChild ? children : <button {...props}>{children}</button>),
+    onSelect?: (event: Event) => void;
+    disabled?: boolean;
+  }) =>
+    asChild ? (
+      children
+    ) : (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() =>
+          onSelect?.({ preventDefault: vi.fn() } as unknown as Event)
+        }
+        {...props}
+      >
+        {children}
+      </button>
+    ),
   DropdownMenuLabel: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  DropdownMenuSeparator: () => <hr />,
   DropdownMenuTrigger: ({
     children,
     asChild,
@@ -439,6 +464,7 @@ afterEach(() => {
   navigateMock.mockReset();
   deleteThreadMock.mockReset();
   updateThreadMock.mockReset();
+  markThreadsReadMock.mockReset();
   pinThreadMock.mockReset();
   unpinThreadMock.mockReset();
   reorderPinnedThreadsMock.mockReset();
@@ -477,6 +503,9 @@ describe("ChatSidebar", () => {
   beforeEach(() => {
     deleteThreadMock.mockResolvedValue({ data: { deleteThread: true } });
     updateThreadMock.mockResolvedValue({ data: { updateThread: { id: "t" } } });
+    markThreadsReadMock.mockResolvedValue({
+      data: { markThreadsRead: { updated: 1 } },
+    });
     pinThreadMock.mockResolvedValue({
       data: { pinThread: { thread: { id: "t" } } },
     });
@@ -609,9 +638,12 @@ describe("ChatSidebar", () => {
 
     render(<ChatSidebar />);
 
+    // The Space section header (its name) is the collapsible label — expected.
+    // The unread badge now lives in a sibling control cluster, not inside the
+    // heading, so the heading's accessible name is exactly the Space name.
     expect(
-      screen.queryByRole("heading", { name: "Customer Onboarding" }),
-    ).toBeNull();
+      screen.getByRole("heading", { name: "Customer Onboarding" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Conversations" })).toBeNull();
     expect(screen.queryByText("Today")).toBeNull();
     expect(screen.queryByText("Yesterday")).toBeNull();
@@ -936,6 +968,210 @@ describe("ChatSidebar", () => {
       expect(updateThreadMock).toHaveBeenCalledWith({
         id: "unread-thread",
         input: { lastReadAt: expect.any(String) },
+      }),
+    );
+  });
+
+  // Scope queries to one section's "…" menu container (the mock renders every
+  // section's DropdownMenu inline, so menu items would otherwise collide).
+  function sectionMenu(triggerName: RegExp) {
+    return screen.getByRole("button", { name: triggerName }).closest("div")!;
+  }
+
+  it("shows the Chats unread-count badge and excludes read threads (R1)", () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "u1",
+        title: "Unread one",
+        lastActivityAt: "2026-05-19T19:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "u2",
+        title: "Unread two",
+        lastActivityAt: "2026-05-19T18:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "r1",
+        title: "Read one",
+        lastActivityAt: "2026-05-19T17:00:00Z",
+        lastReadAt: "2026-05-20T00:00:00Z",
+      },
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    // The Chats controls cluster shows "2" (the two unread, not the read one).
+    const controls = sectionMenu(/chats options/i).parentElement!;
+    expect(within(controls).getByText("2")).toBeTruthy();
+  });
+
+  it("puts no badge or options menu on action items or the Pinned section (R7)", () => {
+    pinnedThreadItemsMock.push({
+      id: "pinned-1",
+      title: "Pinned thread",
+      lastActivityAt: "2026-05-19T19:00:00Z",
+      lastReadAt: null,
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    expect(
+      screen.queryByRole("button", { name: /new thread options/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /search options/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /pinned options/i }),
+    ).toBeNull();
+    // Chats does get one.
+    expect(screen.getByRole("button", { name: /chats options/i })).toBeTruthy();
+  });
+
+  it("marks the Chats section's unread ids read optimistically (R2, R4)", async () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "u1",
+        title: "Unread one",
+        lastActivityAt: "2026-05-19T19:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "u2",
+        title: "Unread two",
+        lastActivityAt: "2026-05-19T18:00:00Z",
+        lastReadAt: null,
+      },
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    const menu = sectionMenu(/chats options/i);
+    fireEvent.click(
+      within(menu).getByRole("button", { name: /mark all as read/i }),
+    );
+
+    await waitFor(() =>
+      expect(markThreadsReadMock).toHaveBeenCalledWith({
+        input: { threadIds: ["u1", "u2"], read: true },
+      }),
+    );
+    // Optimistic: the badge clears immediately to 0 (no "2" left in the cluster).
+    const controls = sectionMenu(/chats options/i).parentElement!;
+    expect(within(controls).queryByText("2")).toBeNull();
+    await waitFor(() =>
+      expect(recentReexecuteMock).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      }),
+    );
+  });
+
+  it("filters a section to its unread threads and persists the choice (R5)", () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "u1",
+        title: "Unread one",
+        lastActivityAt: "2026-05-19T19:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "r1",
+        title: "Read one",
+        lastActivityAt: "2026-05-19T17:00:00Z",
+        lastReadAt: "2026-05-20T00:00:00Z",
+      },
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    const { container } = render(<ChatSidebar />);
+
+    expect(screen.getByText("Read one")).toBeTruthy();
+    fireEvent.click(
+      within(sectionMenu(/chats options/i)).getByRole("button", {
+        name: /show unread/i,
+      }),
+    );
+
+    // Only the unread thread remains; filtered indicator + persisted pref.
+    expect(screen.getByText("Unread one")).toBeTruthy();
+    expect(screen.queryByText("Read one")).toBeNull();
+    expect(
+      container.querySelector('[aria-label="Filtered to unread"]'),
+    ).toBeTruthy();
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          "thinkwork:sidebar-section-unread-filter",
+        ) ?? "{}",
+      ),
+    ).toEqual({ chats: true });
+  });
+
+  it("shows a 'No unread — Show all' affordance when a filtered section empties (R8)", () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push({
+      id: "r1",
+      title: "Read one",
+      lastActivityAt: "2026-05-19T17:00:00Z",
+      lastReadAt: "2026-05-20T00:00:00Z",
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    fireEvent.click(
+      within(sectionMenu(/chats options/i)).getByRole("button", {
+        name: /show unread/i,
+      }),
+    );
+
+    const restore = screen.getByRole("button", {
+      name: /no unread — show all/i,
+    });
+    expect(restore).toBeTruthy();
+    expect(screen.queryByText("Read one")).toBeNull();
+
+    fireEvent.click(restore);
+    expect(screen.getByText("Read one")).toBeTruthy();
+  });
+
+  it("collects the Space section's loaded unread ids for Mark all as read (R4, Spaces)", async () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push({
+      id: "s-unread",
+      title: "Space unread thread",
+      spaceId: "space-1",
+      space: { id: "space-1", name: "Customer Onboarding" },
+      lastActivityAt: "2026-05-19T19:00:00Z",
+      lastReadAt: null,
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    fireEvent.click(
+      within(sectionMenu(/customer onboarding options/i)).getByRole("button", {
+        name: /mark all as read/i,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(markThreadsReadMock).toHaveBeenCalledWith({
+        input: { threadIds: ["s-unread"], read: true },
       }),
     );
   });
