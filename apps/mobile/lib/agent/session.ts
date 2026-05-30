@@ -32,6 +32,8 @@ export interface AgentSessionConfig {
   /** Seed transcript (prior turns). */
   messages?: Message[];
   maxSteps?: number;
+  /** Opaque thread/session id passed through to tools for durable per-thread state. */
+  sessionId?: string;
   /**
    * Pi-style extensions, loaded once before the first prompt. Each contributes tools
    * (additive — built-ins/`tools` are never dropped) and may shape the system prompt via
@@ -138,6 +140,7 @@ export function createAgentSession(config: AgentSessionConfig): AgentSession {
         system: systemPrompt,
         model: config.model,
         maxSteps: config.maxSteps,
+        sessionId: config.sessionId,
         messages,
         signal: controller.signal,
         onEvent: emit,

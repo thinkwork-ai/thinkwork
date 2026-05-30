@@ -166,7 +166,17 @@ export async function runThreadHarnessTurn(
             targets: workspaceTargets,
           })
         : null,
-      localBashExtension({ sessionId: input.threadId }),
+      localBashExtension({
+        sessionId: input.threadId,
+        workspace:
+          workspaceTargets.length > 0
+            ? {
+                cache: workspaceCache,
+                partition: workspacePartition,
+                targets: workspaceTargets,
+              }
+            : undefined,
+      }),
       input.agentId ? mcpToolsExtension({ agentId: input.agentId }) : null,
     ].filter((ext): ext is ExtensionFactory => Boolean(ext));
   const session = createAgentSession({
@@ -175,6 +185,7 @@ export async function runThreadHarnessTurn(
     tools,
     extensions,
     agentName: input.agentName,
+    sessionId: input.threadId,
     messages: toHarnessMessages(input.priorMessages),
   });
 

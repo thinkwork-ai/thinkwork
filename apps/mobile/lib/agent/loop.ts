@@ -30,6 +30,8 @@ export interface RunAgentTurnOptions {
   maxSteps?: number;
   maxTokens?: number;
   temperature?: number;
+  /** Opaque id of the thread/session this turn belongs to, passed to tools. */
+  sessionId?: string;
   signal?: AbortSignal;
   /** Observability / UI streaming hook. Thrown errors here are ignored. */
   onEvent?: (event: AgentEvent) => void;
@@ -74,6 +76,7 @@ export async function runAgentTurn(
     maxSteps = DEFAULT_MAX_STEPS,
     maxTokens,
     temperature,
+    sessionId,
     signal,
     onEvent,
   } = options;
@@ -158,7 +161,7 @@ export async function runAgentTurn(
       emit({ type: "tool_call", call, step: steps });
       const result = await executeTool(tools, call.name, call.arguments, {
         signal,
-        sessionId: undefined,
+        sessionId,
       });
       emit({
         type: "tool_result",

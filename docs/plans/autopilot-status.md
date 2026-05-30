@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U4 rendered workspace cache and read-only built-ins
-- Active branch: `codex/mobile-pi-host-u4-workspace-cache`
+- Active unit: U5 workspace-backed local bash
+- Active branch: `codex/mobile-pi-host-u5-workspace-bash`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u4-workspace-cache`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u5-workspace-bash`
 - Started: 2026-05-30
-- Latest merged PR: [#1873](https://github.com/thinkwork-ai/thinkwork/pull/1873)
-- Active PR: [#1874](https://github.com/thinkwork-ai/thinkwork/pull/1874)
+- Latest merged PR: [#1874](https://github.com/thinkwork-ai/thinkwork/pull/1874)
+- Active PR: [#1875](https://github.com/thinkwork-ai/thinkwork/pull/1875)
 - CI: pending
 
 ### Active Unit Notes
@@ -111,6 +111,37 @@ Target branch: `main`
   `pnpm --filter @thinkwork/react-native-sdk build`, and
   `pnpm --filter @thinkwork/mobile build:web`.
 - Opened PR [#1874](https://github.com/thinkwork-ai/thinkwork/pull/1874).
+- PR [#1874](https://github.com/thinkwork-ai/thinkwork/pull/1874) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and the remote/local U4 branch plus worktree were deleted. Merge commit:
+  `7e8768eccf5309470160506f74b460761156b257`.
+- Synced from `origin/main` and created isolated U5 branch/worktree
+  `codex/mobile-pi-host-u5-workspace-bash`.
+- Goal for U5: make the built-in mobile `bash` tool run from the same
+  workspace surface as read/grep/find/ls, with durable per-thread `/workspace`
+  files and public network access still enabled by default.
+- Implemented U5 workspace-backed local bash: the mobile `bash` tool now
+  hydrates `/workspace` from the rendered workspace cache before each command,
+  overlays a durable per-thread snapshot so command-created files survive app
+  restarts, snapshots files after each command, and uses the loop-provided
+  thread/session id to keep sandboxes isolated.
+- Updated the mobile Pi compatibility contract to mark
+  `workspace-backed-bash-durability` implemented.
+- Focused U5 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/extensions/__tests__/local-bash-extension.test.ts lib/agent/loop.test.ts lib/agent/thread-turn.test.ts lib/agent/compat/pi-contract.test.ts`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent`,
+  `pnpm --filter @thinkwork/react-native-sdk build`,
+  `pnpm --filter @thinkwork/mobile build:web`, changed-file TypeScript
+  diagnostic filter for touched files, and `git diff --check`.
+- U5 deployed smoke attempted:
+  `pnpm --filter @thinkwork/mobile smoke:pi-harness -- --capabilities bash`.
+  First attempt exposed and fixed a Node/TSX import gap for `just-bash/browser`
+  by switching the extension import to the package root; retry reached the
+  expected credential gate. The worktree has the copied mobile `.env`, but it
+  does not contain required smoke identity inputs (`tenantId`, `agentId`,
+  `userId`, Cognito id token), so real deployed smoke remains pending on those
+  credentials.
+- Opened PR [#1875](https://github.com/thinkwork-ai/thinkwork/pull/1875).
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 

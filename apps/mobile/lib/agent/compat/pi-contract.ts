@@ -34,7 +34,7 @@ export interface MobilePiCompatibilityContract {
 }
 
 export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
-  version: "2026-05-30.u4",
+  version: "2026-05-30.u5",
   host: "thinkwork-mobile-hermes",
   upstreamSdkEmbedding: {
     status: "out_of_scope",
@@ -162,12 +162,11 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
     },
     {
       id: "workspace-backed-bash-durability",
-      status: "deferred",
+      status: "implemented",
       upstreamSurface: "cwd-backed bash",
       mobileSurface: "apps/mobile/lib/agent/extensions/local-bash-extension.ts",
-      ownerUnit: "U5",
       notes:
-        "Mobile bash is currently just-bash backed and thread-keyed in process; durable workspace mounting lands in U5.",
+        "Mobile bash runs through just-bash in a durable per-thread /workspace sandbox, hydrated from the rendered workspace cache and snapshotted after commands.",
     },
     {
       id: "bounded-mcp-proxy-tool",
