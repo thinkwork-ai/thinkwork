@@ -265,6 +265,21 @@ export const PiStartTurnRequestSchema = z
   })
   .strict();
 
+export const PiPrewarmWorkspaceRequestSchema = z
+  .object({
+    agentId: z.string().min(1),
+    spaceId: z.string().min(1),
+  })
+  .strict();
+
+export const PiPrewarmWorkspaceResponseSchema = z
+  .object({
+    accepted: z.boolean(),
+    requestId: z.string().min(1),
+    skippedReason: z.string().min(1).optional(),
+  })
+  .strict();
+
 export const PiStartTurnResponseSchema = z
   .object({
     accepted: z.literal(true),
@@ -386,6 +401,10 @@ export const ChannelSchemas = {
     request: GetPiStatusRequestSchema,
     response: GetPiStatusResponseSchema,
   },
+  prewarmPiWorkspace: {
+    request: PiPrewarmWorkspaceRequestSchema,
+    response: PiPrewarmWorkspaceResponseSchema,
+  },
   startPiTurn: {
     request: PiStartTurnRequestSchema,
     response: PiStartTurnResponseSchema,
@@ -427,6 +446,12 @@ export type ReportInstallOutcomeRequest = z.infer<
 export type PiSidecarStatus = z.infer<typeof PiSidecarStatusSchema>;
 export type PiSidecarState = z.infer<typeof PiSidecarStateSchema>;
 export type PiDiagnosticEvent = z.infer<typeof PiDiagnosticEventSchema>;
+export type PiPrewarmWorkspaceRequest = z.infer<
+  typeof PiPrewarmWorkspaceRequestSchema
+>;
+export type PiPrewarmWorkspaceResponse = z.infer<
+  typeof PiPrewarmWorkspaceResponseSchema
+>;
 export type PiStartTurnRequest = z.infer<typeof PiStartTurnRequestSchema>;
 export type PiStartTurnResponse = z.infer<typeof PiStartTurnResponseSchema>;
 export type PiCancelTurnRequest = z.infer<typeof PiCancelTurnRequestSchema>;

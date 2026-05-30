@@ -194,6 +194,24 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     }
   }, [defaultSpaceId, selectedSpaceId, spaceId, spaces]);
 
+  useEffect(() => {
+    const targetSpaceId = selectedSpace?.id ?? defaultSpaceId ?? null;
+    if (!defaultAgentId || !targetSpaceId) return;
+    let cancelled = false;
+    void (async () => {
+      if (!(await shouldUseDesktopLocalPiDispatchNow()) || cancelled) return;
+      await getDesktopBridge()?.pi?.prewarmWorkspace?.({
+        agentId: defaultAgentId,
+        spaceId: targetSpaceId,
+      });
+    })().catch((err) => {
+      console.warn("[desktop-local-pi] workspace prewarm failed:", err);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [defaultAgentId, defaultSpaceId, selectedSpace?.id]);
+
   async function handleSubmit(
     files: File[],
     mentions: SpacesComposerMention[],

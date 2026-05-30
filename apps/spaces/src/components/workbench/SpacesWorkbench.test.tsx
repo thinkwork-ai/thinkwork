@@ -47,6 +47,7 @@ vi.mock("@/lib/use-assigned-computer-selection", () => ({
 const navigate = vi.fn();
 const createThread = vi.fn();
 const sendMessage = vi.fn();
+const prewarmWorkspace = vi.fn();
 const startTurn = vi.fn();
 
 beforeEach(() => {
@@ -54,7 +55,12 @@ beforeEach(() => {
   navigate.mockReset();
   createThread.mockReset();
   sendMessage.mockReset();
+  prewarmWorkspace.mockReset();
   startTurn.mockReset();
+  prewarmWorkspace.mockResolvedValue({
+    accepted: true,
+    requestId: "workspace-prewarm-1",
+  });
   startTurn.mockResolvedValue({ accepted: true, requestId: "local-turn-1" });
   createThread.mockResolvedValue({
     data: { createThread: { id: "thread-1", agentId: "agent-1" } },
@@ -142,6 +148,7 @@ beforeEach(() => {
     value: {
       pi: {
         status: "healthy",
+        prewarmWorkspace,
         startTurn,
         getStatus: vi.fn(async () => ({ status: "healthy" })),
         onStatusChanged: vi.fn(() => () => {}),
@@ -157,6 +164,18 @@ afterEach(() => {
 });
 
 describe("SpacesWorkbench", () => {
+  it("prewarms the desktop local Pi workspace when New Thread loads", async () => {
+    render(<SpacesWorkbench />);
+
+    await waitFor(() => {
+      expect(prewarmWorkspace).toHaveBeenCalledWith({
+        agentId: "agent-1",
+        spaceId: "space-1",
+      });
+    });
+    expect(createThread).not.toHaveBeenCalled();
+  });
+
   it("starts the desktop local Pi sidecar for the first message of a new thread", async () => {
     render(<SpacesWorkbench />);
 

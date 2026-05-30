@@ -2,7 +2,10 @@ import {
   PI_SIDECAR_PROTOCOL_VERSION,
   isPiSidecarParentMessage,
 } from "../main/pi-sidecar-session.js";
-import { runLocalDesktopTurn } from "./local-turn-runner.js";
+import {
+  prewarmLocalWorkspace,
+  runLocalDesktopTurn,
+} from "./local-turn-runner.js";
 import { createRedactedLogger } from "./redacted-logger.js";
 
 interface ParentPort {
@@ -46,6 +49,18 @@ if (!parentPort) {
           requestId: message.requestId,
         });
         void runTurn(message.requestId, message.payload);
+        return;
+      case "prewarm-workspace":
+        logger.info("local Pi sidecar received workspace prewarm", {
+          requestId: message.requestId,
+          agentSlug: message.payload.session.partition.agentSlug,
+          spaceId: message.payload.session.partition.spaceId,
+        });
+        parentPort.postMessage({
+          type: "workspace-prewarm-accepted",
+          requestId: message.requestId,
+        });
+        void prewarmWorkspace(message.requestId, message.payload);
         return;
       case "cancel-turn":
         turns.get(message.requestId)?.abort();
@@ -96,6 +111,29 @@ if (!parentPort) {
     } finally {
       clearTimeout(timeout);
       turns.delete(requestId);
+    }
+  }
+
+  async function prewarmWorkspace(
+    requestId: string,
+    payload: Parameters<typeof prewarmLocalWorkspace>[0],
+  ): Promise<void> {
+    try {
+      const result = await prewarmLocalWorkspace(payload, { logger });
+      parentPort?.postMessage({
+        type: "diagnostic",
+        level: "info",
+        message: `workspace prewarm ${requestId} completed; synced=${result.synced}; cacheHit=${result.cacheHit === true}`,
+      });
+    } catch (error) {
+      parentPort?.postMessage({
+        type: "diagnostic",
+        level: "warn",
+        message:
+          error instanceof Error
+            ? `workspace prewarm failed: ${error.message}`
+            : `workspace prewarm failed: ${String(error)}`,
+      });
     }
   }
 }

@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import {
   PI_DIAGNOSTIC_EVENT_CHANNEL,
   PI_STATUS_EVENT_CHANNEL,
+  type PiPrewarmWorkspaceRequest,
+  type PiPrewarmWorkspaceResponse,
   type PiDiagnosticEvent,
   type PiCancelTurnRequest,
   type PiCancelTurnResponse,
@@ -14,11 +16,13 @@ import {
   PI_SIDECAR_PROTOCOL_VERSION,
   redactPiDiagnosticLine,
   resolvePiSidecarEntryPath,
+  type PreparedDesktopPiWorkspacePrewarmSession,
   type PiSidecarTurnPayload,
   type PiSidecarChildMessage,
   type PiSidecarParentMessage,
 } from "./pi-sidecar-session.js";
 import type { PreparePiRuntimeSession } from "./pi-runtime-session-client.js";
+import type { PreparePiWorkspacePrewarmSession } from "./pi-runtime-session-client.js";
 
 export interface UtilityProcessLike {
   pid?: number;
@@ -56,6 +60,7 @@ export interface PiSidecarControllerOptions {
   restartDelayMs?: number;
   maxRestarts?: number;
   prepareTurn?: PreparePiRuntimeSession;
+  prepareWorkspacePrewarm?: PreparePiWorkspacePrewarmSession;
   workspaceCacheRoot?: string;
   logger?: Pick<Console, "info" | "warn" | "error">;
 }
@@ -70,6 +75,7 @@ export class PiSidecarController {
   private readonly restartDelayMs: number;
   private readonly maxRestarts: number;
   private readonly prepareTurn: PreparePiRuntimeSession;
+  private readonly prepareWorkspacePrewarm: PreparePiWorkspacePrewarmSession;
   private readonly workspaceCacheRoot: string;
   private readonly logger: Pick<Console, "info" | "warn" | "error">;
   private readonly activeTurns = new Map<
@@ -100,6 +106,11 @@ export class PiSidecarController {
       options.prepareTurn ??
       (async () => {
         throw new Error("Pi runtime session preparation is not configured");
+      });
+    this.prepareWorkspacePrewarm =
+      options.prepareWorkspacePrewarm ??
+      (async () => {
+        throw new Error("Pi workspace prewarm preparation is not configured");
       });
     this.workspaceCacheRoot = options.workspaceCacheRoot ?? "";
     this.logger = options.logger ?? console;
@@ -235,6 +246,44 @@ export class PiSidecarController {
     return { accepted: true, requestId };
   }
 
+  async prewarmWorkspace(
+    request: PiPrewarmWorkspaceRequest,
+  ): Promise<PiPrewarmWorkspaceResponse> {
+    if (!this.process || this.state.status !== "healthy") {
+      throw new Error("Pi sidecar is not healthy");
+    }
+    const requestId = randomUUID();
+    this.logger.info("[pi-sidecar] preparing workspace prewarm", {
+      requestId,
+      agentId: request.agentId,
+      spaceId: request.spaceId,
+    });
+    let session: PreparedDesktopPiWorkspacePrewarmSession;
+    try {
+      session = await this.prepareWorkspacePrewarm(request);
+    } catch (err) {
+      const skippedReason =
+        err instanceof Error ? err.message : "Workspace prewarm unavailable";
+      this.logger.warn("[pi-sidecar] workspace prewarm skipped", {
+        requestId,
+        agentId: request.agentId,
+        spaceId: request.spaceId,
+        skippedReason,
+      });
+      return { accepted: false, requestId, skippedReason };
+    }
+    const payload = {
+      session,
+      workspaceCacheRoot: this.workspaceCacheRoot,
+    };
+    this.post({
+      type: "prewarm-workspace",
+      requestId,
+      payload,
+    });
+    return { accepted: true, requestId };
+  }
+
   cancelTurn(request: PiCancelTurnRequest): PiCancelTurnResponse {
     if (!this.process) return { cancelled: false };
     this.post({ type: "cancel-turn", requestId: request.requestId });
@@ -292,6 +341,11 @@ export class PiSidecarController {
           source: "main",
           requestId: message.requestId,
           ...this.contextForRequest(message.requestId),
+        });
+        return;
+      case "workspace-prewarm-accepted":
+        this.logger.info("[pi-sidecar] workspace prewarm accepted", {
+          requestId: message.requestId,
         });
         return;
       case "turn-cancelled":
@@ -445,7 +499,11 @@ function isSidecarChildMessage(
   if (type === "ready" || type === "pong") {
     return typeof (message as { version?: unknown }).version === "string";
   }
-  if (type === "turn-accepted" || type === "turn-cancelled") {
+  if (
+    type === "turn-accepted" ||
+    type === "turn-cancelled" ||
+    type === "workspace-prewarm-accepted"
+  ) {
     return typeof (message as { requestId?: unknown }).requestId === "string";
   }
   if (type !== "diagnostic") return false;

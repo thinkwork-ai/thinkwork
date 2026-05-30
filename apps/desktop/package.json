@@ -17,10 +17,12 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1028.0",
     "@earendil-works/pi-coding-agent": "0.76.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@thinkwork/desktop-ipc": "workspace:*",
     "@thinkwork/pi-extensions": "workspace:^",
     "@thinkwork/pi-runtime-core": "workspace:^",
     "electron-updater": "6.8.3",
+    "pi-mcp-adapter": "2.8.0",
     "typebox": "^1.1.38"
   },
   "devDependencies": {

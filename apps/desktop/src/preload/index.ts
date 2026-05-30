@@ -15,6 +15,7 @@ import {
   OAUTH_ERROR_EVENT_CHANNEL,
   PI_DIAGNOSTIC_EVENT_CHANNEL,
   PI_STATUS_EVENT_CHANNEL,
+  PREWARM_PI_WORKSPACE_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   SIGN_OUT_CHANNEL,
@@ -39,6 +40,8 @@ import {
   PiCancelTurnRequestSchema,
   PiCancelTurnResponseSchema,
   PiDiagnosticEventSchema,
+  PiPrewarmWorkspaceRequestSchema,
+  PiPrewarmWorkspaceResponseSchema,
   PiStartTurnRequestSchema,
   PiStartTurnResponseSchema,
   PiStatusEventSchema,
@@ -89,6 +92,14 @@ const piBridge: NonNullable<ThinkworkBridge["pi"]> = {
     );
     piBridge.status = state.status;
     return state;
+  },
+  async prewarmWorkspace(request) {
+    return PiPrewarmWorkspaceResponseSchema.parse(
+      await ipcRenderer.invoke(
+        PREWARM_PI_WORKSPACE_CHANNEL,
+        PiPrewarmWorkspaceRequestSchema.parse(request),
+      ),
+    );
   },
   async startTurn(request) {
     return PiStartTurnResponseSchema.parse(

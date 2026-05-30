@@ -83,8 +83,30 @@ export interface PrepareLocalPiRuntimeSessionInput {
   messageAttachments?: DesktopRuntimeAttachment[];
 }
 
+export interface PrepareLocalPiWorkspacePrewarmInput {
+  auth: DesktopRuntimeAuth;
+  agentId: string;
+  spaceId: string;
+}
+
 export type PreparedLocalPiRuntimeSession =
   PreparedDesktopPiRuntimeSession<DesktopSidecarCredentials>;
+
+export interface PreparedLocalPiWorkspacePrewarmSession {
+  expiresAt: string;
+  sidecarCredentials: DesktopSidecarCredentials;
+  workspace: {
+    bucket: string;
+    renderedPrefix: string;
+  };
+  partition: {
+    stage?: string;
+    tenantSlug: string;
+    agentSlug: string;
+    spaceId: string;
+    userId: string;
+  };
+}
 
 interface CallerRow {
   id: string;
@@ -837,5 +859,146 @@ export async function prepareLocalPiRuntimeSession(
     finalizeCallbackSecret: finalizeToken,
     sidecarCredentials,
     invocation,
+  };
+}
+
+export async function prepareLocalPiWorkspacePrewarm(
+  input: PrepareLocalPiWorkspacePrewarmInput,
+  deps: PrepareLocalPiRuntimeSessionDeps = defaultPrepareLocalPiRuntimeSessionDeps(),
+): Promise<PreparedLocalPiWorkspacePrewarmSession> {
+  assertUuid(input.agentId, "agentId");
+  assertUuid(input.spaceId, "spaceId");
+  if (input.auth.authType !== "cognito" || !input.auth.email) {
+    throw new DesktopRuntimeSessionError(
+      "Desktop workspace prewarm requires Cognito user authentication",
+      401,
+      "UNAUTHORIZED",
+    );
+  }
+
+  const caller = await deps.loadCallerByEmail(input.auth.email.toLowerCase());
+  if (!caller) {
+    throw new DesktopRuntimeSessionError(
+      "Caller is not bootstrapped",
+      403,
+      "CALLER_NOT_BOOTSTRAPPED",
+    );
+  }
+  if (input.auth.tenantId && input.auth.tenantId !== caller.tenantId) {
+    throw new DesktopRuntimeSessionError(
+      "Caller tenant does not match token tenant",
+      403,
+      "TENANT_MISMATCH",
+    );
+  }
+
+  const membership = await deps.loadTenantMembership({
+    tenantId: caller.tenantId,
+    userId: caller.id,
+  });
+  if (!membership || membership.status !== "active") {
+    throw new DesktopRuntimeSessionError(
+      "Caller is not an active tenant member",
+      403,
+      "TENANT_ACCESS_DENIED",
+    );
+  }
+
+  const space = await deps.loadSpaceForAccess({
+    tenantId: caller.tenantId,
+    spaceId: input.spaceId,
+  });
+  if (!space || space.status !== "active") {
+    throw new DesktopRuntimeSessionError(
+      "Space not found",
+      404,
+      "SPACE_NOT_FOUND",
+    );
+  }
+  if (space.accessMode === "private") {
+    const spaceMember = await deps.loadSpaceMembership({
+      tenantId: caller.tenantId,
+      spaceId: space.id,
+      userId: caller.id,
+    });
+    if (!spaceMember) {
+      throw new DesktopRuntimeSessionError(
+        "Caller does not have access to this Space",
+        403,
+        "SPACE_ACCESS_DENIED",
+      );
+    }
+  }
+
+  let runtimeConfig: AgentRuntimeConfig;
+  try {
+    runtimeConfig = await deps.resolveRuntimeConfig({
+      tenantId: caller.tenantId,
+      agentId: input.agentId,
+      spaceId: input.spaceId,
+      currentUserId: caller.id,
+      currentUserEmail: caller.email,
+    });
+  } catch (err) {
+    if (err instanceof AgentNotFoundError) {
+      throw new DesktopRuntimeSessionError(
+        "Agent not found",
+        404,
+        "AGENT_NOT_FOUND",
+      );
+    }
+    throw err;
+  }
+
+  const renderedWorkspace = await deps.renderWorkspace({
+    tenantId: caller.tenantId,
+    agentId: input.agentId,
+    spaceId: input.spaceId,
+    userId: caller.id,
+    agentBlockedTools: runtimeConfig.blockedTools,
+  });
+  if (!renderedWorkspace.rendered || !renderedWorkspace.renderedPrefix) {
+    if (renderedWorkspace.errorCode === "SpaceAccessDenied") {
+      throw new DesktopRuntimeSessionError(
+        renderedWorkspace.reason ?? "Workspace render access denied",
+        403,
+        "SPACE_ACCESS_DENIED",
+      );
+    }
+    throw new DesktopRuntimeSessionError(
+      renderedWorkspace.reason ?? "Workspace render unavailable",
+      renderedWorkspace.statusCode ?? 503,
+      renderedWorkspace.errorCode ?? "WORKSPACE_RENDER_UNAVAILABLE",
+    );
+  }
+  if (!deps.env.workspaceBucket) {
+    throw new DesktopRuntimeSessionError(
+      "Workspace bucket is not configured",
+      503,
+      "WORKSPACE_BUCKET_UNAVAILABLE",
+    );
+  }
+
+  const now = deps.now();
+  const sidecarCredentials = buildDesktopSidecarCredentials({
+    now,
+    workspaceBucket: deps.env.workspaceBucket,
+    renderedWorkspacePrefix: renderedWorkspace.renderedPrefix,
+    hindsightEndpoint: deps.env.hindsightEndpoint,
+  });
+
+  return {
+    expiresAt: sidecarCredentials.expiresAt,
+    sidecarCredentials,
+    workspace: {
+      bucket: deps.env.workspaceBucket,
+      renderedPrefix: renderedWorkspace.renderedPrefix,
+    },
+    partition: {
+      tenantSlug: runtimeConfig.tenantSlug,
+      agentSlug: runtimeConfig.agentSlug,
+      spaceId: renderedWorkspace.activeSpace?.id ?? input.spaceId,
+      userId: caller.id,
+    },
   };
 }
