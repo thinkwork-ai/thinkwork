@@ -122,6 +122,8 @@ describe("mcp-proxy handler", () => {
     expect(parse(res).tools).toEqual([
       {
         name: "crm__create_lead",
+        server: "crm",
+        tool: "create_lead",
         description: "Create a lead",
         inputSchema: { type: "object" },
       },
@@ -132,6 +134,26 @@ describe("mcp-proxy handler", () => {
       "u1",
       expect.any(String),
     );
+  });
+
+  it("tools/list reports per-server discovery failures without failing the whole catalog", async () => {
+    mockBuildMcpConfigs.mockResolvedValue([
+      SERVER_A,
+      { name: "erp", url: "https://erp", transport: "streamable-http" },
+    ]);
+    mockListTools
+      .mockResolvedValueOnce([{ name: "create_lead" }])
+      .mockRejectedValueOnce(new McpTransportError("timeout", "erp"));
+
+    const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
+    expect(res.statusCode).toBe(200);
+    const body = parse(res);
+    expect(body.tools.map((t: { name: string }) => t.name)).toEqual([
+      "crm__create_lead",
+    ]);
+    expect(body.errors).toEqual([
+      { server: "erp", error: "timeout", kind: "transport" },
+    ]);
   });
 
   it("tools/call forwards {name, arguments} and returns the result", async () => {
@@ -152,6 +174,33 @@ describe("mcp-proxy handler", () => {
     const body = parse(res);
     expect(body.content).toEqual(OK_CONTENT);
     expect(body.isError).toBe(false);
+    expect(mockCallTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: SERVER_A.url,
+        token: "tok-a",
+        name: "crm",
+      }),
+      "create_lead",
+      { email: "x@y.com" },
+    );
+  });
+
+  it("tools/call accepts bounded {server, tool, arguments}", async () => {
+    mockCallTool.mockResolvedValue({
+      content: OK_CONTENT,
+      isError: false,
+      raw: {},
+    });
+
+    const res = await handler(
+      event(CALL_PATH, {
+        agentId: "ag1",
+        server: "crm",
+        tool: "create_lead",
+        arguments: { email: "x@y.com" },
+      }),
+    );
+    expect(res.statusCode).toBe(200);
     expect(mockCallTool).toHaveBeenCalledWith(
       expect.objectContaining({
         url: SERVER_A.url,
@@ -210,8 +259,12 @@ describe("mcp-proxy handler", () => {
 
     const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
     expect(res.statusCode).toBe(200);
-    expect(parse(res).tools.map((t: { name: string }) => t.name)).toEqual([
+    const body = parse(res);
+    expect(body.tools.map((t: { name: string }) => t.name)).toEqual([
       "crm__create_lead",
+    ]);
+    expect(body.errors).toEqual([
+      { server: "broken", error: "boom", kind: "transport" },
     ]);
   });
 
@@ -263,7 +316,9 @@ describe("mcp-proxy handler", () => {
   });
 
   it("unknown route → 404", async () => {
-    const res = await handler(event("/api/mcp/tools/bogus", { agentId: "ag1" }));
+    const res = await handler(
+      event("/api/mcp/tools/bogus", { agentId: "ag1" }),
+    );
     expect(res.statusCode).toBe(404);
   });
 

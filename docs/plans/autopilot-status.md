@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U5 workspace-backed local bash
-- Active branch: `codex/mobile-pi-host-u5-workspace-bash`
+- Active unit: U6 bounded MCP proxy tool for mobile
+- Active branch: `codex/mobile-pi-host-u6-mcp-proxy`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u5-workspace-bash`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u6-mcp-proxy`
 - Started: 2026-05-30
-- Latest merged PR: [#1874](https://github.com/thinkwork-ai/thinkwork/pull/1874)
-- Active PR: [#1875](https://github.com/thinkwork-ai/thinkwork/pull/1875)
+- Latest merged PR: [#1875](https://github.com/thinkwork-ai/thinkwork/pull/1875)
+- Active PR: [#1876](https://github.com/thinkwork-ai/thinkwork/pull/1876)
 - CI: pending
 
 ### Active Unit Notes
@@ -142,6 +142,40 @@ Target branch: `main`
   `userId`, Cognito id token), so real deployed smoke remains pending on those
   credentials.
 - Opened PR [#1875](https://github.com/thinkwork-ai/thinkwork/pull/1875).
+- PR [#1875](https://github.com/thinkwork-ai/thinkwork/pull/1875) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and the remote/local U5 branch plus worktree were deleted. Merge commit:
+  `c921aab417a47652493f88e5f8cfa7a92741274a`.
+- Synced from `origin/main` and created isolated U6 branch/worktree
+  `codex/mobile-pi-host-u6-mcp-proxy`.
+- Goal for U6: replace mobile's default one-visible-tool-per-MCP-tool surface
+  with one bounded `mcp` gateway that supports list, search, and
+  server/tool/args call dispatch while keeping bearer resolution server-side.
+- Implemented U6 bounded MCP proxy behavior: mobile now registers one default
+  `mcp` gateway with `list`, `search`, and `call({ server, tool, args })`
+  modes; direct per-MCP-tool registration is preserved only through an explicit
+  allowlist. Default MCP discovery happens only when the model calls `mcp`
+  list/search/call, keeping simple mobile turns from paying an upfront MCP
+  round trip.
+- Extended the platform MCP proxy list/call contract to return `{server, tool}`
+  metadata, report per-server discovery failures in the list response, and
+  accept bounded `{server, tool, arguments}` calls while keeping existing
+  server-qualified `name` calls compatible.
+- Updated the mobile Pi compatibility contract to mark
+  `bounded-mcp-proxy-tool` implemented.
+- Focused U6 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/extensions/__tests__/mcp-tools-extension.test.ts lib/agent/compat/pi-contract.test.ts lib/agent/thread-turn.test.ts`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent`,
+  `pnpm --filter @thinkwork/api test -- src/handlers/mcp-proxy.test.ts`,
+  `pnpm --filter @thinkwork/react-native-sdk build`,
+  `pnpm --filter @thinkwork/mobile build:web`, changed-file TypeScript
+  diagnostic filter for touched files, and `git diff --check`.
+- U6 deployed smoke attempted:
+  `pnpm --filter @thinkwork/mobile smoke:pi-harness -- --capabilities mcp`.
+  The copied mobile `.env` still lacks required smoke identity inputs
+  (`tenantId`, `agentId`, `userId`, Cognito id token), so real deployed MCP
+  smoke remains pending on those credentials.
+- Opened PR [#1876](https://github.com/thinkwork-ai/thinkwork/pull/1876).
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 

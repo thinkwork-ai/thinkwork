@@ -26,9 +26,25 @@ const DEFAULT_API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
 
 /** A tool definition returned by the proxy's tools/list. */
 export interface TenantToolDef {
+  /** Server-qualified fallback name, e.g. crm__search_opportunities. */
   name: string;
+  /** MCP server slug. Present on the bounded mcp proxy path. */
+  server?: string;
+  /** Tool name as exposed by the MCP server. Present on the bounded mcp proxy path. */
+  tool?: string;
   description?: string;
   inputSchema?: unknown;
+}
+
+export interface TenantToolListError {
+  server?: string;
+  error: string;
+  kind?: "discovery" | "auth" | "transport" | "unknown";
+}
+
+export interface TenantToolListResult {
+  tools: TenantToolDef[];
+  errors: TenantToolListError[];
 }
 
 /** Result of a proxied tools/call. `isError` marks a recoverable tool failure. */
@@ -44,6 +60,23 @@ export interface TenantMcpDeps {
   getToken?: () => Promise<string | null>;
   /** Injectable fetch for tests. */
   fetchImpl?: typeof fetch;
+}
+
+export class McpProxyClientError extends Error {
+  readonly status: number;
+  readonly kind: "auth" | "transport" | "unknown";
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "McpProxyClientError";
+    this.status = status;
+    this.kind =
+      status === 401 || status === 403
+        ? "auth"
+        : status >= 500
+          ? "transport"
+          : "unknown";
+  }
 }
 
 async function proxyPost(
@@ -73,11 +106,27 @@ async function proxyPost(
     [k: string]: unknown;
   };
   if (!resp.ok) {
-    throw new Error(
+    throw new McpProxyClientError(
+      resp.status,
       `MCP proxy ${resp.status}: ${data.error ?? "request failed"}`,
     );
   }
   return data;
+}
+
+/** List the agent's tenant MCP tools and per-server discovery errors via the proxy. */
+export async function listTenantToolCatalog(
+  agentId: string,
+  deps: TenantMcpDeps = {},
+): Promise<TenantToolListResult> {
+  const data = (await proxyPost("/api/mcp/tools/list", { agentId }, deps)) as {
+    tools?: TenantToolDef[];
+    errors?: TenantToolListError[];
+  };
+  return {
+    tools: Array.isArray(data.tools) ? data.tools : [],
+    errors: Array.isArray(data.errors) ? data.errors : [],
+  };
 }
 
 /** List the agent's tenant MCP tools via the proxy (idToken-authed). */
@@ -85,10 +134,7 @@ export async function listTenantTools(
   agentId: string,
   deps: TenantMcpDeps = {},
 ): Promise<TenantToolDef[]> {
-  const data = (await proxyPost("/api/mcp/tools/list", { agentId }, deps)) as {
-    tools?: TenantToolDef[];
-  };
-  return Array.isArray(data.tools) ? data.tools : [];
+  return (await listTenantToolCatalog(agentId, deps)).tools;
 }
 
 /** Call one tenant MCP tool via the proxy (idToken-authed). */
@@ -101,6 +147,25 @@ export async function callTenantTool(
   const data = (await proxyPost(
     "/api/mcp/tools/call",
     { agentId, name, arguments: args },
+    deps,
+  )) as TenantToolResult;
+  return { content: data.content, isError: data.isError };
+}
+
+/** Call one tenant MCP tool by server/tool through the bounded proxy surface. */
+export async function callTenantMcpTool(
+  agentId: string,
+  input: { server: string; tool: string; args?: Record<string, unknown> },
+  deps: TenantMcpDeps = {},
+): Promise<TenantToolResult> {
+  const data = (await proxyPost(
+    "/api/mcp/tools/call",
+    {
+      agentId,
+      server: input.server,
+      tool: input.tool,
+      arguments: input.args ?? {},
+    },
     deps,
   )) as TenantToolResult;
   return { content: data.content, isError: data.isError };

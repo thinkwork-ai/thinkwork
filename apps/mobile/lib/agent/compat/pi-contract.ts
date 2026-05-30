@@ -34,7 +34,7 @@ export interface MobilePiCompatibilityContract {
 }
 
 export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
-  version: "2026-05-30.u5",
+  version: "2026-05-30.u6",
   host: "thinkwork-mobile-hermes",
   upstreamSdkEmbedding: {
     status: "out_of_scope",
@@ -170,12 +170,11 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
     },
     {
       id: "bounded-mcp-proxy-tool",
-      status: "deferred",
+      status: "implemented",
       upstreamSurface: "pi-mcp-adapter proxy tool",
       mobileSurface: "apps/mobile/lib/agent/extensions/mcp-tools-extension.ts",
-      ownerUnit: "U6",
       notes:
-        "Mobile still exposes tenant MCP tools directly; the default bounded mcp tool lands in U6.",
+        "Mobile exposes one default `mcp` gateway for list/search/call over tenant MCP tools; direct per-tool registration is opt-in by allowlist.",
     },
     {
       id: "extension-lifecycle-loop-dispatch",

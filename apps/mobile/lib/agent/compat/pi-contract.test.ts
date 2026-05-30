@@ -71,11 +71,11 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
         "shared-system-prompt-composition",
         "workspace-backed-built-ins",
         "workspace-backed-bash-durability",
+        "bounded-mcp-proxy-tool",
       ]),
     );
     expect(deferredPiCompatibilityFeatureIds()).toEqual(
       expect.arrayContaining([
-        "bounded-mcp-proxy-tool",
         "extension-lifecycle-loop-dispatch",
         "durable-session-compaction",
       ]),
