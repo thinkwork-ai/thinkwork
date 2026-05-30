@@ -129,6 +129,7 @@ function WorkspaceTreePane({
 }: {
   ws: ReturnType<typeof useLocalWorkspace>;
 }) {
+  const fontSize = useEditorFontSize();
   if (ws.tree == null && ws.treeLoading) {
     return (
       <Centered>
@@ -170,6 +171,7 @@ function WorkspaceTreePane({
       <FileTree
         selectedPath={ws.selectedPath ?? undefined}
         onSelect={ws.select}
+        style={{ fontSize: `${fontSize}px` }}
       >
         {renderNodes(ws.tree.tree, true)}
       </FileTree>
