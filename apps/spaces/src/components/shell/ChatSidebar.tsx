@@ -204,13 +204,15 @@ export function ChatSidebar() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const [{ data: spacesData, fetching: spacesFetching, error: spacesError }] =
-    useQuery<SpacesResult>({
-      query: SpacesQuery,
-      variables: { tenantId: tenantId ?? "" },
-      pause: !tenantId,
-      requestPolicy: "cache-and-network",
-    });
+  const [
+    { data: spacesData, fetching: spacesFetching, error: spacesError },
+    reexecuteSpacesQuery,
+  ] = useQuery<SpacesResult>({
+    query: SpacesQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
 
   const spaces = spacesData?.spaces ?? [];
   const defaultSpaceIds = useMemo(
@@ -296,9 +298,10 @@ export function ChatSidebar() {
   }, []);
 
   // "Mark all as read" for a section: optimistically clear the badge/dots for
-  // the section's unread ids, fire the batch mutation, then refetch to
-  // reconcile. The caller passes only currently-unread ids, so a failure
-  // rollback removes exactly what we added.
+  // the section's unread ids, fire the batch mutation, then refetch all three
+  // list sources to reconcile (recent + pinned + Spaces — the Space badge reads
+  // the server unreadThreadCount, so SpacesQuery must re-run or the badge holds
+  // its optimistic value).
   const markSectionThreadsRead = useCallback(
     (threadIds: string[]) => {
       if (threadIds.length === 0) return;
@@ -313,20 +316,30 @@ export function ChatSidebar() {
         if (result.error) {
           setLocallyReadThreadIds((current) => {
             const next = new Set(current);
-            for (const id of threadIds) next.delete(id);
+            for (const id of threadIds) {
+              // Keep any id a concurrent thread-open already persisted as read
+              // (activateThread → persistThreadRead seeds persistedReadThreadIdsRef),
+              // so a failed mark-all can't strip a thread the user just opened.
+              if (!persistedReadThreadIdsRef.current.has(id)) next.delete(id);
+            }
             return next;
           });
           toast.error(`Couldn't mark all as read: ${result.error.message}`);
           return;
         }
+        // These threads are read server-side now; record them so a later open
+        // doesn't fire a redundant per-thread updateThread.
+        for (const id of threadIds) persistedReadThreadIdsRef.current.add(id);
         reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
         reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
+        reexecuteSpacesQuery({ requestPolicy: "network-only" });
       });
     },
     [
       executeMarkThreadsRead,
       reexecutePinnedThreadsQuery,
       reexecuteRecentThreadsQuery,
+      reexecuteSpacesQuery,
     ],
   );
 
@@ -771,8 +784,7 @@ export function ChatSidebar() {
                   {pinnedError.message}
                 </p>
               ) : null}
-              <ThreadListSection
-                label="Pinned"
+              <PinnedThreadListSection
                 threads={pinnedThreads}
                 selectedThreadId={selectedThreadId}
                 locallyReadThreadIds={locallyReadThreadIds}
@@ -1081,43 +1093,30 @@ function ThreadListSection({
   locallyReadThreadIds,
   onActivate,
   onPin,
-  onUnpin,
-  onReorder,
   onMarkSectionRead,
 }: {
   label: string;
-  sectionId?: string;
+  sectionId: string;
   threads: ChatThreadSummary[];
   selectedThreadId?: string;
   defaultOpen?: boolean;
   locallyReadThreadIds: ReadonlySet<string>;
   onActivate: (threadId: string) => void;
   onPin?: (threadId: string) => void;
-  onUnpin?: (threadId: string) => void;
-  onReorder?: (threadIds: string[]) => void;
   onMarkSectionRead?: (threadIds: string[]) => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
-  // Hook order must stay stable across the Pinned early-return below.
-  const filterOn = useSectionUnreadFilter(sectionId ?? "");
-  if (label === "Pinned") {
-    return (
-      <PinnedThreadListSection
-        threads={threads}
-        selectedThreadId={selectedThreadId}
-        locallyReadThreadIds={locallyReadThreadIds}
-        onActivate={onActivate}
-        onUnpin={onUnpin}
-        onReorder={onReorder}
-      />
-    );
-  }
+  const filterOn = useSectionUnreadFilter(sectionId);
+  // Reset pagination when the filter mode flips, so a "Show more" count from one
+  // mode can't truncate the other's list.
+  useEffect(() => {
+    setVisibleCount(SECTION_THREAD_LIMIT);
+  }, [filterOn]);
 
   // Unread set drives the badge, the mark-all target, and the filter — one
   // source so the badge reaches zero after a mark-all (KTD-2).
   const unreadThreads = filterUnreadThreads(threads, locallyReadThreadIds);
   const unreadThreadIds = unreadThreads.map((thread) => thread.id);
-  const hasControls = Boolean(sectionId);
   const displayedThreads = filterOn ? unreadThreads : threads;
   const visibleThreads = displayedThreads.slice(0, visibleCount);
   const hiddenCount = displayedThreads.length - visibleThreads.length;
@@ -1136,16 +1135,14 @@ function ThreadListSection({
             </button>
           </SidebarGroupLabel>
         </CollapsibleTrigger>
-        {hasControls ? (
-          <SectionHeaderControls
-            sectionId={sectionId as string}
-            label={label}
-            unreadCount={unreadThreadIds.length}
-            unreadThreadIds={unreadThreadIds}
-            filterOn={filterOn}
-            onMarkSectionRead={onMarkSectionRead}
-          />
-        ) : null}
+        <SectionHeaderControls
+          sectionId={sectionId}
+          label={label}
+          unreadCount={unreadThreadIds.length}
+          unreadThreadIds={unreadThreadIds}
+          filterOn={filterOn}
+          onMarkSectionRead={onMarkSectionRead}
+        />
       </div>
       <CollapsibleContent>
         <SidebarGroupContent>
@@ -1157,9 +1154,7 @@ function ThreadListSection({
             <button
               type="button"
               className="px-2 py-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
-              onClick={() =>
-                sectionId && setSectionUnreadFilter(sectionId, false)
-              }
+              onClick={() => setSectionUnreadFilter(sectionId, false)}
             >
               No unread — Show all
             </button>
@@ -1394,6 +1389,10 @@ function SpaceThreadSection({
   const sectionId = `space:${space.id}`;
   const filterOn = useSectionUnreadFilter(sectionId);
   const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
+  // Reset pagination when the filter mode flips (see ThreadListSection).
+  useEffect(() => {
+    setVisibleCount(SECTION_THREAD_LIMIT);
+  }, [filterOn]);
 
   // Loaded unread drives the mark-all target and the filter. The BADGE keeps
   // the server's true total (`unreadThreadCount`, which may exceed the loaded

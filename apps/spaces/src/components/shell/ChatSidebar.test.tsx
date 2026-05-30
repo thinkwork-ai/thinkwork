@@ -442,6 +442,7 @@ vi.mock("@thinkwork/ui", () => ({
   ),
 }));
 
+import { toast } from "sonner";
 import { selectNextThreadBelowDeleted } from "./chat-sidebar-types";
 import { ChatSidebar } from "./ChatSidebar";
 
@@ -1076,6 +1077,46 @@ describe("ChatSidebar", () => {
     );
   });
 
+  it("rolls back the optimistic mark-all and toasts when the mutation errors (R4)", async () => {
+    markThreadsReadMock.mockResolvedValue({
+      error: { message: "network down" },
+    });
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push(
+      {
+        id: "u1",
+        title: "Unread one",
+        lastActivityAt: "2026-05-19T19:00:00Z",
+        lastReadAt: null,
+      },
+      {
+        id: "u2",
+        title: "Unread two",
+        lastActivityAt: "2026-05-19T18:00:00Z",
+        lastReadAt: null,
+      },
+    );
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    fireEvent.click(
+      within(sectionMenu(/chats options/i)).getByRole("button", {
+        name: /mark all as read/i,
+      }),
+    );
+
+    // After the rejection the optimistic mark is rolled back: the badge returns.
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("network down"),
+      ),
+    );
+    const controls = sectionMenu(/chats options/i).parentElement!;
+    await waitFor(() => expect(within(controls).getByText("2")).toBeTruthy());
+  });
+
   it("filters a section to its unread threads and persists the choice (R5)", () => {
     recentThreadItemsMock.length = 0;
     recentThreadItemsMock.push(
@@ -1163,6 +1204,11 @@ describe("ChatSidebar", () => {
 
     render(<ChatSidebar />);
 
+    // Space badge starts at the server unreadThreadCount (2 for space-1).
+    const spaceControls = () =>
+      sectionMenu(/customer onboarding options/i).parentElement!;
+    expect(within(spaceControls()).getByText("2")).toBeTruthy();
+
     fireEvent.click(
       within(sectionMenu(/customer onboarding options/i)).getByRole("button", {
         name: /mark all as read/i,
@@ -1173,6 +1219,11 @@ describe("ChatSidebar", () => {
       expect(markThreadsReadMock).toHaveBeenCalledWith({
         input: { threadIds: ["s-unread"], read: true },
       }),
+    );
+    // Optimistic decrement: the one loaded unread thread is marked read, so the
+    // server count of 2 drops to 1 immediately (reconciles fully on refetch).
+    await waitFor(() =>
+      expect(within(spaceControls()).getByText("1")).toBeTruthy(),
     );
   });
 

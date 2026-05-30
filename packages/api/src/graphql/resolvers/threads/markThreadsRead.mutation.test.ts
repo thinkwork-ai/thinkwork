@@ -110,6 +110,7 @@ describe("markThreadsRead", () => {
     expect(result).toEqual({ updated: 2 });
     expect(captured.table).toBe(threadParticipants);
     expect(captured.set?.last_read_at).toBeInstanceOf(Date);
+    expect(captured.set?.updated_at).toBeInstanceOf(Date);
     const { eqs, inArrayValues } = whereLeaves();
     // Tenant + user come from the resolved caller, never the input.
     expect(eqs.get("tenant_id")).toBe("tenant-1");
