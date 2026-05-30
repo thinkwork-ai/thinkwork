@@ -37,7 +37,7 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 const SNAP_THRESHOLD = SCREEN_WIDTH * 0.5;
 
 /** Shimmer text for active threads – a bright window of ~3 chars sweeps left to right */
-const SHIMMER_TEXT = "Processing...";
+const SHIMMER_TEXT = "Working…";
 const SHIMMER_WINDOW = 3;
 const CHAR_DURATION = 120;
 const TOTAL_STEPS = SHIMMER_TEXT.length + SHIMMER_WINDOW;

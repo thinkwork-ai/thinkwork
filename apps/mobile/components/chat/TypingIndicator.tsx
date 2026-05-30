@@ -1,54 +1,34 @@
-import React, { useEffect, useRef } from "react";
-import { View, Animated } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { View } from "react-native";
+import { ShimmerText } from "@/components/ui/ShimmerText";
 
-const SHIMMER_TEXT = "Processing...";
-const SHIMMER_WINDOW = 3;
-const CHAR_DURATION = 120;
-const TOTAL_STEPS = SHIMMER_TEXT.length + SHIMMER_WINDOW;
-
-function AnimatedChar({
-  char,
-  index,
-  step,
-}: {
-  char: string;
-  index: number;
-  step: Animated.Value;
-}) {
-  const color = step.interpolate({
-    inputRange: [index, index + SHIMMER_WINDOW / 2, index + SHIMMER_WINDOW],
-    outputRange: ["#6b7280", "#d1d5db", "#6b7280"],
-    extrapolate: "clamp",
-  });
-  return (
-    <Animated.Text style={{ color, fontSize: 14, lineHeight: 18 }}>
-      {char}
-    </Animated.Text>
-  );
+// "Working… 12s" — matches the desktop/web running indicator. The component
+// mounts when the agent turn starts (gated by isThreadActive upstream) and
+// unmounts when it settles, so its lifetime ≈ the turn duration.
+function formatElapsed(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}m ${s}s`;
 }
 
 export function TypingIndicator({ inline }: { inline?: boolean }) {
-  const step = useRef(new Animated.Value(0)).current;
+  const start = useRef(Date.now());
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    const anim = Animated.loop(
-      Animated.timing(step, {
-        toValue: TOTAL_STEPS,
-        duration: CHAR_DURATION * TOTAL_STEPS,
-        useNativeDriver: false,
-      }),
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [step]);
+    start.current = Date.now();
+    const id = setInterval(() => {
+      setElapsed(Math.round((Date.now() - start.current) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const label = elapsed > 0 ? `Working… ${formatElapsed(elapsed)}` : "Working…";
 
   const content = (
     <View className="px-4 py-2">
-      <Animated.Text style={{ fontSize: 14, lineHeight: 18 }}>
-        {SHIMMER_TEXT.split("").map((char, i) => (
-          <AnimatedChar key={i} char={char} index={i} step={step} />
-        ))}
-      </Animated.Text>
+      <ShimmerText text={label} />
     </View>
   );
 

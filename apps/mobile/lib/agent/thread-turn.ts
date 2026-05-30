@@ -42,7 +42,16 @@ function toHarnessMessages(prior: PriorMessage[]): Message[] {
   for (const m of prior) {
     const role = (m.role ?? "").toLowerCase();
     if (role !== "user" && role !== "assistant") continue;
-    out.push({ role, content: m.content ?? "" });
+    const content = m.content ?? "";
+    // Coalesce consecutive same-role turns. Bedrock Converse requires strictly
+    // alternating roles; adjacent same-role messages get silently concatenated
+    // (producing garbled context), so merge them here with a blank-line break.
+    const last = out[out.length - 1];
+    if (last && last.role === role) {
+      last.content = `${last.content}\n\n${content}`;
+      continue;
+    }
+    out.push({ role, content });
   }
   return out;
 }
