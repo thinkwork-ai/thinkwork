@@ -48,7 +48,24 @@ export interface ThinkworkExtension {
    *  validation errors; not yet plumbed into the Pi runtime (Pi keys
    *  extensions by load path). */
   name: string;
+  /**
+   * Names of the LLM-callable tools this extension registers via
+   * `pi.registerTool`. The host MUST fold these into the `createAgentSession`
+   * tool allowlist: when an allowlist is provided the SDK enables ONLY the
+   * listed names, so extension tools omitted from it register but are silently
+   * gated out and never reach the model. Empty/omitted for hook-only extensions
+   * (e.g. the system-prompt extension's `before_agent_start`).
+   */
+  toolNames?: readonly string[];
   register(pi: ExtensionAPI, providers: ProviderBundle): void | Promise<void>;
+}
+
+/** Collect the declared tool names across a set of extensions (deduped), for
+ *  the host to add to the `createAgentSession` allowlist. */
+export function collectExtensionToolNames(
+  extensions: readonly ThinkworkExtension[],
+): string[] {
+  return [...new Set(extensions.flatMap((ext) => ext.toolNames ?? []))];
 }
 
 /**

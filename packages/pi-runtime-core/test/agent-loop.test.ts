@@ -183,6 +183,36 @@ describe("buildToolAllowlist", () => {
     expect(allowlist).toHaveLength(BUILTIN_TOOL_NAMES.length + 1);
     expect(allowlist).toContain("web_search");
   });
+
+  it("includes extension tool names so extension tools are actually enabled (U6)", () => {
+    const allowlist = buildToolAllowlist(
+      [toToolDefinition(fakeAgentTool("execute_code"))],
+      ["recall", "reflect"],
+    );
+    expect(allowlist).toContain("recall");
+    expect(allowlist).toContain("reflect");
+    expect(allowlist).toContain("execute_code");
+    for (const builtin of BUILTIN_TOOL_NAMES) {
+      expect(allowlist).toContain(builtin);
+    }
+    expect(allowlist).toHaveLength(BUILTIN_TOOL_NAMES.length + 3);
+  });
+
+  it("forwards extensionToolNames through to openSession (U6 allowlist fix)", async () => {
+    let captured: OpenSessionInputs | undefined;
+    const session = makeFakeSession({ messages: [assistantMessage("ok")] });
+    await runAgentLoop(
+      baseArgs({ extensionToolNames: ["recall", "reflect"] }),
+      {
+        openSession: async (inputs) => {
+          captured = inputs;
+          return { session, modelId: inputs.modelId };
+        },
+      },
+    );
+    expect(captured?.toolAllowlist).toContain("recall");
+    expect(captured?.toolAllowlist).toContain("reflect");
+  });
 });
 
 describe("buildTurnPrompt", () => {

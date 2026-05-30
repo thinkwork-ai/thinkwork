@@ -1,5 +1,6 @@
 export * from "./define-extension.js";
 export * from "./memory.js";
+export * from "./system-prompt.js";
 
 // Re-export the SDK extension types so hosts can type their wiring (e.g. an
 // `ExtensionFactory[]` field) without taking a direct dependency on the heavy
