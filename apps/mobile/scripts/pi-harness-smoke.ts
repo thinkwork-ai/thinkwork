@@ -1,0 +1,445 @@
+#!/usr/bin/env tsx
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { BedrockModelProvider } from "../lib/agent/providers/bedrock";
+import { runThreadHarnessTurn } from "../lib/agent/thread-turn";
+import { mcpToolsExtension } from "../lib/agent/extensions/mcp-tools-extension";
+import { workspaceContextExtension } from "../lib/agent/extensions/workspace-context-extension";
+import { recordTurn } from "../lib/agent/persist-turn";
+import type { AgentEvent, ImagePart } from "../lib/agent/types";
+import type { WorkspaceTarget } from "../lib/workspace-api";
+
+type Capability =
+  | "plain"
+  | "workspace"
+  | "mcp"
+  | "execute_code"
+  | "bash"
+  | "image";
+
+interface Args {
+  tenantId: string;
+  agentId: string;
+  userId: string;
+  spaceId?: string;
+  agentName?: string;
+  graphqlUrl: string;
+  apiKey: string;
+  idToken: string;
+  apiBase: string;
+  capabilities: Capability[];
+  timeoutMs: number;
+  imagePath?: string;
+  json: boolean;
+}
+
+interface Thread {
+  id: string;
+  identifier?: string | null;
+  title: string;
+}
+
+interface SmokeResult {
+  capability: Capability;
+  status: "PASS" | "FAIL" | "SKIP";
+  reason: string;
+  threadId?: string;
+  threadIdentifier?: string | null;
+  assistantText?: string;
+  events?: AgentEvent[];
+}
+
+function repoRoot(): string {
+  let dir = process.cwd();
+  for (let i = 0; i < 8; i += 1) {
+    if (existsSync(resolve(dir, "pnpm-workspace.yaml"))) return dir;
+    dir = resolve(dir, "..");
+  }
+  return process.cwd();
+}
+
+function readDotEnv(path: string): Record<string, string> {
+  if (!existsSync(path)) return {};
+  const values: Record<string, string> = {};
+  for (const raw of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const idx = line.indexOf("=");
+    if (idx < 0) continue;
+    values[line.slice(0, idx)] = line.slice(idx + 1).replace(/^"|"$/g, "");
+  }
+  return values;
+}
+
+function usage(exitCode = 2): never {
+  console.error(`Usage:
+  pnpm --filter @thinkwork/mobile smoke:pi-harness -- \\
+    --tenant-id <tenant-id> --agent-id <agent-id> --user-id <user-id> \\
+    --id-token <cognito-id-token> \\
+    [--space-id <space-id>] [--capabilities plain,workspace,mcp,execute_code,bash,image] \\
+    [--image-path ./fixtures/card.png] [--timeout 90000] [--json]
+
+Environment fallbacks:
+  MOBILE_PI_SMOKE_ID_TOKEN / THINKWORK_ID_TOKEN
+  THINKWORK_TENANT_ID, THINKWORK_AGENT_ID, THINKWORK_USER_ID, THINKWORK_SPACE_ID
+  THINKWORK_GRAPHQL_URL / VITE_GRAPHQL_HTTP_URL
+  THINKWORK_GRAPHQL_API_KEY / VITE_GRAPHQL_API_KEY
+  apps/admin/.env and apps/mobile/.env are read when present`);
+  process.exit(exitCode);
+}
+
+function parseArgs(): Args {
+  const root = repoRoot();
+  const adminEnv = readDotEnv(resolve(root, "apps/admin/.env"));
+  const mobileEnv = readDotEnv(resolve(root, "apps/mobile/.env"));
+  const argv = process.argv.slice(2).filter((arg) => arg !== "--");
+  let tenantId = process.env.THINKWORK_TENANT_ID ?? "";
+  let agentId = process.env.THINKWORK_AGENT_ID ?? "";
+  let userId = process.env.THINKWORK_USER_ID ?? "";
+  let spaceId = process.env.THINKWORK_SPACE_ID ?? "";
+  let agentName = process.env.THINKWORK_AGENT_NAME ?? "Mobile Pi";
+  let idToken =
+    process.env.MOBILE_PI_SMOKE_ID_TOKEN ??
+    process.env.THINKWORK_ID_TOKEN ??
+    "";
+  let graphqlUrl =
+    process.env.THINKWORK_GRAPHQL_URL ??
+    process.env.VITE_GRAPHQL_HTTP_URL ??
+    mobileEnv.EXPO_PUBLIC_GRAPHQL_URL ??
+    adminEnv.VITE_GRAPHQL_HTTP_URL ??
+    "";
+  let apiKey =
+    process.env.THINKWORK_GRAPHQL_API_KEY ??
+    process.env.VITE_GRAPHQL_API_KEY ??
+    adminEnv.VITE_GRAPHQL_API_KEY ??
+    "";
+  let capabilityValue = process.env.MOBILE_PI_SMOKE_CAPABILITIES ?? "plain";
+  let timeoutMs = Number(process.env.MOBILE_PI_SMOKE_TIMEOUT_MS ?? 90_000);
+  let imagePath = process.env.MOBILE_PI_SMOKE_IMAGE_PATH;
+  let json = false;
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--help" || arg === "-h") usage(0);
+    if (arg === "--tenant-id") tenantId = argv[++i] ?? "";
+    else if (arg === "--agent-id") agentId = argv[++i] ?? "";
+    else if (arg === "--user-id") userId = argv[++i] ?? "";
+    else if (arg === "--space-id") spaceId = argv[++i] ?? "";
+    else if (arg === "--agent-name") agentName = argv[++i] ?? "";
+    else if (arg === "--id-token") idToken = argv[++i] ?? "";
+    else if (arg === "--graphql-url") graphqlUrl = argv[++i] ?? "";
+    else if (arg === "--api-key") apiKey = argv[++i] ?? "";
+    else if (arg === "--capability" || arg === "--capabilities")
+      capabilityValue = argv[++i] ?? "";
+    else if (arg === "--timeout") timeoutMs = Number(argv[++i] ?? timeoutMs);
+    else if (arg === "--image-path") imagePath = argv[++i];
+    else if (arg === "--json") json = true;
+    else usage();
+  }
+
+  const all: Capability[] = [
+    "plain",
+    "workspace",
+    "mcp",
+    "execute_code",
+    "bash",
+    "image",
+  ];
+  const capabilities =
+    capabilityValue === "all"
+      ? all
+      : capabilityValue
+          .split(",")
+          .map((capability) => capability.trim())
+          .filter(Boolean);
+  for (const capability of capabilities) {
+    if (!all.includes(capability as Capability)) {
+      console.error(`Unknown capability: ${capability}`);
+      usage();
+    }
+  }
+
+  if (!tenantId || !agentId || !userId || !graphqlUrl || !apiKey || !idToken)
+    usage();
+  return {
+    tenantId,
+    agentId,
+    userId,
+    spaceId: spaceId || undefined,
+    agentName,
+    graphqlUrl,
+    apiKey,
+    idToken,
+    apiBase: graphqlUrl.replace(/\/graphql$/, ""),
+    capabilities: capabilities as Capability[],
+    timeoutMs,
+    imagePath,
+    json,
+  };
+}
+
+async function gql<T>(
+  args: Args,
+  query: string,
+  variables: Record<string, unknown>,
+): Promise<T> {
+  const response = await fetch(args.graphqlUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": args.apiKey },
+    body: JSON.stringify({ query, variables }),
+  });
+  const body = (await response.json()) as {
+    data?: T;
+    errors?: Array<{ message: string }>;
+  };
+  if (!response.ok || body.errors?.length || !body.data) {
+    throw new Error(
+      `GraphQL ${response.status}: ${JSON.stringify(body.errors ?? body)}`,
+    );
+  }
+  return body.data;
+}
+
+async function createThread(
+  args: Args,
+  capability: Capability,
+): Promise<Thread> {
+  const data = await gql<{ createThread: Thread }>(
+    args,
+    `mutation($input: CreateThreadInput!) {
+      createThread(input: $input) { id identifier title }
+    }`,
+    {
+      input: {
+        tenantId: args.tenantId,
+        agentId: args.agentId,
+        ...(args.spaceId ? { spaceId: args.spaceId } : {}),
+        title: `Mobile Pi ${capability} smoke ${new Date().toISOString()}`,
+        channel: "CHAT",
+        createdByType: "user",
+        createdById: args.userId,
+      },
+    },
+  );
+  return data.createThread;
+}
+
+async function getWorkspaceFile(
+  args: Args,
+  target: WorkspaceTarget,
+  path: string,
+): Promise<{ content: string | null; source: string; sha256: string }> {
+  const token = args.idToken;
+  const response = await fetch(`${args.apiBase}/api/workspaces/files`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ target, path, includeContent: true }),
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    content?: string | null;
+    source?: string;
+    sha256?: string;
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(
+      `workspace file ${response.status}: ${body.error ?? "failed"}`,
+    );
+  }
+  return {
+    content: body.content ?? null,
+    source: body.source ?? "unknown",
+    sha256: body.sha256 ?? "",
+  };
+}
+
+function promptFor(capability: Capability, token: string): string {
+  switch (capability) {
+    case "plain":
+      return `Plain mobile Pi smoke. Reply exactly: ${token}`;
+    case "workspace":
+      return `Use USER.md workspace context to answer. Reply with ${token} and my name.`;
+    case "mcp":
+      return `Use one connected MCP tool for a safe read-only call. Reply with ${token} and the tool name.`;
+    case "execute_code":
+      return `Use execute_code or a code interpreter tool to compute sum(i*i for i in range(1, 11)). Reply exactly: ${token} 385. Do not calculate mentally.`;
+    case "bash":
+      return `Use bash or a shell tool to run: printf '${token} 385'. Reply exactly with the command output. Do not answer without the tool result.`;
+    case "image":
+      return `Inspect the attached image. Reply with ${token} and a short description.`;
+  }
+}
+
+function imagePart(path: string | undefined): ImagePart | undefined {
+  if (!path) return undefined;
+  const bytes = readFileSync(resolve(path));
+  const lower = path.toLowerCase();
+  const format = lower.endsWith(".png")
+    ? "png"
+    : lower.endsWith(".gif")
+      ? "gif"
+      : lower.endsWith(".webp")
+        ? "webp"
+        : "jpeg";
+  return { format, data: bytes.toString("base64") };
+}
+
+function toolCalls(events: AgentEvent[]): string[] {
+  return events
+    .filter(
+      (event): event is Extract<AgentEvent, { type: "tool_call" }> =>
+        event.type === "tool_call",
+    )
+    .map((event) => event.call.name);
+}
+
+function failedToolResults(events: AgentEvent[]): AgentEvent[] {
+  return events.filter(
+    (event) => event.type === "tool_result" && event.result.isError === true,
+  );
+}
+
+function evaluate(
+  capability: Capability,
+  token: string,
+  assistantText: string,
+  events: AgentEvent[],
+): Pick<SmokeResult, "status" | "reason"> {
+  if (!assistantText.includes(token)) {
+    return { status: "FAIL", reason: "assistant_missing_expected_token" };
+  }
+  const calls = toolCalls(events).map((name) => name.toLowerCase());
+  if (
+    capability === "plain" ||
+    capability === "workspace" ||
+    capability === "image"
+  ) {
+    return { status: "PASS", reason: "assistant_response_matched" };
+  }
+  const wants =
+    capability === "mcp"
+      ? calls.length > 0
+      : capability === "execute_code"
+        ? calls.some((name) =>
+            /execute_code|code_interpreter|python/.test(name),
+          )
+        : calls.some((name) => /bash|shell/.test(name));
+  if (!wants) return { status: "FAIL", reason: "expected_tool_was_not_called" };
+  if (failedToolResults(events).length > 0) {
+    return { status: "FAIL", reason: "tool_result_failed" };
+  }
+  return { status: "PASS", reason: "tool_call_observed" };
+}
+
+async function runCapability(
+  args: Args,
+  capability: Capability,
+): Promise<SmokeResult> {
+  if (capability === "image" && !args.imagePath) {
+    return { capability, status: "SKIP", reason: "image-path not provided" };
+  }
+  const thread = await createThread(args, capability);
+  const token = `MOBILE-PI-${capability.toUpperCase().replace(/_/g, "-")}-${Date.now()}`;
+  const events: AgentEvent[] = [];
+  try {
+    const provider = new BedrockModelProvider({
+      apiBase: args.apiBase,
+      getToken: async () => args.idToken,
+    });
+    const result = await runThreadHarnessTurn(
+      {
+        threadId: thread.id,
+        userText: promptFor(capability, token),
+        priorMessages: [],
+        agentId: args.agentId,
+        userId: args.userId,
+        spaceId: args.spaceId,
+        agentName: args.agentName,
+        images:
+          capability === "image" ? [imagePart(args.imagePath)!] : undefined,
+      },
+      {
+        modelProvider: provider,
+        extensions: [
+          workspaceContextExtension({
+            userId: args.userId,
+            agentId: args.agentId,
+            spaceId: args.spaceId,
+            deps: {
+              getWorkspaceFile: (target, path) =>
+                getWorkspaceFile(args, target, path),
+            },
+          }),
+          mcpToolsExtension({
+            agentId: args.agentId,
+            deps: { apiBase: args.apiBase, getToken: async () => args.idToken },
+          }),
+        ],
+        recordTurnFn: (input) =>
+          recordTurn(input, {
+            apiBase: args.apiBase,
+            getToken: async () => args.idToken,
+          }),
+        onEvent: (event) => events.push(event),
+      },
+    );
+    const verdict = evaluate(capability, token, result.assistantText, events);
+    return {
+      capability,
+      ...verdict,
+      threadId: thread.id,
+      threadIdentifier: thread.identifier,
+      assistantText: result.assistantText,
+      events,
+    };
+  } catch (err) {
+    return {
+      capability,
+      status: "FAIL",
+      reason: err instanceof Error ? err.message : String(err),
+      threadId: thread.id,
+      threadIdentifier: thread.identifier,
+      events,
+    };
+  }
+}
+
+async function main() {
+  const args = parseArgs();
+  const results: SmokeResult[] = [];
+  for (const capability of args.capabilities) {
+    const timeout = new Promise<SmokeResult>((resolve) => {
+      setTimeout(
+        () => resolve({ capability, status: "FAIL", reason: "timeout" }),
+        args.timeoutMs,
+      );
+    });
+    const result = await Promise.race([
+      runCapability(args, capability),
+      timeout,
+    ]);
+    results.push(result);
+    if (args.json) console.log(JSON.stringify(result));
+    else {
+      console.log(
+        `${result.status}: ${capability} thread=${result.threadIdentifier ?? result.threadId ?? "n/a"} reason=${result.reason}`,
+      );
+    }
+  }
+  const failed = results.filter((result) => result.status === "FAIL");
+  if (!args.json) {
+    console.log(
+      `Mobile Pi harness smoke summary: ${results.length - failed.length}/${results.length} passed`,
+    );
+  }
+  if (failed.length) process.exit(1);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

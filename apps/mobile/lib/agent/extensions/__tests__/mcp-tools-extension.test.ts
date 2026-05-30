@@ -19,7 +19,10 @@ describe("mcpToolsExtension", () => {
       {
         name: "create_lead",
         description: "make a lead",
-        inputSchema: { type: "object", properties: { name: { type: "string" } } },
+        inputSchema: {
+          type: "object",
+          properties: { name: { type: "string" } },
+        },
       },
       { name: "search_crm", description: "search", inputSchema: undefined },
     ]);
@@ -43,6 +46,30 @@ describe("mcpToolsExtension", () => {
       systemPrompt: "base",
     });
     expect(composed.systemPrompt).toContain("create_lead, search_crm");
+  });
+
+  it("adds explicit execution guidance when MCP exposes code or shell tools", async () => {
+    const loaded = await load(
+      mcpToolsExtension({
+        agentId: "agent-1",
+        deps: {
+          listTools: vi.fn().mockResolvedValue([
+            { name: "bash", description: "run commands" },
+            { name: "execute_code", description: "run Python" },
+          ]),
+          callTool: vi.fn(),
+        },
+      }),
+    );
+
+    const composed = await loaded.dispatch("before_agent_start", {
+      systemPrompt: "base",
+    });
+    expect(composed.systemPrompt).toContain("bash, execute_code");
+    expect(composed.systemPrompt).toContain("execute code or shell commands");
+    expect(composed.systemPrompt).toContain(
+      "Do not calculate code results mentally",
+    );
   });
 
   it("a registered tool's execute calls the proxy and returns text content", async () => {
@@ -112,7 +139,10 @@ describe("mcpToolsExtension", () => {
   it("registers nothing when the tenant exposes no tools", async () => {
     const listTools = vi.fn().mockResolvedValue([]);
     const loaded = await load(
-      mcpToolsExtension({ agentId: "a", deps: { listTools, callTool: vi.fn() } }),
+      mcpToolsExtension({
+        agentId: "a",
+        deps: { listTools, callTool: vi.fn() },
+      }),
     );
     expect(loaded.tools).toEqual([]);
   });

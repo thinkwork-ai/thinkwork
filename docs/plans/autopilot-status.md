@@ -1,12 +1,88 @@
 ---
 title: "Autopilot status ledger"
-date: 2026-05-18
-status: complete
+date: 2026-05-30
+status: active
 ---
 
 # Autopilot Status Ledger
 
-## Current Run: Pi Extensions Architecture
+## Current Run: Mobile Pi Parity and E2E Smokes
+
+Plan:
+`docs/plans/2026-05-30-003-mobile-harness-HANDOFF.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active
+- Active unit: mobile Pi harness smoke coverage and MCP/bash execution hardening
+- Active branch: `codex/mobile-pi-e2e-smokes`
+- Active worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-e2e-smokes`
+- Started: 2026-05-30
+- Latest merged PR:
+  [#1863](https://github.com/thinkwork-ai/thinkwork/pull/1863)
+- Active PR: [#1867](https://github.com/thinkwork-ai/thinkwork/pull/1867)
+- CI: pending
+
+### Active Unit Notes
+
+- Merged prior mobile composer parity PR
+  [#1863](https://github.com/thinkwork-ai/thinkwork/pull/1863) into `main`.
+  Merge commit: `9a7dfb84d7ced38ba6ced3ec51e9e42d72c75689`.
+- Synced from `origin/main` and created isolated branch/worktree
+  `codex/mobile-pi-e2e-smokes` for the next mobile parity unit.
+- Goal for this unit: make the mobile harness behave more like Desktop Local Pi
+  in the important seams: S3 workspace context, connected MCP tools,
+  code/shell execution guidance, observable tool activity, and repeatable E2E
+  smoke coverage. Mobile remains a Hermes/Expo harness rather than the native
+  Pi SDK, so shell execution is implemented as a local mobile extension instead
+  of a cloud/MCP shim.
+- Implemented prompt hardening so the mobile base system prompt no longer tells
+  the model it has "no shell" or "no ability to run code" when connected tools
+  may expose those capabilities. The prompt still forbids claiming code,
+  command, file, or external-system results without a same-turn tool result.
+- Added MCP extension guidance that explicitly prefers `bash`/shell tools for
+  command output, package scripts, builds, and tests, and
+  `execute_code`/code-interpreter tools for isolated Python/calculation work.
+- Added a built-in `local-bash` mobile Pi extension backed by `just-bash`. The
+  `bash` tool runs in an in-memory sandbox keyed by thread id so files can
+  persist across app-process-local turns without crossing thread boundaries.
+  Public internet access is enabled by default for `curl`/`wget`, while
+  private/loopback ranges remain denied. This is intentionally local to the
+  mobile app, not the deployed Code Interpreter or an MCP proxy alias.
+- Added Metro resolver support for `just-bash/browser` plus a small `node:zlib`
+  shim because the published browser bundle still imports `node:zlib` for gzip
+  commands. The shim throws only when unavailable gzip/gunzip behavior is used;
+  normal bash/curl/file commands continue to bundle on Expo/Hermes.
+- Added an `onEvent` tap to the mobile thread harness so smoke tests and future
+  mobile activity UI can observe assistant text, tool calls, tool results, and
+  completion events without changing model behavior.
+- Added `pnpm --filter @thinkwork/mobile smoke:pi-harness` as a deployed-stage
+  smoke harness that creates real threads, runs the mobile harness through the
+  deployed API/model/MCP proxy/workspace file routes, captures tool events, and
+  validates `plain`, `workspace`, `mcp`, `execute_code`, `bash`, and `image`
+  scenarios when a Cognito id token and tenant/agent/user ids are provided.
+- Focused local verification passed:
+  `pnpm exec vitest run lib/agent` from `apps/mobile` (82 tests passed),
+  changed-file TypeScript filter for the touched mobile harness/bundler files
+  returned no errors, and `git diff --check` passed.
+- iOS simulator verification from the local Expo dev build:
+  - Workspace context smoke passed in a real thread: asked "What is my name?"
+    and the mobile harness answered "Your name is Eric Odom."
+  - Tenant MCP smoke passed in a real thread: asked for the last 5 CRM
+    opportunities and the harness returned the live CRM names.
+  - Local bash smoke passed in real thread `CHAT-883`: asked it to run
+    `printf MOBILE-PI-BASH-SMOKE-OK`; the thread list shows
+    `MOBILE-PI-BASH-SMOKE-OK` as the assistant output.
+- Full `apps/mobile` TypeScript still has unrelated pre-existing app errors
+  outside this unit; this run is tracking touched-file cleanliness until those
+  broader mobile type errors are addressed in their own slice.
+- Remaining before PR: decide whether mobile file attachments fit in this PR or
+  need the next focused implementation unit, then commit/open the PR.
+
+## Prior Run: Pi Extensions Architecture
 
 Plan:
 `docs/plans/2026-05-29-004-refactor-pi-extensions-architecture-plan.md`

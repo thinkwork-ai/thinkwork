@@ -35,6 +35,20 @@ config.resolver.sourceExts.push("mjs");
 const DEDUPE = new Set(["react", "react-native", "urql", "graphql"]);
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === "just-bash/browser") {
+    return context.resolveRequest(
+      context,
+      path.resolve(__dirname, "node_modules/just-bash/dist/bundle/browser.js"),
+      platform,
+    );
+  }
+  if (moduleName === "node:zlib") {
+    return context.resolveRequest(
+      context,
+      path.resolve(__dirname, "lib/polyfills/node-zlib.ts"),
+      platform,
+    );
+  }
   if (DEDUPE.has(moduleName)) {
     return context.resolveRequest(
       { ...context, originModulePath: path.resolve(__dirname, "package.json") },

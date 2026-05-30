@@ -10,11 +10,18 @@
 import { BedrockModelProvider } from "./providers/bedrock";
 import { createAgentSession } from "./session";
 import { buildTurnContext } from "./turn-context";
+import { localBashExtension } from "./extensions/local-bash-extension";
 import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
 import { workspaceContextExtension } from "./extensions/workspace-context-extension";
 import { recordTurn } from "./persist-turn";
 import type { ExtensionFactory } from "./extensions/types";
-import type { ImagePart, Message, ModelProvider, Tool } from "./types";
+import type {
+  AgentEvent,
+  ImagePart,
+  Message,
+  ModelProvider,
+  Tool,
+} from "./types";
 
 /** Loose shape of the thread's rendered messages (role + content). */
 export interface PriorMessage {
@@ -54,6 +61,8 @@ export interface RunThreadHarnessTurnDeps {
    * when `agentId` is set. Injected in tests to avoid the proxy/auth modules.
    */
   extensions?: ExtensionFactory[];
+  /** Observability hook for smoke tests or future activity UI. */
+  onEvent?: (event: AgentEvent) => void;
 }
 
 export interface ThreadHarnessTurnResult {
@@ -97,6 +106,7 @@ export async function runThreadHarnessTurn(
   const extensions =
     deps.extensions ??
     [
+      localBashExtension({ sessionId: input.threadId }),
       input.userId || input.agentId || input.spaceId
         ? workspaceContextExtension({
             userId: input.userId,
@@ -115,7 +125,12 @@ export async function runThreadHarnessTurn(
     messages: toHarnessMessages(input.priorMessages),
   });
 
-  const result = await session.prompt(input.userText, input.images);
+  const unsubscribe = deps.onEvent ? session.subscribe(deps.onEvent) : null;
+  const result = await session
+    .prompt(input.userText, input.images)
+    .finally(() => {
+      unsubscribe?.();
+    });
   const assistantText = result.finalText || "";
 
   // Persist the completed turn into the thread (append-only). A persistence failure
