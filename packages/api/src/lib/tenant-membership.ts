@@ -94,6 +94,7 @@ export async function requireTenantMembership(
         principalId: null,
         tenantId: null,
         email: null,
+        emailVerified: false,
         authType: "apikey",
         agentId: null,
       };

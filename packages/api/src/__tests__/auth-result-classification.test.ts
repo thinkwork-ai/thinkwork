@@ -39,6 +39,7 @@ describe("authenticate — apikey vs service classification", () => {
       principalId: null,
       tenantId: "tenant-A",
       email: null,
+      emailVerified: false,
       authType: "service",
       agentId: null,
     });

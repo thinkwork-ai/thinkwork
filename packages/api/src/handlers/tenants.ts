@@ -259,6 +259,7 @@ async function inviteMember(
   if (existingUser.length === 0) {
     await db.insert(users).values({
       id: cognitoSub,
+      cognito_sub: cognitoSub,
       tenant_id: tenantId,
       email,
       name,

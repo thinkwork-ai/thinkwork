@@ -32,6 +32,7 @@ describe("authenticate — apikey path", () => {
       principalId: "user-123",
       tenantId: "tenant-abc",
       email: "operator@example.com",
+      emailVerified: false,
       authType: "apikey",
       agentId: "agent-42",
     });
@@ -97,6 +98,7 @@ describe("authenticate — Bearer-as-apikey fallback (CLI/Strands back-compat)",
       principalId: "user-7",
       tenantId: null,
       email: "ops@example.com",
+      emailVerified: false,
       authType: "apikey",
       agentId: "agent-9",
     });
