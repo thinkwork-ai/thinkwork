@@ -77,6 +77,18 @@ function parseRecipients(value: string[] | string | undefined): string[] {
   return [];
 }
 
+// Minimal RFC-ish email shape check: a local part, "@", and a dotted domain.
+// SES rejects malformed addresses with an opaque 400 ("Missing final '@domain'")
+// that surfaces to the agent as a generic "server error". Validating here turns
+// that into an actionable message and never hands SES garbage (e.g. an
+// unresolved "me" or a bare name that slipped through the tool).
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Return the first address that is not a well-formed email, or undefined. */
+function findInvalidEmail(addresses: string[]): string | undefined {
+  return addresses.find((address) => !EMAIL_PATTERN.test(address));
+}
+
 export async function handler(
   event: APIGatewayProxyEventV2 | DirectSendEmailRequest = {},
 ) {
@@ -158,6 +170,15 @@ export async function handler(
     return {
       statusCode: 400,
       body: JSON.stringify({ error: "Maximum 5 recipients per email" }),
+    };
+  }
+  const invalidRecipient = findInvalidEmail(recipients);
+  if (invalidRecipient) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: `Recipient "${invalidRecipient}" is not a valid email address. Provide a full address like name@example.com.`,
+      }),
     };
   }
 
@@ -384,6 +405,15 @@ async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
     return {
       statusCode: 400,
       body: JSON.stringify({ error: "Maximum 5 recipients per email" }),
+    };
+  }
+  const invalidAddress = findInvalidEmail([...recipients, ...cc]);
+  if (invalidAddress) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: `Recipient "${invalidAddress}" is not a valid email address.`,
+      }),
     };
   }
 
