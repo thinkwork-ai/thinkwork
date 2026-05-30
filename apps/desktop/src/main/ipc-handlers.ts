@@ -12,6 +12,7 @@ import {
   INSTALL_UPDATE_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   START_PI_TURN_CHANNEL,
+  RAISE_THREAD_NOTIFICATION_CHANNEL,
   UPDATE_STATE_EVENT_CHANNEL,
   UPDATE_TELEMETRY_EVENT_CHANNEL,
   CheckForUpdatesRequestSchema,
@@ -23,9 +24,11 @@ import {
   PiCancelTurnRequestSchema,
   PiStartTurnRequestSchema,
   ReportInstallOutcomeRequestSchema,
+  RaiseThreadNotificationRequestSchema,
   assertSafeSenderFrame,
   type DeepLinkCallback,
 } from "@thinkwork/desktop-ipc";
+import { raiseThreadNotification } from "./notifications.js";
 import type { DeepLinkDispatcher } from "./deep-link.js";
 import { resolveDeepLinkScheme } from "./deep-link.js";
 import type { DesktopEnvSnapshot } from "./env.js";
@@ -171,6 +174,10 @@ export async function registerDesktopIpcHandlers(
     assertSafeSenderFrame(event);
     const request = PiCancelTurnRequestSchema.parse(payload);
     return piSidecar?.cancelTurn(request) ?? { cancelled: false };
+  });
+  ipcMain.handle(RAISE_THREAD_NOTIFICATION_CHANNEL, (event, payload) => {
+    assertSafeSenderFrame(event);
+    raiseThreadNotification(RaiseThreadNotificationRequestSchema.parse(payload));
   });
 
   app.on("before-quit", () => {

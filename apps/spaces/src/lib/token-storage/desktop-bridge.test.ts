@@ -103,6 +103,13 @@ function makeBridge(
       return () => {};
     },
     async reportInstallOutcome() {},
+    async raiseThreadNotification() {},
+    onOpenThread() {
+      return () => {};
+    },
+    onWindowFocusChange() {
+      return () => {};
+    },
     emitTokensChanged(nextSnapshot) {
       snapshot = nextSnapshot;
       listener?.(nextSnapshot);

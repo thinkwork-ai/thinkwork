@@ -69,6 +69,8 @@ import {
   SidebarMenuItem,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
+import { useThreadNotifications } from "@/hooks/useThreadNotifications";
+import { useThreadNotificationsEnabled } from "@/lib/thread-notifications-pref";
 import {
   DeleteThreadMutation,
   PinThreadMutation,
@@ -134,6 +136,12 @@ export function ChatSidebar() {
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
   const routeThreadId = threadIdFromThreadPath(location.pathname);
+  // Desktop OS notifications for thread activity (no-op in the web build).
+  const threadNotificationsEnabled = useThreadNotificationsEnabled();
+  useThreadNotifications({
+    activeThreadId: routeThreadId ?? null,
+    enabled: threadNotificationsEnabled,
+  });
   const isNewThreadRoute = location.pathname === "/new";
   const isAutomationsRoute = location.pathname === "/automations";
   const [searchOpen, setSearchOpen] = useState(false);

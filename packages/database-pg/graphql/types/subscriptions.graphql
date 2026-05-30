@@ -44,6 +44,18 @@ type ThreadUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
+type ThreadActivityEvent {
+  userId: ID!
+  tenantId: ID!
+  threadId: ID!
+  messageId: ID!
+  authorId: ID
+  authorType: String!
+  snippet: String
+  threadTitle: String
+  createdAt: AWSDateTime
+}
+
 type InboxItemStatusEvent {
   inboxItemId: ID!
   tenantId: ID!
@@ -136,6 +148,18 @@ extend type Mutation {
     title: String!
   ): ThreadUpdateEvent
 
+  notifyThreadActivity(
+    userId: ID!
+    tenantId: ID!
+    threadId: ID!
+    messageId: ID!
+    authorId: ID
+    authorType: String!
+    snippet: String
+    threadTitle: String
+    createdAt: AWSDateTime
+  ): ThreadActivityEvent
+
   notifyInboxItemUpdate(
     inboxItemId: ID!
     tenantId: ID!
@@ -198,6 +222,9 @@ extend type Subscription {
 
   onThreadUpdated(tenantId: ID!): ThreadUpdateEvent
     @aws_subscribe(mutations: ["notifyThreadUpdate"])
+
+  onThreadActivity(userId: ID!): ThreadActivityEvent
+    @aws_subscribe(mutations: ["notifyThreadActivity"])
 
   onInboxItemStatusChanged(tenantId: ID!): InboxItemStatusEvent
     @aws_subscribe(mutations: ["notifyInboxItemUpdate"])
