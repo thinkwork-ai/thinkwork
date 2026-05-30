@@ -22,8 +22,8 @@ Target branch: `main`
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u1-contract`
 - Started: 2026-05-30
 - Latest merged PR: [#1870](https://github.com/thinkwork-ai/thinkwork/pull/1870)
-- Active PR: none yet
-- CI: not started
+- Active PR: [#1871](https://github.com/thinkwork-ai/thinkwork/pull/1871)
+- CI: pending
 
 ### Active Unit Notes
 
@@ -46,6 +46,7 @@ Target branch: `main`
   (24 tests), `pnpm dlx prettier --check ...`, and `git diff --check`.
 - `pnpm --filter @thinkwork/mobile typecheck` has no selected package script;
   CI `typecheck` remains the broader gate.
+- Opened PR [#1871](https://github.com/thinkwork-ai/thinkwork/pull/1871).
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 
