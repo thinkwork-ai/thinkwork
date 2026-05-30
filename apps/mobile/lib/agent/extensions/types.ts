@@ -117,6 +117,12 @@ export interface Extension {
   /** Authoring-time identifier (kebab-case). Surfaced in validation/log messages. */
   name: string;
   description?: string;
+  /**
+   * Optional declared model-visible tool names. Shared ThinkWork extensions use
+   * this to let hosts reason about tool allowlists; mobile does not gate on it
+   * yet, but preserving it keeps the host contract aligned.
+   */
+  toolNames?: readonly string[];
   register(pi: ExtensionAPI): void | Promise<void>;
 }
 

@@ -18,6 +18,12 @@ export type { AgentSession, AgentSessionConfig } from "./session";
 export { defineExtension } from "./extensions/define-extension";
 export { loadExtensions } from "./extensions/load-extensions";
 export { workspaceContextExtension } from "./extensions/workspace-context-extension";
+export {
+  adaptThinkworkExtension,
+  adaptThinkworkExtensions,
+  adaptThinkworkTool,
+  thinkworkToolResultToMobile,
+} from "./extensions/thinkwork-extension-adapter";
 export type { LoadedExtensions } from "./extensions/load-extensions";
 export type {
   ExtensionAPI,
@@ -30,6 +36,12 @@ export type {
   BeforeAgentStartEvent,
   BeforeAgentStartResult,
 } from "./extensions/types";
+export type {
+  ProviderBundleLike,
+  ThinkworkExtensionAdapterOptions,
+  ThinkworkExtensionLike,
+  ThinkworkToolDefinitionLike,
+} from "./extensions/thinkwork-extension-adapter";
 
 // Lower-level engine (advanced use; createAgentSession wraps it).
 export { runAgentTurn } from "./loop";

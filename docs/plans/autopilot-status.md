@@ -16,13 +16,13 @@ Target branch: `main`
 ### Run Status
 
 - Status: active
-- Active unit: U1 mobile Pi compatibility contract and baseline tests
-- Active branch: `codex/mobile-pi-host-u1-contract`
+- Active unit: U2 shared extension adapter for mobile
+- Active branch: `codex/mobile-pi-host-u2-extension-adapter`
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u1-contract`
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-host-u2-extension-adapter`
 - Started: 2026-05-30
-- Latest merged PR: [#1870](https://github.com/thinkwork-ai/thinkwork/pull/1870)
-- Active PR: [#1871](https://github.com/thinkwork-ai/thinkwork/pull/1871)
+- Latest merged PR: [#1871](https://github.com/thinkwork-ai/thinkwork/pull/1871)
+- Active PR: [#1872](https://github.com/thinkwork-ai/thinkwork/pull/1872)
 - CI: pending
 
 ### Active Unit Notes
@@ -47,6 +47,26 @@ Target branch: `main`
 - `pnpm --filter @thinkwork/mobile typecheck` has no selected package script;
   CI `typecheck` remains the broader gate.
 - Opened PR [#1871](https://github.com/thinkwork-ai/thinkwork/pull/1871).
+- PR [#1871](https://github.com/thinkwork-ai/thinkwork/pull/1871) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`, squash-merged into `main`,
+  and the remote/local U1 branch plus worktree were deleted. Merge commit:
+  `a2c6badd388387fb41374e24f4c6e7103057b485`.
+- Synced from `origin/main` and created isolated U2 branch/worktree
+  `codex/mobile-pi-host-u2-extension-adapter`.
+- Implemented a Hermes-safe shared ThinkWork extension adapter at
+  `apps/mobile/lib/agent/extensions/thinkwork-extension-adapter.ts` without any
+  runtime import of `@thinkwork/pi-extensions` or upstream Pi SDK modules.
+- The adapter preserves shared extension `toolNames`, maps shared Pi tool
+  definitions to mobile tools, flattens text/resource content blocks into
+  mobile `ToolResult` text, and no-ops unsupported lifecycle events with a
+  debug log until U7 wires the full loop dispatch.
+- Updated the mobile Pi compatibility contract from U1 to U2 so
+  `shared-thinkwork-extension-adapter` is now implemented.
+- Focused U2 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/extensions/__tests__/thinkwork-extension-adapter.test.ts lib/agent/compat/pi-contract.test.ts`,
+  `pnpm --filter @thinkwork/react-native-sdk build`, `pnpm --filter @thinkwork/mobile build:web`,
+  `pnpm dlx prettier --check ...`, and `git diff --check`.
+- Opened PR [#1872](https://github.com/thinkwork-ai/thinkwork/pull/1872).
 
 ## Current Run: Mobile Pi Parity and E2E Smokes
 

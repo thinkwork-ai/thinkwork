@@ -67,11 +67,11 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
         "before-agent-start-prompt-composition",
         "observable-tool-turn-events",
         "pre-model-abort",
+        "shared-thinkwork-extension-adapter",
       ]),
     );
     expect(deferredPiCompatibilityFeatureIds()).toEqual(
       expect.arrayContaining([
-        "shared-thinkwork-extension-adapter",
         "workspace-backed-built-ins",
         "bounded-mcp-proxy-tool",
         "extension-lifecycle-loop-dispatch",
