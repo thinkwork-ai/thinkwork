@@ -16,6 +16,8 @@ import {
   PI_DIAGNOSTIC_EVENT_CHANNEL,
   PI_STATUS_EVENT_CHANNEL,
   PREWARM_PI_WORKSPACE_CHANNEL,
+  READ_WORKSPACE_FILE_CHANNEL,
+  READ_WORKSPACE_TREE_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   SIGN_OUT_CHANNEL,
@@ -45,6 +47,9 @@ import {
   PiStartTurnRequestSchema,
   PiStartTurnResponseSchema,
   PiStatusEventSchema,
+  ReadWorkspaceFileRequestSchema,
+  ReadWorkspaceFileResponseSchema,
+  ReadWorkspaceTreeResponseSchema,
   ReportInstallOutcomeRequestSchema,
   RaiseThreadNotificationRequestSchema,
   OpenThreadEventSchema,
@@ -301,6 +306,19 @@ const bridge = {
     ipcRenderer.on(WINDOW_FOCUS_EVENT_CHANNEL, wrappedListener);
     return () =>
       ipcRenderer.removeListener(WINDOW_FOCUS_EVENT_CHANNEL, wrappedListener);
+  },
+  async readWorkspaceTree() {
+    return ReadWorkspaceTreeResponseSchema.parse(
+      await ipcRenderer.invoke(READ_WORKSPACE_TREE_CHANNEL),
+    );
+  },
+  async readWorkspaceFile(request) {
+    return ReadWorkspaceFileResponseSchema.parse(
+      await ipcRenderer.invoke(
+        READ_WORKSPACE_FILE_CHANNEL,
+        ReadWorkspaceFileRequestSchema.parse(request),
+      ),
+    );
   },
   pi: piBridge,
 } satisfies ThinkworkBridge;

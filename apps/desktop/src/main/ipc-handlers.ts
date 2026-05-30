@@ -11,6 +11,8 @@ import {
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
   PREWARM_PI_WORKSPACE_CHANNEL,
+  READ_WORKSPACE_FILE_CHANNEL,
+  READ_WORKSPACE_TREE_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   START_PI_TURN_CHANNEL,
   RAISE_THREAD_NOTIFICATION_CHANNEL,
@@ -25,11 +27,20 @@ import {
   PiCancelTurnRequestSchema,
   PiPrewarmWorkspaceRequestSchema,
   PiStartTurnRequestSchema,
+  ReadWorkspaceFileRequestSchema,
+  ReadWorkspaceTreeRequestSchema,
   ReportInstallOutcomeRequestSchema,
   RaiseThreadNotificationRequestSchema,
   assertSafeSenderFrame,
+  rateLimit,
   type DeepLinkCallback,
 } from "@thinkwork/desktop-ipc";
+import { WORKSPACE_CACHE_DIRNAME } from "../sidecar/workspace-cache.js";
+import {
+  readCacheFile,
+  resolveCacheRoot,
+  walkCacheTree,
+} from "./workspace-cache-reader.js";
 import { raiseThreadNotification } from "./notifications.js";
 import type { DeepLinkDispatcher } from "./deep-link.js";
 import { resolveDeepLinkScheme } from "./deep-link.js";
@@ -114,7 +125,10 @@ export async function registerDesktopIpcHandlers(
             env: options.env,
             tokenSnapshot: () => storage.snapshot(),
           }),
-          workspaceCacheRoot: join(app.getPath("userData"), "pi-workspaces"),
+          workspaceCacheRoot: join(
+            app.getPath("userData"),
+            WORKSPACE_CACHE_DIRNAME,
+          ),
           logger: piDiagnostics.logger,
         })
       : null);
@@ -194,7 +208,21 @@ export async function registerDesktopIpcHandlers(
   });
   ipcMain.handle(RAISE_THREAD_NOTIFICATION_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);
-    raiseThreadNotification(RaiseThreadNotificationRequestSchema.parse(payload));
+    raiseThreadNotification(
+      RaiseThreadNotificationRequestSchema.parse(payload),
+    );
+  });
+  ipcMain.handle(READ_WORKSPACE_TREE_CHANNEL, async (event, payload) => {
+    assertSafeSenderFrame(event);
+    ReadWorkspaceTreeRequestSchema.parse(payload);
+    rateLimit({ key: "read-workspace-tree", intervalMs: 100 });
+    return walkCacheTree(resolveCacheRoot(app));
+  });
+  ipcMain.handle(READ_WORKSPACE_FILE_CHANNEL, async (event, payload) => {
+    assertSafeSenderFrame(event);
+    const request = ReadWorkspaceFileRequestSchema.parse(payload);
+    rateLimit({ key: "read-workspace-file", intervalMs: 50 });
+    return readCacheFile(resolveCacheRoot(app), request.path);
   });
 
   app.on("before-quit", () => {

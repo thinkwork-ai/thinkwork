@@ -53,9 +53,7 @@ async function apiFetch<T>(
 
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
 
-function jobColumns(
-  runningIds: Set<string>,
-): ColumnDef<ScheduledJobRow>[] {
+function jobColumns(runningIds: Set<string>): ColumnDef<ScheduledJobRow>[] {
   return [
     {
       accessorKey: "name",
@@ -331,12 +329,6 @@ function AutomationsPage() {
     [jobs, userId],
   );
 
-  const enabledJobs = useMemo(() => myJobs.filter((j) => j.enabled), [myJobs]);
-  const disabledJobs = useMemo(
-    () => myJobs.filter((j) => !j.enabled),
-    [myJobs],
-  );
-
   const filteredJobs = useMemo(() => {
     if (!search) return myJobs;
     const q = search.toLowerCase();
@@ -347,11 +339,7 @@ function AutomationsPage() {
     );
   }, [myJobs, search]);
 
-  const tally = loading
-    ? "Loading..."
-    : `${enabledJobs.length} active, ${disabledJobs.length} disabled`;
-
-  usePageHeaderActions({ title: "Automations", subtitle: tally });
+  usePageHeaderActions({ title: "Automations" });
 
   if (!tenantId || loading) {
     return <PageSkeleton />;
@@ -404,10 +392,10 @@ function AutomationsPage() {
             />
           </label>
           <AddJobButton
-              tenantId={tenantId}
-              agentId={agentId}
-              onCreated={fetchData}
-            />
+            tenantId={tenantId}
+            agentId={agentId}
+            onCreated={fetchData}
+          />
         </header>
         {error && <p className="shrink-0 text-sm text-destructive">{error}</p>}
 

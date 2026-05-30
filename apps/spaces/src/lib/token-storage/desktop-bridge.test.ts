@@ -110,6 +110,12 @@ function makeBridge(
     onWindowFocusChange() {
       return () => {};
     },
+    async readWorkspaceTree() {
+      return { status: "empty" as const };
+    },
+    async readWorkspaceFile() {
+      return { status: "vanished" as const };
+    },
     emitTokensChanged(nextSnapshot) {
       snapshot = nextSnapshot;
       listener?.(nextSnapshot);

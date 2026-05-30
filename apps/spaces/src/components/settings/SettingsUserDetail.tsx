@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import {
   Button,
   Input,
@@ -288,6 +289,9 @@ function ProfileSection({
       }
     >
       <div className="space-y-4 p-4">
+        <Labeled label="User ID">
+          <CopyableId value={userId} />
+        </Labeled>
         <Labeled label="Name">
           <Input
             value={form.name}
@@ -343,5 +347,38 @@ function Labeled({
       <label className="text-sm font-medium text-foreground">{label}</label>
       {children}
     </div>
+  );
+}
+
+/** Read-only identifier field; click anywhere to copy the value. */
+function CopyableId({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function onCopy() {
+    if (!navigator?.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard denied — leave the value visible to select manually.
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void onCopy()}
+      title="Click to copy"
+      aria-label={`Copy user ID ${value}`}
+      className="flex w-full items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2 text-left font-mono text-xs text-muted-foreground outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className="truncate">{value}</span>
+      {copied ? (
+        <CheckIcon className="size-4 shrink-0 text-foreground" />
+      ) : (
+        <CopyIcon className="size-4 shrink-0 opacity-60" />
+      )}
+    </button>
   );
 }

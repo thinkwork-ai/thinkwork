@@ -21,6 +21,13 @@ import {
   useThreadNotificationsEnabled,
 } from "@/lib/thread-notifications-pref";
 import {
+  EDITOR_FONT_SIZES,
+  setEditorFontSize,
+  setEditorWrap,
+  useEditorFontSize,
+  useEditorWrap,
+} from "@/lib/editor-prefs";
+import {
   SettingsDeploymentStatusQuery,
   SettingsRenameTenantSlugMutation,
   SettingsTenantDetailQuery,
@@ -127,6 +134,13 @@ export function SettingsGeneral() {
         </SettingsSection>
       ) : null}
 
+      {isDesktop() ? (
+        <SettingsSection label="Editor">
+          <EditorWrapRow />
+          <EditorFontSizeRow />
+        </SettingsSection>
+      ) : null}
+
       {showOperator ? (
         <>
           <SettingsSection label="Deployment">
@@ -182,6 +196,42 @@ function ResourceRow({
       <span className="max-w-[22rem] truncate font-mono text-xs">
         {value ?? "—"}
       </span>
+    </SettingsRow>
+  );
+}
+
+function EditorWrapRow() {
+  const wrap = useEditorWrap();
+  return (
+    <SettingsRow label="Wrap text">
+      <Switch
+        checked={wrap}
+        onCheckedChange={(next) => setEditorWrap(next)}
+        aria-label="Wrap text"
+      />
+    </SettingsRow>
+  );
+}
+
+function EditorFontSizeRow() {
+  const fontSize = useEditorFontSize();
+  return (
+    <SettingsRow label="Font size">
+      <Select
+        value={String(fontSize)}
+        onValueChange={(v) => setEditorFontSize(Number(v))}
+      >
+        <SelectTrigger className="w-40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {EDITOR_FONT_SIZES.map((size) => (
+            <SelectItem key={size} value={String(size)}>
+              {size}px
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </SettingsRow>
   );
 }

@@ -22,6 +22,7 @@ import { Route as AuthedSettingsWikiRouteImport } from "./routes/_authed/setting
 import { Route as AuthedSettingsWebhooksRouteImport } from "./routes/_authed/settings.webhooks";
 import { Route as AuthedSettingsToolsRouteImport } from "./routes/_authed/settings.tools";
 import { Route as AuthedSettingsMemoryRouteImport } from "./routes/_authed/settings.memory";
+import { Route as AuthedSettingsLocalWorkspaceRouteImport } from "./routes/_authed/settings.local-workspace";
 import { Route as AuthedSettingsKnowledgeBasesRouteImport } from "./routes/_authed/settings.knowledge-bases";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
 import { Route as AuthedSettingsAutomationsRouteImport } from "./routes/_authed/settings.automations";
@@ -132,6 +133,12 @@ const AuthedSettingsMemoryRoute = AuthedSettingsMemoryRouteImport.update({
   path: "/memory",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
+const AuthedSettingsLocalWorkspaceRoute =
+  AuthedSettingsLocalWorkspaceRouteImport.update({
+    id: "/local-workspace",
+    path: "/local-workspace",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsKnowledgeBasesRoute =
   AuthedSettingsKnowledgeBasesRouteImport.update({
     id: "/knowledge-bases",
@@ -410,6 +417,7 @@ export interface FileRoutesByFullPath {
   "/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
+  "/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/webhooks": typeof AuthedSettingsWebhooksRoute;
@@ -465,6 +473,7 @@ export interface FileRoutesByTo {
   "/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
+  "/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/webhooks": typeof AuthedSettingsWebhooksRoute;
@@ -527,6 +536,7 @@ export interface FileRoutesById {
   "/_authed/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
+  "/_authed/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
   "/_authed/settings/memory": typeof AuthedSettingsMemoryRoute;
   "/_authed/settings/tools": typeof AuthedSettingsToolsRoute;
   "/_authed/settings/webhooks": typeof AuthedSettingsWebhooksRoute;
@@ -588,6 +598,7 @@ export interface FileRouteTypes {
     | "/settings/automations"
     | "/settings/general"
     | "/settings/knowledge-bases"
+    | "/settings/local-workspace"
     | "/settings/memory"
     | "/settings/tools"
     | "/settings/webhooks"
@@ -643,6 +654,7 @@ export interface FileRouteTypes {
     | "/settings/automations"
     | "/settings/general"
     | "/settings/knowledge-bases"
+    | "/settings/local-workspace"
     | "/settings/memory"
     | "/settings/tools"
     | "/settings/webhooks"
@@ -704,6 +716,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/automations"
     | "/_authed/settings/general"
     | "/_authed/settings/knowledge-bases"
+    | "/_authed/settings/local-workspace"
     | "/_authed/settings/memory"
     | "/_authed/settings/tools"
     | "/_authed/settings/webhooks"
@@ -848,6 +861,13 @@ declare module "@tanstack/react-router" {
       path: "/memory";
       fullPath: "/settings/memory";
       preLoaderRoute: typeof AuthedSettingsMemoryRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/local-workspace": {
+      id: "/_authed/settings/local-workspace";
+      path: "/local-workspace";
+      fullPath: "/settings/local-workspace";
+      preLoaderRoute: typeof AuthedSettingsLocalWorkspaceRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/knowledge-bases": {
@@ -1305,6 +1325,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsAutomationsRoute: typeof AuthedSettingsAutomationsRouteWithChildren;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsKnowledgeBasesRoute: typeof AuthedSettingsKnowledgeBasesRoute;
+  AuthedSettingsLocalWorkspaceRoute: typeof AuthedSettingsLocalWorkspaceRoute;
   AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRoute;
   AuthedSettingsToolsRoute: typeof AuthedSettingsToolsRoute;
   AuthedSettingsWebhooksRoute: typeof AuthedSettingsWebhooksRoute;
@@ -1335,6 +1356,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAutomationsRoute: AuthedSettingsAutomationsRouteWithChildren,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsKnowledgeBasesRoute: AuthedSettingsKnowledgeBasesRoute,
+  AuthedSettingsLocalWorkspaceRoute: AuthedSettingsLocalWorkspaceRoute,
   AuthedSettingsMemoryRoute: AuthedSettingsMemoryRoute,
   AuthedSettingsToolsRoute: AuthedSettingsToolsRoute,
   AuthedSettingsWebhooksRoute: AuthedSettingsWebhooksRoute,

@@ -30,6 +30,10 @@ export const RAISE_THREAD_NOTIFICATION_CHANNEL = "desktop:notification:raise";
 export const OPEN_THREAD_EVENT_CHANNEL = "desktop:open-thread";
 // Main → renderer (send): app window focus/blur transitions.
 export const WINDOW_FOCUS_EVENT_CHANNEL = "desktop:window-focus";
+// Renderer → main (invoke): read the local Pi workspace cache as a tree.
+export const READ_WORKSPACE_TREE_CHANNEL = "desktop:workspace:read-tree";
+// Renderer → main (invoke): read one file from the local Pi workspace cache.
+export const READ_WORKSPACE_FILE_CHANNEL = "desktop:workspace:read-file";
 
 export const IPC_CHANNELS = {
   GET_SESSION_TOKENS: GET_SESSION_TOKENS_CHANNEL,
@@ -60,4 +64,6 @@ export const IPC_CHANNELS = {
   RAISE_THREAD_NOTIFICATION: RAISE_THREAD_NOTIFICATION_CHANNEL,
   OPEN_THREAD_EVENT: OPEN_THREAD_EVENT_CHANNEL,
   WINDOW_FOCUS_EVENT: WINDOW_FOCUS_EVENT_CHANNEL,
+  READ_WORKSPACE_TREE: READ_WORKSPACE_TREE_CHANNEL,
+  READ_WORKSPACE_FILE: READ_WORKSPACE_FILE_CHANNEL,
 } as const;

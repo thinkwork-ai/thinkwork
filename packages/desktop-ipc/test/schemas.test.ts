@@ -384,3 +384,105 @@ describe("desktop IPC handler guards", () => {
     ).not.toThrow();
   });
 });
+
+describe("local workspace inspector schemas", () => {
+  it("parses each tree response status variant", () => {
+    expect(
+      ChannelSchemas.readWorkspaceTree.request.parse(undefined),
+    ).toBeUndefined();
+    expect(
+      ChannelSchemas.readWorkspaceTree.response.parse({
+        status: "ok",
+        truncated: false,
+        tree: [
+          {
+            name: "dev",
+            path: "dev",
+            kind: "dir",
+            children: [
+              { name: "GOAL.md", path: "dev/GOAL.md", kind: "file" },
+              {
+                name: "skills",
+                path: "dev/skills",
+                kind: "dir",
+                truncated: true,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toMatchObject({ status: "ok", truncated: false });
+    expect(
+      ChannelSchemas.readWorkspaceTree.response.parse({ status: "empty" }),
+    ).toEqual({ status: "empty" });
+    expect(
+      ChannelSchemas.readWorkspaceTree.response.parse({
+        status: "error",
+        code: "EACCES",
+      }),
+    ).toEqual({ status: "error", code: "EACCES" });
+  });
+
+  it("rejects malformed tree responses", () => {
+    expect(() =>
+      ChannelSchemas.readWorkspaceTree.response.parse({ status: "ok" }),
+    ).toThrow();
+    expect(() =>
+      ChannelSchemas.readWorkspaceTree.response.parse({ status: "nope" }),
+    ).toThrow();
+    expect(() =>
+      ChannelSchemas.readWorkspaceTree.response.parse({
+        status: "ok",
+        truncated: false,
+        tree: [{ name: "x", path: "x", kind: "symlink" }],
+      }),
+    ).toThrow();
+  });
+
+  it("parses each file response status variant", () => {
+    expect(
+      ChannelSchemas.readWorkspaceFile.request.parse({ path: "dev/GOAL.md" }),
+    ).toEqual({ path: "dev/GOAL.md" });
+    expect(
+      ChannelSchemas.readWorkspaceFile.response.parse({
+        status: "ok",
+        content: "# GOAL",
+        language: "markdown",
+      }),
+    ).toMatchObject({ status: "ok", language: "markdown" });
+    expect(
+      ChannelSchemas.readWorkspaceFile.response.parse({
+        status: "too-large",
+        size: 5_242_880,
+      }),
+    ).toEqual({ status: "too-large", size: 5_242_880 });
+    expect(
+      ChannelSchemas.readWorkspaceFile.response.parse({ status: "binary" }),
+    ).toEqual({ status: "binary" });
+    expect(
+      ChannelSchemas.readWorkspaceFile.response.parse({ status: "vanished" }),
+    ).toEqual({ status: "vanished" });
+    expect(
+      ChannelSchemas.readWorkspaceFile.response.parse({
+        status: "error",
+        code: "EIO",
+      }),
+    ).toEqual({ status: "error", code: "EIO" });
+  });
+
+  it("rejects malformed file requests and responses", () => {
+    expect(() =>
+      ChannelSchemas.readWorkspaceFile.request.parse({ path: "" }),
+    ).toThrow();
+    expect(() => ChannelSchemas.readWorkspaceFile.request.parse({})).toThrow();
+    expect(() =>
+      ChannelSchemas.readWorkspaceFile.response.parse({ status: "too-large" }),
+    ).toThrow();
+    expect(() =>
+      ChannelSchemas.readWorkspaceFile.response.parse({
+        status: "ok",
+        content: "x",
+      }),
+    ).toThrow();
+  });
+});
