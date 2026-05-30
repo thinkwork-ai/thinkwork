@@ -34,7 +34,7 @@ export interface MobilePiCompatibilityContract {
 }
 
 export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
-  version: "2026-05-30.u3",
+  version: "2026-05-30.u4",
   host: "thinkwork-mobile-hermes",
   upstreamSdkEmbedding: {
     status: "out_of_scope",
@@ -154,12 +154,11 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
     },
     {
       id: "workspace-backed-built-ins",
-      status: "deferred",
+      status: "implemented",
       upstreamSurface: "cwd-backed read/grep/find/ls/edit/write/bash",
       mobileSurface: "apps/mobile/lib/agent/workspace-cache.ts",
-      ownerUnit: "U4",
       notes:
-        "Mobile local bash exists, but read/grep/find/ls over a rendered workspace cache land in U4.",
+        "Mobile maintains a durable rendered workspace cache and exposes read, grep, find, and ls tools over that cache.",
     },
     {
       id: "workspace-backed-bash-durability",

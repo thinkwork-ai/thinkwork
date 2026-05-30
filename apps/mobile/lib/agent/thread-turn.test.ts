@@ -7,7 +7,13 @@ import {
 } from "./providers/mock";
 import { defineTool } from "./session";
 import { defineExtension } from "./extensions/define-extension";
+import {
+  MemoryWorkspaceCacheStorage,
+  WorkspaceCache,
+  type WorkspaceCacheSource,
+} from "./workspace-cache";
 import type { Tool } from "./types";
+import type { WorkspaceTarget } from "@/lib/workspace-api";
 
 function crmTool(): Tool {
   return defineTool({
@@ -16,6 +22,22 @@ function crmTool(): Tool {
     parameters: { type: "object" },
     execute: async () => ({ content: '{"id":"opp_1"}' }),
   });
+}
+
+class FakeWorkspaceSource implements WorkspaceCacheSource {
+  async listFiles(_target: WorkspaceTarget) {
+    return {
+      files: [
+        {
+          path: "USER.md",
+          source: "user" as const,
+          sha256: "user",
+          overridden: false,
+          content: "The human's name is Eric.",
+        },
+      ],
+    };
+  }
 }
 
 describe("runThreadHarnessTurn", () => {
@@ -186,6 +208,32 @@ describe("runThreadHarnessTurn", () => {
 
     expect(provider.requests[0].tools.map((t) => t.name)).toContain("bash");
     expect(provider.requests[0].system).toContain("local `bash` tool");
+  });
+
+  it("advertises cached workspace tools and USER.md context when user context is available", async () => {
+    const provider = new MockModelProvider([textResponse("Eric")]);
+    const recordTurnFn = vi.fn().mockResolvedValue({});
+    const workspaceCache = new WorkspaceCache(
+      new MemoryWorkspaceCacheStorage(),
+      new FakeWorkspaceSource(),
+    );
+
+    await runThreadHarnessTurn(
+      {
+        threadId: "t-workspace",
+        userText: "what is my name?",
+        priorMessages: [],
+        userId: "user-1",
+        tenantId: "tenant-1",
+      },
+      { modelProvider: provider, recordTurnFn, workspaceCache },
+    );
+
+    expect(provider.requests[0].tools.map((t) => t.name)).toEqual(
+      expect.arrayContaining(["read", "grep", "find", "ls", "bash"]),
+    );
+    expect(provider.requests[0].system).toContain("The human's name is Eric.");
+    expect(provider.requests[0].system).toContain("cached ThinkWork workspace");
   });
 
   it("forwards attached images to the model on the user turn", async () => {

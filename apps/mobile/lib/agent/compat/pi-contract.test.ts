@@ -69,11 +69,12 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
         "pre-model-abort",
         "shared-thinkwork-extension-adapter",
         "shared-system-prompt-composition",
+        "workspace-backed-built-ins",
       ]),
     );
     expect(deferredPiCompatibilityFeatureIds()).toEqual(
       expect.arrayContaining([
-        "workspace-backed-built-ins",
+        "workspace-backed-bash-durability",
         "bounded-mcp-proxy-tool",
         "extension-lifecycle-loop-dispatch",
         "durable-session-compaction",
