@@ -23,8 +23,8 @@ Target branch: `main`
 - Started: 2026-05-30
 - Latest merged PR:
   [#1867](https://github.com/thinkwork-ai/thinkwork/pull/1867)
-- Active PR: none
-- CI: not opened yet
+- Active PR: [#1868](https://github.com/thinkwork-ai/thinkwork/pull/1868)
+- CI: `cla`, `lint`, `typecheck`, and `verify` passed; `test` pending
 
 ### Active Unit Notes
 
@@ -59,6 +59,19 @@ Target branch: `main`
 MOBILE-ROUTE-OK.` navigated directly into the new detail screen with the
   optimistic user message plus `Working...` visible, then replaced the scaffold
   with persisted messages and assistant response `MOBILE-ROUTE-OK`.
+- Follow-up hardening: deferred the post-create list refresh and route push by
+  one tick to match the existing thread-row navigation pattern and avoid the
+  React dev warning observed during simulator smoke (`ThreadsScreen` updating
+  while `ThreadDetailRoute` renders).
+- Opened PR [#1868](https://github.com/thinkwork-ai/thinkwork/pull/1868) for
+  the mobile optimistic new-thread route unit.
+- Scheduled EAS production iOS build with auto-submit for TestFlight:
+  build
+  [d57d8031-6080-48cc-a9a9-dd8e259eeaa6](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/builds/d57d8031-6080-48cc-a9a9-dd8e259eeaa6),
+  submission
+  [ddaac04b-3468-45c2-a786-11a3bed383dd](https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile/submissions/ddaac04b-3468-45c2-a786-11a3bed383dd),
+  app version `1.0.0`, build number `16`. This build was still in progress at
+  the latest check.
 - Merged prior mobile composer parity PR
   [#1863](https://github.com/thinkwork-ai/thinkwork/pull/1863) into `main`.
   Merge commit: `9a7dfb84d7ced38ba6ced3ec51e9e42d72c75689`.

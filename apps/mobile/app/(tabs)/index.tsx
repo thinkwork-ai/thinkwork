@@ -777,6 +777,9 @@ export default function ThreadsScreen() {
           : undefined;
 
       try {
+        const threadTitle =
+          (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image";
+
         // Create the thread WITHOUT firstMessage so the cloud agent is NOT triggered —
         // the on-device Pi-inspired harness handles the first message instead.
         const newThread = await createThread({
@@ -785,8 +788,7 @@ export default function ThreadsScreen() {
           // Resolve to the explicit pick or the tenant default — never null, which
           // the server would route to "General" instead of the shown "Default".
           ...(effectiveSpaceId ? { spaceId: effectiveSpaceId } : {}),
-          title:
-            (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image",
+          title: threadTitle,
           channel: "CHAT",
           createdByType: "user",
           createdById: currentUser?.id || user?.sub,
@@ -798,22 +800,20 @@ export default function ThreadsScreen() {
         markThreadActive(newThread.id);
         setPendingThreadStart({
           threadId: newThread.id,
-          title:
-            (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image",
+          title: threadTitle,
           content: text || "Image",
           persistedContent: messageContent,
           expectAssistantResponse: true,
           userId: currentUser?.id || user?.sub,
           createdAt: new Date().toISOString(),
         });
-        reexecute({ requestPolicy: "network-only" });
-        router.push({
-          pathname: `/thread/${newThread.id}`,
-          params: {
-            title:
-              (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image",
-          },
-        });
+        setTimeout(() => {
+          reexecute({ requestPolicy: "network-only" });
+          router.push({
+            pathname: `/thread/${newThread.id}`,
+            params: { title: threadTitle },
+          });
+        }, 0);
 
         // First message runs through the on-device harness (loop in Hermes → Bedrock via
         // /api/model/converse), persisted into the new thread via record-turn.
