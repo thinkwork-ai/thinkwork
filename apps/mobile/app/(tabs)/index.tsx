@@ -55,6 +55,12 @@ import {
 } from "@/components/threads/ThreadFilterBar";
 import { ThreadRow } from "@/components/threads/ThreadRow";
 import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
+import { pickImage } from "@/lib/agent/capture-image";
+import {
+  launchImagePicker,
+  launchCamera,
+} from "@/lib/agent/tools/image-picker";
+import type { ImagePart } from "@/lib/agent/types";
 import { Muted, Text } from "@/components/ui/typography";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -519,6 +525,12 @@ export default function ThreadsScreen() {
   // Each tab keeps its own draft text so switching tabs doesn't leak a
   // half-typed thread into a memory submit (or vice versa).
   const [newThreadText, setNewThreadText] = useState("");
+  // New-thread image attachment (model-vision input for the first turn) + agent toggle.
+  const [newThreadImage, setNewThreadImage] = useState<ImagePart | null>(null);
+  const [newThreadImageUri, setNewThreadImageUri] = useState<string | null>(
+    null,
+  );
+  const [newThreadAgentEnabled, setNewThreadAgentEnabled] = useState(true);
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const quickActionFormRef = useRef<QuickActionFormSheetRef>(null);
   const spacePickerRef = useRef<SpacePickerSheetRef>(null);
@@ -657,10 +669,37 @@ export default function ThreadsScreen() {
     [executeUpdateThread],
   );
 
+  const handleNewThreadAttach = useCallback(() => {
+    Alert.alert("Attach image", undefined, [
+      {
+        text: "Photo Library",
+        onPress: async () => {
+          const img = await pickImage(launchImagePicker);
+          if (img) {
+            setNewThreadImage(img);
+            setNewThreadImageUri(`data:image/${img.format};base64,${img.data}`);
+          }
+        },
+      },
+      {
+        text: "Camera",
+        onPress: async () => {
+          const img = await pickImage(launchCamera);
+          if (img) {
+            setNewThreadImage(img);
+            setNewThreadImageUri(`data:image/${img.format};base64,${img.data}`);
+          }
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, []);
+
   const handleCreateThread = useCallback(
     async (overrideText?: string, overrideWorkspaces?: SelectedWorkspace[]) => {
       const text = (overrideText ?? newThreadText).trim();
       const workspaces = overrideWorkspaces ?? selectedWorkspaces;
+      const image = newThreadImage;
       console.log("[handleCreateThread]", {
         text: text.slice(0, 20),
         agentId: selectedComputer?.id,
@@ -669,9 +708,11 @@ export default function ThreadsScreen() {
         userId: currentUser?.id,
         workspaceCount: workspaces.length,
       });
-      if (!text || !selectedComputer?.id || !tenantId) {
+      // A new thread is sendable with text OR an attached image (image-only valid).
+      if ((!text && !image) || !selectedComputer?.id || !tenantId) {
         console.warn("[handleCreateThread] Bailed — missing:", {
           text: !!text,
+          image: !!image,
           agentId: !!selectedComputer?.id,
           tenantId: !!tenantId,
         });
@@ -680,6 +721,8 @@ export default function ThreadsScreen() {
 
       setNewThreadText("");
       setSelectedWorkspaces([]);
+      setNewThreadImage(null);
+      setNewThreadImageUri(null);
       Keyboard.dismiss();
 
       // Build routing hint if workspaces are selected
@@ -702,7 +745,8 @@ export default function ThreadsScreen() {
           tenantId,
           agentId: selectedComputer.id,
           ...(selectedSpaceId ? { spaceId: selectedSpaceId } : {}),
-          title: text.length > 60 ? text.slice(0, 60) + "..." : text,
+          title:
+            (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image",
           channel: "CHAT",
           createdByType: "user",
           createdById: currentUser?.id || user?.sub,
@@ -723,8 +767,11 @@ export default function ThreadsScreen() {
             priorMessages: [],
             agentName: selectedComputer?.name,
             // Selects which tenant MCP tools the on-device agent can call
-            // (mcp-tools extension + proxy) on the first turn of a new thread.
-            agentId: selectedComputer.id,
+            // (mcp-tools extension + proxy). Agent toggle off → no agentId,
+            // so the first turn runs with no platform tools (plain message).
+            agentId: newThreadAgentEnabled ? selectedComputer.id : undefined,
+            // Attached image is model-vision input on the first turn.
+            images: image ? [image] : undefined,
           });
           reexecute({ requestPolicy: "network-only" });
         } catch (err) {
@@ -1171,6 +1218,14 @@ export default function ThreadsScreen() {
             disabled={noAssignedComputer}
             colors={colors}
             isDark={isDark}
+            onAttach={handleNewThreadAttach}
+            attachedImageUri={newThreadImageUri}
+            onRemoveAttachment={() => {
+              setNewThreadImage(null);
+              setNewThreadImageUri(null);
+            }}
+            agentEnabled={newThreadAgentEnabled}
+            onToggleAgent={() => setNewThreadAgentEnabled((v) => !v)}
             selectedSpace={selectedSpace}
             onSpacePress={() => {
               Keyboard.dismiss();
