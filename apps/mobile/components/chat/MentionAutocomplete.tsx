@@ -42,22 +42,20 @@ export function MentionAutocomplete({
   return (
     <View
       style={{
-        position: "absolute",
-        bottom: 156,
-        left: 8,
-        right: 8,
+        marginHorizontal: 16,
+        marginTop: 12,
+        marginBottom: 8,
         backgroundColor: dark ? "#1c1c1e" : "#ffffff",
         borderRadius: 12,
         borderWidth: 1,
         borderColor: dark ? "#333" : "#e0e0e0",
         overflow: "hidden",
-        zIndex: 10,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: -2 },
         shadowOpacity: 0.15,
         shadowRadius: 8,
         elevation: 4,
-        maxHeight: 340,
+        maxHeight: 220,
       }}
     >
       <ScrollView keyboardShouldPersistTaps="always">
