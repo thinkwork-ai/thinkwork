@@ -1,16 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
-import {
-  Search,
-  Play,
-  Pause,
-  Monitor,
-  Clock,
-  Plus,
-  Loader2,
-} from "lucide-react";
+import { Search, Play, Pause, Zap, Clock, Plus, Loader2 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useSubscription } from "urql";
+import { useQuery, useSubscription } from "urql";
 import {
   Badge,
   Button,
@@ -22,10 +14,9 @@ import {
   TooltipTrigger,
 } from "@thinkwork/ui";
 import { ThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
+import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { useTenant } from "@/context/TenantContext";
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
-import type { AssignedComputer } from "@/lib/use-assigned-computer-selection";
-import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import {
@@ -35,6 +26,7 @@ import {
 import {
   estimateNextRun,
   formatSchedule,
+  JOB_TYPE_LABELS,
   relativeTime,
   type ScheduledJobRow,
   type ThreadTurnRow,
@@ -63,7 +55,6 @@ const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
 
 function jobColumns(
   runningIds: Set<string>,
-  computerName: string,
 ): ColumnDef<ScheduledJobRow>[] {
   return [
     {
@@ -85,16 +76,14 @@ function jobColumns(
       ),
     },
     {
-      id: "owner",
+      id: "type",
       header: "Type",
-      cell: () => (
+      cell: ({ row }) => (
         <span className={COMPACT_TABLE_CELL}>
-          <Badge
-            variant="secondary"
-            className="text-xs gap-1 bg-purple-500/15 text-purple-600 dark:text-purple-400"
-          >
-            <Monitor className="h-3.5 w-3.5" />
-            {computerName || "Computer"}
+          <Badge variant="secondary" className="gap-1 text-xs">
+            <Zap className="h-3.5 w-3.5" />
+            {JOB_TYPE_LABELS[row.original.trigger_type] ??
+              row.original.trigger_type}
           </Badge>
         </span>
       ),
@@ -210,17 +199,16 @@ function jobColumns(
 
 function AddJobButton({
   tenantId,
-  computer,
+  agentId,
   onCreated,
 }: {
   tenantId: string;
-  computer: AssignedComputer;
+  agentId: string | null;
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const sourceAgent = computer.sourceAgent;
 
-  if (!sourceAgent) {
+  if (!agentId) {
     return (
       <TooltipProvider>
         <Tooltip>
@@ -237,8 +225,7 @@ function AddJobButton({
             </span>
           </TooltipTrigger>
           <TooltipContent>
-            This workspace has no source agent yet — use admin to create the
-            schedule.
+            The tenant agent is still loading — try again in a moment.
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -267,8 +254,7 @@ function AddJobButton({
         open={open}
         onOpenChange={setOpen}
         mode="create"
-        computerId={computer.id}
-        agentId={sourceAgent.id}
+        agentId={agentId}
         onSubmit={handleSubmit}
       />
     </>
@@ -276,7 +262,7 @@ function AddJobButton({
 }
 
 function AutomationsPage() {
-  const { tenantId } = useTenant();
+  const { tenantId, userId } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [jobs, setJobs] = useState<ScheduledJobRow[]>([]);
@@ -284,12 +270,14 @@ function AutomationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const {
-    fetching: computerFetching,
-    noAssignedComputers,
-    selectedComputer: computer,
-  } = useAssignedComputerSelection();
-  const computerId = computer?.id ?? null;
+  // The tenant platform agent owns scheduled jobs created here (the legacy
+  // per-Computer source agent was removed with the Computer concept).
+  const [agentResult] = useQuery({
+    query: SettingsTenantAgentQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const agentId = agentResult.data?.agent?.id ?? null;
 
   const [subResult] = useSubscription({
     query: ThreadTurnUpdatedSubscription,
@@ -298,13 +286,10 @@ function AutomationsPage() {
   });
 
   const fetchData = useCallback(async () => {
-    if (!tenantId || !computerId) return;
+    if (!tenantId) return;
     try {
       const [jobsData, runsData] = await Promise.all([
-        apiFetch<ScheduledJobRow[]>(
-          `/api/scheduled-jobs?computer_id=${encodeURIComponent(computerId)}`,
-          tenantId,
-        ),
+        apiFetch<ScheduledJobRow[]>("/api/scheduled-jobs", tenantId),
         apiFetch<ThreadTurnRow[]>("/api/thread-turns?limit=100", tenantId),
       ]);
       setJobs(jobsData);
@@ -315,7 +300,7 @@ function AutomationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, computerId]);
+  }, [tenantId]);
 
   useEffect(() => {
     fetchData();
@@ -336,43 +321,43 @@ function AutomationsPage() {
     return ids;
   }, [runs]);
 
-  const enabledJobs = useMemo(() => jobs.filter((j) => j.enabled), [jobs]);
-  const disabledJobs = useMemo(() => jobs.filter((j) => !j.enabled), [jobs]);
+  // Main-nav Automations shows the caller's own scheduled jobs ("my
+  // automations"); the operator-wide view lives in Settings.
+  const myJobs = useMemo(
+    () =>
+      jobs.filter(
+        (j) => j.created_by_type === "user" && j.created_by_id === userId,
+      ),
+    [jobs, userId],
+  );
+
+  const enabledJobs = useMemo(() => myJobs.filter((j) => j.enabled), [myJobs]);
+  const disabledJobs = useMemo(
+    () => myJobs.filter((j) => !j.enabled),
+    [myJobs],
+  );
 
   const filteredJobs = useMemo(() => {
-    if (!search) return jobs;
+    if (!search) return myJobs;
     const q = search.toLowerCase();
-    return jobs.filter(
+    return myJobs.filter(
       (j) =>
         j.name.toLowerCase().includes(q) ||
         (j.description?.toLowerCase().includes(q) ?? false),
     );
-  }, [jobs, search]);
+  }, [myJobs, search]);
 
-  const tally =
-    !computer || loading
-      ? "Loading..."
-      : `${enabledJobs.length} active, ${disabledJobs.length} disabled`;
+  const tally = loading
+    ? "Loading..."
+    : `${enabledJobs.length} active, ${disabledJobs.length} disabled`;
 
   usePageHeaderActions({ title: "Automations", subtitle: tally });
 
-  if (noAssignedComputers) {
-    return (
-      <main className="flex h-full w-full flex-col items-center justify-center bg-background p-6 text-center">
-        <p className="text-base font-medium">No workspace assigned</p>
-        <p className="mt-1 max-w-md text-sm text-muted-foreground">
-          Ask your tenant operator to assign a workspace before managing
-          automations.
-        </p>
-      </main>
-    );
-  }
-
-  if (!tenantId || !computer || loading || computerFetching) {
+  if (!tenantId || loading) {
     return <PageSkeleton />;
   }
 
-  if (jobs.length === 0 && !error) {
+  if (myJobs.length === 0 && !error) {
     return (
       <main className="flex h-full w-full flex-col overflow-hidden bg-background">
         <div className="flex h-full min-h-0 flex-col gap-4 px-2 py-4 sm:px-4">
@@ -389,7 +374,7 @@ function AutomationsPage() {
             </label>
             <AddJobButton
               tenantId={tenantId}
-              computer={computer}
+              agentId={agentId}
               onCreated={fetchData}
             />
           </header>
@@ -419,15 +404,15 @@ function AutomationsPage() {
             />
           </label>
           <AddJobButton
-            tenantId={tenantId}
-            computer={computer}
-            onCreated={fetchData}
-          />
+              tenantId={tenantId}
+              agentId={agentId}
+              onCreated={fetchData}
+            />
         </header>
         {error && <p className="shrink-0 text-sm text-destructive">{error}</p>}
 
         <DataTable
-          columns={jobColumns(runningJobIds, computer.name || "Computer")}
+          columns={jobColumns(runningJobIds)}
           data={filteredJobs}
           filterValue={search}
           filterColumn="name"

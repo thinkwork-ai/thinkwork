@@ -7,7 +7,7 @@ import {
 
 import {
   CompletionCallbackAuthError,
-  assembleTools,
+  buildInvocationResources,
   handleInvocation,
   postCompletion,
   postFinalizeCallback,
@@ -15,6 +15,7 @@ import {
 import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
 import { McpToolRegistry } from "../src/mcp-registry.js";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { DelegationProvider } from "@thinkwork/pi-runtime-core";
 
 // ---------------------------------------------------------------------------
 // Test fixtures.
@@ -103,6 +104,49 @@ describe("handleInvocation — payload validation", () => {
     expect(result.statusCode).toBe(200);
     expect(toolNames).not.toContain("execute_code");
   });
+
+  it("passes U7 extension tool names through to runAgentLoop for the SDK allowlist", async () => {
+    let seenExtensionToolNames: string[] = [];
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        browser_automation_enabled: true,
+        send_email_config: {
+          apiUrl: "https://api.example.com",
+          apiSecret: "test-secret",
+          agentId: "agent-1",
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+        },
+        tenant_slug: "acme",
+        turn_context: { spaceSlug: "finance" },
+        web_search_config: { provider: "exa", apiKey: "exa-key" },
+        context_engine_enabled: true,
+      }),
+      deps: makeDeps({
+        runAgentLoop: async ({ extensionToolNames }) => {
+          seenExtensionToolNames = extensionToolNames ?? [];
+          return {
+            content: "stub response",
+            modelId: "amazon-bedrock/test-model",
+            toolsCalled: [],
+            toolInvocations: [],
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(seenExtensionToolNames).toEqual(
+      expect.arrayContaining([
+        "browser_automation",
+        "send_email",
+        "web_search",
+        "query_context",
+        "query_memory_context",
+        "query_wiki_context",
+      ]),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -171,7 +215,7 @@ describe("handleInvocation — happy path", () => {
     let seenSystemPrompt: string | undefined = "unset";
     let seenTools: AgentTool<any>[] = [];
     let capturedBundle:
-      | import("../src/server.js").AssembledToolBundle
+      | import("../src/server.js").InvocationResourceBundle
       | undefined;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
@@ -248,6 +292,7 @@ describe("handleInvocation — happy path", () => {
       }
     }
     expect(composed).toContain("Files attached to this turn:");
+    expect(composed).toContain("Pi built-in `bash` tool is available");
     expect(composed).toContain("/tmp/pi-turn-test/attachments/brief.md");
     expect(composed).toContain("Revenue grew 12%.");
   });
@@ -891,7 +936,7 @@ describe("postFinalizeCallback", () => {
 // MCP wire format — handle scheme is the only Authorization that crosses.
 // ---------------------------------------------------------------------------
 
-describe("assembleTools — bearer never reaches the connect factory", () => {
+describe("buildInvocationResources — bearer never reaches the connect factory", () => {
   it("Authorization is `Handle <uuid>` with no bearer substring", async () => {
     const captured: Array<Record<string, string>> = [];
     const connect: ConnectMcpServerFn = async (args) => {
@@ -899,7 +944,7 @@ describe("assembleTools — bearer never reaches the connect factory", () => {
       return [];
     };
 
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: {
         mcp_configs: [
           {
@@ -951,10 +996,10 @@ describe("assembleTools — bearer never reaches the connect factory", () => {
   });
 });
 
-describe("assembleTools — Pi built-in tools", () => {
+describe("buildInvocationResources — Pi built-in tools", () => {
   it("registers execute_code when the sandbox interpreter id is present", async () => {
     const cleanup: Array<() => Promise<void>> = [];
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: {
         sandbox_interpreter_id: "thinkwork_test_sandbox-AAA",
       },
@@ -994,7 +1039,7 @@ describe("assembleTools — Pi built-in tools", () => {
   });
 
   it("loads the memory extension (not hand-assembled tools) on the hindsight engine", async () => {
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: { message: "what do you remember about me?" },
       identity: {
         tenantId: "tenant-1",
@@ -1039,7 +1084,7 @@ describe("assembleTools — Pi built-in tools", () => {
   });
 
   it("skips the memory extension in eval mode (user-less)", async () => {
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: { message: "hi", eval_mode: true },
       identity: {
         tenantId: "tenant-1",
@@ -1077,7 +1122,7 @@ describe("assembleTools — Pi built-in tools", () => {
   });
 
   it("registers browser_automation when browser automation is enabled", async () => {
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: {
         browser_automation_enabled: true,
         trace_id: "trace-1",
@@ -1114,13 +1159,63 @@ describe("assembleTools — Pi built-in tools", () => {
       mcpRegistry: new McpToolRegistry(),
     });
 
-    expect(bundle.tools.map((tool) => tool.name)).toContain(
+    expect(bundle.extensionToolNames).toContain("browser_automation");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
       "browser_automation",
     );
   });
 
+  it("does not register migrated extension tool names when capability config is absent", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {},
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    expect(bundle.extensionToolNames).not.toEqual(
+      expect.arrayContaining([
+        "browser_automation",
+        "send_email",
+        "web_search",
+        "query_context",
+        "query_memory_context",
+        "query_wiki_context",
+        "workspace_skill",
+        "delegate_to_managed_agent",
+      ]),
+    );
+  });
+
   it("registers send_email when send email config is present", async () => {
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: {
         tenant_slug: "acme",
         send_email_config: {
@@ -1164,7 +1259,164 @@ describe("assembleTools — Pi built-in tools", () => {
       mcpRegistry: new McpToolRegistry(),
     });
 
-    expect(bundle.tools.map((tool) => tool.name)).toContain("send_email");
+    expect(bundle.extensionToolNames).toContain("send_email");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain("send_email");
+  });
+
+  it("registers web_search and Context Engine as extension tools", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {
+        web_search_config: { provider: "exa", apiKey: "exa-key" },
+        context_engine_enabled: true,
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    expect(bundle.extensionToolNames).toEqual(
+      expect.arrayContaining([
+        "web_search",
+        "query_context",
+        "query_memory_context",
+        "query_wiki_context",
+      ]),
+    );
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain("web_search");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
+      "query_context",
+    );
+  });
+
+  it("registers workspace_skill as an extension tool when workspace skills exist", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {},
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [
+        {
+          slug: "research",
+          name: "Research",
+          description: "Research helper",
+          skillPath: "/tmp/workspace/skills/research/SKILL.md",
+          content: "# Research",
+        },
+      ],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    expect(bundle.extensionToolNames).toContain("workspace_skill");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
+      "workspace_skill",
+    );
+  });
+
+  it("registers delegation as an extension tool only when the host supplies a DelegationProvider", async () => {
+    const delegationProvider: DelegationProvider = {
+      delegate: vi.fn(async () => ({
+        ok: true,
+        delegationId: "delegation-1",
+        parentThreadTurnId: "parent-turn-1",
+        childThreadTurnId: "child-turn-1",
+        requestedVisibility: "hidden" as const,
+        effectiveVisibility: "hidden" as const,
+        status: "completed" as const,
+      })),
+    };
+    const bundle = await buildInvocationResources({
+      payload: {},
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+      delegationProvider,
+    });
+
+    expect(bundle.extensionToolNames).toContain("delegate_to_managed_agent");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
+      "delegate_to_managed_agent",
+    );
   });
 });
 
@@ -1172,7 +1424,7 @@ describe("assembleTools — Pi built-in tools", () => {
 // Plan §006 U4 — mcp proxy registration + directTools validation.
 // ---------------------------------------------------------------------------
 
-describe("assembleTools — mcp proxy registration (Plan §006 U4)", () => {
+describe("buildInvocationResources — mcp proxy registration (Plan §006 U4)", () => {
   const baseIdentity = {
     tenantId: "tenant-1",
     userId: "user-1",
@@ -1210,7 +1462,7 @@ describe("assembleTools — mcp proxy registration (Plan §006 U4)", () => {
 
   it("registers the inert mcp proxy when MCP configs are present", async () => {
     const registry = new McpToolRegistry();
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: {
         mcp_configs: [
           {
@@ -1240,7 +1492,7 @@ describe("assembleTools — mcp proxy registration (Plan §006 U4)", () => {
 
   it("does not register the proxy when there are zero validated MCP configs", async () => {
     const registry = new McpToolRegistry();
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: {},
       identity: baseIdentity,
       env: baseEnv,
@@ -1260,7 +1512,7 @@ describe("assembleTools — mcp proxy registration (Plan §006 U4)", () => {
 
   it("passes validation when every directTools entry resolves in the live registry", async () => {
     const registry = new McpToolRegistry();
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: {
         mcp_configs: [
           {
@@ -1291,7 +1543,7 @@ describe("assembleTools — mcp proxy registration (Plan §006 U4)", () => {
     const registry = new McpToolRegistry();
     const { DirectToolsValidationError } = await import("../src/server.js");
     await expect(
-      assembleTools({
+      buildInvocationResources({
         payload: {
           mcp_configs: [
             {
@@ -1321,7 +1573,7 @@ describe("assembleTools — mcp proxy registration (Plan §006 U4)", () => {
     const registry = new McpToolRegistry();
     const { DirectToolsValidationError } = await import("../src/server.js");
     await expect(
-      assembleTools({
+      buildInvocationResources({
         payload: {
           mcp_configs: [
             {
@@ -1349,7 +1601,7 @@ describe("assembleTools — mcp proxy registration (Plan §006 U4)", () => {
 
   it("the inert proxy tool's serialization contains no bearer fixtures", async () => {
     const registry = new McpToolRegistry();
-    const bundle = await assembleTools({
+    const bundle = await buildInvocationResources({
       payload: {
         mcp_configs: [
           {
@@ -1526,7 +1778,7 @@ interface MakeDepsOptions {
   stageMessageAttachmentsImpl?: typeof import("../src/runtime/message-attachments.js").stageMessageAttachments;
   /** Hook fired after the agent loop finally block (before returning). */
   onHandlerComplete?: (
-    bundle: import("../src/server.js").AssembledToolBundle,
+    bundle: import("../src/server.js").InvocationResourceBundle,
   ) => void;
   /** Lambda client factory — overridden by retain integration tests. */
   lambdaClientFactory?: (region: string) => LambdaClient;

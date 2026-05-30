@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildBrowserAutomationTool } from "../src/runtime/tools/browser-automation.js";
+import { runAgentCoreBrowserAutomation } from "../src/runtime/browser-automation-runner.js";
 
 function browserResultFor(command: {
   input?: { action?: Record<string, unknown> };
@@ -21,7 +21,7 @@ function browserResultFor(command: {
   };
 }
 
-describe("buildBrowserAutomationTool", () => {
+describe("runAgentCoreBrowserAutomation", () => {
   it("starts AgentCore Browser, navigates, captures a screenshot, and stops", async () => {
     const commandNames: string[] = [];
     const client = {
@@ -41,17 +41,18 @@ describe("buildBrowserAutomationTool", () => {
         },
       ),
     };
-    const tool = buildBrowserAutomationTool({
-      client: client as never,
-      browserIdentifier: "aws.browser.v1",
-      traceId: "trace-1",
-      settleDelayMs: 0,
-    });
-
-    const result = await tool.execute("call-1", {
-      url: "https://example.com/?token=secret&ok=1",
-      task: "confirm the page opens",
-    });
+    const result = await runAgentCoreBrowserAutomation(
+      {
+        client: client as never,
+        browserIdentifier: "aws.browser.v1",
+        traceId: "trace-1",
+        settleDelayMs: 0,
+      },
+      {
+        url: "https://example.com/?token=secret&ok=1",
+        task: "confirm the page opens",
+      },
+    );
 
     expect(commandNames).toEqual([
       "StartBrowserSessionCommand",
@@ -90,16 +91,17 @@ describe("buildBrowserAutomationTool", () => {
         throw new Error("browser quota exceeded");
       }),
     };
-    const tool = buildBrowserAutomationTool({
-      client: client as never,
-      browserIdentifier: "aws.browser.v1",
-      settleDelayMs: 0,
-    });
-
-    const result = await tool.execute("call-1", {
-      url: "https://example.com",
-      task: "confirm the page opens",
-    });
+    const result = await runAgentCoreBrowserAutomation(
+      {
+        client: client as never,
+        browserIdentifier: "aws.browser.v1",
+        settleDelayMs: 0,
+      },
+      {
+        url: "https://example.com",
+        task: "confirm the page opens",
+      },
+    );
 
     expect(commandNames).toEqual(["StartBrowserSessionCommand"]);
     expect(result.details).toMatchObject({
@@ -146,16 +148,17 @@ describe("buildBrowserAutomationTool", () => {
         },
       ),
     };
-    const tool = buildBrowserAutomationTool({
-      client: client as never,
-      browserIdentifier: "aws.browser.v1",
-      settleDelayMs: 0,
-    });
-
-    const result = await tool.execute("call-1", {
-      url: "https://example.com",
-      task: "confirm the page opens",
-    });
+    const result = await runAgentCoreBrowserAutomation(
+      {
+        client: client as never,
+        browserIdentifier: "aws.browser.v1",
+        settleDelayMs: 0,
+      },
+      {
+        url: "https://example.com",
+        task: "confirm the page opens",
+      },
+    );
 
     expect(commandNames).toEqual([
       "StartBrowserSessionCommand",
@@ -196,17 +199,18 @@ describe("buildBrowserAutomationTool", () => {
         },
       ),
     };
-    const tool = buildBrowserAutomationTool({
-      client: client as never,
-      browserIdentifier: "aws.browser.v1",
-      traceId: "trace-1",
-      settleDelayMs: 0,
-    });
-
-    const result = await tool.execute("call-1", {
-      url: "https://example.com",
-      task: "confirm the page opens",
-    });
+    const result = await runAgentCoreBrowserAutomation(
+      {
+        client: client as never,
+        browserIdentifier: "aws.browser.v1",
+        traceId: "trace-1",
+        settleDelayMs: 0,
+      },
+      {
+        url: "https://example.com",
+        task: "confirm the page opens",
+      },
+    );
 
     expect(result.details).toMatchObject({
       runtime: "pi",
@@ -226,17 +230,18 @@ describe("buildBrowserAutomationTool", () => {
     "https://user:pass@example.com/",
   ])("rejects private or credential-bearing browser URLs: %s", async (url) => {
     const client = { send: vi.fn() };
-    const tool = buildBrowserAutomationTool({
-      client: client as never,
-      browserIdentifier: "aws.browser.v1",
-      settleDelayMs: 0,
-    });
-
     await expect(
-      tool.execute("call-1", {
-        url,
-        task: "blocked",
-      }),
+      runAgentCoreBrowserAutomation(
+        {
+          client: client as never,
+          browserIdentifier: "aws.browser.v1",
+          settleDelayMs: 0,
+        },
+        {
+          url,
+          task: "blocked",
+        },
+      ),
     ).rejects.toThrow(/browser_automation/);
     expect(client.send).not.toHaveBeenCalled();
   });

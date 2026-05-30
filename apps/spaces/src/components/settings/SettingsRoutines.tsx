@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
 import { Badge, DataTable, Input } from "@thinkwork/ui";
@@ -23,6 +24,7 @@ function relativeTime(value: unknown): string {
 
 export function SettingsRoutines() {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [result] = useQuery({
     query: SettingsRoutinesQuery,
@@ -95,6 +97,12 @@ export function SettingsRoutines() {
         allowHorizontalScroll={false}
         pageSize={25}
         tableClassName="table-fixed"
+        onRowClick={(row) =>
+          navigate({
+            to: "/settings/routines/$routineId",
+            params: { routineId: row.id },
+          })
+        }
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
             No routines yet.
