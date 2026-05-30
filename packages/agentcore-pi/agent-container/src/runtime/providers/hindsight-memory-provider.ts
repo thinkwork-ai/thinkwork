@@ -217,9 +217,12 @@ function requireScope(options: HindsightMemoryProviderOptions): void {
       "Hindsight memory provider constructed without an endpoint.",
     );
   }
-  // Cheap defense: the endpoint is operator-set env today (no SSRF surface), but
-  // refuse plaintext so a future change that derives it from tenant/payload
-  // config can't silently send memory over http://.
+  // The endpoint is operator-set env (HINDSIGHT_ENDPOINT), never user/payload
+  // derived, so there is no SSRF surface here. We validate the URL parses and
+  // restrict to http/https, but we deliberately ALLOW http: — dev's Hindsight is
+  // an internal ELB served over plaintext within the VPC, and the legacy
+  // tools/hindsight.ts path (which this replaces) imposed no scheme requirement.
+  // Hard-failing on http: would 500 every Pi turn on that environment.
   let parsed: URL;
   try {
     parsed = new URL(options.endpoint);
@@ -228,9 +231,9 @@ function requireScope(options: HindsightMemoryProviderOptions): void {
       `Hindsight memory provider endpoint is not a valid URL: ${options.endpoint}`,
     );
   }
-  if (parsed.protocol !== "https:") {
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new HindsightMemoryProviderError(
-      `Hindsight memory provider endpoint must be https:// (got ${parsed.protocol}).`,
+      `Hindsight memory provider endpoint must be http(s):// (got ${parsed.protocol}).`,
     );
   }
   if (!options.tenantId?.trim()) {
