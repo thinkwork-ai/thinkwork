@@ -16,7 +16,19 @@ import {
 
 const CACHE_MANIFEST_FILE = ".thinkwork-workspace-cache.json";
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
-const SKIP_FILES = new Set([
+
+/**
+ * Directory under Electron `userData` that holds the synced Pi workspace cache.
+ * Single source of truth shared by the sidecar (writer) and the Local Workspace
+ * inspector (reader) so the two never drift onto divergent paths.
+ */
+export const WORKSPACE_CACHE_DIRNAME = "pi-workspaces";
+
+/**
+ * Sidecar-internal sentinel files that are never workspace content. Exported so
+ * the read-only inspector filters exactly what the writer skips.
+ */
+export const SKIP_FILES = new Set([
   "manifest.json",
   "_defaults_version",
   CACHE_MANIFEST_FILE,

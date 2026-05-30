@@ -344,6 +344,73 @@ export const WindowFocusEventSchema = z
   })
   .strict();
 
+// ---- Local Pi workspace inspector (read-only) ----
+
+// A node in the rendered cache tree. Recursive: directories carry children.
+// `path` is the POSIX-style path relative to the cache root; `truncated` marks
+// a directory whose contents were cut off by the walk's depth/node caps. The
+// model keeps `name`/`path` separate so later human-friendly labeling can
+// derive display text without losing the raw segment.
+export interface WorkspaceTreeNode {
+  name: string;
+  path: string;
+  kind: "file" | "dir";
+  children?: WorkspaceTreeNode[];
+  truncated?: boolean;
+}
+
+export const WorkspaceTreeNodeSchema: z.ZodType<WorkspaceTreeNode> = z.lazy(() =>
+  z
+    .object({
+      name: z.string(),
+      path: z.string(),
+      kind: z.enum(["file", "dir"]),
+      children: z.array(WorkspaceTreeNodeSchema).optional(),
+      truncated: z.boolean().optional(),
+    })
+    .strict(),
+);
+
+export const ReadWorkspaceTreeRequestSchema = EmptyRequestSchema;
+// Discriminated on `status` so the renderer never collapses "nothing synced
+// yet" (empty) into a real read failure (error).
+export const ReadWorkspaceTreeResponseSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("ok"),
+      tree: z.array(WorkspaceTreeNodeSchema),
+      truncated: z.boolean(),
+    })
+    .strict(),
+  z.object({ status: z.literal("empty") }).strict(),
+  z.object({ status: z.literal("error"), code: z.string() }).strict(),
+]);
+
+export const ReadWorkspaceFileRequestSchema = z
+  .object({ path: z.string().min(1) })
+  .strict();
+// `ok.language` is a Shiki bundled-language id (or "text"); the main process
+// maps it from the file extension with a plaintext fallback so the renderer
+// never feeds Shiki an unmapped language.
+export const ReadWorkspaceFileResponseSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("ok"),
+      content: z.string(),
+      language: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("too-large"),
+      size: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z.object({ status: z.literal("binary") }).strict(),
+  z.object({ status: z.literal("vanished") }).strict(),
+  z.object({ status: z.literal("error"), code: z.string() }).strict(),
+]);
+
 export const ChannelSchemas = {
   getSessionTokens: {
     request: GetSessionTokensRequestSchema,
@@ -417,6 +484,14 @@ export const ChannelSchemas = {
     request: RaiseThreadNotificationRequestSchema,
     response: RaiseThreadNotificationResponseSchema,
   },
+  readWorkspaceTree: {
+    request: ReadWorkspaceTreeRequestSchema,
+    response: ReadWorkspaceTreeResponseSchema,
+  },
+  readWorkspaceFile: {
+    request: ReadWorkspaceFileRequestSchema,
+    response: ReadWorkspaceFileResponseSchema,
+  },
 } as const;
 
 export type TokenStorageSnapshot = z.infer<typeof TokenStorageSnapshotSchema>;
@@ -461,3 +536,12 @@ export type RaiseThreadNotificationRequest = z.infer<
 >;
 export type OpenThreadEvent = z.infer<typeof OpenThreadEventSchema>;
 export type WindowFocusEvent = z.infer<typeof WindowFocusEventSchema>;
+export type ReadWorkspaceFileRequest = z.infer<
+  typeof ReadWorkspaceFileRequestSchema
+>;
+export type ReadWorkspaceTreeResponse = z.infer<
+  typeof ReadWorkspaceTreeResponseSchema
+>;
+export type ReadWorkspaceFileResponse = z.infer<
+  typeof ReadWorkspaceFileResponseSchema
+>;
