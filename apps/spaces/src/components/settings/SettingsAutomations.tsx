@@ -167,7 +167,7 @@ export function SettingsAutomations() {
         tableClassName="table-fixed"
         onRowClick={(row) =>
           navigate({
-            to: "/automations/$scheduledJobId",
+            to: "/settings/automations/$scheduledJobId",
             params: { scheduledJobId: row.id },
           })
         }

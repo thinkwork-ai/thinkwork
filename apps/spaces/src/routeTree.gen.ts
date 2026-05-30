@@ -47,6 +47,7 @@ import { Route as AuthedSettingsUsersUserIdRouteImport } from "./routes/_authed/
 import { Route as AuthedSettingsSpacesSpaceIdRouteImport } from "./routes/_authed/settings.spaces.$spaceId";
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
+import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./routes/_authed/settings.automations.$scheduledJobId";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
 import { Route as AuthedShellSpacesSpaceIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId";
 import { Route as AuthedShellMemoryPagesRouteImport } from "./routes/_authed/_shell/memory.pages";
@@ -264,6 +265,12 @@ const AuthedSettingsRoutinesRoutineIdRoute =
     path: "/routines/$routineId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsAutomationsScheduledJobIdRoute =
+  AuthedSettingsAutomationsScheduledJobIdRouteImport.update({
+    id: "/$scheduledJobId",
+    path: "/$scheduledJobId",
+    getParentRoute: () => AuthedSettingsAutomationsRoute,
+  } as any);
 const AuthedShellThreadsIdRoute = AuthedShellThreadsIdRouteImport.update({
   id: "/threads/$id",
   path: "/threads/$id",
@@ -351,7 +358,7 @@ export interface FileRoutesByFullPath {
   "/new": typeof AuthedShellNewRoute;
   "/settings/agent": typeof AuthedSettingsAgentRoute;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
-  "/settings/automations": typeof AuthedSettingsAutomationsRoute;
+  "/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
   "/settings/mcp-servers": typeof AuthedSettingsMcpServersRoute;
@@ -370,6 +377,7 @@ export interface FileRoutesByFullPath {
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -398,7 +406,7 @@ export interface FileRoutesByTo {
   "/new": typeof AuthedShellNewRoute;
   "/settings/agent": typeof AuthedSettingsAgentRoute;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
-  "/settings/automations": typeof AuthedSettingsAutomationsRoute;
+  "/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
   "/settings/mcp-servers": typeof AuthedSettingsMcpServersRoute;
@@ -417,6 +425,7 @@ export interface FileRoutesByTo {
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -452,7 +461,7 @@ export interface FileRoutesById {
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
   "/_authed/settings/agent": typeof AuthedSettingsAgentRoute;
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
-  "/_authed/settings/automations": typeof AuthedSettingsAutomationsRoute;
+  "/_authed/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
   "/_authed/settings/mcp-servers": typeof AuthedSettingsMcpServersRoute;
@@ -471,6 +480,7 @@ export interface FileRoutesById {
   "/_authed/_shell/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/_authed/_shell/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/_authed/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/_authed/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -524,6 +534,7 @@ export interface FileRouteTypes {
     | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
+    | "/settings/automations/$scheduledJobId"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/spaces/$spaceId"
@@ -571,6 +582,7 @@ export interface FileRouteTypes {
     | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
+    | "/settings/automations/$scheduledJobId"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/spaces/$spaceId"
@@ -624,6 +636,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory/pages"
     | "/_authed/_shell/spaces/$spaceId"
     | "/_authed/_shell/threads/$id"
+    | "/_authed/settings/automations/$scheduledJobId"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
     | "/_authed/settings/spaces/$spaceId"
@@ -921,6 +934,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsRoutinesRoutineIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/automations/$scheduledJobId": {
+      id: "/_authed/settings/automations/$scheduledJobId";
+      path: "/$scheduledJobId";
+      fullPath: "/settings/automations/$scheduledJobId";
+      preLoaderRoute: typeof AuthedSettingsAutomationsScheduledJobIdRouteImport;
+      parentRoute: typeof AuthedSettingsAutomationsRoute;
+    };
     "/_authed/_shell/threads/$id": {
       id: "/_authed/_shell/threads/$id";
       path: "/threads/$id";
@@ -1124,10 +1144,25 @@ const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
   AuthedShellRouteChildren,
 );
 
+interface AuthedSettingsAutomationsRouteChildren {
+  AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
+}
+
+const AuthedSettingsAutomationsRouteChildren: AuthedSettingsAutomationsRouteChildren =
+  {
+    AuthedSettingsAutomationsScheduledJobIdRoute:
+      AuthedSettingsAutomationsScheduledJobIdRoute,
+  };
+
+const AuthedSettingsAutomationsRouteWithChildren =
+  AuthedSettingsAutomationsRoute._addFileChildren(
+    AuthedSettingsAutomationsRouteChildren,
+  );
+
 interface AuthedSettingsRouteChildren {
   AuthedSettingsAgentRoute: typeof AuthedSettingsAgentRoute;
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
-  AuthedSettingsAutomationsRoute: typeof AuthedSettingsAutomationsRoute;
+  AuthedSettingsAutomationsRoute: typeof AuthedSettingsAutomationsRouteWithChildren;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsKnowledgeBasesRoute: typeof AuthedSettingsKnowledgeBasesRoute;
   AuthedSettingsMcpServersRoute: typeof AuthedSettingsMcpServersRoute;
@@ -1150,7 +1185,7 @@ interface AuthedSettingsRouteChildren {
 const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAgentRoute: AuthedSettingsAgentRoute,
   AuthedSettingsAnalyticsRoute: AuthedSettingsAnalyticsRoute,
-  AuthedSettingsAutomationsRoute: AuthedSettingsAutomationsRoute,
+  AuthedSettingsAutomationsRoute: AuthedSettingsAutomationsRouteWithChildren,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsKnowledgeBasesRoute: AuthedSettingsKnowledgeBasesRoute,
   AuthedSettingsMcpServersRoute: AuthedSettingsMcpServersRoute,
