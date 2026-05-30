@@ -1757,6 +1757,7 @@ export type Mutation = {
   notifyInboxItemUpdate?: Maybe<InboxItemStatusEvent>;
   notifyNewMessage?: Maybe<NewMessageEvent>;
   notifyOrgUpdate?: Maybe<OrgUpdateEvent>;
+  notifyThreadActivity?: Maybe<ThreadActivityEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   pinThread: PinnedThread;
@@ -2276,6 +2277,19 @@ export type MutationNotifyOrgUpdateArgs = {
   entityId?: InputMaybe<Scalars['ID']['input']>;
   entityType?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type MutationNotifyThreadActivityArgs = {
+  authorId?: InputMaybe<Scalars['ID']['input']>;
+  authorType: Scalars['String']['input'];
+  createdAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  messageId: Scalars['ID']['input'];
+  snippet?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
+  threadTitle?: InputMaybe<Scalars['String']['input']>;
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -4863,6 +4877,7 @@ export type Subscription = {
   onInboxItemStatusChanged?: Maybe<InboxItemStatusEvent>;
   onNewMessage?: Maybe<NewMessageEvent>;
   onOrgUpdated?: Maybe<OrgUpdateEvent>;
+  onThreadActivity?: Maybe<ThreadActivityEvent>;
   onThreadTurnUpdated?: Maybe<ThreadTurnUpdateEvent>;
   onThreadUpdated?: Maybe<ThreadUpdateEvent>;
 };
@@ -4900,6 +4915,11 @@ export type SubscriptionOnNewMessageArgs = {
 
 export type SubscriptionOnOrgUpdatedArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type SubscriptionOnThreadActivityArgs = {
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -5153,6 +5173,19 @@ export type Thread = {
 export type ThreadMessagesArgs = {
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type ThreadActivityEvent = {
+  __typename?: 'ThreadActivityEvent';
+  authorId?: Maybe<Scalars['ID']['output']>;
+  authorType: Scalars['String']['output'];
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  messageId: Scalars['ID']['output'];
+  snippet?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  threadTitle?: Maybe<Scalars['String']['output']>;
+  userId: Scalars['ID']['output'];
 };
 
 export type ThreadAttachment = {
