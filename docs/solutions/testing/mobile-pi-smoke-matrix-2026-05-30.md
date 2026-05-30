@@ -46,7 +46,6 @@ non-secret API defaults, but it does not mint a user token.
 | `bash`             | A `bash`/shell tool call precedes the answer and command output matches.        | Script prints `thread.id` and `thread.identifier`. |
 | `mcp`              | Bounded `mcp` gateway is used for list/search/call.                             | Script prints `thread.id` and `thread.identifier`. |
 | `mcp_auth_failure` | Invalid bearer resolution returns recoverable auth/reconnect guidance.          | Script prints `thread.id` and `thread.identifier`. |
-| `execute_code`     | Code interpreter or execute-code tool is used instead of mental math.           | Script prints `thread.id` and `thread.identifier`. |
 | `image`            | Image reaches the model and is persisted as mobile session attachment evidence. | Script prints `thread.id` and `thread.identifier`. |
 | `file`             | File metadata reaches `mobile_session.attachments`.                             | Script prints `thread.id` and `thread.identifier`. |
 | `abort`            | Stop reason is persisted as `aborted`.                                          | Script prints `thread.id` and `thread.identifier`. |
@@ -59,6 +58,10 @@ non-secret API defaults, but it does not mint a user token.
 - Mobile-only rows, including camera/photo-library selection, file picker, and
   clipboard permissions, should be compared against desktop by evidence shape
   rather than identical OS affordances.
+- Mobile's default execution primitive is host-contained `bash` backed by
+  `just-bash`. AgentCore/desktop `execute_code` remains a separate sandbox
+  capability and is not part of the mobile-required `all` matrix unless a future
+  mobile code-interpreter extension is intentionally added.
 - Simple prompts should route optimistically and show activity immediately.
   External calls such as MCP and web search may take longer, but workspace sync
   should not be visible as part of the model turn when the cache is warm.

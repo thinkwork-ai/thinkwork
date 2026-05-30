@@ -5,8 +5,8 @@
 - Plan: `docs/plans/2026-05-30-004-feat-mobile-pi-compatible-host-plan.md`
 - Status: active until deployed-stage all-capability smokes and TestFlight/on-device validation are recorded.
 - Target branch: `main`
-- Last closeout PR: <https://github.com/thinkwork-ai/thinkwork/pull/1884>
-- Active final-gates branch: `codex/mobile-pi-host-final-gates`
+- Last closeout PR: <https://github.com/thinkwork-ai/thinkwork/pull/1885>
+- Active final-gates branch: `codex/mobile-pi-host-smoke-tools`
 
 ### Merged Implementation Units
 
@@ -22,6 +22,7 @@
 - U10 host-contained `just-bash` parity and mobile multiplayer follow-ups: PR <https://github.com/thinkwork-ai/thinkwork/pull/1880>, merge `7d1d3d7ac3503202c3fe5b3c50159c264560b6a6`.
 - Mention picker anchoring follow-up: PR <https://github.com/thinkwork-ai/thinkwork/pull/1883>, merge `4f74efad75699f6bb3e17eaf9e8b3d9643d469cd`.
 - Smoke harness `just-bash` packaging follow-up: PR <https://github.com/thinkwork-ai/thinkwork/pull/1884>, merge `b47e849e38d036278f633d31dd8487c56a167c9c`.
+- CLI OAuth loopback callback follow-up: PR <https://github.com/thinkwork-ai/thinkwork/pull/1885>, merge `a842729871878a6a0512336414553b621989a087`.
 
 ### Closeout Findings
 
@@ -34,6 +35,24 @@
   `http://localhost:42010/callback`. The active branch restores those URLs in
   `terraform/modules/thinkwork` defaults so the normal merge/deploy pipeline can
   apply them.
+- PR #1885 deployed successfully. `thinkwork login --stage dev --region
+us-east-1` now completes through the normal Cognito loopback flow, and
+  `thinkwork me --stage dev --json` returns the authenticated dev user and
+  tenant ids needed for deployed mobile harness smokes.
+- The first deployed harness closeout run exposed a real smoke-script bug: the
+  script overrode `runThreadHarnessTurn` extensions with only workspace context
+  and `mcp`, so the deployed model saw only the bounded MCP gateway. That made
+  workspace tools, local `bash`, and mobile-native file tools appear missing
+  even though the app path registered them.
+- The current branch fixes the harness to use the same mobile host stack as the
+  app: workspace context, read/grep/find/ls, local `just-bash`, mobile-native
+  photo/file/clipboard tools, and bounded MCP with deployed bearer resolution.
+  It also records a fallback assistant message when a turn errors or aborts
+  before model text, preventing `record-turn` from failing on empty assistant
+  text.
+- The mention picker follow-up was visually rechecked in the iOS simulator. The
+  picker now renders inside the composer surface with no gap above the text
+  field. Screenshot: `/tmp/thinkwork-screens/mention-picker-composer-flush.png`.
 
 ### Current Verification
 
@@ -45,6 +64,30 @@
 - `pnpm --filter @thinkwork/mobile test` - passed, 182 tests.
 - `pnpm --filter @thinkwork/react-native-sdk build` - passed.
 - `pnpm --filter @thinkwork/mobile build:web` - passed.
+- `pnpm --filter @thinkwork/mobile test -- lib/agent/thread-turn.test.ts lib/agent/extensions/mobile-native/mobile-native.test.ts` - passed, 15 tests.
+- `pnpm --filter @thinkwork/mobile test` - passed, 182 tests.
+- `pnpm --filter @thinkwork/mobile smoke:pi-harness:dry-run` - passed; `all`
+  now enumerates the mobile-required matrix: plain, workspace,
+  workspace_tools, mcp, mcp_auth_failure, bash, image, file, and abort.
+- Deployed dev harness run from branch `codex/mobile-pi-host-smoke-tools`
+  passed all nine required rows:
+  - `plain`: `CHAT-898`
+  - `workspace`: `CHAT-899`
+  - `workspace_tools`: `CHAT-900`
+  - `mcp`: `CHAT-901`
+  - `mcp_auth_failure`: `CHAT-902`
+  - `bash`: `CHAT-903`
+  - `image`: `CHAT-904`
+  - `file`: `CHAT-905`
+  - `abort`: `CHAT-906`
+- `pnpm --filter @thinkwork/react-native-sdk build` - passed after a fresh
+  worktree initially lacked `packages/react-native-sdk/dist/index.js`.
+- `pnpm --filter @thinkwork/mobile build:web` - passed after rebuilding the
+  SDK package.
+- `pnpm --filter @thinkwork/mobile exec tsc --noEmit` - attempted, but blocked
+  by existing unrelated mobile type errors in app/fleet, routines, navigation
+  package typings, generated GraphQL variable shapes, and pre-existing agent
+  extension test typings. Focused tests and web export passed.
 - `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts` - passed, 15 tests.
 - `pnpm --filter @thinkwork/desktop typecheck` - passed.
 - PR #1884 CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed; PR
@@ -66,7 +109,6 @@
 
 ### Remaining Gates
 
-- Deployed-stage harness run:
-  `pnpm --filter @thinkwork/mobile smoke:pi-harness -- --capabilities all --json`.
-  This needs `tenantId`, `agentId`, `userId`, and a current Cognito ID token; the checked-in/copyable `.env` files provide endpoints and API keys but not identity tokens. The simulator workspace cache exposes current dev IDs, but the clean token path is blocked until the Cognito CLI loopback callback URL is deployed.
+- PR, CI, merge, and deploy the current harness/mention-picker follow-up branch
+  `codex/mobile-pi-host-smoke-tools`.
 - iOS TestFlight/on-device matrix from `apps/mobile/scripts/pi-device-smoke.md`, including image/file attachment and abort validation on a real device.
