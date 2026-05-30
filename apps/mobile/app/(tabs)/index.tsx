@@ -1168,10 +1168,6 @@ export default function ThreadsScreen() {
             disabled={noAssignedComputer}
             colors={colors}
             isDark={isDark}
-            onQuickActions={() => {
-              Keyboard.dismiss();
-              quickActionsRef.current?.present();
-            }}
             selectedSpace={selectedSpace}
             onSpacePress={() => {
               Keyboard.dismiss();
