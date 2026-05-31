@@ -185,8 +185,7 @@ describe("handleInvocation — happy path", () => {
     const bootstrapCalls: unknown[][] = [];
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
-        rendered_workspace_prefix:
-          "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+        rendered_workspace_prefix: "tenants/tenant-1/threads/customer-kickoff/",
       }),
       deps: makeDeps({
         bootstrapWorkspaceImpl: (async (...args: unknown[]) => {
@@ -195,7 +194,7 @@ describe("handleInvocation — happy path", () => {
             synced: 0,
             deleted: 0,
             total: 0,
-            prefix: "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+            prefix: "tenants/tenant-1/threads/customer-kickoff/",
           };
         }) as never,
       }),
@@ -206,7 +205,7 @@ describe("handleInvocation — happy path", () => {
     expect(bootstrapCalls[0]?.[0]).toBe("tenant-1");
     expect(bootstrapCalls[0]?.[1]).toBe("agent-slug");
     expect(bootstrapCalls[0]?.[5]).toEqual({
-      workspacePrefix: "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+      workspacePrefix: "tenants/tenant-1/threads/customer-kickoff/",
     });
   });
 
@@ -218,7 +217,7 @@ describe("handleInvocation — happy path", () => {
     process.env.WORKSPACE_DIR = workspaceDir;
     const manifest = {
       version: 1,
-      renderedPrefix: "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+      renderedPrefix: "tenants/tenant-1/threads/customer-kickoff/",
       generatedAt: "2026-05-28T12:00:00.000Z",
       sources: [
         { owner: "agent", prefix: "tenants/tenant-1/agents/agent-slug/" },
@@ -253,7 +252,7 @@ describe("handleInvocation — happy path", () => {
       const result = await handleInvocation({
         payload: VALID_PAYLOAD({
           rendered_workspace_prefix:
-            "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+            "tenants/tenant-1/threads/customer-kickoff/",
           finalize_callback_url:
             "https://api.example.com/api/threads/thread-1/finalize",
           finalize_callback_secret: "test-secret-do-not-leak",
@@ -272,7 +271,7 @@ describe("handleInvocation — happy path", () => {
               synced: 2,
               deleted: 0,
               total: 2,
-              prefix: "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+              prefix: "tenants/tenant-1/threads/customer-kickoff/",
             };
           },
           runAgentLoop: async () => {

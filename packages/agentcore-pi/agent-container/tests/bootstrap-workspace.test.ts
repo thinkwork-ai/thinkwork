@@ -17,8 +17,8 @@ import {
 } from "@aws-sdk/client-s3";
 import { bootstrapWorkspace } from "../src/runtime/bootstrap-workspace.js";
 
-const PREFIX = "tenants/acme/agents/marco/workspace/";
-const RENDERED_PREFIX = "tenants/acme/rendered/marco/sales/eric/";
+const PREFIX = "tenants/acme/agents/marco/";
+const SOURCE_PREFIX = "tenants/acme/agents/marco/";
 const THREAD_PREFIX = "tenants/acme/threads/customer-kickoff/";
 // aws-sdk-client-mock's middleware-stack types and @aws-sdk/client-s3
 // drift on minor SDK version bumps; the runtime behavior is correct
@@ -159,29 +159,28 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(result).toEqual({ synced: 0, deleted: 0, total: 0, prefix: PREFIX });
   });
 
-  it("syncs the rendered Agent + Space + User workspace when provided", async () => {
+  it("syncs the canonical agent source workspace when provided", async () => {
     stubRemote(
       {
-        "AGENTS.md": "# Marco in Sales",
-        "USER.md": "- Name: Eric Odom",
-        "space/SPACE.md": "# Sales",
+        "AGENTS.md": "# Marco",
+        "skills/research/SKILL.md": "# Research",
       },
-      RENDERED_PREFIX,
+      SOURCE_PREFIX,
     );
 
     const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
-      workspacePrefix: RENDERED_PREFIX,
+      workspacePrefix: SOURCE_PREFIX,
     });
 
     expect(result).toEqual({
-      synced: 3,
+      synced: 2,
       deleted: 0,
-      total: 3,
-      prefix: RENDERED_PREFIX,
+      total: 2,
+      prefix: SOURCE_PREFIX,
     });
     const files = await readFiles(tmp);
-    expect(files["USER.md"]).toBe("- Name: Eric Odom");
-    expect(files["space/SPACE.md"]).toBe("# Sales");
+    expect(files["AGENTS.md"]).toBe("# Marco");
+    expect(files["skills/research/SKILL.md"]).toBe("# Research");
   });
 
   it("syncs the per-thread runtime workspace when provided", async () => {
@@ -210,16 +209,16 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(files["DECISIONS.md"]).toBe("# Decisions");
   });
 
-  it("rejects rendered workspace prefixes outside the tenant/agent scope", async () => {
+  it("rejects workspace prefixes outside the tenant/agent scope", async () => {
     await expect(
       bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
-        workspacePrefix: "tenants/other/rendered/marco/sales/eric/",
+        workspacePrefix: "tenants/other/agents/marco/",
       }),
     ).rejects.toThrow("outside the expected tenant/agent scope");
 
     await expect(
       bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
-        workspacePrefix: "tenants/acme/rendered/other-agent/sales/eric/",
+        workspacePrefix: "tenants/acme/agents/other-agent/",
       }),
     ).rejects.toThrow("outside the expected tenant/agent scope");
 
@@ -228,18 +227,30 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
         workspacePrefix: "tenants/other/threads/customer-kickoff/",
       }),
     ).rejects.toThrow("outside the expected tenant/agent scope");
-  });
 
-  it("rejects unsafe rendered workspace prefixes", async () => {
     await expect(
       bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
-        workspacePrefix: "/tenants/acme/rendered/marco/sales/eric/",
+        workspacePrefix: "tenants/acme/threads/",
+      }),
+    ).rejects.toThrow("outside the expected tenant/agent scope");
+
+    await expect(
+      bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+        workspacePrefix: "tenants/acme/rendered/marco/sales/eric/",
+      }),
+    ).rejects.toThrow("outside the expected tenant/agent scope");
+  });
+
+  it("rejects unsafe workspace prefixes", async () => {
+    await expect(
+      bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+        workspacePrefix: "/tenants/acme/agents/marco/",
       }),
     ).rejects.toThrow("relative S3 prefix");
 
     await expect(
       bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
-        workspacePrefix: "tenants/acme/rendered/marco/../eric/",
+        workspacePrefix: "tenants/acme/agents/marco/../eric/",
       }),
     ).rejects.toThrow("unsafe path segment");
   });

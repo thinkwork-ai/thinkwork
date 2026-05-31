@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U11 Revocation wipe + TTL re-validation.
-- Active branch: `codex/workspace-arch-u11`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u11`.
+- Active unit: U12 Update boot/hydration prefix validators (3 runtimes).
+- Active branch: `codex/workspace-arch-u12`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u12`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1916](https://github.com/thinkwork-ai/thinkwork/pull/1916).
-- CI/deploy: U10 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1917](https://github.com/thinkwork-ai/thinkwork/pull/1917).
+- CI/deploy: U11 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -87,6 +87,51 @@ Target branch: `main`
   script and then `pnpm --filter @thinkwork/desktop test` passed all 144
   desktop tests.
 - Opened PR [#1917](https://github.com/thinkwork-ai/thinkwork/pull/1917).
+- PR [#1917](https://github.com/thinkwork-ai/thinkwork/pull/1917) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `191f7d34bcba81971e97dbd14b619cc6fdb0f5cd`.
+- Removed U11 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U12 worktree
+  `codex/workspace-arch-u12` from `origin/main` at `191f7d34`.
+- Started U12 boot/hydration prefix validator work. Installed worktree
+  dependencies with `pnpm install`; optional `node-liblzma` native rebuild
+  again reported missing `pkg-config`, but `pnpm` completed successfully.
+- Implemented U12 prefix validator update across agentcore Pi bootstrapping
+  and desktop hydration. Runtime workspace prefixes now accept the new
+  thread-scoped layout (`tenants/<tenant>/threads/<thread>/`) and the canonical
+  agent source prefix (`tenants/<tenant>/agents/<agent>/`), while rejecting the
+  retired `tenants/<tenant>/rendered/<agent>/...` shape and preserving
+  absolute/parent-segment path safety checks.
+- Added/updated tests for all three runtime paths: agentcore bootstrapping,
+  desktop sidecar hydration/local-turn execution, and mobile upstream
+  `WorkspaceTarget` resolution that ignores S3 rendered-prefix input.
+- U12 focused verification passed:
+  `pnpm --filter @thinkwork/agentcore-pi test -- tests/bootstrap-workspace.test.ts tests/server.test.ts`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/workspace-cache.test.ts`,
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and
+  `pnpm --filter @thinkwork/desktop typecheck`.
+- U12 broad verification passed:
+  `pnpm --filter @thinkwork/agentcore-pi test`,
+  `pnpm --filter @thinkwork/mobile test`,
+  `pnpm --filter @thinkwork/desktop test`, `pnpm typecheck`, `pnpm lint`,
+  changed-file Prettier check via
+  `pnpm dlx prettier@3.8.2 --check <changed files>`, and
+  `git diff --check`.
+- Verification note: the first broad desktop test attempt failed before
+  assertions in `menus.test.ts` after parallel suites raced while downloading
+  Electron and left the local Electron package half-installed. Removed the
+  partial local Electron `dist`/`path.txt`, reran Electron's install script,
+  and `pnpm --filter @thinkwork/desktop test` then passed all 145 desktop tests.
+- Compound review pass found and fixed one prefix-scope tightening: the bare
+  `tenants/<tenant>/threads/` root must not be accepted because U12 only allows
+  a named thread runtime prefix (`threads/<name>/`). Added regression coverage
+  for agentcore Pi and desktop.
+- Post-review verification re-ran the focused validator tests, full
+  `@thinkwork/agentcore-pi` and `@thinkwork/desktop` test suites,
+  `pnpm typecheck`, `pnpm lint`, changed-file Prettier check, and
+  `git diff --check`; all passed.
+- Opened PR [#1918](https://github.com/thinkwork-ai/thinkwork/pull/1918).
 - Created isolated U1 worktree `codex/workspace-arch-u1` from `origin/main`.
 - Implemented U1 substrate:
   `workspace_folder_name` columns and partial unique indexes for agents,

@@ -6,6 +6,7 @@ import {
   WorkspaceCache,
   assertSafeRelativePath,
   createWorkspaceCachePartition,
+  workspaceTargetsForContext,
   type WorkspaceCacheSource,
 } from "./workspace-cache";
 import type { WorkspaceTarget } from "@/lib/workspace-api";
@@ -257,6 +258,30 @@ describe("WorkspaceCache", () => {
     ).resolves.toMatchObject({
       content: "still granted",
     });
+  });
+
+  it("resolves mobile cache hydration from typed targets, not S3 prefixes", () => {
+    expect(
+      workspaceTargetsForContext({
+        agentId: " agent-1 ",
+        spaceId: "space-1",
+        userId: "user-1",
+      }),
+    ).toEqual([
+      { agentId: "agent-1" },
+      { spaceId: "space-1" },
+      { userId: "user-1" },
+    ]);
+
+    expect(
+      workspaceTargetsForContext({
+        agentId: "",
+        spaceId: null,
+        userId: " ",
+        renderedWorkspacePrefix:
+          "tenants/tenant-1/rendered/agent-1/space-1/user-1/",
+      } as unknown as Parameters<typeof workspaceTargetsForContext>[0]),
+    ).toEqual([]);
   });
 
   it("rejects unsafe relative paths", () => {
