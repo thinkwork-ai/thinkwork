@@ -194,6 +194,45 @@ describe("reconcileChangedFiles", () => {
     };
   }
 
+  function quarantineStore(): {
+    writes: Array<{
+      bucket: string;
+      key: string;
+      content: string;
+      kmsKeyId?: string;
+      metadata: Record<string, string>;
+      expiresAt: Date;
+    }>;
+    store: {
+      put(input: {
+        bucket: string;
+        key: string;
+        content: string;
+        kmsKeyId?: string;
+        metadata: Record<string, string>;
+        expiresAt: Date;
+      }): Promise<{ key: string }>;
+    };
+  } {
+    const writes: Array<{
+      bucket: string;
+      key: string;
+      content: string;
+      kmsKeyId?: string;
+      metadata: Record<string, string>;
+      expiresAt: Date;
+    }> = [];
+    return {
+      writes,
+      store: {
+        async put(input) {
+          writes.push(input);
+          return { key: input.key };
+        },
+      },
+    };
+  }
+
   it("is a clean no-op for an empty diff", async () => {
     await expect(
       reconcileChangedFiles({
@@ -389,6 +428,12 @@ describe("reconcileChangedFiles", () => {
 
   it("reports partial failures for ETag conflicts, unmapped paths, scratch, and secrets", async () => {
     const store = objectStore();
+    const quarantine = quarantineStore();
+    const notifications: Array<{
+      path: string;
+      rule: string;
+      key: string | null;
+    }> = [];
     store.putText = async (input) => {
       store.puts.push({
         key: input.key,
@@ -415,6 +460,16 @@ describe("reconcileChangedFiles", () => {
       context,
       hydrateManifest,
       objectStore: store,
+      secretQuarantineStore: quarantine.store,
+      secretQuarantineBucket: "quarantine-bucket",
+      secretQuarantineKmsKeyId: "kms-key-1",
+      notifySecretQuarantine: async (input) => {
+        notifications.push({
+          path: input.changedFile.path,
+          rule: input.rule,
+          key: input.quarantineKey,
+        });
+      },
       changedFiles: [
         { path: "memory/ok.md", op: "create", content: "# OK\n" },
         { path: "memory/conflict.md", op: "create", content: "# Conflict\n" },
@@ -451,9 +506,113 @@ describe("reconcileChangedFiles", () => {
           status: "rejected",
           code: "secret_detected",
           rule: "openai_api_key",
+          quarantineKey: expect.stringContaining(
+            "tenants/acme/_quarantine/workspace-secrets/thread-1/turn-1/",
+          ),
         }),
       ]),
     );
+    expect(quarantine.writes).toHaveLength(1);
+    expect(quarantine.writes[0]).toMatchObject({
+      bucket: "quarantine-bucket",
+      content: "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456",
+      kmsKeyId: "kms-key-1",
+      metadata: {
+        tenant_id: "tenant-1",
+        thread_id: "thread-1",
+        agent_id: "agent-1",
+        rule: "openai_api_key",
+      },
+    });
+    expect(quarantine.writes[0]?.metadata).not.toHaveProperty("content");
+    expect(notifications).toEqual([
+      {
+        path: "memory/secret.md",
+        rule: "openai_api_key",
+        key: quarantine.writes[0]?.key,
+      },
+    ]);
+    expect(JSON.stringify(notifications)).not.toContain(
+      "sk-abcdefghijklmnopqrstuvwxyz123456",
+    );
+    expect(store.puts.map((put) => put.key)).not.toContain(
+      "tenants/acme/users/eric/memory/secret.md",
+    );
+  });
+
+  it("allows explicit operator overrides for false-positive secret scans", async () => {
+    const store = objectStore();
+    const quarantine = quarantineStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      secretQuarantineStore: quarantine.store,
+      secretOverride: {
+        actorType: "operator",
+        operatorId: "operator-1",
+        reason: "Test fixture false positive.",
+      },
+      changedFiles: [
+        {
+          path: "memory/secret.md",
+          op: "create",
+          content: "fixture=sk-abcdefghijklmnopqrstuvwxyz123456",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("complete");
+    expect(store.puts).toEqual([
+      {
+        key: "tenants/acme/users/eric/memory/secret.md",
+        content: "fixture=sk-abcdefghijklmnopqrstuvwxyz123456",
+        ifNoneMatch: "*",
+      },
+    ]);
+    expect(quarantine.writes).toEqual([]);
+  });
+
+  it("keeps the quarantine key when notification fails after storage", async () => {
+    const store = objectStore();
+    const quarantine = quarantineStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      secretQuarantineStore: quarantine.store,
+      notifySecretQuarantine: async () => {
+        throw new Error("notify unavailable");
+      },
+      changedFiles: [
+        {
+          path: "memory/secret.md",
+          op: "create",
+          content: "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.files[0]).toMatchObject({
+      status: "rejected",
+      code: "secret_detected",
+      quarantineKey: quarantine.writes[0]?.key,
+    });
+    expect(quarantine.writes).toHaveLength(1);
+    expect(store.puts).toEqual([]);
   });
 
   it("rejects modify/delete without matching manifest ETags", async () => {
