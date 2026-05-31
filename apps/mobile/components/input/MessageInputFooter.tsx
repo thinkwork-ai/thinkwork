@@ -51,6 +51,7 @@ export interface SelectedWorkspace {
 export interface SelectedSpace {
   id: string | null;
   name: string;
+  slug?: string | null;
 }
 
 export interface MessageInputMention {

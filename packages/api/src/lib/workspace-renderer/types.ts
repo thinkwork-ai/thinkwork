@@ -95,7 +95,7 @@ export interface WorkspaceHydrateFile {
 }
 
 export interface WorkspaceHydrateStatusMount {
-  path: "GOAL.md" | "PROGRESS.md";
+  path: string;
   owner: "system";
   source: "database";
   provider: "thread-goals";

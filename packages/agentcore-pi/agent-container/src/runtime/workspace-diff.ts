@@ -16,10 +16,15 @@ export async function createLocalWorkspaceBaseline(input: {
   workspaceDir: string;
   log?: (message: string, fields?: Record<string, unknown>) => void;
 }): Promise<WorkspaceBaseline> {
-  const [snapshot, hydrateManifest] = await Promise.all([
-    readLocalWorkspaceSnapshot(input.workspaceDir, input.log),
-    readHydrateManifest(input.workspaceDir, input.log),
-  ]);
+  const hydrateManifest = await readHydrateManifest(
+    input.workspaceDir,
+    input.log,
+  );
+  const snapshot = await readLocalWorkspaceSnapshot(
+    input.workspaceDir,
+    input.log,
+    runtimeToManifestPathMap(hydrateManifest),
+  );
   return buildWorkspaceBaseline({ snapshot, hydrateManifest });
 }
 
@@ -29,9 +34,17 @@ export async function collectLocalWorkspaceChangedFiles(input: {
   log?: (message: string, fields?: Record<string, unknown>) => void;
 }): Promise<FinalizeChangedFile[]> {
   if (!input.baseline) return [];
+  const hydrateManifest = await readHydrateManifest(
+    input.workspaceDir,
+    input.log,
+  );
   return computeWorkspaceChangedFiles({
     baseline: input.baseline,
-    current: await readLocalWorkspaceSnapshot(input.workspaceDir, input.log),
+    current: await readLocalWorkspaceSnapshot(
+      input.workspaceDir,
+      input.log,
+      runtimeToManifestPathMap(hydrateManifest),
+    ),
   });
 }
 
@@ -56,6 +69,7 @@ async function readHydrateManifest(
 async function readLocalWorkspaceSnapshot(
   workspaceDir: string,
   log?: (message: string, fields?: Record<string, unknown>) => void,
+  pathMap: Map<string, string> = new Map(),
 ): Promise<WorkspaceSnapshot> {
   const files: WorkspaceSnapshot = {};
   async function visit(dir: string): Promise<void> {
@@ -84,11 +98,53 @@ async function readLocalWorkspaceSnapshot(
         return null;
       });
       if (!bytes || bytes.includes(0)) continue;
-      files[
-        path.relative(workspaceDir, absolutePath).split(path.sep).join("/")
-      ] = new TextDecoder().decode(bytes);
+      const relativePath = path
+        .relative(workspaceDir, absolutePath)
+        .split(path.sep)
+        .join("/");
+      files[pathMap.get(relativePath) ?? relativePath] = new TextDecoder()
+        .decode(bytes);
     }
   }
   await visit(workspaceDir);
   return files;
+}
+
+function runtimeToManifestPathMap(
+  hydrateManifest: Record<string, unknown> | null,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  const files = Array.isArray(hydrateManifest?.files)
+    ? hydrateManifest.files
+    : [];
+  for (const file of files) {
+    if (!file || typeof file !== "object") continue;
+    const manifestPath = (file as { path?: unknown }).path;
+    if (typeof manifestPath !== "string" || !manifestPath.trim()) continue;
+    out.set(runtimeWorkspacePath(manifestPath), manifestPath);
+  }
+  return out;
+}
+
+function runtimeWorkspacePath(manifestPath: string): string {
+  const clean = manifestPath.replace(/^\/+/, "");
+  if (clean.startsWith("Agent/")) {
+    return stripLegacySourceRoot(clean.slice("Agent/".length));
+  }
+  if (clean.startsWith("User/")) {
+    return stripLegacySourceRoot(clean.slice("User/".length));
+  }
+  if (clean.startsWith("Spaces/")) {
+    const [, , ...rest] = clean.split("/");
+    return ["Space", stripLegacySourceRoot(rest.join("/"))].join("/");
+  }
+  return stripLegacySourceRoot(clean);
+}
+
+function stripLegacySourceRoot(relativePath: string): string {
+  let current = relativePath;
+  while (current.startsWith("source/") || current.startsWith("workspace/")) {
+    current = current.replace(/^(source|workspace)\//, "");
+  }
+  return current;
 }

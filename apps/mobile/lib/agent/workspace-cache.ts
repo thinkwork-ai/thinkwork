@@ -4,6 +4,8 @@ const CACHE_KEY_PREFIX = "thinkwork:mobile-pi:workspace-cache:";
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 export const DEFAULT_OFFLINE_EXECUTION_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_MAX_PARTITIONS = 12;
+const DEFAULT_SPACE_FOLDER_NAME = "default";
+const TUPLE_ROOTS = new Set(["Agent", "Spaces", "User"]);
 
 export interface WorkspaceCachePartition {
   stage: string;
@@ -209,7 +211,11 @@ export class WorkspaceCache {
     const manifest = await this.readManifest(partition);
     if (!manifest) return null;
     const path = assertSafeRelativePath(filePath);
-    return manifest.files[path] ?? null;
+    for (const candidate of workspaceReadCandidates(path, manifest.files)) {
+      const file = manifest.files[candidate];
+      if (file) return file;
+    }
+    return null;
   }
 
   async listFiles(
@@ -237,7 +243,8 @@ export class WorkspaceCache {
       });
       for (const file of listed.files) {
         if (!file.content) continue;
-        const path = assertSafeRelativePath(file.path);
+        const path = workspaceRuntimePathForFile(target, file);
+        if (!path) continue;
         files[path] = {
           path,
           content: file.content,
@@ -338,7 +345,7 @@ export class WorkspaceCache {
       if (!raw) return null;
       const manifest = JSON.parse(raw) as WorkspaceCacheManifest;
       if (!manifest.files || !Number.isFinite(manifest.total)) return null;
-      return manifest;
+      return normalizeStoredManifest(manifest);
     } catch {
       return null;
     }
@@ -400,11 +407,17 @@ export function getDefaultWorkspaceCache(): WorkspaceCache {
 export function workspaceTargetsForContext(input: {
   agentId?: string | null;
   spaceId?: string | null;
+  spaceFolderName?: string | null;
   userId?: string | null;
 }): WorkspaceTarget[] {
   const targets: WorkspaceTarget[] = [];
   if (input.agentId?.trim()) targets.push({ agentId: input.agentId.trim() });
-  if (input.spaceId?.trim()) targets.push({ spaceId: input.spaceId.trim() });
+  if (input.spaceId?.trim()) {
+    targets.push({
+      spaceId: input.spaceId.trim(),
+      spaceFolderName: input.spaceFolderName?.trim() || null,
+    });
+  }
   if (input.userId?.trim()) targets.push({ userId: input.userId.trim() });
   return targets;
 }
@@ -470,6 +483,132 @@ export function assertSafeRelativePath(input: string): string {
     throw new WorkspaceBoundaryError("workspace path is unsafe");
   }
   return path;
+}
+
+export function workspaceRuntimePathForFile(
+  target: WorkspaceTarget,
+  file: Pick<WorkspaceFileMeta, "path" | "source">,
+): string | null {
+  const safePath = assertSafeRelativePath(file.path);
+  if (isWorkspaceArchivesPath(safePath)) return null;
+  if (hasTupleRoot(safePath)) return normalizeTupleRuntimePath(safePath);
+
+  const relativePath = stripLegacySourceRoot(safePath);
+  if (isWorkspaceArchivesPath(relativePath)) return null;
+  const source = file.source;
+  if (
+    source === "user" ||
+    (!source && "userId" in target) ||
+    ("userId" in target && source !== "agent" && source !== "space")
+  ) {
+    return `User/${relativePath}`;
+  }
+  if (source === "space" || "spaceId" in target) {
+    return `Spaces/${spaceFolderNameForTarget(target)}/${relativePath}`;
+  }
+  return `Agent/${relativePath}`;
+}
+
+function normalizeStoredManifest(
+  manifest: WorkspaceCacheManifest,
+): WorkspaceCacheManifest {
+  const files: Record<string, WorkspaceCachedFile> = {};
+  for (const file of Object.values(manifest.files)) {
+    const path = normalizeStoredRuntimePath(file);
+    if (!path) continue;
+    files[path] = { ...file, path };
+  }
+  return {
+    ...manifest,
+    total: Object.keys(files).length,
+    files,
+  };
+}
+
+function normalizeStoredRuntimePath(
+  file: WorkspaceCachedFile,
+): string | null {
+  const safePath = assertSafeRelativePath(file.path);
+  if (isWorkspaceArchivesPath(safePath)) return null;
+
+  const tuplePath = normalizeTupleRuntimePath(safePath);
+  if (!tuplePath) return null;
+  if (tuplePath !== safePath || hasTupleRoot(tuplePath)) return tuplePath;
+
+  const relativePath = stripLegacySourceRoot(safePath);
+  if (isWorkspaceArchivesPath(relativePath)) return null;
+  if (file.source === "user") return `User/${relativePath}`;
+  if (file.source === "space") {
+    return `Spaces/${DEFAULT_SPACE_FOLDER_NAME}/${relativePath}`;
+  }
+  return `Agent/${relativePath}`;
+}
+
+function normalizeTupleRuntimePath(path: string): string | null {
+  if (path.startsWith("Agent/")) {
+    const relativePath = stripLegacySourceRoot(path.slice("Agent/".length));
+    if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
+    return `Agent/${relativePath}`;
+  }
+  if (path.startsWith("Spaces/")) {
+    const [, folder, ...rest] = path.split("/");
+    if (!folder || rest.length === 0) return path;
+    const relativePath = stripLegacySourceRoot(rest.join("/"));
+    if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
+    return `Spaces/${folder}/${relativePath}`;
+  }
+  return path;
+}
+
+function workspaceReadCandidates(
+  path: string,
+  files: Record<string, WorkspaceCachedFile>,
+): string[] {
+  if (hasTupleRoot(path)) return [path];
+
+  const candidates = [path];
+  if (path === "AGENTS.md") candidates.unshift("Agent/AGENTS.md");
+  if (path === "USER.md") candidates.unshift("User/USER.md");
+  if (path === "SPACE.md") {
+    candidates.unshift("Spaces/default/SPACE.md");
+    for (const key of Object.keys(files)) {
+      if (/^Spaces\/[^/]+\/SPACE\.md$/.test(key)) {
+        candidates.unshift(key);
+      }
+    }
+  }
+
+  candidates.push(`Agent/${path}`, `User/${path}`);
+  for (const key of Object.keys(files)) {
+    if (key.endsWith(`/${path}`) && key.startsWith("Spaces/")) {
+      candidates.push(key);
+    }
+  }
+
+  return [...new Set(candidates)];
+}
+
+function hasTupleRoot(path: string): boolean {
+  return TUPLE_ROOTS.has(path.split("/")[0] ?? "");
+}
+
+function stripLegacySourceRoot(path: string): string {
+  let current = path;
+  while (current.startsWith("source/") || current.startsWith("workspace/")) {
+    current = current.replace(/^(source|workspace)\//, "");
+  }
+  return current;
+}
+
+function isWorkspaceArchivesPath(path: string): boolean {
+  return path === "workspace-archives" || path.startsWith("workspace-archives/");
+}
+
+function spaceFolderNameForTarget(target: WorkspaceTarget): string {
+  if ("spaceId" in target && target.spaceFolderName?.trim()) {
+    return safeSegment(target.spaceFolderName);
+  }
+  return DEFAULT_SPACE_FOLDER_NAME;
 }
 
 function safeSegment(value: string): string {

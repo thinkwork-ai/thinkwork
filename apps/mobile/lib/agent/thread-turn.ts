@@ -76,6 +76,8 @@ export interface RunThreadHarnessTurnInput {
   stage?: string | null;
   /** Active Space id, used to load direct Space workspace context when available. */
   spaceId?: string;
+  /** Active Space folder/slug used to mount mobile bash workspaces without UUID folders. */
+  spaceFolderName?: string | null;
   /**
    * Idempotency key for the platform turn lease. Callers may pass a stable value
    * when retrying the same pending send; otherwise the harness generates one.
@@ -133,6 +135,18 @@ function fallbackAssistantText(
     return "This turn was canceled before I could complete a response.";
   }
   return `This turn ended before I could complete a response (${stopReason}).`;
+}
+
+function lastSafeToolResultText(messages: Message[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "tool") continue;
+    if (message.isError) continue;
+    if (!message.name || !toolEvidenceIsSafe(message.name)) continue;
+    const content = message.content.trim();
+    if (content) return content;
+  }
+  return null;
 }
 
 function toHarnessMessages(prior: PriorMessage[]): Message[] {
@@ -464,7 +478,9 @@ export async function runThreadHarnessTurn(
     unsubscribeBackground?.();
   }
   const assistantText =
-    result.finalText || fallbackAssistantText(result.stopReason, events);
+    result.finalText ||
+    lastSafeToolResultText(result.messages) ||
+    fallbackAssistantText(result.stopReason, events);
   const evidence: MobileSessionTurnEvidence = {
     type: "mobile_session",
     stopReason: result.stopReason,

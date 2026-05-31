@@ -88,6 +88,22 @@ describe("walkCacheTree", () => {
     expect(result.tree.find((n) => n.name === "onlysentinels")).toBeUndefined();
   });
 
+  it("hides local sidecar implementation directories from the inspector", async () => {
+    await mkdir(join(root, "Agent"), { recursive: true });
+    await writeFile(join(root, "Agent", "AGENTS.md"), "# Agent");
+    await mkdir(join(root, "Spaces"), { recursive: true });
+    await mkdir(join(root, "User"), { recursive: true });
+    await mkdir(join(root, ".thinkwork-pi"), { recursive: true });
+    await writeFile(join(root, ".thinkwork-pi", "bundle.md"), "# Bundle");
+    await mkdir(join(root, "debug"), { recursive: true });
+    await writeFile(join(root, "debug", "prompt.md"), "# Debug");
+
+    const result = await walkCacheTree(root);
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.tree.map((n) => n.name)).toEqual(["Agent", "Spaces", "User"]);
+  });
+
   it("reports empty when only sentinels exist", async () => {
     await writeFile(join(root, "manifest.json"), "{}");
     expect(await walkCacheTree(root)).toEqual({ status: "empty" });

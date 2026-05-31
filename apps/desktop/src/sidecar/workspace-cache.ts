@@ -15,6 +15,8 @@ import {
 } from "@aws-sdk/client-s3";
 
 const CACHE_MANIFEST_FILE = ".thinkwork-workspace-cache.json";
+const HYDRATE_MANIFEST_FILE = ".hydrate_manifest.json";
+const RENDERED_AT_FILE = ".rendered_at";
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 export const DEFAULT_OFFLINE_EXECUTION_TTL_MS = 15 * 60 * 1000;
 
@@ -90,6 +92,42 @@ interface WorkspaceCacheManifest {
   accessValidatedAt?: string;
   total: number;
   objects?: Record<string, string>;
+}
+
+interface WorkspaceHydrateManifestFile {
+  path?: unknown;
+  sourceKey?: unknown;
+  etag?: unknown;
+  size?: unknown;
+  lastModified?: unknown;
+}
+
+interface WorkspaceHydrateManifestStatusMount {
+  path?: unknown;
+  sourceKey?: unknown;
+  etag?: unknown;
+  size?: unknown;
+  lastModified?: unknown;
+  available?: unknown;
+}
+
+interface WorkspaceHydrateManifestSource {
+  owner?: unknown;
+  prefix?: unknown;
+}
+
+interface WorkspaceHydrateManifest {
+  version?: unknown;
+  sources?: WorkspaceHydrateManifestSource[];
+  files?: WorkspaceHydrateManifestFile[];
+  statusMounts?: WorkspaceHydrateManifestStatusMount[];
+}
+
+interface RemoteEntry {
+  key: string;
+  rel: string;
+  signature: string;
+  bytes?: Uint8Array;
 }
 
 export interface WorkspaceRevocationInput {
@@ -195,30 +233,10 @@ export class WorkspaceCache {
   async wipeRevokedSpace(
     input: WorkspaceRevocationInput,
   ): Promise<WorkspaceWipeResult> {
-    const stageDir = path.join(this.rootDir, safeSegment(input.stage));
-    const tenantDir = path.join(stageDir, safeSegment(input.tenantSlug));
-    const agentNames = input.agentSlug?.trim()
-      ? [safeSegment(input.agentSlug)]
-      : await listChildDirectoryNames(tenantDir);
-    let deleted = 0;
-
-    for (const agentName of agentNames) {
-      const spaceDir = path.join(
-        tenantDir,
-        agentName,
-        safeSegment(input.spaceId),
-      );
-      const targets = input.userId?.trim()
-        ? [path.join(spaceDir, safeSegment(input.userId))]
-        : [spaceDir];
-      for (const target of targets) {
-        if (!(await directoryExists(target))) continue;
-        await rm(target, { recursive: true, force: true });
-        deleted++;
-      }
-    }
-
-    return { deleted };
+    void input;
+    if (!(await directoryExists(this.rootDir))) return { deleted: 0 };
+    await rm(this.rootDir, { recursive: true, force: true });
+    return { deleted: 1 };
   }
 
   private async refreshFromRemote(
@@ -230,21 +248,20 @@ export class WorkspaceCache {
       bucket: input.bucket,
       prefix,
     });
-    const remoteEntries = remote
-      .filter((obj) => obj.key.startsWith(prefix))
-      .map((obj) => ({
-        key: obj.key,
-        rel: obj.key.slice(prefix.length),
-        signature: remoteObjectSignature(obj),
-      }))
-      .filter(({ rel }) => rel && !SKIP_FILES.has(rel));
+    const remoteEntries = await this.remoteEntriesForHydration({
+      bucket: input.bucket,
+      prefix,
+      remote,
+    });
     const remoteSet = new Set(remoteEntries.map(({ rel }) => rel));
 
     let synced = 0;
     const priorObjects =
-      (await this.readCacheManifest(localDir, prefix))?.objects ?? {};
+      (await this.readCacheManifest(localDir, prefix))?.objects ??
+      (await this.readAnyCacheManifest(localDir))?.objects ??
+      {};
     const nextObjects: Record<string, string> = {};
-    for (const { key, rel, signature } of remoteEntries) {
+    for (const { key, rel, signature, bytes: cachedBytes } of remoteEntries) {
       assertSafeRelativePath(rel);
       const localPath = path.join(localDir, rel);
       nextObjects[rel] = signature;
@@ -252,10 +269,12 @@ export class WorkspaceCache {
         continue;
       }
       await mkdir(path.dirname(localPath), { recursive: true });
-      const bytes = await this.store.getObjectBytes({
-        bucket: input.bucket,
-        key,
-      });
+      const bytes =
+        cachedBytes ??
+        (await this.store.getObjectBytes({
+          bucket: input.bucket,
+          key,
+        }));
       await writeFile(localPath, bytes);
       synced++;
     }
@@ -288,6 +307,164 @@ export class WorkspaceCache {
     };
   }
 
+  private async remoteEntriesForHydration(input: {
+    bucket: string;
+    prefix: string;
+    remote: WorkspaceRemoteObject[];
+  }): Promise<RemoteEntry[]> {
+    const manifestObject = input.remote.find(
+      (object) => object.key === `${input.prefix}${HYDRATE_MANIFEST_FILE}`,
+    );
+    if (manifestObject) {
+      const manifestBytes = await this.store.getObjectBytes({
+        bucket: input.bucket,
+        key: manifestObject.key,
+      });
+      const manifest = parseHydrateManifest(manifestBytes);
+      if (manifest) {
+        const normalizedManifest = normalizeHydrateManifestForDesktop(manifest);
+        const entriesByRel = new Map<string, RemoteEntry>();
+        const addEntry = (entry: RemoteEntry) => {
+          entriesByRel.set(entry.rel, entry);
+        };
+        for (const file of normalizedManifest.files ?? []) {
+          const rel = stringValue(file.path);
+          const key = stringValue(file.sourceKey);
+          if (!rel || !key) continue;
+          addEntry({
+            key,
+            rel,
+            signature: manifestObjectSignature(key, file),
+          });
+        }
+        for (const mount of normalizedManifest.statusMounts ?? []) {
+          if (mount.available === false) continue;
+          const rel = stringValue(mount.path);
+          const key = stringValue(mount.sourceKey);
+          if (!rel || !key) continue;
+          addEntry({
+            key,
+            rel,
+            signature: manifestObjectSignature(key, mount),
+          });
+        }
+        for (const entry of await this.sourceEntriesForHydrationManifest({
+          bucket: input.bucket,
+          manifest: normalizedManifest,
+        })) {
+          addEntry(entry.remoteEntry);
+          ensureManifestFile(normalizedManifest, entry.manifestFile);
+        }
+        const normalizedManifestBytes = new TextEncoder().encode(
+          `${JSON.stringify(normalizedManifest, null, 2)}\n`,
+        );
+        addEntry({
+          key: manifestObject.key,
+          rel: HYDRATE_MANIFEST_FILE,
+          signature: remoteObjectSignature(manifestObject),
+          bytes: normalizedManifestBytes,
+        });
+        return Array.from(entriesByRel.values()).sort((left, right) =>
+          left.rel.localeCompare(right.rel),
+        );
+      }
+    }
+
+    return input.remote
+      .filter((obj) => obj.key.startsWith(input.prefix))
+      .map((obj) => ({
+        key: obj.key,
+        rel: obj.key.slice(input.prefix.length),
+        signature: remoteObjectSignature(obj),
+      }))
+      .filter(
+        ({ rel }) => rel && !SKIP_FILES.has(rel) && rel !== RENDERED_AT_FILE,
+      );
+  }
+
+  private async sourceEntriesForHydrationManifest(input: {
+    bucket: string;
+    manifest: WorkspaceHydrateManifest;
+  }): Promise<
+    Array<{
+      remoteEntry: RemoteEntry;
+      manifestFile: WorkspaceHydrateManifestFile & {
+        owner: string;
+        sourcePrefix: string;
+        sourcePath: string;
+        readOnly: false;
+      };
+    }>
+  > {
+    const out: Array<{
+      remoteEntry: RemoteEntry;
+      manifestFile: WorkspaceHydrateManifestFile & {
+        owner: string;
+        sourcePrefix: string;
+        sourcePath: string;
+        readOnly: false;
+      };
+    }> = [];
+    const sources = normalizedHydrateSources(input.manifest);
+    let hasUserSourceEntries = false;
+    for (const source of sources) {
+      const listPrefix =
+        source.owner === "space"
+          ? (tenantSpacesPrefix(source.prefix) ?? source.prefix)
+          : source.prefix;
+      const objects = await this.store.listObjects({
+        bucket: input.bucket,
+        prefix: listPrefix,
+      });
+      for (const object of objects) {
+        const mapped = desktopHydratePathForSourceObject({
+          owner: source.owner,
+          sourcePrefix: listPrefix,
+          key: object.key,
+        });
+        if (!mapped) continue;
+        if (source.owner === "user") hasUserSourceEntries = true;
+        out.push({
+          remoteEntry: {
+            key: object.key,
+            rel: mapped.path,
+            signature: remoteObjectSignature(object),
+          },
+          manifestFile: {
+            path: mapped.path,
+            owner: source.owner,
+            sourceKey: object.key,
+            sourcePrefix: mapped.sourcePrefix,
+            sourcePath: mapped.sourcePath,
+            lastModified: object.lastModified,
+            etag: object.eTag,
+            size: object.size,
+            readOnly: false,
+          },
+        });
+      }
+    }
+    if (!hasUserSourceEntries) {
+      const userSource = sources.find((source) => source.owner === "user");
+      const legacyPrefix = legacyRenderedUserWorkspacePrefix(input.manifest);
+      if (userSource && legacyPrefix) {
+        const objects = await this.store.listObjects({
+          bucket: input.bucket,
+          prefix: legacyPrefix,
+        });
+        for (const object of objects) {
+          const mapped = legacyRenderedUserHydrateEntry({
+            object,
+            legacyPrefix,
+            userSourcePrefix: userSource.prefix,
+          });
+          if (mapped) out.push(mapped);
+        }
+      }
+    }
+    return out;
+  }
+
   private refreshInBackground(
     input: WorkspaceSyncInput,
     localDir: string,
@@ -307,14 +484,8 @@ export class WorkspaceCache {
   }
 
   partitionPath(partition: WorkspaceCachePartition): string {
-    return path.join(
-      this.rootDir,
-      safeSegment(partition.stage),
-      safeSegment(partition.tenantSlug),
-      safeSegment(partition.agentSlug),
-      safeSegment(partition.spaceId),
-      safeSegment(partition.userId),
-    );
+    void partition;
+    return this.rootDir;
   }
 
   private async evictOldPartitions(stage: string): Promise<void> {
@@ -377,6 +548,17 @@ export class WorkspaceCache {
     localDir: string,
     prefix: string,
   ): Promise<WorkspaceCacheManifest | null> {
+    const manifest = await this.readAnyCacheManifest(localDir);
+    if (!manifest) return null;
+    if (manifest.prefix !== prefix || !Number.isFinite(manifest.total)) {
+      return null;
+    }
+    return manifest;
+  }
+
+  private async readAnyCacheManifest(
+    localDir: string,
+  ): Promise<WorkspaceCacheManifest | null> {
     let manifest: WorkspaceCacheManifest;
     try {
       manifest = JSON.parse(
@@ -385,10 +567,7 @@ export class WorkspaceCache {
     } catch {
       return null;
     }
-    if (manifest.prefix !== prefix || !Number.isFinite(manifest.total)) {
-      return null;
-    }
-    return manifest;
+    return Number.isFinite(manifest.total) ? manifest : null;
   }
 
   private async writeManifest(
@@ -509,25 +688,6 @@ async function listLocalFiles(localDir: string): Promise<Set<string>> {
   return out;
 }
 
-async function listChildDirectoryNames(dir: string): Promise<string[]> {
-  let entries: string[];
-  try {
-    entries = await readdir(dir);
-  } catch {
-    return [];
-  }
-  const out: string[] = [];
-  for (const entry of entries) {
-    const abs = path.join(dir, entry);
-    try {
-      if ((await stat(abs)).isDirectory()) out.push(entry);
-    } catch {
-      // Best-effort revocation cleanup only.
-    }
-  }
-  return out;
-}
-
 async function directoryExists(dir: string): Promise<boolean> {
   try {
     return (await stat(dir)).isDirectory();
@@ -560,6 +720,306 @@ function remoteObjectSignature(obj: WorkspaceRemoteObject): string {
   ].join("\t");
 }
 
+function shouldHydrateSourcePath(relPath: string): boolean {
+  if (!relPath || relPath === RENDERED_AT_FILE) return false;
+  if (isWorkspaceArchivesPath(relPath)) return false;
+  const base = relPath.split("/").pop() ?? relPath;
+  return (
+    !SKIP_FILES.has(base) &&
+    base !== HYDRATE_MANIFEST_FILE &&
+    base !== ".gitkeep"
+  );
+}
+
+function stripLegacySourceRoot(relPath: string): string {
+  let current = relPath;
+  while (current.startsWith("source/") || current.startsWith("workspace/")) {
+    current = current.replace(/^(source|workspace)\//, "");
+  }
+  return current;
+}
+
+function isWorkspaceArchivesPath(relPath: string): boolean {
+  return (
+    relPath === "workspace-archives" ||
+    relPath.startsWith("workspace-archives/") ||
+    relPath === "Agent/workspace-archives" ||
+    relPath.startsWith("Agent/workspace-archives/") ||
+    relPath === "Spaces/workspace-archives" ||
+    relPath.startsWith("Spaces/workspace-archives/")
+  );
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function parseHydrateManifest(
+  bytes: Uint8Array,
+): WorkspaceHydrateManifest | null {
+  try {
+    const parsed = JSON.parse(
+      new TextDecoder().decode(bytes),
+    ) as WorkspaceHydrateManifest;
+    if (parsed.version !== 1) return null;
+    if (!Array.isArray(parsed.files)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHydrateManifestForDesktop(
+  manifest: WorkspaceHydrateManifest,
+): WorkspaceHydrateManifest {
+  const spaceFolder = workspaceFolderFromManifest(manifest);
+  return {
+    ...manifest,
+    files: (manifest.files ?? []).map((file) => ({
+      ...file,
+      path: desktopHydratePath({
+        owner: stringValue((file as { owner?: unknown }).owner),
+        path: stringValue(file.path),
+        sourcePath: stringValue((file as { sourcePath?: unknown }).sourcePath),
+        spaceFolder,
+      }),
+    })),
+    statusMounts: (manifest.statusMounts ?? []).map((mount) => ({
+      ...mount,
+      path: desktopHydratePath({
+        owner: "system",
+        path: stringValue(mount.path),
+        sourcePath: stringValue(mount.path),
+        spaceFolder,
+      }),
+    })),
+  };
+}
+
+function workspaceFolderFromManifest(
+  manifest: WorkspaceHydrateManifest,
+): string {
+  const source = (
+    manifest as { sources?: Array<{ owner?: unknown; prefix?: unknown }> }
+  ).sources?.find((candidate) => candidate.owner === "space");
+  const prefix = stringValue(source?.prefix);
+  const match = prefix?.match(/\/spaces\/([^/]+)\//);
+  return match?.[1] ?? "default";
+}
+
+function normalizedHydrateSources(
+  manifest: WorkspaceHydrateManifest,
+): Array<{ owner: "agent" | "space" | "user"; prefix: string }> {
+  const out: Array<{ owner: "agent" | "space" | "user"; prefix: string }> = [];
+  const seen = new Set<string>();
+  for (const source of manifest.sources ?? []) {
+    const owner = stringValue(source.owner);
+    if (owner !== "agent" && owner !== "space" && owner !== "user") continue;
+    const rawPrefix = stringValue(source.prefix);
+    if (!rawPrefix) continue;
+    const prefix = rawPrefix.endsWith("/") ? rawPrefix : `${rawPrefix}/`;
+    const key = `${owner}:${prefix}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ owner, prefix });
+  }
+  return out;
+}
+
+function tenantSpacesPrefix(prefix: string): string | null {
+  const match = prefix.match(/^(tenants\/[^/]+\/)spaces\/[^/]+\//);
+  return match ? `${match[1]}spaces/` : null;
+}
+
+function desktopHydratePathForSourceObject(input: {
+  owner: "agent" | "space" | "user";
+  sourcePrefix: string;
+  key: string;
+}): { path: string; sourcePrefix: string; sourcePath: string } | null {
+  if (!input.key.startsWith(input.sourcePrefix)) return null;
+  const relPath = input.key.slice(input.sourcePrefix.length);
+  if (!shouldHydrateSourcePath(relPath)) return null;
+  if (input.owner === "agent") {
+    const sourcePath = stripLegacySourceRoot(relPath);
+    if (!shouldHydrateSourcePath(sourcePath)) return null;
+    return {
+      path: `Agent/${sourcePath}`,
+      sourcePrefix: input.sourcePrefix,
+      sourcePath,
+    };
+  }
+  if (input.owner === "user") {
+    const sourcePath = stripLegacySourceRoot(relPath);
+    if (!shouldHydrateSourcePath(sourcePath)) return null;
+    return {
+      path: `User/${sourcePath}`,
+      sourcePrefix: input.sourcePrefix,
+      sourcePath,
+    };
+  }
+  const [spaceFolder, ...rest] = relPath.split("/");
+  if (!spaceFolder || rest.length === 0) return null;
+  const sourcePath = stripLegacySourceRoot(rest.join("/"));
+  if (!shouldHydrateSourcePath(sourcePath)) return null;
+  return {
+    path: `Spaces/${spaceFolder}/${sourcePath}`,
+    sourcePrefix: `${input.sourcePrefix}${spaceFolder}/`,
+    sourcePath,
+  };
+}
+
+function legacyRenderedUserWorkspacePrefix(
+  manifest: WorkspaceHydrateManifest,
+): string | null {
+  const sources = normalizedHydrateSources(manifest);
+  const agent = sources
+    .find((source) => source.owner === "agent")
+    ?.prefix.match(/^tenants\/([^/]+)\/agents\/([^/]+)\//);
+  const space = sources
+    .find((source) => source.owner === "space")
+    ?.prefix.match(/^tenants\/([^/]+)\/spaces\/([^/]+)\//);
+  const user = sources
+    .find((source) => source.owner === "user")
+    ?.prefix.match(/^tenants\/([^/]+)\/users\/([^/]+)\//);
+  if (!agent || !space || !user) return null;
+  const [, tenantSlug, agentSlug] = agent;
+  const [, spaceTenantSlug, spaceSlug] = space;
+  const [, userTenantSlug, userSlug] = user;
+  if (tenantSlug !== spaceTenantSlug || tenantSlug !== userTenantSlug) {
+    return null;
+  }
+  return `tenants/${tenantSlug}/rendered/${agentSlug}/${spaceSlug}/${userSlug}/`;
+}
+
+function legacyRenderedUserHydrateEntry(input: {
+  object: WorkspaceRemoteObject;
+  legacyPrefix: string;
+  userSourcePrefix: string;
+}): {
+  remoteEntry: RemoteEntry;
+  manifestFile: WorkspaceHydrateManifestFile & {
+    owner: "user";
+    sourcePrefix: string;
+    sourcePath: string;
+    readOnly: false;
+  };
+} | null {
+  if (!input.object.key.startsWith(input.legacyPrefix)) return null;
+  const sourcePath = input.object.key.slice(input.legacyPrefix.length);
+  if (!isLegacyRenderedUserPath(sourcePath)) return null;
+  const path = `User/${sourcePath}`;
+  return {
+    remoteEntry: {
+      key: input.object.key,
+      rel: path,
+      signature: remoteObjectSignature(input.object),
+    },
+    manifestFile: {
+      path,
+      owner: "user",
+      sourceKey: `${input.userSourcePrefix}${sourcePath}`,
+      sourcePrefix: input.userSourcePrefix,
+      sourcePath,
+      lastModified: input.object.lastModified,
+      etag: input.object.eTag,
+      size: input.object.size,
+      readOnly: false,
+    },
+  };
+}
+
+function isLegacyRenderedUserPath(sourcePath: string): boolean {
+  if (sourcePath === "USER.md") return true;
+  if (!sourcePath.startsWith("memory/")) return false;
+  if (sourcePath.startsWith("memory/.") || sourcePath.includes("/.")) {
+    return false;
+  }
+  if (sourcePath.startsWith("memory/reports/")) return false;
+  return shouldHydrateSourcePath(sourcePath);
+}
+
+function ensureManifestFile(
+  manifest: WorkspaceHydrateManifest,
+  file: WorkspaceHydrateManifestFile,
+): void {
+  const files = (manifest.files ??= []);
+  const path = stringValue(file.path);
+  const sourceKey = stringValue(file.sourceKey);
+  if (
+    files.some(
+      (existing) =>
+        (path && existing.path === path) ||
+        (sourceKey && existing.sourceKey === sourceKey),
+    )
+  ) {
+    return;
+  }
+  files.push(file);
+}
+
+function desktopHydratePath(input: {
+  owner: string | null;
+  path: string | null;
+  sourcePath: string | null;
+  spaceFolder: string;
+}): string | undefined {
+  const path = input.path ?? "";
+  if (
+    path.startsWith("Agent/") ||
+    path.startsWith("User/") ||
+    path.startsWith("Spaces/")
+  ) {
+    return normalizeTupleHydratePath(path);
+  }
+  const sourcePath = stripLegacySourceRoot(input.sourcePath ?? path);
+  if (!sourcePath || isWorkspaceArchivesPath(sourcePath)) return undefined;
+  if (input.owner === "agent") return `Agent/${sourcePath}`;
+  if (input.owner === "user") return `User/${sourcePath}`;
+  if (
+    input.owner === "space" ||
+    input.owner === "thread_goal" ||
+    input.owner === "system"
+  ) {
+    return `Spaces/${input.spaceFolder}/${sourcePath}`;
+  }
+  return path || undefined;
+}
+
+function normalizeTupleHydratePath(path: string): string | undefined {
+  if (path.startsWith("Agent/")) {
+    const sourcePath = stripLegacySourceRoot(path.slice("Agent/".length));
+    if (!sourcePath || isWorkspaceArchivesPath(sourcePath)) return undefined;
+    return `Agent/${sourcePath}`;
+  }
+  if (path.startsWith("User/")) {
+    const sourcePath = stripLegacySourceRoot(path.slice("User/".length));
+    if (!sourcePath || isWorkspaceArchivesPath(sourcePath)) return undefined;
+    return `User/${sourcePath}`;
+  }
+  if (path.startsWith("Spaces/")) {
+    const [root, folder, ...rest] = path.split("/");
+    if (!root || !folder || rest.length === 0) return path;
+    const sourcePath = stripLegacySourceRoot(rest.join("/"));
+    if (!sourcePath || isWorkspaceArchivesPath(sourcePath)) return undefined;
+    return `${root}/${folder}/${sourcePath}`;
+  }
+  return path || undefined;
+}
+
+function manifestObjectSignature(
+  key: string,
+  object: WorkspaceHydrateManifestFile | WorkspaceHydrateManifestStatusMount,
+): string {
+  return [
+    key,
+    stringValue(object.etag) ?? "",
+    typeof object.size === "number" && Number.isFinite(object.size)
+      ? String(object.size)
+      : "",
+    stringValue(object.lastModified) ?? "",
+  ].join("\t");
+}
+
 async function pruneEmptyDirs(root: string, dir: string): Promise<void> {
   let entries: string[];
   try {
@@ -573,7 +1033,9 @@ async function pruneEmptyDirs(root: string, dir: string): Promise<void> {
   }
   if (dir === root) return;
   try {
-    if ((await readdir(dir)).length === 0) await rm(dir);
+    if ((await readdir(dir)).length === 0) {
+      await rm(dir, { recursive: true, force: true });
+    }
   } catch {
     // Best-effort cleanup only.
   }

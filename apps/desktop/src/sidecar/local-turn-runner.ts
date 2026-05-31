@@ -450,7 +450,7 @@ async function prepareWorkspace(
   const spaceId = stringValue(turnContext?.spaceId) ?? invocation.thread_id;
 
   if (!bucket || !renderedPrefix || !tenantSlug || !agentSlug) {
-    const localDir = path.join(payload.workspaceCacheRoot, "empty-workspace");
+    const localDir = payload.workspaceCacheRoot;
     await mkdir(localDir, { recursive: true });
     return { localDir, prefix: "", synced: 0, deleted: 0, total: 0 };
   }

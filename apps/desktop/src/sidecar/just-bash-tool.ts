@@ -41,6 +41,8 @@ export interface DesktopJustBashController {
   snapshotWorkspace(): Promise<WorkspaceSnapshot | null>;
 }
 
+type RuntimeTuplePathMap = Map<string, string>;
+
 function createBash(network: boolean): Bash {
   const options: BashOptions = {
     cwd: "/workspace",
@@ -92,11 +94,62 @@ async function writeWorkspaceFile(
   bash: Bash,
   relativePath: string,
   content: string,
+  pathMap?: RuntimeTuplePathMap,
 ): Promise<void> {
-  const safePath = safeRelativePath(relativePath);
+  const tuplePath = safeRelativePath(relativePath);
+  const safePath = workspaceRuntimePath(relativePath);
+  pathMap?.set(safePath, tuplePath);
   const absolutePath = `/workspace/${safePath}`;
   await bash.fs.mkdir(parentDir(absolutePath), { recursive: true });
   await bash.writeFile(absolutePath, content);
+}
+
+function workspaceRuntimePath(relativePath: string): string {
+  const safePath = safeRelativePath(relativePath);
+  if (safePath.startsWith("Agent/")) {
+    return safeRelativePath(stripLegacySourceRoot(safePath.slice("Agent/".length)));
+  }
+  if (safePath.startsWith("User/")) {
+    return safeRelativePath(stripLegacySourceRoot(safePath.slice("User/".length)));
+  }
+  if (safePath.startsWith("Spaces/")) {
+    const [, , ...rest] = safePath.split("/");
+    return safeRelativePath(["Space", stripLegacySourceRoot(rest.join("/"))].join("/"));
+  }
+  return stripLegacySourceRoot(safePath);
+}
+
+function stripLegacySourceRoot(relativePath: string): string {
+  let current = relativePath;
+  while (current.startsWith("source/") || current.startsWith("workspace/")) {
+    current = current.replace(/^(source|workspace)\//, "");
+  }
+  return current;
+}
+
+function workspaceTuplePath(
+  relativePath: string,
+  pathMap: RuntimeTuplePathMap,
+): string {
+  const safePath = safeRelativePath(relativePath);
+  const mapped = pathMap.get(safePath);
+  if (mapped) return mapped;
+  if (safePath.startsWith("Space/")) {
+    const spaceFolder = firstMappedSpaceFolder(pathMap);
+    return `Spaces/${spaceFolder}/${safePath.slice("Space/".length)}`;
+  }
+  if (safePath === "USER.md" || safePath.startsWith("memory/")) {
+    return `User/${safePath}`;
+  }
+  return `Agent/${safePath}`;
+}
+
+function firstMappedSpaceFolder(pathMap: RuntimeTuplePathMap): string {
+  for (const tuplePath of pathMap.values()) {
+    const match = tuplePath.match(/^Spaces\/([^/]+)\//);
+    if (match) return match[1];
+  }
+  return "default";
 }
 
 function hasNulByte(bytes: Uint8Array): boolean {
@@ -106,9 +159,10 @@ function hasNulByte(bytes: Uint8Array): boolean {
 async function hydrateWorkspace(
   bash: Bash,
   workspaceDir: string,
-): Promise<void> {
+): Promise<RuntimeTuplePathMap> {
   await bash.fs.mkdir("/workspace", { recursive: true });
   let hydratedBytes = 0;
+  const pathMap: RuntimeTuplePathMap = new Map();
 
   async function visit(dir: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -126,16 +180,23 @@ async function hydrateWorkspace(
       if (hydratedBytes + stat.size > MAX_HYDRATED_WORKSPACE_BYTES) return;
       const bytes = await readFile(absolute);
       if (hasNulByte(bytes)) continue;
-      await writeWorkspaceFile(bash, relative, new TextDecoder().decode(bytes));
+      await writeWorkspaceFile(
+        bash,
+        relative,
+        new TextDecoder().decode(bytes),
+        pathMap,
+      );
       hydratedBytes += bytes.byteLength;
     }
   }
 
   await visit(workspaceDir);
+  return pathMap;
 }
 
 export async function snapshotBashWorkspace(
   bash: Bash,
+  pathMap: RuntimeTuplePathMap = new Map(),
 ): Promise<WorkspaceSnapshot> {
   const files: WorkspaceSnapshot = {};
   for (const filePath of bash.fs.getAllPaths()) {
@@ -144,7 +205,8 @@ export async function snapshotBashWorkspace(
     try {
       const stat = await bash.fs.stat(filePath);
       if (!stat.isFile) continue;
-      files[safeRelativePath(relativePath)] = await bash.readFile(filePath);
+      files[workspaceTuplePath(relativePath, pathMap)] =
+        await bash.readFile(filePath);
     } catch {
       // Best effort: a concurrently removed or non-text file should not fail the turn.
     }
@@ -192,6 +254,7 @@ export function createDesktopJustBashController(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const bash = createBash(network);
   let hydrated = false;
+  let pathMap: RuntimeTuplePathMap = new Map();
 
   const tool: ToolDefinition = {
     name: "bash",
@@ -232,7 +295,7 @@ export function createDesktopJustBashController(
 
       try {
         if (!hydrated) {
-          await hydrateWorkspace(bash, options.workspaceDir);
+          pathMap = await hydrateWorkspace(bash, options.workspaceDir);
           hydrated = true;
         }
         const result = await bash.exec(command, { signal: controller.signal });
@@ -267,7 +330,7 @@ export function createDesktopJustBashController(
   return {
     tool,
     async snapshotWorkspace() {
-      return hydrated ? snapshotBashWorkspace(bash) : null;
+      return hydrated ? snapshotBashWorkspace(bash, pathMap) : null;
     },
   };
 }

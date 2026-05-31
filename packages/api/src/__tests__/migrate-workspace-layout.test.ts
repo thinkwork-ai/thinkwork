@@ -154,8 +154,20 @@ describe("migrate-workspace-layout", () => {
   it("dry-runs folder backfills, source copies, rendered deletes, and thread renders", async () => {
     const store = FakeObjectStore.from([
       ["tenants/acme/agents/marco/workspace/AGENTS.md", { etag: "a", size: 1 }],
+      [
+        "tenants/acme/agents/marco/workspace-archives/old/AGENTS.md",
+        { etag: "archive", size: 1 },
+      ],
       ["tenants/acme/spaces/sales/SPACE.md", { etag: "s", size: 1 }],
+      [
+        "tenants/acme/spaces/sales/source/artifacts/brief.md",
+        { etag: "brief", size: 1 },
+      ],
       ["tenants/acme/users/eric/USER.md", { etag: "u", size: 1 }],
+      [
+        "tenants/tenant-1/users/user-1/memory/preferences.md",
+        { etag: "m", size: 1 },
+      ],
       ["tenants/acme/threads/thread-1/DECISIONS.md", { etag: "t", size: 1 }],
       [
         "tenants/acme/rendered/marco/sales/eric/AGENTS.md",
@@ -198,8 +210,17 @@ describe("migrate-workspace-layout", () => {
           destinationKey: "tenants/acme/spaces/board-pack/SPACE.md",
         }),
         expect.objectContaining({
+          sourceKey: "tenants/acme/spaces/sales/source/artifacts/brief.md",
+          destinationKey:
+            "tenants/acme/spaces/board-pack/artifacts/brief.md",
+        }),
+        expect.objectContaining({
           sourceKey: "tenants/acme/users/eric/USER.md",
           destinationKey: "tenants/acme/users/eric-odom/USER.md",
+        }),
+        expect.objectContaining({
+          sourceKey: "tenants/tenant-1/users/user-1/memory/preferences.md",
+          destinationKey: "tenants/acme/users/eric-odom/memory/preferences.md",
         }),
         expect.objectContaining({
           sourceKey: "tenants/acme/threads/thread-1/DECISIONS.md",
@@ -209,6 +230,13 @@ describe("migrate-workspace-layout", () => {
     );
     expect(plan.deletePrefixes).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          prefix: "tenants/acme/agents/marco/workspace-archives/",
+          reason: "legacy-source",
+          keys: [
+            "tenants/acme/agents/marco/workspace-archives/old/AGENTS.md",
+          ],
+        }),
         expect.objectContaining({
           prefix: "tenants/acme/rendered/",
           reason: "retired-rendered",

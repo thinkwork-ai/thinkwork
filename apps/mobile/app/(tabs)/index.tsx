@@ -652,6 +652,9 @@ export default function ThreadsScreen() {
       name:
         spaces.find((space) => space.id === effectiveSpaceId)?.name ??
         "Default",
+      slug:
+        spaces.find((space) => space.id === effectiveSpaceId)?.slug ??
+        "default",
     }),
     [effectiveSpaceId, spaces],
   );
@@ -970,6 +973,7 @@ export default function ThreadsScreen() {
               userEmail: currentUser?.email,
               tenantId: currentUser?.tenantId ?? tenantId,
               spaceId: effectiveSpaceId ?? undefined,
+              spaceFolderName: selectedSpace.slug,
               // Selects which tenant MCP tools the on-device agent can call
               // (mcp-tools extension + proxy).
               agentId: selectedComputer.id,

@@ -2,9 +2,9 @@
 /**
  * Bootstrap per-user context USER.md files.
  *
- * Writes `tenants/{tenantId}/users/{userId}/USER.md` for active tenant
- * members whose principal is a user. Existing files are preserved unless
- * `--overwrite` is passed.
+ * Writes `tenants/{tenantSlug}/users/{userWorkspaceFolderName}/USER.md` for
+ * active tenant members whose principal is a user. Existing files are
+ * preserved unless `--overwrite` is passed.
  *
  * Usage:
  *   DATABASE_URL=... WORKSPACE_BUCKET=... \
@@ -16,7 +16,7 @@
 
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getDb } from "@thinkwork/database-pg";
-import { tenantMembers } from "@thinkwork/database-pg/schema";
+import { tenants, tenantMembers, users } from "@thinkwork/database-pg/schema";
 import { eq } from "drizzle-orm";
 import { writeUserContextMdForUser } from "../src/lib/user-context-md-writer.js";
 
@@ -29,7 +29,11 @@ interface CliOptions {
 
 type Target = {
   tenantId: string;
+  tenantSlug: string | null;
   userId: string;
+  userWorkspaceFolderName: string | null;
+  userName: string | null;
+  userEmail: string | null;
 };
 
 type TargetResult = Target & {
@@ -77,8 +81,23 @@ function workspaceBucket(): string {
   return bucket;
 }
 
+function workspaceSegment(value: string | null | undefined): string {
+  return (
+    value
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "user"
+  );
+}
+
 function userContextKey(target: Target): string {
-  return `tenants/${target.tenantId}/users/${target.userId}/USER.md`;
+  const tenantSlug = workspaceSegment(target.tenantSlug);
+  const userSlug = workspaceSegment(
+    target.userWorkspaceFolderName ?? target.userName ?? target.userEmail,
+  );
+  return `tenants/${tenantSlug}/users/${userSlug}/USER.md`;
 }
 
 function isNotFound(err: unknown): boolean {
@@ -109,20 +128,32 @@ async function loadTargets(opts: CliOptions): Promise<Target[]> {
     ? await db
         .select({
           tenantId: tenantMembers.tenant_id,
+          tenantSlug: tenants.slug,
           principalType: tenantMembers.principal_type,
           principalId: tenantMembers.principal_id,
           status: tenantMembers.status,
+          userWorkspaceFolderName: users.workspace_folder_name,
+          userName: users.name,
+          userEmail: users.email,
         })
         .from(tenantMembers)
+        .innerJoin(tenants, eq(tenants.id, tenantMembers.tenant_id))
+        .innerJoin(users, eq(users.id, tenantMembers.principal_id))
         .where(eq(tenantMembers.tenant_id, opts.tenantId))
     : await db
         .select({
           tenantId: tenantMembers.tenant_id,
+          tenantSlug: tenants.slug,
           principalType: tenantMembers.principal_type,
           principalId: tenantMembers.principal_id,
           status: tenantMembers.status,
+          userWorkspaceFolderName: users.workspace_folder_name,
+          userName: users.name,
+          userEmail: users.email,
         })
-        .from(tenantMembers);
+        .from(tenantMembers)
+        .innerJoin(tenants, eq(tenants.id, tenantMembers.tenant_id))
+        .innerJoin(users, eq(users.id, tenantMembers.principal_id));
 
   const seen = new Set<string>();
   const targets: Target[] = [];
@@ -133,7 +164,14 @@ async function loadTargets(opts: CliOptions): Promise<Target[]> {
     const key = `${row.tenantId}:${row.principalId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    targets.push({ tenantId: row.tenantId, userId: row.principalId });
+    targets.push({
+      tenantId: row.tenantId,
+      tenantSlug: row.tenantSlug,
+      userId: row.principalId,
+      userWorkspaceFolderName: row.userWorkspaceFolderName,
+      userName: row.userName,
+      userEmail: row.userEmail,
+    });
   }
   return targets;
 }

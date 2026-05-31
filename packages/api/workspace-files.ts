@@ -263,6 +263,7 @@ interface AgentTarget {
   agentSlug: string;
   agentId: string;
   prefix: string;
+  readPrefixes?: string[];
   key: (path: string) => string;
 }
 
@@ -271,6 +272,7 @@ interface TemplateTarget {
   tenantSlug: string;
   templateSlug: string;
   prefix: string;
+  readPrefixes?: string[];
   key: (path: string) => string;
 }
 
@@ -280,6 +282,7 @@ interface SpaceTarget {
   spaceSlug: string;
   spaceId: string;
   prefix: string;
+  readPrefixes?: string[];
   key: (path: string) => string;
 }
 
@@ -288,6 +291,7 @@ interface ThreadTarget {
   tenantSlug: string;
   threadId: string;
   prefix: string;
+  readPrefixes?: string[];
   key: (path: string) => string;
 }
 
@@ -295,6 +299,7 @@ interface DefaultsTarget {
   kind: "defaults";
   tenantSlug: string;
   prefix: string;
+  readPrefixes?: string[];
   key: (path: string) => string;
 }
 
@@ -302,7 +307,9 @@ interface UserContextTarget {
   kind: "user";
   tenantSlug: string;
   userSlug: string;
+  userId: string;
   prefix: string;
+  readPrefixes?: string[];
   key: (path: string) => string;
 }
 
@@ -310,6 +317,7 @@ interface CatalogTarget {
   kind: "catalog";
   tenantSlug: string;
   prefix: string;
+  readPrefixes?: string[];
   key: (path: string) => string;
 }
 
@@ -527,7 +535,15 @@ async function resolveUserContextTarget(
     kind: "user",
     tenantSlug: tenant.slug,
     userSlug,
+    userId,
     prefix: userContextPrefix(tenant.slug, userSlug),
+    readPrefixes: [
+      // Pre-stable-folder USER.md bootstrap wrote by database ids. Keep
+      // reading it so existing user workspaces don't disappear while new
+      // writes go to the human-readable canonical prefix.
+      `tenants/${tenant.slug}/users/${userId}/`,
+      `tenants/${tenantId}/users/${userId}/`,
+    ],
     key: (path) => userContextKey(tenant.slug, userSlug, path),
   };
 }
@@ -597,12 +613,154 @@ interface HandlerDeps {
   target: Target;
 }
 
+interface VisibleWorkspaceObject {
+  path: string;
+  readKey: string;
+}
+
+function targetReadPrefixes(target: Target): string[] {
+  return [
+    ...new Set([target.prefix, ...(target.readPrefixes ?? [])].filter(Boolean)),
+  ];
+}
+
+function stripLegacyWorkspaceRoot(target: Target, path: string): string | null {
+  if (path.startsWith("/")) return path;
+  const clean = path.replace(/^\/+/, "");
+  if (!clean) return null;
+  if (
+    clean === "workspace-archives" ||
+    clean.startsWith("workspace-archives/")
+  ) {
+    return null;
+  }
+  if (target.kind === "space" && clean.startsWith("source/")) {
+    return clean.slice("source/".length);
+  }
+  if (
+    (target.kind === "agent" ||
+      target.kind === "template" ||
+      target.kind === "defaults" ||
+      target.kind === "space") &&
+    clean.startsWith("workspace/")
+  ) {
+    return clean.slice("workspace/".length);
+  }
+  return clean;
+}
+
+function storagePathCandidatesForTarget(target: Target, path: string): string[] {
+  const clean = path.replace(/^\/+/, "");
+  const logical = stripLegacyWorkspaceRoot(target, clean) ?? clean;
+  const candidates = [logical];
+  if (
+    target.kind === "agent" ||
+    target.kind === "template" ||
+    target.kind === "defaults" ||
+    target.kind === "space"
+  ) {
+    candidates.push(`workspace/${logical}`);
+  }
+  if (target.kind === "space") {
+    candidates.push(`source/${logical}`);
+  }
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function isVisibleListedPath(target: Target, path: string): boolean {
+  if (path === "manifest.json" || path === "_defaults_version") return false;
+  if (target.kind === "user" && !isVisibleUserContextPath(path)) return false;
+  if (target.kind === "catalog" && !isAllowedCatalogPath(path)) return false;
+  if (isBuiltinToolWorkspacePath(path)) return false;
+  return true;
+}
+
+async function listVisibleWorkspaceObjects(
+  target: Target,
+): Promise<VisibleWorkspaceObject[]> {
+  const byPath = new Map<
+    string,
+    { object: VisibleWorkspaceObject; canonicalScore: number; index: number }
+  >();
+  const ordered: string[] = [];
+
+  for (const prefix of targetReadPrefixes(target)) {
+    const rawPaths = await listPrefix(prefix);
+    for (const rawPath of rawPaths) {
+      const logicalPath = stripLegacyWorkspaceRoot(target, rawPath);
+      if (!logicalPath || !isVisibleListedPath(target, logicalPath)) continue;
+
+      const canonicalScore =
+        prefix === target.prefix && rawPath === logicalPath
+          ? 2
+          : prefix === target.prefix
+            ? 1
+            : 0;
+      const existing = byPath.get(logicalPath);
+      const object = { path: logicalPath, readKey: `${prefix}${rawPath}` };
+      if (!existing) {
+        ordered.push(logicalPath);
+        byPath.set(logicalPath, {
+          object,
+          canonicalScore,
+          index: ordered.length - 1,
+        });
+      } else if (canonicalScore > existing.canonicalScore) {
+        byPath.set(logicalPath, {
+          object,
+          canonicalScore,
+          index: existing.index,
+        });
+      }
+    }
+  }
+
+  type VisibleEntry = {
+    object: VisibleWorkspaceObject;
+    canonicalScore: number;
+    index: number;
+  };
+
+  return ordered
+    .map((path) => byPath.get(path))
+    .filter((entry): entry is VisibleEntry => Boolean(entry))
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.object);
+}
+
+async function readWorkspaceObject(
+  target: Target,
+  path: string,
+): Promise<{ content: string | null; key: string | null }> {
+  const prefixes = targetReadPrefixes(target);
+  for (const prefix of prefixes) {
+    for (const candidatePath of storagePathCandidatesForTarget(target, path)) {
+      try {
+        const key = `${prefix}${candidatePath}`;
+        const resp = await s3.send(
+          new GetObjectCommand({ Bucket: bucket(), Key: key }),
+        );
+        if (!resp) continue;
+        return {
+          content: (await resp.Body?.transformToString("utf-8")) ?? "",
+          key,
+        };
+      } catch (err) {
+        if (isNoSuchKey(err)) continue;
+        throw err;
+      }
+    }
+  }
+  return { content: null, key: null };
+}
+
 async function handleGet(
   deps: HandlerDeps,
   path: string,
 ): Promise<APIGatewayProxyResult> {
   const { target } = deps;
-  if (target.kind === "user" && !isVisibleUserContextPath(path)) {
+  const logicalPath = stripLegacyWorkspaceRoot(target, path) ?? path;
+  if (target.kind === "user" && !isVisibleUserContextPath(logicalPath)) {
     return json(403, {
       ok: false,
       error: "User context path is not editable from this surface.",
@@ -612,28 +770,13 @@ async function handleGet(
   // defaults / user context) reads its own prefix directly. No overlay walk, no
   // template/defaults fallback for agents — the agent prefix is the
   // source of truth.
-  try {
-    const resp = await s3.send(
-      new GetObjectCommand({ Bucket: bucket(), Key: target.key(path) }),
-    );
-    const content = (await resp.Body?.transformToString("utf-8")) ?? "";
-    return json(200, {
-      ok: true,
-      content,
-      source: target.kind,
-      sha256: "",
-    });
-  } catch (err) {
-    if (isNoSuchKey(err)) {
-      return json(200, {
-        ok: true,
-        content: null,
-        source: target.kind,
-        sha256: "",
-      });
-    }
-    throw err;
-  }
+  const { content } = await readWorkspaceObject(target, logicalPath);
+  return json(200, {
+    ok: true,
+    content,
+    source: target.kind,
+    sha256: "",
+  });
 }
 
 async function handleList(
@@ -647,15 +790,8 @@ async function handleList(
   // Operational artifacts (manifest.json, _defaults_version) are
   // filtered so callers don't accidentally treat them as workspace
   // files.
-  const paths = await listPrefix(target.prefix);
-  const visiblePaths = paths.filter(
-    (p) =>
-      p !== "manifest.json" &&
-      p !== "_defaults_version" &&
-      (target.kind !== "user" || isVisibleUserContextPath(p)) &&
-      (target.kind !== "catalog" || isAllowedCatalogPath(p)) &&
-      !isBuiltinToolWorkspacePath(p),
-  );
+  const visibleObjects = await listVisibleWorkspaceObjects(target);
+  const visiblePaths = visibleObjects.map((object) => object.path);
 
   if (target.kind === "catalog") {
     return await handleCatalogList(target, visiblePaths, includeContent);
@@ -678,14 +814,14 @@ async function handleList(
   // local /tmp/workspace (per the runtime bootstrap helpers in U6 / U12
   // of the plan).
   const files = await Promise.all(
-    visiblePaths.map(async (p) => {
+    visibleObjects.map(async (object) => {
       try {
         const resp = await s3.send(
-          new GetObjectCommand({ Bucket: bucket(), Key: target.key(p) }),
+          new GetObjectCommand({ Bucket: bucket(), Key: object.readKey }),
         );
         const content = (await resp.Body?.transformToString("utf-8")) ?? "";
         return {
-          path: p,
+          path: object.path,
           source: target.kind,
           sha256: "",
           overridden: false,
@@ -696,7 +832,7 @@ async function handleList(
         // rather than failing the whole batch.
         if (isNoSuchKey(err)) {
           return {
-            path: p,
+            path: object.path,
             source: target.kind,
             sha256: "",
             overridden: false,
@@ -857,7 +993,9 @@ async function handlePut(
   const { target, tenantId, auth } = deps;
   let cleanPath: string;
   try {
-    cleanPath = normalizeWorkspacePath(path);
+    cleanPath = normalizeWorkspacePath(
+      stripLegacyWorkspaceRoot(target, path) ?? path,
+    );
   } catch (err) {
     return json(400, {
       ok: false,
@@ -1221,18 +1359,19 @@ async function handleDelete(
   path: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind === "user" && !isVisibleUserContextPath(path)) {
+  const cleanPath = stripLegacyWorkspaceRoot(target, path) ?? path;
+  if (target.kind === "user" && !isVisibleUserContextPath(cleanPath)) {
     return json(403, {
       ok: false,
       error: "User context path is not editable from this surface.",
     });
   }
   await s3.send(
-    new DeleteObjectCommand({ Bucket: bucket(), Key: target.key(path) }),
+    new DeleteObjectCommand({ Bucket: bucket(), Key: target.key(cleanPath) }),
   );
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-    if (isSkillMarkerPath(path)) {
+    if (isSkillMarkerPath(cleanPath)) {
       const derive = await syncDerivedAgentSkills(
         target,
         tenantId,
@@ -1533,8 +1672,15 @@ async function handleMove(
   let cleanFrom: string;
   let cleanToFolder: string;
   try {
-    cleanFrom = normalizeWorkspacePath(fromPath);
-    cleanToFolder = toFolder === "" ? "" : normalizeWorkspacePath(toFolder);
+    cleanFrom = normalizeWorkspacePath(
+      stripLegacyWorkspaceRoot(target, fromPath) ?? fromPath,
+    );
+    cleanToFolder =
+      toFolder === ""
+        ? ""
+        : normalizeWorkspacePath(
+            stripLegacyWorkspaceRoot(target, toFolder) ?? toFolder,
+          );
   } catch (err) {
     return json(400, {
       ok: false,
@@ -1858,8 +2004,12 @@ async function handleRename(
   let cleanFrom: string;
   let cleanTo: string;
   try {
-    cleanFrom = normalizeWorkspacePath(fromPath);
-    cleanTo = normalizeWorkspacePath(toPath);
+    cleanFrom = normalizeWorkspacePath(
+      stripLegacyWorkspaceRoot(target, fromPath) ?? fromPath,
+    );
+    cleanTo = normalizeWorkspacePath(
+      stripLegacyWorkspaceRoot(target, toPath) ?? toPath,
+    );
   } catch (err) {
     return json(400, {
       ok: false,

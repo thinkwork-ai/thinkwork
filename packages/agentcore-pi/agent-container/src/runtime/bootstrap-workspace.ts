@@ -41,6 +41,11 @@ export interface BootstrapWorkspaceOptions {
   workspacePrefix?: string;
 }
 
+interface RemoteEntry {
+  key: string;
+  rel: string;
+}
+
 function agentPrefix(tenantSlug: string, agentSlug: string): string {
   return `tenants/${tenantSlug}/agents/${agentSlug}/`;
 }
@@ -99,8 +104,8 @@ async function listAgentKeys(
   s3: S3Client,
   bucket: string,
   prefix: string,
-): Promise<string[]> {
-  const out: string[] = [];
+): Promise<RemoteEntry[]> {
+  const out: RemoteEntry[] = [];
   let continuationToken: string | undefined;
   do {
     const resp = await s3.send(
@@ -112,15 +117,60 @@ async function listAgentKeys(
     );
     for (const obj of resp.Contents ?? []) {
       if (!obj.Key) continue;
-      const rel = obj.Key.slice(prefix.length);
+      const rel = runtimeWorkspacePath(obj.Key.slice(prefix.length));
       if (!rel || SKIP_FILES.has(rel)) continue;
-      out.push(rel);
+      out.push({ key: obj.Key, rel });
     }
     continuationToken = resp.IsTruncated
       ? resp.NextContinuationToken
       : undefined;
   } while (continuationToken);
   return out;
+}
+
+function runtimeWorkspacePath(relPath: string): string | null {
+  const clean = relPath.replace(/^\/+/, "");
+  if (!clean) return null;
+  if (isWorkspaceArchivesPath(clean)) return null;
+
+  if (clean.startsWith("Agent/")) {
+    const agentPath = stripLegacySourceRoot(clean.slice("Agent/".length));
+    if (!agentPath || isWorkspaceArchivesPath(agentPath)) return null;
+    return agentPath;
+  }
+  if (clean.startsWith("User/")) {
+    const userPath = stripLegacySourceRoot(clean.slice("User/".length));
+    if (!userPath || isWorkspaceArchivesPath(userPath)) return null;
+    return userPath;
+  }
+  if (clean.startsWith("Spaces/")) {
+    const [, , ...rest] = clean.split("/");
+    if (rest.length === 0) return null;
+    const spacePath = stripLegacySourceRoot(rest.join("/"));
+    if (!spacePath || isWorkspaceArchivesPath(spacePath)) return null;
+    return `Space/${spacePath}`;
+  }
+
+  const runtimePath = stripLegacySourceRoot(clean);
+  if (!runtimePath || isWorkspaceArchivesPath(runtimePath)) return null;
+  return runtimePath;
+}
+
+function stripLegacySourceRoot(relPath: string): string {
+  let current = relPath;
+  while (current.startsWith("source/") || current.startsWith("workspace/")) {
+    current = current.replace(/^(source|workspace)\//, "");
+  }
+  return current;
+}
+
+function isWorkspaceArchivesPath(relPath: string): boolean {
+  return (
+    relPath === "workspace-archives" ||
+    relPath.startsWith("workspace-archives/") ||
+    relPath === "Agent/workspace-archives" ||
+    relPath.startsWith("Agent/workspace-archives/")
+  );
 }
 
 async function listLocalPaths(localDir: string): Promise<Set<string>> {
@@ -157,14 +207,13 @@ export async function bootstrapWorkspace(
 ): Promise<BootstrapResult> {
   const prefix = resolveWorkspacePrefix(tenantSlug, agentSlug, options);
   const remote = await listAgentKeys(s3, bucket, prefix);
-  const remoteSet = new Set(remote);
+  const remoteSet = new Set(remote.map((entry) => entry.rel));
 
   await mkdir(localDir, { recursive: true });
   const local = await listLocalPaths(localDir);
 
   let synced = 0;
-  for (const rel of remote) {
-    const key = prefix + rel;
+  for (const { key, rel } of remote) {
     const localPath = path.join(localDir, rel);
     const parent = path.dirname(localPath);
     if (parent) await mkdir(parent, { recursive: true });

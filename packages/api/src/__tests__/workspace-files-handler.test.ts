@@ -1783,6 +1783,61 @@ describe("agent GET / LIST", () => {
       "skills/workspace-memory/SKILL.md",
     ]);
   });
+
+  it("LIST presents legacy agent workspace/ objects as root files and hides workspace archives", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [
+        { Key: "tenants/acme/agents/marco/workspace/AGENTS.md" },
+        { Key: "tenants/acme/agents/marco/workspace/skills/report/SKILL.md" },
+        {
+          Key: "tenants/acme/agents/marco/workspace-archives/blueprint/AGENTS.md",
+        },
+      ],
+    });
+
+    const res = await parse(
+      await handler(event({ action: "list", agentId: AGENT_ID })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.files.map((f: { path: string }) => f.path)).toEqual([
+      "AGENTS.md",
+      "skills/report/SKILL.md",
+    ]);
+  });
+});
+
+describe("space workspace GET / LIST", () => {
+  it("LIST presents legacy source/ objects at the Space workspace root", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([spaceRowTenantA()]);
+    pushDbRows([tenantRow()]);
+
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [
+        { Key: "tenants/acme/spaces/engineering/source/artifacts/brief.md" },
+        { Key: "tenants/acme/spaces/engineering/source/docs/customer.md" },
+        { Key: "tenants/acme/spaces/engineering/SPACE.md" },
+      ],
+    });
+
+    const res = await parse(
+      await handler(event({ action: "list", spaceId: SPACE_ID })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.files.map((f: { path: string }) => f.path)).toEqual([
+      "artifacts/brief.md",
+      "docs/customer.md",
+      "SPACE.md",
+    ]);
+  });
 });
 
 describe("user context workspace target", () => {
@@ -1878,6 +1933,57 @@ describe("user context workspace target", () => {
       content: "- Prefers concise summaries\n",
     });
     expect(lambdaMock.commandCalls(InvokeCommand)).toHaveLength(0);
+  });
+
+  it("lists legacy id-keyed USER.md objects through the logical User workspace", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([userRow()]);
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: "tenants/tenant-a-id/users/user-eric-id/USER.md" }],
+    });
+
+    const res = await parse(
+      await handler(event({ action: "list", userId: USER_ID })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.files).toEqual([
+      {
+        path: "USER.md",
+        source: "user",
+        sha256: "",
+        overridden: false,
+      },
+    ]);
+  });
+
+  it("reads legacy id-keyed USER.md objects when the canonical slugged key is absent", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([userRow()]);
+    s3Mock.on(GetObjectCommand).rejects(noSuchKey());
+    s3Mock
+      .on(GetObjectCommand, {
+        Bucket: "test-bucket",
+        Key: "tenants/tenant-a-id/users/user-eric-id/USER.md",
+      })
+      .resolves(body("# USER.md\nEric"));
+
+    const res = await parse(
+      await handler(event({ action: "get", userId: USER_ID, path: "USER.md" })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      source: "user",
+      content: "# USER.md\nEric",
+    });
   });
 
   it("blocks hidden requester memory internals from direct User context reads", async () => {

@@ -209,6 +209,38 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(files["DECISIONS.md"]).toBe("# Decisions");
   });
 
+  it("unwraps tuple-rendered workspaces into the runtime sandbox layout", async () => {
+    stubRemote(
+      {
+        "Agent/workspace/AGENTS.md": "# Agent",
+        "Agent/skills/research/SKILL.md": "# Skill",
+        "Agent/workspace-archives/old/AGENTS.md": "# Old",
+        "User/USER.md": "# User",
+        "Spaces/default/source/SPACE.md": "# Space",
+        "Spaces/default/source/docs/customer.md": "# Customer",
+      },
+      THREAD_PREFIX,
+    );
+
+    const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: THREAD_PREFIX,
+    });
+
+    expect(result).toMatchObject({ synced: 5, total: 5 });
+    const files = await readFiles(tmp);
+    expect(files).toMatchObject({
+      "AGENTS.md": "# Agent",
+      "skills/research/SKILL.md": "# Skill",
+      "USER.md": "# User",
+      "Space/SPACE.md": "# Space",
+      "Space/docs/customer.md": "# Customer",
+    });
+    expect(files["Agent/workspace/AGENTS.md"]).toBeUndefined();
+    expect(files["User/USER.md"]).toBeUndefined();
+    expect(files["Spaces/default/source/SPACE.md"]).toBeUndefined();
+    expect(files["workspace-archives/old/AGENTS.md"]).toBeUndefined();
+  });
+
   it("rejects workspace prefixes outside the tenant/agent scope", async () => {
     await expect(
       bootstrapWorkspace("acme", "marco", tmp, s3, "test", {

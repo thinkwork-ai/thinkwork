@@ -5,8 +5,8 @@
 // in the same place the mobile agent lives, while still letting the agent call public
 // internet endpoints through curl/wget when a task needs it.
 
-import { Bash } from "just-bash/browser";
-import type { BashOptions } from "just-bash/browser";
+import { Bash } from "just-bash";
+import type { BashOptions } from "just-bash";
 import { defineExtension } from "./define-extension";
 import type { ExtensionFactory } from "./types";
 import type { ToolResult } from "../types";
@@ -23,6 +23,7 @@ const MAX_RESPONSE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_OUTPUT_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_TOOL_RESULT_CHARS = 64 * 1024;
 const SNAPSHOT_KEY_PREFIX = "thinkwork:mobile-pi:bash-snapshot:";
+type RuntimeTuplePathMap = Map<string, string>;
 
 export interface BashSnapshotStorage {
   getItem(key: string): Promise<string | null>;
@@ -174,19 +175,69 @@ async function writeWorkspaceFile(
   bash: Bash,
   relativePath: string,
   content: string,
+  pathMap?: RuntimeTuplePathMap,
 ): Promise<void> {
-  const safePath = assertSafeRelativePath(relativePath);
+  const tuplePath = assertSafeRelativePath(relativePath);
+  const safePath = workspaceRuntimePath(relativePath);
+  pathMap?.set(safePath, tuplePath);
   const absolutePath = `/workspace/${safePath}`;
   await bash.fs.mkdir(parentDir(absolutePath), { recursive: true });
   await bash.writeFile(absolutePath, content);
+}
+
+function workspaceRuntimePath(relativePath: string): string {
+  const safePath = assertSafeRelativePath(relativePath);
+  if (safePath.startsWith("Agent/")) {
+    return assertSafeRelativePath(
+      stripLegacySourceRoot(safePath.slice("Agent/".length)),
+    );
+  }
+  if (safePath.startsWith("User/")) {
+    return assertSafeRelativePath(
+      stripLegacySourceRoot(safePath.slice("User/".length)),
+    );
+  }
+  if (safePath.startsWith("Spaces/")) {
+    const [, , ...rest] = safePath.split("/");
+    return assertSafeRelativePath(
+      ["Space", stripLegacySourceRoot(rest.join("/"))].join("/"),
+    );
+  }
+  return stripLegacySourceRoot(safePath);
+}
+
+function stripLegacySourceRoot(relativePath: string): string {
+  let current = relativePath;
+  while (current.startsWith("source/") || current.startsWith("workspace/")) {
+    current = current.replace(/^(source|workspace)\//, "");
+  }
+  return current;
+}
+
+function workspaceTuplePath(
+  relativePath: string,
+  pathMap: RuntimeTuplePathMap,
+  spaceFolderName: string,
+): string {
+  const safePath = assertSafeRelativePath(relativePath);
+  const mapped = pathMap.get(safePath);
+  if (mapped) return mapped;
+  if (safePath.startsWith("Space/")) {
+    return `Spaces/${spaceFolderName}/${safePath.slice("Space/".length)}`;
+  }
+  if (safePath === "USER.md" || safePath.startsWith("memory/")) {
+    return `User/${safePath}`;
+  }
+  return `Agent/${safePath}`;
 }
 
 async function hydrateWorkspace(
   bash: Bash,
   key: string,
   options: LocalBashExtensionOptions,
-): Promise<void> {
+): Promise<RuntimeTuplePathMap> {
   await bash.fs.mkdir("/workspace", { recursive: true });
+  const pathMap: RuntimeTuplePathMap = new Map();
 
   const storage = options.snapshotStorage ?? createAsyncStorageAdapter();
   const raw = await storage.getItem(snapshotKey(key));
@@ -195,10 +246,10 @@ async function hydrateWorkspace(
       const files = JSON.parse(raw) as Record<string, string>;
       for (const [path, content] of Object.entries(files)) {
         if (typeof content === "string") {
-          await writeWorkspaceFile(bash, path, content);
+          await writeWorkspaceFile(bash, path, content, pathMap);
         }
       }
-      return;
+      return pathMap;
     } catch {
       await storage.removeItem?.(snapshotKey(key));
     }
@@ -213,15 +264,18 @@ async function hydrateWorkspace(
       options.workspace.partition,
     );
     for (const file of files) {
-      await writeWorkspaceFile(bash, file.path, file.content);
+      await writeWorkspaceFile(bash, file.path, file.content, pathMap);
     }
   }
+  return pathMap;
 }
 
 async function snapshotWorkspace(
   bash: Bash,
   key: string,
   storage: BashSnapshotStorage,
+  pathMap: RuntimeTuplePathMap,
+  spaceFolderName: string,
 ): Promise<WorkspaceSnapshot> {
   const files: WorkspaceSnapshot = {};
   for (const path of bash.fs.getAllPaths()) {
@@ -230,13 +284,24 @@ async function snapshotWorkspace(
     try {
       const stat = await bash.fs.stat(path);
       if (!stat.isFile) continue;
-      files[assertSafeRelativePath(relativePath)] = await bash.readFile(path);
+      files[workspaceTuplePath(relativePath, pathMap, spaceFolderName)] =
+        await bash.readFile(path);
     } catch {
       // Snapshot best effort: a concurrently removed or non-text file should not fail the turn.
     }
   }
   await storage.setItem(snapshotKey(key), JSON.stringify(files));
   return files;
+}
+
+function spaceFolderNameForTargets(
+  targets: readonly WorkspaceTarget[] | undefined,
+): string {
+  const space = targets?.find(
+    (target): target is WorkspaceTarget & { spaceFolderName?: string | null } =>
+      "spaceId" in target,
+  );
+  return space?.spaceFolderName?.trim() || "default";
 }
 
 function truncate(value: string): string {
@@ -271,6 +336,7 @@ export function localBashExtension(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const snapshotStorage =
     options.snapshotStorage ?? createAsyncStorageAdapter();
+  const spaceFolderName = spaceFolderNameForTargets(options.workspace?.targets);
 
   return defineExtension({
     name: "local-bash",
@@ -314,7 +380,7 @@ export function localBashExtension(
           try {
             const key = sandboxKey(ctx.sessionId ?? options.sessionId);
             const bash = getBash(key, network);
-            await hydrateWorkspace(bash, key, {
+            const pathMap = await hydrateWorkspace(bash, key, {
               ...options,
               snapshotStorage,
             });
@@ -322,6 +388,8 @@ export function localBashExtension(
               bash,
               key,
               snapshotStorage,
+              pathMap,
+              spaceFolderName,
             );
             options.onWorkspaceSnapshot?.("baseline", baselineFiles);
             const result = await bash.exec(command, {
@@ -331,6 +399,8 @@ export function localBashExtension(
               bash,
               key,
               snapshotStorage,
+              pathMap,
+              spaceFolderName,
             );
             options.onWorkspaceSnapshot?.("current", currentFiles);
             return formatResult(result);

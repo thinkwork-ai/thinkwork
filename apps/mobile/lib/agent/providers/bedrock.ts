@@ -7,7 +7,13 @@
 // Model resolution / fail-loud behavior is authoritative server-side; this provider only
 // surfaces the proxy's errors so the loop reports a clean `error` stop reason.
 
-import type { ModelProvider, ModelRequest, ModelResponse } from "../types";
+import type {
+  ModelProvider,
+  ModelRequest,
+  ModelResponse,
+  StopReason,
+  ToolCall,
+} from "../types";
 
 const DEFAULT_API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
   /\/graphql$/,
@@ -25,6 +31,59 @@ export interface BedrockModelProviderOptions {
   getToken?: () => Promise<string | null>;
   /** Injectable fetch for tests. */
   fetchImpl?: typeof fetch;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function argsRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function textOrEmpty(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function normalizeToolCall(value: unknown, index: number): ToolCall | null {
+  const outer = record(value);
+  if (!outer) return null;
+
+  const raw = record(outer.toolUse) ?? outer;
+  const name = textOrEmpty(raw.name ?? raw.toolName ?? raw.tool_name);
+  if (!name) return null;
+
+  return {
+    id: textOrEmpty(raw.id ?? raw.toolUseId ?? raw.tool_use_id) || `tool-${index + 1}`,
+    name,
+    arguments: argsRecord(raw.arguments ?? raw.input ?? raw.args ?? raw.params),
+  };
+}
+
+function normalizeToolCalls(value: unknown): ToolCall[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((call, index) => normalizeToolCall(call, index))
+    .filter((call): call is ToolCall => Boolean(call));
+}
+
+function normalizeStopReason(value: unknown): StopReason {
+  switch (value) {
+    case "end":
+    case "tool_use":
+    case "max_tokens":
+    case "error":
+      return value;
+    case "stop":
+    case "completed":
+      return "end";
+    default:
+      return "error";
+  }
 }
 
 export class BedrockModelProvider implements ModelProvider {
@@ -66,8 +125,8 @@ export class BedrockModelProvider implements ModelProvider {
 
     const data = (await res.json().catch(() => ({}))) as {
       text?: string;
-      toolCalls?: ModelResponse["toolCalls"];
-      stopReason?: ModelResponse["stopReason"];
+      toolCalls?: unknown;
+      stopReason?: unknown;
       usage?: ModelResponse["usage"];
       modelId?: string;
       error?: string;
@@ -81,8 +140,8 @@ export class BedrockModelProvider implements ModelProvider {
 
     return {
       text: data.text ?? "",
-      toolCalls: data.toolCalls ?? [],
-      stopReason: data.stopReason ?? "error",
+      toolCalls: normalizeToolCalls(data.toolCalls),
+      stopReason: normalizeStopReason(data.stopReason),
       usage: data.usage,
       modelId: data.modelId,
     };
