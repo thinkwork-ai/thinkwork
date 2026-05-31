@@ -28,7 +28,7 @@
  * insertion, etc. The behavior must match chat-agent-invoke today.
  */
 
-import { and, eq, gte, isNull } from "drizzle-orm";
+import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { artifacts, threadTurns, threads } from "@thinkwork/database-pg/schema";
 import {
@@ -50,6 +50,7 @@ import {
   notifyNewMessage,
   notifyThreadTurnUpdate,
 } from "./notify.js";
+import { reconcileChangedFiles } from "./reconcile.js";
 import type { FinalizePayload, FinalizeResponse } from "./types.js";
 
 const db = getDb();
@@ -87,8 +88,9 @@ export function diagnosticsFromFinalizePayload(
 }
 
 /**
- * Runs the post-AgentCore finalize chain. Idempotent on
- * `thread_turns.finalized_at` — a second call for the same turn returns
+ * Runs the post-AgentCore finalize chain. Reconcile is claimed before
+ * `thread_turns.finalized_at` becomes terminal, so non-empty diff failures can
+ * be retried. A second call after finalized_at is set returns
  * `{ finalized: false, messageId: null }` without re-running side-effects.
  */
 export async function processFinalize(
@@ -114,13 +116,21 @@ export async function processFinalize(
   } = payload;
 
   // ---- Idempotency gate (the load-bearing dedup check) -----------------
-  // A retried finalize call for the same turn must no-op. We check
-  // finalized_at AND atomically set it inside the same UPDATE so two
-  // concurrent calls can't both pass the gate.
+  // Reconcile runs before finalized_at is terminal. The claim records an
+  // in-progress reconcile marker in context_snapshot so a non-empty diff can
+  // fail, be marked failed, and be retried without finalized_at suppressing it.
   const claimed = await db
     .update(threadTurns)
-    .set({ finalized_at: new Date() })
-    .where(and(eq(threadTurns.id, turnId), isNull(threadTurns.finalized_at)))
+    .set({
+      context_snapshot: sql`jsonb_set(coalesce(${threadTurns.context_snapshot}, '{}'::jsonb), '{workspace_reconcile,status}', '"running"'::jsonb, true)`,
+    })
+    .where(
+      and(
+        eq(threadTurns.id, turnId),
+        isNull(threadTurns.finalized_at),
+        sql`coalesce(${threadTurns.context_snapshot}->'workspace_reconcile'->>'status', 'idle') != 'running'`,
+      ),
+    )
     .returning({
       id: threadTurns.id,
       runtimeType: threadTurns.runtime_type,
@@ -138,6 +148,26 @@ export async function processFinalize(
     claimed[0]?.contextSnapshot,
   );
 
+  try {
+    const reconcileReport = await reconcileChangedFiles({
+      tenantId,
+      agentId,
+      threadId,
+      threadTurnId: turnId,
+      changedFiles: payload.changed_files ?? [],
+    });
+    await recordWorkspaceReconcileStatus(turnId, {
+      status: "complete",
+      report: reconcileReport,
+    });
+  } catch (err) {
+    await recordWorkspaceReconcileStatus(turnId, {
+      status: "failed",
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
+
   if (status === "failed") {
     await handleFailedTurn({
       turnId,
@@ -150,6 +180,7 @@ export async function processFinalize(
       systemPrompt: capturedSystemPromptFromFinalizePayload(payload),
       suppressAssistantMessage: hiddenDesktopDelegation,
     });
+    await markTurnFinalized(turnId);
     return { finalized: true, messageId: null };
   }
 
@@ -344,6 +375,7 @@ export async function processFinalize(
   // Early exit on empty response (legacy behavior — no message inserted)
   if (!responseText || responseText === "{}") {
     console.warn(`[chat-finalize] Empty response from AgentCore`);
+    await markTurnFinalized(turnId);
     return { finalized: true, messageId: null };
   }
 
@@ -351,6 +383,7 @@ export async function processFinalize(
     console.log(
       `[chat-finalize] Hidden desktop delegation ${turnId} finalized without inserting an assistant message`,
     );
+    await markTurnFinalized(turnId);
     return { finalized: true, messageId: null };
   }
 
@@ -477,7 +510,34 @@ export async function processFinalize(
     });
   }
 
+  await markTurnFinalized(turnId);
   return { finalized: true, messageId: assistantMsg?.id ?? null };
+}
+
+async function recordWorkspaceReconcileStatus(
+  turnId: string,
+  result:
+    | { status: "complete"; report: unknown }
+    | { status: "failed"; error: string },
+): Promise<void> {
+  await db
+    .update(threadTurns)
+    .set({
+      context_snapshot: sql`jsonb_set(coalesce(${threadTurns.context_snapshot}, '{}'::jsonb), '{workspace_reconcile}', ${JSON.stringify(
+        {
+          ...result,
+          updated_at: new Date().toISOString(),
+        },
+      )}::jsonb, true)`,
+    })
+    .where(eq(threadTurns.id, turnId));
+}
+
+async function markTurnFinalized(turnId: string): Promise<void> {
+  await db
+    .update(threadTurns)
+    .set({ finalized_at: new Date() })
+    .where(eq(threadTurns.id, turnId));
 }
 
 export function isHiddenDesktopDelegation(contextSnapshot: unknown): boolean {

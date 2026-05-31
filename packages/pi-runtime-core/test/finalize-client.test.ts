@@ -71,6 +71,15 @@ describe("buildFinalizeBody", () => {
       },
       identity,
       systemPrompt: "system",
+      changedFiles: [
+        {
+          path: "memory/preferences.md",
+          op: "modify",
+          content: "# Preferences\n",
+          base_etag: '"old"',
+        },
+        { path: "scratch/tmp.md", op: "delete", base_etag: '"tmp"' },
+      ],
       result: { status: "ok", runResult, latencyMs: 123 },
       fetchImpl: fetch,
     });
@@ -83,6 +92,15 @@ describe("buildFinalizeBody", () => {
       runtime_type: "pi",
       status: "completed",
       composed_system_prompt: "system",
+      changed_files: [
+        {
+          path: "memory/preferences.md",
+          op: "modify",
+          content: "# Preferences\n",
+          base_etag: '"old"',
+        },
+        { path: "scratch/tmp.md", op: "delete", base_etag: '"tmp"' },
+      ],
       response: {
         content: "done",
         runtime: "pi",

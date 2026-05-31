@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U3 per-thread render-by-reference.
-- Active branch: `codex/workspace-arch-u3`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u3`.
+- Active unit: U4 diff contract + finalize reconcile seam.
+- Active branch: `codex/workspace-arch-u4`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u4`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1908](https://github.com/thinkwork-ai/thinkwork/pull/1908).
-- CI/deploy: U2 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1909](https://github.com/thinkwork-ai/thinkwork/pull/1909).
+- CI/deploy: U3 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -123,6 +123,39 @@ Target branch: `main`
   changed-file Prettier check via `pnpm dlx prettier --check <changed files>`,
   and `git diff --check`.
 - Opened PR [#1909](https://github.com/thinkwork-ai/thinkwork/pull/1909).
+- PR [#1909](https://github.com/thinkwork-ai/thinkwork/pull/1909) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `71f98b4560c12207e5394f5364f30b6799d82210`.
+- Removed U3 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U4 worktree `codex/workspace-arch-u4`
+  from `origin/main` at `71f98b45`.
+- Started U4 diff contract and finalize reconcile seam work.
+- Implemented U4 finalize diff plumbing: Pi runtime finalize callbacks now send
+  `changed_files`, the finalize handler validates canonical changed-file
+  payloads, and `processFinalize` claims reconcile separately from
+  `finalized_at`.
+- Added the U4 reconcile seam in
+  `packages/api/src/lib/chat-finalize/reconcile.ts`: empty diffs no-op,
+  non-empty diffs throw the explicit stub error for later implementation, and
+  path/op/content/size validation rejects malformed payloads before side
+  effects.
+- Preserved retry semantics for the U4 stub: reconcile failures record
+  `context_snapshot.workspace_reconcile.status = failed` while leaving
+  `finalized_at` unset, so callback retry can re-enter reconcile instead of
+  being treated as finalized.
+- U4 local verification passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test -- finalize-client.test.ts`,
+  `pnpm --filter @thinkwork/api test -- chat-agent-finalize.test.ts process-finalize.test.ts reconcile.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/pi-runtime-core test`, `pnpm typecheck`,
+  `pnpm lint`, changed-file Prettier check via
+  `pnpm dlx prettier@3.8.2 --check <changed files>`, and `git diff --check`.
+- Verification note: repo-level `pnpm format:check` is blocked in this
+  worktree because the root `prettier` binary is not installed; changed files
+  pass the pinned Prettier check above.
+- Opened PR [#1910](https://github.com/thinkwork-ai/thinkwork/pull/1910).
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 

@@ -13,12 +13,22 @@ export interface FinalizeCallbackArgs {
   payload: Record<string, unknown>;
   identity: PiInvocationIdentity;
   systemPrompt?: string;
+  changedFiles?: FinalizeChangedFile[];
   result:
     | { status: "ok"; runResult: RunAgentLoopResult; latencyMs: number }
     | { status: "error"; error: unknown; latencyMs: number };
   fetchImpl: typeof fetch;
   attemptTimeoutMs?: number;
   logger?: (entry: PiRuntimeLogEntry) => void;
+}
+
+export type FinalizeChangedFileOp = "create" | "modify" | "delete";
+
+export interface FinalizeChangedFile {
+  path: string;
+  op: FinalizeChangedFileOp;
+  content?: string;
+  base_etag?: string;
 }
 
 function usageNumber(usage: unknown, ...keys: string[]): number {
@@ -65,6 +75,7 @@ export function buildFinalizeBody(
     duration_ms: result.latencyMs,
     status: result.status === "ok" ? "completed" : "failed",
     error_message: errorMessage,
+    changed_files: args.changedFiles ?? [],
     computer_id: asString(payload.computer_id) || null,
     computer_task_id: asString(payload.computer_task_id) || null,
     usage: {

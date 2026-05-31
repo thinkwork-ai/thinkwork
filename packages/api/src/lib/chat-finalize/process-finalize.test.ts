@@ -1,10 +1,63 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  updateSets: [] as unknown[],
+  updateReturning: [] as Array<unknown[]>,
+  reconcileChangedFiles: vi.fn(),
+}));
+
+vi.mock("@thinkwork/database-pg", () => ({
+  getDb: () => ({
+    update: () => ({
+      set: (value: unknown) => {
+        mocks.updateSets.push(value);
+        return {
+          where: () => ({
+            returning: async () => mocks.updateReturning.shift() ?? [],
+          }),
+        };
+      },
+    }),
+  }),
+}));
+
+vi.mock("./reconcile.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./reconcile.js")>();
+  return {
+    ...actual,
+    reconcileChangedFiles: mocks.reconcileChangedFiles,
+  };
+});
 
 import {
   capturedSystemPromptFromFinalizePayload,
   diagnosticsFromFinalizePayload,
   isHiddenDesktopDelegation,
+  processFinalize,
 } from "./process-finalize";
+
+const TENANT_ID = "11111111-1111-1111-1111-111111111111";
+const AGENT_ID = "22222222-2222-2222-2222-222222222222";
+const THREAD_ID = "33333333-3333-3333-3333-333333333333";
+const TURN_ID = "44444444-4444-4444-4444-444444444444";
+
+beforeEach(() => {
+  mocks.updateSets = [];
+  mocks.updateReturning = [
+    [
+      {
+        id: TURN_ID,
+        runtimeType: "pi",
+        contextSnapshot: null,
+      },
+    ],
+  ];
+  mocks.reconcileChangedFiles.mockReset();
+  mocks.reconcileChangedFiles.mockResolvedValue({
+    status: "no_changes",
+    files: [],
+  });
+});
 
 describe("capturedSystemPromptFromFinalizePayload", () => {
   it("uses the top-level composed prompt from runtime finalize payloads", () => {
@@ -70,5 +123,50 @@ describe("isHiddenDesktopDelegation", () => {
         },
       }),
     ).toBe(false);
+  });
+});
+
+describe("processFinalize reconcile seam", () => {
+  it("re-enters reconcile on retry when the U4 non-empty diff stub throws", async () => {
+    mocks.updateReturning = [
+      [
+        {
+          id: TURN_ID,
+          runtimeType: "pi",
+          contextSnapshot: null,
+        },
+      ],
+      [
+        {
+          id: TURN_ID,
+          runtimeType: "pi",
+          contextSnapshot: null,
+        },
+      ],
+    ];
+    mocks.reconcileChangedFiles.mockRejectedValue(new Error("stub throws"));
+    const payload = {
+      thread_turn_id: TURN_ID,
+      tenant_id: TENANT_ID,
+      agent_id: AGENT_ID,
+      thread_id: THREAD_ID,
+      duration_ms: 1,
+      status: "completed" as const,
+      response: { content: "done" },
+      changed_files: [
+        { path: "docs/new.md", op: "create" as const, content: "# New\n" },
+      ],
+    };
+
+    await expect(processFinalize(payload)).rejects.toThrow("stub throws");
+    await expect(processFinalize(payload)).rejects.toThrow("stub throws");
+
+    expect(mocks.reconcileChangedFiles).toHaveBeenCalledTimes(2);
+    expect(mocks.updateSets[0]).not.toHaveProperty("finalized_at");
+    expect(mocks.updateSets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ context_snapshot: expect.anything() }),
+      ]),
+    );
   });
 });
