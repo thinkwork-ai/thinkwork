@@ -1680,54 +1680,72 @@ function mapTurnsToUserMessages(
 }
 
 function withTurnResponseFallback(thread: TaskThread): TaskThreadMessage[] {
-  if (hasAssistantAfterLatestUser(thread.messages)) return thread.messages;
+  const turns = thread.turns ?? [];
+  if (turns.length === 0) return thread.messages;
 
-  // The fallback exists for the brief window between a turn finishing and the
-  // assistant message being persisted/refetched. Only synthesize when the
-  // latest completed turn actually corresponds to the latest user message —
-  // i.e. it finished AT OR AFTER the latest user message was sent. Otherwise
-  // a previous question's response gets re-rendered below the new question's
-  // running Thinking row, producing a phantom duplicate.
-  const latestUserMessage = findLastIndex(
-    thread.messages,
-    (message) => message.role.toUpperCase() === "USER",
-  );
-  if (latestUserMessage < 0) return thread.messages;
-  const latestUserTime = parseEventTimestamp(
-    thread.messages[latestUserMessage].createdAt ?? null,
-  );
+  // The fallback exists for the brief window between a turn finishing and its
+  // assistant message being persisted/refetched. We reconstruct a synthetic
+  // response for EVERY completed turn whose user message has no durable
+  // assistant reply yet, inserted directly after that user message — not just
+  // the latest one tail-appended.
+  //
+  // Tail-appending only the latest completed turn used to drop an earlier
+  // turn's still-synthetic response the instant a new follow-up user message
+  // arrived (e.g. an optimistic send): the earlier response, never durable,
+  // simply vanished until the new turn finished, flashing the transcript. The
+  // per-turn / position-aware reconstruction below keeps prior responses
+  // anchored to their own user message across new turns. The
+  // "no durable assistant before the next user message" guard still prevents a
+  // phantom duplicate once the real assistant message has landed.
+  const messages = thread.messages;
+  const turnByUserMessageId = mapTurnsToUserMessages(messages, turns);
+  if (turnByUserMessageId.size === 0) return messages;
 
-  const latestCompletedTurn = (thread.turns ?? []).find((turn) => {
+  const result: TaskThreadMessage[] = [];
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
+    result.push(message);
+    if (message.role.toUpperCase() !== "USER") continue;
+
+    const turn = turnByUserMessageId.get(message.id);
+    if (!turn) continue;
     if (
       !["completed", "succeeded"].includes(
         String(turn.status ?? "").toLowerCase(),
       )
     ) {
-      return false;
+      continue;
     }
-    const finishedTime = parseEventTimestamp(turn.finishedAt ?? null);
-    // Allow when timestamps are unavailable (treat as 0) so older threads
-    // without timestamps still render their fallback once.
-    return finishedTime === 0 || finishedTime >= latestUserTime;
-  });
-  const response = stringValue(
-    parseRecord(latestCompletedTurn?.resultJson).response,
-  );
-  if (!latestCompletedTurn || !response) return thread.messages;
+    const response = stringValue(parseRecord(turn.resultJson).response);
+    if (!response) continue;
 
-  return [
-    ...thread.messages,
-    {
-      id: `turn-${latestCompletedTurn.id}-response`,
+    // Skip when a durable assistant message already follows this user message
+    // (before the next user message) — the real reply landed, so synthesizing
+    // would duplicate it.
+    let nextUserIndex = messages.length;
+    for (let j = i + 1; j < messages.length; j += 1) {
+      if (messages[j].role.toUpperCase() === "USER") {
+        nextUserIndex = j;
+        break;
+      }
+    }
+    const hasDurableAssistant = messages
+      .slice(i + 1, nextUserIndex)
+      .some((m) => m.role.toUpperCase() === "ASSISTANT");
+    if (hasDurableAssistant) continue;
+
+    result.push({
+      id: `turn-${turn.id}-response`,
       role: "ASSISTANT",
       content: response,
-      createdAt: latestCompletedTurn.finishedAt,
+      createdAt: turn.finishedAt,
       metadata: {
         source: "thread_turn_result",
-        turnId: latestCompletedTurn.id,
+        turnId: turn.id,
       },
-    },
-  ];
+    });
+  }
+  return result;
 }
 
 function hasAssistantAfterLatestUser(messages: TaskThreadMessage[]) {
