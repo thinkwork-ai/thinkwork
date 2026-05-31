@@ -3101,10 +3101,11 @@ None.
 ## Status
 
 - Plan: `docs/plans/2026-05-30-004-feat-mobile-pi-compatible-host-plan.md`
-- Current branch: `codex/mobile-pi-testflight-closeout`
+- Current branch: `codex/mobile-pi-testflight-ready-status`
 - Target branch: `main`
 - PR #1886: merged and deployed.
-- TestFlight: current-main iOS build uploaded; Apple processing pending.
+- TestFlight: current-main iOS build is valid and available for internal beta
+  testing; on-device smoke matrix pending.
 
 ## Verification Log
 
@@ -3123,11 +3124,14 @@ None.
   - Build number: `18`
   - Submission id: `082ac8d2-1cae-4415-ac1c-e816753d336e`
   - Artifact: `https://expo.dev/artifacts/eas/bNvynB3acLzR3BqQFYu3iT.ipa`
-  - Result: uploaded to App Store Connect; Apple processing pending.
+  - EAS submission result: `FINISHED`, no error.
+  - App Store Connect build id: `ffd0674f-a9e1-43be-8af6-1625b1162e98`
+  - Apple processing state: `VALID`
+  - TestFlight internal build state: `IN_BETA_TESTING`
+  - TestFlight external build state: `READY_FOR_BETA_SUBMISSION`
 
 ## Remaining Gates
 
-- Wait for Apple to finish TestFlight processing for build 18.
 - Run the on-device TestFlight smoke matrix from
   `apps/mobile/scripts/pi-device-smoke.md`.
 
