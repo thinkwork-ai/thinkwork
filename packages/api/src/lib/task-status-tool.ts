@@ -3,10 +3,10 @@ import { schema } from "@thinkwork/database-pg";
 import { db as defaultDb } from "./db.js";
 import {
   LINKED_TASK_STATUSES,
-  requiredTasksComplete,
   type LinkedTaskStatus,
 } from "./linked-tasks/status.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "./spaces/customer-onboarding-goal-md.js";
+import { deriveThreadGoalTaskProgress } from "./thread-goals/progress.js";
 
 const { goals, linkedTaskEvents, linkedTasks, spaceMembers, threads } = schema;
 
@@ -215,7 +215,8 @@ export async function setTaskStatus(
             eq(linkedTasks.thread_id, input.threadId),
           ),
         );
-      if (requiredTasksComplete(taskRows)) {
+      const progress = deriveThreadGoalTaskProgress(taskRows);
+      if (progress.readyForReview) {
         await tx
           .update(goals)
           .set({

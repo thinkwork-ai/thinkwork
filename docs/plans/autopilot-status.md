@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U8 DB-rendered read-only status files.
-- Active branch: `codex/workspace-arch-u8`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u8`.
+- Active unit: U9 Generalize progress + review beyond customer-onboarding.
+- Active branch: `codex/workspace-arch-u9`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u9`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1913](https://github.com/thinkwork-ai/thinkwork/pull/1913).
-- CI/deploy: U7 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1914](https://github.com/thinkwork-ai/thinkwork/pull/1914).
+- CI/deploy: U8 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -342,6 +342,39 @@ test` passed, and the subsequent full `pnpm test` rerun passed.
   affected API files passed when rerun directly, and the subsequent full
   `pnpm --filter @thinkwork/api test` suite passed cleanly.
 - Opened PR [#1914](https://github.com/thinkwork-ai/thinkwork/pull/1914).
+- PR [#1914](https://github.com/thinkwork-ai/thinkwork/pull/1914) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `18eb572adb5d02f7bfc73a9f5825331c5b44df33`.
+- Removed U8 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U9 worktree `codex/workspace-arch-u9`
+  from `origin/main` at `18eb572a`.
+- Started U9 general progress and review work.
+- Implemented U9 template-agnostic progress derivation in
+  `packages/api/src/lib/thread-goals/progress.ts`: linked-task progress now
+  reports completed/total required work, percentage, zero-required state, and
+  review readiness independent of the customer-onboarding template.
+- Reused the shared progress renderer from customer-onboarding `PROGRESS.md`
+  while preserving the existing customer-specific blocker, missing-info, and
+  next-step sections. Customer-onboarding readiness now delegates to the shared
+  thread-goal progress math.
+- Updated the task-status review gate to use the shared progress math, so all
+  required applicable tasks move a Goal to `in_review`, while all
+  `not_applicable` required tasks remain active and surface as "no required
+  tasks" instead of auto-reviewing or auto-closing.
+- Compound review pass found and fixed one U9 coupling: `reviewGoal` no longer
+  stamps review-change follow-up tasks as `customer_onboarding` for
+  non-customer Goals; it preserves the Goal template key in task metadata.
+- U9 verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/thread-goals/progress.test.ts src/lib/spaces/customer-onboarding-goal-md.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/lib/task-status-tool.test.ts src/graphql/resolvers/goals/reviewGoal.mutation.test.ts src/graphql/resolvers/goals/threadGoal.query.test.ts src/graphql/resolvers/goals/threadGoalFiles.query.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/api test`, `pnpm typecheck`, `pnpm lint`,
+  changed-file Prettier via `pnpm dlx prettier --check <changed files>`, and
+  `git diff --check`.
+- Verification note: initial focused tests in the fresh U9 worktree could not
+  find Vitest until `pnpm install` linked dependencies. Install completed with
+  the known optional `node-liblzma` native rebuild warning because
+  `pkg-config` is unavailable.
+- Opened PR [#1915](https://github.com/thinkwork-ai/thinkwork/pull/1915).
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 

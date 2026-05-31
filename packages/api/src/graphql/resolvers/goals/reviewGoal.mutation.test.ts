@@ -393,6 +393,39 @@ describe("reviewGoal", () => {
     expect(result.goal).toMatchObject({ status: "ACTIVE" });
   });
 
+  it("keeps review-change task metadata template-agnostic", async () => {
+    captures.goalRows.push(
+      goalRow({
+        owner_id: "someone-else",
+        reviewer_id: "user-1",
+        template_key: "renewal_prep",
+      }),
+    );
+
+    await reviewGoal(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          goalId: "goal-1",
+          action: "REQUEST_CHANGES",
+          notes: "Add renewal terms.",
+        },
+      },
+      ctx,
+    );
+
+    expect(captures.linkedTaskInserts[0]?.metadata).toMatchObject({
+      workflow: "renewal_prep",
+      systemOfRecord: "thinkwork",
+      reviewChangesTask: true,
+      nativeChecklist: {
+        createdFrom: "goal_review_request_changes",
+        createdNote: "Add renewal terms.",
+      },
+    });
+  });
+
   it("lets Space owners or admins review even when they are not named reviewer", async () => {
     captures.goalRows.push(goalRow({ owner_id: "someone-else" }));
     captures.spaceMemberRows.push({ role: "admin" });

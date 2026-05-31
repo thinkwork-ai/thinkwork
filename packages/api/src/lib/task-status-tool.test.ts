@@ -7,6 +7,7 @@ import { setTaskStatus, TaskStatusToolError } from "./task-status-tool";
 function fakeDb(options: {
   taskStatus?: string;
   requiredComplete?: boolean;
+  goalTaskRows?: Array<{ status: LinkedTaskStatus; required: boolean }>;
   onLinkedTaskUpdate?: (value: Record<string, unknown>) => void;
 }) {
   const updates: Record<string, unknown>[] = [];
@@ -32,7 +33,7 @@ function fakeDb(options: {
         metadata: {},
       },
     ],
-    [
+    options.goalTaskRows ?? [
       {
         status: options.requiredComplete === false ? "todo" : "completed",
         required: true,
@@ -131,6 +132,44 @@ describe("setTaskStatus", () => {
     expect(refreshGoalFolder).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       threadId: "thread-1",
+    });
+  });
+
+  it("keeps zero-required Goals active instead of auto-closing or entering review", async () => {
+    const store = fakeDb({
+      goalTaskRows: [
+        { status: "not_applicable", required: true },
+        { status: "not_applicable", required: true },
+      ],
+    });
+
+    await expect(
+      setTaskStatus(
+        {
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+          agentId: "agent-1",
+          linkedTaskId: "task-1",
+          status: "not_applicable",
+          actor: { type: "agent", id: "agent-1" },
+        },
+        {
+          db: store.db as never,
+          now: () => new Date("2026-05-31T12:00:00.000Z"),
+          refreshGoalFolder: async () => [],
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      linkedTaskId: "task-1",
+      status: "not_applicable",
+      goalStatus: "active",
+    });
+
+    expect(store.updates).toHaveLength(1);
+    expect(store.updates[0]).toMatchObject({
+      status: "not_applicable",
+      sync_status: "synced",
     });
   });
 

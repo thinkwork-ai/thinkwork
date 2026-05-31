@@ -9,6 +9,7 @@ import {
   type ThreadGoalFileName,
   type ThreadGoalStorageDeps,
 } from "../thread-goals/storage.js";
+import { deriveThreadGoalTaskProgress } from "../thread-goals/progress.js";
 import {
   type CustomerOnboardingProgressRepository,
   type CustomerOnboardingProgressState,
@@ -190,21 +191,13 @@ function isNarrativeGoalFile(file: ThreadGoalFileName): boolean {
 export function customerOnboardingGoalReadiness(
   tasks: CustomerOnboardingProgressTask[],
 ): CustomerOnboardingGoalReadiness {
-  const activeRequired = tasks.filter(
-    (task) => task.required && task.status !== "not_applicable",
-  );
-  const completedRequired = activeRequired.filter(
-    (task) => task.status === "completed",
-  ).length;
-  const totalRequired = activeRequired.length;
-  const readyForReview =
-    totalRequired > 0 && completedRequired === totalRequired;
+  const progress = deriveThreadGoalTaskProgress(tasks);
 
   return {
-    status: readyForReview ? "in_review" : "active",
-    completedRequired,
-    totalRequired,
-    readyForReview,
+    status: progress.status,
+    completedRequired: progress.completedRequired,
+    totalRequired: progress.totalRequired,
+    readyForReview: progress.readyForReview,
   };
 }
 
