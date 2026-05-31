@@ -211,6 +211,30 @@ describe("chat-agent-finalize — validation", () => {
     );
     expect(res.statusCode).toBe(400);
   });
+
+  it("rejects malformed changed_files before processFinalize", async () => {
+    const res = await handler(
+      mockEvent({
+        body: {
+          thread_turn_id: TURN_ID,
+          tenant_id: TENANT_ID,
+          agent_id: AGENT_ID,
+          thread_id: THREAD_ID,
+          duration_ms: 1,
+          status: "completed",
+          changed_files: [
+            { path: "../secrets.md", op: "modify", content: "secret" },
+          ],
+        },
+      }),
+    );
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body as string);
+    expect(body.details).toEqual([
+      expect.objectContaining({ code: "invalid_path" }),
+    ]);
+    expect(mocks.processFinalize).not.toHaveBeenCalled();
+  });
 });
 
 describe("chat-agent-finalize — turn lookup", () => {
@@ -259,6 +283,42 @@ describe("chat-agent-finalize — happy paths", () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body as string);
     expect(body).toEqual({ ok: true, idempotent: false, messageId: "msg-1" });
+  });
+
+  it("passes validated changed_files to processFinalize", async () => {
+    const res = await handler(
+      mockEvent({
+        body: {
+          thread_turn_id: TURN_ID,
+          tenant_id: TENANT_ID,
+          agent_id: AGENT_ID,
+          thread_id: THREAD_ID,
+          duration_ms: 1,
+          status: "completed",
+          changed_files: [
+            {
+              path: "memory/preferences.md",
+              op: "modify",
+              content: "# Prefs\n",
+              base_etag: '"old"',
+            },
+          ],
+        },
+      }),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(mocks.processFinalize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changed_files: [
+          {
+            path: "memory/preferences.md",
+            op: "modify",
+            content: "# Prefs\n",
+            base_etag: '"old"',
+          },
+        ],
+      }),
+    );
   });
 
   it("returns 200 idempotent when processFinalize signals already-finalized", async () => {

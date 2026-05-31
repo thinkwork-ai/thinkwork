@@ -17,8 +17,9 @@
  *
  * Service-endpoint auth pattern (Bearer API_AUTH_SECRET) — same shape
  * as routine-step-callback / sandbox-quota-check. Idempotency is keyed
- * on `thread_turns.finalized_at` (migration 0123); two concurrent calls
- * race through a conditional UPDATE so only one wins the claim.
+ * on `thread_turns.finalized_at` plus a non-terminal
+ * `context_snapshot.workspace_reconcile` claim. Reconcile failures leave
+ * finalized_at unset so callback retries can re-enter the reconcile seam.
  */
 
 import type {
@@ -33,6 +34,7 @@ import {
   processFinalize,
   toFinalizeResponse,
 } from "../lib/chat-finalize/process-finalize.js";
+import { validateChangedFiles } from "../lib/chat-finalize/reconcile.js";
 import type { FinalizePayload } from "../lib/chat-finalize/types.js";
 import {
   DESKTOP_FINALIZE_TOKEN_PREFIX,
@@ -125,6 +127,16 @@ export async function handler(
   if (typeof payload.duration_ms !== "number" || payload.duration_ms < 0) {
     return badRequest("Missing or invalid duration_ms");
   }
+  const changedFiles = validateChangedFiles(payload.changed_files);
+  if (!changedFiles.ok) {
+    return json(400, {
+      ok: false,
+      error: "Invalid changed_files",
+      code: "BAD_REQUEST",
+      details: changedFiles.errors,
+    });
+  }
+  payload.changed_files = changedFiles.changedFiles;
 
   // ---- Turn lookup ----------------------------------------------------
   const [turn] = await db

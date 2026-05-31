@@ -6,6 +6,8 @@
  * consumed today (when it was waiting synchronously). The fields are the
  * superset of every value the post-AgentCore code path reads.
  */
+import type { ChangedFilePayload } from "./reconcile.js";
+
 export interface FinalizePayload {
   /** Idempotency key — `thread_turns.id` that chat-agent-invoke inserted before dispatching. */
   thread_turn_id: string;
@@ -33,6 +35,8 @@ export interface FinalizePayload {
   status: "completed" | "failed";
   /** Free-text error when `status: "failed"`. */
   error_message?: string;
+  /** Text workspace file changes captured by the runtime after the turn. */
+  changed_files?: ChangedFilePayload[];
   /** Composed runtime system prompt captured for this turn, when available. */
   composed_system_prompt?: string | null;
   /** Computer task / event context for tasks that originated from the Computer surface. */
