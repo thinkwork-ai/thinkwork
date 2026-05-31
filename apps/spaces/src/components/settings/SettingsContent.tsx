@@ -5,13 +5,14 @@ import { LoadingShimmer } from "@/components/LoadingShimmer";
 
 /**
  * Publishes a settings section's title (and optional action) to the settings
- * header bar as a single breadcrumb. Renders nothing in the content body — the
- * title lives in the header now. `description` is accepted for call-site
- * compatibility but no longer rendered. Detail pages that need nested
+ * header bar as a single breadcrumb, and renders the prominent in-body page
+ * heading (via {@link SettingsPageTitle}). The breadcrumb gives nav context;
+ * the in-body heading titles the page. Detail pages that need nested
  * breadcrumbs call `usePageHeaderActions` directly instead of using this.
  */
 export function SettingsHeader({
   title,
+  description,
   actions,
 }: {
   title: string;
@@ -24,7 +25,37 @@ export function SettingsHeader({
     action: actions ?? undefined,
     actionKey: actions ? `settings-header:${title}` : undefined,
   });
-  return null;
+  return <SettingsPageTitle title={title} description={description} />;
+}
+
+/**
+ * Prominent in-body page title for a settings section. Complements the header
+ * bar breadcrumb — the breadcrumb gives nav context, this gives the page its
+ * heading. Rendered by `SettingsHeader`/`SettingsTablePane` for the standard
+ * pages; pages that drive `usePageHeaderActions` directly render it themselves.
+ */
+export function SettingsPageTitle({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="mb-8 flex shrink-0 items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {title}
+        </h1>
+        {description ? (
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {actions ? <div className="shrink-0">{actions}</div> : null}
+    </div>
+  );
 }
 
 /** Outer padding wrapper for a settings content pane. */
@@ -56,6 +87,7 @@ export const settingsLinkActionClassName =
 
 export function SettingsTablePane({
   title,
+  description,
   actions,
   toolbar,
   loading,
@@ -70,12 +102,13 @@ export function SettingsTablePane({
   loading?: boolean;
   children: ReactNode;
 }) {
-  // Title relocates to the settings header bar as a breadcrumb. The search
-  // toolbar (left) and primary action (right, a muted link) share a row above
-  // the table in the content body.
+  // Title shows both as a header-bar breadcrumb and as the in-body page
+  // heading. The search toolbar (left) and primary action (right, a muted
+  // link) share a row above the table in the content body.
   usePageHeaderActions({ title, breadcrumbs: [{ label: title }] });
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
+      <SettingsPageTitle title={title} description={description} />
       {toolbar || actions ? (
         <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
           <div className="min-w-0">{toolbar}</div>
