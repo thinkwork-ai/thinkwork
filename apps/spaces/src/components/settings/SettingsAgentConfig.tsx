@@ -20,6 +20,7 @@ import {
   SettingsUpdateTenantAgentMutation,
 } from "@/lib/settings-queries";
 import {
+  SettingsPageTitle,
   SettingsPane,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
@@ -76,6 +77,7 @@ export function SettingsAgentConfig() {
   if (agentResult.fetching && !agent) {
     return (
       <SettingsPane>
+        <SettingsPageTitle title="Agent" />
         <div className="flex items-center justify-center py-24">
           <LoadingShimmer />
         </div>
@@ -86,6 +88,7 @@ export function SettingsAgentConfig() {
   if (agentResult.error) {
     return (
       <SettingsPane>
+        <SettingsPageTitle title="Agent" />
         <SettingsSection>
           <div className="p-6 text-sm text-muted-foreground">
             Couldn’t load agent configuration. {agentResult.error.message}
@@ -125,6 +128,7 @@ export function SettingsAgentConfig() {
 
   return (
     <SettingsPane>
+      <SettingsPageTitle title="Agent" />
       <SettingsSection
         label="Configuration"
         action={

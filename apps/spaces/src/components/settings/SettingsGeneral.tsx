@@ -59,7 +59,10 @@ export function SettingsGeneral() {
   if (tenantResult.fetching && !tenantResult.data) {
     return (
       <SettingsPane>
-        <SettingsHeader title="General" />
+        <SettingsHeader
+          title="General"
+          description="Tenant configuration and preferences."
+        />
         <div className="flex items-center justify-center py-24">
           <LoadingShimmer />
         </div>
@@ -70,7 +73,10 @@ export function SettingsGeneral() {
   if (tenantResult.error || !tenantResult.data?.tenant) {
     return (
       <SettingsPane>
-        <SettingsHeader title="General" />
+        <SettingsHeader
+          title="General"
+          description="Tenant configuration and preferences."
+        />
         <SettingsSection>
           <div className="flex items-center justify-between p-6">
             <span className="text-sm text-muted-foreground">

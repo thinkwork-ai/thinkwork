@@ -42,7 +42,10 @@ import { useTenant } from "@/context/TenantContext";
 import { ModelSelect } from "@/components/agents/ModelSelect";
 import { MetricCard } from "@/components/MetricCard";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
-import { SettingsPane } from "@/components/settings/SettingsContent";
+import {
+  SettingsPageTitle,
+  SettingsPane,
+} from "@/components/settings/SettingsContent";
 import { EVAL_CATEGORIES as CATEGORIES } from "@/lib/evaluation-options";
 import {
   EvalRunsQuery,
@@ -356,6 +359,7 @@ export function SettingsEvaluations() {
 
   return (
     <SettingsPane className="max-w-5xl">
+      <SettingsPageTitle title="Evaluations" />
       <div className="space-y-6">
         {/* Summary metric cards */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 *:data-[slot=card]:shadow-xs dark:*:data-[slot=card]:bg-card">
