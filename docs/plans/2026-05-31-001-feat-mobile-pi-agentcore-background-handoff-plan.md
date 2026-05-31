@@ -1,7 +1,7 @@
 ---
 title: "feat: Mobile Pi AgentCore Background Handoff"
 type: feat
-status: active
+status: complete
 date: 2026-05-31
 origin: docs/brainstorms/2026-05-31-mobile-pi-background-agentcore-handoff-requirements.md
 deepened: 2026-05-31

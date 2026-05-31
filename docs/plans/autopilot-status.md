@@ -15,14 +15,16 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active; implementation unit U5 is in progress.
-- Active unit: U5 E2E Smoke Coverage and Operational Docs.
-- Active branch: `codex/mobile-pi-handoff-u5`.
-- Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u5`.
-- Started: 2026-05-31 from `origin/main` at `d92772d1`.
-- Active PR: pending.
-- CI: not yet pushed.
+- Status: complete; implementation units U1-U5 are merged, deployed, and
+  simulator-verified.
+- Active unit: none.
+- Active branch: none.
+- Active worktree: none.
+- Started: 2026-05-31 from `origin/main`.
+- Latest merged PR: [#1905](https://github.com/thinkwork-ai/thinkwork/pull/1905).
+- CI/deploy: required PR checks passed; `main` deploy
+  [run 26718624337](https://github.com/thinkwork-ai/thinkwork/actions/runs/26718624337)
+  completed successfully.
 
 ### Active Unit Notes
 
@@ -189,6 +191,26 @@ smoke:pi-harness:full:dry-run`.
   `c7efa22b-1aba-478d-81f0-2149681cde86`), and
   `handoff_late_finalize` (`CHAT-939`,
   `9d9b9570-ade6-44c2-b47a-4c81b1ef7e4a`).
+- PR [#1905](https://github.com/thinkwork-ai/thinkwork/pull/1905) passed
+  required CI and was squash-merged into `main`. Merge commit:
+  `a76eae931128494d25e19c2a74f61b0d3412c531`.
+- The post-merge `main` deploy passed in
+  [run 26718624337](https://github.com/thinkwork-ai/thinkwork/actions/runs/26718624337).
+- Post-deploy harness verification passed on dev for `handoff_local`
+  (`CHAT-941`, thread `1304adc6-b658-4530-8d89-053b09a792f9`, turn
+  `9a60fed1-9821-4ae5-b99c-f0b3f33fcb10`) with assistant output
+  `MOBILE-PI-HANDOFF-LOCAL-1780246812614`.
+- Real iOS Simulator E2E verification passed after deploy: submitted new
+  thread `CHAT-942` from the simulator UI, immediately backgrounded the app,
+  observed managed AgentCore Pi claim the stale mobile turn from checkpoint 0,
+  and reopened the app to verify the final assistant output
+  `MOBILE-SIM-HANDOFF-1205` in the thread detail. Evidence:
+  thread `0df8c773-fc95-4ca6-a64c-c9463206d912`, turn
+  `d0162be0-4198-4fd9-a101-b31382d0a2bc`, event seq 0
+  `mobile Pi turn started`, event seq 1 `managed Pi claimed`, final status
+  `succeeded`.
+- Removed U5 remote/local branch and worktree, synced `main`, and confirmed the
+  main checkout was clean at `a76eae93`.
 
 ### Blockers
 
