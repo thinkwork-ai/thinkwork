@@ -6,6 +6,64 @@ status: active
 
 # Autopilot Status Ledger
 
+## Current Run: Mobile Pi AgentCore Background Handoff
+
+Plan:
+`docs/plans/2026-05-31-001-feat-mobile-pi-agentcore-background-handoff-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active; implementation unit U1 is in progress.
+- Active unit: U1 API Turn Lease Lifecycle.
+- Active branch: `codex/mobile-pi-handoff-u1`.
+- Active worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u1`.
+- Started: 2026-05-31 from `origin/main` at `a6fc3b66`.
+- Active PR: [#1896](https://github.com/thinkwork-ai/thinkwork/pull/1896).
+- CI: rerunning after dev migration drift fix.
+
+### Active Unit Notes
+
+- Read `AGENTS.md`.
+- Read the Mobile Pi AgentCore Background Handoff plan and confirmed U1 is the
+  first implementation unit.
+- Read relevant prior solution docs:
+  `docs/solutions/architecture-patterns/mobile-pi-compatible-host-contract-2026-05-30.md`
+  and `docs/solutions/testing/mobile-pi-smoke-matrix-2026-05-30.md`.
+- Created isolated U1 worktree and copied the plan/source brainstorm into the
+  branch so the PR carries the implementation context.
+- Started server-side durable lease lifecycle work: mobile client turn
+  idempotency, lifecycle endpoint, ordered event helper, and migration wiring.
+- Implemented U1 lifecycle endpoint and service:
+  `/api/mobile/turn-session` now supports start, heartbeat, checkpoint,
+  background, abort, and one-winner local finalize for mobile Pi turns.
+- Start/finalize/abort paths notify existing thread turn and message
+  subscribers so UI working state can stay live once U2 swaps mobile onto the
+  lifecycle endpoint.
+- Added a narrow partial unique index on mobile `clientTurnId`
+  (`thread_turns.external_run_id`) plus ordered `thread_turn_events`
+  append helper and focused regression tests.
+- Focused verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/thread-turn-events.test.ts src/lib/mobile-turns/lifecycle.test.ts src/handlers/mobile-turn-session.test.ts src/handlers/record-turn.test.ts`
+  (24 tests), `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/database-pg typecheck`,
+  `bash scripts/build-lambdas.sh mobile-turn-session`, `bash -n
+scripts/build-lambdas.sh`, `terraform fmt -check
+terraform/modules/app/lambda-api/handlers.tf`, touched-file Prettier check,
+  and `git diff --check`.
+- Opened PR [#1896](https://github.com/thinkwork-ai/thinkwork/pull/1896).
+- CI failure: `Migration Drift Precheck (dev)` reported
+  `public.uq_thread_turns_mobile_client_turn -> MISSING` for
+  `0139_mobile_turn_client_id.sql`.
+- Applied the scoped dev migration with `psql` and verified with
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0139_mobile_turn_client_id.sql`.
+
+### Blockers
+
+- None.
+
 ## Current Run: Pi-Compatible Mobile Host
 
 Plan:
