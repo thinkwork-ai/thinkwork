@@ -247,6 +247,7 @@ resource "aws_lambda_function" "handler" {
     # aws_lambda_function.handler, NOT derived from api_routes).
     "model-converse",
     "record-turn",
+    "mobile-turn-session",
     # Mobile local Pi built-in tools. These are ThinkWork platform tools, not
     # MCP connector tools.
     "mobile-tools",
@@ -804,6 +805,8 @@ locals {
     # handled inside the Lambda before auth.
     "POST /api/threads/record-turn"    = "record-turn"
     "OPTIONS /api/threads/record-turn" = "record-turn"
+    "POST /api/mobile/turn-session"    = "mobile-turn-session"
+    "OPTIONS /api/mobile/turn-session" = "mobile-turn-session"
 
     # Mobile local Pi built-in tool proxy. This is intentionally separate from
     # /api/mcp because web_search is a ThinkWork platform capability, not an
