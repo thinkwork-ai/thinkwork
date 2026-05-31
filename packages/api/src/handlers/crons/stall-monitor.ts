@@ -10,12 +10,40 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { getRetryDelay } from "../../lib/retry-backoff.js";
+import {
+  processStaleMobileHandoffs,
+  type ProcessStaleMobileHandoffsDeps,
+} from "../../lib/mobile-turns/managed-dispatch.js";
 
 const STALL_THRESHOLD_MINUTES = 5;
 
-export async function handler() {
+export interface StallMonitorDeps {
+  processMobileHandoffs(deps?: ProcessStaleMobileHandoffsDeps): Promise<{
+    scanned: number;
+    claimed: number;
+    dispatched: number;
+    failed: number;
+    skipped: number;
+  }>;
+}
+
+export async function runStallMonitor(
+  deps: StallMonitorDeps = {
+    processMobileHandoffs: () => processStaleMobileHandoffs(),
+  },
+) {
   const db = getDb();
   const now = new Date();
+  const mobileHandoffs = await deps.processMobileHandoffs();
+  if (
+    mobileHandoffs.claimed > 0 ||
+    mobileHandoffs.failed > 0 ||
+    mobileHandoffs.skipped > 0
+  ) {
+    console.log(
+      `[stall-monitor] Mobile handoffs scanned=${mobileHandoffs.scanned} claimed=${mobileHandoffs.claimed} dispatched=${mobileHandoffs.dispatched} failed=${mobileHandoffs.failed} skipped=${mobileHandoffs.skipped}`,
+    );
+  }
 
   // Find turns stuck in 'running' beyond the stall threshold.
   // Uses last_activity_at if set, otherwise falls back to started_at.
@@ -82,7 +110,11 @@ export async function handler() {
   }
 
   console.log(`[stall-monitor] Processed ${processed} stalled turns`);
-  return { stalled: processed };
+  return { stalled: processed, mobileHandoffs };
+}
+
+export async function handler() {
+  return runStallMonitor();
 }
 
 // Legacy runbook reconciliation against computer_runbook_tasks /

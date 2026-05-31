@@ -36,9 +36,15 @@ vi.mock("@thinkwork/database-pg", () => ({
     update: () => ({
       set: (value: Record<string, unknown>) => {
         mocks.updateValues.push(value);
-        return {
-          where: async () => [],
+        const chain = {
+          where: () => chain,
+          returning: async () => [{ id: "turn-mobile-1" }],
+          then: (
+            resolve: (value: Array<Record<string, unknown>>) => unknown,
+            reject?: (reason: unknown) => unknown,
+          ) => Promise.resolve([]).then(resolve, reject),
         };
+        return chain;
       },
     }),
   }),
@@ -257,5 +263,62 @@ describe("chat-agent-invoke runtime routing", () => {
         }),
       ]),
     );
+  });
+
+  it("dispatches managed mobile handoff using the existing thread turn id", async () => {
+    mocks.selectRows = [
+      [{ sender_id: "user-1", sender_type: "human" }],
+      [{ email: "user-1@example.com" }],
+      [{ spaceId: null }],
+      [],
+    ];
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    const result = await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "Continue from mobile checkpoint",
+      messageId: "message-1",
+      existingThreadTurnId: "turn-mobile-1",
+      mobileHandoff: {
+        checkpointSeq: 2,
+        latestObservedCheckpointSeq: 3,
+        unsafeCheckpointSkipped: true,
+      },
+    });
+
+    expect(result).toEqual({ ok: true, threadTurnId: "turn-mobile-1" });
+    expect(mocks.insertValues).toEqual([]);
+    expect(mocks.updateValues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          context_snapshot: expect.anything(),
+          last_activity_at: expect.any(Date),
+        }),
+      ]),
+    );
+
+    const command = mocks.lambdaSend.mock.calls[0][0] as {
+      input: {
+        FunctionName: string;
+        InvocationType: string;
+        Payload: Uint8Array;
+      };
+    };
+    expect(command.input).toMatchObject({
+      FunctionName: "pi-runtime-fn",
+      InvocationType: "Event",
+    });
+
+    const body = decodeInvokeBody(command);
+    expect(body).toMatchObject({
+      runtime_type: "pi",
+      thread_turn_id: "turn-mobile-1",
+      message: "Continue from mobile checkpoint",
+      finalize_callback_url:
+        "https://api.example.com/api/threads/thread-1/finalize",
+      finalize_callback_secret: "test-secret",
+    });
   });
 });

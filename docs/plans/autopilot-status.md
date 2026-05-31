@@ -15,12 +15,12 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active; implementation unit U2 is in progress.
-- Active unit: U2 Mobile Harness Lease Integration.
-- Active branch: `codex/mobile-pi-handoff-u2`.
+- Status: active; implementation unit U3 is in progress.
+- Active unit: U3 Managed Handoff Claim and Dispatch.
+- Active branch: `codex/mobile-pi-handoff-u3`.
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u2`.
-- Started: 2026-05-31 from `origin/main` at `7e0103c5`.
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u3`.
+- Started: 2026-05-31 from `origin/main` at `d7922bbe`.
 - Active PR: pending.
 - CI: not yet pushed.
 
@@ -98,6 +98,33 @@ MOBILE-U2-LEASE-OK-0840.`, observed immediate optimistic navigation to new
   the user and assistant messages arriving on the new thread subscription.
   Screenshot:
   `/tmp/thinkwork-verification/mobile-u2-lease-smoke.png`.
+- Opened PR [#1901](https://github.com/thinkwork-ai/thinkwork/pull/1901)
+  for U2. Required CI (`cla`, `lint`, `verify`, `typecheck`, `test`) passed,
+  then the PR was squash-merged into `main`. Merge commit:
+  `d7922bbed4a97901ddb63c146afa96ff01a5b9fe`.
+- Removed U2 remote/local branch and worktree, synced `main`, and created U3
+  worktree `codex/mobile-pi-handoff-u3` from `origin/main` at `d7922bbe`.
+- Started U3 managed handoff claim and dispatch. Implemented checkpoint
+  selection/rendering in `packages/api/src/lib/mobile-turns/checkpoint.ts`,
+  including safe fallback when the latest checkpoint is unsafe and fail-closed
+  behavior when checkpoint 0 is missing or corrupt.
+- Implemented server-side mobile handoff processing in
+  `packages/api/src/lib/mobile-turns/managed-dispatch.ts`: the stall monitor can
+  scan stale running mobile Pi turns, atomically claim ownership, append
+  `managed Pi claimed` / `unsafe checkpoint skipped` activity, and invoke
+  `chat-agent-invoke` with the original `thread_turns.id`.
+- Extended `chat-agent-invoke` with an explicit `existingThreadTurnId` path so
+  managed AgentCore Pi dispatch reuses the durable mobile turn and finalizes
+  through the existing callback/idempotency path without creating a second
+  `thread_turns` row.
+- Focused U3 verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/mobile-turns src/handlers/mobile-turn-session.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts src/handlers/crons/stall-monitor.test.ts`
+  (28 tests), `pnpm --filter @thinkwork/api typecheck`, `bash
+scripts/build-lambdas.sh chat-agent-invoke`, `bash scripts/build-lambdas.sh
+cron-stall-monitor`, and `git diff --check`.
+- Touched-file formatting was applied with `pnpm dlx prettier --write ...`
+  because this fresh worktree install did not provide a local `prettier`
+  binary for the repo `format:check` script.
 
 ### Blockers
 
