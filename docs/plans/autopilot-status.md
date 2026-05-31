@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U12 Update boot/hydration prefix validators (3 runtimes).
-- Active branch: `codex/workspace-arch-u12`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u12`.
-- Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1917](https://github.com/thinkwork-ai/thinkwork/pull/1917).
-- CI/deploy: U11 required PR checks passed and merged into `main`.
+- Active unit: U13 One-shot S3 regenerate/cutover.
+- Active branch: `codex/workspace-arch-u13`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u13`.
+- Started: 2026-05-31 from `origin/main` at `3ec328ad`.
+- Latest merged PR: [#1918](https://github.com/thinkwork-ai/thinkwork/pull/1918).
+- CI/deploy: U12 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -132,6 +132,79 @@ Target branch: `main`
   `pnpm typecheck`, `pnpm lint`, changed-file Prettier check, and
   `git diff --check`; all passed.
 - Opened PR [#1918](https://github.com/thinkwork-ai/thinkwork/pull/1918).
+- PR [#1918](https://github.com/thinkwork-ai/thinkwork/pull/1918) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `3ec328ad13a64f96ed3267766068c6d3f8aab458`.
+- Removed U12 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U13 worktree
+  `codex/workspace-arch-u13` from `origin/main` at `3ec328ad`.
+- Started U13 one-shot S3 regenerate/cutover work. Installed worktree
+  dependencies with `pnpm install`; optional `node-liblzma` native rebuild
+  again reported missing `pkg-config`, but `pnpm` completed successfully.
+- Read the U13 migration runbook and prior workflow docs covering destructive
+  migration drift and survey-before-apply sequencing:
+  `docs/runbooks/collapse-agents-migration.md`,
+  `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md`,
+  `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`,
+  and
+  `docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`.
+- Implemented U13 migration tooling:
+  `packages/api/src/lib/workspace-layout-migration.ts` plus a thin
+  `scripts/migrate-workspace-layout.ts` CLI. The planner backfills stable
+  human-readable `workspace_folder_name` values, copies legacy source prefixes
+  into the canonical layout, updates goal thread runtime prefixes, renders
+  thread runtime manifests, deletes retired `tenants/<tenant>/rendered/`
+  tuple objects on apply, and refuses to overwrite destination objects with
+  differing metadata.
+- Added focused migration coverage for dry-run planning, safe apply behavior,
+  conflict detection, invalid batch-size rejection, and idempotent noop reruns
+  once folder names, manifests, and new-layout objects are present.
+- Consumer survey found no active raw producer of the retired
+  `tenants/<tenant>/rendered/...` tuple prefix outside compatibility field
+  names/tests. It did find live non-runtime consumers of
+  `tenants/<tenant>/agents/<agent>/workspace/` in GitHub workspace sync,
+  workspace events, identity/user writers, wakeup processing, workspace copy,
+  agent snapshots, and review/writeback paths, so U13 preserves legacy source
+  prefixes by default and only deletes them with explicit
+  `--delete-legacy-sources` after a fresh clean survey.
+- U13 focused verification passed:
+  `pnpm --filter @thinkwork/api test -- src/__tests__/migrate-workspace-layout.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and
+  `pnpm exec tsx scripts/migrate-workspace-layout.ts --help`.
+- U13 runtime regression verification passed for all requested runtime paths:
+  `pnpm --filter @thinkwork/api test -- src/__tests__/migrate-workspace-layout.test.ts src/lib/workspace-renderer/compose-tuple.test.ts src/handlers/__tests__/workspace-renderer.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- tests/bootstrap-workspace.test.ts tests/server.test.ts`,
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts test/sidecar/local-turn-runner.test.ts`,
+  and
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/workspace-cache.test.ts lib/agent/thread-turn.test.ts`.
+- U13 broad verification passed:
+  `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/agentcore-pi test`,
+  `pnpm --filter @thinkwork/mobile test`,
+  `pnpm --filter @thinkwork/desktop test`, `pnpm typecheck`,
+  `pnpm lint`, changed-file Prettier check via
+  `pnpm dlx prettier@3.8.2 --check <changed files>`, and
+  `git diff --check`.
+- Verification note: the first full desktop test pass hit the known local
+  Electron install race in `menus.test.ts`. Removed the partial local Electron
+  `dist`/`path.txt`, reran `pnpm --filter @thinkwork/desktop exec npx
+install-electron --no`, and the full desktop suite then passed all 145
+  desktop tests.
+- Compound-style review found and fixed two migration safety issues before PR:
+  S3 `CopyObject` now URL-encodes source keys so filenames with spaces or
+  reserved characters migrate correctly, and apply mode processes tenant plans
+  sequentially while preserving per-tenant render batching. Added focused
+  coverage for S3 copy-source key encoding.
+- Post-review verification passed:
+  `pnpm --filter @thinkwork/api test -- src/__tests__/migrate-workspace-layout.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- tests/bootstrap-workspace.test.ts tests/server.test.ts`,
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/workspace-cache.test.ts lib/agent/thread-turn.test.ts`,
+  `pnpm typecheck`, `pnpm lint`, changed-file Prettier check, and
+  `git diff --check`.
+- Opened PR [#1919](https://github.com/thinkwork-ai/thinkwork/pull/1919).
 - Created isolated U1 worktree `codex/workspace-arch-u1` from `origin/main`.
 - Implemented U1 substrate:
   `workspace_folder_name` columns and partial unique indexes for agents,
