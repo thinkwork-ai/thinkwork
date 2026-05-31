@@ -140,6 +140,20 @@ describe("customer onboarding Goal folder", () => {
       readyForReview: true,
     });
   });
+
+  it("keeps all-not-applicable task sets active for human correction", () => {
+    const readiness = customerOnboardingGoalReadiness([
+      task({ status: "not_applicable" }),
+      task({ status: "not_applicable" }),
+    ]);
+
+    expect(readiness).toEqual({
+      status: "active",
+      completedRequired: 0,
+      totalRequired: 0,
+      readyForReview: false,
+    });
+  });
 });
 
 function state(

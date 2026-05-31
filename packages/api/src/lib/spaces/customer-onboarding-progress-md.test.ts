@@ -133,6 +133,22 @@ describe("customer onboarding PROGRESS.md", () => {
     );
   });
 
+  it("surfaces Goals with no required applicable tasks without marking them complete", () => {
+    const markdown = renderCustomerOnboardingProgressMarkdown({
+      ...state({
+        tasks: state().tasks.map((task) => ({
+          ...task,
+          status: "not_applicable",
+        })),
+      }),
+      updatedAt,
+    });
+
+    expect(markdown).toContain("Status: No required tasks.");
+    expect(markdown).toContain("- Required complete: 0/0");
+    expect(markdown).toContain("- Overall: 0%");
+  });
+
   it("writes rendered markdown through the supplied writer", async () => {
     const writes: Array<{
       tenantSlug: string;

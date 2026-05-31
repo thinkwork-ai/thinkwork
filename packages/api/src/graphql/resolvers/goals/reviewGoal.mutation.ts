@@ -343,8 +343,8 @@ async function createReviewChangesFollowUp(input: {
       blocked: false,
       sync_status: "synced",
       last_synced_at: input.reviewedAt,
-      metadata: {
-        workflow: "customer_onboarding",
+      metadata: compactObject({
+        workflow: input.row.template_key ?? "thread_goal",
         systemOfRecord: "thinkwork",
         checklistItemKey,
         customChecklistTask: true,
@@ -355,7 +355,7 @@ async function createReviewChangesFollowUp(input: {
           createdAt: input.reviewedAt.toISOString(),
           createdByUserId: input.reviewedByUserId,
         },
-      },
+      }),
       created_at: input.reviewedAt,
       updated_at: input.reviewedAt,
     })

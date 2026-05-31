@@ -4,6 +4,10 @@ import { linkedTasks, tenants, threads } from "@thinkwork/database-pg/schema";
 
 import type { LinkedTaskStatus } from "../linked-tasks/status.js";
 import {
+  formatGoalProgressLabel,
+  renderThreadGoalProgressMarkdown,
+} from "../thread-goals/progress.js";
+import {
   writeThreadProgressMarkdown,
   type ThreadProgressStorageDeps,
 } from "../thread-progress/storage.js";
@@ -111,57 +115,18 @@ export function renderCustomerOnboardingProgressMarkdown(input: {
   tasks: CustomerOnboardingProgressTask[];
   updatedAt: Date;
 }): string {
-  const activeRequiredTasks = input.tasks.filter(
-    (task) => task.required && task.status !== "not_applicable",
-  );
-  const completedRequired = activeRequiredTasks.filter(
-    (task) => task.status === "completed",
-  ).length;
-  const totalRequired = activeRequiredTasks.length;
-  const percent =
-    totalRequired === 0
-      ? 100
-      : Math.round((completedRequired / totalRequired) * 100);
   const customer =
     input.normalized.companyName ??
     input.normalized.customerName ??
     input.threadTitle;
-  const status =
-    completedRequired === totalRequired && totalRequired > 0
-      ? "Ready for final review."
-      : `Waiting on ${totalRequired - completedRequired} required task${
-          totalRequired - completedRequired === 1 ? "" : "s"
-        }.`;
 
   return [
-    "# PROGRESS",
-    "",
-    `Thread: ${input.threadTitle}`,
-    `Goal: Complete customer onboarding for ${customer}.`,
-    `Status: ${status}`,
-    `Updated: ${input.updatedAt.toISOString()}`,
-    "",
-    "## Progress",
-    `- Required complete: ${completedRequired}/${totalRequired}`,
-    `- Overall: ${percent}%`,
-    "",
-    "## Tasks",
-    "| Task | Status | Owner | Required | Blocker/Notes |",
-    "| --- | --- | --- | --- | --- |",
-    ...input.tasks.map(
-      (task) =>
-        `| ${[
-          tableCell(task.title),
-          tableCell(formatStatusLabel(task.status)),
-          tableCell(
-            task.owner ?? formatRoleLabel(task.roleKey) ?? "Unassigned",
-          ),
-          task.required ? "Yes" : "No",
-          tableCell(
-            task.blocked ? (task.notes ?? "Blocked") : (task.notes ?? ""),
-          ),
-        ].join(" | ")} |`,
-    ),
+    renderThreadGoalProgressMarkdown({
+      threadTitle: input.threadTitle,
+      goalTitle: `Complete customer onboarding for ${customer}.`,
+      tasks: input.tasks,
+      updatedAt: input.updatedAt,
+    }).trimEnd(),
     "",
     "## Blockers",
     ...blockerLines(input.tasks),
@@ -312,21 +277,9 @@ function nextStepLines(input: {
   ];
 }
 
-function formatStatusLabel(status: string): string {
-  return status
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function formatRoleLabel(roleKey: string | null): string | null {
   if (!roleKey) return null;
-  return formatStatusLabel(roleKey);
-}
-
-function tableCell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
+  return formatGoalProgressLabel(roleKey);
 }
 
 function objectRecord(value: unknown): JsonRecord {
