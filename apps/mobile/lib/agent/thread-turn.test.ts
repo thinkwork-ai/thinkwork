@@ -13,6 +13,7 @@ import {
   type WorkspaceCacheSource,
 } from "./workspace-cache";
 import type { Tool } from "./types";
+import type { MobileTurnLeaseClient } from "./turn-lease";
 import type { WorkspaceTarget } from "@/lib/workspace-api";
 
 function crmTool(): Tool {
@@ -40,7 +41,257 @@ class FakeWorkspaceSource implements WorkspaceCacheSource {
   }
 }
 
+function fakeLeaseClient(
+  overrides: Partial<MobileTurnLeaseClient> = {},
+): MobileTurnLeaseClient {
+  let checkpointSeq = 0;
+  return {
+    start: vi.fn().mockResolvedValue({
+      threadTurnId: "turn-1",
+      threadId: "thr_1",
+      userMessageId: "um",
+      status: "running",
+      checkpointSeq: 0,
+      idempotent: false,
+    }),
+    heartbeat: vi.fn().mockResolvedValue({ ok: true }),
+    checkpoint: vi.fn().mockImplementation(async () => ({
+      seq: ++checkpointSeq,
+    })),
+    background: vi.fn().mockResolvedValue({ ok: true }),
+    abort: vi.fn().mockResolvedValue({ ok: true }),
+    finalize: vi
+      .fn()
+      .mockResolvedValue({ finalized: true, assistantMessageId: "am" }),
+    ...overrides,
+  };
+}
+
 describe("runThreadHarnessTurn", () => {
+  it("starts a durable lease before calling the model and finalizes the same turn", async () => {
+    const order: string[] = [];
+    const lease = fakeLeaseClient({
+      start: vi.fn().mockImplementation(async () => {
+        order.push("start");
+        return {
+          threadTurnId: "turn-1",
+          threadId: "thr_1",
+          userMessageId: "um",
+          status: "running",
+          checkpointSeq: 0,
+          idempotent: false,
+        };
+      }),
+    });
+    const provider = new MockModelProvider(() => {
+      order.push("model");
+      return textResponse("on it");
+    });
+
+    const res = await runThreadHarnessTurn(
+      {
+        threadId: "thr_1",
+        userText: "hello",
+        priorMessages: [],
+        agentId: "agent-1",
+        userId: "user-1",
+        userName: "Eric Odom",
+        userEmail: "eric@example.com",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        clientTurnId: "client-1",
+      },
+      { modelProvider: provider, turnLeaseClient: lease },
+    );
+
+    expect(res).toEqual({ assistantText: "on it", ok: true });
+    expect(order).toEqual(["start", "model"]);
+    expect(lease.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientTurnId: "client-1",
+        threadId: "thr_1",
+        agentId: "agent-1",
+        userText: "hello",
+        metadata: expect.objectContaining({
+          user_id: "user-1",
+          user_name: "Eric Odom",
+          user_email: "eric@example.com",
+          tenant_id: "tenant-1",
+          space_id: "space-1",
+        }),
+      }),
+    );
+    expect(lease.finalize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadTurnId: "turn-1",
+        assistantText: "on it",
+        diagnostics: { clientTurnId: "client-1" },
+      }),
+    );
+  });
+
+  it("heartbeats while the provider is pending and stops after completion", async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveModel!: () => void;
+      const modelDone = new Promise<void>((resolve) => {
+        resolveModel = resolve;
+      });
+      const provider = {
+        id: "pending",
+        generate: vi.fn(async () => {
+          await modelDone;
+          return textResponse("done");
+        }),
+      };
+      const lease = fakeLeaseClient();
+
+      const run = runThreadHarnessTurn(
+        { threadId: "thr_1", userText: "hello", priorMessages: [] },
+        {
+          modelProvider: provider,
+          turnLeaseClient: lease,
+          heartbeatIntervalMs: 1000,
+        },
+      );
+      await vi.waitFor(() => expect(provider.generate).toHaveBeenCalled());
+      await vi.advanceTimersByTimeAsync(2500);
+      expect(lease.heartbeat).toHaveBeenCalledTimes(2);
+
+      resolveModel();
+      await run;
+      await vi.advanceTimersByTimeAsync(2500);
+      expect(lease.heartbeat).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("checkpoints safe transcript evidence and unsafe in-flight tool calls", async () => {
+    const lease = fakeLeaseClient();
+    const provider = new MockModelProvider([
+      toolResponse("c1", "create_crm_opportunity", {}, "creating"),
+      textResponse("created opp_1"),
+    ]);
+
+    await runThreadHarnessTurn(
+      {
+        threadId: "thr_1",
+        userText: "add acme",
+        priorMessages: [],
+        tools: [crmTool()],
+      },
+      { modelProvider: provider, turnLeaseClient: lease },
+    );
+
+    const checkpointCalls = vi
+      .mocked(lease.checkpoint)
+      .mock.calls.map(([input]) => input);
+    expect(checkpointCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          safe: false,
+          checkpoint: expect.objectContaining({
+            event_type: "tool_call",
+            event_log: expect.arrayContaining([
+              expect.objectContaining({ type: "tool_call" }),
+            ]),
+            unsafe_reason: "tool_call_in_flight",
+          }),
+        }),
+        expect.objectContaining({
+          safe: false,
+          checkpoint: expect.objectContaining({
+            event_type: "tool_result",
+            name: "create_crm_opportunity",
+          }),
+        }),
+        expect.objectContaining({
+          safe: true,
+          checkpoint: expect.objectContaining({
+            event_type: "assistant_text",
+            text: "created opp_1",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("sends background signals without aborting the local run", async () => {
+    let backgroundHandler: ((reason: string) => void) | null = null;
+    let resolveModel!: () => void;
+    const modelDone = new Promise<void>((resolve) => {
+      resolveModel = resolve;
+    });
+    const provider = {
+      id: "pending",
+      generate: vi.fn(async () => {
+        await modelDone;
+        return textResponse("done");
+      }),
+    };
+    const lease = fakeLeaseClient();
+
+    const run = runThreadHarnessTurn(
+      { threadId: "thr_1", userText: "hello", priorMessages: [] },
+      {
+        modelProvider: provider,
+        turnLeaseClient: lease,
+        subscribeToBackground: (handler) => {
+          backgroundHandler = handler;
+          return vi.fn();
+        },
+      },
+    );
+    await vi.waitFor(() => expect(provider.generate).toHaveBeenCalled());
+
+    backgroundHandler?.("background");
+    await vi.waitFor(() =>
+      expect(lease.background).toHaveBeenCalledWith({
+        threadTurnId: "turn-1",
+        reason: "background",
+      }),
+    );
+
+    resolveModel();
+    const res = await run;
+    expect(res.ok).toBe(true);
+    expect(lease.abort).not.toHaveBeenCalled();
+  });
+
+  it("does not call the model when lifecycle start fails", async () => {
+    const provider = new MockModelProvider([textResponse("should not run")]);
+    const lease = fakeLeaseClient({
+      start: vi.fn().mockRejectedValue(new Error("start failed")),
+    });
+
+    await expect(
+      runThreadHarnessTurn(
+        { threadId: "thr_1", userText: "hello", priorMessages: [] },
+        { modelProvider: provider, turnLeaseClient: lease },
+      ),
+    ).rejects.toThrow(/start failed/);
+    expect(provider.requests).toHaveLength(0);
+  });
+
+  it("returns ok=false when local finalize loses the managed-claim race", async () => {
+    const provider = new MockModelProvider([textResponse("late local answer")]);
+    const lease = fakeLeaseClient({
+      finalize: vi
+        .fn()
+        .mockRejectedValue(
+          new Error("mobile-turn-session finalize 409: FINALIZE_REJECTED"),
+        ),
+    });
+
+    const res = await runThreadHarnessTurn(
+      { threadId: "thr_1", userText: "hello", priorMessages: [] },
+      { modelProvider: provider, turnLeaseClient: lease },
+    );
+
+    expect(res).toEqual({ assistantText: "late local answer", ok: false });
+  });
+
   it("runs a turn and persists the user+assistant pair to the thread", async () => {
     const provider = new MockModelProvider([textResponse("on it")]);
     const recordTurnFn = vi.fn().mockResolvedValue({

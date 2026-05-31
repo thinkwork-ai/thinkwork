@@ -18,6 +18,13 @@ import { workspaceContextExtension } from "./extensions/workspace-context-extens
 import { workspaceToolsExtension } from "./extensions/workspace-tools-extension";
 import { recordTurn, type MobileSessionTurnEvidence } from "./persist-turn";
 import {
+  createClientTurnId,
+  createMobileTurnLeaseClient,
+  subscribeToAppBackground,
+  type BackgroundSignalSubscribe,
+  type MobileTurnLeaseClient,
+} from "./turn-lease";
+import {
   createWorkspaceCachePartition,
   getDefaultWorkspaceCache,
   workspaceTargetsForContext,
@@ -59,6 +66,11 @@ export interface RunThreadHarnessTurnInput {
   stage?: string | null;
   /** Active Space id, used to load direct Space workspace context when available. */
   spaceId?: string;
+  /**
+   * Idempotency key for the platform turn lease. Callers may pass a stable value
+   * when retrying the same pending send; otherwise the harness generates one.
+   */
+  clientTurnId?: string;
   tools?: Tool[];
   /**
    * Images attached to this user message (model-vision input — e.g. a business
@@ -72,6 +84,7 @@ export interface RunThreadHarnessTurnInput {
 
 export interface RunThreadHarnessTurnDeps {
   modelProvider?: ModelProvider;
+  turnLeaseClient?: MobileTurnLeaseClient;
   recordTurnFn?: typeof recordTurn;
   /**
    * Override the extensions loaded for the turn. Defaults to [mcpToolsExtension]
@@ -82,6 +95,10 @@ export interface RunThreadHarnessTurnDeps {
   onEvent?: (event: AgentEvent) => void;
   /** Test seam for the durable rendered workspace cache. */
   workspaceCache?: WorkspaceCache;
+  /** Test seam for AppState/background subscription. */
+  subscribeToBackground?: BackgroundSignalSubscribe;
+  /** Test seam for heartbeat timing. */
+  heartbeatIntervalMs?: number;
 }
 
 export interface ThreadHarnessTurnResult {
@@ -125,12 +142,128 @@ function toHarnessMessages(prior: PriorMessage[]): Message[] {
   return out;
 }
 
+function toolEvidenceIsSafe(name: string): boolean {
+  return [
+    "bash",
+    "read",
+    "grep",
+    "find",
+    "ls",
+    "web_search",
+    "mcp",
+    "mobile_photo",
+    "mobile_file",
+    "mobile_clipboard",
+  ].includes(name);
+}
+
+function checkpointForEvent(
+  event: AgentEvent,
+  transcript: Message[],
+  eventLog: AgentEvent[],
+): {
+  checkpoint: Record<string, unknown>;
+  message: string;
+  safe: boolean;
+} | null {
+  const base = {
+    event_type: event.type,
+    transcript,
+    event_log: eventLog,
+  };
+  switch (event.type) {
+    case "agent_start":
+      return {
+        checkpoint: { ...base, tool_names: event.toolNames },
+        message: "mobile Pi turn prepared",
+        safe: true,
+      };
+    case "assistant_text":
+      return {
+        checkpoint: { ...base, text: event.text, step: event.step },
+        message: "checkpoint saved",
+        safe: true,
+      };
+    case "tool_call":
+      return {
+        checkpoint: {
+          ...base,
+          tool_call: event.call,
+          step: event.step,
+          unsafe_reason: "tool_call_in_flight",
+        },
+        message: "checkpoint saved",
+        safe: false,
+      };
+    case "tool_result":
+      return {
+        checkpoint: {
+          ...base,
+          tool_call_id: event.toolCallId,
+          name: event.name,
+          result: event.result,
+          step: event.step,
+        },
+        message: "checkpoint saved",
+        safe: toolEvidenceIsSafe(event.name) && !event.result.isError,
+      };
+    case "agent_end":
+      return {
+        checkpoint: {
+          ...base,
+          stop_reason: event.stopReason,
+          steps: event.steps,
+          usage: event.usage,
+        },
+        message: "checkpoint saved",
+        safe: true,
+      };
+    case "done":
+      return {
+        checkpoint: {
+          ...base,
+          stop_reason: event.stopReason,
+          steps: event.steps,
+        },
+        message: "checkpoint saved",
+        safe: true,
+      };
+    case "error":
+      return {
+        checkpoint: { ...base, error: event.error },
+        message: "checkpoint saved",
+        safe: true,
+      };
+    case "after_tool_call":
+      return null;
+  }
+}
+
+function attachmentRefs(
+  input: RunThreadHarnessTurnInput,
+): { name?: string; mimeType?: string; sizeBytes?: number }[] {
+  return [
+    ...(input.nativeAttachments ?? []).map((attachment) => ({
+      name: attachment.name,
+      mimeType: attachment.mimeType ?? undefined,
+      sizeBytes: attachment.sizeBytes ?? undefined,
+    })),
+    ...(input.images ?? []).map((image, index) => ({
+      name: `image-${index + 1}.${image.format}`,
+      mimeType: `image/${image.format}`,
+      sizeBytes: Math.ceil((image.data.length * 3) / 4),
+    })),
+  ];
+}
+
 export async function runThreadHarnessTurn(
   input: RunThreadHarnessTurnInput,
   deps: RunThreadHarnessTurnDeps = {},
 ): Promise<ThreadHarnessTurnResult> {
   const provider = deps.modelProvider ?? new BedrockModelProvider();
+  const useLegacyRecord = Boolean(deps.recordTurnFn) && !deps.turnLeaseClient;
   const record = deps.recordTurnFn ?? recordTurn;
+  const lease = deps.turnLeaseClient ?? createMobileTurnLeaseClient();
 
   const { system, tools } = buildTurnContext({
     agentName: input.agentName,
@@ -214,15 +347,85 @@ export async function runThreadHarnessTurn(
   });
 
   const events: AgentEvent[] = [];
+  const clientTurnId = input.clientTurnId ?? createClientTurnId();
+  let threadTurnId: string | null = null;
+  let latestCheckpointSeq = 0;
+  let checkpointQueue: Promise<void> = Promise.resolve();
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let unsubscribeBackground: (() => void) | null = null;
+
+  if (!useLegacyRecord) {
+    const started = await lease.start({
+      clientTurnId,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      userText: input.userText,
+      attachments: attachmentRefs(input),
+      metadata: {
+        agent_name: input.agentName ?? null,
+        user_id: input.userId ?? null,
+        user_name: input.userName ?? null,
+        user_email: input.userEmail ?? null,
+        tenant_id: input.tenantId ?? null,
+        space_id: input.spaceId ?? null,
+        stage: input.stage ?? null,
+      },
+    });
+    threadTurnId = started.threadTurnId;
+    latestCheckpointSeq = started.checkpointSeq;
+
+    heartbeatTimer = setInterval(() => {
+      void lease
+        .heartbeat({
+          threadTurnId: started.threadTurnId,
+          latestCheckpointSeq,
+        })
+        .catch((err) => console.warn("[mobile-pi] heartbeat failed", err));
+    }, deps.heartbeatIntervalMs ?? 5000);
+
+    const subscribe = deps.subscribeToBackground ?? subscribeToAppBackground;
+    unsubscribeBackground = subscribe((reason) => {
+      void lease
+        .background({ threadTurnId: started.threadTurnId, reason })
+        .catch((err) =>
+          console.warn("[mobile-pi] background signal failed", err),
+        );
+    });
+  }
+
   const unsubscribe = session.subscribe((event) => {
     events.push(event);
     deps.onEvent?.(event);
+    if (!threadTurnId || useLegacyRecord) return;
+    const checkpoint = checkpointForEvent(event, session.messages, [...events]);
+    if (!checkpoint) return;
+    checkpointQueue = checkpointQueue
+      .then(async () => {
+        const saved = await lease.checkpoint({
+          threadTurnId: threadTurnId!,
+          ...checkpoint,
+        });
+        latestCheckpointSeq = saved.seq;
+      })
+      .catch((err) => console.warn("[mobile-pi] checkpoint failed", err));
   });
-  const result = await session
-    .prompt(input.userText, input.images)
-    .finally(() => {
-      unsubscribe();
-    });
+  let result;
+  try {
+    result = await session.prompt(input.userText, input.images);
+    await checkpointQueue;
+  } catch (err) {
+    if (!useLegacyRecord && threadTurnId) {
+      await lease.abort({
+        threadTurnId,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+    }
+    throw err;
+  } finally {
+    unsubscribe();
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    unsubscribeBackground?.();
+  }
   const assistantText =
     result.finalText || fallbackAssistantText(result.stopReason, events);
   const evidence: MobileSessionTurnEvidence = {
@@ -243,15 +446,37 @@ export async function runThreadHarnessTurn(
     ],
   };
 
-  // Persist the completed turn into the thread (append-only). A persistence failure
-  // shouldn't lose the fact that the turn ran — surface via the returned ok flag.
-  await record({
-    threadId: input.threadId,
-    userText: input.userText,
-    assistantText,
-    toolResults: [evidence],
-    usage: result.usage,
-  });
+  if (useLegacyRecord) {
+    // Compatibility path for older callers/tests. The default mobile harness
+    // path uses the platform-owned turn lease above.
+    await record({
+      threadId: input.threadId,
+      userText: input.userText,
+      assistantText,
+      toolResults: [evidence],
+      usage: result.usage,
+    });
+  } else if (threadTurnId) {
+    if (result.stopReason === "aborted") {
+      await lease.abort({ threadTurnId, reason: "local_abort" });
+      return { assistantText, ok: false };
+    }
+    try {
+      await lease.finalize({
+        threadTurnId,
+        assistantText,
+        toolResults: [evidence],
+        usage: result.usage,
+        diagnostics: { clientTurnId },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("409") || message.includes("FINALIZE_REJECTED")) {
+        return { assistantText, ok: false };
+      }
+      throw err;
+    }
+  }
 
   return { assistantText, ok: result.stopReason === "completed" };
 }
