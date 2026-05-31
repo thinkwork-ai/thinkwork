@@ -30,6 +30,7 @@ import {
   createDelegationExtension,
   createMemoryExtension,
   createSendEmailExtension,
+  createTaskStatusExtension,
   createWebSearchExtension,
   toExtensionFactory,
   type ProviderBundle,
@@ -876,6 +877,28 @@ async function createDesktopSharedExtensions(
           threadTurnId,
         },
         payload: invocation,
+        fetchImpl,
+      }),
+    );
+  }
+
+  if (
+    apiUrl &&
+    finalizeToken &&
+    invocation.tenant_id &&
+    invocation.assistant_id &&
+    invocation.thread_id
+  ) {
+    addExtension(
+      createTaskStatusExtension({
+        taskStatusConfig: {
+          apiUrl,
+          apiSecret: finalizeToken,
+          tenantId: invocation.tenant_id,
+          agentId: invocation.assistant_id,
+          threadId: invocation.thread_id,
+          threadTurnId,
+        },
         fetchImpl,
       }),
     );

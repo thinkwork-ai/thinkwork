@@ -6,6 +6,7 @@ export * from "./memory.js";
 export * from "./send-email.js";
 export * from "./skills.js";
 export * from "./system-prompt.js";
+export * from "./task-status.js";
 export * from "./web-search.js";
 
 // Re-export the SDK extension types so hosts can type their wiring (e.g. an

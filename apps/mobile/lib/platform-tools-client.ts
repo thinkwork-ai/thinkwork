@@ -90,6 +90,32 @@ export async function callPlatformWebSearch(
   return { content: data.content, isError: data.isError };
 }
 
+export async function callPlatformTaskStatus(
+  input: {
+    agentId: string;
+    threadId: string;
+    linkedTaskId: string;
+    status: string;
+    note?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+  deps: PlatformToolDeps = {},
+): Promise<PlatformToolResult> {
+  const data = (await postPlatformTool(
+    "/api/tasks/status",
+    {
+      agentId: input.agentId,
+      threadId: input.threadId,
+      linkedTaskId: input.linkedTaskId,
+      status: input.status,
+      note: input.note,
+      metadata: input.metadata,
+    },
+    deps,
+  )) as PlatformToolResult;
+  return { content: data.content, isError: data.isError };
+}
+
 export function platformToolContentToText(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return JSON.stringify(content ?? "");

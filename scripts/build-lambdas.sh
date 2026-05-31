@@ -167,6 +167,11 @@ build_handler "mobile-turn-session" \
 build_handler "mobile-tools" \
   "$REPO_ROOT/packages/api/src/handlers/mobile-tools.ts"
 
+# Agent-visible task status mutation tool. Service/desktop/mobile callers all
+# land here so linked_tasks remains database-authoritative.
+build_handler "task-status-tool" \
+  "$REPO_ROOT/packages/api/src/handlers/task-status-tool.ts"
+
 # Mobile harness MCP proxy: tenant-scoped tools/list + tools/call over the
 # signed-in user's Cognito idToken. Plain fetch JSON-RPC to the tenant MCP
 # server — no MCP SDK, so the default (externalized @aws-sdk/*) flags apply;

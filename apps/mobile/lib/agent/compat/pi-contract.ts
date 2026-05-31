@@ -183,6 +183,16 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
         "Mobile captures local bash /workspace before/after snapshots, computes create/modify/delete changed_files for the durable thread_turn_id, and sends them with mobile turn finalization.",
     },
     {
+      id: "task-status-tool",
+      status: "implemented",
+      upstreamSurface: "set_task_status platform extension",
+      mobileSurface:
+        "apps/mobile/lib/agent/extensions/task-status-extension.ts",
+      ownerUnit: "U7",
+      notes:
+        "Mobile exposes set_task_status as a platform tool that writes checklist status through the API/database rather than by editing GOAL.md or PROGRESS.md.",
+    },
+    {
       id: "bounded-mcp-proxy-tool",
       status: "implemented",
       upstreamSurface: "pi-mcp-adapter proxy tool",

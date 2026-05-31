@@ -205,6 +205,7 @@ describe("runLocalDesktopTurn", () => {
     expect(optionsSeen?.tools).toEqual([
       ...DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
       ...DESKTOP_JUST_BASH_TOOL_NAMES,
+      "set_task_status",
       "delegate_to_managed_agent",
     ]);
     expect(
@@ -661,7 +662,11 @@ describe("runLocalDesktopTurn", () => {
     );
 
     expect(optionsSeen?.tools).toEqual(
-      expect.arrayContaining(["web_search", "delegate_to_managed_agent"]),
+      expect.arrayContaining([
+        "web_search",
+        "set_task_status",
+        "delegate_to_managed_agent",
+      ]),
     );
     expect(optionsSeen?.customTools).toEqual([
       expect.objectContaining({ name: "bash" }),
@@ -669,13 +674,17 @@ describe("runLocalDesktopTurn", () => {
     const factories = loaderOptions?.extensionFactories as Array<
       (pi: { registerTool: (tool: { name?: string }) => void }) => void
     >;
-    expect(factories).toHaveLength(2);
+    expect(factories).toHaveLength(3);
     const registered: Array<{ name?: string }> = [];
     for (const factory of factories) {
       factory({ registerTool: (tool) => registered.push(tool) });
     }
     expect(registered.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(["web_search", "delegate_to_managed_agent"]),
+      expect.arrayContaining([
+        "web_search",
+        "set_task_status",
+        "delegate_to_managed_agent",
+      ]),
     );
   });
 

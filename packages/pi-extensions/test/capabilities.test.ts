@@ -10,6 +10,7 @@ import { createDelegationExtension } from "../src/delegation.js";
 import { toExtensionFactory } from "../src/define-extension.js";
 import { createSendEmailExtension } from "../src/send-email.js";
 import { createSkillsExtension, formatWorkspaceSkills } from "../src/skills.js";
+import { createTaskStatusExtension } from "../src/task-status.js";
 import { createWebSearchExtension } from "../src/web-search.js";
 
 type FetchCall = [string | URL | Request, RequestInit?];
@@ -158,6 +159,60 @@ describe("U7 capability extensions", () => {
       Authorization: "Bearer desktop-token",
       "x-thread-turn-id": "turn-1",
     });
+  });
+
+  it("set_task_status registers when configured and posts the database mutation request", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        content: [{ type: "text", text: '{"ok":true}' }],
+        details: { ok: true, status: "completed" },
+      }),
+    );
+    const { api, tools } = makeFakeApi();
+    const extension = createTaskStatusExtension({
+      taskStatusConfig: {
+        apiUrl: "https://api.example.com/",
+        apiSecret: "secret",
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        threadTurnId: "turn-1",
+      },
+      fetchImpl,
+    });
+    await toExtensionFactory(extension, {})(api);
+
+    expect(extension.toolNames).toEqual(["set_task_status"]);
+    const result = await getTool(tools, "set_task_status").execute(
+      "call-1",
+      {
+        linked_task_id: "task-1",
+        status: "completed",
+        note: "Customer confirmed.",
+      },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    const fetchCalls = fetchImpl.mock.calls as unknown as FetchCall[];
+    expect(fetchCalls[0]![0]).toBe("https://api.example.com/api/tasks/status");
+    expect(fetchCalls[0]![1]?.headers).toMatchObject({
+      Authorization: "Bearer secret",
+      "x-agent-id": "agent-1",
+      "x-thread-turn-id": "turn-1",
+      "x-tenant-id": "tenant-1",
+    });
+    expect(JSON.parse(String(fetchCalls[0]![1]?.body))).toMatchObject({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      linkedTaskId: "task-1",
+      status: "completed",
+      note: "Customer confirmed.",
+    });
+    expect(result.details).toEqual({ ok: true, status: "completed" });
   });
 
   it("context-engine registers all query tools and calls the MCP facade", async () => {
