@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   currentMentionQuery,
+  filterMentionCandidates,
   mentionCandidatesForTargets,
   sendMessageMentionsForInput,
 } from "./thread-mentions";
@@ -62,6 +63,31 @@ describe("thread mentions", () => {
         rawText: "@Scott Hertel",
       },
     ]);
+  });
+
+  it("keeps every mention candidate available for a bare @ query", () => {
+    const candidates = [
+      "Amy Odom",
+      "Brett Odom",
+      "Eric Odom",
+      "Joey Terrazas",
+      "Rebecca Odom",
+      "Sarah Smith",
+      "Scott Hertel",
+    ].map((name, index) => ({
+      id: `target-${index}`,
+      name,
+      type: "member" as const,
+      targetId: `user-${index}`,
+      targetType: "USER" as const,
+    }));
+
+    const filtered = filterMentionCandidates(candidates, "");
+
+    expect(filtered).toHaveLength(candidates.length);
+    expect(filtered.map((candidate) => candidate.name)).toContain(
+      "Scott Hertel",
+    );
   });
 
   it("detects an active mention query at the current cursor", () => {

@@ -5,6 +5,7 @@ import {
   FloatingMenuItem,
   FloatingMenuSurface,
 } from "@/components/ui/floating-menu";
+import { filterMentionCandidates } from "@/lib/thread-mentions";
 
 export interface MentionCandidate {
   id: string;
@@ -87,10 +88,7 @@ export function MentionAutocomplete({
 }: MentionAutocompleteProps) {
   if (!visible) return null;
 
-  const filtered = candidates
-    .filter((c) => c.name.toLowerCase().startsWith(query.toLowerCase()))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, 6);
+  const filtered = filterMentionCandidates(candidates, query);
 
   if (filtered.length === 0) return null;
 

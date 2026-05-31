@@ -30,6 +30,18 @@ export function sendMessageMentionsForInput(mentions: MessageInputMention[]) {
   }));
 }
 
+export function filterMentionCandidates(
+  candidates: MentionCandidate[],
+  query: string,
+): MentionCandidate[] {
+  const normalizedQuery = query.toLowerCase();
+  return candidates
+    .filter((candidate) =>
+      candidate.name.toLowerCase().startsWith(normalizedQuery),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function currentMentionQuery(
   text: string,
   cursorPos: number,
