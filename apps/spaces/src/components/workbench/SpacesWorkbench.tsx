@@ -13,7 +13,6 @@ import {
   SpacesComposer,
   type SpacesComposerMention,
 } from "@/components/workbench/SpacesComposer";
-import type { AgentRuntimePreference } from "@/components/workbench/AgentRuntimeIndicator";
 import type { SpaceSummary } from "@/components/spaces/space-types";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { useTenant } from "@/context/TenantContext";
@@ -218,7 +217,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     files: File[],
     mentions: SpacesComposerMention[],
     agentRequested: boolean,
-    runtimePreference: AgentRuntimePreference = "local",
   ) {
     const trimmed = prompt.trim();
     if (!trimmed && files.length === 0) return;
@@ -243,9 +241,10 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       setError(message);
     };
     try {
+      // Host-derived runtime: desktop with a ready local sidecar runs locally;
+      // otherwise the server dispatches the turn on managed cloud.
       const shouldAttemptDesktopLocalPi =
         agentRequested !== false &&
-        runtimePreference !== "managed" &&
         (await shouldUseDesktopLocalPiDispatchNow());
 
       // Create the thread first, route immediately, then finish message send
@@ -338,8 +337,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         sendInput.agentRequested = false;
       } else if (shouldAttemptDesktopLocalPi && desktopLocalAgentId) {
         sendInput.dispatchMode = "DESKTOP_LOCAL";
-      } else if (runtimePreference === "managed") {
-        sendInput.dispatchMode = "MANAGED_DEFAULT";
       }
       const sent = await sendMessage({
         input: sendInput,
@@ -355,20 +352,37 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
 
       if (sendInput.dispatchMode === "DESKTOP_LOCAL" && desktopLocalAgentId) {
         dispatchDesktopLocalPiEvent("running");
-        try {
-          await getDesktopBridge()?.pi?.startTurn({
+        const startLocalTurn = () =>
+          getDesktopBridge()?.pi?.startTurn({
             agentId: desktopLocalAgentId,
             threadId,
             messageId: sent.data?.sendMessage?.id,
             userMessage: trimmed,
           });
-        } catch (err) {
-          dispatchDesktopLocalPiEvent("fallback");
-          surfaceError(
-            "Local Pi could not start. The message was saved; use cloud fallback for the next turn.",
+        // Retry once (the sidecar may be mid-restart) before surfacing an
+        // error. No silent managed-cloud fallback — local and managed run
+        // against different filesystems.
+        try {
+          await startLocalTurn();
+        } catch (firstErr) {
+          console.warn(
+            "[desktop-local-pi] startTurn failed; retrying once:",
+            firstErr,
           );
-          console.warn("[desktop-local-pi] startTurn failed:", err);
-          return;
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          try {
+            await startLocalTurn();
+          } catch (retryErr) {
+            dispatchDesktopLocalPiEvent("idle");
+            surfaceError(
+              "Local agent is unavailable. Your message was saved — try again once Local Pi is running.",
+            );
+            console.warn(
+              "[desktop-local-pi] startTurn retry failed:",
+              retryErr,
+            );
+            return;
+          }
         }
       }
     } catch (err) {

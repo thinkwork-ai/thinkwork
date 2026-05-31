@@ -1034,60 +1034,6 @@ describe("SpacesThreadDetailRoute", () => {
     });
   });
 
-  it("forces managed dispatch when the cloud toggle is selected", async () => {
-    vi.stubGlobal("__DESKTOP_BUILD__", true);
-    const startTurn = vi.fn(async () => ({
-      accepted: true,
-      requestId: "local-turn-1",
-    }));
-    Object.defineProperty(window, "thinkworkBridge", {
-      configurable: true,
-      value: {
-        pi: {
-          status: "healthy",
-          startTurn,
-          getStatus: vi.fn(async () => ({ status: "healthy" })),
-          onStatusChanged: vi.fn(() => () => {}),
-        },
-      },
-    });
-    threadData = {
-      thread: {
-        id: "thread-1",
-        agentId: "agent-1",
-        title: "Agent thread",
-        lifecycleStatus: "COMPLETED",
-        messages: { edges: [] },
-      },
-    };
-    sendMessage.mockResolvedValue({
-      data: { sendMessage: { id: "message-managed-1" } },
-    });
-
-    render(<SpacesThreadDetailRoute threadId="thread-1" />);
-
-    const cloudToggle = await screen.findByRole("button", {
-      name: "Run this turn on local Pi (click for managed cloud)",
-    });
-    fireEvent.click(cloudToggle);
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "Run this in managed cloud" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
-
-    await waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledWith({
-        input: {
-          threadId: "thread-1",
-          role: "USER",
-          content: "Run this in managed cloud",
-          dispatchMode: "MANAGED_DEFAULT",
-        },
-      });
-    });
-    expect(startTurn).not.toHaveBeenCalled();
-  });
-
   it("renders visible managed delegation turns in the existing activity row", async () => {
     taskData = { computerTasks: [] };
     threadData = {
