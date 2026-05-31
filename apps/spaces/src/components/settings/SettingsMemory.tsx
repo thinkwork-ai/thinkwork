@@ -46,7 +46,7 @@ function StrategyBadge({ strategy }: { strategy: string | null }) {
   if (!strategy) return null;
   const colors = STRATEGY_COLORS[strategy] || "bg-muted text-muted-foreground";
   return (
-    <Badge className={`${colors} font-normal text-xs`}>
+    <Badge className={`${colors} whitespace-nowrap font-normal text-xs`}>
       {strategyLabel(strategy)}
     </Badge>
   );
@@ -164,8 +164,10 @@ export function SettingsMemory() {
       },
       {
         accessorKey: "factType",
+        // Wide enough for the longest strategy label ("Reflections" /
+        // "Preferences") so the badge never clips under table-fixed.
         header: "Type",
-        size: 90,
+        size: 132,
         cell: ({ row }) => (
           <span className={COMPACT_TABLE_CELL}>
             <StrategyBadge strategy={row.original.strategy} />
