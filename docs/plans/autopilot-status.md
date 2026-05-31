@@ -15,14 +15,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active; implementation unit U4 is in progress.
-- Active unit: U4 Activity Timeline and Working State Continuity.
-- Active branch: `codex/mobile-pi-handoff-u4`.
+- Status: active; implementation unit U5 is in progress.
+- Active unit: U5 E2E Smoke Coverage and Operational Docs.
+- Active branch: `codex/mobile-pi-handoff-u5`.
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u4`.
-- Started: 2026-05-31 from `origin/main` at `7192b2fd`.
-- Active PR: [#1904](https://github.com/thinkwork-ai/thinkwork/pull/1904).
-- CI: pending.
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u5`.
+- Started: 2026-05-31 from `origin/main` at `d92772d1`.
+- Active PR: pending.
+- CI: not yet pushed.
 
 ### Active Unit Notes
 
@@ -149,7 +149,46 @@ src/__tests__/lifecycle-status.test.ts` (15 tests),
   `pnpm --filter @thinkwork/mobile build:web`, touched-file Prettier check,
   and `git diff --check`.
 - Opened PR [#1904](https://github.com/thinkwork-ai/thinkwork/pull/1904)
-  for U4; CI is pending.
+  for U4. Required CI (`cla`, `lint`, `verify`, `typecheck`, `test`) passed
+  after rebasing on current `main`, then the PR was squash-merged into `main`.
+  Merge commit: `d92772d13e761af1eea158630bce58a616551233`.
+- Removed the U4 worktree after merge and created U5 worktree
+  `codex/mobile-pi-handoff-u5` from `origin/main` at `d92772d1`.
+- Started U5 smoke coverage and operational docs. Added explicit smoke rows for
+  `handoff_local`, `handoff_managed`, `handoff_late_finalize`, and
+  `handoff_unsafe_checkpoint`; handoff rows print `thread.id`,
+  `thread.identifier`, and `threadTurnId` for UI/debug traceability.
+- The smoke harness now uses the mobile turn lease client for normal local
+  capability rows instead of forcing the legacy completion-only `recordTurnFn`
+  path, so deployed smokes exercise the durable lease/checkpoint/finalize path.
+- Tightened the server-side local finalize predicate so a mobile finalize cannot
+  win after ownership has moved to managed AgentCore.
+- iOS simulator smoke found the real edge case: a user can submit a new thread
+  and background the app before the detail screen/local harness gets CPU. U5 now
+  seeds agent-enabled new mobile threads atomically through `createThread`
+  (`mobileTurnClientId` + `mobileTurnUserText`), so the thread, user message,
+  checkpoint 0, and running handoff-capable turn exist before the app can be
+  suspended. The local harness then resumes idempotently with the same
+  `clientTurnId`.
+- Focused U5 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/pending-thread-starts.test.ts lib/agent/turn-lease.test.ts lib/agent/thread-turn.test.ts scripts/pi-harness-smoke.test.ts lib/agent/pi-harness-smoke-matrix.test.ts`
+  (26 tests), `pnpm --filter @thinkwork/api test --
+src/lib/mobile-turns/lifecycle.test.ts src/lib/mobile-turns/managed-dispatch.test.ts src/handlers/crons/stall-monitor.test.ts src/handlers/mobile-turn-session.test.ts src/graphql/resolvers/threads/createThread.mentions.test.ts`
+  (23 tests), `pnpm --filter @thinkwork/mobile
+smoke:pi-harness:handoff:dry-run`, and `pnpm --filter @thinkwork/mobile
+smoke:pi-harness:full:dry-run`.
+- Broader U5 verification passed: `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm schema:build`, `pnpm --filter @thinkwork/react-native-sdk build`,
+  `bash scripts/build-lambdas.sh graphql-http mobile-turn-session`, and
+  `pnpm --filter @thinkwork/mobile build:web`.
+- Deployed dev handoff smoke passed using the U5 harness:
+  `handoff_local` (`CHAT-936`,
+  `c1122645-a832-40db-8363-9eac608efb70`), `handoff_managed` (`CHAT-937`,
+  `4053ffb9-02d7-42dd-a4b2-a0ac655d0cb4`),
+  `handoff_unsafe_checkpoint` (`CHAT-938`,
+  `c7efa22b-1aba-478d-81f0-2149681cde86`), and
+  `handoff_late_finalize` (`CHAT-939`,
+  `9d9b9570-ade6-44c2-b47a-4c81b1ef7e4a`).
 
 ### Blockers
 

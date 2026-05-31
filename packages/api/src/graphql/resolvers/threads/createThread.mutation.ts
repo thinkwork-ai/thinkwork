@@ -12,10 +12,16 @@ import {
   messages,
   messageMentions,
   spaces,
+  threadTurns,
+  threadTurnEvents,
   threadParticipants,
   threadToCamel,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
+import {
+  notifyNewMessage,
+  notifyThreadTurnUpdate,
+} from "../../../lib/chat-finalize/notify.js";
 import { requireTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { ensureDefaultThreadSpace } from "../../../lib/spaces/default-space.js";
@@ -37,6 +43,26 @@ import {
   CustomerOnboardingWorkflowError,
   startCustomerOnboardingWorkflow,
 } from "../../../lib/spaces/customer-onboarding-workflow.js";
+import {
+  MOBILE_PI_INVOCATION_SOURCE,
+  MOBILE_PI_RUNTIME_TYPE,
+} from "../../../lib/mobile-turns/lifecycle.js";
+
+function parseJsonArray(value: unknown): Record<string, unknown>[] {
+  if (!value) return [];
+  let parsed: unknown;
+  try {
+    parsed = typeof value === "string" ? JSON.parse(value) : value;
+  } catch {
+    return [];
+  }
+  return Array.isArray(parsed)
+    ? parsed.filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === "object" && !Array.isArray(item),
+      )
+    : [];
+}
 
 export const createThread = async (
   _parent: any,
@@ -149,11 +175,28 @@ export const createThread = async (
   const initialStatus =
     channel === "chat" || channel === "schedule" ? "in_progress" : "backlog";
 
-  // Atomic: counter bump + thread insert + optional first user message. Keeps
-  // hosts from needing a two-round-trip create-then-send and prevents orphan
-  // threads if the message insert fails.
-  const openingMessageCreatedAt = i.firstMessage ? new Date() : null;
-  const { row, firstMessageId } = await db.transaction(async (tx) => {
+  // Atomic: counter bump + thread insert + optional first user message or
+  // mobile Pi turn seed. Keeps hosts from needing a two-round-trip
+  // create-then-send and prevents orphan threads if the message insert fails.
+  const mobileTurnClientId =
+    typeof i.mobileTurnClientId === "string" && i.mobileTurnClientId.trim()
+      ? i.mobileTurnClientId.trim()
+      : null;
+  const mobileTurnUserText =
+    typeof i.mobileTurnUserText === "string" && i.mobileTurnUserText.trim()
+      ? i.mobileTurnUserText.trim()
+      : null;
+  const shouldSeedMobileTurn = Boolean(
+    mobileTurnClientId && mobileTurnUserText,
+  );
+  if (shouldSeedMobileTurn && !threadAgentId) {
+    throw new GraphQLError("agentId is required for mobile Pi turns", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  const openingMessageCreatedAt =
+    i.firstMessage || shouldSeedMobileTurn ? new Date() : null;
+  const { row, firstMessageId, mobileTurn } = await db.transaction(async (tx) => {
     const [tenant] = await tx
       .update(tenants)
       .set({
@@ -236,7 +279,129 @@ export const createThread = async (
       firstMsgId = msgRow?.id ?? null;
     }
 
-    return { row: threadRow, firstMessageId: firstMsgId };
+    let seededMobileTurn: {
+      threadTurnId: string;
+      userMessageId: string | null;
+    } | null = null;
+    if (shouldSeedMobileTurn) {
+      const [countRow] = await tx
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(threadTurns)
+        .where(eq(threadTurns.thread_id, threadRow.id));
+      const turnNumber = Number(countRow?.count ?? 0) + 1;
+      const startedIso = (openingMessageCreatedAt ?? new Date()).toISOString();
+      const attachments = parseJsonArray(i.mobileTurnAttachments);
+      const metadata = parseJsonObject(i.mobileTurnMetadata);
+      const baseSnapshot = {
+        mobile_turn: {
+          client_turn_id: mobileTurnClientId,
+          handoff_eligible: true,
+          ownership: "mobile",
+          runtime_type: MOBILE_PI_RUNTIME_TYPE,
+          started_at: startedIso,
+          last_heartbeat_at: startedIso,
+          baseline_checkpoint_seq: 0,
+          latest_checkpoint_seq: 0,
+          user_message_id: null,
+          requester: {
+            id: createdById,
+          },
+          thread: {
+            id: threadRow.id,
+            agent_id: threadAgentId,
+            space_id: threadSpace.id,
+          },
+          attachments,
+          metadata,
+        },
+      };
+
+      const [turn] = await tx
+        .insert(threadTurns)
+        .values({
+          tenant_id: i.tenantId,
+          agent_id: threadAgentId ?? undefined,
+          thread_id: threadRow.id,
+          invocation_source: MOBILE_PI_INVOCATION_SOURCE,
+          runtime_type: MOBILE_PI_RUNTIME_TYPE,
+          status: "running",
+          started_at: openingMessageCreatedAt ?? undefined,
+          last_activity_at: openingMessageCreatedAt ?? undefined,
+          turn_number: turnNumber,
+          external_run_id: mobileTurnClientId,
+          context_snapshot: baseSnapshot,
+        })
+        .returning({ id: threadTurns.id });
+      if (!turn?.id) throw new Error("Failed to seed mobile turn");
+
+      const [msgRow] = await tx
+        .insert(messages)
+        .values({
+          thread_id: threadRow.id,
+          tenant_id: i.tenantId,
+          role: "user",
+          content: mobileTurnUserText!,
+          sender_type: "user",
+          sender_id: createdById,
+          created_at: openingMessageCreatedAt ?? undefined,
+          metadata: {
+            mobile_turn: {
+              client_turn_id: mobileTurnClientId,
+              thread_turn_id: turn.id,
+            },
+            attachments,
+          },
+        })
+        .returning({ id: messages.id });
+
+      const snapshot = {
+        ...baseSnapshot,
+        mobile_turn: {
+          ...baseSnapshot.mobile_turn,
+          user_message_id: msgRow?.id ?? null,
+          checkpoint_0: {
+            kind: "baseline",
+            safe: true,
+            seq: 0,
+            user_text: mobileTurnUserText,
+            attachments,
+            created_at: startedIso,
+          },
+        },
+      };
+
+      await tx
+        .update(threadTurns)
+        .set({
+          wakeup_request_id: turn.id,
+          context_snapshot: snapshot,
+        })
+        .where(eq(threadTurns.id, turn.id));
+
+      await tx.insert(threadTurnEvents).values({
+        tenant_id: i.tenantId,
+        run_id: turn.id,
+        agent_id: threadAgentId ?? undefined,
+        seq: 0,
+        event_type: "mobile_pi_checkpoint",
+        stream: "activity",
+        level: "info",
+        color: "blue",
+        message: "mobile Pi turn started",
+        payload: snapshot.mobile_turn.checkpoint_0,
+      });
+
+      seededMobileTurn = {
+        threadTurnId: turn.id,
+        userMessageId: msgRow?.id ?? null,
+      };
+    }
+
+    return {
+      row: threadRow,
+      firstMessageId: firstMsgId,
+      mobileTurn: seededMobileTurn,
+    };
   });
 
   // Side effects after commit (non-transactional — Lambda invoke + SNS notify).
@@ -246,6 +411,28 @@ export const createThread = async (
     status: row.status,
     title: row.title,
   }).catch(() => {});
+
+  if (mobileTurn?.userMessageId && mobileTurnUserText) {
+    notifyNewMessage({
+      messageId: mobileTurn.userMessageId,
+      threadId: row.id,
+      tenantId: row.tenant_id,
+      role: "user",
+      content: mobileTurnUserText,
+      senderType: "user",
+      senderId: createdById,
+    }).catch(() => {});
+  }
+  if (mobileTurn?.threadTurnId && threadAgentId) {
+    notifyThreadTurnUpdate({
+      runId: mobileTurn.threadTurnId,
+      tenantId: row.tenant_id,
+      threadId: row.id,
+      agentId: threadAgentId,
+      status: "running",
+      triggerName: "Mobile Pi",
+    }).catch(() => {});
+  }
 
   const parsedOpeningMentions =
     firstMessageId && i.firstMessage

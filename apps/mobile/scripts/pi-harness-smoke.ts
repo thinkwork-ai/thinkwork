@@ -27,6 +27,7 @@ import { adaptThinkworkExtension } from "../lib/agent/extensions/thinkwork-exten
 import type { ExtensionFactory } from "../lib/agent/extensions/types";
 import { recordTurn } from "../lib/agent/persist-turn";
 import { createAgentSession } from "../lib/agent/session";
+import { createMobileTurnLeaseClient } from "../lib/agent/turn-lease";
 import {
   MemoryWorkspaceCacheStorage,
   WorkspaceCache,
@@ -57,6 +58,10 @@ export type Capability =
   | "image"
   | "file"
   | "agentcore_pi"
+  | "handoff_local"
+  | "handoff_managed"
+  | "handoff_late_finalize"
+  | "handoff_unsafe_checkpoint"
   | "abort";
 
 export const LOCAL_ALL_CAPABILITIES = [
@@ -70,12 +75,16 @@ export const LOCAL_ALL_CAPABILITIES = [
   "skill",
   "image",
   "file",
+  "handoff_local",
   "abort",
 ] as const satisfies readonly Capability[];
 
 export const FULL_ALL_CAPABILITIES = [
   ...LOCAL_ALL_CAPABILITIES.slice(0, -1),
   "agentcore_pi",
+  "handoff_managed",
+  "handoff_late_finalize",
+  "handoff_unsafe_checkpoint",
   "abort",
 ] as const satisfies readonly Capability[];
 
@@ -109,8 +118,14 @@ interface SmokeResult {
   reason: string;
   threadId?: string;
   threadIdentifier?: string | null;
+  threadTurnId?: string;
   assistantText?: string;
   events?: AgentEvent[];
+  turnEvents?: Array<{
+    eventType: string;
+    message?: string | null;
+    seq: number;
+  }>;
 }
 
 function repoRoot(): string {
@@ -140,7 +155,7 @@ function usage(exitCode = 2): never {
   pnpm --filter @thinkwork/mobile smoke:pi-harness -- \\
     --tenant-id <tenant-id> --agent-id <agent-id> \\
     --id-token <cognito-id-token> \\
-    [--space-id <space-id>] [--capabilities plain,workspace,workspace_tools,web_search,mcp,mcp_auth_failure,execute_code,bash,skill,image,file,agentcore_pi,abort] \\
+    [--space-id <space-id>] [--capabilities plain,workspace,workspace_tools,web_search,mcp,mcp_auth_failure,execute_code,bash,skill,image,file,handoff_local,agentcore_pi,handoff_managed,handoff_late_finalize,handoff_unsafe_checkpoint,abort] \\
     [--image-path ./fixtures/card.png] [--file-path ./fixtures/note.txt] [--timeout 90000] [--json]
 
   pnpm --filter @thinkwork/mobile smoke:pi-harness -- --dry-run --capabilities all --json
@@ -156,7 +171,7 @@ Environment fallbacks:
 
 User id is resolved from the Cognito token when possible; THINKWORK_USER_ID is a fallback.
 Use --dry-run to validate the smoke matrix shape without deployed credentials.
-Use --capabilities all for the local/mobile matrix, or full to include managed AgentCore Pi.`);
+Use --capabilities all for the local/mobile matrix, or full to include managed AgentCore Pi and handoff scenarios.`);
   process.exit(exitCode);
 }
 
@@ -391,6 +406,25 @@ interface ThreadPollState {
   }>;
 }
 
+interface ThreadTurnDetail {
+  id: string;
+  status?: string | null;
+  invocationSource?: string | null;
+  error?: string | null;
+  errorCode?: string | null;
+  contextSnapshot?: unknown;
+  resultJson?: unknown;
+}
+
+interface ThreadTurnEventSummary {
+  id: string;
+  seq: number;
+  eventType: string;
+  message?: string | null;
+  payload?: unknown;
+  createdAt?: string | null;
+}
+
 async function getThreadPollState(
   args: Args,
   threadId: string,
@@ -433,6 +467,51 @@ async function getThreadPollState(
   };
 }
 
+async function getThreadTurnDetail(
+  args: Args,
+  threadTurnId: string,
+): Promise<ThreadTurnDetail> {
+  const data = await gql<{ threadTurn: ThreadTurnDetail | null }>(
+    args,
+    `query($id: ID!) {
+      threadTurn(id: $id) {
+        id
+        invocationSource
+        status
+        error
+        errorCode
+        contextSnapshot
+        resultJson
+      }
+    }`,
+    { id: threadTurnId },
+  );
+  if (!data.threadTurn)
+    throw new Error(`Thread turn not found: ${threadTurnId}`);
+  return data.threadTurn;
+}
+
+async function getThreadTurnEvents(
+  args: Args,
+  threadTurnId: string,
+): Promise<ThreadTurnEventSummary[]> {
+  const data = await gql<{ threadTurnEvents: ThreadTurnEventSummary[] }>(
+    args,
+    `query($runId: ID!, $limit: Int) {
+      threadTurnEvents(runId: $runId, limit: $limit) {
+        id
+        seq
+        eventType
+        message
+        payload
+        createdAt
+      }
+    }`,
+    { runId: threadTurnId, limit: 100 },
+  );
+  return data.threadTurnEvents ?? [];
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -463,6 +542,14 @@ function promptFor(capability: Capability, token: string): string {
       return `Use the mobile_file tool to inspect the attached file. Reply with ${token} and the attached filename.`;
     case "agentcore_pi":
       return `Managed AgentCore Pi smoke. Reply exactly: ${token}`;
+    case "handoff_local":
+      return `Mobile Pi handoff local-completion smoke. Reply exactly: ${token}`;
+    case "handoff_managed":
+      return `Mobile Pi background handoff smoke. The local mobile app will stop heartbeating; managed AgentCore Pi should continue this same turn. Reply exactly: ${token}`;
+    case "handoff_late_finalize":
+      return `Mobile Pi late-finalize smoke. Managed AgentCore Pi should own this turn after stale claim. Reply exactly: ${token}`;
+    case "handoff_unsafe_checkpoint":
+      return `Mobile Pi unsafe-checkpoint smoke. Managed AgentCore Pi should continue from the last safe checkpoint and reply exactly: ${token}`;
     case "abort":
       return `Abort smoke. This turn should be canceled before assistant output: ${token}`;
   }
@@ -866,6 +953,252 @@ async function runAbortCapability(
   }
 }
 
+function mobileTurnOwnership(turn: ThreadTurnDetail): string | null {
+  const snapshot = turn.contextSnapshot;
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const mobileTurn = (snapshot as { mobile_turn?: Record<string, unknown> })
+    .mobile_turn;
+  return typeof mobileTurn?.ownership === "string"
+    ? mobileTurn.ownership
+    : null;
+}
+
+function summarizeTurnEvents(
+  events: ThreadTurnEventSummary[],
+): SmokeResult["turnEvents"] {
+  return events.map((event) => ({
+    seq: event.seq,
+    eventType: event.eventType,
+    message: event.message,
+  }));
+}
+
+function smokeLease(args: Args) {
+  return createMobileTurnLeaseClient({
+    apiBase: args.apiBase,
+    getToken: async () => args.idToken,
+  });
+}
+
+async function startHandoffSmokeTurn(
+  args: Args,
+  capability:
+    | "handoff_local"
+    | "handoff_managed"
+    | "handoff_late_finalize"
+    | "handoff_unsafe_checkpoint",
+  token: string,
+): Promise<{
+  thread: Thread;
+  threadTurnId: string;
+  userText: string;
+}> {
+  const thread = await createThread(args, capability);
+  const userText = promptFor(capability, token);
+  const started = await smokeLease(args).start({
+    clientTurnId: `mobile-pi-smoke-${capability}-${Date.now()}`,
+    threadId: thread.id,
+    agentId: args.agentId,
+    userText,
+    metadata: {
+      smoke: capability,
+      tenant_id: args.tenantId,
+      user_id: args.userId,
+      space_id: args.spaceId ?? null,
+      stage: "dev",
+    },
+  });
+  return { thread, threadTurnId: started.threadTurnId, userText };
+}
+
+async function waitForAssistantMessage(input: {
+  args: Args;
+  thread: Thread;
+  threadTurnId: string;
+  token: string;
+  timeoutMs: number;
+}): Promise<{
+  assistantText?: string;
+  state: ThreadPollState | null;
+  turn: ThreadTurnDetail | null;
+  events: ThreadTurnEventSummary[];
+}> {
+  const started = Date.now();
+  let state: ThreadPollState | null = null;
+  let turn: ThreadTurnDetail | null = null;
+  let events: ThreadTurnEventSummary[] = [];
+
+  while (Date.now() - started < input.timeoutMs) {
+    state = await getThreadPollState(input.args, input.thread.id);
+    turn = await getThreadTurnDetail(input.args, input.threadTurnId);
+    events = await getThreadTurnEvents(input.args, input.threadTurnId);
+    const assistant = state.messages.find(
+      (message) =>
+        message.role.toLowerCase() === "assistant" &&
+        typeof message.content === "string" &&
+        message.content.length > 0,
+    );
+    if (assistant?.content) {
+      return { assistantText: assistant.content, state, turn, events };
+    }
+    if (turn.status === "failed" || state.lifecycleStatus === "FAILED") {
+      return { state, turn, events };
+    }
+    await sleep(5_000);
+  }
+
+  return { state, turn, events };
+}
+
+async function runHandoffLocalCapability(args: Args): Promise<SmokeResult> {
+  const capability = "handoff_local" as const;
+  const token = `MOBILE-PI-HANDOFF-LOCAL-${Date.now()}`;
+  const { thread, threadTurnId } = await startHandoffSmokeTurn(
+    args,
+    capability,
+    token,
+  );
+  const lease = smokeLease(args);
+  await lease.checkpoint({
+    threadTurnId,
+    message: "checkpoint saved",
+    safe: true,
+    checkpoint: {
+      seq: 1,
+      safe: true,
+      transcript: [{ role: "user", content: promptFor(capability, token) }],
+    },
+  });
+  await lease.finalize({
+    threadTurnId,
+    assistantText: token,
+    toolResults: [{ type: "mobile_pi_smoke", capability }],
+    diagnostics: { smoke: capability },
+  });
+  const state = await getThreadPollState(args, thread.id);
+  const turn = await getThreadTurnDetail(args, threadTurnId);
+  const events = await getThreadTurnEvents(args, threadTurnId);
+  const assistant = state.messages.find(
+    (message) => message.role.toLowerCase() === "assistant",
+  );
+  const ok =
+    assistant?.content?.includes(token) &&
+    turn.status === "succeeded" &&
+    !events.some((event) => event.eventType === "mobile_pi_managed_claim");
+  return {
+    capability,
+    status: ok ? "PASS" : "FAIL",
+    reason: ok
+      ? "local_mobile_turn_finalized_before_handoff"
+      : `local_handoff_unexpected_state status=${turn.status ?? "unknown"}`,
+    threadId: thread.id,
+    threadIdentifier: thread.identifier,
+    threadTurnId,
+    assistantText: assistant?.content ?? undefined,
+    turnEvents: summarizeTurnEvents(events),
+  };
+}
+
+async function runManagedHandoffScenario(
+  args: Args,
+  capability:
+    | "handoff_managed"
+    | "handoff_late_finalize"
+    | "handoff_unsafe_checkpoint",
+): Promise<SmokeResult> {
+  const token = `MOBILE-PI-${capability.toUpperCase().replace(/_/g, "-")}-${Date.now()}`;
+  const { thread, threadTurnId } = await startHandoffSmokeTurn(
+    args,
+    capability,
+    token,
+  );
+  const lease = smokeLease(args);
+  await lease.checkpoint({
+    threadTurnId,
+    message: "checkpoint saved",
+    safe: true,
+    checkpoint: {
+      seq: 1,
+      safe: true,
+      transcript: [
+        { role: "user", content: promptFor(capability, token) },
+        {
+          role: "assistant",
+          content:
+            "The mobile host started the turn and is about to background.",
+        },
+      ],
+      text: "safe pre-background checkpoint",
+    },
+  });
+  if (capability === "handoff_unsafe_checkpoint") {
+    await lease.checkpoint({
+      threadTurnId,
+      message: "checkpoint saved",
+      safe: false,
+      checkpoint: {
+        seq: 2,
+        safe: false,
+        unsafe_reason: "tool_call_in_flight",
+        tool_call: { name: "send_email", arguments: { to: "nobody" } },
+      },
+    });
+  }
+  await lease.background({ threadTurnId, reason: "smoke_background" });
+
+  const observed = await waitForAssistantMessage({
+    args,
+    thread,
+    threadTurnId,
+    token,
+    timeoutMs: Math.max(args.timeoutMs, 180_000),
+  });
+  const ownership = observed.turn ? mobileTurnOwnership(observed.turn) : null;
+  const hasManagedClaim = observed.events.some(
+    (event) => event.eventType === "mobile_pi_managed_claim",
+  );
+  const hasUnsafeSkip = observed.events.some(
+    (event) => event.eventType === "mobile_pi_unsafe_checkpoint_skipped",
+  );
+  let lateFinalizeRejected = false;
+  if (capability === "handoff_late_finalize") {
+    try {
+      await lease.finalize({
+        threadTurnId,
+        assistantText: `LATE-MOBILE-FINALIZE-${token}`,
+        diagnostics: { smoke: capability, expected: "reject" },
+      });
+    } catch (err) {
+      lateFinalizeRejected =
+        err instanceof Error && /FINALIZE_REJECTED|409/.test(err.message);
+    }
+  }
+
+  const assistantMatched = Boolean(observed.assistantText?.includes(token));
+  const ok =
+    assistantMatched &&
+    hasManagedClaim &&
+    ownership === "managed" &&
+    (capability !== "handoff_late_finalize" || lateFinalizeRejected) &&
+    (capability !== "handoff_unsafe_checkpoint" || hasUnsafeSkip);
+  return {
+    capability,
+    status: ok ? "PASS" : "FAIL",
+    reason: ok
+      ? capability === "handoff_late_finalize"
+        ? "managed_handoff_completed_and_late_mobile_finalize_rejected"
+        : capability === "handoff_unsafe_checkpoint"
+          ? "managed_handoff_used_safe_checkpoint_after_unsafe_skip"
+          : "managed_handoff_completed"
+      : `handoff_unexpected_state assistant=${assistantMatched} managedClaim=${hasManagedClaim} ownership=${ownership ?? "unknown"} unsafeSkip=${hasUnsafeSkip} lateRejected=${lateFinalizeRejected}`,
+    threadId: thread.id,
+    threadIdentifier: thread.identifier,
+    threadTurnId,
+    assistantText: observed.assistantText,
+    turnEvents: summarizeTurnEvents(observed.events),
+  };
+}
+
 async function runManagedAgentCoreCapability(args: Args): Promise<SmokeResult> {
   const token = `MOBILE-PI-AGENTCORE-${Date.now()}`;
   const prompt = promptFor("agentcore_pi", token);
@@ -942,6 +1275,16 @@ async function runCapability(
   if (capability === "agentcore_pi") {
     return runManagedAgentCoreCapability(args);
   }
+  if (capability === "handoff_local") {
+    return runHandoffLocalCapability(args);
+  }
+  if (
+    capability === "handoff_managed" ||
+    capability === "handoff_late_finalize" ||
+    capability === "handoff_unsafe_checkpoint"
+  ) {
+    return runManagedHandoffScenario(args, capability);
+  }
   const thread = await createThread(args, capability);
   if (capability === "mcp_auth_failure") {
     return runMcpAuthFailure(args, thread);
@@ -977,11 +1320,7 @@ async function runCapability(
         modelProvider: provider,
         extensions: smoke.extensions,
         workspaceCache: smoke.workspaceCache,
-        recordTurnFn: (input) =>
-          recordTurn(input, {
-            apiBase: args.apiBase,
-            getToken: async () => args.idToken,
-          }),
+        turnLeaseClient: smokeLease(args),
         onEvent: (event) => {
           events.push(event);
         },
@@ -1015,6 +1354,7 @@ export function dryRunResults(args: Pick<Args, "capabilities">): SmokeResult[] {
     reason: "dry_run_matrix_only",
     threadId: `dry-run-thread-${index + 1}`,
     threadIdentifier: `DRY-${String(index + 1).padStart(3, "0")}`,
+    threadTurnId: `dry-run-turn-${index + 1}`,
   }));
 }
 
@@ -1026,7 +1366,7 @@ function printResult(result: SmokeResult, json: boolean): void {
   console.log(
     `${result.status}: ${result.capability} thread=${
       result.threadIdentifier ?? result.threadId ?? "n/a"
-    } reason=${result.reason}`,
+    } turn=${result.threadTurnId ?? "n/a"} reason=${result.reason}`,
   );
 }
 

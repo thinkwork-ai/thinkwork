@@ -19,18 +19,22 @@ describe("mobile Pi harness smoke matrix", () => {
       "skill",
       "image",
       "file",
+      "handoff_local",
       "abort",
     ]);
   });
 
-  it("adds a managed AgentCore Pi row only to the full matrix", () => {
+  it("adds managed AgentCore Pi and background handoff rows only to the full matrix", () => {
     expect(LOCAL_ALL_CAPABILITIES).not.toContain("agentcore_pi");
     expect(FULL_ALL_CAPABILITIES).toContain("agentcore_pi");
+    expect(FULL_ALL_CAPABILITIES).toContain("handoff_managed");
+    expect(FULL_ALL_CAPABILITIES).toContain("handoff_late_finalize");
+    expect(FULL_ALL_CAPABILITIES).toContain("handoff_unsafe_checkpoint");
   });
 
   it("dry-runs every requested row with replayable thread identifiers", () => {
     const results = dryRunResults({
-      capabilities: ["web_search", "skill", "agentcore_pi"],
+      capabilities: ["web_search", "skill", "agentcore_pi", "handoff_managed"],
     });
 
     expect(results).toMatchObject([
@@ -51,6 +55,13 @@ describe("mobile Pi harness smoke matrix", () => {
         status: "SKIP",
         reason: "dry_run_matrix_only",
         threadIdentifier: "DRY-003",
+      },
+      {
+        capability: "handoff_managed",
+        status: "SKIP",
+        reason: "dry_run_matrix_only",
+        threadIdentifier: "DRY-004",
+        threadTurnId: "dry-run-turn-4",
       },
     ]);
   });
