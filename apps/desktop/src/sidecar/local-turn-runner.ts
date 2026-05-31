@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { isIP } from "node:net";
 import path from "node:path";
@@ -11,12 +11,17 @@ import { Type, type TSchema } from "typebox";
 import {
   PI_APPLICATION_SDK_MIN_VERSION,
   PI_APPLICATION_SDK_PACKAGE,
+  buildWorkspaceBaseline,
+  computeWorkspaceChangedFiles,
   postFinalizeCallback,
   type DelegationProvider,
   type DesktopPiRuntimeInvocation,
+  type FinalizeChangedFile,
   type MemoryProvider,
   type PreparedDesktopPiRuntimeSession,
   type RunAgentLoopResult,
+  type WorkspaceBaseline,
+  type WorkspaceSnapshot,
 } from "@thinkwork/pi-runtime-core";
 import {
   collectExtensionToolNames,
@@ -33,7 +38,7 @@ import {
 import {
   DESKTOP_JUST_BASH_TOOL_NAMES,
   DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
-  createDesktopJustBashTool,
+  createDesktopJustBashController,
 } from "./just-bash-tool.js";
 import { createManagedDelegationClient } from "./managed-delegation-client.js";
 import { createBedrockRuntimeAdapter } from "./runtime-adapters/bedrock.js";
@@ -215,8 +220,11 @@ export async function runLocalDesktopTurn(
         modelFallbackMessage?: string;
         resolvedModelId?: string;
         cleanup?: Array<() => Promise<void>>;
+        snapshotWorkspace?: () => Promise<WorkspaceSnapshot | null>;
       }
     | undefined;
+  let workspaceBaseline: WorkspaceBaseline | undefined;
+  let snapshotWorkspace: (() => Promise<WorkspaceSnapshot | null>) | undefined;
   let unbindAbort: (() => void) | undefined;
   // Snapshot the composed prompt at turn entry so the finalize callback
   // (incl. the catch path) persists exactly what the SDK received, not the
@@ -279,6 +287,10 @@ export async function runLocalDesktopTurn(
       timings,
     );
     sdkSession = preparedSdkSession;
+    snapshotWorkspace = preparedSdkSession.snapshotWorkspace;
+    workspaceBaseline = await timings.measure("workspace_baseline_ms", () =>
+      createWorkspaceDiffBaseline(preparedWorkspace.localDir, logger),
+    );
     unbindAbort = bindAbortSignal(
       deps.signal,
       preparedSdkSession.session,
@@ -316,12 +328,21 @@ export async function runLocalDesktopTurn(
       phase: "pre_finalize",
       timings: runResult.diagnostics?.local_pi_timings_ms,
     });
+    const changedFiles = await timings.measure("workspace_diff_ms", () =>
+      collectDesktopWorkspaceChangedFiles({
+        localDir: preparedWorkspace.localDir,
+        baseline: workspaceBaseline,
+        snapshotWorkspace,
+        logger,
+      }),
+    );
 
     const finalized = await timings.measure("finalize_callback_ms", () =>
       finalizeTurn({
         prepared: payload.session,
         runResult,
         status: "ok",
+        changedFiles,
         systemPrompt: composedSystemPrompt,
         startedAt,
         deps,
@@ -346,11 +367,18 @@ export async function runLocalDesktopTurn(
       error: error instanceof Error ? error.message : String(error),
       threadTurnId: payload.session.threadTurnId,
     });
+    const changedFiles = await collectDesktopWorkspaceChangedFiles({
+      localDir: workspace?.localDir,
+      baseline: workspaceBaseline,
+      snapshotWorkspace,
+      logger,
+    });
     const finalized = await timings.measure("finalize_callback_ms", () =>
       finalizeTurn({
         prepared: payload.session,
         error,
         status: "error",
+        changedFiles,
         systemPrompt: composedSystemPrompt,
         startedAt,
         deps,
@@ -457,6 +485,106 @@ async function prepareWorkspace(
   });
 }
 
+const WORKSPACE_DIFF_SKIPPED_DIRS = new Set([
+  ".git",
+  LOCAL_PI_AGENT_DIR,
+  "debug",
+  "node_modules",
+]);
+const MAX_WORKSPACE_DIFF_FILE_BYTES = 256 * 1024;
+const HYDRATE_MANIFEST_PATH = ".hydrate_manifest.json";
+
+async function createWorkspaceDiffBaseline(
+  localDir: string,
+  logger: RedactedLogger,
+): Promise<WorkspaceBaseline> {
+  const [snapshot, hydrateManifest] = await Promise.all([
+    readLocalWorkspaceSnapshot(localDir, logger),
+    readHydrateManifest(localDir, logger),
+  ]);
+  return buildWorkspaceBaseline({ snapshot, hydrateManifest });
+}
+
+async function collectDesktopWorkspaceChangedFiles(input: {
+  localDir?: string;
+  baseline?: WorkspaceBaseline;
+  snapshotWorkspace?: () => Promise<WorkspaceSnapshot | null>;
+  logger: RedactedLogger;
+}): Promise<FinalizeChangedFile[]> {
+  if (!input.localDir || !input.baseline) return [];
+  const current =
+    (await input.snapshotWorkspace?.().catch((err: unknown) => {
+      input.logger.warn("local Pi bash workspace snapshot failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    })) ?? (await readLocalWorkspaceSnapshot(input.localDir, input.logger));
+  return computeWorkspaceChangedFiles({
+    baseline: input.baseline,
+    current,
+  });
+}
+
+async function readHydrateManifest(
+  localDir: string,
+  logger: RedactedLogger,
+): Promise<Record<string, unknown> | null> {
+  try {
+    return JSON.parse(
+      await readFile(path.join(localDir, HYDRATE_MANIFEST_PATH), "utf8"),
+    ) as Record<string, unknown>;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      logger.warn("local Pi hydrate manifest read failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return null;
+  }
+}
+
+async function readLocalWorkspaceSnapshot(
+  localDir: string,
+  logger: RedactedLogger,
+): Promise<WorkspaceSnapshot> {
+  const files: WorkspaceSnapshot = {};
+  async function visit(dir: string): Promise<void> {
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (WORKSPACE_DIFF_SKIPPED_DIRS.has(entry)) continue;
+      const absolutePath = path.join(dir, entry);
+      const info = await stat(absolutePath).catch(() => null);
+      if (!info) continue;
+      if (info.isDirectory()) {
+        await visit(absolutePath);
+        continue;
+      }
+      if (!info.isFile() || info.size > MAX_WORKSPACE_DIFF_FILE_BYTES) {
+        continue;
+      }
+      const bytes = await readFile(absolutePath).catch((err: unknown) => {
+        logger.warn("local Pi workspace diff file read failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      });
+      if (!bytes || bytes.includes(0)) continue;
+      const rel = path
+        .relative(localDir, absolutePath)
+        .split(path.sep)
+        .join("/");
+      files[rel] = new TextDecoder().decode(bytes);
+    }
+  }
+  await visit(localDir);
+  return files;
+}
+
 function resolveAwsRegion(
   invocation: PreparedDesktopPiRuntimeSession["invocation"],
   sidecarCredentials: unknown,
@@ -490,6 +618,7 @@ async function createSdkSession(
   modelFallbackMessage?: string;
   resolvedModelId?: string;
   cleanup?: Array<() => Promise<void>>;
+  snapshotWorkspace?: () => Promise<WorkspaceSnapshot | null>;
 }> {
   if (typeof sdk.createAgentSession !== "function") {
     throw new Error("Pi SDK createAgentSession export is unavailable");
@@ -554,10 +683,8 @@ async function createSdkSession(
       createPiSdkModelConfig(sdk, invocation, logger),
     );
     const hindsight = createHindsightRuntimeAdapter(prepared);
-    const desktopBashTool = defineDesktopTool(
-      sdk,
-      createDesktopJustBashTool({ workspaceDir }),
-    );
+    const desktopBash = createDesktopJustBashController({ workspaceDir });
+    const desktopBashTool = defineDesktopTool(sdk, desktopBash.tool);
     const tools = [
       ...DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
       ...DESKTOP_JUST_BASH_TOOL_NAMES,
@@ -618,6 +745,7 @@ async function createSdkSession(
       ...session,
       cleanup,
       resolvedModelId: modelConfig.resolvedModelId,
+      snapshotWorkspace: desktopBash.snapshotWorkspace,
     };
   } catch (error) {
     for (const cleanupFn of cleanup) {
@@ -2026,6 +2154,7 @@ async function finalizeTurn(args: {
   status: "ok" | "error";
   runResult?: RunAgentLoopResult;
   error?: unknown;
+  changedFiles?: FinalizeChangedFile[];
   systemPrompt?: string;
   startedAt: Date;
   deps: LocalTurnRunnerDeps;
@@ -2050,6 +2179,7 @@ async function finalizeTurn(args: {
       traceId: args.prepared.invocation.trace_id,
     },
     systemPrompt: args.systemPrompt ?? args.prepared.invocation.system_prompt,
+    changedFiles: args.changedFiles,
     result:
       args.status === "ok" && args.runResult
         ? { status: "ok", runResult: args.runResult, latencyMs }

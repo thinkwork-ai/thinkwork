@@ -25,6 +25,10 @@ import {
   startMobileTurn,
   type MobileTurnAuth,
 } from "../lib/mobile-turns/lifecycle.js";
+import {
+  validateChangedFiles,
+  type ChangedFilePayload,
+} from "../lib/chat-finalize/reconcile.js";
 
 interface MobileTurnSessionBody {
   action?: string;
@@ -43,6 +47,8 @@ interface MobileTurnSessionBody {
   reason?: string;
   toolResults?: unknown[];
   usage?: { inputTokens?: number; outputTokens?: number };
+  changedFiles?: ChangedFilePayload[];
+  changed_files?: ChangedFilePayload[];
   diagnostics?: Record<string, unknown>;
 }
 
@@ -136,7 +142,13 @@ export async function handler(
             reason: body.reason,
           }),
         );
-      case "finalize":
+      case "finalize": {
+        const changedFiles = validateChangedFiles(
+          body.changedFiles ?? body.changed_files,
+        );
+        if (!changedFiles.ok) {
+          return error("Invalid changed_files", 400);
+        }
         return json(
           await finalizeLocalMobileTurn({
             auth: turnAuth,
@@ -144,9 +156,11 @@ export async function handler(
             assistantText: body.assistantText ?? "",
             toolResults: body.toolResults,
             usage: body.usage,
+            changedFiles: changedFiles.changedFiles,
             diagnostics: body.diagnostics,
           }),
         );
+      }
       default:
         return error("Unknown mobile turn lifecycle action", 400);
     }

@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U5 live reconcile handler.
-- Active branch: `codex/workspace-arch-u5`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u5`.
+- Active unit: U6 runtime diff capture.
+- Active branch: `codex/workspace-arch-u6`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u6`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1910](https://github.com/thinkwork-ai/thinkwork/pull/1910).
-- CI/deploy: U4 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1911](https://github.com/thinkwork-ai/thinkwork/pull/1911).
+- CI/deploy: U5 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -187,6 +187,54 @@ Target branch: `main`
   changed-file Prettier check via
   `pnpm dlx prettier@3.8.2 --check <changed files>`, and `git diff --check`.
 - Opened PR [#1911](https://github.com/thinkwork-ai/thinkwork/pull/1911).
+- PR [#1911](https://github.com/thinkwork-ai/thinkwork/pull/1911) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `e682a9271b2ca1cc34222a0b0941aa8bc13c4ba2`.
+- Removed U5 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U6 worktree `codex/workspace-arch-u6`
+  from `origin/main` at `e682a927`.
+- Started U6 runtime diff-capture work.
+- Implemented shared runtime diff capture in `@thinkwork/pi-runtime-core`:
+  workspace baselines from hydrate manifests, normalized workspace snapshots,
+  create/modify/delete diff computation, and tests for path filtering,
+  `base_etag` propagation, and control-file exclusions.
+- Added desktop local runtime diff capture around Pi SDK turns. Desktop now
+  snapshots the hydrated workspace after session creation, records just-bash
+  workspace snapshots when bash runs, falls back to local filesystem snapshots
+  otherwise, and sends `changed_files` through the existing finalize callback.
+- Added AgentCore container diff capture around remote runtime turns, including
+  hydrate-manifest baseline extraction and local workspace snapshots before
+  finalize success or failure callbacks.
+- Added mobile just-bash snapshot capture and mobile turn finalization plumbing:
+  the local bash extension emits before/after snapshots, mobile thread turns
+  compute `changedFiles`, and `/api/mobile/turn-session` accepts
+  `changedFiles`/`changed_files` for local finalize payloads. The default
+  mobile finalizer now validates those payloads and routes local completion
+  through the shared `processFinalize` reconcile boundary with a mobile
+  one-winner claim.
+- U6 focused verification passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test -- workspace-diff.test.ts`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- tests/server.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/thread-turn.test.ts lib/agent/extensions/__tests__/local-bash-extension.test.ts lib/agent/compat/pi-contract.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/handlers/mobile-turn-session.test.ts src/lib/mobile-turns/lifecycle.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/handlers/mobile-turn-session.test.ts src/lib/mobile-turns/lifecycle.test.ts src/lib/chat-finalize/process-finalize.test.ts`,
+  and `pnpm --filter @thinkwork/api typecheck`.
+- U6 broad verification passed: `pnpm typecheck`, `pnpm lint`,
+  `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/pi-runtime-core test`,
+  `pnpm --filter @thinkwork/agentcore-pi test`,
+  `pnpm --filter @thinkwork/mobile test`,
+  `pnpm --filter @thinkwork/desktop test`,
+  changed-file Prettier check via
+  `pnpm dlx prettier@3.8.2 --check <changed files>`, and `git diff --check`.
+- Verification note: the first full desktop test attempt failed before running
+  assertions because parallel test installs left Electron's local app bundle in
+  an inconsistent symlink state. Re-running Electron's install script and then
+  `pnpm --filter @thinkwork/desktop test` passed all 140 desktop tests.
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 

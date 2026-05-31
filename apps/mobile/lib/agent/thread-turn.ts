@@ -10,12 +10,21 @@
 import { BedrockModelProvider } from "./providers/bedrock";
 import { createAgentSession } from "./session";
 import { buildTurnContext } from "./turn-context";
-import { localBashExtension } from "./extensions/local-bash-extension";
+import {
+  localBashExtension,
+  type BashSnapshotStorage,
+} from "./extensions/local-bash-extension";
 import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
 import { mobileNativeExtensions } from "./extensions/mobile-native";
 import { webSearchExtension } from "./extensions/web-search-extension";
 import { workspaceContextExtension } from "./extensions/workspace-context-extension";
 import { workspaceToolsExtension } from "./extensions/workspace-tools-extension";
+import {
+  buildWorkspaceBaseline,
+  computeWorkspaceChangedFiles,
+  type FinalizeChangedFile,
+  type WorkspaceSnapshot,
+} from "./workspace-diff";
 import { recordTurn, type MobileSessionTurnEvidence } from "./persist-turn";
 import {
   createClientTurnId,
@@ -95,6 +104,8 @@ export interface RunThreadHarnessTurnDeps {
   onEvent?: (event: AgentEvent) => void;
   /** Test seam for the durable rendered workspace cache. */
   workspaceCache?: WorkspaceCache;
+  /** Test seam for durable local bash snapshots. */
+  bashSnapshotStorage?: BashSnapshotStorage;
   /** Test seam for AppState/background subscription. */
   subscribeToBackground?: BackgroundSignalSubscribe;
   /** Test seam for heartbeat timing. */
@@ -298,6 +309,23 @@ export async function runThreadHarnessTurn(
           },
         }
       : undefined;
+  let bashWorkspaceBaseline:
+    | ReturnType<typeof buildWorkspaceBaseline>
+    | undefined;
+  let bashWorkspaceCurrent: WorkspaceSnapshot | undefined;
+  const captureBashWorkspaceSnapshot = (
+    phase: "baseline" | "current",
+    files: WorkspaceSnapshot,
+  ) => {
+    if (phase === "baseline" && !bashWorkspaceBaseline) {
+      bashWorkspaceBaseline = buildWorkspaceBaseline({ snapshot: files });
+      bashWorkspaceCurrent = files;
+      return;
+    }
+    if (phase === "current") {
+      bashWorkspaceCurrent = files;
+    }
+  };
   // The agent's tenant MCP tools arrive as the first Pi-style extension. Default
   // when an agentId is known; tests inject their own (or none). Built-ins/`tools`
   // are preserved — extensions are additive.
@@ -323,6 +351,8 @@ export async function runThreadHarnessTurn(
         : null,
       localBashExtension({
         sessionId: input.threadId,
+        onWorkspaceSnapshot: captureBashWorkspaceSnapshot,
+        snapshotStorage: deps.bashSnapshotStorage,
         workspace:
           workspaceTargets.length > 0
             ? {
@@ -445,6 +475,13 @@ export async function runThreadHarnessTurn(
       })),
     ],
   };
+  const changedFiles: FinalizeChangedFile[] =
+    bashWorkspaceBaseline && bashWorkspaceCurrent
+      ? computeWorkspaceChangedFiles({
+          baseline: bashWorkspaceBaseline,
+          current: bashWorkspaceCurrent,
+        })
+      : [];
 
   if (useLegacyRecord) {
     // Compatibility path for older callers/tests. The default mobile harness
@@ -467,6 +504,7 @@ export async function runThreadHarnessTurn(
         assistantText,
         toolResults: [evidence],
         usage: result.usage,
+        changedFiles,
         diagnostics: { clientTurnId },
       });
     } catch (err) {

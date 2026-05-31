@@ -231,6 +231,94 @@ describe("runLocalDesktopTurn", () => {
     expect(result.content?.[0]?.text).toBe("# Agent");
   });
 
+  it("sends just-bash workspace modifications as finalize changed_files", async () => {
+    const manifest = {
+      version: 1,
+      renderedPrefix: BASE_INVOCATION.rendered_workspace_prefix,
+      generatedAt: "2026-05-28T12:00:00.000Z",
+      sources: [{ owner: "agent", prefix: "tenants/acme/agents/marco/" }],
+      files: [
+        {
+          path: "AGENTS.md",
+          owner: "agent",
+          sourceKey: "tenants/acme/agents/marco/AGENTS.md",
+          sourcePrefix: "tenants/acme/agents/marco/",
+          sourcePath: "AGENTS.md",
+          etag: '"etag-agents"',
+          readOnly: false,
+        },
+      ],
+      statusMounts: [],
+    };
+    const store: WorkspaceObjectStore = {
+      async listObjects() {
+        return [
+          {
+            key: `${BASE_INVOCATION.rendered_workspace_prefix}AGENTS.md`,
+            eTag: '"rendered-agents"',
+          },
+          {
+            key: `${BASE_INVOCATION.rendered_workspace_prefix}.hydrate_manifest.json`,
+            eTag: '"manifest"',
+          },
+        ];
+      },
+      async getObjectBytes(input) {
+        return new TextEncoder().encode(
+          input.key.endsWith(".hydrate_manifest.json")
+            ? `${JSON.stringify(manifest)}\n`
+            : "# Agent",
+        );
+      },
+    };
+    const sdk: PiSdkModuleLike = {
+      defineTool: vi.fn((definition) => definition),
+      createAgentSession: vi.fn(async (options) => {
+        const bashTool = (
+          options?.customTools as Array<{
+            name?: string;
+            execute?: (
+              toolCallId: string,
+              params: Record<string, unknown>,
+            ) => Promise<unknown>;
+          }>
+        ).find((tool) => tool.name === "bash");
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "Done" }],
+            prompt: vi.fn(async () => {
+              await bashTool?.execute?.("call-1", {
+                command: "printf '# Agent v2' > AGENTS.md",
+              });
+            }),
+          },
+        };
+      }),
+    };
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.changed_files).toEqual([
+        {
+          path: "AGENTS.md",
+          op: "modify",
+          content: "# Agent v2",
+          base_etag: '"etag-agents"',
+        },
+      ]);
+      return Response.json({ ok: true }, { status: 200 });
+    });
+
+    await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: store,
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+  });
+
   it("fails expired sessions before invoking the Pi SDK and finalizes failure", async () => {
     const sdk: PiSdkModuleLike = {
       createAgentSession: vi.fn(),

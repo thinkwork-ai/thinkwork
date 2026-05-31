@@ -5,11 +5,12 @@
 // in the same place the mobile agent lives, while still letting the agent call public
 // internet endpoints through curl/wget when a task needs it.
 
-import { Bash } from "just-bash";
-import type { BashOptions } from "just-bash";
+import { Bash } from "just-bash/browser";
+import type { BashOptions } from "just-bash/browser";
 import { defineExtension } from "./define-extension";
 import type { ExtensionFactory } from "./types";
 import type { ToolResult } from "../types";
+import type { WorkspaceSnapshot } from "../workspace-diff";
 import {
   assertSafeRelativePath,
   type WorkspaceCache,
@@ -65,6 +66,11 @@ export interface LocalBashExtensionOptions {
   };
   /** Test seam for durable per-thread shell file snapshots. Defaults to AsyncStorage. */
   snapshotStorage?: BashSnapshotStorage;
+  /** Optional turn-level sink for computing the finalize changed_files payload. */
+  onWorkspaceSnapshot?: (
+    phase: "baseline" | "current",
+    files: WorkspaceSnapshot,
+  ) => void;
 }
 
 const sandboxes = new Map<string, Bash>();
@@ -118,18 +124,43 @@ function getBash(sessionId: string | undefined, network: boolean): Bash {
 }
 
 function createAsyncStorageAdapter(): BashSnapshotStorage {
+  let fallback: MemoryBashSnapshotStorage | null = null;
+  async function loadAsyncStorage() {
+    try {
+      const storage = await import("@react-native-async-storage/async-storage");
+      return storage.default;
+    } catch {
+      fallback ??= new MemoryBashSnapshotStorage();
+      return fallback;
+    }
+  }
   return {
     async getItem(key) {
-      const storage = await import("@react-native-async-storage/async-storage");
-      return storage.default.getItem(key);
+      const storage = await loadAsyncStorage();
+      try {
+        return await storage.getItem(key);
+      } catch {
+        fallback ??= new MemoryBashSnapshotStorage();
+        return fallback.getItem(key);
+      }
     },
     async setItem(key, value) {
-      const storage = await import("@react-native-async-storage/async-storage");
-      await storage.default.setItem(key, value);
+      const storage = await loadAsyncStorage();
+      try {
+        await storage.setItem(key, value);
+      } catch {
+        fallback ??= new MemoryBashSnapshotStorage();
+        await fallback.setItem(key, value);
+      }
     },
     async removeItem(key) {
-      const storage = await import("@react-native-async-storage/async-storage");
-      await storage.default.removeItem(key);
+      const storage = await loadAsyncStorage();
+      try {
+        await storage.removeItem?.(key);
+      } catch {
+        fallback ??= new MemoryBashSnapshotStorage();
+        await fallback.removeItem(key);
+      }
     },
   };
 }
@@ -191,8 +222,8 @@ async function snapshotWorkspace(
   bash: Bash,
   key: string,
   storage: BashSnapshotStorage,
-): Promise<void> {
-  const files: Record<string, string> = {};
+): Promise<WorkspaceSnapshot> {
+  const files: WorkspaceSnapshot = {};
   for (const path of bash.fs.getAllPaths()) {
     if (!path.startsWith("/workspace/")) continue;
     const relativePath = path.slice("/workspace/".length);
@@ -205,6 +236,7 @@ async function snapshotWorkspace(
     }
   }
   await storage.setItem(snapshotKey(key), JSON.stringify(files));
+  return files;
 }
 
 function truncate(value: string): string {
@@ -286,10 +318,21 @@ export function localBashExtension(
               ...options,
               snapshotStorage,
             });
+            const baselineFiles = await snapshotWorkspace(
+              bash,
+              key,
+              snapshotStorage,
+            );
+            options.onWorkspaceSnapshot?.("baseline", baselineFiles);
             const result = await bash.exec(command, {
               signal: controller.signal,
             });
-            await snapshotWorkspace(bash, key, snapshotStorage);
+            const currentFiles = await snapshotWorkspace(
+              bash,
+              key,
+              snapshotStorage,
+            );
+            options.onWorkspaceSnapshot?.("current", currentFiles);
             return formatResult(result);
           } catch (err) {
             const message =

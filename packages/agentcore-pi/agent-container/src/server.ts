@@ -75,6 +75,7 @@ import {
   type RunAgentLoopResult,
   type ToolCostRecord,
   type ToolInvocationRecord,
+  type WorkspaceBaseline,
 } from "@thinkwork/pi-runtime-core";
 
 import {
@@ -115,6 +116,10 @@ import {
 } from "./sessionstore-aurora.js";
 import { resolveSandboxFactory } from "./runtime/sandbox-factory.js";
 import { bootstrapWorkspace } from "./runtime/bootstrap-workspace.js";
+import {
+  collectLocalWorkspaceChangedFiles,
+  createLocalWorkspaceBaseline,
+} from "./runtime/workspace-diff.js";
 import { createS3SessionStore } from "./runtime/session-store.js";
 import {
   buildFileReadTool,
@@ -965,6 +970,7 @@ export async function handleInvocation(
   // the prior tenant's SKILL.md files and leak them into the system prompt.
   // Fail-closed: if the bucket is configured but the payload doesn't carry
   // the slugs, refuse the invocation.
+  let workspaceBaseline: WorkspaceBaseline | undefined;
   if (env.workspaceBucket) {
     if (!identity.tenantSlug || !identity.agentSlug) {
       logStructured({
@@ -1005,6 +1011,18 @@ export async function handleInvocation(
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+  if (env.workspaceBucket) {
+    workspaceBaseline = await createLocalWorkspaceBaseline({
+      workspaceDir: env.workspaceDir,
+      log: (event, fields) =>
+        logStructured({
+          level: "warn",
+          event,
+          tenantId: identity.tenantId,
+          ...fields,
+        }),
+    });
   }
 
   const workspaceSkills = await discoverSkills(env.workspaceDir);
@@ -1288,6 +1306,17 @@ export async function handleInvocation(
   // Skill-run invocations carry a runId + HMAC; chat-turn invocations don't.
   // Chat turns use the finalize callback when configured.
   const runContext = extractSkillRunContext(args.payload);
+  const changedFiles = await collectLocalWorkspaceChangedFiles({
+    workspaceDir: env.workspaceDir,
+    baseline: workspaceBaseline,
+    log: (event, fields) =>
+      logStructured({
+        level: "warn",
+        event,
+        tenantId: identity.tenantId,
+        ...fields,
+      }),
+  });
 
   if (runError !== undefined || !runResult) {
     if (isFinalizeCallbackConfigured(args.payload)) {
@@ -1295,6 +1324,7 @@ export async function handleInvocation(
         payload: args.payload,
         identity,
         systemPrompt: composedSystemPrompt,
+        changedFiles,
         result: { status: "error", error: runError, latencyMs },
         fetchImpl,
         logger: logStructured,
@@ -1370,6 +1400,7 @@ export async function handleInvocation(
       payload: args.payload,
       identity,
       systemPrompt: composedSystemPrompt,
+      changedFiles,
       result: { status: "ok", runResult, latencyMs },
       fetchImpl,
       logger: logStructured,

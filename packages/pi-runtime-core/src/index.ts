@@ -9,3 +9,4 @@ export * from "./model-provider.js";
 export * from "./tool-costs.js";
 export * from "./types.js";
 export * from "./workspace-provider.js";
+export * from "./workspace-diff.js";
