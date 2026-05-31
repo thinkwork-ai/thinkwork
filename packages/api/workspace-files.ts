@@ -107,6 +107,11 @@ import {
   isAgentIdentityField,
   replaceAgentsMdIdentityField,
 } from "./src/lib/agents-md-persona-surgery.js";
+import {
+  isProtectedOrchestrationWritePath,
+  isSpaceCapabilityWritePath,
+  isVisibleUserContextPath,
+} from "./src/lib/workspace-lanes.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -743,15 +748,6 @@ async function handleCatalogList(
   });
 }
 
-function isVisibleUserContextPath(path: string): boolean {
-  const clean = path.replace(/^\/+/, "");
-  if (clean === "USER.md") return true;
-  if (!clean.startsWith("memory/")) return false;
-  if (clean.startsWith("memory/.") || clean.includes("/.")) return false;
-  if (clean.startsWith("memory/reports/")) return false;
-  return true;
-}
-
 function catalogPathSlug(path: string): string {
   return path.replace(/^\/+/, "").split("/")[0] ?? "";
 }
@@ -837,25 +833,6 @@ function isGovernanceFilePath(cleanPath: string): boolean {
   // governance-tier — they change agent capability.
   if (isSkillMarkerPath(cleanPath)) return true;
   return false;
-}
-
-function isProtectedOrchestrationWritePath(path: string): boolean {
-  return (
-    path.startsWith("work/inbox/") ||
-    path.startsWith("review/") ||
-    /^work\/runs\/[^/]+\/events\//.test(path) ||
-    path.startsWith("events/intents/") ||
-    path.startsWith("events/audit/")
-  );
-}
-
-function isSpaceCapabilityWritePath(path: string): boolean {
-  return (
-    path === "skills" ||
-    path.startsWith("skills/") ||
-    path === "TOOLS.md" ||
-    path === "MCP.md"
-  );
 }
 
 function rejectSpaceCapabilityWrite(

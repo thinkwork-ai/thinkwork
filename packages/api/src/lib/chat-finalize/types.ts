@@ -6,7 +6,7 @@
  * consumed today (when it was waiting synchronously). The fields are the
  * superset of every value the post-AgentCore code path reads.
  */
-import type { ChangedFilePayload } from "./reconcile.js";
+import type { ChangedFilePayload, ReconcileReport } from "./reconcile.js";
 
 export interface FinalizePayload {
   /** Idempotency key — `thread_turns.id` that chat-agent-invoke inserted before dispatching. */
@@ -109,6 +109,11 @@ export interface GuardrailBlockPayload {
 
 /** Response shape that the finalize HTTP endpoint returns. */
 export type FinalizeResponse =
-  | { ok: true; idempotent: false; messageId: string | null }
+  | {
+      ok: true;
+      idempotent: false;
+      messageId: string | null;
+      reconcile?: ReconcileReport;
+    }
   | { ok: true; idempotent: true }
   | { ok: false; error: string; code: string };
