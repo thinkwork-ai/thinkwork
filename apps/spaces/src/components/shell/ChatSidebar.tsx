@@ -40,6 +40,7 @@ import {
   Shield,
   SlidersHorizontal,
   Sun,
+  Table2,
   Trash2,
   User,
 } from "lucide-react";
@@ -80,6 +81,7 @@ import {
   PinThreadMutation,
   PinnedThreadsQuery,
   ReorderPinnedThreadsMutation,
+  SpaceThreadsQuery,
   SpacesQuery,
   ThreadsPagedQuery,
   ThreadUpdatedSubscription,
@@ -98,6 +100,7 @@ import {
 } from "@/lib/pending-thread-deletes";
 import { cn } from "@/lib/utils";
 import {
+  displayedUnreadThreads,
   filterUnreadThreads,
   formatCompactCount,
   formatTinyRelativeDate,
@@ -139,6 +142,10 @@ const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
 const PINNED_LIMIT = 100;
 const SECTION_THREAD_LIMIT = 5;
+// Each space section fetches its OWN recent window (matching the space detail
+// page) instead of bucketing the tenant-wide RECENT_LIMIT list, which starved
+// busy-tenant spaces. 40 mirrors the detail page's limit.
+const SPACE_SECTION_FETCH_LIMIT = 40;
 
 export function ChatSidebar() {
   const { tenantId, userId } = useTenant();
@@ -217,6 +224,12 @@ export function ChatSidebar() {
   const spaces = spacesData?.spaces ?? [];
   const defaultSpaceIds = useMemo(
     () => new Set(spaces.filter(isDefaultSpace).map((space) => space.id)),
+    [spaces],
+  );
+  // The generic "Chats" section lists default-space threads, so its Thread list
+  // scopes to that space rather than every thread in the tenant.
+  const defaultSpaceId = useMemo(
+    () => spaces.find(isDefaultSpace)?.id,
     [spaces],
   );
 
@@ -799,6 +812,8 @@ export function ChatSidebar() {
                 selectedThreadId={selectedThreadId}
                 defaultOpen
                 locallyReadThreadIds={locallyReadThreadIds}
+                scopeSpaceId={defaultSpaceId}
+                scopeSpaceName="Chats"
                 onActivate={activateThread}
                 onPin={pinThread}
                 onMarkSectionRead={markSectionThreadsRead}
@@ -821,7 +836,10 @@ export function ChatSidebar() {
                     <SpaceThreadSection
                       key={space.id}
                       space={space}
-                      threads={spaceThreadsById.get(space.id) ?? []}
+                      seedThreads={spaceThreadsById.get(space.id) ?? []}
+                      tenantId={tenantId}
+                      pinnedThreadIdSet={pinnedThreadIdSet}
+                      pendingThreadDeletes={pendingThreadDeletes}
                       selectedThreadId={selectedThreadId}
                       activeSpaceId={routeSpaceId}
                       locallyReadThreadIds={locallyReadThreadIds}
@@ -1031,15 +1049,23 @@ function SectionHeaderControls({
   label,
   unreadThreadIds,
   filterOn,
+  scopeSpaceId,
+  scopeSpaceName,
   onMarkSectionRead,
 }: {
   sectionId: string;
   label: string;
   unreadThreadIds: string[];
   filterOn: boolean;
+  // The space the section's "Thread list" opens scoped to. For a Space section
+  // it's that space; for the generic "Chats" section it's the default space, so
+  // the table matches what the section actually lists (not every thread).
+  scopeSpaceId?: string;
+  scopeSpaceName?: string;
   onMarkSectionRead?: (threadIds: string[]) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
   return (
     // Filter indicator and "…" menu share one slot: the filter icon shows when
     // the section is filtered and idle; on hover, touch, or while the menu is
@@ -1085,6 +1111,20 @@ function SectionHeaderControls({
             <CheckCheck className="size-4" />
             Mark all as read
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() =>
+              navigate({
+                to: "/threads",
+                search: {
+                  spaceId: scopeSpaceId,
+                  spaceName: scopeSpaceId ? scopeSpaceName : undefined,
+                },
+              })
+            }
+          >
+            <Table2 className="size-4" />
+            Thread list
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -1098,6 +1138,8 @@ function ThreadListSection({
   selectedThreadId,
   defaultOpen = true,
   locallyReadThreadIds,
+  scopeSpaceId,
+  scopeSpaceName,
   onActivate,
   onPin,
   onMarkSectionRead,
@@ -1108,6 +1150,8 @@ function ThreadListSection({
   selectedThreadId?: string;
   defaultOpen?: boolean;
   locallyReadThreadIds: ReadonlySet<string>;
+  scopeSpaceId?: string;
+  scopeSpaceName?: string;
   onActivate: (threadId: string) => void;
   onPin?: (threadId: string) => void;
   onMarkSectionRead?: (threadIds: string[]) => void;
@@ -1124,7 +1168,11 @@ function ThreadListSection({
   // source so the badge reaches zero after a mark-all (KTD-2).
   const unreadThreads = filterUnreadThreads(threads, locallyReadThreadIds);
   const unreadThreadIds = unreadThreads.map((thread) => thread.id);
-  const displayedThreads = filterOn ? unreadThreads : threads;
+  // The displayed list additionally retains the selected thread so opening one
+  // while filtered doesn't make it vanish (it stays until selection moves).
+  const displayedThreads = filterOn
+    ? displayedUnreadThreads(threads, locallyReadThreadIds, selectedThreadId)
+    : threads;
   const visibleThreads = displayedThreads.slice(0, visibleCount);
   const hiddenCount = displayedThreads.length - visibleThreads.length;
 
@@ -1148,6 +1196,8 @@ function ThreadListSection({
           label={label}
           unreadThreadIds={unreadThreadIds}
           filterOn={filterOn}
+          scopeSpaceId={scopeSpaceId}
+          scopeSpaceName={scopeSpaceName}
           onMarkSectionRead={onMarkSectionRead}
         />
       </div>
@@ -1375,7 +1425,10 @@ function SpaceJumpMenu({
 
 function SpaceThreadSection({
   space,
-  threads,
+  seedThreads,
+  tenantId,
+  pinnedThreadIdSet,
+  pendingThreadDeletes,
   selectedThreadId,
   activeSpaceId,
   locallyReadThreadIds,
@@ -1384,7 +1437,10 @@ function SpaceThreadSection({
   onMarkSectionRead,
 }: {
   space: SpaceNavSummary;
-  threads: ChatThreadSummary[];
+  seedThreads: ChatThreadSummary[];
+  tenantId?: string | null;
+  pinnedThreadIdSet: ReadonlySet<string>;
+  pendingThreadDeletes: ReadonlySet<string>;
   selectedThreadId?: string;
   activeSpaceId?: string;
   locallyReadThreadIds: ReadonlySet<string>;
@@ -1396,6 +1452,44 @@ function SpaceThreadSection({
   const isActiveSpace = activeSpaceId === space.id;
   const sectionId = `space:${space.id}`;
   const filterOn = useSectionUnreadFilter(sectionId);
+
+  // Fetch THIS space's own recent threads (mirrors the space detail page's
+  // scoped query) rather than bucketing the tenant-wide RECENT_LIMIT window —
+  // busy tenants pushed a space's threads out of that shared window, so the
+  // section showed far fewer threads than the detail page listed. The bucketed
+  // `seedThreads` still seed the list so a brand-new/optimistic thread appears
+  // before this query refetches.
+  const [{ data: scopedData }] = useQuery<ThreadsPagedResult>({
+    query: SpaceThreadsQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      spaceId: space.id,
+      limit: SPACE_SECTION_FETCH_LIMIT,
+      offset: 0,
+    },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
+  const threads = useMemo(() => {
+    const byId = new Map<string, ChatThreadSummary>();
+    for (const thread of scopedData?.threadsPaged?.items ?? []) {
+      byId.set(thread.id, thread);
+    }
+    for (const thread of seedThreads) {
+      if (!byId.has(thread.id)) byId.set(thread.id, thread);
+    }
+    const merged = [...byId.values()].filter(
+      (thread) =>
+        !pinnedThreadIdSet.has(thread.id) &&
+        !pendingThreadDeletes.has(thread.id),
+    );
+    return sortThreadsByActivityDesc(merged);
+  }, [
+    scopedData?.threadsPaged?.items,
+    seedThreads,
+    pinnedThreadIdSet,
+    pendingThreadDeletes,
+  ]);
   const [visibleCount, setVisibleCount] = useState(SECTION_THREAD_LIMIT);
   // Reset pagination when the filter mode flips (see ThreadListSection).
   useEffect(() => {
@@ -1415,7 +1509,11 @@ function SpaceThreadSection({
     0,
     (space.unreadThreadCount ?? 0) - optimisticallyRead,
   );
-  const displayedThreads = filterOn ? unreadThreads : threads;
+  // Retain the selected thread while filtered so opening one doesn't drop it
+  // from the section the same frame it's marked read (see displayedUnreadThreads).
+  const displayedThreads = filterOn
+    ? displayedUnreadThreads(threads, locallyReadThreadIds, selectedThreadId)
+    : threads;
   const visibleThreads = displayedThreads.slice(0, visibleCount);
   const hiddenCount = displayedThreads.length - visibleThreads.length;
 
@@ -1445,6 +1543,8 @@ function SpaceThreadSection({
           label={label}
           unreadThreadIds={unreadThreadIds}
           filterOn={filterOn}
+          scopeSpaceId={space.id}
+          scopeSpaceName={label}
           onMarkSectionRead={onMarkSectionRead}
         />
       </div>

@@ -2609,6 +2609,64 @@ describe("TaskThreadView", () => {
     ).toHaveLength(1);
   });
 
+  it("keeps a prior turn's synthetic response visible when a follow-up turn is in flight", () => {
+    // Regression: when the prior turn's response only lives in resultJson (the
+    // assistant message has NOT been persisted yet) and the user sends a
+    // follow-up, the old tail-append fallback dropped that response the instant
+    // a newer user message appeared — the transcript flashed the prior answer
+    // out and showed only "Working…". The per-turn reconstruction must keep the
+    // prior response anchored to u1 while u2's turn runs.
+    const priorResponse = "The farmer's market is on Springdale Road.";
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-followup-flash",
+          title: "Follow-up flash",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "u1",
+              role: "USER",
+              content: "Where is the farmer's market?",
+              createdAt: "2026-05-31T10:00:00Z",
+            },
+            // No durable assistant for u1 yet — only the turn resultJson has it.
+            {
+              id: "u2",
+              role: "USER",
+              content: "What time does it open?",
+              createdAt: "2026-05-31T10:01:00Z",
+            },
+          ],
+          turns: [
+            // Newest first (resolver emits DESC). u2's turn is still running.
+            {
+              id: "turn-2",
+              status: "running",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-31T10:01:01Z",
+            },
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-31T10:00:00Z",
+              finishedAt: "2026-05-31T10:00:30Z",
+              resultJson: { response: priorResponse },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // Prior response stays visible (synthesized once, anchored to u1)...
+    expect(screen.getAllByText(priorResponse, { exact: false })).toHaveLength(
+      1,
+    );
+    // ...and the in-flight follow-up turn still surfaces its Working row.
+    expect(screen.getByText("Working…")).toBeTruthy();
+  });
+
   it("renders live tool_invocation_started events with toolActionTitle formatting", () => {
     // U4 regression guard: the Strands runtime emits tool_invocation_started
     // events as tools begin (instead of waiting for end-of-turn). The UI

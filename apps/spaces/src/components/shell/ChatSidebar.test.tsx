@@ -72,6 +72,7 @@ const {
     PinThreadMutation: Symbol("PinThreadMutation"),
     PinnedThreadsQuery: Symbol("PinnedThreadsQuery"),
     ReorderPinnedThreadsMutation: Symbol("ReorderPinnedThreadsMutation"),
+    SpaceThreadsQuery: Symbol("SpaceThreadsQuery"),
     SpacesQuery: Symbol("SpacesQuery"),
     ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),
     ThreadUpdatedSubscription: Symbol("ThreadUpdatedSubscription"),
@@ -235,6 +236,22 @@ vi.mock("urql", () => ({
           },
         },
         isSearchQuery ? searchReexecuteMock : recentReexecuteMock,
+      ];
+    }
+    if (query === queryDocs.SpaceThreadsQuery) {
+      // Each space section now fetches its own scoped threads. Mirror the old
+      // client-side bucketing so existing assertions about which threads land
+      // in a space section stay valid: return the recent items for this space.
+      const spaceId = variables?.spaceId;
+      const items = recentThreadItemsMock.filter(
+        (thread) => thread.spaceId === spaceId,
+      );
+      return [
+        {
+          fetching: false,
+          data: { threadsPaged: { totalCount: items.length, items } },
+        },
+        vi.fn(),
       ];
     }
     if (query === queryDocs.PinnedThreadsQuery) {

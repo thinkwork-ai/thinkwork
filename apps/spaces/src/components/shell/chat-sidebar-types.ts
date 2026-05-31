@@ -93,6 +93,27 @@ export function filterUnreadThreads(
   );
 }
 
+/**
+ * The threads to DISPLAY in a section when its unread filter is on: the unread
+ * set, plus the currently-selected thread retained in place even after clicking
+ * it marks it locally-read. Without this the active thread vanishes from the
+ * list the same frame it's opened — jarring while you're reading it. It drops
+ * out naturally once selection moves elsewhere. The badge and "mark all as
+ * read" target still use the pure {@link filterUnreadThreads} set, so retaining
+ * the selected thread here never inflates the unread count.
+ */
+export function displayedUnreadThreads(
+  threads: ChatThreadSummary[],
+  locallyReadThreadIds: ReadonlySet<string>,
+  selectedThreadId: string | undefined,
+): ChatThreadSummary[] {
+  return threads.filter(
+    (thread) =>
+      thread.id === selectedThreadId ||
+      (isThreadUnread(thread) && !locallyReadThreadIds.has(thread.id)),
+  );
+}
+
 function activityTime(thread: ChatThreadSummary): number {
   const activity = threadActivityAt(thread);
   if (!activity) return 0;
