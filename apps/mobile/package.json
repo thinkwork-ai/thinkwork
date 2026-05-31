@@ -15,7 +15,8 @@
     "test": "vitest run --config vitest.config.ts",
     "smoke:pi-harness": "tsx scripts/pi-harness-smoke.ts",
     "smoke:pi-harness:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities all --json",
-    "smoke:pi-harness:full:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities full --json"
+    "smoke:pi-harness:full:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities full --json",
+    "smoke:pi-harness:handoff:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities handoff_local,handoff_managed,handoff_late_finalize,handoff_unsafe_checkpoint --json"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

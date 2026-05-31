@@ -818,6 +818,7 @@ export function defaultMobileTurnLifecycleDeps(): MobileTurnLifecycleDeps {
               eq(threadTurns.invocation_source, MOBILE_PI_INVOCATION_SOURCE),
               eq(threadTurns.status, "running"),
               isNull(threadTurns.finalized_at),
+              sql`COALESCE(${threadTurns.context_snapshot} #>> '{mobile_turn,ownership}', 'mobile') = 'mobile'`,
             ),
           )
           .returning({

@@ -56,6 +56,7 @@ import {
 } from "@/components/threads/ThreadFilterBar";
 import { ThreadRow } from "@/components/threads/ThreadRow";
 import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
+import { createClientTurnId } from "@/lib/agent/turn-lease";
 import { prewarmWorkspaceCache } from "@/lib/agent/workspace-cache";
 import {
   clearPendingThreadStart,
@@ -151,6 +152,17 @@ function resolveApiUrl(): string {
 
 function hasDefaultAgentMentionAlias(content: string) {
   return /(?:^|\s)@(agent|think)\b/iu.test(content);
+}
+
+function imageAttachmentRefs(image: ImagePart | null) {
+  if (!image) return [];
+  return [
+    {
+      name: `image-1.${image.format}`,
+      mimeType: `image/${image.format}`,
+      sizeBytes: Math.ceil((image.data.length * 3) / 4),
+    },
+  ];
 }
 
 type HomeComputer = {
@@ -868,9 +880,14 @@ export default function ThreadsScreen() {
       try {
         const threadTitle =
           (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image";
+        const clientTurnId = effectiveNewThreadAgentEnabled
+          ? createClientTurnId()
+          : null;
 
-        // Create the thread WITHOUT firstMessage so the cloud agent is NOT triggered —
-        // the on-device Pi-inspired harness handles the first message instead.
+        // Agent-enabled mobile starts seed a durable mobile turn as part of
+        // createThread itself. That makes the thread, visible user message,
+        // checkpoint 0, and handoff-capable running turn survive even if iOS
+        // backgrounds the app before the detail screen/local harness mounts.
         const newThread = await createThread({
           tenantId,
           agentId: selectedComputer.id,
@@ -882,6 +899,23 @@ export default function ThreadsScreen() {
           createdByType: "user",
           createdById: currentUser?.id || user?.sub,
           ...(metadata ? ({ metadata } as any) : {}),
+          ...(clientTurnId
+            ? ({
+                mobileTurnClientId: clientTurnId,
+                mobileTurnUserText: messageContent || "Image",
+                mobileTurnAttachments: JSON.stringify(
+                  imageAttachmentRefs(image),
+                ),
+                mobileTurnMetadata: JSON.stringify({
+                  agent_name: selectedComputer?.name ?? null,
+                  user_id: currentUser?.id ?? null,
+                  user_name: currentUser?.name ?? null,
+                  user_email: currentUser?.email ?? null,
+                  tenant_id: currentUser?.tenantId ?? tenantId,
+                  space_id: effectiveSpaceId ?? null,
+                }),
+              } as any)
+            : {}),
         } as any);
 
         console.log("[Threads] Thread created:", newThread.id);
@@ -893,6 +927,7 @@ export default function ThreadsScreen() {
           persistedContent: messageContent,
           expectAssistantResponse: effectiveNewThreadAgentEnabled,
           userId: currentUser?.id || user?.sub,
+          clientTurnId,
           createdAt: new Date().toISOString(),
         });
         setTimeout(() => {
@@ -938,6 +973,7 @@ export default function ThreadsScreen() {
               // Selects which tenant MCP tools the on-device agent can call
               // (mcp-tools extension + proxy).
               agentId: selectedComputer.id,
+              clientTurnId: clientTurnId ?? undefined,
               // Attached image is model-vision input on the first turn.
               images: image ? [image] : undefined,
             });

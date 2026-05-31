@@ -151,6 +151,14 @@ input CreateThreadInput {
   # creates the thread and the first message in a single transaction so
   # hosts can avoid the two-round-trip "create then send" footgun.
   firstMessage: String
+  # Optional mobile Pi lease seed. Mobile uses this instead of firstMessage for
+  # agent-enabled new threads so thread creation, user message, checkpoint 0,
+  # and the durable running turn are one server-side operation before local
+  # model/tool work begins.
+  mobileTurnClientId: String
+  mobileTurnUserText: String
+  mobileTurnAttachments: AWSJSON
+  mobileTurnMetadata: AWSJSON
 }
 
 input UpdateThreadInput {

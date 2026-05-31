@@ -5,6 +5,7 @@ export interface PendingThreadStart {
   persistedContent?: string;
   expectAssistantResponse: boolean;
   userId?: string | null;
+  clientTurnId?: string | null;
   createdAt: string;
 }
 

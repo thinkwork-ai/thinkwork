@@ -932,6 +932,10 @@ export type CreateThreadInput = {
   firstMessage?: InputMaybe<Scalars['String']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  mobileTurnAttachments?: InputMaybe<Scalars['AWSJSON']['input']>;
+  mobileTurnClientId?: InputMaybe<Scalars['String']['input']>;
+  mobileTurnMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  mobileTurnUserText?: InputMaybe<Scalars['String']['input']>;
   spaceId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
   title: Scalars['String']['input'];

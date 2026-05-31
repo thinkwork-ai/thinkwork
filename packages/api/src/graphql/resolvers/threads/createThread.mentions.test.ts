@@ -34,4 +34,11 @@ describe("createThread opening message mention routing", () => {
     expect(source).toContain("const threadAgentId =");
     expect(source).toContain("agent_id: threadAgentId ?? undefined");
   });
+
+  it("can atomically seed a mobile Pi turn for opening mobile messages", () => {
+    expect(source).toContain("mobileTurnClientId");
+    expect(source).toContain("MOBILE_PI_INVOCATION_SOURCE");
+    expect(source).toContain("checkpoint_0");
+    expect(source).toContain("notifyThreadTurnUpdate");
+  });
 });
