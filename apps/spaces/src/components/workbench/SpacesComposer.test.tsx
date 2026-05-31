@@ -181,7 +181,7 @@ describe("SpacesComposer", () => {
     expect(startButton.parentElement?.contains(voiceInput)).toBe(true);
   });
 
-  it("shows the cloud runtime state next to the agent toggle", () => {
+  it("does not render a runtime (cloud) toggle — runtime is host-derived", () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
@@ -197,48 +197,10 @@ describe("SpacesComposer", () => {
     render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
 
     expect(
-      screen.getByLabelText(
+      screen.queryByLabelText(
         "Run this turn on local Pi (click for managed cloud)",
       ),
-    ).toBeTruthy();
-  });
-
-  it("lets the cloud toggle force managed AgentCore for the next start", async () => {
-    vi.stubGlobal("__DESKTOP_BUILD__", true);
-    Object.defineProperty(window, "thinkworkBridge", {
-      configurable: true,
-      value: {
-        pi: {
-          status: "healthy",
-          getStatus: vi.fn(async () => ({ status: "healthy" })),
-          onStatusChanged: vi.fn(() => () => {}),
-        },
-      },
-    });
-    const onSubmit = vi.fn();
-    render(
-      <SpacesComposer
-        value="Start in cloud"
-        onChange={() => {}}
-        onSubmit={onSubmit}
-      />,
-    );
-
-    const cloudToggle = await screen.findByRole("button", {
-      name: "Run this turn on local Pi (click for managed cloud)",
-    });
-    fireEvent.click(cloudToggle);
-    expect(
-      screen.getByRole("button", {
-        name: "Run this turn on managed cloud (click for local Pi)",
-      }),
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: /start/i }));
-
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith([], [], true, "managed");
-    });
+    ).toBeNull();
   });
 
   it("submits a non-empty prompt", async () => {
@@ -259,7 +221,7 @@ describe("SpacesComposer", () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
-    expect(onSubmit).toHaveBeenCalledWith([], [], true, "local");
+    expect(onSubmit).toHaveBeenCalledWith([], [], true);
   });
 
   it("passes agent opt-out through submit", async () => {
@@ -276,7 +238,7 @@ describe("SpacesComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
 
     await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith([], [], false, "local");
+      expect(onSubmit).toHaveBeenCalledWith([], [], false);
     });
   });
 

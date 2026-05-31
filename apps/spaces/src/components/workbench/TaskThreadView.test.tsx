@@ -485,7 +485,6 @@ describe("TaskThreadView", () => {
         [],
         [],
         true,
-        "local",
       ),
     );
   });
@@ -3011,13 +3010,7 @@ describe("TaskThreadView", () => {
       // (empty when no attachments) alongside the text. The route
       // uploads files before sendMessage and embeds attachmentId refs
       // in metadata.attachments.
-      expect(onSendFollowUp).toHaveBeenCalledWith(
-        "Add detail",
-        [],
-        [],
-        true,
-        "local",
-      );
+      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", [], [], true);
     });
   });
 
@@ -3051,7 +3044,6 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
-        "local",
       );
     });
     expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
@@ -3067,7 +3059,6 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
-        "local",
       );
     });
   });
@@ -3123,11 +3114,6 @@ describe("TaskThreadView", () => {
 
     const agentToggle = screen.getByRole("button", { name: "Send to agent" });
     const agentIcon = agentToggle.querySelector("svg");
-    expect(
-      screen.getByLabelText(
-        "Run this turn on local Pi (click for managed cloud)",
-      ),
-    ).toBeTruthy();
     expect(agentToggle.className).toContain("size-8");
     expect(agentToggle.className).toContain("text-[#54a9ff]");
     expect(agentIcon?.getAttribute("class")).toContain("size-5");
@@ -3139,12 +3125,9 @@ describe("TaskThreadView", () => {
     expect(agentToggle.className).toContain("size-8");
     expect(agentToggle.className).toContain("text-white/60");
     expect(agentToggle.className).not.toContain("bg-white/15");
-    expect(
-      screen.getByLabelText("Agent is off; cloud runtime disabled"),
-    ).toBeTruthy();
   });
 
-  it("lets the cloud toggle force the follow-up onto managed AgentCore", async () => {
+  it("does not render a runtime (cloud) toggle in the follow-up composer", () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
@@ -3156,7 +3139,6 @@ describe("TaskThreadView", () => {
         },
       },
     });
-    const onSendFollowUp = vi.fn();
     render(
       <TaskThreadView
         thread={{
@@ -3165,34 +3147,15 @@ describe("TaskThreadView", () => {
           lifecycleStatus: "IDLE",
           messages: [{ id: "message-1", role: "USER", content: "Start" }],
         }}
-        onSendFollowUp={onSendFollowUp}
+        onSendFollowUp={vi.fn()}
       />,
     );
 
-    const cloudToggle = await screen.findByRole("button", {
-      name: "Run this turn on local Pi (click for managed cloud)",
-    });
-    fireEvent.click(cloudToggle);
     expect(
-      screen.getByRole("button", {
-        name: "Run this turn on managed cloud (click for local Pi)",
+      screen.queryByRole("button", {
+        name: "Run this turn on local Pi (click for managed cloud)",
       }),
-    ).toBeTruthy();
-
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "Use cloud for this" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
-
-    await waitFor(() => {
-      expect(onSendFollowUp).toHaveBeenCalledWith(
-        "Use cloud for this",
-        [],
-        [],
-        true,
-        "managed",
-      );
-    });
+    ).toBeNull();
   });
 
   it("folds local Pi diagnostic events into the turn activity with a gated console log", async () => {
@@ -3359,7 +3322,6 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
-        "local",
       );
     });
   });
@@ -3432,7 +3394,6 @@ describe("TaskThreadView", () => {
           },
         ],
         false,
-        "local",
       );
     });
   });
@@ -3568,7 +3529,6 @@ describe("TaskThreadView", () => {
           },
         ],
         true,
-        "local",
       );
     });
   });

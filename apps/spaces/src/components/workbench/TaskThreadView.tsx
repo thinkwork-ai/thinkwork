@@ -109,10 +109,6 @@ import {
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
 import {
-  AgentRuntimeIndicator,
-  type AgentRuntimePreference,
-} from "@/components/workbench/AgentRuntimeIndicator";
-import {
   useDesktopLocalPiConsole,
   type DesktopLocalPiConsoleEntry,
 } from "@/lib/use-desktop-local-pi-console";
@@ -197,7 +193,6 @@ interface TaskThreadViewProps {
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
-    runtimePreference?: AgentRuntimePreference,
   ) => Promise<void> | void;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
@@ -2192,7 +2187,6 @@ function FollowUpComposer({
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
-    runtimePreference?: AgentRuntimePreference,
   ) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
@@ -2219,8 +2213,6 @@ function FollowUpComposer({
   // false, the toggle tracks the derived default; once true, the manual choice
   // persists until the thread changes (which clears it).
   const agentOverriddenRef = useRef(false);
-  const [runtimePreference, setRuntimePreference] =
-    useState<AgentRuntimePreference>("local");
   const prefillText = prefill?.text;
   const prefillToken = prefill?.token;
   const mentionQuery = useMemo(
@@ -2341,13 +2333,7 @@ function FollowUpComposer({
       const submittedMentions = mentions.filter((mention) =>
         content.includes(mention.rawText),
       );
-      await onSubmit(
-        content,
-        files,
-        submittedMentions,
-        effectiveAgentEnabled,
-        runtimePreference,
-      );
+      await onSubmit(content, files, submittedMentions, effectiveAgentEnabled);
       composer.clear();
       setMentions([]);
     } catch (err) {
@@ -2494,13 +2480,6 @@ function FollowUpComposer({
               >
                 <Bot className="size-5" />
               </button>
-              <AgentRuntimeIndicator
-                agentEnabled={effectiveAgentEnabled}
-                disabled={disabled || isSending}
-                preference={runtimePreference}
-                onPreferenceChange={setRuntimePreference}
-                tone="dark"
-              />
               <PromptInputAttachButton />
             </PromptInputTools>
             <div className="flex items-center gap-1">

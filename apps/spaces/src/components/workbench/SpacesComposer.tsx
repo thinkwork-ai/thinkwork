@@ -35,10 +35,6 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
-import {
-  AgentRuntimeIndicator,
-  type AgentRuntimePreference,
-} from "@/components/workbench/AgentRuntimeIndicator";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { cn } from "@/lib/utils";
 import { deriveAgentDefault } from "@/lib/agent-mode";
@@ -67,7 +63,6 @@ interface SpacesComposerProps {
     files: File[],
     mentions: SpacesComposerMention[],
     agentRequested: boolean,
-    runtimePreference: AgentRuntimePreference,
   ) => void;
   mentionTargets?: MentionTarget[];
   spaces?: SpacesComposerSpaceOption[];
@@ -145,8 +140,6 @@ export function SpacesComposer({
   // Once the user manually toggles, their choice persists until the draft is
   // cleared; until then the toggle tracks the derived default.
   const agentOverriddenRef = useRef(false);
-  const [runtimePreference, setRuntimePreference] =
-    useState<AgentRuntimePreference>("local");
   const agentForcedOn = hasDefaultAgentMentionAlias(value);
   const effectiveAgentEnabled = agentForcedOn || agentEnabled;
 
@@ -207,12 +200,7 @@ export function SpacesComposer({
     const submittedMentions = mentions.filter((mention) =>
       value.includes(mention.rawText),
     );
-    onSubmit(
-      files,
-      submittedMentions,
-      effectiveAgentEnabled,
-      runtimePreference,
-    );
+    onSubmit(files, submittedMentions, effectiveAgentEnabled);
     setMentions([]);
     // Fresh draft after send: drop the manual override so the next new thread
     // starts from the derived default again.
@@ -338,12 +326,6 @@ export function SpacesComposer({
               >
                 <Bot className="size-5" />
               </button>
-              <AgentRuntimeIndicator
-                agentEnabled={effectiveAgentEnabled}
-                disabled={isComposerDisabled}
-                preference={runtimePreference}
-                onPreferenceChange={setRuntimePreference}
-              />
               <PromptInputAttachButton />
               {spaces.length > 0 && selectedSpaceId && onSelectedSpaceChange ? (
                 <Select
