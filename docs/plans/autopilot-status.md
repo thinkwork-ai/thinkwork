@@ -22,7 +22,7 @@ Target branch: `main`
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u1`.
 - Started: 2026-05-31 from `origin/main` at `a6fc3b66`.
 - Active PR: [#1896](https://github.com/thinkwork-ai/thinkwork/pull/1896).
-- CI: pending.
+- CI: rerunning after dev migration drift fix.
 
 ### Active Unit Notes
 
@@ -54,6 +54,11 @@ scripts/build-lambdas.sh`, `terraform fmt -check
 terraform/modules/app/lambda-api/handlers.tf`, touched-file Prettier check,
   and `git diff --check`.
 - Opened PR [#1896](https://github.com/thinkwork-ai/thinkwork/pull/1896).
+- CI failure: `Migration Drift Precheck (dev)` reported
+  `public.uq_thread_turns_mobile_client_turn -> MISSING` for
+  `0139_mobile_turn_client_id.sql`.
+- Applied the scoped dev migration with `psql` and verified with
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0139_mobile_turn_client_id.sql`.
 
 ### Blockers
 
