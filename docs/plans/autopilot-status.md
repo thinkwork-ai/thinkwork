@@ -15,14 +15,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active; implementation unit U1 is in progress.
-- Active unit: U1 API Turn Lease Lifecycle.
-- Active branch: `codex/mobile-pi-handoff-u1`.
+- Status: active; implementation unit U2 is in progress.
+- Active unit: U2 Mobile Harness Lease Integration.
+- Active branch: `codex/mobile-pi-handoff-u2`.
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u1`.
-- Started: 2026-05-31 from `origin/main` at `a6fc3b66`.
-- Active PR: [#1896](https://github.com/thinkwork-ai/thinkwork/pull/1896).
-- CI: rerunning after dev migration drift fix.
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u2`.
+- Started: 2026-05-31 from `origin/main` at `7e0103c5`.
+- Active PR: pending.
+- CI: not yet pushed.
 
 ### Active Unit Notes
 
@@ -59,6 +59,45 @@ terraform/modules/app/lambda-api/handlers.tf`, touched-file Prettier check,
   `0139_mobile_turn_client_id.sql`.
 - Applied the scoped dev migration with `psql` and verified with
   `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0139_mobile_turn_client_id.sql`.
+- PR [#1896](https://github.com/thinkwork-ai/thinkwork/pull/1896) passed
+  `cla`, `lint`, `test`, `typecheck`, `verify`, and the migration drift
+  precheck, then squash-merged into `main`. Merge commit:
+  `978bfe7c9eb3b0c50fa10293d7f0b085d46c1252`.
+- Follow-up PR [#1898](https://github.com/thinkwork-ai/thinkwork/pull/1898)
+  made the mobile native splash background pure black, was visually verified in
+  iOS Simulator, passed required CI, and squash-merged into `main`. Merge
+  commit: `7e0103c540306c2dc567a50627a627489616b8a8`.
+- Synced `main` and created isolated U2 worktree
+  `codex/mobile-pi-handoff-u2` from `origin/main` at `7e0103c5`.
+- Started U2 mobile harness lease integration:
+  `apps/mobile/lib/agent/turn-lease.ts` now wraps
+  `/api/mobile/turn-session` for start, heartbeat, checkpoint, background,
+  abort, and finalize; `runThreadHarnessTurn` can use this lease as the default
+  platform-owned persistence path while preserving the legacy `recordTurnFn`
+  injection seam for compatibility tests.
+- Focused U2 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/turn-lease.test.ts lib/agent/thread-turn.test.ts lib/agent/persist-turn.test.ts`
+  (23 tests).
+- `pnpm --filter @thinkwork/mobile typecheck` has no selected package script;
+  CI `typecheck` remains the broader gate.
+- Broadened U2 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent` (133 tests),
+  `pnpm --filter @thinkwork/react-native-sdk build`,
+  `pnpm --filter @thinkwork/mobile build:web`,
+  touched-file Prettier check, and `git diff --check`.
+- Tightened checkpoint payloads to include an `event_log` snapshot as well as
+  the transcript snapshot, so managed handoff has mid-turn evidence even before
+  the local session transcript is finalized.
+- U2 local-completion iOS Simulator verification passed from the U2 worktree
+  Metro bundle. This validates the mobile lease path and UI continuity; the
+  true managed-handoff E2E remains gated on U3/U4/U5:
+  submitted `U2 lease smoke 2026-05-31T08:40:00. Reply exactly
+MOBILE-U2-LEASE-OK-0840.`, observed immediate optimistic navigation to new
+  thread `f12f6d9a-fb29-4ef1-9a34-f2a82b6be62c`, observed `Working...`, and
+  received assistant reply `MOBILE-U2-LEASE-OK-0840.`. Metro/AppSync logs showed
+  the user and assistant messages arriving on the new thread subscription.
+  Screenshot:
+  `/tmp/thinkwork-verification/mobile-u2-lease-smoke.png`.
 
 ### Blockers
 
