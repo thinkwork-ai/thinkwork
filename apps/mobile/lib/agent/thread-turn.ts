@@ -13,6 +13,7 @@ import { buildTurnContext } from "./turn-context";
 import { localBashExtension } from "./extensions/local-bash-extension";
 import { mcpToolsExtension } from "./extensions/mcp-tools-extension";
 import { mobileNativeExtensions } from "./extensions/mobile-native";
+import { webSearchExtension } from "./extensions/web-search-extension";
 import { workspaceContextExtension } from "./extensions/workspace-context-extension";
 import { workspaceToolsExtension } from "./extensions/workspace-tools-extension";
 import { recordTurn, type MobileSessionTurnEvidence } from "./persist-turn";
@@ -199,6 +200,7 @@ export async function runThreadHarnessTurn(
             : undefined,
       }),
       ...mobileNativeExtensions(),
+      input.agentId ? webSearchExtension({ agentId: input.agentId }) : null,
       input.agentId ? mcpToolsExtension({ agentId: input.agentId }) : null,
     ].filter((ext): ext is ExtensionFactory => Boolean(ext));
   const session = createAgentSession({
