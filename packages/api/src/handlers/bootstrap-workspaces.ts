@@ -86,7 +86,7 @@ async function writeWorkspaceFile(
   path: string,
   content: string,
 ): Promise<void> {
-  const key = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${path}`;
+  const key = `tenants/${tenantSlug}/agents/${agentSlug}/${path}`;
   await s3.send(
     new PutObjectCommand({
       Bucket: BUCKET,

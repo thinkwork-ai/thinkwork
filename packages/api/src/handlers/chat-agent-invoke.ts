@@ -143,6 +143,8 @@ export interface RenderWorkspaceTupleForInvokeInput {
   tenantId: string;
   agentId: string;
   spaceId: string;
+  threadId?: string | null;
+  threadSlug?: string | null;
   userId?: string | null;
   agentBlockedTools?: unknown;
   agentAllowedTools?: unknown;
@@ -189,6 +191,8 @@ export async function renderWorkspaceTupleForInvoke(
           tenantId: input.tenantId,
           agentId: input.agentId,
           spaceId: input.spaceId,
+          threadId: input.threadId ?? null,
+          threadSlug: input.threadSlug ?? input.threadId ?? null,
           userId: input.userId ?? null,
           agentBlockedTools: input.agentBlockedTools,
           agentAllowedTools: input.agentAllowedTools,
@@ -734,6 +738,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           tenantId,
           agentId,
           spaceId,
+          threadId,
+          threadSlug: threadId,
           userId: currentUserId || null,
           agentBlockedTools: runtimeConfig.blockedTools,
         });

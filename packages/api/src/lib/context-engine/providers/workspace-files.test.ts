@@ -75,7 +75,7 @@ describe("Workspace Files context provider", () => {
     pushDbRows([{ slug: "acme" }]);
     pushDbRows([{ slug: "fleet-caterpillar-456", tenantId: "tenant-1" }]);
 
-    const prefix = "tenants/acme/agents/fleet-caterpillar-456/workspace/";
+    const prefix = "tenants/acme/agents/fleet-caterpillar-456/";
     s3Mock
       .on(ListObjectsV2Command, { Bucket: "test-bucket", Prefix: prefix })
       .resolves({
@@ -117,7 +117,7 @@ describe("Workspace Files context provider", () => {
     pushDbRows([{ slug: "acme" }]);
     pushDbRows([{ slug: "fleet-caterpillar-456", tenantId: "tenant-1" }]);
 
-    const prefix = "tenants/acme/agents/fleet-caterpillar-456/workspace/";
+    const prefix = "tenants/acme/agents/fleet-caterpillar-456/";
     s3Mock
       .on(ListObjectsV2Command, { Bucket: "test-bucket", Prefix: prefix })
       .resolves({

@@ -43,7 +43,7 @@ export function spaceSourcePrefix(
   tenantSlug: string,
   spaceSlug: string,
 ): string {
-  return `tenants/${tenantSlug}/spaces/${spaceSlug}/source/`;
+  return `tenants/${tenantSlug}/spaces/${spaceSlug}/`;
 }
 
 export function legacyTemplateWorkspacePrefix(

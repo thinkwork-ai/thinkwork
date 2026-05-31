@@ -86,8 +86,7 @@ function makeDeps(
     ]),
     renderWorkspace: vi.fn(async () => ({
       rendered: true,
-      renderedPrefix:
-        "tenants/acme/workspaces/agents/pi/spaces/launch/users/user/",
+      renderedPrefix: `tenants/acme/threads/${THREAD_ID}/`,
       activeSpace: {
         id: SPACE_ID,
         slug: "launch",
@@ -156,8 +155,8 @@ describe("prepareLocalPiRuntimeSession", () => {
       runtimeFactory: "createAgentSessionRuntime",
     });
     expect(session.invocation.runtime_host).toBe("desktop-local");
-    expect(session.invocation.rendered_workspace_prefix).toContain(
-      "/spaces/launch/",
+    expect(session.invocation.rendered_workspace_prefix).toBe(
+      `tenants/acme/threads/${THREAD_ID}/`,
     );
     expect(session.invocation.send_email_config).toBeUndefined();
     expect(JSON.stringify(session)).not.toContain("SHOULD_NOT_LEAK");

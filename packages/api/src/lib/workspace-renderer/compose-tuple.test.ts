@@ -22,6 +22,8 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
   spacePrompt: "Prepare board reporting work.",
   spaceToolPolicy: { blockedTools: ["send_email"] },
   spaceMcpPolicy: { allowedServers: ["github"], blockedServers: ["prod-db"] },
+  threadId: "thread-1",
+  threadSlug: "thread-1",
   userId: "user-1",
   userSlug: "eric",
   userName: "Eric",
@@ -98,7 +100,7 @@ function seedObjects(
   overrides: Record<string, { content: string; lastModified?: string }> = {},
 ): Map<string, { content: string; lastModified: Date }> {
   const base: Record<string, { content: string; lastModified?: string }> = {
-    "tenants/acme/agents/finance-agent/workspace/AGENTS.md": {
+    "tenants/acme/agents/finance-agent/AGENTS.md": {
       content: `# AGENTS.md
 
 Root routing.
@@ -127,44 +129,44 @@ finance-agent/
 old`,
       lastModified: "2026-05-22T09:00:00.000Z",
     },
-    "tenants/acme/agents/finance-agent/workspace/TOOLS.md": {
+    "tenants/acme/agents/finance-agent/TOOLS.md": {
       content: "---\nadds: [browser]\n---\n# Tools\n",
       lastModified: "2026-05-22T09:01:00.000Z",
     },
-    "tenants/acme/agents/finance-agent/workspace/IDENTITY.md": {
+    "tenants/acme/agents/finance-agent/IDENTITY.md": {
       content: "# Identity\n",
       lastModified: "2026-05-22T09:02:00.000Z",
     },
-    "tenants/acme/agents/finance-agent/workspace/SPACE_CONTEXT.md": {
+    "tenants/acme/agents/finance-agent/SPACE_CONTEXT.md": {
       content: "# Stale context\n",
       lastModified: "2026-05-22T09:07:00.000Z",
     },
-    "tenants/acme/agents/finance-agent/workspace/effective-policy.json": {
+    "tenants/acme/agents/finance-agent/effective-policy.json": {
       content: "{}\n",
       lastModified: "2026-05-22T09:07:00.000Z",
     },
-    "tenants/acme/agents/finance-agent/workspace/space/SPACE.md": {
+    "tenants/acme/agents/finance-agent/space/SPACE.md": {
       content: "# Old Space\n",
       lastModified: "2026-05-22T09:07:00.000Z",
     },
-    "tenants/acme/agents/finance-agent/workspace/spaces/old/SPACE.md": {
+    "tenants/acme/agents/finance-agent/spaces/old/SPACE.md": {
       content: "# Old Space\n",
       lastModified: "2026-05-22T09:07:00.000Z",
     },
-    "tenants/tenant-1/users/user-1/USER.md": {
+    "tenants/acme/users/eric/USER.md": {
       content: "# User\n",
       lastModified: "2026-05-22T09:03:00.000Z",
     },
-    "tenants/acme/spaces/board-pack/source/SPACE.md": {
+    "tenants/acme/spaces/board-pack/SPACE.md": {
       content: "# Board Pack\n",
       lastModified: "2026-05-22T09:04:00.000Z",
     },
-    "tenants/acme/spaces/board-pack/source/TOOLS.md": {
+    "tenants/acme/spaces/board-pack/TOOLS.md": {
       content:
         "---\nadds: [warehouse]\nrestricts:\n  - send_email\n---\n# Space Tools\n",
       lastModified: "2026-05-22T09:05:00.000Z",
     },
-    "tenants/acme/spaces/board-pack/source/knowledge/board.md": {
+    "tenants/acme/spaces/board-pack/knowledge/board.md": {
       content: "# Report\n",
       lastModified: "2026-05-22T09:06:00.000Z",
     },
@@ -197,9 +199,7 @@ describe("renderWorkspaceTuple", () => {
     );
 
     expect(result.cacheStatus).toBe("miss");
-    expect(result.renderedPrefix).toBe(
-      "tenants/acme/rendered/finance-agent/board-pack/eric/",
-    );
+    expect(result.renderedPrefix).toBe("tenants/acme/threads/thread-1/");
     expect(result.writtenFiles).toContain("AGENTS.md");
     expect(result.writtenFiles).toContain("SPACE.md");
     expect(result.writtenFiles).toContain("space/SPACE.md");
@@ -239,7 +239,7 @@ describe("renderWorkspaceTuple", () => {
   it("returns a cache hit without writes when the marker is newer than source files", async () => {
     const store = new FakeStore(
       seedObjects({
-        "tenants/acme/rendered/finance-agent/board-pack/eric/.rendered_at": {
+        "tenants/acme/threads/thread-1/.rendered_at": {
           content: "2026-05-22T11:00:00.000Z",
           lastModified: "2026-05-22T11:00:00.000Z",
         },
@@ -264,7 +264,7 @@ describe("renderWorkspaceTuple", () => {
   it("filters rendered workspace mentions from SPACE.md allowlists", async () => {
     const store = new FakeStore(
       seedObjects({
-        "tenants/acme/spaces/board-pack/source/SPACE.md": {
+        "tenants/acme/spaces/board-pack/SPACE.md": {
           content: `# Board Pack
 
 ## Mentionable Workspaces
@@ -302,7 +302,7 @@ missing-workspace
   it("removes all routing rows when SPACE.md declares an empty mentionable block", async () => {
     const store = new FakeStore(
       seedObjects({
-        "tenants/acme/spaces/board-pack/source/SPACE.md": {
+        "tenants/acme/spaces/board-pack/SPACE.md": {
           content: `# Board Pack
 
 ## Mentionable Workspaces
@@ -399,7 +399,7 @@ missing-workspace
 
   it("fails clearly when the Space source prefix has no renderable files", async () => {
     const store = new FakeStore(seedObjects());
-    store.deletePrefix("tenants/acme/spaces/board-pack/source/");
+    store.deletePrefix("tenants/acme/spaces/board-pack/");
 
     await expect(
       renderWorkspaceTuple(
@@ -415,7 +415,7 @@ missing-workspace
 
   it("renders agent and user context for an empty default Space", async () => {
     const store = new FakeStore(seedObjects());
-    store.deletePrefix("tenants/acme/spaces/board-pack/source/");
+    store.deletePrefix("tenants/acme/spaces/board-pack/");
 
     const result = await renderWorkspaceTuple(
       { tenantId: "tenant-1", agentId: "agent-1", spaceId: "default-space" },
@@ -428,9 +428,7 @@ missing-workspace
     );
 
     expect(result.cacheStatus).toBe("miss");
-    expect(result.renderedPrefix).toBe(
-      "tenants/acme/rendered/finance-agent/default/eric/",
-    );
+    expect(result.renderedPrefix).toBe("tenants/acme/threads/thread-1/");
     expect(result.writtenFiles).toContain("USER.md");
     expect(result.writtenFiles).toContain("SPACE.md");
     expect(result.writtenFiles).not.toContain("space/SPACE.md");

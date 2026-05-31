@@ -85,6 +85,7 @@ import {
   tenantMembers,
   tenants,
   threads,
+  users,
 } from "./src/graphql/utils.js";
 import { callerVisibleThreadPredicate } from "./src/graphql/resolvers/threads/access.js";
 import { emitAuditEvent } from "./src/lib/compliance/emit.js";
@@ -187,11 +188,11 @@ async function refreshAgentAgentsMdSections(
 
 function agentKey(tenantSlug: string, agentSlug: string, path: string): string {
   const clean = path.replace(/^\/+/, "");
-  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${clean}`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/${clean}`;
 }
 
 function agentPrefix(tenantSlug: string, agentSlug: string): string {
-  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/`;
 }
 
 function templateKey(
@@ -217,16 +218,16 @@ function defaultsPrefix(tenantSlug: string): string {
 }
 
 function userContextKey(
-  userId: string,
-  tenantId: string,
+  tenantSlug: string,
+  userSlug: string,
   path: string,
 ): string {
   const clean = path.replace(/^\/+/, "");
-  return `tenants/${tenantId}/users/${userId}/${clean}`;
+  return `tenants/${tenantSlug}/users/${userSlug}/${clean}`;
 }
 
-function userContextPrefix(userId: string, tenantId: string): string {
-  return `tenants/${tenantId}/users/${userId}/`;
+function userContextPrefix(tenantSlug: string, userSlug: string): string {
+  return `tenants/${tenantSlug}/users/${userSlug}/`;
 }
 
 function catalogKey(tenantSlug: string, path: string): string {
@@ -294,8 +295,8 @@ interface DefaultsTarget {
 
 interface UserContextTarget {
   kind: "user";
-  tenantId: string;
-  userId: string;
+  tenantSlug: string;
+  userSlug: string;
   prefix: string;
   key: (path: string) => string;
 }
@@ -489,12 +490,40 @@ async function resolveUserContextTarget(
     )
     .limit(1);
   if (!member || member.principalType.toLowerCase() !== "user") return null;
+
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  if (!tenant?.slug) return null;
+
+  const [user] = await db
+    .select({
+      workspaceFolderName: users.workspace_folder_name,
+      email: users.email,
+      name: users.name,
+    })
+    .from(users)
+    .where(and(eq(users.id, userId), eq(users.tenant_id, tenantId)))
+    .limit(1);
+  if (!user) return null;
+
+  const userSlug =
+    user.workspaceFolderName ||
+    (user.email?.split("@")[0] || user.name || "user")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) ||
+    "user";
+
   return {
     kind: "user",
-    tenantId,
-    userId,
-    prefix: userContextPrefix(userId, tenantId),
-    key: (path) => userContextKey(userId, tenantId, path),
+    tenantSlug: tenant.slug,
+    userSlug,
+    prefix: userContextPrefix(tenant.slug, userSlug),
+    key: (path) => userContextKey(tenant.slug, userSlug, path),
   };
 }
 

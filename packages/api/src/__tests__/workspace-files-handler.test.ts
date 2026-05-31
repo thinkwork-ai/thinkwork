@@ -114,6 +114,7 @@ vi.mock("../graphql/utils.js", () => {
       email: tableCol("users.email"),
       name: tableCol("users.name"),
       tenant_id: tableCol("users.tenant_id"),
+      workspace_folder_name: tableCol("users.workspace_folder_name"),
     },
     userProfiles: {
       user_id: tableCol("user_profiles.user_id"),
@@ -316,6 +317,17 @@ function tenantRow(id = TENANT_A, slug = "acme", name = "Acme") {
   return { id, slug, name };
 }
 
+function userRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: USER_ID,
+    tenant_id: TENANT_A,
+    email: EMAIL,
+    name: "Eric Odom",
+    workspaceFolderName: "eric",
+    ...overrides,
+  };
+}
+
 function queueAdminAgentTargetRows(): void {
   pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
   pushDbRows([agentRow()]);
@@ -485,12 +497,12 @@ describe("agent AGENTS.md derived section refresh", () => {
     s3Mock.resetHistory();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/memory/note.md/",
+        Prefix: "tenants/acme/agents/marco/memory/note.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -513,7 +525,7 @@ describe("agent AGENTS.md derived section refresh", () => {
     s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+        Key: "tenants/acme/agents/marco/AGENTS.md",
       })
       .rejects(noSuchKey());
     s3Mock.on(PutObjectCommand).resolves({});
@@ -844,7 +856,7 @@ describe("apikey auth (Strands container path, Unit 7)", () => {
     // returns them verbatim.
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/SOUL.md",
+        Key: "tenants/acme/agents/marco/SOUL.md",
       })
       .resolves({
         Body: {
@@ -979,7 +991,7 @@ describe("target selection", () => {
 
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/spaces/engineering/source/AGENTS.md",
+        Key: "tenants/acme/spaces/engineering/AGENTS.md",
       })
       .resolves(body("# Engineering Space"));
 
@@ -1225,7 +1237,7 @@ describe("tenant skill catalog target", () => {
 // ─── 4c. Catalog skill install action ───────────────────────────────────────
 
 function mockCatalogInstallS3(
-  targetPrefix = "tenants/acme/agents/marco/workspace/",
+  targetPrefix = "tenants/acme/agents/marco/",
 ): void {
   s3Mock
     .on(ListObjectsV2Command, {
@@ -1298,18 +1310,17 @@ describe("agent install-skill action", () => {
       s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
     ).toEqual([
       expect.objectContaining({
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
       }),
       expect.objectContaining({
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
       }),
     ]);
     const contextPut = s3Mock
       .commandCalls(PutObjectCommand)
       .find(
         (call) =>
-          call.args[0].input.Key ===
-          "tenants/acme/agents/marco/workspace/CONTEXT.md",
+          call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
       );
     expect(String(contextPut?.args[0].input.Body)).toContain(
       "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |",
@@ -1388,7 +1399,7 @@ describe("agent install-skill action", () => {
 // ─── 4d. Catalog skill uninstall action ─────────────────────────────────────
 
 function mockCatalogUninstallS3(
-  targetPrefix = "tenants/acme/agents/marco/workspace/",
+  targetPrefix = "tenants/acme/agents/marco/",
 ): void {
   s3Mock
     .on(ListObjectsV2Command, {
@@ -1462,9 +1473,9 @@ describe("agent uninstall-skill action", () => {
         .commandCalls(DeleteObjectCommand)
         .map((call) => call.args[0].input.Key),
     ).toEqual([
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
     ]);
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
@@ -1472,7 +1483,7 @@ describe("agent uninstall-skill action", () => {
   it("uninstalls from a Space source scope without refreshing agent state", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminSpaceTargetRows();
-    mockCatalogUninstallS3("tenants/acme/spaces/engineering/source/");
+    mockCatalogUninstallS3("tenants/acme/spaces/engineering/");
 
     const res = await parse(
       await handler(
@@ -1491,9 +1502,9 @@ describe("agent uninstall-skill action", () => {
         .commandCalls(DeleteObjectCommand)
         .map((call) => call.args[0].input.Key),
     ).toEqual([
-      "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/.catalog-ref.json",
-      "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/SKILL.md",
-      "tenants/acme/spaces/engineering/source/skills/finance-audit-xls/WIRING.md",
+      "tenants/acme/spaces/engineering/skills/finance-audit-xls/.catalog-ref.json",
+      "tenants/acme/spaces/engineering/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/spaces/engineering/skills/finance-audit-xls/WIRING.md",
     ]);
     expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
@@ -1524,7 +1535,7 @@ describe("agent uninstall-skill action", () => {
 // ─── 4e. Catalog skill reinstall action ─────────────────────────────────────
 
 function mockCatalogReinstallS3(
-  targetPrefix = "tenants/acme/agents/marco/workspace/",
+  targetPrefix = "tenants/acme/agents/marco/",
 ): void {
   s3Mock
     .on(GetObjectCommand, {
@@ -1621,17 +1632,17 @@ describe("agent reinstall-skill action", () => {
         .commandCalls(DeleteObjectCommand)
         .map((call) => call.args[0].input.Key),
     ).toEqual([
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/old.txt",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/old.txt",
     ]);
     expect(
       s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
     ).toEqual([
       expect.objectContaining({
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
       }),
       expect.objectContaining({
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
       }),
     ]);
     expect(
@@ -1727,7 +1738,7 @@ describe("agent GET / LIST", () => {
     // already-substituted bytes. No template / defaults fallback.
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/IDENTITY.md",
+        Key: "tenants/acme/agents/marco/IDENTITY.md",
       })
       .resolves(body("Your name is Marco."));
 
@@ -1752,12 +1763,12 @@ describe("agent GET / LIST", () => {
 
     s3Mock.on(ListObjectsV2Command).resolves({
       Contents: [
-        { Key: "tenants/acme/agents/marco/workspace/SOUL.md" },
+        { Key: "tenants/acme/agents/marco/SOUL.md" },
         {
-          Key: "tenants/acme/agents/marco/workspace/skills/web-search/SKILL.md",
+          Key: "tenants/acme/agents/marco/skills/web-search/SKILL.md",
         },
         {
-          Key: "tenants/acme/agents/marco/workspace/skills/workspace-memory/SKILL.md",
+          Key: "tenants/acme/agents/marco/skills/workspace-memory/SKILL.md",
         },
       ],
     });
@@ -1774,36 +1785,37 @@ describe("agent GET / LIST", () => {
   });
 });
 
-
 describe("user context workspace target", () => {
   it("lists and reads requester USER.md and memory files from the tenant/user S3 prefix", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([userRow()]);
     s3Mock.on(ListObjectsV2Command).resolves({
       Contents: [
-        { Key: `tenants/${TENANT_A}/users/${USER_ID}/USER.md` },
-        { Key: `tenants/${TENANT_A}/users/${USER_ID}/knowledge-pack.md` },
-        { Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/MEMORY.md` },
-        { Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/DREAMS.md` },
+        { Key: "tenants/acme/users/eric/USER.md" },
+        { Key: "tenants/acme/users/eric/knowledge-pack.md" },
+        { Key: "tenants/acme/users/eric/memory/MEMORY.md" },
+        { Key: "tenants/acme/users/eric/memory/DREAMS.md" },
         {
-          Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/candidates/2026-05-18.md`,
+          Key: "tenants/acme/users/eric/memory/candidates/2026-05-18.md",
         },
         {
-          Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/dreaming/rem/2026-05-18.md`,
+          Key: "tenants/acme/users/eric/memory/dreaming/rem/2026-05-18.md",
         },
         {
-          Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/.dreams/2026-05-18.json`,
+          Key: "tenants/acme/users/eric/memory/.dreams/2026-05-18.json",
         },
         {
-          Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/reports/thread-idle/run-1.md`,
+          Key: "tenants/acme/users/eric/memory/reports/thread-idle/run-1.md",
         },
       ],
     });
     s3Mock
       .on(GetObjectCommand, {
         Bucket: "test-bucket",
-        Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/MEMORY.md`,
+        Key: "tenants/acme/users/eric/memory/MEMORY.md",
       })
       .resolves(body("- Prefers concise summaries\n"));
 
@@ -1847,6 +1859,8 @@ describe("user context workspace target", () => {
 
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([userRow()]);
     const getRes = await parse(
       await handler(
         event({
@@ -1870,6 +1884,8 @@ describe("user context workspace target", () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([userRow()]);
 
     const getRes = await parse(
       await handler(
@@ -1890,6 +1906,8 @@ describe("user context workspace target", () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([userRow()]);
     pushDbRows([{ role: "admin" }]);
     s3Mock.on(PutObjectCommand).resolves({});
 
@@ -1910,7 +1928,7 @@ describe("user context workspace target", () => {
       s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
     ).toMatchObject({
       Bucket: "test-bucket",
-      Key: `tenants/${TENANT_A}/users/${USER_ID}/memory/MEMORY.md`,
+      Key: "tenants/acme/users/eric/memory/MEMORY.md",
       Body: "- Prefers concise summaries\n",
     });
   });
@@ -2014,7 +2032,7 @@ describe("pinned-file write guard", () => {
     expect(res.statusCode).toBe(200);
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(1);
     expect(s3Mock.commandCalls(PutObjectCommand)[0].args[0].input.Key).toBe(
-      "tenants/acme/agents/marco/workspace/expenses/GUARDRAILS.md",
+      "tenants/acme/agents/marco/expenses/GUARDRAILS.md",
     );
   });
 
@@ -2283,12 +2301,12 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     // Second call: destination sibling listing — empty (no collision).
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+        Prefix: "tenants/acme/agents/marco/notes.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/memory/",
+        Prefix: "tenants/acme/agents/marco/memory/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2315,15 +2333,15 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     const copies = s3Mock.commandCalls(CopyObjectCommand);
     expect(copies.length).toBe(1);
     expect(copies[0].args[0].input.Key).toBe(
-      "tenants/acme/agents/marco/workspace/memory/notes.md",
+      "tenants/acme/agents/marco/memory/notes.md",
     );
     expect(copies[0].args[0].input.CopySource).toBe(
-      "test-bucket/tenants/acme/agents/marco/workspace/notes.md",
+      "test-bucket/tenants/acme/agents/marco/notes.md",
     );
     const deletes = s3Mock.commandCalls(DeleteObjectCommand);
     expect(deletes.length).toBe(1);
     expect(deletes[0].args[0].input.Key).toBe(
-      "tenants/acme/agents/marco/workspace/notes.md",
+      "tenants/acme/agents/marco/notes.md",
     );
   });
 
@@ -2332,17 +2350,15 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/events/notes.md/",
+        Prefix: "tenants/acme/agents/marco/events/notes.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/memory/",
+        Prefix: "tenants/acme/agents/marco/memory/",
       })
       .resolves({
-        Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/memory/notes.md" },
-        ],
+        Contents: [{ Key: "tenants/acme/agents/marco/memory/notes.md" }],
       });
     s3Mock.on(CopyObjectCommand).resolves({});
     s3Mock.on(DeleteObjectCommand).resolves({});
@@ -2362,7 +2378,7 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     expect(res.body.destPath).toBe("memory/notes (2).md");
     const copies = s3Mock.commandCalls(CopyObjectCommand);
     expect(copies[0].args[0].input.Key).toBe(
-      "tenants/acme/agents/marco/workspace/memory/notes (2).md",
+      "tenants/acme/agents/marco/memory/notes (2).md",
     );
   });
 
@@ -2371,17 +2387,17 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/events/notes.md/",
+        Prefix: "tenants/acme/agents/marco/events/notes.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/memory/",
+        Prefix: "tenants/acme/agents/marco/memory/",
       })
       .resolves({
         Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/memory/notes.md" },
-          { Key: "tenants/acme/agents/marco/workspace/memory/notes (2).md" },
+          { Key: "tenants/acme/agents/marco/memory/notes.md" },
+          { Key: "tenants/acme/agents/marco/memory/notes (2).md" },
         ],
       });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2407,12 +2423,12 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/GUARDRAILS.md/",
+        Prefix: "tenants/acme/agents/marco/GUARDRAILS.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2443,7 +2459,7 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+        Prefix: "tenants/acme/agents/marco/notes.md/",
       })
       .resolves({ Contents: [] });
 
@@ -2511,12 +2527,12 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/AGENTS.md/",
+        Prefix: "tenants/acme/agents/marco/AGENTS.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2542,12 +2558,12 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/old-slug/SKILL.md/",
+        Prefix: "tenants/acme/agents/marco/skills/old-slug/SKILL.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/new-slug/",
+        Prefix: "tenants/acme/agents/marco/skills/new-slug/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2573,12 +2589,12 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+        Prefix: "tenants/acme/agents/marco/notes.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/memory/",
+        Prefix: "tenants/acme/agents/marco/memory/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2651,19 +2667,19 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     // the relative contents of the folder.
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/events/",
+        Prefix: "tenants/acme/agents/marco/events/",
       })
       .resolves({
         Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/events/log.md" },
-          { Key: "tenants/acme/agents/marco/workspace/events/meeting.md" },
-          { Key: "tenants/acme/agents/marco/workspace/events/notes.md" },
+          { Key: "tenants/acme/agents/marco/events/log.md" },
+          { Key: "tenants/acme/agents/marco/events/meeting.md" },
+          { Key: "tenants/acme/agents/marco/events/notes.md" },
         ],
       });
     // Destination sibling listing — empty (no folder collision at "archive/").
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2692,17 +2708,17 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     const copies = s3Mock.commandCalls(CopyObjectCommand);
     expect(copies.length).toBe(3);
     expect(copies.map((c) => c.args[0].input.Key).sort()).toEqual([
-      "tenants/acme/agents/marco/workspace/archive/events/log.md",
-      "tenants/acme/agents/marco/workspace/archive/events/meeting.md",
-      "tenants/acme/agents/marco/workspace/archive/events/notes.md",
+      "tenants/acme/agents/marco/archive/events/log.md",
+      "tenants/acme/agents/marco/archive/events/meeting.md",
+      "tenants/acme/agents/marco/archive/events/notes.md",
     ]);
 
     const deletes = s3Mock.commandCalls(DeleteObjectCommand);
     expect(deletes.length).toBe(3);
     expect(deletes.map((c) => c.args[0].input.Key).sort()).toEqual([
-      "tenants/acme/agents/marco/workspace/events/log.md",
-      "tenants/acme/agents/marco/workspace/events/meeting.md",
-      "tenants/acme/agents/marco/workspace/events/notes.md",
+      "tenants/acme/agents/marco/events/log.md",
+      "tenants/acme/agents/marco/events/meeting.md",
+      "tenants/acme/agents/marco/events/notes.md",
     ]);
 
     // Source folder should disappear from the tree after move (Finder
@@ -2719,27 +2735,27 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     // them at the source. The unfiltered walk must include + delete.
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/earnest-falcon-947/",
+        Prefix: "tenants/acme/agents/marco/earnest-falcon-947/",
       })
       .resolves({
         Contents: [
           {
-            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/AGENTS.md",
+            Key: "tenants/acme/agents/marco/earnest-falcon-947/AGENTS.md",
           },
           {
-            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/CONTEXT.md",
+            Key: "tenants/acme/agents/marco/earnest-falcon-947/CONTEXT.md",
           },
           {
-            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/manifest.json",
+            Key: "tenants/acme/agents/marco/earnest-falcon-947/manifest.json",
           },
           {
-            Key: "tenants/acme/agents/marco/workspace/earnest-falcon-947/.gitkeep",
+            Key: "tenants/acme/agents/marco/earnest-falcon-947/.gitkeep",
           },
         ],
       });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/agents/",
+        Prefix: "tenants/acme/agents/marco/agents/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2766,18 +2782,18 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
 
     const copies = s3Mock.commandCalls(CopyObjectCommand);
     expect(copies.map((c) => c.args[0].input.Key).sort()).toEqual([
-      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/.gitkeep",
-      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/AGENTS.md",
-      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/CONTEXT.md",
-      "tenants/acme/agents/marco/workspace/agents/earnest-falcon-947/manifest.json",
+      "tenants/acme/agents/marco/agents/earnest-falcon-947/.gitkeep",
+      "tenants/acme/agents/marco/agents/earnest-falcon-947/AGENTS.md",
+      "tenants/acme/agents/marco/agents/earnest-falcon-947/CONTEXT.md",
+      "tenants/acme/agents/marco/agents/earnest-falcon-947/manifest.json",
     ]);
 
     const deletes = s3Mock.commandCalls(DeleteObjectCommand);
     expect(deletes.map((c) => c.args[0].input.Key).sort()).toEqual([
-      "tenants/acme/agents/marco/workspace/earnest-falcon-947/.gitkeep",
-      "tenants/acme/agents/marco/workspace/earnest-falcon-947/AGENTS.md",
-      "tenants/acme/agents/marco/workspace/earnest-falcon-947/CONTEXT.md",
-      "tenants/acme/agents/marco/workspace/earnest-falcon-947/manifest.json",
+      "tenants/acme/agents/marco/earnest-falcon-947/.gitkeep",
+      "tenants/acme/agents/marco/earnest-falcon-947/AGENTS.md",
+      "tenants/acme/agents/marco/earnest-falcon-947/CONTEXT.md",
+      "tenants/acme/agents/marco/earnest-falcon-947/manifest.json",
     ]);
 
     // No .gitkeep re-emit at source — folder disappears entirely.
@@ -2789,22 +2805,20 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/events/",
+        Prefix: "tenants/acme/agents/marco/events/",
       })
       .resolves({
-        Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/events/log.md" },
-        ],
+        Contents: [{ Key: "tenants/acme/agents/marco/events/log.md" }],
       });
     // Destination already has an `events/` folder (any child under it is enough).
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({
         Contents: [
           {
-            Key: "tenants/acme/agents/marco/workspace/archive/events/old.md",
+            Key: "tenants/acme/agents/marco/archive/events/old.md",
           },
         ],
       });
@@ -2827,7 +2841,7 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     expect(res.body.destPath).toBe("archive/events (2)");
     const copies = s3Mock.commandCalls(CopyObjectCommand);
     expect(copies[0].args[0].input.Key).toBe(
-      "tenants/acme/agents/marco/workspace/archive/events (2)/log.md",
+      "tenants/acme/agents/marco/archive/events (2)/log.md",
     );
   });
 
@@ -2836,17 +2850,17 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/sub/",
+        Prefix: "tenants/acme/agents/marco/sub/",
       })
       .resolves({
         Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/sub/AGENTS.md" },
-          { Key: "tenants/acme/agents/marco/workspace/sub/CONTEXT.md" },
+          { Key: "tenants/acme/agents/marco/sub/AGENTS.md" },
+          { Key: "tenants/acme/agents/marco/sub/CONTEXT.md" },
         ],
       });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2873,24 +2887,24 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/",
+        Prefix: "tenants/acme/agents/marco/skills/",
       })
       .resolves({
         Contents: [
           {
-            Key: "tenants/acme/agents/marco/workspace/skills/a/SKILL.md",
+            Key: "tenants/acme/agents/marco/skills/a/SKILL.md",
           },
           {
-            Key: "tenants/acme/agents/marco/workspace/skills/b/SKILL.md",
+            Key: "tenants/acme/agents/marco/skills/b/SKILL.md",
           },
           {
-            Key: "tenants/acme/agents/marco/workspace/skills/c/SKILL.md",
+            Key: "tenants/acme/agents/marco/skills/c/SKILL.md",
           },
         ],
       });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2917,17 +2931,17 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/notes/",
+        Prefix: "tenants/acme/agents/marco/notes/",
       })
       .resolves({
         Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/notes/a.md" },
-          { Key: "tenants/acme/agents/marco/workspace/notes/b.md" },
+          { Key: "tenants/acme/agents/marco/notes/a.md" },
+          { Key: "tenants/acme/agents/marco/notes/b.md" },
         ],
       });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -2954,16 +2968,14 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/projects/",
+        Prefix: "tenants/acme/agents/marco/projects/",
       })
       .resolves({
-        Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/projects/sub/note.md" },
-        ],
+        Contents: [{ Key: "tenants/acme/agents/marco/projects/sub/note.md" }],
       });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/projects/sub/",
+        Prefix: "tenants/acme/agents/marco/projects/sub/",
       })
       .resolves({ Contents: [] });
 
@@ -2989,18 +3001,18 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/events/",
+        Prefix: "tenants/acme/agents/marco/events/",
       })
       .resolves({
         Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/events/a.md" },
-          { Key: "tenants/acme/agents/marco/workspace/events/b.md" },
-          { Key: "tenants/acme/agents/marco/workspace/events/c.md" },
+          { Key: "tenants/acme/agents/marco/events/a.md" },
+          { Key: "tenants/acme/agents/marco/events/b.md" },
+          { Key: "tenants/acme/agents/marco/events/c.md" },
         ],
       });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
 
@@ -3037,17 +3049,17 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/events/",
+        Prefix: "tenants/acme/agents/marco/events/",
       })
       .resolves({
         Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/events/a.md" },
-          { Key: "tenants/acme/agents/marco/workspace/events/b.md" },
+          { Key: "tenants/acme/agents/marco/events/a.md" },
+          { Key: "tenants/acme/agents/marco/events/b.md" },
         ],
       });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -3105,7 +3117,7 @@ describe("agent DELETE", () => {
     const calls = s3Mock.commandCalls(DeleteObjectCommand);
     expect(calls.length).toBe(1);
     expect(calls[0].args[0].input.Key).toBe(
-      "tenants/acme/agents/marco/workspace/IDENTITY.md",
+      "tenants/acme/agents/marco/IDENTITY.md",
     );
   });
 });
@@ -3131,12 +3143,12 @@ describe("agent RENAME", () => {
     destinationMissing();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/ideas.md/",
+        Prefix: "tenants/acme/agents/marco/ideas.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+        Prefix: "tenants/acme/agents/marco/notes.md/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -3160,10 +3172,10 @@ describe("agent RENAME", () => {
       movedCount: 1,
     });
     expect(s3Mock.commandCalls(CopyObjectCommand)[0].args[0].input.Key).toBe(
-      "tenants/acme/agents/marco/workspace/ideas.md",
+      "tenants/acme/agents/marco/ideas.md",
     );
     expect(s3Mock.commandCalls(DeleteObjectCommand)[0].args[0].input.Key).toBe(
-      "tenants/acme/agents/marco/workspace/notes.md",
+      "tenants/acme/agents/marco/notes.md",
     );
   });
 
@@ -3172,12 +3184,12 @@ describe("agent RENAME", () => {
     adminAgentRows();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/notes.md/",
+        Prefix: "tenants/acme/agents/marco/notes.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(HeadObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/ideas.md",
+        Key: "tenants/acme/agents/marco/ideas.md",
       })
       .resolves({});
 
@@ -3204,17 +3216,17 @@ describe("agent RENAME", () => {
     destinationMissing();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/archive/",
+        Prefix: "tenants/acme/agents/marco/archive/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/events/",
+        Prefix: "tenants/acme/agents/marco/events/",
       })
       .resolves({
         Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/events/a.md" },
-          { Key: "tenants/acme/agents/marco/workspace/events/nested/b.md" },
+          { Key: "tenants/acme/agents/marco/events/a.md" },
+          { Key: "tenants/acme/agents/marco/events/nested/b.md" },
         ],
       });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -3243,8 +3255,8 @@ describe("agent RENAME", () => {
         .map((call) => call.args[0].input.Key)
         .sort(),
     ).toEqual([
-      "tenants/acme/agents/marco/workspace/archive/a.md",
-      "tenants/acme/agents/marco/workspace/archive/nested/b.md",
+      "tenants/acme/agents/marco/archive/a.md",
+      "tenants/acme/agents/marco/archive/nested/b.md",
     ]);
     expect(
       s3Mock
@@ -3252,8 +3264,8 @@ describe("agent RENAME", () => {
         .map((call) => call.args[0].input.Key)
         .sort(),
     ).toEqual([
-      "tenants/acme/agents/marco/workspace/events/a.md",
-      "tenants/acme/agents/marco/workspace/events/nested/b.md",
+      "tenants/acme/agents/marco/events/a.md",
+      "tenants/acme/agents/marco/events/nested/b.md",
     ]);
   });
 
@@ -3263,12 +3275,10 @@ describe("agent RENAME", () => {
     destinationMissing();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/events/",
+        Prefix: "tenants/acme/agents/marco/events/",
       })
       .resolves({
-        Contents: [
-          { Key: "tenants/acme/agents/marco/workspace/events/nested/a.md" },
-        ],
+        Contents: [{ Key: "tenants/acme/agents/marco/events/nested/a.md" }],
       });
 
     const res = await parse(
@@ -3294,12 +3304,12 @@ describe("agent RENAME", () => {
     destinationMissing();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/ROUTES.md/",
+        Prefix: "tenants/acme/agents/marco/ROUTES.md/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/AGENTS.md/",
+        Prefix: "tenants/acme/agents/marco/AGENTS.md/",
       })
       .resolves({ Contents: [] });
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -3319,7 +3329,6 @@ describe("agent RENAME", () => {
     expect(res.statusCode).toBe(200);
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
-
 });
 
 // ─── 7b. Composite create-sub-agent ─────────────────────────────────────────
@@ -3345,7 +3354,7 @@ describe("agent create-sub-agent", () => {
     } as never);
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+        Key: "tenants/acme/agents/marco/AGENTS.md",
       })
       .resolves(
         body(`# Agent Map
@@ -3372,8 +3381,8 @@ describe("agent create-sub-agent", () => {
     expect(res.statusCode).toBe(200);
     const puts = s3Mock.commandCalls(PutObjectCommand);
     expect(puts.map((call) => call.args[0].input.Key)).toEqual([
-      "tenants/acme/agents/marco/workspace/workspaces/support/CONTEXT.md",
-      "tenants/acme/agents/marco/workspace/AGENTS.md",
+      "tenants/acme/agents/marco/workspaces/support/CONTEXT.md",
+      "tenants/acme/agents/marco/AGENTS.md",
     ]);
     expect(String(puts[1].args[0].input.Body)).toContain(
       "| support specialist | workspaces/support/ | workspaces/support/CONTEXT.md |  |",
@@ -3437,12 +3446,12 @@ describe("agent create-sub-agent", () => {
     pushDbRows([templateRowTenantA()]);
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/",
+        Prefix: "tenants/acme/agents/marco/",
       })
       .resolves({
         Contents: [
           {
-            Key: "tenants/acme/agents/marco/workspace/workspaces/expenses/CONTEXT.md",
+            Key: "tenants/acme/agents/marco/workspaces/expenses/CONTEXT.md",
           },
         ],
       });
@@ -3462,7 +3471,7 @@ describe("agent create-sub-agent", () => {
     } as never);
     s3Mock
       .on(HeadObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/expenses/CONTEXT.md",
+        Key: "tenants/acme/agents/marco/expenses/CONTEXT.md",
       })
       .resolves({});
 
@@ -3550,11 +3559,11 @@ describe("list action includeContent (Strands container cold-start)", () => {
     // The agent prefix has the substituted bytes; the runtime cold-start
     // bootstrap reads them via list+get on this single prefix.
     s3Mock.on(ListObjectsV2Command).resolves({
-      Contents: [{ Key: "tenants/acme/agents/marco/workspace/SOUL.md" }],
+      Contents: [{ Key: "tenants/acme/agents/marco/SOUL.md" }],
     });
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/SOUL.md",
+        Key: "tenants/acme/agents/marco/SOUL.md",
       })
       .resolves({
         Body: {
@@ -3787,7 +3796,7 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
     pushDbRows([{ role: "admin" }]);
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+        Key: "tenants/acme/agents/marco/AGENTS.md",
       })
       .resolves(
         body(
@@ -3820,7 +3829,7 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
 
     expect(res.statusCode).toBe(200);
     const put = s3Mock.commandCalls(PutObjectCommand)[0]?.args[0].input;
-    expect(put?.Key).toBe("tenants/acme/agents/marco/workspace/AGENTS.md");
+    expect(put?.Key).toBe("tenants/acme/agents/marco/AGENTS.md");
     expect(String(put?.Body)).toContain(
       "- **Creature:** axolotl with injection",
     );
@@ -3880,7 +3889,7 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
     pushDbRows([{ role: "admin" }]);
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+        Key: "tenants/acme/agents/marco/AGENTS.md",
       })
       .rejects(noSuchKey());
 
@@ -3908,7 +3917,7 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
     pushDbRows([{ role: "admin" }]);
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+        Key: "tenants/acme/agents/marco/AGENTS.md",
       })
       .resolves(body("# AGENTS.md\n\n## Identity\n- **Name:** Marco\n"));
 
@@ -3940,7 +3949,7 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
 
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+        Key: "tenants/acme/agents/marco/AGENTS.md",
       })
       .rejects(noSuchKey());
     s3Mock

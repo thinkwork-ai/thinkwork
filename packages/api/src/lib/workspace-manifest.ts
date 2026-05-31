@@ -26,7 +26,7 @@ const s3 = new S3Client({
 });
 
 function workspacePrefix(tenantSlug: string, instanceId: string): string {
-  return `tenants/${tenantSlug}/agents/${instanceId}/workspace/`;
+  return `tenants/${tenantSlug}/agents/${instanceId}/`;
 }
 
 export async function regenerateManifest(

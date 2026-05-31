@@ -199,7 +199,7 @@ import {
   renderDerivedAgentsMdSections,
 } from "../workspace-map-generator.js";
 
-const PREFIX = "tenants/acme/agents/acme-daily-digest/workspace/";
+const PREFIX = "tenants/acme/agents/acme-daily-digest/";
 
 function resetState(): void {
   state.agent = {
@@ -1047,7 +1047,7 @@ describe("regenerateWorkspaceMap — idempotent write", () => {
 });
 
 describe("generateContextFolderStructureForSpace", () => {
-  const SPACE_PREFIX = "tenants/acme/spaces/sales/source/";
+  const SPACE_PREFIX = "tenants/acme/spaces/sales/";
 
   function lastWrittenSpace(path: string): string | null {
     const put = [...s3Calls.puts]

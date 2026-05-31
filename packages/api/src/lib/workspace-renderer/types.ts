@@ -4,6 +4,8 @@ export interface WorkspaceRenderTupleInput {
   tenantId: string;
   agentId: string;
   spaceId: string;
+  threadId?: string | null;
+  threadSlug?: string | null;
   userId?: string | null;
   invokingServiceIdentity?: string | null;
   agentBlockedTools?: unknown;
@@ -24,6 +26,8 @@ export interface ResolvedWorkspaceRenderTuple {
   spacePrompt: string | null;
   spaceToolPolicy: unknown;
   spaceMcpPolicy: unknown;
+  threadId?: string | null;
+  threadSlug?: string | null;
   userId: string | null;
   userSlug: string | null;
   userName: string | null;

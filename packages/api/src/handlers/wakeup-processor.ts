@@ -248,6 +248,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
   tenantId: string;
   agentId: string;
   spaceId: string;
+  threadId?: string | null;
+  threadSlug?: string | null;
   userId?: string | null;
   agentBlockedTools?: unknown;
   agentAllowedTools?: unknown;
@@ -270,6 +272,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
           tenantId: input.tenantId,
           agentId: input.agentId,
           spaceId: input.spaceId,
+          threadId: input.threadId ?? null,
+          threadSlug: input.threadSlug ?? input.threadId ?? null,
           userId: input.userId ?? null,
           agentBlockedTools: input.agentBlockedTools,
           agentAllowedTools: input.agentAllowedTools,
@@ -1401,6 +1405,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         tenantId: wakeup.tenant_id,
         agentId: wakeup.agent_id,
         spaceId: runSpaceId,
+        threadId: runThreadId ?? null,
+        threadSlug: runThreadId ?? null,
         userId: invokerUserId ?? null,
         agentBlockedTools: blockedTools,
       });

@@ -33,7 +33,7 @@ describe("agent Template removal migration", () => {
     expect(migration0114).toContain("'agent-template:' || t.slug");
     expect(migration0114).toContain("ON CONFLICT (tenant_id, slug)");
     expect(migration0114).toContain(
-      "workspaceSourcePrefix', format('tenants/%s/spaces/default/source/'",
+      "workspaceSourcePrefix', format('tenants/%s/spaces/default/'",
     );
   });
 

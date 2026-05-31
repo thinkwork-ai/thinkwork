@@ -185,6 +185,8 @@ export interface PrepareLocalPiRuntimeSessionDeps {
     tenantId: string;
     agentId: string;
     spaceId: string;
+    threadId: string;
+    threadSlug?: string | null;
     userId: string;
     agentBlockedTools: string[];
   }): Promise<RenderWorkspaceTupleForInvokeResult>;
@@ -237,6 +239,8 @@ export async function renderWorkspaceTupleForDesktopRuntime(input: {
   tenantId: string;
   agentId: string;
   spaceId: string;
+  threadId: string;
+  threadSlug?: string | null;
   userId: string;
   agentBlockedTools: unknown;
   agentAllowedTools?: unknown;
@@ -254,6 +258,8 @@ export async function renderWorkspaceTupleForDesktopRuntime(input: {
           tenantId: input.tenantId,
           agentId: input.agentId,
           spaceId: input.spaceId,
+          threadId: input.threadId,
+          threadSlug: input.threadSlug ?? input.threadId,
           userId: input.userId,
           agentBlockedTools: input.agentBlockedTools,
           agentAllowedTools: input.agentAllowedTools,
@@ -478,6 +484,8 @@ export function defaultPrepareLocalPiRuntimeSessionDeps(): PrepareLocalPiRuntime
         tenantId: input.tenantId,
         agentId: input.agentId,
         spaceId: input.spaceId,
+        threadId: input.threadId,
+        threadSlug: input.threadSlug ?? input.threadId,
         userId: input.userId,
         agentBlockedTools: input.agentBlockedTools,
       });
@@ -668,6 +676,8 @@ export async function prepareLocalPiRuntimeSession(
     tenantId: caller.tenantId,
     agentId: input.agentId,
     spaceId: thread.spaceId,
+    threadId: input.threadId,
+    threadSlug: input.threadId,
     userId: caller.id,
     agentBlockedTools: runtimeConfig.blockedTools,
   });
@@ -954,6 +964,8 @@ export async function prepareLocalPiWorkspacePrewarm(
     tenantId: caller.tenantId,
     agentId: input.agentId,
     spaceId: input.spaceId,
+    threadId: `prewarm-${input.spaceId}-${caller.id}`,
+    threadSlug: `prewarm-${input.spaceId}-${caller.id}`,
     userId: caller.id,
     agentBlockedTools: runtimeConfig.blockedTools,
   });

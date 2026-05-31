@@ -201,7 +201,7 @@ async function callerIsTenantAdmin(
 }
 
 function makeStorage(target: ImportTarget): ImportBundleStorage {
-  const prefix = `tenants/${target.tenantSlug}/agents/${target.agentSlug}/workspace/`;
+  const prefix = `tenants/${target.tenantSlug}/agents/${target.agentSlug}/`;
   return {
     async getText(path) {
       try {

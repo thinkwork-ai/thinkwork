@@ -110,7 +110,7 @@ function bucket(): string {
 }
 
 function agentKey(tenantSlug: string, agentSlug: string, path: string): string {
-  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${path}`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/${path}`;
 }
 
 function isNotFound(err: unknown): boolean {

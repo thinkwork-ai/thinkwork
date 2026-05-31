@@ -89,7 +89,7 @@ describe("workspace-renderer handler", () => {
     ).resolves.toMatchObject({
       ok: true,
       statusCode: 200,
-      renderedPrefix: "tenants/acme/rendered/agent/default/anon/",
+      renderedPrefix: "tenants/acme/threads/thread/",
       cacheStatus: "miss",
       effectivePolicy: {
         blockedTools: ["browser_automation"],

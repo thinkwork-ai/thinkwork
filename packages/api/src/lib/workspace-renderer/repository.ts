@@ -100,6 +100,8 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       spacePrompt: space.prompt,
       spaceToolPolicy: space.toolPolicy,
       spaceMcpPolicy: space.mcpPolicy,
+      threadId: input.threadId ?? null,
+      threadSlug: input.threadSlug ?? input.threadId ?? null,
       userId: resolvedUser?.id ?? input.userId ?? null,
       userSlug: resolvedUser?.slug ?? null,
       userName: resolvedUser?.name ?? null,

@@ -54,7 +54,7 @@ SELECT
   ),
   jsonb_build_object(
     'source', 'template_migration',
-    'workspaceSourcePrefix', format('tenants/%s/spaces/default/source/', t.slug),
+    'workspaceSourcePrefix', format('tenants/%s/spaces/default/', t.slug),
     'legacyDefaultsPrefix', format('tenants/%s/agents/_catalog/defaults/workspace/', t.slug)
   ),
   '{}'::jsonb,
@@ -145,7 +145,7 @@ SELECT
     'sourceKind', 'agent_template',
     'legacyTemplateId', t.id::text,
     'legacyTemplateSlug', t.slug,
-    'workspaceSourcePrefix', format('tenants/%s/spaces/%s/source/', tenant.slug, 'template-' || regexp_replace(lower(t.slug), '[^a-z0-9]+', '-', 'g')),
+    'workspaceSourcePrefix', format('tenants/%s/spaces/%s/', tenant.slug, 'template-' || regexp_replace(lower(t.slug), '[^a-z0-9]+', '-', 'g')),
     'legacyTemplatePrefix', format('tenants/%s/agents/_catalog/%s/workspace/', tenant.slug, t.slug),
     'legacyDefaultsPrefix', format('tenants/%s/agents/_catalog/defaults/workspace/', tenant.slug),
     'skills', CASE WHEN jsonb_typeof(t.skills) = 'array' THEN t.skills ELSE '[]'::jsonb END,

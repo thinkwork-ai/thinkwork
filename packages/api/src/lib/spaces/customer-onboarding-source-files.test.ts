@@ -37,7 +37,7 @@ describe("ensureCustomerOnboardingSourceFiles", () => {
     });
 
     expect(result).toEqual({
-      targetPrefix: "tenants/acme/spaces/customer-onboarding/source/",
+      targetPrefix: "tenants/acme/spaces/customer-onboarding/",
       total: CUSTOMER_ONBOARDING_SPACE_SOURCE_FILES.length,
       written: SOURCE_FILE_PATHS,
       skipped: [],
@@ -48,7 +48,7 @@ describe("ensureCustomerOnboardingSourceFiles", () => {
       SOURCE_FILE_PATHS.map((path) =>
         expect.objectContaining({
           Bucket: "workspace-bucket",
-          Key: `tenants/acme/spaces/customer-onboarding/source/${path}`,
+          Key: `tenants/acme/spaces/customer-onboarding/${path}`,
           ContentType: "text/markdown; charset=utf-8",
         }),
       ),

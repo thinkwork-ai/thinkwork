@@ -51,7 +51,7 @@ async function _readAgentPrefixFiles(
     .where(eq(tenants.id, agent.tenant_id));
   if (!tenant?.slug) throw new Error(`Tenant ${agent.tenant_id} has no slug`);
 
-  const prefix = `tenants/${tenant.slug}/agents/${agent.slug}/workspace/`;
+  const prefix = `tenants/${tenant.slug}/agents/${agent.slug}/`;
   const out: AgentPrefixFile[] = [];
   let continuationToken: string | undefined;
   do {

@@ -152,7 +152,7 @@ describe("renderWorkspaceTupleForInvoke", () => {
         Payload: new TextEncoder().encode(
           JSON.stringify({
             ok: true,
-            renderedPrefix: "tenants/acme/rendered/marco/default/eric/",
+            renderedPrefix: "tenants/acme/threads/thread-1/",
             cacheStatus: "hit",
             activeSpace: {
               id: "space-1",
@@ -178,6 +178,7 @@ describe("renderWorkspaceTupleForInvoke", () => {
           tenantId: "tenant-1",
           agentId: "agent-1",
           spaceId: "space-1",
+          threadId: "thread-1",
           userId: "user-1",
           agentBlockedTools: ["browser_automation"],
         },
@@ -185,7 +186,7 @@ describe("renderWorkspaceTupleForInvoke", () => {
       ),
     ).resolves.toEqual({
       rendered: true,
-      renderedPrefix: "tenants/acme/rendered/marco/default/eric/",
+      renderedPrefix: "tenants/acme/threads/thread-1/",
       cacheStatus: "hit",
       activeSpace: {
         id: "space-1",
@@ -214,6 +215,8 @@ describe("renderWorkspaceTupleForInvoke", () => {
         : "{}";
     expect(JSON.parse(payload)).toMatchObject({
       agentBlockedTools: ["browser_automation"],
+      threadId: "thread-1",
+      threadSlug: "thread-1",
     });
   });
 
