@@ -3,10 +3,10 @@
 ## 2026-05-30 Closeout Audit
 
 - Plan: `docs/plans/2026-05-30-004-feat-mobile-pi-compatible-host-plan.md`
-- Status: active until Apple finishes TestFlight processing and on-device validation is recorded.
+- Status: active until on-device TestFlight validation is recorded.
 - Target branch: `main`
 - Last closeout PR: <https://github.com/thinkwork-ai/thinkwork/pull/1886>
-- Active final-gates branch: `codex/mobile-pi-testflight-closeout`
+- Active final-gates branch: `codex/mobile-pi-testflight-ready-status`
 
 ### Merged Implementation Units
 
@@ -119,10 +119,13 @@ us-east-1` now completes through the normal Cognito loopback flow, and
   - Commit: `3665461ed0882ac8c99ef8e3dd3ea4db8361bf72`
   - Submission: `082ac8d2-1cae-4415-ac1c-e816753d336e`
   - Artifact: `https://expo.dev/artifacts/eas/bNvynB3acLzR3BqQFYu3iT.ipa`
-  - Result: uploaded to App Store Connect; Apple processing pending.
+  - EAS submission result: `FINISHED`, no error.
+  - App Store Connect build id: `ffd0674f-a9e1-43be-8af6-1625b1162e98`
+  - Apple processing state: `VALID`
+  - TestFlight internal build state: `IN_BETA_TESTING`
+  - TestFlight external build state: `READY_FOR_BETA_SUBMISSION`
 
 ### Remaining Gates
 
-- Apple TestFlight processing for build 18 must finish.
 - iOS TestFlight/on-device matrix from `apps/mobile/scripts/pi-device-smoke.md`,
   including image/file attachment and abort validation on a real device.
