@@ -1,0 +1,88 @@
+---
+title: Turn Lifecycle
+description: How ThinkWork composes, hydrates, runs, and reconciles a Pi workspace turn.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Every Pi turn follows the same lifecycle on AgentCore, desktop, and mobile:
+
+```text
+compose -> hydrate -> run -> reconcile
+```
+
+That consistency is what lets the same workspace contract work in a Linux container, on a Mac desktop executor, and inside the mobile harness.
+
+## 1. Compose
+
+Composition resolves the current Thread into source folders and structured status:
+
+| Source        | What it contributes                                        |
+| ------------- | ---------------------------------------------------------- |
+| Agent source  | Worker identity, instructions, skills, tool guidance       |
+| Space source  | Active project/customer/team context, docs, Goal templates |
+| User source   | Requester personalization and user memory notes            |
+| Thread source | Goal narrative files and per-thread runtime metadata       |
+| Database      | Read-only status mounts, access grants, task/Goal state    |
+
+The renderer writes a hydrate manifest under the Thread runtime prefix. The manifest records source prefixes, source keys, ownership, ETags, sizes, and read-only status mounts.
+
+## 2. Hydrate
+
+The runtime downloads the manifest-backed workspace into `/workspace`.
+
+```text
+/workspace
+├── AGENTS.md
+├── SPACE.md
+├── USER.md
+├── GOAL.md
+├── PROGRESS.md
+├── DECISIONS.md
+├── ARTIFACTS.md
+├── HANDOFFS.md
+├── docs/
+├── memory/
+└── skills/
+```
+
+`GOAL.md` and `PROGRESS.md` are mounted read-only because they describe database state. Narrative files such as `DECISIONS.md`, `ARTIFACTS.md`, and `HANDOFFS.md` are writable Thread Goal files.
+
+## 3. Run
+
+The Pi runtime executes the model turn with `/workspace` as the working directory. The agent can:
+
+- read composed workspace context
+- write working and narrative files
+- run allowed coding tools
+- call platform tools such as `set_task_status`
+- call approved MCP and built-in tools
+
+The platform still enforces tool allowlists, runtime policy, and access checks. The local folder is the agent's working surface, not the permission authority.
+
+## 4. Reconcile
+
+After the turn, the runtime sends changed files to the finalize path. The API reconcile layer decides whether each file can be written back:
+
+| Check                  | Purpose                                                          |
+| ---------------------- | ---------------------------------------------------------------- |
+| Path provenance        | Routes each changed file to Agent, Space, User, or Thread source |
+| Lane enforcement       | Rejects writes outside the file's allowed owner lane             |
+| Access check           | Ensures the acting user still has access to the Space/Thread     |
+| Read-only status check | Rejects writes to `GOAL.md` and `PROGRESS.md`                    |
+| Secret scan            | Blocks or quarantines inline secret material                     |
+| Conditional S3 write   | Uses object freshness to catch stale writes                      |
+| Structured report      | Records per-file success, rejection, or conflict                 |
+
+Reconcile is file-side only. Structured state changes use transactional tools and resolvers.
+
+<Aside type="caution">
+  Do not ask an agent to change task status by editing `PROGRESS.md`. Ask it to
+  use the task-status tool. The file will re-render from the database.
+</Aside>
+
+## Failure behavior
+
+Reconcile is per-file best effort. One file can fail because of a stale ETag or secret scan while another file succeeds. The turn records a structured report so operators can see what wrote, what was rejected, and what needs retry.
+
+If access is revoked before reconcile, the API rejects the write. Desktop and mobile caches also carry access revalidation metadata and wipe revoked Space subtrees when notified.

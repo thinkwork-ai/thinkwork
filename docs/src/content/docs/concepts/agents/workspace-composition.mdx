@@ -15,6 +15,12 @@ ThinkWork does not fork a complete copy of every file for every agent. It resolv
   `workspaces/<slug>/`.
 </Aside>
 
+<Aside type="tip">
+  For the operator-facing ownership model and turn lifecycle, start with
+  [Workspace Architecture](/concepts/agents/workspace-architecture/). This page
+  goes deeper on the composition layers.
+</Aside>
+
 ## The layers
 
 Composition starts with the target being invoked and walks outward:
@@ -94,7 +100,37 @@ If `workspaces/expenses/GUARDRAILS.md` exists, it narrows the root guardrails fo
 
 ## S3 layout
 
-Every tenant's agent workspace state lives under:
+Every tenant's workspace state is stored under tenant-scoped source folders:
+
+```text
+tenants/{tenantSlug}/
+├── agents/{agentFolder}/
+│   ├── AGENTS.md
+│   ├── CONTEXT.md
+│   ├── GUARDRAILS.md
+│   ├── memory/
+│   └── skills/
+├── spaces/{spaceFolder}/
+│   ├── SPACE.md
+│   ├── docs/
+│   ├── goals/
+│   └── knowledge/
+├── users/{userFolder}/
+│   ├── USER.md
+│   └── memory/
+└── threads/{threadFolder}/
+    ├── .hydrate_manifest.json
+    ├── .rendered_at
+    ├── GOAL.md
+    ├── PROGRESS.md
+    ├── DECISIONS.md
+    ├── ARTIFACTS.md
+    └── HANDOFFS.md
+```
+
+The Agent, Space, and User folders are the editable factory sources. The Thread folder is the per-thread runtime and Goal-narrative surface. Runtime rendering writes a hydrate manifest that points back to source files rather than materializing a permanent copy for every Agent/Space/User tuple.
+
+Template and default sources still live in the Agent catalog area:
 
 ```text
 tenants/{tenantSlug}/agents/
@@ -107,36 +143,33 @@ tenants/{tenantSlug}/agents/
 │   └── {templateSlug}/
 │       ├── workspace/
 │       └── workspace-versions/
-└── {agentSlug}/
-    └── workspace/
-        ├── AGENTS.md
-        ├── CONTEXT.md
-        ├── memory/
-        ├── skills/
-        └── workspaces/
-            └── expenses/
-                └── CONTEXT.md
+└── {agentFolder}/
+    ├── AGENTS.md
+    ├── CONTEXT.md
+    ├── memory/
+    ├── skills/
+    └── workspaces/
+        └── expenses/
+            └── CONTEXT.md
 ```
 
-Space files are stored in the Space workspace and rendered into the active turn as Space context. The runtime should treat Space context as current workroom context, not as a replacement for the tenant agent's root folder.
+Space files are stored in the Space source folder and rendered into the active turn as Space context. The runtime should treat Space context as current workroom context, not as a replacement for the tenant agent's root folder.
 
 Space-owned Goal templates live under the Space source folder:
 
 ```text
-tenants/{tenantSlug}/spaces/{spaceSlug}/source/
-└── goals/
-    └── customer-onboarding/
-        ├── GOAL.md
-        ├── PROGRESS.md
-        ├── DECISIONS.md
-        ├── ARTIFACTS.md
-        └── HANDOFFS.md
+tenants/{tenantSlug}/spaces/{spaceFolder}/goals/customer-onboarding/
+├── GOAL.md
+├── PROGRESS.md
+├── DECISIONS.md
+├── ARTIFACTS.md
+└── HANDOFFS.md
 ```
 
 Thread-owned Goal instances live under the Thread folder:
 
 ```text
-tenants/{tenantSlug}/threads/{threadId}/
+tenants/{tenantSlug}/threads/{threadFolder}/
 ├── GOAL.md
 ├── PROGRESS.md
 ├── DECISIONS.md
@@ -160,6 +193,7 @@ This split is intentional. The Space template explains the reusable workflow. Th
 
 ## Related pages
 
+- [Workspace Architecture](/concepts/agents/workspace-architecture/) - the ownership model and turn lifecycle.
 - [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - folders as the behavior boundary.
 - [Goals](/concepts/goals/) - how promoted Threads get portable Goal folders.
 - [Inheritance Rules](/concepts/agents/inheritance-rules/) - path-specific lookup.

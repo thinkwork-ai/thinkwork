@@ -1,0 +1,74 @@
+---
+title: Ownership Model
+description: What lives in workspace files, what lives in the database, and why ThinkWork keeps those authorities separate.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+ThinkWork draws authority by **data kind**, not by feature. A Goal has files and database rows, but each fact inside the Goal still has one authoritative home.
+
+## Authority table
+
+| Data kind                         | Authoritative home                     | Examples                                                    | Why it lives there                                                                 |
+| --------------------------------- | -------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Working and narrative content     | S3 files, synced into `/workspace`     | Context, docs, memory notes, decisions, artifacts, handoffs | Plain text is readable, portable, diffable, and natural for an agent to work with. |
+| Structured workflow state         | Database                               | Task status, required flags, Goal lifecycle, review policy  | Transactions and constraints protect concurrent users, automations, and agents.    |
+| Access and binding state          | Database                               | Space membership, thread binding, tenant/user grants        | Access checks must be server-authoritative and current.                            |
+| Status-bearing workspace files    | Database-rendered read-only projection | `GOAL.md`, `PROGRESS.md`                                    | The agent needs to read status as files, but the database remains the authority.   |
+| File indexes and hydrate metadata | Derived projection                     | `.hydrate_manifest.json`, file lists                        | They are rebuildable from the source folders and database.                         |
+| Secrets                           | Secrets Manager or SSM reference       | `secret://...` aliases, approved ARNs                       | Secret material should not live in markdown or S3 workspace files.                 |
+
+## Invariants
+
+1. No fact is authoritative in both files and the database.
+2. `GOAL.md` and `PROGRESS.md` are read-only status projections.
+3. The agent changes structured status through transactional tools, not file edits.
+4. The agent changes working content by writing files, then reconcile writes those files back to S3.
+5. Derived projections can be rebuilt from their authorities.
+
+## Why the database owns structured state
+
+Structured status is multi-writer state. A user can update a checklist, an automation can trigger a worker, and an agent can complete work through a tool. Those updates need transactions, constraints, and consistent reads.
+
+Markdown is a good interface for narrative work. It is not a safe authority for "this required task is complete" or "this Goal is ready for review" when multiple writers can act at once.
+
+<Aside type="note">
+  The database does not replace the workspace. It owns the state that needs
+  relational guarantees. Files own the work material the agent reads and writes.
+</Aside>
+
+## How to decide where something belongs
+
+Use files when the content is prose, working context, narrative output, or a source the agent should directly edit:
+
+- `docs/customer-onboarding-intake.md`
+- `memory/preferences.md`
+- `DECISIONS.md`
+- `ARTIFACTS.md`
+- `HANDOFFS.md`
+- `skills/<slug>/SKILL.md`
+
+Use the database when the value is status, policy, identity, access, or a queryable workflow fact:
+
+- linked task status and required flags
+- Goal lifecycle and review state
+- Space membership
+- thread ownership and binding
+- runtime policy selections
+- task assignee labels and department labels
+
+Use secret references when content needs credential material:
+
+```text
+secret://tenant/salesforce/oauth-token
+```
+
+The reference can appear in configuration where approved. The secret value itself does not belong in a workspace file.
+
+## What operators should do
+
+- Edit Agent, Space, User, and narrative Thread files for working content.
+- Use task, Goal, access, and review actions for structured state.
+- Treat `GOAL.md` and `PROGRESS.md` as readable status snapshots.
+- Treat `.hydrate_manifest.json` and `.rendered_at` as runtime metadata, not authoring surfaces.
+- Keep credentials out of markdown and use the configured secret surfaces.

@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U13 One-shot S3 regenerate/cutover.
-- Active branch: `codex/workspace-arch-u13`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u13`.
-- Started: 2026-05-31 from `origin/main` at `3ec328ad`.
-- Latest merged PR: [#1918](https://github.com/thinkwork-ai/thinkwork/pull/1918).
-- CI/deploy: U12 required PR checks passed and merged into `main`.
+- Active unit: U14 User-facing architecture documentation.
+- Active branch: `codex/workspace-arch-u14`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u14`.
+- Started: 2026-05-31 from `origin/main` at `22b2acba`.
+- Latest merged PR: [#1919](https://github.com/thinkwork-ai/thinkwork/pull/1919).
+- CI/deploy: U13 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -205,6 +205,31 @@ install-electron --no`, and the full desktop suite then passed all 145
   `pnpm typecheck`, `pnpm lint`, changed-file Prettier check, and
   `git diff --check`.
 - Opened PR [#1919](https://github.com/thinkwork-ai/thinkwork/pull/1919).
+- PR [#1919](https://github.com/thinkwork-ai/thinkwork/pull/1919) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `22b2acba40cb601f9583358b4c68d62b252b47aa`.
+- Removed U13 worktree/local branch, confirmed the remote branch was already
+  deleted, synced `main`, and created isolated U14 worktree
+  `codex/workspace-arch-u14` from `origin/main` at `22b2acba`.
+- Started U14 user-facing architecture documentation. Installed worktree
+  dependencies with `pnpm install`; optional `node-liblzma` native rebuild
+  again reported missing `pkg-config`, but `pnpm` completed successfully.
+- Added a new Workspace Architecture docs page set covering the ownership
+  model, factory-to-runtime composition, turn lifecycle, and how to read the
+  Agent/Space/User/Thread workspace tree. Updated the existing Workspace
+  Composition page's S3 layout section to match the shipped canonical source
+  prefixes and per-thread runtime manifest shape.
+- U14 documentation verification passed:
+  `pnpm --filter @thinkwork/docs build`, `pnpm typecheck`, `pnpm lint`,
+  changed-file Prettier check via
+  `pnpm dlx prettier@3.8.2 --check <changed docs files>`, and
+  `git diff --check`. Docs build emitted only existing warnings for missing
+  i18n content, the redirect-only workspace-overlay page, and unset sitemap
+  `site`.
+- U14 review verified the new docs against the shipped renderer/reconcile
+  behavior and found no stale changed-page references to the retired
+  `tenants/{tenant}/rendered/...`,
+  `agents/{agentSlug}/workspace`, or `spaces/{spaceSlug}/source` layouts.
 - Created isolated U1 worktree `codex/workspace-arch-u1` from `origin/main`.
 - Implemented U1 substrate:
   `workspace_folder_name` columns and partial unique indexes for agents,

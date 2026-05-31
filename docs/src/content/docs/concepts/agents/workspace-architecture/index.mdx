@@ -1,0 +1,106 @@
+---
+title: Workspace Architecture
+description: The ownership model, factory-to-runtime composition, and turn lifecycle for ThinkWork workspaces.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+ThinkWork workspaces are split into two kinds of durable state:
+
+- **Files** hold working and narrative content: context, memory notes, docs, decisions, artifacts, handoffs, skills, and instructions the agent reads while working.
+- **The database** holds structured workflow state: task status, Goal lifecycle, review policy, access grants, thread bindings, and other values that need transactions.
+
+That split is the point of the architecture. A fact has one authoritative home. Files are portable, readable, diffable, and natural for an agent running in a filesystem. The database is transactional, constrained, and safe for many users, automations, and agent workers updating structured state at the same time.
+
+<Aside type="tip">
+  If you remember one rule, remember this: working content changes through
+  files; structured status changes through tools and platform actions.
+</Aside>
+
+## The model at a glance
+
+```mermaid
+flowchart TB
+  subgraph Factory["Factory source folders"]
+    Agent["Agent source\nidentity, instructions, skills"]
+    Space["Space source\nproject docs, workflow templates, knowledge"]
+    User["User source\npersonalization and memory notes"]
+  end
+
+  subgraph DB["Database"]
+    Goals["Goals and linked tasks"]
+    Access["Access grants and thread binding"]
+    Policy["Review policy, owner, mode"]
+  end
+
+  Factory --> Compose["Compose by reference"]
+  DB --> Status["Render read-only status files"]
+  Compose --> Runtime["Per-thread runtime workspace\n/workspace"]
+  Status --> Runtime
+  Runtime --> Turn["Pi turn\nAgentCore, desktop, or mobile"]
+  Turn --> Reconcile["Reconcile file changes through the API"]
+  Reconcile --> Factory
+  Turn --> Tools["Structured tools and resolvers"]
+  Tools --> DB
+```
+
+## Factory and runtime
+
+The **factory** is the editable source side of the workspace. It contains one canonical Agent source, Space sources, and User sources. Operators edit these sources in the workspace UI or through platform actions.
+
+The **runtime workspace** is what the agent sees for one Thread turn. It is rendered per Thread under a stable thread folder and hydrated into `/workspace` for Pi on AgentCore, desktop, and mobile. Runtime rendering is by reference: it writes a hydrate manifest that points back to the source files instead of copying every Agent, Space, and User file into a permanent per-user tuple.
+
+## Canonical S3 shape
+
+The canonical source folders are tenant-scoped in S3:
+
+```text
+tenants/{tenant}/
+├── agents/{agent-folder}/
+│   ├── AGENTS.md
+│   ├── CONTEXT.md
+│   ├── skills/
+│   └── memory/
+├── spaces/{space-folder}/
+│   ├── SPACE.md
+│   ├── docs/
+│   ├── goals/
+│   └── knowledge/
+├── users/{user-folder}/
+│   ├── USER.md
+│   └── memory/
+└── threads/{thread-folder}/
+    ├── .hydrate_manifest.json
+    ├── .rendered_at
+    ├── GOAL.md
+    ├── PROGRESS.md
+    ├── DECISIONS.md
+    ├── ARTIFACTS.md
+    └── HANDOFFS.md
+```
+
+Folder names are human-readable and filesystem-safe. The stable identity remains the database UUID; the folder name is the readable path.
+
+## Why status is not file-authoritative
+
+`GOAL.md` and `PROGRESS.md` are status files, but they are not the authority for status. They are read-only projections rendered from database rows so the agent can understand the work in normal workspace form.
+
+When an agent completes a task, it uses the task-status tool. That tool writes the database transaction, then the status files can be re-rendered from the new structured state. Editing `PROGRESS.md` text does not change the task row.
+
+## How a turn flows
+
+Every Pi runtime follows the same turn shape:
+
+1. **Compose.** Resolve the Agent, Space, User, Thread, and database status sources.
+2. **Hydrate.** Download the manifest-backed files into `/workspace`.
+3. **Run.** The agent reads and writes files, calls tools, and produces the reply.
+4. **Reconcile.** The runtime sends changed files to the API. The API checks provenance, lanes, access, secret scanning, and object freshness before writing source files back to S3.
+
+Structured state changes do not go through reconcile. They go through tools and resolvers that write the database.
+
+## Related pages
+
+- [Ownership Model](/concepts/agents/workspace-architecture/ownership-model/) explains what belongs in files and what belongs in the database.
+- [Turn Lifecycle](/concepts/agents/workspace-architecture/turn-lifecycle/) walks through compose, hydrate, run, and reconcile.
+- [Reading the Workspace Tree](/concepts/agents/workspace-architecture/workspace-tree/) explains the folders an operator sees.
+- [Workspace Composition](/concepts/agents/workspace-composition/) documents the detailed composition layers.
