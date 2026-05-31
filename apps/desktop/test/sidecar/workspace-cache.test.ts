@@ -65,8 +65,8 @@ describe("WorkspaceCache", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("syncs only the approved rendered prefix and removes stale files", async () => {
-    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+  it("syncs only approved workspace prefixes and removes stale files", async () => {
+    const prefix = "tenants/acme/agents/marco/";
     const cache = new WorkspaceCache(
       root,
       new FakeStore({
@@ -103,7 +103,7 @@ describe("WorkspaceCache", () => {
   });
 
   it("reuses a fresh local workspace cache without redownloading every file", async () => {
-    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    const prefix = "tenants/acme/agents/marco/";
     const store = new FakeStore({
       [`${prefix}AGENTS.md`]: "# Agent",
     });
@@ -165,7 +165,7 @@ describe("WorkspaceCache", () => {
   });
 
   it("serves stale local files immediately and refreshes unchanged files in the background", async () => {
-    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    const prefix = "tenants/acme/agents/marco/";
     let now = new Date("2026-05-28T12:00:00.000Z");
     const refreshes: Array<() => Promise<void>> = [];
     const store = new FakeStore({
@@ -207,7 +207,7 @@ describe("WorkspaceCache", () => {
   });
 
   it("redownloads only changed remote objects during background refresh", async () => {
-    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    const prefix = "tenants/acme/agents/marco/";
     let now = new Date("2026-05-28T12:00:00.000Z");
     const refreshes: Array<() => Promise<void>> = [];
     const store = new FakeStore({
@@ -249,7 +249,7 @@ describe("WorkspaceCache", () => {
   });
 
   it("fails closed when a stale local copy exceeds the offline execution TTL", async () => {
-    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    const prefix = "tenants/acme/agents/marco/";
     let now = new Date("2026-05-28T12:00:00.000Z");
     const store = new FakeStore({
       [`${prefix}AGENTS.md`]: "# Agent",
@@ -276,7 +276,7 @@ describe("WorkspaceCache", () => {
   });
 
   it("does not serve a fresh cache hit after the offline execution TTL expires", async () => {
-    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    const prefix = "tenants/acme/agents/marco/";
     let now = new Date("2026-05-28T12:00:00.000Z");
     const store = new FakeStore({
       [`${prefix}AGENTS.md`]: "# Agent",
@@ -306,7 +306,7 @@ describe("WorkspaceCache", () => {
   });
 
   it("revalidates an expired local copy before serving it again", async () => {
-    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    const prefix = "tenants/acme/agents/marco/";
     let now = new Date("2026-05-28T12:00:00.000Z");
     const store = new FakeStore({
       [`${prefix}AGENTS.md`]: "# Agent",
@@ -361,7 +361,7 @@ describe("WorkspaceCache", () => {
     ).resolves.toBe("# Still granted");
   });
 
-  it("rejects rendered prefixes outside the tenant and agent scope", async () => {
+  it("rejects workspace prefixes outside the tenant and agent scope", async () => {
     const cache = new WorkspaceCache(root, new FakeStore({}));
 
     await expect(
@@ -377,7 +377,7 @@ describe("WorkspaceCache", () => {
     await expect(
       cache.sync({
         bucket: "workspace-bucket",
-        renderedPrefix: "tenants/other/rendered/marco/sales/user-1/",
+        renderedPrefix: "tenants/other/agents/marco/",
         partition: PARTITION,
       }),
     ).rejects.toBeInstanceOf(WorkspaceBoundaryError);
@@ -385,7 +385,7 @@ describe("WorkspaceCache", () => {
     await expect(
       cache.sync({
         bucket: "workspace-bucket",
-        renderedPrefix: "tenants/acme/rendered/other/sales/user-1/",
+        renderedPrefix: "tenants/acme/agents/other/",
         partition: PARTITION,
       }),
     ).rejects.toThrow("outside the expected tenant/agent scope");
@@ -397,20 +397,36 @@ describe("WorkspaceCache", () => {
         partition: PARTITION,
       }),
     ).rejects.toThrow("outside the expected tenant/agent scope");
+
+    await expect(
+      cache.sync({
+        bucket: "workspace-bucket",
+        renderedPrefix: "tenants/acme/threads/",
+        partition: PARTITION,
+      }),
+    ).rejects.toThrow("outside the expected tenant/agent scope");
+
+    await expect(
+      cache.sync({
+        bucket: "workspace-bucket",
+        renderedPrefix: "tenants/acme/rendered/marco/sales/user-1/",
+        partition: PARTITION,
+      }),
+    ).rejects.toThrow("outside the expected tenant/agent scope");
   });
 
   it("rejects unsafe workspace prefixes and object keys", async () => {
     const cache = new WorkspaceCache(
       root,
       new FakeStore({
-        "tenants/acme/rendered/marco/sales/user-1/../secret.txt": "nope",
+        "tenants/acme/agents/marco/../secret.txt": "nope",
       }),
     );
 
     await expect(
       cache.sync({
         bucket: "workspace-bucket",
-        renderedPrefix: "/tenants/acme/rendered/marco/sales/user-1/",
+        renderedPrefix: "/tenants/acme/agents/marco/",
         partition: PARTITION,
       }),
     ).rejects.toThrow("relative S3 prefix");
@@ -418,7 +434,7 @@ describe("WorkspaceCache", () => {
     await expect(
       cache.sync({
         bucket: "workspace-bucket",
-        renderedPrefix: "tenants/acme/rendered/marco/sales/user-1/",
+        renderedPrefix: "tenants/acme/agents/marco/",
         partition: PARTITION,
       }),
     ).rejects.toThrow("workspace object key is unsafe");

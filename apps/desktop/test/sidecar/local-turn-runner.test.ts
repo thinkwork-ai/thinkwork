@@ -37,7 +37,7 @@ const BASE_INVOCATION = {
   tenant_slug: "acme",
   instance_id: "marco",
   workspace_bucket: "workspace-bucket",
-  rendered_workspace_prefix: "tenants/acme/rendered/marco/sales/user-1/",
+  rendered_workspace_prefix: "tenants/acme/threads/customer-kickoff/",
   thinkwork_api_url: "https://api.test",
   finalize_callback_url: "https://api.test/api/threads/thread-1/finalize",
 };
@@ -50,7 +50,7 @@ class FakeStore implements WorkspaceObjectStore {
     this.listed = true;
     return [
       {
-        key: "tenants/acme/rendered/marco/sales/user-1/AGENTS.md",
+        key: "tenants/acme/threads/customer-kickoff/AGENTS.md",
       },
     ];
   }
@@ -74,7 +74,7 @@ function createPrepared(
       expiresAt: "2026-05-28T13:00:00.000Z",
       workspace: {
         bucket: "workspace-bucket",
-        renderedPrefix: "tenants/acme/rendered/marco/sales/user-1/",
+        renderedPrefix: "tenants/acme/threads/customer-kickoff/",
       },
       aws: {
         mode: "server-brokered",
@@ -173,7 +173,7 @@ describe("runLocalDesktopTurn", () => {
     expect(promptText).toContain("Current user message:");
     expect(store.listed).toBe(true);
     expect(store.fetched).toEqual([
-      "tenants/acme/rendered/marco/sales/user-1/AGENTS.md",
+      "tenants/acme/threads/customer-kickoff/AGENTS.md",
     ]);
   });
 

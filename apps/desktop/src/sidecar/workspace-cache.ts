@@ -418,21 +418,21 @@ export function normalizeRenderedWorkspacePrefix(
     );
   }
   const normalized = trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
-  for (const segment of normalized.split("/").filter(Boolean)) {
+  const segments = normalized.split("/").filter(Boolean);
+  for (const segment of segments) {
     if (segment === "." || segment === "..") {
       throw new WorkspaceBoundaryError(
         "rendered_workspace_prefix contains an unsafe path segment",
       );
     }
   }
-  const allowedPrefixes = [
-    `tenants/${tenantSlug}/rendered/${agentSlug}/`,
-    `tenants/${tenantSlug}/threads/`,
-  ];
+  const allowedPrefixes = [`tenants/${tenantSlug}/agents/${agentSlug}/`];
+  const threadPrefix = `tenants/${tenantSlug}/threads/`;
   if (
     !allowedPrefixes.some((allowedPrefix) =>
       normalized.startsWith(allowedPrefix),
-    )
+    ) &&
+    !(normalized.startsWith(threadPrefix) && segments.length >= 4)
   ) {
     throw new WorkspaceBoundaryError(
       "rendered_workspace_prefix is outside the expected tenant/agent scope",

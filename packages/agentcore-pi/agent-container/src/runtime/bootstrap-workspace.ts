@@ -4,9 +4,9 @@
  * Per docs/plans/2026-04-27-003 (materialize-at-write-time): the runtime
  * reads one already-materialized S3 prefix. There is no overlay walk, no
  * template fallback, no read-time substitution. Bootstrap is "list the prefix,
- * download every file." Most invocations use the rendered Agent + Space + User
- * workspace prefix prepared by the API; legacy invocations fall back to the
- * agent's raw workspace prefix.
+ * download every file." Most invocations use the per-thread runtime prefix
+ * prepared by the API; legacy invocations fall back to the agent's canonical
+ * source prefix.
  *
  * TypeScript port of the Strands `bootstrap_workspace.py` helper —
  * intentionally identical contract so an agent invoked on either runtime
@@ -42,7 +42,7 @@ export interface BootstrapWorkspaceOptions {
 }
 
 function agentPrefix(tenantSlug: string, agentSlug: string): string {
-  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/`;
 }
 
 function normalizeRenderedWorkspacePrefix(
@@ -64,14 +64,13 @@ function normalizeRenderedWorkspacePrefix(
     );
   }
 
-  const allowedPrefixes = [
-    `tenants/${tenantSlug}/rendered/${agentSlug}/`,
-    `tenants/${tenantSlug}/threads/`,
-  ];
+  const allowedPrefixes = [`tenants/${tenantSlug}/agents/${agentSlug}/`];
+  const threadPrefix = `tenants/${tenantSlug}/threads/`;
   if (
     !allowedPrefixes.some((allowedPrefix) =>
       normalized.startsWith(allowedPrefix),
-    )
+    ) &&
+    !(normalized.startsWith(threadPrefix) && segments.length >= 4)
   ) {
     throw new Error(
       "rendered_workspace_prefix is outside the expected tenant/agent scope.",
@@ -86,14 +85,14 @@ function resolveWorkspacePrefix(
   agentSlug: string,
   options: BootstrapWorkspaceOptions = {},
 ): string {
-  const renderedPrefix = options.workspacePrefix
+  const scopedPrefix = options.workspacePrefix
     ? normalizeRenderedWorkspacePrefix(
         tenantSlug,
         agentSlug,
         options.workspacePrefix,
       )
     : "";
-  return renderedPrefix || agentPrefix(tenantSlug, agentSlug);
+  return scopedPrefix || agentPrefix(tenantSlug, agentSlug);
 }
 
 async function listAgentKeys(
