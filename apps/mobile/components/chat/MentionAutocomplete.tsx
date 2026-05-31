@@ -1,7 +1,10 @@
 import React from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
-import { useColorScheme } from "nativewind";
-import { COLORS } from "@/lib/theme";
+import { View, ScrollView, type StyleProp, type ViewStyle } from "react-native";
+import {
+  FLOATING_MENU_ROW_HEIGHT,
+  FloatingMenuItem,
+  FloatingMenuSurface,
+} from "@/components/ui/floating-menu";
 
 export interface MentionCandidate {
   id: string;
@@ -13,11 +16,65 @@ export interface MentionCandidate {
   rawText?: string;
 }
 
+export const COMPOSER_PICKER_VISIBLE_ROWS = 5;
+export const COMPOSER_PICKER_HEIGHT =
+  FLOATING_MENU_ROW_HEIGHT * COMPOSER_PICKER_VISIBLE_ROWS;
+
+export interface ComposerPickerOption {
+  id: string;
+  label: string;
+}
+
+interface ComposerPickerOverlayProps<T extends ComposerPickerOption> {
+  options: T[];
+  onSelect: (option: T) => void;
+  visible: boolean;
+  style?: StyleProp<ViewStyle>;
+  width?: number;
+}
+
 interface MentionAutocompleteProps {
   query: string;
   candidates: MentionCandidate[];
   onSelect: (candidate: MentionCandidate) => void;
   visible: boolean;
+  style?: StyleProp<ViewStyle>;
+  width?: number;
+}
+
+export function ComposerPickerOverlay<T extends ComposerPickerOption>({
+  options,
+  onSelect,
+  visible,
+  style,
+  width,
+}: ComposerPickerOverlayProps<T>) {
+  if (!visible || options.length === 0) return null;
+
+  return (
+    <FloatingMenuSurface
+      style={[
+        {
+          width,
+          height:
+            Math.min(options.length, COMPOSER_PICKER_VISIBLE_ROWS) *
+            FLOATING_MENU_ROW_HEIGHT,
+          maxHeight: COMPOSER_PICKER_HEIGHT,
+        },
+        style,
+      ]}
+    >
+      <ScrollView keyboardShouldPersistTaps="always">
+        {options.map((option) => (
+          <FloatingMenuItem
+            key={option.id}
+            label={option.label}
+            onPress={() => onSelect(option)}
+          />
+        ))}
+      </ScrollView>
+    </FloatingMenuSurface>
+  );
 }
 
 export function MentionAutocomplete({
@@ -25,11 +82,9 @@ export function MentionAutocomplete({
   candidates,
   onSelect,
   visible,
+  style,
+  width,
 }: MentionAutocompleteProps) {
-  const { colorScheme } = useColorScheme();
-  const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
-  const dark = colorScheme === "dark";
-
   if (!visible) return null;
 
   const filtered = candidates
@@ -40,59 +95,15 @@ export function MentionAutocomplete({
   if (filtered.length === 0) return null;
 
   return (
-    <View
-      style={{
-        marginHorizontal: 16,
-        marginTop: 0,
-        marginBottom: 0,
-        backgroundColor: dark ? "#1c1c1e" : "#ffffff",
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: dark ? "#333" : "#e0e0e0",
-        overflow: "hidden",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 4,
-        maxHeight: 220,
-      }}
-    >
-      <ScrollView keyboardShouldPersistTaps="always">
-        {filtered.map((candidate, i) => (
-          <Pressable key={candidate.id} onPress={() => onSelect(candidate)}>
-            {({ pressed }) => (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingHorizontal: 16,
-                  paddingVertical: 14,
-                  borderBottomWidth: i < filtered.length - 1 ? 1 : 0,
-                  borderBottomColor: dark ? "#2a2a2a" : "#f0f0f0",
-                  backgroundColor: pressed
-                    ? dark
-                      ? "#2a2a2a"
-                      : "#f5f5f5"
-                    : "transparent",
-                }}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    flex: 1,
-                    color: colors.foreground,
-                    fontSize: 16,
-                    fontWeight: "500",
-                  }}
-                >
-                  {candidate.name}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
+    <ComposerPickerOverlay
+      options={filtered.map((candidate) => ({
+        ...candidate,
+        label: candidate.name,
+      }))}
+      onSelect={onSelect}
+      visible={visible}
+      style={style}
+      width={width}
+    />
   );
 }

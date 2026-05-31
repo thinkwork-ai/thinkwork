@@ -116,11 +116,7 @@ import {
   type WorkspacePickerSheetRef,
   type SubAgent,
 } from "@/components/input/WorkspacePickerSheet";
-import {
-  SpacePickerSheet,
-  type SpacePickerSheetRef,
-  type SpaceOption,
-} from "@/components/input/SpacePickerSheet";
+import type { SpaceOption } from "@/components/input/SpacePickerSheet";
 import {
   useQuickActions,
   useCreateQuickAction,
@@ -616,7 +612,6 @@ export default function ThreadsScreen() {
     newThreadAgentForcedOn || newThreadAgentEnabled;
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const quickActionFormRef = useRef<QuickActionFormSheetRef>(null);
-  const spacePickerRef = useRef<SpacePickerSheetRef>(null);
   const workspacePickerRef = useRef<WorkspacePickerSheetRef>(null);
   const messageInputRef = useRef<MessageInputFooterRef>(null);
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
@@ -647,6 +642,15 @@ export default function ThreadsScreen() {
         "Default",
     }),
     [effectiveSpaceId, spaces],
+  );
+  const newThreadSpaceOptions = useMemo<SelectedSpace[]>(
+    () => [
+      { id: null, name: "Default" },
+      ...spaces
+        .filter((space) => space.id !== defaultSpace?.id)
+        .map((space) => ({ id: space.id, name: space.name })),
+    ],
+    [defaultSpace?.id, spaces],
   );
 
   useEffect(() => {
@@ -1410,10 +1414,8 @@ export default function ThreadsScreen() {
             selectedMentions={newThreadMentions}
             onMentionsChange={setNewThreadMentions}
             selectedSpace={selectedSpace}
-            onSpacePress={() => {
-              Keyboard.dismiss();
-              spacePickerRef.current?.present();
-            }}
+            spaceOptions={newThreadSpaceOptions}
+            onSpaceSelect={(space) => setSelectedSpaceId(space.id)}
             selectedWorkspaces={selectedWorkspaces}
             onRemoveWorkspace={(id) =>
               setSelectedWorkspaces((prev) => prev.filter((w) => w.id !== id))
@@ -1503,13 +1505,6 @@ export default function ThreadsScreen() {
             return [...prev, { id: agent.id, name: agent.name }];
           });
         }}
-      />
-
-      <SpacePickerSheet
-        ref={spacePickerRef}
-        spaces={spaces}
-        selectedId={selectedSpaceId}
-        onSelect={(space) => setSelectedSpaceId(space?.id ?? null)}
       />
 
       <QuickActionFormSheet

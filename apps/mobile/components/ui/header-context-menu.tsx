@@ -1,9 +1,12 @@
 import React, { useRef, useState, useCallback } from "react";
 import { View, Pressable, Modal, Dimensions } from "react-native";
 import { MoreHorizontal } from "lucide-react-native";
-import { Text } from "@/components/ui/typography";
 import { useColorScheme } from "nativewind";
 import { COLORS } from "@/lib/theme";
+import {
+  FloatingMenuItem,
+  FloatingMenuSurface,
+} from "@/components/ui/floating-menu";
 
 interface MenuItem {
   label: string;
@@ -62,53 +65,23 @@ export function HeaderContextMenu({ items, trigger }: HeaderContextMenuProps) {
               position: "absolute",
               top: dropdownTop,
               right: dropdownRight,
-              minWidth: 200,
-              maxWidth: 280,
-              backgroundColor: colorScheme === "dark" ? "#1c1c1e" : "#ffffff",
-              borderRadius: 12,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: colorScheme === "dark" ? 0.5 : 0.15,
-              shadowRadius: 12,
-              elevation: 8,
-              borderWidth: 1,
-              borderColor:
-                colorScheme === "dark"
-                  ? "rgba(255,255,255,0.1)"
-                  : "rgba(0,0,0,0.08)",
             }}
           >
-            {items.map((item, index) => {
-              const isLast = index === items.length - 1;
-              const Icon = item.icon;
-              const itemColor = item.destructive
-                ? "#ef4444"
-                : colors.foreground;
-              return (
-                <Pressable
+            <FloatingMenuSurface style={{ minWidth: 200, maxWidth: 280 }}>
+              {items.map((item) => (
+                <FloatingMenuItem
                   key={item.label}
+                  label={item.label}
+                  icon={item.icon}
+                  destructive={item.destructive}
+                  separator={item.separator}
                   onPress={() => {
                     setVisible(false);
                     item.onPress();
                   }}
-                  className="flex-row items-center gap-3 px-4 py-2.5"
-                  style={
-                    item.separator
-                      ? {
-                          borderTopWidth: 0.5,
-                          borderTopColor:
-                            colorScheme === "dark"
-                              ? "rgba(255,255,255,0.08)"
-                              : "rgba(0,0,0,0.06)",
-                        }
-                      : undefined
-                  }
-                >
-                  {Icon && <Icon size={16} color={itemColor} />}
-                  <Text style={{ color: itemColor }}>{item.label}</Text>
-                </Pressable>
-              );
-            })}
+                />
+              ))}
+            </FloatingMenuSurface>
           </View>
         </Pressable>
       </Modal>
