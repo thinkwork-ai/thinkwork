@@ -230,6 +230,7 @@ install-electron --no`, and the full desktop suite then passed all 145
   behavior and found no stale changed-page references to the retired
   `tenants/{tenant}/rendered/...`,
   `agents/{agentSlug}/workspace`, or `spaces/{spaceSlug}/source` layouts.
+- Opened PR [#1920](https://github.com/thinkwork-ai/thinkwork/pull/1920).
 - Created isolated U1 worktree `codex/workspace-arch-u1` from `origin/main`.
 - Implemented U1 substrate:
   `workspace_folder_name` columns and partial unique indexes for agents,
