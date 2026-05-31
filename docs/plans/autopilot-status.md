@@ -21,8 +21,8 @@ Target branch: `main`
 - Active worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u1`.
 - Started: 2026-05-31 from `origin/main` at `a6fc3b66`.
-- Active PR: pending.
-- CI: not started.
+- Active PR: [#1896](https://github.com/thinkwork-ai/thinkwork/pull/1896).
+- CI: pending.
 
 ### Active Unit Notes
 
@@ -53,6 +53,7 @@ Target branch: `main`
 scripts/build-lambdas.sh`, `terraform fmt -check
 terraform/modules/app/lambda-api/handlers.tf`, touched-file Prettier check,
   and `git diff --check`.
+- Opened PR [#1896](https://github.com/thinkwork-ai/thinkwork/pull/1896).
 
 ### Blockers
 
