@@ -23,6 +23,7 @@ import {
   agentTemplates,
 } from "../../utils.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 
 export const bootstrapUser = async (
   _parent: unknown,
@@ -79,6 +80,13 @@ export const bootstrapUser = async (
     console.log(
       `[bootstrapUser] Claiming pre-provisioned paid tenant ${pendingTenant.id} (plan=${pendingTenant.plan}) for ${email}`,
     );
+    const existingUsers = await db
+      .select({
+        id: users.id,
+        workspaceFolderName: users.workspace_folder_name,
+      })
+      .from(users)
+      .where(eq(users.tenant_id, pendingTenant.id));
 
     const [user] = await db
       .insert(users)
@@ -86,6 +94,11 @@ export const bootstrapUser = async (
         tenant_id: pendingTenant.id,
         email,
         name,
+        workspace_folder_name: workspaceFolderName(
+          name,
+          existingUsers.map((row) => row.workspaceFolderName ?? row.id),
+          "user",
+        ),
         // Stable identity link captured at creation, where email (and thus
         // the Cognito sub) is guaranteed present — so the user resolves by
         // sub forever, independent of whether later tokens carry email.
@@ -167,6 +180,7 @@ export const bootstrapUser = async (
       tenant_id: tenant.id,
       email,
       name,
+      workspace_folder_name: workspaceFolderName(name, [], "user"),
       // Stable identity link captured at creation (see paid-path note above).
       cognito_sub: cognitoSub,
     })

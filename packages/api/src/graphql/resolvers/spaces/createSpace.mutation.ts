@@ -5,6 +5,7 @@ import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { normalizeSpaceSlug } from "../../../lib/spaces/space-slug.js";
 import { parseSpaceAccessMode, toGraphqlSpace } from "./shared.js";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 
 type CreateSpaceInput = {
   tenantId: string;
@@ -33,6 +34,7 @@ export async function createSpace(
     input.tenantId,
     normalizeSpaceSlug(name),
   );
+  const folderName = await nextAvailableSpaceFolderName(input.tenantId, name);
 
   const [row] = await db.transaction(async (tx) => {
     const [created] = await tx
@@ -40,6 +42,7 @@ export async function createSpace(
       .values({
         tenant_id: input.tenantId,
         slug,
+        workspace_folder_name: folderName,
         name,
         description,
         status: "active",
@@ -71,6 +74,24 @@ export async function createSpace(
   });
 
   return toGraphqlSpace(row);
+}
+
+async function nextAvailableSpaceFolderName(
+  tenantId: string,
+  displayName: string,
+) {
+  const existingRows = await db
+    .select({
+      slug: spaces.slug,
+      workspaceFolderName: spaces.workspace_folder_name,
+    })
+    .from(spaces)
+    .where(and(eq(spaces.tenant_id, tenantId)));
+  return workspaceFolderName(
+    displayName,
+    existingRows.map((row) => row.workspaceFolderName ?? row.slug),
+    "space",
+  );
 }
 
 async function nextAvailableSpaceSlug(tenantId: string, baseSlug: string) {

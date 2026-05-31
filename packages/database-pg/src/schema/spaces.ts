@@ -32,6 +32,7 @@ export const spaces = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" })
       .notNull(),
     slug: text("slug").notNull(),
+    workspace_folder_name: text("workspace_folder_name"),
     name: text("name").notNull(),
     description: text("description"),
     prompt: text("prompt"),
@@ -71,6 +72,9 @@ export const spaces = pgTable(
   },
   (table) => [
     uniqueIndex("uq_spaces_tenant_slug").on(table.tenant_id, table.slug),
+    uniqueIndex("uq_spaces_tenant_workspace_folder_name")
+      .on(table.tenant_id, table.workspace_folder_name)
+      .where(sql`${table.workspace_folder_name} IS NOT NULL`),
     index("idx_spaces_tenant_status").on(table.tenant_id, table.status),
     index("idx_spaces_tenant_template").on(table.tenant_id, table.template_key),
     index("idx_spaces_migrated_template")

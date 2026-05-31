@@ -47,6 +47,7 @@ import {
   MOBILE_PI_INVOCATION_SOURCE,
   MOBILE_PI_RUNTIME_TYPE,
 } from "../../../lib/mobile-turns/lifecycle.js";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 
 function parseJsonArray(value: unknown): Record<string, unknown>[] {
   if (!value) return [];
@@ -196,213 +197,232 @@ export const createThread = async (
   }
   const openingMessageCreatedAt =
     i.firstMessage || shouldSeedMobileTurn ? new Date() : null;
-  const { row, firstMessageId, mobileTurn } = await db.transaction(async (tx) => {
-    const [tenant] = await tx
-      .update(tenants)
-      .set({
-        issue_counter: sql`${tenants.issue_counter} + 1`,
-      })
-      .where(eq(tenants.id, i.tenantId))
-      .returning({
-        next_number: sql<number>`${tenants.issue_counter}`,
-      });
-    if (!tenant) throw new Error("Tenant not found");
-    const nextNumber = tenant.next_number;
-    const identifier = `${prefix}-${nextNumber}`;
-
-    // Mirror sendMessage's auto-title logic so the atomic path matches the
-    // two-step flow when callers leave title as "Untitled conversation".
-    let effectiveTitle = i.title;
-    if (i.firstMessage && i.title === "Untitled conversation") {
-      const raw = i.firstMessage.trim();
-      effectiveTitle =
-        raw.length <= 80 ? raw : raw.substring(0, 80).replace(/\s+\S*$/, "...");
-    }
-
-    const [threadRow] = await tx
-      .insert(threads)
-      .values({
-        tenant_id: i.tenantId,
-        agent_id: threadAgentId ?? undefined,
-        space_id: threadSpace.id,
-        user_id: createdByType === "user" ? createdById : undefined,
-        number: nextNumber,
-        identifier,
-        title: effectiveTitle,
-        status: initialStatus,
-        channel,
-        assignee_type: i.assigneeType,
-        assignee_id: i.assigneeId,
-        billing_code: i.billingCode,
-        created_by_type: createdByType,
-        created_by_id: createdById,
-        labels: i.labels ? JSON.parse(i.labels) : undefined,
-        metadata: i.metadata ? JSON.parse(i.metadata) : undefined,
-        due_at: i.dueAt ? new Date(i.dueAt) : undefined,
-        created_at: openingMessageCreatedAt ?? undefined,
-        updated_at: openingMessageCreatedAt ?? undefined,
-      })
-      .returning();
-
-    const participantRows: (typeof threadParticipants.$inferInsert)[] = [];
-    if (createdByType === "user" && createdById) {
-      participantRows.push({
-        tenant_id: i.tenantId,
-        thread_id: threadRow.id,
-        space_id: threadSpace.id,
-        participant_type: "user",
-        user_id: createdById,
-        role: "requester",
-        source: "thread_creator",
-        last_read_at: openingMessageCreatedAt ?? undefined,
-      });
-    }
-
-    if (participantRows.length > 0) {
-      await tx.insert(threadParticipants).values(participantRows);
-    }
-
-    let firstMsgId: string | null = null;
-    if (i.firstMessage) {
-      const [msgRow] = await tx
-        .insert(messages)
-        .values({
-          thread_id: threadRow.id,
-          tenant_id: i.tenantId,
-          role: "user",
-          content: i.firstMessage,
-          sender_type: createdByType,
-          sender_id: createdById,
-          created_at: openingMessageCreatedAt ?? undefined,
+  const { row, firstMessageId, mobileTurn } = await db.transaction(
+    async (tx) => {
+      const [tenant] = await tx
+        .update(tenants)
+        .set({
+          issue_counter: sql`${tenants.issue_counter} + 1`,
         })
-        .returning({ id: messages.id });
-      firstMsgId = msgRow?.id ?? null;
-    }
+        .where(eq(tenants.id, i.tenantId))
+        .returning({
+          next_number: sql<number>`${tenants.issue_counter}`,
+        });
+      if (!tenant) throw new Error("Tenant not found");
+      const nextNumber = tenant.next_number;
+      const identifier = `${prefix}-${nextNumber}`;
 
-    let seededMobileTurn: {
-      threadTurnId: string;
-      userMessageId: string | null;
-    } | null = null;
-    if (shouldSeedMobileTurn) {
-      const [countRow] = await tx
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(threadTurns)
-        .where(eq(threadTurns.thread_id, threadRow.id));
-      const turnNumber = Number(countRow?.count ?? 0) + 1;
-      const startedIso = (openingMessageCreatedAt ?? new Date()).toISOString();
-      const attachments = parseJsonArray(i.mobileTurnAttachments);
-      const metadata = parseJsonObject(i.mobileTurnMetadata);
-      const baseSnapshot = {
-        mobile_turn: {
-          client_turn_id: mobileTurnClientId,
-          handoff_eligible: true,
-          ownership: "mobile",
-          runtime_type: MOBILE_PI_RUNTIME_TYPE,
-          started_at: startedIso,
-          last_heartbeat_at: startedIso,
-          baseline_checkpoint_seq: 0,
-          latest_checkpoint_seq: 0,
-          user_message_id: null,
-          requester: {
-            id: createdById,
-          },
-          thread: {
-            id: threadRow.id,
-            agent_id: threadAgentId,
-            space_id: threadSpace.id,
-          },
-          attachments,
-          metadata,
-        },
-      };
+      // Mirror sendMessage's auto-title logic so the atomic path matches the
+      // two-step flow when callers leave title as "Untitled conversation".
+      let effectiveTitle = i.title;
+      if (i.firstMessage && i.title === "Untitled conversation") {
+        const raw = i.firstMessage.trim();
+        effectiveTitle =
+          raw.length <= 80
+            ? raw
+            : raw.substring(0, 80).replace(/\s+\S*$/, "...");
+      }
+      const existingThreads = await tx
+        .select({
+          id: threads.id,
+          workspaceFolderName: threads.workspace_folder_name,
+        })
+        .from(threads)
+        .where(eq(threads.tenant_id, i.tenantId));
+      const threadFolderName = workspaceFolderName(
+        effectiveTitle || identifier,
+        existingThreads.map((row) => row.workspaceFolderName ?? row.id),
+        "thread",
+      );
 
-      const [turn] = await tx
-        .insert(threadTurns)
+      const [threadRow] = await tx
+        .insert(threads)
         .values({
           tenant_id: i.tenantId,
           agent_id: threadAgentId ?? undefined,
-          thread_id: threadRow.id,
-          invocation_source: MOBILE_PI_INVOCATION_SOURCE,
-          runtime_type: MOBILE_PI_RUNTIME_TYPE,
-          status: "running",
-          started_at: openingMessageCreatedAt ?? undefined,
-          last_activity_at: openingMessageCreatedAt ?? undefined,
-          turn_number: turnNumber,
-          external_run_id: mobileTurnClientId,
-          context_snapshot: baseSnapshot,
-        })
-        .returning({ id: threadTurns.id });
-      if (!turn?.id) throw new Error("Failed to seed mobile turn");
-
-      const [msgRow] = await tx
-        .insert(messages)
-        .values({
-          thread_id: threadRow.id,
-          tenant_id: i.tenantId,
-          role: "user",
-          content: mobileTurnUserText!,
-          sender_type: "user",
-          sender_id: createdById,
+          space_id: threadSpace.id,
+          user_id: createdByType === "user" ? createdById : undefined,
+          number: nextNumber,
+          identifier,
+          title: effectiveTitle,
+          workspace_folder_name: threadFolderName,
+          status: initialStatus,
+          channel,
+          assignee_type: i.assigneeType,
+          assignee_id: i.assigneeId,
+          billing_code: i.billingCode,
+          created_by_type: createdByType,
+          created_by_id: createdById,
+          labels: i.labels ? JSON.parse(i.labels) : undefined,
+          metadata: i.metadata ? JSON.parse(i.metadata) : undefined,
+          due_at: i.dueAt ? new Date(i.dueAt) : undefined,
           created_at: openingMessageCreatedAt ?? undefined,
-          metadata: {
-            mobile_turn: {
-              client_turn_id: mobileTurnClientId,
-              thread_turn_id: turn.id,
+          updated_at: openingMessageCreatedAt ?? undefined,
+        })
+        .returning();
+
+      const participantRows: (typeof threadParticipants.$inferInsert)[] = [];
+      if (createdByType === "user" && createdById) {
+        participantRows.push({
+          tenant_id: i.tenantId,
+          thread_id: threadRow.id,
+          space_id: threadSpace.id,
+          participant_type: "user",
+          user_id: createdById,
+          role: "requester",
+          source: "thread_creator",
+          last_read_at: openingMessageCreatedAt ?? undefined,
+        });
+      }
+
+      if (participantRows.length > 0) {
+        await tx.insert(threadParticipants).values(participantRows);
+      }
+
+      let firstMsgId: string | null = null;
+      if (i.firstMessage) {
+        const [msgRow] = await tx
+          .insert(messages)
+          .values({
+            thread_id: threadRow.id,
+            tenant_id: i.tenantId,
+            role: "user",
+            content: i.firstMessage,
+            sender_type: createdByType,
+            sender_id: createdById,
+            created_at: openingMessageCreatedAt ?? undefined,
+          })
+          .returning({ id: messages.id });
+        firstMsgId = msgRow?.id ?? null;
+      }
+
+      let seededMobileTurn: {
+        threadTurnId: string;
+        userMessageId: string | null;
+      } | null = null;
+      if (shouldSeedMobileTurn) {
+        const [countRow] = await tx
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(threadTurns)
+          .where(eq(threadTurns.thread_id, threadRow.id));
+        const turnNumber = Number(countRow?.count ?? 0) + 1;
+        const startedIso = (
+          openingMessageCreatedAt ?? new Date()
+        ).toISOString();
+        const attachments = parseJsonArray(i.mobileTurnAttachments);
+        const metadata = parseJsonObject(i.mobileTurnMetadata);
+        const baseSnapshot = {
+          mobile_turn: {
+            client_turn_id: mobileTurnClientId,
+            handoff_eligible: true,
+            ownership: "mobile",
+            runtime_type: MOBILE_PI_RUNTIME_TYPE,
+            started_at: startedIso,
+            last_heartbeat_at: startedIso,
+            baseline_checkpoint_seq: 0,
+            latest_checkpoint_seq: 0,
+            user_message_id: null,
+            requester: {
+              id: createdById,
+            },
+            thread: {
+              id: threadRow.id,
+              agent_id: threadAgentId,
+              space_id: threadSpace.id,
             },
             attachments,
+            metadata,
           },
-        })
-        .returning({ id: messages.id });
+        };
 
-      const snapshot = {
-        ...baseSnapshot,
-        mobile_turn: {
-          ...baseSnapshot.mobile_turn,
-          user_message_id: msgRow?.id ?? null,
-          checkpoint_0: {
-            kind: "baseline",
-            safe: true,
-            seq: 0,
-            user_text: mobileTurnUserText,
-            attachments,
-            created_at: startedIso,
+        const [turn] = await tx
+          .insert(threadTurns)
+          .values({
+            tenant_id: i.tenantId,
+            agent_id: threadAgentId ?? undefined,
+            thread_id: threadRow.id,
+            invocation_source: MOBILE_PI_INVOCATION_SOURCE,
+            runtime_type: MOBILE_PI_RUNTIME_TYPE,
+            status: "running",
+            started_at: openingMessageCreatedAt ?? undefined,
+            last_activity_at: openingMessageCreatedAt ?? undefined,
+            turn_number: turnNumber,
+            external_run_id: mobileTurnClientId,
+            context_snapshot: baseSnapshot,
+          })
+          .returning({ id: threadTurns.id });
+        if (!turn?.id) throw new Error("Failed to seed mobile turn");
+
+        const [msgRow] = await tx
+          .insert(messages)
+          .values({
+            thread_id: threadRow.id,
+            tenant_id: i.tenantId,
+            role: "user",
+            content: mobileTurnUserText!,
+            sender_type: "user",
+            sender_id: createdById,
+            created_at: openingMessageCreatedAt ?? undefined,
+            metadata: {
+              mobile_turn: {
+                client_turn_id: mobileTurnClientId,
+                thread_turn_id: turn.id,
+              },
+              attachments,
+            },
+          })
+          .returning({ id: messages.id });
+
+        const snapshot = {
+          ...baseSnapshot,
+          mobile_turn: {
+            ...baseSnapshot.mobile_turn,
+            user_message_id: msgRow?.id ?? null,
+            checkpoint_0: {
+              kind: "baseline",
+              safe: true,
+              seq: 0,
+              user_text: mobileTurnUserText,
+              attachments,
+              created_at: startedIso,
+            },
           },
-        },
+        };
+
+        await tx
+          .update(threadTurns)
+          .set({
+            wakeup_request_id: turn.id,
+            context_snapshot: snapshot,
+          })
+          .where(eq(threadTurns.id, turn.id));
+
+        await tx.insert(threadTurnEvents).values({
+          tenant_id: i.tenantId,
+          run_id: turn.id,
+          agent_id: threadAgentId ?? undefined,
+          seq: 0,
+          event_type: "mobile_pi_checkpoint",
+          stream: "activity",
+          level: "info",
+          color: "blue",
+          message: "mobile Pi turn started",
+          payload: snapshot.mobile_turn.checkpoint_0,
+        });
+
+        seededMobileTurn = {
+          threadTurnId: turn.id,
+          userMessageId: msgRow?.id ?? null,
+        };
+      }
+
+      return {
+        row: threadRow,
+        firstMessageId: firstMsgId,
+        mobileTurn: seededMobileTurn,
       };
-
-      await tx
-        .update(threadTurns)
-        .set({
-          wakeup_request_id: turn.id,
-          context_snapshot: snapshot,
-        })
-        .where(eq(threadTurns.id, turn.id));
-
-      await tx.insert(threadTurnEvents).values({
-        tenant_id: i.tenantId,
-        run_id: turn.id,
-        agent_id: threadAgentId ?? undefined,
-        seq: 0,
-        event_type: "mobile_pi_checkpoint",
-        stream: "activity",
-        level: "info",
-        color: "blue",
-        message: "mobile Pi turn started",
-        payload: snapshot.mobile_turn.checkpoint_0,
-      });
-
-      seededMobileTurn = {
-        threadTurnId: turn.id,
-        userMessageId: msgRow?.id ?? null,
-      };
-    }
-
-    return {
-      row: threadRow,
-      firstMessageId: firstMsgId,
-      mobileTurn: seededMobileTurn,
-    };
-  });
+    },
+  );
 
   // Side effects after commit (non-transactional — Lambda invoke + SNS notify).
   notifyThreadUpdate({

@@ -10,6 +10,7 @@ import { getDb } from "../db";
 import { tenants } from "../schema/core";
 import { spaces } from "../schema/spaces";
 import { threads } from "../schema/threads";
+import { workspaceFolderName } from "../utils/workspace-folder-name";
 
 // ---------------------------------------------------------------------------
 // Channel → Prefix mapping
@@ -105,6 +106,13 @@ export async function ensureThreadForWork(
         : "backlog";
   const spaceId =
     opts.spaceId ?? (await ensureDefaultThreadSpaceId(opts.tenantId));
+  const existingThreads = await db
+    .select({
+      id: threads.id,
+      workspaceFolderName: threads.workspace_folder_name,
+    })
+    .from(threads)
+    .where(eq(threads.tenant_id, opts.tenantId));
 
   const [thread] = await db
     .insert(threads)
@@ -117,6 +125,11 @@ export async function ensureThreadForWork(
       number: nextNumber,
       identifier,
       title: opts.title || "Untitled conversation",
+      workspace_folder_name: workspaceFolderName(
+        opts.title || identifier,
+        existingThreads.map((row) => row.workspaceFolderName ?? row.id),
+        "thread",
+      ),
       status: initialStatus,
       channel,
       assignee_type: opts.computerId
@@ -140,6 +153,7 @@ async function ensureDefaultThreadSpaceId(tenantId: string): Promise<string> {
     .values({
       tenant_id: tenantId,
       slug: DEFAULT_THREADS_SPACE_SLUG,
+      workspace_folder_name: DEFAULT_THREADS_SPACE_SLUG,
       name: "General",
       description:
         "Default Space for conversations that are not part of a configured workflow.",

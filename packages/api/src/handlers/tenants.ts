@@ -9,6 +9,7 @@ import {
   AdminGetUserCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { schema } from "@thinkwork/database-pg";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { db } from "../lib/db.js";
 import { authenticate } from "../lib/cognito-auth.js";
 import {
@@ -263,6 +264,7 @@ async function inviteMember(
       tenant_id: tenantId,
       email,
       name,
+      workspace_folder_name: workspaceFolderName(name || email, [], "user"),
     });
   }
 

@@ -6,6 +6,7 @@ import {
   threadParticipants,
   threads,
 } from "@thinkwork/database-pg/schema";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { resolveTenantPlatformAgent } from "../agents/tenant-platform-agent.js";
 
 const db = getDb();
@@ -36,6 +37,7 @@ export async function createColdContactThread(
       .where(eq(tenants.id, input.tenantId))
       .returning({ nextNumber: sql<number>`${tenants.issue_counter}` });
     if (!tenant) throw new Error("Tenant not found");
+    const identifier = `EMAIL-${tenant.nextNumber}`;
 
     const [thread] = await tx
       .insert(threads)
@@ -45,8 +47,13 @@ export async function createColdContactThread(
         space_id: input.spaceId,
         user_id: input.senderUserId,
         number: tenant.nextNumber,
-        identifier: `EMAIL-${tenant.nextNumber}`,
+        identifier,
         title,
+        workspace_folder_name: workspaceFolderName(
+          title || identifier,
+          [],
+          "thread",
+        ),
         status: "in_progress",
         channel: "email",
         created_by_type: "user",

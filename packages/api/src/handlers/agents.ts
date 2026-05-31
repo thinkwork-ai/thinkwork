@@ -5,6 +5,7 @@ import type {
 import { eq, and } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { db } from "../lib/db.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import { handleCors, json, error, notFound } from "../lib/response.js";
@@ -133,13 +134,26 @@ async function createAgent(tenantId: string, event: APIGatewayProxyEventV2) {
   const body = parseBody(event);
   if (!body.name) return error("name is required");
   if (!body.template_id) return error("template_id is required");
+  const name = String(body.name);
+  const existingFolders = await db
+    .select({
+      slug: agents.slug,
+      workspaceFolderName: agents.workspace_folder_name,
+    })
+    .from(agents)
+    .where(eq(agents.tenant_id, tenantId));
 
   const [row] = await db
     .insert(agents)
     .values({
       tenant_id: tenantId,
-      name: body.name as string,
+      name,
       slug: generateSlug(),
+      workspace_folder_name: workspaceFolderName(
+        name,
+        existingFolders.map((row) => row.workspaceFolderName ?? row.slug),
+        "agent",
+      ),
       template_id: body.template_id as string,
       role: body.role as string | undefined,
       type: (body.type as string) ?? "agent",

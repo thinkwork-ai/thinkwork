@@ -32,6 +32,7 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       .select({
         id: agents.id,
         slug: agents.slug,
+        workspaceFolderName: agents.workspace_folder_name,
         name: agents.name,
       })
       .from(agents)
@@ -44,6 +45,7 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       .select({
         id: spaces.id,
         slug: spaces.slug,
+        workspaceFolderName: spaces.workspace_folder_name,
         name: spaces.name,
         kind: spaces.kind,
         accessMode: spaces.access_mode,
@@ -67,6 +69,7 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       const [user] = await this.db
         .select({
           id: users.id,
+          workspaceFolderName: users.workspace_folder_name,
           name: users.name,
           email: users.email,
         })
@@ -77,7 +80,7 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       if (user) {
         resolvedUser = {
           id: user.id,
-          slug: userSlug(user),
+          slug: user.workspaceFolderName ?? userSlug(user),
           name: user.name,
         };
       }
@@ -87,10 +90,10 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       tenantId: tenant.id,
       tenantSlug: tenant.slug,
       agentId: agent.id,
-      agentSlug: agent.slug,
+      agentSlug: agent.workspaceFolderName ?? agent.slug,
       agentName: agent.name,
       spaceId: space.id,
-      spaceSlug: space.slug,
+      spaceSlug: space.workspaceFolderName ?? space.slug,
       spaceName: space.name,
       spaceKind: space.kind,
       spaceAccessMode: space.accessMode,

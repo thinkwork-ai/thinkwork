@@ -142,6 +142,7 @@ export const users = pgTable(
     // (bootstrapUser) and opportunistically backfilled on resolution.
     cognito_sub: text("cognito_sub"),
     name: text("name"),
+    workspace_folder_name: text("workspace_folder_name"),
     image: text("image"),
     email_verified_at: timestamp("email_verified_at", {
       withTimezone: true,
@@ -167,6 +168,9 @@ export const users = pgTable(
   (table) => [
     uniqueIndex("idx_users_email").on(table.email),
     uniqueIndex("idx_users_cognito_sub").on(table.cognito_sub),
+    uniqueIndex("uq_users_tenant_workspace_folder_name")
+      .on(table.tenant_id, table.workspace_folder_name)
+      .where(sql`${table.workspace_folder_name} IS NOT NULL`),
     index("idx_users_tenant_id").on(table.tenant_id),
   ],
 );
