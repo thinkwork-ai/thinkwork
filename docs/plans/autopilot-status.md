@@ -1,7 +1,7 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-30
-status: active
+status: complete
 ---
 
 # Autopilot Status Ledger
@@ -15,15 +15,17 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active.
-- Active unit: U14 User-facing architecture documentation.
-- Active branch: `codex/workspace-arch-u14`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u14`.
+- Status: complete.
+- Active unit: none; all 14 implementation units are complete.
+- Active branch: none.
+- Active worktree: none.
 - Started: 2026-05-31 from `origin/main` at `22b2acba`.
-- Latest merged PR: [#1919](https://github.com/thinkwork-ai/thinkwork/pull/1919).
-- CI/deploy: U13 required PR checks passed and merged into `main`.
+- Completed: 2026-05-31 after U14 merged into `main`.
+- Latest merged implementation PR:
+  [#1920](https://github.com/thinkwork-ai/thinkwork/pull/1920).
+- CI/deploy: U14 required PR checks passed and merged into `main`.
 
-### Active Unit Notes
+### Run Notes
 
 - Read `AGENTS.md`.
 - Read the Workspace + Agent-Turn Architecture plan and confirmed U1 is the
@@ -231,6 +233,14 @@ install-electron --no`, and the full desktop suite then passed all 145
   `tenants/{tenant}/rendered/...`,
   `agents/{agentSlug}/workspace`, or `spaces/{spaceSlug}/source` layouts.
 - Opened PR [#1920](https://github.com/thinkwork-ai/thinkwork/pull/1920).
+- PR [#1920](https://github.com/thinkwork-ai/thinkwork/pull/1920) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `120aa9f0e9619977e56622c689dd59ed35aad348`.
+- Removed U14 worktree/local branch, confirmed the remote branch was deleted,
+  and synced `main` to `120aa9f0`.
+- All implementation units in
+  `docs/plans/2026-05-31-002-refactor-workspace-architecture-simplification-plan.md`
+  are complete.
 - Created isolated U1 worktree `codex/workspace-arch-u1` from `origin/main`.
 - Implemented U1 substrate:
   `workspace_folder_name` columns and partial unique indexes for agents,
