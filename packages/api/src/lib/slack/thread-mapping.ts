@@ -8,6 +8,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { db } from "../db.js";
 import type { SlackThreadTurnInput } from "./envelope.js";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 
 export interface SlackThreadMappingResult {
   threadId: string;
@@ -164,6 +165,7 @@ function createDrizzleSlackThreadMappingStore(
         .values({
           tenant_id: input.tenantId,
           slug: "general",
+          workspace_folder_name: "general",
           name: "General",
           description:
             "Default Space for conversations that are not part of a configured workflow.",
@@ -190,6 +192,14 @@ function createDrizzleSlackThreadMappingStore(
         .where(eq(tenants.id, input.tenantId))
         .returning({ nextNumber: sql<number>`${tenants.issue_counter}` });
       if (!tenant) throw new Error("Tenant not found");
+      const existingThreads = await dbClient
+        .select({
+          id: threads.id,
+          workspaceFolderName: threads.workspace_folder_name,
+        })
+        .from(threads)
+        .where(eq(threads.tenant_id, input.tenantId));
+      const identifier = `SLACK-${tenant.nextNumber}`;
       const [thread] = await dbClient
         .insert(threads)
         .values({
@@ -198,8 +208,16 @@ function createDrizzleSlackThreadMappingStore(
           space_id: space.id,
           user_id: input.actorId,
           number: tenant.nextNumber,
-          identifier: `SLACK-${tenant.nextNumber}`,
+          identifier,
           title: input.title,
+          workspace_folder_name: workspaceFolderName(
+            input.title || identifier,
+            existingThreads.map(
+              (row: { workspaceFolderName: string | null; id: string }) =>
+                row.workspaceFolderName ?? row.id,
+            ),
+            "thread",
+          ),
           status: "in_progress",
           channel: "slack",
           created_by_type: "user",

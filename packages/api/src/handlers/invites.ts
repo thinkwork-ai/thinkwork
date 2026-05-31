@@ -26,6 +26,7 @@ import {
   activityLog,
 } from "@thinkwork/database-pg/schema";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { db } from "../lib/db.js";
 import {
   handleCors,
@@ -547,6 +548,8 @@ async function approveJoinRequest(
       reports_to: agents.reports_to,
       status: agents.status,
       template_id: agents.template_id,
+      slug: agents.slug,
+      workspaceFolderName: agents.workspace_folder_name,
     })
     .from(agents)
     .where(eq(agents.tenant_id, tenantId));
@@ -562,6 +565,11 @@ async function approveJoinRequest(
       tenant_id: tenantId,
       name: jr.agent_name,
       slug: generateSlug(),
+      workspace_folder_name: workspaceFolderName(
+        jr.agent_name,
+        existingAgents.map((row) => row.workspaceFolderName ?? row.slug),
+        "agent",
+      ),
       template_id: (jr as any).template_id || ceoAgent?.template_id,
       type: "agent",
       status: "idle",

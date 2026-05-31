@@ -7,6 +7,7 @@ export function defaultAgentContextSpaceValues(tenantId: string) {
   return {
     tenant_id: tenantId,
     slug: DEFAULT_AGENT_CONTEXT_SPACE_SLUG,
+    workspace_folder_name: DEFAULT_AGENT_CONTEXT_SPACE_SLUG,
     name: "Default",
     description: "Default contextual workspace for tenant agents.",
     prompt:
@@ -83,6 +84,7 @@ export async function ensureDefaultThreadSpace(input: {
     .values({
       tenant_id: input.tenantId,
       slug: DEFAULT_THREADS_SPACE_SLUG,
+      workspace_folder_name: DEFAULT_THREADS_SPACE_SLUG,
       name: "General",
       description:
         "Default Space for conversations that are not part of a configured workflow.",

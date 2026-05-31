@@ -6,7 +6,52 @@ status: active
 
 # Autopilot Status Ledger
 
-## Current Run: Mobile Pi AgentCore Background Handoff
+## Current Run: Workspace Architecture Simplification
+
+Plan:
+`docs/plans/2026-05-31-002-refactor-workspace-architecture-simplification-plan.md`
+
+Target branch: `main`
+
+### Run Status
+
+- Status: active.
+- Active unit: U1 human-name folder identity.
+- Active branch: `codex/workspace-arch-u1`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u1`.
+- Started: 2026-05-31 from `origin/main` at `197a47a1`.
+- Latest merged PR: none for this run.
+- CI/deploy: none yet for this run.
+
+### Active Unit Notes
+
+- Read `AGENTS.md`.
+- Read the Workspace + Agent-Turn Architecture plan and confirmed U1 is the
+  first implementation unit.
+- Read relevant prior solution docs:
+  `docs/solutions/architecture-patterns/inert-first-seam-swap-multi-pr-pattern-2026-05-08.md`,
+  `docs/solutions/design-patterns/gitkeep-materialization-s3-empty-folders-2026-05-13.md`,
+  and
+  `docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md`.
+- Created isolated U1 worktree `codex/workspace-arch-u1` from `origin/main`.
+- Implemented U1 substrate:
+  `workspace_folder_name` columns and partial unique indexes for agents,
+  spaces, users, threads, and goals; a shared
+  `workspaceFolderName(displayName, existingSiblings)` helper; creation-time
+  folder-name assignment for the main workspace entity creation paths; and
+  workspace target resolution that prefers persisted folder names with
+  pre-migration slug/id fallback.
+- Focused verification passed:
+  `pnpm --filter @thinkwork/database-pg test -- __tests__/workspace-folder-name.test.ts`,
+  `pnpm --filter @thinkwork/database-pg typecheck`,
+  `pnpm --filter @thinkwork/api test -- src/lib/workspace-renderer/compose-tuple.test.ts src/handlers/__tests__/workspace-renderer.test.ts src/__tests__/workspace-files-handler.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and `git diff --check`.
+- Worktree dependency note: initial verification found missing `node_modules`;
+  ran `pnpm install` once per repo instructions. Optional
+  `node-liblzma` native rebuild reported missing `pkg-config`, but `pnpm`
+  completed and focused tests/typechecks ran successfully.
+
+## Previous Run: Mobile Pi AgentCore Background Handoff
 
 Plan:
 `docs/plans/2026-05-31-001-feat-mobile-pi-agentcore-background-handoff-plan.md`

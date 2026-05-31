@@ -38,6 +38,7 @@ export const goals = pgTable(
       .notNull(),
     template_key: text("template_key"),
     outcome: text("outcome").notNull(),
+    workspace_folder_name: text("workspace_folder_name"),
     owner_type: text("owner_type"),
     owner_id: text("owner_id"),
     mode: text("mode").notNull().default("collaborate"),
@@ -70,6 +71,9 @@ export const goals = pgTable(
       table.status,
     ),
     index("idx_goals_folder_s3_prefix").on(table.folder_s3_prefix),
+    uniqueIndex("uq_goals_tenant_workspace_folder_name")
+      .on(table.tenant_id, table.workspace_folder_name)
+      .where(sql`${table.workspace_folder_name} IS NOT NULL`),
     uniqueIndex("uq_goals_thread_non_terminal")
       .on(table.tenant_id, table.thread_id)
       .where(sql`${table.status} IN ('active','in_review')`),

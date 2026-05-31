@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { goals } from "@thinkwork/database-pg/schema";
 
 import {
@@ -184,9 +185,7 @@ export function customerOnboardingGoalReadiness(
   };
 }
 
-class DrizzleCustomerOnboardingGoalStatusUpdater
-  implements CustomerOnboardingGoalStatusUpdater
-{
+class DrizzleCustomerOnboardingGoalStatusUpdater implements CustomerOnboardingGoalStatusUpdater {
   async update(input: {
     tenantId: string;
     threadId: string;
@@ -242,12 +241,24 @@ class DrizzleCustomerOnboardingGoalStatusUpdater
     if (!input.state.spaceId) return;
 
     const customer = customerLabel(input.state);
+    const existingGoalFolders = await db
+      .select({
+        id: goals.id,
+        workspaceFolderName: goals.workspace_folder_name,
+      })
+      .from(goals)
+      .where(eq(goals.tenant_id, input.tenantId));
     const values = {
       tenant_id: input.tenantId,
       space_id: input.state.spaceId,
       thread_id: input.threadId,
       template_key: "customer_onboarding",
       outcome: `Complete customer onboarding for ${customer}.`,
+      workspace_folder_name: workspaceFolderName(
+        customer,
+        existingGoalFolders.map((row) => row.workspaceFolderName ?? row.id),
+        "goal",
+      ),
       mode: "collaborate",
       status: input.status,
       progress_model: "linked_tasks",

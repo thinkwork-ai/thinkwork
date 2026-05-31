@@ -324,6 +324,7 @@ async function resolveAgentTarget(
     .select({
       id: agents.id,
       slug: agents.slug,
+      workspaceFolderName: agents.workspace_folder_name,
       tenant_id: agents.tenant_id,
     })
     .from(agents)
@@ -336,7 +337,7 @@ async function resolveAgentTarget(
     .where(eq(tenants.id, agent.tenant_id));
   if (!tenant?.slug) return null;
 
-  const slug = agent.slug;
+  const slug = agent.workspaceFolderName ?? agent.slug;
   const tSlug = tenant.slug;
   return {
     kind: "agent",
@@ -388,6 +389,7 @@ async function resolveSpaceTarget(
     .select({
       id: spaces.id,
       slug: spaces.slug,
+      workspaceFolderName: spaces.workspace_folder_name,
       tenant_id: spaces.tenant_id,
     })
     .from(spaces)
@@ -401,11 +403,12 @@ async function resolveSpaceTarget(
   if (!tenant?.slug) return null;
 
   const tSlug = tenant.slug;
-  const prefix = spaceSourcePrefix(tSlug, space.slug);
+  const spaceFolderName = space.workspaceFolderName ?? space.slug;
+  const prefix = spaceSourcePrefix(tSlug, spaceFolderName);
   return {
     kind: "space",
     tenantSlug: tSlug,
-    spaceSlug: space.slug,
+    spaceSlug: spaceFolderName,
     spaceId: space.id,
     prefix,
     key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
@@ -417,13 +420,17 @@ async function resolveThreadTarget(
   threadId: string,
   userId: string | null,
 ): Promise<ThreadTarget | null> {
-  const conditions = [eq(threads.id, threadId), eq(threads.tenant_id, tenantId)];
+  const conditions = [
+    eq(threads.id, threadId),
+    eq(threads.tenant_id, tenantId),
+  ];
   if (userId) {
     conditions.push(callerVisibleThreadPredicate(tenantId, userId));
   }
   const [thread] = await db
     .select({
       id: threads.id,
+      workspaceFolderName: threads.workspace_folder_name,
       tenant_id: threads.tenant_id,
     })
     .from(threads)
@@ -440,9 +447,10 @@ async function resolveThreadTarget(
   return {
     kind: "thread",
     tenantSlug: tenant.slug,
-    threadId: thread.id,
-    prefix: threadPrefix(tenant.slug, thread.id),
-    key: (path) => threadKey(tenant.slug, thread.id, path),
+    threadId: thread.workspaceFolderName ?? thread.id,
+    prefix: threadPrefix(tenant.slug, thread.workspaceFolderName ?? thread.id),
+    key: (path) =>
+      threadKey(tenant.slug, thread.workspaceFolderName ?? thread.id, path),
   };
 }
 

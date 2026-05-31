@@ -1,5 +1,6 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import {
   linkedTaskEvents,
   linkedTasks,
@@ -1010,9 +1011,7 @@ function createUnavailableLastMileTaskAdapter(): LastMileTasksWorkflowAdapter {
   };
 }
 
-class DrizzleCustomerOnboardingRepository
-  implements CustomerOnboardingWorkflowRepository
-{
+class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowRepository {
   private readonly db = getDb();
 
   async findSpace(input: {
@@ -1201,14 +1200,27 @@ class DrizzleCustomerOnboardingRepository
         );
       }
       const prefix = input.channel === "webhook" ? "HOOK" : "TICK";
+      const identifier = `${prefix}-${tenant.next_number}`;
+      const existingThreads = await tx
+        .select({
+          id: threads.id,
+          workspaceFolderName: threads.workspace_folder_name,
+        })
+        .from(threads)
+        .where(eq(threads.tenant_id, input.tenantId));
       const [thread] = await tx
         .insert(threads)
         .values({
           tenant_id: input.tenantId,
           space_id: input.space.id,
           number: tenant.next_number,
-          identifier: `${prefix}-${tenant.next_number}`,
+          identifier,
           title: input.title,
+          workspace_folder_name: workspaceFolderName(
+            input.title || identifier,
+            existingThreads.map((row) => row.workspaceFolderName ?? row.id),
+            "thread",
+          ),
           status: "backlog",
           channel: input.channel,
           created_by_type: input.createdByType,
@@ -1276,12 +1288,24 @@ class DrizzleCustomerOnboardingRepository
       input.normalized.customerName ??
       input.thread.title;
     const now = new Date();
+    const existingGoalFolders = await this.db
+      .select({
+        id: goals.id,
+        workspaceFolderName: goals.workspace_folder_name,
+      })
+      .from(goals)
+      .where(eq(goals.tenant_id, input.tenantId));
     const values = {
       tenant_id: input.tenantId,
       space_id: input.spaceId,
       thread_id: input.thread.id,
       template_key: CUSTOMER_ONBOARDING_TEMPLATE_KEY,
       outcome: `Complete customer onboarding for ${customer}.`,
+      workspace_folder_name: workspaceFolderName(
+        customer,
+        existingGoalFolders.map((row) => row.workspaceFolderName ?? row.id),
+        "goal",
+      ),
       owner_type: input.startedBy?.type ?? null,
       owner_id: input.startedBy?.id ?? null,
       mode: "collaborate",

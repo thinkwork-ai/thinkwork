@@ -37,6 +37,7 @@ export const agents = pgTable(
       .notNull(),
     name: text("name").notNull(),
     slug: text("slug").unique(),
+    workspace_folder_name: text("workspace_folder_name"),
     role: text("role"),
     type: text("type").notNull().default("agent"),
     /** "user" = created by tenant admins, "system" = platform-managed (eval test agent, etc.) */
@@ -115,6 +116,9 @@ export const agents = pgTable(
       .on(table.tenant_id)
       .where(sql`${table.is_platform_default} IS TRUE`),
     index("idx_agents_tenant_id").on(table.tenant_id),
+    uniqueIndex("uq_agents_tenant_workspace_folder_name")
+      .on(table.tenant_id, table.workspace_folder_name)
+      .where(sql`${table.workspace_folder_name} IS NOT NULL`),
     index("idx_agents_type").on(table.type),
     index("idx_agents_status").on(table.status),
     index("idx_agents_reports_to").on(table.reports_to),

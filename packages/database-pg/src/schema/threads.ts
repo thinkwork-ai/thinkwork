@@ -43,6 +43,7 @@ export const threads = pgTable(
     number: integer("number").notNull(),
     identifier: text("identifier"),
     title: text("title").notNull(),
+    workspace_folder_name: text("workspace_folder_name"),
     description: text("description"),
     status: text("status").notNull().default("backlog"),
     priority: text("priority").notNull().default("medium"),
@@ -100,6 +101,9 @@ export const threads = pgTable(
   },
   (table) => [
     uniqueIndex("uq_threads_tenant_number").on(table.tenant_id, table.number),
+    uniqueIndex("uq_threads_tenant_workspace_folder_name")
+      .on(table.tenant_id, table.workspace_folder_name)
+      .where(sql`${table.workspace_folder_name} IS NOT NULL`),
     // idx_threads_tenant_status + idx_threads_parent_id were retired by U5
     // (drizzle/0031_thread_cleanup_drops.sql) — admin U7 dropped the only
     // list-view filter that used the status index, and parent/child thread

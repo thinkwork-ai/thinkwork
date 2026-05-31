@@ -15,6 +15,7 @@ import {
 import { requireTenantAdmin } from "./authz.js";
 import { resolveCallerUserId } from "./resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
+import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 
 const cognito = new CognitoIdentityProviderClient({});
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
@@ -115,6 +116,7 @@ async function inviteMemberCore(
       tenant_id: tenantId,
       email,
       name: name || null,
+      workspace_folder_name: workspaceFolderName(name || email, [], "user"),
     });
   }
 
