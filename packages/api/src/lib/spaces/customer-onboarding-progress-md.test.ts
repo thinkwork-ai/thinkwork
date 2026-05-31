@@ -15,6 +15,7 @@ function state(
   return {
     tenantSlug: "acme",
     threadId: "thread-1",
+    threadFolderName: "customer-kickoff",
     spaceId: "space-1",
     threadTitle: "Onboard Acme Equipment",
     normalized: normalizeCustomerOnboardingSource({
@@ -165,6 +166,7 @@ describe("customer onboarding PROGRESS.md", () => {
     expect(writes[0]).toMatchObject({
       tenantSlug: "acme",
       threadId: "thread-1",
+      threadFolderName: "customer-kickoff",
     });
     expect(writes[0].content).toContain("Updated: 2026-05-25T17:00:00.000Z");
   });

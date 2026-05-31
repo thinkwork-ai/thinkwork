@@ -51,6 +51,7 @@ export type ReconcileFailureCode =
   | "manifest_invalid"
   | "source_not_mounted"
   | "unowned_path"
+  | "read_only_status_file"
   | "lane_violation"
   | "secret_detected"
   | "base_etag_required"
@@ -63,7 +64,7 @@ export type ReconcileFileResult =
   | {
       path: string;
       op: ChangedFileOp;
-      owner: Exclude<WorkspacePathOwner, "unowned" | "scratch">;
+      owner: Exclude<WorkspacePathOwner, "unowned" | "scratch" | "status">;
       status: "written";
       sourceKey: string;
       etag: string;
@@ -71,7 +72,7 @@ export type ReconcileFileResult =
   | {
       path: string;
       op: "delete";
-      owner: Exclude<WorkspacePathOwner, "unowned" | "scratch">;
+      owner: Exclude<WorkspacePathOwner, "unowned" | "scratch" | "status">;
       status: "deleted";
       sourceKey: string;
     }
@@ -449,6 +450,16 @@ async function reconcileOneFile(input: {
     return rejected(changedFile, owner, "unowned_path", "Path is unowned.");
   }
 
+  if (owner === "status") {
+    logRejectedLane(input.context, changedFile.path, "read_only_status_file");
+    return rejected(
+      changedFile,
+      owner,
+      "read_only_status_file",
+      "GOAL.md and PROGRESS.md are database-rendered read-only status files. Use set_task_status for checklist progress updates.",
+    );
+  }
+
   const laneFailure = lanePolicyFailure(owner, changedFile.path);
   if (laneFailure) {
     logRejectedLane(input.context, changedFile.path, laneFailure.code);
@@ -721,7 +732,7 @@ async function readHydrateManifest(input: {
 }
 
 function lanePolicyFailure(
-  owner: Exclude<WorkspacePathOwner, "scratch" | "unowned">,
+  owner: Exclude<WorkspacePathOwner, "scratch" | "unowned" | "status">,
   path: string,
 ): { code: "lane_violation"; message: string } | null {
   if (owner === "user" && !isVisibleUserContextPath(path)) {
@@ -748,7 +759,7 @@ function lanePolicyFailure(
 
 function sourcePrefixForOwner(
   manifest: WorkspaceHydrateManifest,
-  owner: Exclude<WorkspacePathOwner, "scratch" | "unowned">,
+  owner: Exclude<WorkspacePathOwner, "scratch" | "unowned" | "status">,
 ): string | null {
   return (
     manifest.sources.find((source) => source.owner === owner)?.prefix ?? null

@@ -198,6 +198,46 @@ old`,
   );
 }
 
+function compatibleHydrateManifest(
+  overrides: Record<string, unknown> = {},
+): string {
+  return `${JSON.stringify(
+    {
+      version: 1,
+      renderedPrefix: "tenants/acme/threads/thread-1/",
+      generatedAt: "2026-05-22T11:00:00.000Z",
+      sources: [
+        { owner: "agent", prefix: "tenants/acme/agents/finance-agent/" },
+        { owner: "space", prefix: "tenants/acme/spaces/board-pack/" },
+        { owner: "user", prefix: "tenants/acme/users/eric/" },
+        { owner: "thread_goal", prefix: "tenants/acme/threads/thread-1/" },
+      ],
+      files: [],
+      statusMounts: [
+        {
+          path: "GOAL.md",
+          owner: "system",
+          source: "database",
+          provider: "thread-goals",
+          readOnly: true,
+          available: false,
+        },
+        {
+          path: "PROGRESS.md",
+          owner: "system",
+          source: "database",
+          provider: "thread-goals",
+          readOnly: true,
+          available: false,
+        },
+      ],
+      ...overrides,
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 describe("renderWorkspaceTuple", () => {
   it("composes agent, user, and Space files by reference into a hydrate manifest", async () => {
     const store = new FakeStore(seedObjects());
@@ -214,11 +254,18 @@ describe("renderWorkspaceTuple", () => {
 
     expect(result.cacheStatus).toBe("miss");
     expect(result.renderedPrefix).toBe("tenants/acme/threads/thread-1/");
+    expect(result.sourcePrefixes).toEqual([
+      "tenants/acme/agents/finance-agent/",
+      "tenants/acme/spaces/board-pack/",
+      "tenants/acme/users/eric/",
+      "tenants/acme/threads/thread-1/",
+    ]);
     expect(result.writtenFiles).toEqual([".hydrate_manifest.json"]);
     expect(result.hydrateManifest.sources).toEqual([
       { owner: "agent", prefix: "tenants/acme/agents/finance-agent/" },
       { owner: "space", prefix: "tenants/acme/spaces/board-pack/" },
       { owner: "user", prefix: "tenants/acme/users/eric/" },
+      { owner: "thread_goal", prefix: "tenants/acme/threads/thread-1/" },
     ]);
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
@@ -295,6 +342,74 @@ describe("renderWorkspaceTuple", () => {
     });
   });
 
+  it("mounts rendered status files read-only while exposing narrative goal files as writable", async () => {
+    const store = new FakeStore(seedObjects());
+    store.setObject("tenants/acme/threads/customer-kickoff/GOAL.md", {
+      content: "# Goal\n",
+      lastModified: "2026-05-22T09:08:00.000Z",
+      etag: '"goal-db"',
+    });
+    store.setObject("tenants/acme/threads/customer-kickoff/PROGRESS.md", {
+      content: "# Progress\n",
+      lastModified: "2026-05-22T09:09:00.000Z",
+      etag: '"progress-db"',
+    });
+    store.setObject("tenants/acme/threads/customer-kickoff/DECISIONS.md", {
+      content: "# Decisions\n",
+      lastModified: "2026-05-22T09:10:00.000Z",
+      etag: '"decisions-file"',
+    });
+
+    const result = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository({
+          ...TUPLE,
+          threadSlug: "customer-kickoff",
+        }),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    expect(result.renderedPrefix).toBe(
+      "tenants/acme/threads/customer-kickoff/",
+    );
+    expect(result.hydrateManifest.statusMounts).toEqual([
+      expect.objectContaining({
+        path: "GOAL.md",
+        available: true,
+        sourceKey: "tenants/acme/threads/customer-kickoff/GOAL.md",
+        etag: '"goal-db"',
+        readOnly: true,
+      }),
+      expect.objectContaining({
+        path: "PROGRESS.md",
+        available: true,
+        sourceKey: "tenants/acme/threads/customer-kickoff/PROGRESS.md",
+        etag: '"progress-db"',
+        readOnly: true,
+      }),
+    ]);
+    expect(result.hydrateManifest.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "DECISIONS.md",
+          owner: "thread_goal",
+          sourceKey: "tenants/acme/threads/customer-kickoff/DECISIONS.md",
+          etag: '"decisions-file"',
+        }),
+      ]),
+    );
+    expect(result.hydrateManifest.files).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "GOAL.md" }),
+        expect.objectContaining({ path: "PROGRESS.md" }),
+      ]),
+    );
+  });
+
   it("returns a cache hit without writes when the marker is newer than source files", async () => {
     const store = new FakeStore(
       seedObjects({
@@ -303,7 +418,7 @@ describe("renderWorkspaceTuple", () => {
           lastModified: "2026-05-22T11:00:00.000Z",
         },
         "tenants/acme/threads/thread-1/.hydrate_manifest.json": {
-          content: "{}\n",
+          content: compatibleHydrateManifest(),
           lastModified: "2026-05-22T11:00:00.000Z",
         },
       }),
@@ -330,6 +445,57 @@ describe("renderWorkspaceTuple", () => {
       ]),
     );
     expect(store.puts).toEqual([]);
+  });
+
+  it("rewrites a fresh legacy hydrate manifest that lacks status and thread-goal ownership", async () => {
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/threads/thread-1/.rendered_at": {
+          content: "2026-05-22T11:00:00.000Z",
+          lastModified: "2026-05-22T11:00:00.000Z",
+        },
+        "tenants/acme/threads/thread-1/.hydrate_manifest.json": {
+          content: compatibleHydrateManifest({
+            sources: [
+              { owner: "agent", prefix: "tenants/acme/agents/finance-agent/" },
+              { owner: "space", prefix: "tenants/acme/spaces/board-pack/" },
+              { owner: "user", prefix: "tenants/acme/users/eric/" },
+            ],
+            statusMounts: [],
+          }),
+          lastModified: "2026-05-22T11:00:00.000Z",
+        },
+      }),
+    );
+
+    const result = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+        now: () => new Date("2026-05-22T11:05:00.000Z"),
+      },
+    );
+
+    expect(result.cacheStatus).toBe("miss");
+    expect(result.writtenFiles).toEqual([".hydrate_manifest.json"]);
+    const manifestPut = store.puts.find((put) =>
+      put.key.endsWith(".hydrate_manifest.json"),
+    );
+    expect(JSON.parse(manifestPut?.content ?? "{}")).toMatchObject({
+      sources: expect.arrayContaining([
+        { owner: "thread_goal", prefix: "tenants/acme/threads/thread-1/" },
+      ]),
+      statusMounts: expect.arrayContaining([
+        expect.objectContaining({
+          path: "PROGRESS.md",
+          source: "database",
+          provider: "thread-goals",
+          readOnly: true,
+        }),
+      ]),
+    });
   });
 
   it("rewrites the hydrate manifest when only a legacy marker exists", async () => {

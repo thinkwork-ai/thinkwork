@@ -42,6 +42,7 @@ export interface ThreadGoalStorageDeps {
 export interface ThreadGoalAddress {
   tenantSlug: string;
   threadId: string;
+  threadFolderName?: string | null;
 }
 
 export interface ThreadGoalFileAddress extends ThreadGoalAddress {
@@ -56,9 +57,13 @@ export interface ThreadGoalPromptFile {
 
 export function threadGoalFileKey(input: ThreadGoalFileAddress): string {
   assertSafeSegment(input.tenantSlug, "tenantSlug");
-  assertSafeSegment(input.threadId, "threadId");
+  const threadSegment = input.threadFolderName || input.threadId;
+  assertSafeSegment(
+    threadSegment,
+    input.threadFolderName ? "threadFolderName" : "threadId",
+  );
   const file = assertThreadGoalFileName(input.file);
-  return `tenants/${input.tenantSlug}/threads/${input.threadId}/${file}`;
+  return `tenants/${input.tenantSlug}/threads/${threadSegment}/${file}`;
 }
 
 export async function readThreadGoalFile(

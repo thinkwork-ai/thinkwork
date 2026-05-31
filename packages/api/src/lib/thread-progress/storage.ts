@@ -14,6 +14,7 @@ export type ThreadProgressStorageDeps = ThreadGoalStorageDeps;
 export interface ThreadProgressAddress {
   tenantSlug: string;
   threadId: string;
+  threadFolderName?: string | null;
 }
 
 export function threadProgressKey(input: ThreadProgressAddress): string {

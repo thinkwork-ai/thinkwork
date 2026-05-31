@@ -111,7 +111,9 @@ export class WorkspaceCache {
     const localDir = this.partitionPath(input.partition);
     await mkdir(localDir, { recursive: true });
 
-    const cached = await this.readFreshCacheManifest(localDir, prefix);
+    const cached = isThreadRuntimePrefix(input.partition.tenantSlug, prefix)
+      ? null
+      : await this.readFreshCacheManifest(localDir, prefix);
     if (cached) {
       await this.evictOldPartitions(input.partition.stage);
       return {
@@ -124,7 +126,12 @@ export class WorkspaceCache {
       };
     }
 
-    const staleManifest = await this.readCacheManifest(localDir, prefix);
+    const staleManifest = isThreadRuntimePrefix(
+      input.partition.tenantSlug,
+      prefix,
+    )
+      ? null
+      : await this.readCacheManifest(localDir, prefix);
     if (staleManifest && (await hasLocalWorkspaceFiles(localDir))) {
       this.refreshInBackground(input, localDir, prefix);
       await this.evictOldPartitions(input.partition.stage);
@@ -320,13 +327,24 @@ export function normalizeRenderedWorkspacePrefix(
       );
     }
   }
-  const allowedPrefix = `tenants/${tenantSlug}/rendered/${agentSlug}/`;
-  if (!normalized.startsWith(allowedPrefix)) {
+  const allowedPrefixes = [
+    `tenants/${tenantSlug}/rendered/${agentSlug}/`,
+    `tenants/${tenantSlug}/threads/`,
+  ];
+  if (
+    !allowedPrefixes.some((allowedPrefix) =>
+      normalized.startsWith(allowedPrefix),
+    )
+  ) {
     throw new WorkspaceBoundaryError(
       "rendered_workspace_prefix is outside the expected tenant/agent scope",
     );
   }
   return normalized;
+}
+
+function isThreadRuntimePrefix(tenantSlug: string, prefix: string): boolean {
+  return prefix.startsWith(`tenants/${tenantSlug}/threads/`);
 }
 
 export function createS3WorkspaceObjectStore(

@@ -115,6 +115,23 @@ function shouldRenderSpaceSourcePath(relPath: string): boolean {
   );
 }
 
+const THREAD_GOAL_STATUS_PATHS = new Set(["GOAL.md", "PROGRESS.md"]);
+const THREAD_GOAL_NARRATIVE_PATHS = new Set([
+  "DECISIONS.md",
+  "ARTIFACTS.md",
+  "HANDOFFS.md",
+]);
+
+function shouldRenderThreadGoalSourcePath(relPath: string): boolean {
+  if (THREAD_GOAL_NARRATIVE_PATHS.has(relPath)) return true;
+  if (/^stages\/[^/]+\/(?:CONTEXT|OUTPUT)\.md$/.test(relPath)) return true;
+  return false;
+}
+
+function shouldRenderThreadGoalStatusPath(relPath: string): boolean {
+  return THREAD_GOAL_STATUS_PATHS.has(relPath);
+}
+
 function hydratePathForSource(object: SourceObject): string {
   return object.relPath;
 }
@@ -149,34 +166,40 @@ function sortedManifestFiles(sources: SourceSet[]): WorkspaceHydrateFile[] {
   );
 }
 
-function statusMountsForTuple(
-  tuple: ResolvedWorkspaceRenderTuple,
-): WorkspaceHydrateStatusMount[] {
-  if (!tuple.threadId && !tuple.threadSlug) return [];
-  return [
-    {
-      path: "GOAL.md",
+function statusMountsForTuple(input: {
+  tuple: ResolvedWorkspaceRenderTuple;
+  statusObjects: SourceObject[];
+}): WorkspaceHydrateStatusMount[] {
+  if (!input.tuple.threadId && !input.tuple.threadSlug) return [];
+  const byPath = new Map(
+    input.statusObjects.map((object) => [object.relPath, object]),
+  );
+  return ["GOAL.md", "PROGRESS.md"].map((path) => {
+    const object = byPath.get(path);
+    return {
+      path: path as "GOAL.md" | "PROGRESS.md",
       owner: "system",
       source: "database",
       provider: "thread-goals",
       readOnly: true,
-      available: false,
-    },
-    {
-      path: "PROGRESS.md",
-      owner: "system",
-      source: "database",
-      provider: "thread-goals",
-      readOnly: true,
-      available: false,
-    },
-  ];
+      available: Boolean(object),
+      ...(object
+        ? {
+            sourceKey: object.key,
+            lastModified: object.lastModified?.toISOString(),
+            etag: object.etag,
+            size: object.size,
+          }
+        : {}),
+    };
+  });
 }
 
 function buildHydrateManifest(input: {
   renderedPrefix: string;
   generatedAt: string;
   sources: SourceSet[];
+  statusObjects: SourceObject[];
   tuple: ResolvedWorkspaceRenderTuple;
 }): WorkspaceHydrateManifest {
   const hydrateSources: WorkspaceHydrateSource[] = input.sources
@@ -191,8 +214,55 @@ function buildHydrateManifest(input: {
     generatedAt: input.generatedAt,
     sources: hydrateSources,
     files: sortedManifestFiles(input.sources),
-    statusMounts: statusMountsForTuple(input.tuple),
+    statusMounts: statusMountsForTuple({
+      tuple: input.tuple,
+      statusObjects: input.statusObjects,
+    }),
   };
+}
+
+function existingManifestMatchesContract(
+  existingManifest: string,
+  expectedManifest: WorkspaceHydrateManifest,
+): boolean {
+  try {
+    const parsed = JSON.parse(existingManifest) as WorkspaceHydrateManifest;
+    if (parsed.version !== expectedManifest.version) return false;
+    if (!Array.isArray(parsed.sources) || !Array.isArray(parsed.statusMounts)) {
+      return false;
+    }
+
+    for (const source of expectedManifest.sources) {
+      if (
+        !parsed.sources.some(
+          (candidate) =>
+            candidate.owner === source.owner &&
+            candidate.prefix === source.prefix,
+        )
+      ) {
+        return false;
+      }
+    }
+
+    for (const mount of expectedManifest.statusMounts) {
+      const candidate = parsed.statusMounts.find(
+        (statusMount) => statusMount.path === mount.path,
+      );
+      if (
+        !candidate ||
+        candidate.owner !== "system" ||
+        candidate.source !== "database" ||
+        candidate.provider !== "thread-goals" ||
+        candidate.readOnly !== true
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function renderWorkspaceTuple(
@@ -242,7 +312,13 @@ export async function renderWorkspaceTuple(
       })
     : null;
 
-  const [agentSource, spaceSource, userSource] = await Promise.all([
+  const [
+    agentSource,
+    spaceSource,
+    userSource,
+    threadGoalSource,
+    threadGoalStatusSource,
+  ] = await Promise.all([
     listRenderableSource(
       objectStore,
       bucket,
@@ -260,6 +336,20 @@ export async function renderWorkspaceTuple(
     userPrefix
       ? listRenderableSource(objectStore, bucket, userPrefix, "user")
       : Promise.resolve({ owner: "user" as const, prefix: "", objects: [] }),
+    listRenderableSource(
+      objectStore,
+      bucket,
+      renderedPrefix,
+      "thread_goal",
+      shouldRenderThreadGoalSourcePath,
+    ),
+    listRenderableSource(
+      objectStore,
+      bucket,
+      renderedPrefix,
+      "thread_goal",
+      shouldRenderThreadGoalStatusPath,
+    ),
   ]);
 
   if (agentSource.objects.length === 0) {
@@ -275,9 +365,12 @@ export async function renderWorkspaceTuple(
     );
   }
 
-  const sourcePrefixes = [agentPrefix, spacePrefix, userPrefix].filter(
-    (prefix): prefix is string => Boolean(prefix),
-  );
+  const sourcePrefixes = [
+    agentPrefix,
+    spacePrefix,
+    userPrefix,
+    renderedPrefix,
+  ].filter((prefix): prefix is string => Boolean(prefix));
   const effectivePolicy = composeWorkspacePolicy({
     agentBlockedTools: input.agentBlockedTools,
     agentAllowedTools: input.agentAllowedTools,
@@ -286,18 +379,29 @@ export async function renderWorkspaceTuple(
     objectStore.getText({ bucket, key: markerKey }),
     objectStore.getText({ bucket, key: manifestKey }),
   ]);
-  const sourceLatest = latestMtime([agentSource, spaceSource, userSource]);
-  const cacheIsFresh =
-    existingManifest !== null && markerIsFresh(marker, sourceLatest);
-  const generatedAt = cacheIsFresh
-    ? marker?.trim() || (deps.now?.() ?? new Date()).toISOString()
-    : (deps.now?.() ?? new Date()).toISOString();
+  const sourceLatest = latestMtime([
+    agentSource,
+    spaceSource,
+    userSource,
+    threadGoalSource,
+    threadGoalStatusSource,
+  ]);
+  const markerFresh = markerIsFresh(marker, sourceLatest);
+  const generatedAtCandidate =
+    markerFresh && marker?.trim()
+      ? marker.trim()
+      : (deps.now?.() ?? new Date()).toISOString();
   const hydrateManifest = buildHydrateManifest({
     renderedPrefix,
-    generatedAt,
-    sources: [agentSource, spaceSource, userSource],
+    generatedAt: generatedAtCandidate,
+    sources: [agentSource, spaceSource, userSource, threadGoalSource],
+    statusObjects: threadGoalStatusSource.objects,
     tuple,
   });
+  const cacheIsFresh =
+    existingManifest !== null &&
+    markerFresh &&
+    existingManifestMatchesContract(existingManifest, hydrateManifest);
   if (cacheIsFresh) {
     return {
       renderedPrefix,
@@ -320,11 +424,22 @@ export async function renderWorkspaceTuple(
     };
   }
 
+  const generatedAt = (deps.now?.() ?? new Date()).toISOString();
+  const nextHydrateManifest =
+    hydrateManifest.generatedAt === generatedAt
+      ? hydrateManifest
+      : buildHydrateManifest({
+          renderedPrefix,
+          generatedAt,
+          sources: [agentSource, spaceSource, userSource, threadGoalSource],
+          statusObjects: threadGoalStatusSource.objects,
+          tuple,
+        });
   const writtenFiles = [HYDRATE_MANIFEST_PATH];
   await objectStore.putText({
     bucket,
     key: manifestKey,
-    content: `${JSON.stringify(hydrateManifest, null, 2)}\n`,
+    content: `${JSON.stringify(nextHydrateManifest, null, 2)}\n`,
     contentType: "application/json",
   });
   await objectStore.putText({
@@ -339,7 +454,7 @@ export async function renderWorkspaceTuple(
     cacheStatus: "miss",
     sourcePrefixes,
     writtenFiles,
-    hydrateManifest,
+    hydrateManifest: nextHydrateManifest,
     activeSpace: {
       id: tuple.spaceId,
       slug: tuple.spaceSlug,

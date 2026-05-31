@@ -57,6 +57,10 @@ describe("workspace renderer prefixes", () => {
     expect(workspacePathOwner("goals/launch/notes.md")).toBe("space");
     expect(workspacePathOwner("AGENTS.md")).toBe("agent");
     expect(workspacePathOwner("skills/reporting/SKILL.md")).toBe("agent");
+    expect(workspacePathOwner("GOAL.md")).toBe("status");
+    expect(workspacePathOwner("PROGRESS.md")).toBe("status");
+    expect(workspacePathOwner("DECISIONS.md")).toBe("thread_goal");
+    expect(workspacePathOwner("stages/kickoff/CONTEXT.md")).toBe("thread_goal");
   });
 
   it("treats scratch and unmapped paths as non-authoritative", () => {

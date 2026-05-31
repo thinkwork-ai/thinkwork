@@ -70,7 +70,12 @@ export interface WorkspaceTupleRepository {
 
 export type WorkspaceRenderCacheStatus = "hit" | "miss";
 
-export type WorkspaceHydrateOwner = "agent" | "space" | "user" | "system";
+export type WorkspaceHydrateOwner =
+  | "agent"
+  | "space"
+  | "user"
+  | "thread_goal"
+  | "system";
 
 export interface WorkspaceHydrateSource {
   owner: Exclude<WorkspaceHydrateOwner, "system">;
@@ -95,7 +100,11 @@ export interface WorkspaceHydrateStatusMount {
   source: "database";
   provider: "thread-goals";
   readOnly: true;
-  available: false;
+  available: boolean;
+  sourceKey?: string;
+  lastModified?: string;
+  etag?: string;
+  size?: number;
 }
 
 export interface WorkspaceHydrateManifest {
