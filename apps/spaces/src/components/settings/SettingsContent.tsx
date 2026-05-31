@@ -37,18 +37,24 @@ export function SettingsHeader({
 export function SettingsPageTitle({
   title,
   description,
+  badge,
   actions,
 }: {
   title: string;
   description?: string;
+  /** Optional element rendered inline beside the title (e.g. a status badge). */
+  badge?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
     <div className="mb-8 flex shrink-0 items-start justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          {title}
-        </h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {title}
+          </h1>
+          {badge ? <div className="shrink-0">{badge}</div> : null}
+        </div>
         {description ? (
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         ) : null}
