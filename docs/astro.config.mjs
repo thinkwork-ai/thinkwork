@@ -87,7 +87,10 @@ export default defineConfig({
                       label: "Spaces",
                       collapsed: true,
                       items: [
-                        { label: "Overview", slug: "applications/admin/spaces" },
+                        {
+                          label: "Overview",
+                          slug: "applications/admin/spaces",
+                        },
                         {
                           label: "Spaces list",
                           slug: "applications/admin/spaces/list",
@@ -240,6 +243,28 @@ export default defineConfig({
                 {
                   label: "Workspace Composition",
                   slug: "concepts/agents/workspace-composition",
+                },
+                {
+                  label: "Workspace Architecture",
+                  collapsed: true,
+                  items: [
+                    {
+                      label: "Overview",
+                      slug: "concepts/agents/workspace-architecture",
+                    },
+                    {
+                      label: "Ownership Model",
+                      slug: "concepts/agents/workspace-architecture/ownership-model",
+                    },
+                    {
+                      label: "Turn Lifecycle",
+                      slug: "concepts/agents/workspace-architecture/turn-lifecycle",
+                    },
+                    {
+                      label: "Reading the Tree",
+                      slug: "concepts/agents/workspace-architecture/workspace-tree",
+                    },
+                  ],
                 },
                 {
                   label: "Workspace Orchestration",
