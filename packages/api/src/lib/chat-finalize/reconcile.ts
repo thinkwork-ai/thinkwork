@@ -4,9 +4,11 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
+  messages,
   spaceMembers,
   spaces,
   tenants,
@@ -91,6 +93,7 @@ export type ReconcileFileResult =
       message: string;
       sourceKey?: string;
       rule?: string;
+      quarantineKey?: string;
     };
 
 export interface ReconcileReport {
@@ -108,6 +111,12 @@ export interface ReconcileChangedFilesInput {
   objectStore?: ReconcileObjectStore;
   context?: ReconcileContext;
   hydrateManifest?: WorkspaceHydrateManifest | null;
+  secretQuarantineStore?: SecretQuarantineStore;
+  secretQuarantineBucket?: string;
+  secretQuarantineKmsKeyId?: string;
+  secretQuarantineRetentionDays?: number;
+  notifySecretQuarantine?: SecretQuarantineNotifier;
+  secretOverride?: SecretQuarantineOverride;
 }
 
 export class ReconcileNotImplementedError extends Error {
@@ -154,6 +163,31 @@ export interface ReconcileObjectStore {
   }): Promise<void>;
 }
 
+export interface SecretQuarantineStore {
+  put(input: {
+    bucket: string;
+    key: string;
+    content: string;
+    kmsKeyId?: string;
+    metadata: Record<string, string>;
+    expiresAt: Date;
+  }): Promise<{ key: string }>;
+}
+
+export type SecretQuarantineNotifier = (input: {
+  context: ReconcileContext;
+  changedFile: ChangedFilePayload;
+  rule: string;
+  quarantineKey: string | null;
+}) => Promise<void>;
+
+export interface SecretQuarantineOverride {
+  actorType: "operator";
+  operatorId: string;
+  reason: string;
+  approvedAt?: Date;
+}
+
 type ManifestFailure = {
   code: "manifest_missing" | "manifest_invalid";
   message: string;
@@ -170,6 +204,7 @@ const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
 const s3 = new S3Client({ region: REGION });
 const HYDRATE_MANIFEST_PATH = ".hydrate_manifest.json";
+const DEFAULT_SECRET_QUARANTINE_RETENTION_DAYS = 7;
 
 class S3ReconcileObjectStore implements ReconcileObjectStore {
   async getText(input: {
@@ -220,6 +255,32 @@ class S3ReconcileObjectStore implements ReconcileObjectStore {
         IfMatch: input.ifMatch,
       }),
     );
+  }
+}
+
+class S3SecretQuarantineStore implements SecretQuarantineStore {
+  async put(input: {
+    bucket: string;
+    key: string;
+    content: string;
+    kmsKeyId?: string;
+    metadata: Record<string, string>;
+    expiresAt: Date;
+  }): Promise<{ key: string }> {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: input.bucket,
+        Key: input.key,
+        Body: input.content,
+        ContentType: "text/plain; charset=utf-8",
+        Metadata: input.metadata,
+        Expires: input.expiresAt,
+        ServerSideEncryption: input.kmsKeyId ? "aws:kms" : "AES256",
+        ...(input.kmsKeyId ? { SSEKMSKeyId: input.kmsKeyId } : {}),
+        Tagging: "classification=secret-quarantine&retention=short",
+      }),
+    );
+    return { key: input.key };
   }
 }
 
@@ -382,6 +443,26 @@ export async function reconcileChangedFiles(
 
   const context = input.context ?? (await resolveReconcileContext(input));
   const objectStore = input.objectStore ?? new S3ReconcileObjectStore();
+  const secretQuarantineStore =
+    input.secretQuarantineStore ?? new S3SecretQuarantineStore();
+  const secretQuarantineBucket =
+    input.secretQuarantineBucket ??
+    process.env.SECRET_QUARANTINE_BUCKET ??
+    bucket;
+  const secretQuarantineKmsKeyId =
+    input.secretQuarantineKmsKeyId ??
+    process.env.SECRET_QUARANTINE_KMS_KEY_ID ??
+    undefined;
+  const configuredSecretQuarantineRetentionDays =
+    input.secretQuarantineRetentionDays ??
+    Number(process.env.SECRET_QUARANTINE_RETENTION_DAYS);
+  const secretQuarantineRetentionDays =
+    Number.isFinite(configuredSecretQuarantineRetentionDays) &&
+    configuredSecretQuarantineRetentionDays > 0
+      ? configuredSecretQuarantineRetentionDays
+      : DEFAULT_SECRET_QUARANTINE_RETENTION_DAYS;
+  const notifySecretQuarantine =
+    input.notifySecretQuarantine ?? notifySecretQuarantineMessage;
   let manifest = input.hydrateManifest;
   let manifestFailure: ManifestFailure | null = null;
   if (manifest === undefined) {
@@ -414,7 +495,14 @@ export async function reconcileChangedFiles(
       manifest,
       manifestFailure,
       changedFile,
+      threadTurnId: input.threadTurnId,
       objectStore,
+      secretQuarantineStore,
+      secretQuarantineBucket,
+      secretQuarantineKmsKeyId,
+      secretQuarantineRetentionDays,
+      notifySecretQuarantine,
+      secretOverride: input.secretOverride,
     });
     files.push(result);
   }
@@ -431,7 +519,14 @@ async function reconcileOneFile(input: {
   manifest: WorkspaceHydrateManifest | null;
   manifestFailure: ManifestFailure | null;
   changedFile: ChangedFilePayload;
+  threadTurnId: string;
   objectStore: ReconcileObjectStore;
+  secretQuarantineStore: SecretQuarantineStore;
+  secretQuarantineBucket: string;
+  secretQuarantineKmsKeyId?: string;
+  secretQuarantineRetentionDays: number;
+  notifySecretQuarantine: SecretQuarantineNotifier;
+  secretOverride?: SecretQuarantineOverride;
 }): Promise<ReconcileFileResult> {
   const { changedFile } = input;
   const owner = workspacePathOwner(changedFile.path);
@@ -544,14 +639,29 @@ async function reconcileOneFile(input: {
     changedFile.content !== undefined
   ) {
     const secretMatch = detectSecret(changedFile.content);
-    if (secretMatch) {
+    if (secretMatch && !isAuthorizedSecretOverride(input.secretOverride)) {
+      const quarantine = await quarantineSecretDetection({
+        bucket: input.secretQuarantineBucket,
+        kmsKeyId: input.secretQuarantineKmsKeyId,
+        retentionDays: input.secretQuarantineRetentionDays,
+        store: input.secretQuarantineStore,
+        notify: input.notifySecretQuarantine,
+        context: input.context,
+        threadTurnId: input.threadTurnId,
+        changedFile,
+        content: changedFile.content,
+        rule: secretMatch.rule,
+      });
       return rejected(
         changedFile,
         owner,
         "secret_detected",
-        "Content matched the minimal secret-scan gate.",
+        quarantine.key
+          ? "Content matched the secret-scan gate and was quarantined."
+          : "Content matched the secret-scan gate; quarantine failed before canonical write.",
         sourceKey,
         secretMatch.rule,
+        quarantine.key,
       );
     }
   }
@@ -807,6 +917,7 @@ function rejected(
   message: string,
   sourceKey?: string,
   rule?: string,
+  quarantineKey?: string | null,
 ): ReconcileFileResult {
   return {
     path: changedFile.path,
@@ -817,6 +928,7 @@ function rejected(
     message,
     ...(sourceKey ? { sourceKey } : {}),
     ...(rule ? { rule } : {}),
+    ...(quarantineKey ? { quarantineKey } : {}),
   };
 }
 
@@ -853,6 +965,137 @@ function detectSecret(content: string): { rule: string } | null {
     }
   }
   return null;
+}
+
+async function quarantineSecretDetection(input: {
+  bucket: string;
+  kmsKeyId?: string;
+  retentionDays: number;
+  store: SecretQuarantineStore;
+  notify: SecretQuarantineNotifier;
+  context: ReconcileContext;
+  threadTurnId: string;
+  changedFile: ChangedFilePayload;
+  content: string;
+  rule: string;
+}): Promise<{ key: string | null }> {
+  const key = secretQuarantineKey({
+    tenantSlug: input.context.tenantSlug,
+    threadId: input.context.threadId,
+    threadTurnId: input.threadTurnId,
+    path: input.changedFile.path,
+    content: input.content,
+  });
+  const expiresAt = new Date(
+    Date.now() + input.retentionDays * 24 * 60 * 60 * 1000,
+  );
+
+  let stored: { key: string };
+  try {
+    stored = await input.store.put({
+      bucket: input.bucket,
+      key,
+      content: input.content,
+      kmsKeyId: input.kmsKeyId,
+      expiresAt,
+      metadata: {
+        tenant_id: input.context.tenantId,
+        thread_id: input.context.threadId,
+        agent_id: input.context.agentId,
+        path_hash: hashText(input.changedFile.path),
+        rule: input.rule,
+      },
+    });
+  } catch (error) {
+    console.warn("[workspace-reconcile] secret quarantine failed", {
+      tenantId: input.context.tenantId,
+      threadId: input.context.threadId,
+      agentId: input.context.agentId,
+      path: input.changedFile.path,
+      rule: input.rule,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { key: null };
+  }
+
+  try {
+    await input.notify({
+      context: input.context,
+      changedFile: input.changedFile,
+      rule: input.rule,
+      quarantineKey: stored.key,
+    });
+  } catch (error) {
+    console.warn(
+      "[workspace-reconcile] secret quarantine notification failed",
+      {
+        tenantId: input.context.tenantId,
+        threadId: input.context.threadId,
+        agentId: input.context.agentId,
+        path: input.changedFile.path,
+        rule: input.rule,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    );
+  }
+  return { key: stored.key };
+}
+
+function secretQuarantineKey(input: {
+  tenantSlug: string;
+  threadId: string;
+  threadTurnId: string;
+  path: string;
+  content: string;
+}): string {
+  return [
+    "tenants",
+    input.tenantSlug,
+    "_quarantine",
+    "workspace-secrets",
+    input.threadId,
+    input.threadTurnId,
+    `${hashText(`${input.path}\0${input.content}`)}.txt`,
+  ].join("/");
+}
+
+async function notifySecretQuarantineMessage(input: {
+  context: ReconcileContext;
+  changedFile: ChangedFilePayload;
+  rule: string;
+  quarantineKey: string | null;
+}): Promise<void> {
+  await getDb()
+    .insert(messages)
+    .values({
+      thread_id: input.context.threadId,
+      tenant_id: input.context.tenantId,
+      role: "assistant",
+      content: `A workspace file was quarantined because it matched secret-scan rule ${input.rule}: ${input.changedFile.path}.`,
+      sender_type: "system",
+      sender_id: null,
+      metadata: {
+        kind: "workspace_secret_quarantine",
+        path: input.changedFile.path,
+        rule: input.rule,
+        quarantineKey: input.quarantineKey,
+      },
+      created_at: new Date(),
+    });
+}
+
+function isAuthorizedSecretOverride(
+  override: SecretQuarantineOverride | undefined,
+): boolean {
+  return Boolean(
+    override?.actorType === "operator" &&
+    override.operatorId.trim() &&
+    override.reason.trim(),
+  );
+}
+
+function hashText(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function shannonEntropy(value: string): number {

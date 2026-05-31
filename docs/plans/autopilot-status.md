@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U9 Generalize progress + review beyond customer-onboarding.
-- Active branch: `codex/workspace-arch-u9`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u9`.
+- Active unit: U10 Secret references + quarantine controls.
+- Active branch: `codex/workspace-arch-u10`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u10`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1914](https://github.com/thinkwork-ai/thinkwork/pull/1914).
-- CI/deploy: U8 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1915](https://github.com/thinkwork-ai/thinkwork/pull/1915).
+- CI/deploy: U9 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -375,6 +375,43 @@ test` passed, and the subsequent full `pnpm test` rerun passed.
   the known optional `node-liblzma` native rebuild warning because
   `pkg-config` is unavailable.
 - Opened PR [#1915](https://github.com/thinkwork-ai/thinkwork/pull/1915).
+- PR [#1915](https://github.com/thinkwork-ai/thinkwork/pull/1915) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `5693a93fba807540d6175273987276a66cdcb783`.
+- Removed U9 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U10 worktree `codex/workspace-arch-u10`
+  from `origin/main` at `5693a93f`.
+- Started U10 secret references and quarantine controls work.
+- Implemented U10 reconcile quarantine controls: secret-scan matches now fail
+  the changed file before canonical S3 writes, store the raw content under a
+  tenant-scoped `_quarantine/workspace-secrets/` key with server-side
+  encryption metadata and short retention, and post a system thread message
+  containing only the path, matched rule, and quarantine metadata.
+- Added an explicit operator-only false-positive override seam for reconcile
+  callers; normal finalize paths do not supply it, so agent-written inline
+  secrets still quarantine and fail closed. Partial-success behavior continues
+  to let unrelated files reconcile.
+- Added the AgentCore TS runtime secret-reference resolver for governed
+  `secret://` aliases and approved tenant/stage/account Secrets Manager ARNs,
+  including SSM SecureString lookup, optional Secrets Manager dereference, and
+  tenant/user grant enforcement.
+- Compound review pass fixed two issues before PR: regenerated the lockfile
+  after an accidental Prettier rewrite produced huge lockfile churn, and split
+  quarantine storage from notification failure so a successfully quarantined
+  object still reports its quarantine key if the notification write fails.
+- U10 verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/chat-finalize/reconcile.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/secret-references.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+  `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/agentcore-pi test`, `pnpm typecheck`,
+  `pnpm lint`, changed-file Prettier via
+  `pnpm dlx prettier --check <changed files>`, and `git diff --check`.
+- Verification note: `pnpm install` was required in the fresh U10 worktree to
+  update dependencies and the lockfile. It completed with the known optional
+  `node-liblzma` native rebuild warning because `pkg-config` is unavailable.
+- Opened PR [#1916](https://github.com/thinkwork-ai/thinkwork/pull/1916).
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 
