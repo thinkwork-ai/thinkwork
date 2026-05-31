@@ -16,6 +16,7 @@ import {
 
 const CACHE_MANIFEST_FILE = ".thinkwork-workspace-cache.json";
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
+export const DEFAULT_OFFLINE_EXECUTION_TTL_MS = 15 * 60 * 1000;
 
 /**
  * Directory under Electron `userData` that holds the synced Pi workspace cache.
@@ -72,10 +73,12 @@ export interface WorkspaceSyncResult {
   total: number;
   cacheHit?: boolean;
   cacheStale?: boolean;
+  accessRevalidated?: boolean;
 }
 
 export interface WorkspaceCacheOptions {
   cacheTtlMs?: number;
+  offlineExecutionTtlMs?: number;
   now?: () => Date;
   backgroundRefresh?: (refresh: () => Promise<void>) => void;
   onBackgroundRefreshError?: (err: unknown) => void;
@@ -84,14 +87,34 @@ export interface WorkspaceCacheOptions {
 interface WorkspaceCacheManifest {
   prefix: string;
   syncedAt: string;
+  accessValidatedAt?: string;
   total: number;
   objects?: Record<string, string>;
+}
+
+export interface WorkspaceRevocationInput {
+  stage: string;
+  tenantSlug: string;
+  spaceId: string;
+  agentSlug?: string | null;
+  userId?: string | null;
+}
+
+export interface WorkspaceWipeResult {
+  deleted: number;
 }
 
 export class WorkspaceBoundaryError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "WorkspaceBoundaryError";
+  }
+}
+
+export class WorkspaceAccessRevalidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkspaceAccessRevalidationError";
   }
 }
 
@@ -111,9 +134,10 @@ export class WorkspaceCache {
     const localDir = this.partitionPath(input.partition);
     await mkdir(localDir, { recursive: true });
 
+    const now = this.options.now?.() ?? new Date();
     const cached = isThreadRuntimePrefix(input.partition.tenantSlug, prefix)
       ? null
-      : await this.readFreshCacheManifest(localDir, prefix);
+      : await this.readFreshCacheManifest(localDir, prefix, now);
     if (cached) {
       await this.evictOldPartitions(input.partition.stage);
       return {
@@ -132,7 +156,13 @@ export class WorkspaceCache {
     )
       ? null
       : await this.readCacheManifest(localDir, prefix);
-    if (staleManifest && (await hasLocalWorkspaceFiles(localDir))) {
+    const hasStaleLocalFiles =
+      Boolean(staleManifest) && (await hasLocalWorkspaceFiles(localDir));
+    if (
+      staleManifest &&
+      hasStaleLocalFiles &&
+      !this.isOfflineExecutionExpired(staleManifest, now)
+    ) {
       this.refreshInBackground(input, localDir, prefix);
       await this.evictOldPartitions(input.partition.stage);
       return {
@@ -146,7 +176,49 @@ export class WorkspaceCache {
       };
     }
 
-    return this.refreshFromRemote(input, localDir, prefix);
+    try {
+      return await this.refreshFromRemote(input, localDir, prefix);
+    } catch (err) {
+      if (
+        staleManifest &&
+        hasStaleLocalFiles &&
+        this.isOfflineExecutionExpired(staleManifest, now)
+      ) {
+        throw new WorkspaceAccessRevalidationError(
+          "Workspace access revalidation is required before using this cached Space.",
+        );
+      }
+      throw err;
+    }
+  }
+
+  async wipeRevokedSpace(
+    input: WorkspaceRevocationInput,
+  ): Promise<WorkspaceWipeResult> {
+    const stageDir = path.join(this.rootDir, safeSegment(input.stage));
+    const tenantDir = path.join(stageDir, safeSegment(input.tenantSlug));
+    const agentNames = input.agentSlug?.trim()
+      ? [safeSegment(input.agentSlug)]
+      : await listChildDirectoryNames(tenantDir);
+    let deleted = 0;
+
+    for (const agentName of agentNames) {
+      const spaceDir = path.join(
+        tenantDir,
+        agentName,
+        safeSegment(input.spaceId),
+      );
+      const targets = input.userId?.trim()
+        ? [path.join(spaceDir, safeSegment(input.userId))]
+        : [spaceDir];
+      for (const target of targets) {
+        if (!(await directoryExists(target))) continue;
+        await rm(target, { recursive: true, force: true });
+        deleted++;
+      }
+    }
+
+    return { deleted };
   }
 
   private async refreshFromRemote(
@@ -196,15 +268,24 @@ export class WorkspaceCache {
       deleted++;
     }
     await pruneEmptyDirs(localDir, localDir);
+    const validatedAt = (this.options.now?.() ?? new Date()).toISOString();
     await this.writeManifest(localDir, {
       prefix,
-      syncedAt: (this.options.now?.() ?? new Date()).toISOString(),
+      syncedAt: validatedAt,
+      accessValidatedAt: validatedAt,
       total: remoteEntries.length,
       objects: nextObjects,
     });
     await this.evictOldPartitions(input.partition.stage);
 
-    return { localDir, prefix, synced, deleted, total: remoteEntries.length };
+    return {
+      localDir,
+      prefix,
+      synced,
+      deleted,
+      total: remoteEntries.length,
+      accessRevalidated: true,
+    };
   }
 
   private refreshInBackground(
@@ -259,20 +340,37 @@ export class WorkspaceCache {
   private async readFreshCacheManifest(
     localDir: string,
     prefix: string,
+    now: Date,
   ): Promise<WorkspaceCacheManifest | null> {
     const cacheTtlMs = this.options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     if (cacheTtlMs <= 0) return null;
 
     const manifest = await this.readCacheManifest(localDir, prefix);
     if (!manifest) return null;
+    if (this.isOfflineExecutionExpired(manifest, now)) return null;
     const syncedAt = Date.parse(manifest.syncedAt);
     if (!Number.isFinite(syncedAt)) return null;
-    const ageMs = (this.options.now?.() ?? new Date()).getTime() - syncedAt;
+    const ageMs = now.getTime() - syncedAt;
     if (ageMs < 0 || ageMs > cacheTtlMs) return null;
 
     const files = await listLocalFiles(localDir);
     files.delete(CACHE_MANIFEST_FILE);
     return files.size > 0 ? manifest : null;
+  }
+
+  private isOfflineExecutionExpired(
+    manifest: WorkspaceCacheManifest,
+    now: Date,
+  ): boolean {
+    const ttlMs =
+      this.options.offlineExecutionTtlMs ?? DEFAULT_OFFLINE_EXECUTION_TTL_MS;
+    if (ttlMs <= 0) return true;
+    const validatedAt = Date.parse(
+      manifest.accessValidatedAt ?? manifest.syncedAt,
+    );
+    if (!Number.isFinite(validatedAt)) return true;
+    const ageMs = now.getTime() - validatedAt;
+    return ageMs < 0 || ageMs > ttlMs;
   }
 
   private async readCacheManifest(
@@ -409,6 +507,33 @@ async function listLocalFiles(localDir: string): Promise<Set<string>> {
   }
   await walk(localDir);
   return out;
+}
+
+async function listChildDirectoryNames(dir: string): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const entry of entries) {
+    const abs = path.join(dir, entry);
+    try {
+      if ((await stat(abs)).isDirectory()) out.push(entry);
+    } catch {
+      // Best-effort revocation cleanup only.
+    }
+  }
+  return out;
+}
+
+async function directoryExists(dir: string): Promise<boolean> {
+  try {
+    return (await stat(dir)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

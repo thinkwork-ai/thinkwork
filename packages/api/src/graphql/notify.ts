@@ -107,6 +107,22 @@ export async function notifyNewMessage(payload: {
   );
 }
 
+export async function notifyWorkspaceAccessRevoked(payload: {
+  tenantId: string;
+  spaceId: string;
+  userId: string;
+  revokedAt: string;
+}): Promise<void> {
+  await postToAppSync(
+    `mutation($tenantId: ID!, $spaceId: ID!, $userId: ID!, $revokedAt: AWSDateTime!) {
+      notifyWorkspaceAccessRevoked(tenantId: $tenantId, spaceId: $spaceId, userId: $userId, revokedAt: $revokedAt) {
+        tenantId spaceId userId revokedAt
+      }
+    }`,
+    payload,
+  );
+}
+
 function deriveMessageOwner(payload: {
   role: string;
   senderType?: string;

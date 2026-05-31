@@ -31,8 +31,13 @@ import { GraphQLProvider } from "@/lib/graphql/provider";
 import { NAV_THEME } from "@/lib/theme";
 import { useAgents } from "@/lib/hooks/use-agents";
 import { usePushNotifications } from "@/lib/hooks/use-push-notifications";
+import { useMe } from "@/lib/hooks/use-users";
 import { TurnCompletionProvider } from "@/lib/hooks/use-turn-completion";
-import { useThreadTurnUpdatedSubscription } from "@thinkwork/react-native-sdk";
+import {
+  useThreadTurnUpdatedSubscription,
+  useWorkspaceAccessRevokedSubscription,
+} from "@thinkwork/react-native-sdk";
+import { handleWorkspaceAccessRevoked } from "@/lib/agent/workspace-revocation";
 import { useBiometricAuth, getBiometricName } from "@/hooks/useBiometricAuth";
 import { BiometricLockScreen } from "@/components/BiometricLockScreen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -86,6 +91,24 @@ function RootLayoutNav() {
 
   // Register turn subscription early at root level so it's active before home tab mounts
   useThreadTurnUpdatedSubscription(tenantId);
+
+  const [{ data: meData }] = useMe();
+  const currentUserId = meData?.me?.id ?? null;
+  const [{ data: revocationData }] =
+    useWorkspaceAccessRevokedSubscription(currentUserId);
+  const revocationEvent = revocationData?.onWorkspaceAccessRevoked;
+
+  useEffect(() => {
+    if (!revocationEvent) return;
+    void handleWorkspaceAccessRevoked(revocationEvent).catch((err) => {
+      console.warn("[workspace-cache] failed to wipe revoked Space:", err);
+    });
+  }, [
+    revocationEvent?.tenantId,
+    revocationEvent?.spaceId,
+    revocationEvent?.userId,
+    revocationEvent?.revokedAt,
+  ]);
 
   const [{ data: agentsData }] = useAgents(tenantId);
   const agents = agentsData?.agents;

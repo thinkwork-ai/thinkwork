@@ -19,6 +19,10 @@ const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
 const SCHEMA_DIR = join(REPO_ROOT, "packages/database-pg/graphql");
 const TYPES_DIR = join(SCHEMA_DIR, "types");
 const TF_SCHEMA = join(REPO_ROOT, "terraform/schema.graphql");
+const TF_APPSYNC_SUBSCRIPTIONS = join(
+  REPO_ROOT,
+  "terraform/modules/app/appsync-subscriptions/main.tf",
+);
 
 // AWS AppSync custom directives — needed so buildSchema doesn't reject @aws_subscribe
 const APPSYNC_DIRECTIVES = `
@@ -427,6 +431,7 @@ describe("GraphQL Schema Contract", () => {
       // subscription via @aws_subscribe so the Studio + dashboard
       // live-update while the eval-runner Lambda processes a run).
       "onEvalRunUpdated",
+      "onWorkspaceAccessRevoked",
     ];
 
     for (const s of expectedSubscriptions) {
@@ -542,6 +547,22 @@ describe("GraphQL Schema Contract", () => {
       expect(fields).toContain("notifyAgentStatus");
       expect(fields).toContain("notifyNewMessage");
       expect(fields).toContain("notifyThreadUpdate");
+      expect(fields).toContain("notifyWorkspaceAccessRevoked");
+    });
+
+    it("does not allow API-key revocation subscriptions", () => {
+      const sdl = readFileSync(TF_SCHEMA, "utf-8");
+      expect(sdl).toContain(
+        "onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent @aws_cognito_user_pools @aws_iam",
+      );
+      expect(sdl).not.toContain(
+        "onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent @aws_api_key",
+      );
+    });
+
+    it("wires notification mutations to AppSync resolvers", () => {
+      const terraform = readFileSync(TF_APPSYNC_SUBSCRIPTIONS, "utf-8");
+      expect(terraform).toContain('"notifyWorkspaceAccessRevoked"');
     });
 
     it("Computer thread chunk subscription is retired", () => {

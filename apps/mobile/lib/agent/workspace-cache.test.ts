@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MemoryWorkspaceCacheStorage,
+  WorkspaceAccessRevalidationError,
   WorkspaceBoundaryError,
   WorkspaceCache,
   assertSafeRelativePath,
@@ -19,6 +20,7 @@ const PARTITION = createWorkspaceCachePartition({
 
 class FakeSource implements WorkspaceCacheSource {
   calls = 0;
+  fail = false;
 
   constructor(
     private readonly filesByTarget: Record<string, Record<string, string>>,
@@ -39,6 +41,7 @@ class FakeSource implements WorkspaceCacheSource {
     }>;
   }> {
     this.calls++;
+    if (this.fail) throw new Error("offline");
     const key = targetKey(target);
     const files = this.filesByTarget[key] ?? {};
     return {
@@ -130,6 +133,129 @@ describe("WorkspaceCache", () => {
     await refreshes[0]();
     await expect(cache.readFile(PARTITION, "USER.md")).resolves.toMatchObject({
       content: "v2",
+    });
+  });
+
+  it("fails closed when cached access is older than the offline execution TTL", async () => {
+    let now = new Date("2026-05-30T12:00:00.000Z");
+    const source = new FakeSource({
+      "space:space-1": { "SPACE.md": "v1" },
+    });
+    const cache = new WorkspaceCache(
+      new MemoryWorkspaceCacheStorage(),
+      source,
+      { now: () => now },
+    );
+
+    await cache.sync({
+      partition: PARTITION,
+      targets: [{ spaceId: "space-1" }],
+    });
+    source.fail = true;
+    now = new Date("2026-05-30T12:16:00.000Z");
+
+    await expect(
+      cache.sync({
+        partition: PARTITION,
+        targets: [{ spaceId: "space-1" }],
+      }),
+    ).rejects.toBeInstanceOf(WorkspaceAccessRevalidationError);
+  });
+
+  it("does not serve a fresh cache hit after the offline execution TTL expires", async () => {
+    let now = new Date("2026-05-30T12:00:00.000Z");
+    const source = new FakeSource({
+      "space:space-1": { "SPACE.md": "v1" },
+    });
+    const cache = new WorkspaceCache(
+      new MemoryWorkspaceCacheStorage(),
+      source,
+      {
+        cacheTtlMs: 20 * 60 * 1000,
+        offlineExecutionTtlMs: 15 * 60 * 1000,
+        now: () => now,
+      },
+    );
+
+    await cache.sync({
+      partition: PARTITION,
+      targets: [{ spaceId: "space-1" }],
+    });
+    source.fail = true;
+    now = new Date("2026-05-30T12:16:00.000Z");
+
+    await expect(
+      cache.sync({
+        partition: PARTITION,
+        targets: [{ spaceId: "space-1" }],
+      }),
+    ).rejects.toBeInstanceOf(WorkspaceAccessRevalidationError);
+    expect(source.calls).toBe(2);
+  });
+
+  it("revalidates expired cached access before serving a Space", async () => {
+    let now = new Date("2026-05-30T12:00:00.000Z");
+    const source = new FakeSource({
+      "space:space-1": { "SPACE.md": "v1" },
+    });
+    const cache = new WorkspaceCache(
+      new MemoryWorkspaceCacheStorage(),
+      source,
+      { now: () => now },
+    );
+
+    await cache.sync({
+      partition: PARTITION,
+      targets: [{ spaceId: "space-1" }],
+    });
+    now = new Date("2026-05-30T12:16:00.000Z");
+    const revalidated = await cache.sync({
+      partition: PARTITION,
+      targets: [{ spaceId: "space-1" }],
+    });
+
+    expect(revalidated).toMatchObject({
+      synced: 0,
+      accessRevalidated: true,
+    });
+    expect(source.calls).toBe(2);
+  });
+
+  it("wipes only cache partitions for the revoked Space", async () => {
+    const storage = new MemoryWorkspaceCacheStorage();
+    const source = new FakeSource({
+      "space:space-1": { "SPACE.md": "revoked" },
+      "space:space-2": { "SPACE.md": "still granted" },
+    });
+    const cache = new WorkspaceCache(storage, source, {
+      now: () => new Date("2026-05-30T12:00:00.000Z"),
+    });
+    const otherPartition = createWorkspaceCachePartition({
+      ...PARTITION,
+      spaceId: "space-2",
+    });
+
+    await cache.sync({
+      partition: PARTITION,
+      targets: [{ spaceId: "space-1" }],
+    });
+    await cache.sync({
+      partition: otherPartition,
+      targets: [{ spaceId: "space-2" }],
+    });
+
+    const wiped = await cache.wipeRevokedSpace({
+      stage: "dev",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+    });
+
+    expect(wiped).toEqual({ deleted: 1 });
+    await expect(cache.readFile(PARTITION, "SPACE.md")).resolves.toBeNull();
+    await expect(
+      cache.readFile(otherPartition, "SPACE.md"),
+    ).resolves.toMatchObject({
+      content: "still granted",
     });
   });
 

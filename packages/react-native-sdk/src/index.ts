@@ -26,9 +26,11 @@ export {
   useThreadTurnSubscription,
   useThreadTurnUpdatedSubscription,
   useThreadUpdatedSubscription,
+  useWorkspaceAccessRevokedSubscription,
   type NewMessageEvent,
   type ThreadTurnUpdateEvent,
   type ThreadUpdateEvent,
+  type WorkspaceAccessRevokedEvent,
 } from "./hooks/use-subscriptions";
 export { useCaptureMobileMemory } from "./hooks/use-capture-mobile-memory";
 export {

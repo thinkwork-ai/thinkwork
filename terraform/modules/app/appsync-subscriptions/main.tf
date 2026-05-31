@@ -79,6 +79,7 @@ locals {
     "notifyThreadTurnUpdate",
     "publishComputerThreadChunk",
     "notifyOrgUpdate",
+    "notifyWorkspaceAccessRevoked",
   ]
 }
 
