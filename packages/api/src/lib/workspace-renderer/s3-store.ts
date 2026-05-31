@@ -50,6 +50,8 @@ export class S3WorkspaceRendererObjectStore implements WorkspaceRendererObjectSt
         objects.push({
           key: object.Key,
           lastModified: object.LastModified,
+          etag: object.ETag,
+          size: object.Size,
         });
       }
       continuationToken = page.IsTruncated

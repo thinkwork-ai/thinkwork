@@ -62,7 +62,7 @@ class FakeStore implements WorkspaceRendererObjectStore {
   constructor(
     private readonly objects: Map<
       string,
-      { content: string; lastModified: Date }
+      { content: string; lastModified: Date; etag?: string; size?: number }
     >,
   ) {}
 
@@ -74,6 +74,8 @@ class FakeStore implements WorkspaceRendererObjectStore {
       .map(([key, value]) => ({
         key,
         lastModified: value.lastModified,
+        etag: value.etag ?? `"${key}"`,
+        size: value.size ?? value.content.length,
       }));
   }
 
@@ -93,6 +95,18 @@ class FakeStore implements WorkspaceRendererObjectStore {
     for (const key of Array.from(this.objects.keys())) {
       if (key.startsWith(prefix)) this.objects.delete(key);
     }
+  }
+
+  setObject(
+    key: string,
+    value: { content: string; lastModified: string; etag?: string },
+  ): void {
+    this.objects.set(key, {
+      content: value.content,
+      lastModified: new Date(value.lastModified),
+      etag: value.etag,
+      size: value.content.length,
+    });
   }
 }
 
@@ -185,7 +199,7 @@ old`,
 }
 
 describe("renderWorkspaceTuple", () => {
-  it("composes agent, user, and Space files into a rendered tuple prefix", async () => {
+  it("composes agent, user, and Space files by reference into a hydrate manifest", async () => {
     const store = new FakeStore(seedObjects());
 
     const result = await renderWorkspaceTuple(
@@ -200,40 +214,85 @@ describe("renderWorkspaceTuple", () => {
 
     expect(result.cacheStatus).toBe("miss");
     expect(result.renderedPrefix).toBe("tenants/acme/threads/thread-1/");
-    expect(result.writtenFiles).toContain("AGENTS.md");
-    expect(result.writtenFiles).toContain("SPACE.md");
-    expect(result.writtenFiles).toContain("space/SPACE.md");
-    expect(result.writtenFiles).toContain("space/knowledge/board.md");
-    expect(result.writtenFiles).toContain(
-      "spaces/board-pack/knowledge/board.md",
+    expect(result.writtenFiles).toEqual([".hydrate_manifest.json"]);
+    expect(result.hydrateManifest.sources).toEqual([
+      { owner: "agent", prefix: "tenants/acme/agents/finance-agent/" },
+      { owner: "space", prefix: "tenants/acme/spaces/board-pack/" },
+      { owner: "user", prefix: "tenants/acme/users/eric/" },
+    ]);
+    expect(result.hydrateManifest.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          owner: "agent",
+          path: "AGENTS.md",
+          sourceKey: "tenants/acme/agents/finance-agent/AGENTS.md",
+        }),
+        expect.objectContaining({
+          owner: "agent",
+          path: "TOOLS.md",
+          sourceKey: "tenants/acme/agents/finance-agent/TOOLS.md",
+        }),
+        expect.objectContaining({
+          owner: "space",
+          path: "SPACE.md",
+          sourceKey: "tenants/acme/spaces/board-pack/SPACE.md",
+        }),
+        expect.objectContaining({
+          owner: "space",
+          path: "knowledge/board.md",
+          sourceKey: "tenants/acme/spaces/board-pack/knowledge/board.md",
+        }),
+        expect.objectContaining({
+          owner: "user",
+          path: "USER.md",
+          sourceKey: "tenants/acme/users/eric/USER.md",
+        }),
+      ]),
     );
-    expect(result.writtenFiles).not.toContain("space/TOOLS.md");
-    expect(result.writtenFiles).not.toContain("spaces/board-pack/TOOLS.md");
-    expect(result.writtenFiles).not.toContain("SPACE_CONTEXT.md");
-    expect(result.writtenFiles).not.toContain("effective-policy.json");
-    expect(result.writtenFiles).not.toContain("spaces/old/SPACE.md");
+    expect(result.hydrateManifest.files).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "SPACE_CONTEXT.md" }),
+        expect.objectContaining({ path: "effective-policy.json" }),
+        expect.objectContaining({ path: "space/SPACE.md" }),
+        expect.objectContaining({ path: "spaces/old/SPACE.md" }),
+      ]),
+    );
+    expect(result.hydrateManifest.statusMounts).toEqual([
+      expect.objectContaining({
+        path: "GOAL.md",
+        source: "database",
+        readOnly: true,
+        available: false,
+      }),
+      expect.objectContaining({
+        path: "PROGRESS.md",
+        source: "database",
+        readOnly: true,
+        available: false,
+      }),
+    ]);
     expect(result.effectivePolicy).toMatchObject({
       blockedTools: [],
       mcpAllowedServers: null,
       mcpBlockedServers: [],
     });
 
-    const renderedAgents = store.puts.find((put) =>
-      put.key.endsWith("/AGENTS.md"),
-    )?.content;
-    expect(renderedAgents).toContain("## Active Space");
-    expect(renderedAgents).toContain("- **Slug:** board-pack");
-    expect(renderedAgents).toContain(
-      "- **Active Space folder:** space/SPACE.md",
+    expect(store.puts.map((put) => put.key).sort()).toEqual([
+      "tenants/acme/threads/thread-1/.hydrate_manifest.json",
+      "tenants/acme/threads/thread-1/.rendered_at",
+    ]);
+    const manifestPut = store.puts.find((put) =>
+      put.key.endsWith(".hydrate_manifest.json"),
     );
-    expect(renderedAgents).not.toContain("\nold");
-
-    const renderedTools = store.puts.find((put) =>
-      put.key.endsWith("/TOOLS.md"),
-    )?.content;
-    expect(renderedTools).toContain("adds: [browser]");
-    expect(renderedTools).not.toContain("warehouse");
-    expect(renderedTools).not.toContain("send_email");
+    expect(JSON.parse(manifestPut?.content ?? "{}")).toMatchObject({
+      renderedPrefix: "tenants/acme/threads/thread-1/",
+      files: expect.arrayContaining([
+        expect.objectContaining({
+          path: "knowledge/board.md",
+          sourceKey: "tenants/acme/spaces/board-pack/knowledge/board.md",
+        }),
+      ]),
+    });
   });
 
   it("returns a cache hit without writes when the marker is newer than source files", async () => {
@@ -241,6 +300,10 @@ describe("renderWorkspaceTuple", () => {
       seedObjects({
         "tenants/acme/threads/thread-1/.rendered_at": {
           content: "2026-05-22T11:00:00.000Z",
+          lastModified: "2026-05-22T11:00:00.000Z",
+        },
+        "tenants/acme/threads/thread-1/.hydrate_manifest.json": {
+          content: "{}\n",
           lastModified: "2026-05-22T11:00:00.000Z",
         },
       }),
@@ -258,28 +321,47 @@ describe("renderWorkspaceTuple", () => {
     expect(result.cacheStatus).toBe("hit");
     expect(result.effectivePolicy.blockedTools).toEqual([]);
     expect(result.writtenFiles).toEqual([]);
+    expect(result.hydrateManifest.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "SPACE.md",
+          sourceKey: "tenants/acme/spaces/board-pack/SPACE.md",
+        }),
+      ]),
+    );
     expect(store.puts).toEqual([]);
   });
 
-  it("filters rendered workspace mentions from SPACE.md allowlists", async () => {
+  it("rewrites the hydrate manifest when only a legacy marker exists", async () => {
     const store = new FakeStore(
       seedObjects({
-        "tenants/acme/spaces/board-pack/SPACE.md": {
-          content: `# Board Pack
-
-## Mentionable Workspaces
-
-\`\`\`
-sql
-finance analyst
-missing-workspace
-\`\`\`
-`,
-          lastModified: "2026-05-22T09:04:00.000Z",
+        "tenants/acme/threads/thread-1/.rendered_at": {
+          content: "2026-05-22T11:00:00.000Z",
+          lastModified: "2026-05-22T11:00:00.000Z",
         },
       }),
     );
 
+    const result = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+        now: () => new Date("2026-05-22T11:05:00.000Z"),
+      },
+    );
+
+    expect(result.cacheStatus).toBe("miss");
+    expect(result.writtenFiles).toEqual([".hydrate_manifest.json"]);
+    expect(store.puts.map((put) => put.key).sort()).toEqual([
+      "tenants/acme/threads/thread-1/.hydrate_manifest.json",
+      "tenants/acme/threads/thread-1/.rendered_at",
+    ]);
+  });
+
+  it("picks up canonical Space source edits without copying files into the thread prefix", async () => {
+    const store = new FakeStore(seedObjects());
     await renderWorkspaceTuple(
       { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
       {
@@ -289,48 +371,38 @@ missing-workspace
         now: () => new Date("2026-05-22T10:00:00.000Z"),
       },
     );
+    store.puts.length = 0;
+    store.setObject("tenants/acme/spaces/board-pack/SPACE.md", {
+      content: "# Board Pack v2\n",
+      lastModified: "2026-05-22T10:30:00.000Z",
+      etag: '"space-v2"',
+    });
 
-    const renderedAgents = store.puts.find((put) =>
-      put.key.endsWith("/AGENTS.md"),
-    )?.content;
-    expect(renderedAgents).toContain("workspaces/sql/");
-    expect(renderedAgents).toContain("workspaces/finance-analyst/");
-    expect(renderedAgents).not.toContain("workspaces/legal/");
-    expect(renderedAgents).not.toContain("missing-workspace");
-  });
-
-  it("removes all routing rows when SPACE.md declares an empty mentionable block", async () => {
-    const store = new FakeStore(
-      seedObjects({
-        "tenants/acme/spaces/board-pack/SPACE.md": {
-          content: `# Board Pack
-
-## Mentionable Workspaces
-
-\`\`\`
-\`\`\`
-`,
-          lastModified: "2026-05-22T09:04:00.000Z",
-        },
-      }),
-    );
-
-    await renderWorkspaceTuple(
+    const result = await renderWorkspaceTuple(
       { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
       {
         bucket: "workspace",
         repository: new FakeRepository(TUPLE),
         objectStore: store,
+        now: () => new Date("2026-05-22T10:31:00.000Z"),
       },
     );
 
-    const renderedAgents = store.puts.find((put) =>
-      put.key.endsWith("/AGENTS.md"),
-    )?.content;
-    expect(renderedAgents).toContain("| Task | Go to | Read | Skills |");
-    expect(renderedAgents).not.toContain("workspaces/sql/");
-    expect(renderedAgents).not.toContain("workspaces/finance-analyst/");
-    expect(renderedAgents).not.toContain("workspaces/legal/");
+    expect(result.cacheStatus).toBe("miss");
+    expect(result.hydrateManifest.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "SPACE.md",
+          sourceKey: "tenants/acme/spaces/board-pack/SPACE.md",
+          etag: '"space-v2"',
+          lastModified: "2026-05-22T10:30:00.000Z",
+        }),
+      ]),
+    );
+    expect(store.puts.map((put) => put.key).sort()).toEqual([
+      "tenants/acme/threads/thread-1/.hydrate_manifest.json",
+      "tenants/acme/threads/thread-1/.rendered_at",
+    ]);
   });
 
   it("blocks private Spaces before reading source files for non-members", async () => {
@@ -413,7 +485,7 @@ missing-workspace
     ).rejects.toMatchObject({ code: "SpaceSourcesNotFound" });
   });
 
-  it("renders agent and user context for an empty default Space", async () => {
+  it("composes agent and user references for a goal-less default Space", async () => {
     const store = new FakeStore(seedObjects());
     store.deletePrefix("tenants/acme/spaces/board-pack/");
 
@@ -429,18 +501,22 @@ missing-workspace
 
     expect(result.cacheStatus).toBe("miss");
     expect(result.renderedPrefix).toBe("tenants/acme/threads/thread-1/");
-    expect(result.writtenFiles).toContain("USER.md");
-    expect(result.writtenFiles).toContain("SPACE.md");
-    expect(result.writtenFiles).not.toContain("space/SPACE.md");
-
-    const renderedUser = store.puts.find((put) =>
-      put.key.endsWith("/USER.md"),
-    )?.content;
-    expect(renderedUser).toBe("# User\n");
-
-    const renderedSpace = store.puts.find((put) =>
-      put.key.endsWith("/SPACE.md"),
-    )?.content;
-    expect(renderedSpace).toContain("# Default");
+    expect(result.writtenFiles).toEqual([".hydrate_manifest.json"]);
+    expect(result.hydrateManifest.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ owner: "agent", path: "AGENTS.md" }),
+        expect.objectContaining({ owner: "user", path: "USER.md" }),
+      ]),
+    );
+    expect(result.hydrateManifest.files).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "GOAL.md" }),
+        expect.objectContaining({ path: "PROGRESS.md" }),
+        expect.objectContaining({ path: "SPACE.md", owner: "space" }),
+      ]),
+    );
+    expect(
+      result.hydrateManifest.statusMounts.map((mount) => mount.path),
+    ).toEqual(["GOAL.md", "PROGRESS.md"]);
   });
 });
