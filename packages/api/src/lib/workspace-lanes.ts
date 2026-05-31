@@ -2,6 +2,8 @@ export type WorkspacePathOwner =
   | "agent"
   | "space"
   | "user"
+  | "thread_goal"
+  | "status"
   | "scratch"
   | "unowned";
 
@@ -9,6 +11,15 @@ export function workspacePathOwner(path: string): WorkspacePathOwner {
   const clean = path.replace(/^\/+/, "");
   if (!clean || clean.includes("..") || clean.includes("\\")) return "unowned";
   if (clean === "scratch" || clean.startsWith("scratch/")) return "scratch";
+  if (clean === "GOAL.md" || clean === "PROGRESS.md") return "status";
+  if (
+    clean === "DECISIONS.md" ||
+    clean === "ARTIFACTS.md" ||
+    clean === "HANDOFFS.md" ||
+    /^stages\/[^/]+\/(?:CONTEXT|OUTPUT)\.md$/.test(clean)
+  ) {
+    return "thread_goal";
+  }
   if (clean === "USER.md" || clean.startsWith("memory/")) return "user";
   if (
     clean === "SPACE.md" ||

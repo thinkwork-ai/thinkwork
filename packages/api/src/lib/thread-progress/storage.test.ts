@@ -35,6 +35,13 @@ describe("thread progress storage", () => {
     expect(
       threadProgressKey({ tenantSlug: "acme", threadId: "thread-123" }),
     ).toBe("tenants/acme/threads/thread-123/PROGRESS.md");
+    expect(
+      threadProgressKey({
+        tenantSlug: "acme",
+        threadId: "thread-123",
+        threadFolderName: "customer-kickoff",
+      }),
+    ).toBe("tenants/acme/threads/customer-kickoff/PROGRESS.md");
   });
 
   it("rejects unsafe path segments", () => {

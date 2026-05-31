@@ -48,6 +48,17 @@ describe("thread goal storage", () => {
     ).toBe("tenants/acme/threads/thread-123/stages/credit_check/OUTPUT.md");
   });
 
+  it("uses the stable thread workspace folder when present", () => {
+    expect(
+      threadGoalFileKey({
+        tenantSlug: "acme",
+        threadId: "thread-123",
+        threadFolderName: "customer-kickoff",
+        file: "PROGRESS.md",
+      }),
+    ).toBe("tenants/acme/threads/customer-kickoff/PROGRESS.md");
+  });
+
   it("rejects unsafe segments and filenames before S3 calls", async () => {
     expect(() =>
       threadGoalFileKey({
@@ -63,6 +74,14 @@ describe("thread goal storage", () => {
         file: "GOAL.md",
       }),
     ).toThrow("threadId must be a safe S3 path segment");
+    expect(() =>
+      threadGoalFileKey({
+        tenantSlug: "acme",
+        threadId: "thread-123",
+        threadFolderName: "../customer",
+        file: "GOAL.md",
+      }),
+    ).toThrow("threadFolderName must be a safe S3 path segment");
     expect(() =>
       threadGoalFileKey({
         tenantSlug: "acme",

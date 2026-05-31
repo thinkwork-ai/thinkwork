@@ -89,6 +89,43 @@ describe("customer onboarding Goal folder", () => {
     );
   });
 
+  it("preserves existing narrative files while refreshing DB-rendered status files", async () => {
+    const writes: Array<{ file: string; content: string }> = [];
+    const existingNarratives = new Set(["DECISIONS.md", "ARTIFACTS.md"]);
+
+    await refreshCustomerOnboardingGoalFolder(
+      { tenantId: "tenant-1", threadId: "thread-1" },
+      {
+        now: () => updatedAt,
+        repository: {
+          load: async () => state(),
+        },
+        statusUpdater: {
+          update: async () => {},
+        },
+        writer: {
+          read: async (input) =>
+            existingNarratives.has(input.file) ? "agent-authored\n" : null,
+          write: async (input) => {
+            writes.push({ file: input.file, content: input.content });
+            return {
+              key: `tenants/${input.tenantSlug}/threads/${
+                input.threadFolderName ?? input.threadId
+              }/${input.file}`,
+              bytes: input.content.length,
+            };
+          },
+        },
+      },
+    );
+
+    expect(writes.map((write) => write.file)).toEqual([
+      "GOAL.md",
+      "PROGRESS.md",
+      "HANDOFFS.md",
+    ]);
+  });
+
   it("excludes not-applicable tasks from required completion math", () => {
     const readiness = customerOnboardingGoalReadiness([
       task({ status: "completed" }),
@@ -111,6 +148,7 @@ function state(
   return {
     tenantSlug: "acme",
     threadId: "thread-1",
+    threadFolderName: "customer-kickoff",
     spaceId: "space-1",
     threadTitle: "Acme onboarding",
     normalized: normalizeCustomerOnboardingSource({

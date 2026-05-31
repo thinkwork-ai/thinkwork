@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+import type { LinkedTaskStatus } from "./linked-tasks/status";
+import { refreshCustomerOnboardingGoalFolder } from "./spaces/customer-onboarding-goal-md";
+import { normalizeCustomerOnboardingSource } from "./spaces/customer-onboarding-workflow";
 import { setTaskStatus, TaskStatusToolError } from "./task-status-tool";
 
-function fakeDb(options: { taskStatus?: string; requiredComplete?: boolean }) {
+function fakeDb(options: {
+  taskStatus?: string;
+  requiredComplete?: boolean;
+  onLinkedTaskUpdate?: (value: Record<string, unknown>) => void;
+}) {
   const updates: Record<string, unknown>[] = [];
   const inserts: Record<string, unknown>[] = [];
   const selectRows: unknown[][] = [
@@ -51,6 +58,9 @@ function fakeDb(options: { taskStatus?: string; requiredComplete?: boolean }) {
     update: vi.fn(() => ({
       set(value: Record<string, unknown>) {
         updates.push(value);
+        if ("sync_status" in value) {
+          options.onLinkedTaskUpdate?.(value);
+        }
         return {
           where: () => ({
             returning: async () => updateRows.shift() ?? [],
@@ -122,6 +132,87 @@ describe("setTaskStatus", () => {
       tenantId: "tenant-1",
       threadId: "thread-1",
     });
+  });
+
+  it("refreshes PROGRESS.md from the updated DB task state after set_task_status", async () => {
+    let persistedStatus: LinkedTaskStatus = "todo";
+    const progressWrites: string[] = [];
+    const store = fakeDb({
+      requiredComplete: false,
+      onLinkedTaskUpdate: (value) => {
+        persistedStatus = value.status as LinkedTaskStatus;
+      },
+    });
+    const refreshGoalFolder = vi.fn(
+      async (input: { tenantId: string; threadId: string }) =>
+        refreshCustomerOnboardingGoalFolder(input, {
+          now: () => new Date("2026-05-31T12:01:00.000Z"),
+          repository: {
+            load: async () => ({
+              tenantSlug: "acme",
+              threadId: "thread-1",
+              threadFolderName: "customer-kickoff",
+              spaceId: "space-1",
+              threadTitle: "Acme onboarding",
+              normalized: normalizeCustomerOnboardingSource({
+                opportunityId: "opp-1",
+                customerName: "Acme Equipment",
+              }),
+              tasks: [
+                {
+                  title: "Collect invoice",
+                  status: persistedStatus,
+                  required: true,
+                  blocked: false,
+                  owner: "Finance",
+                  roleKey: "finance",
+                  checklistItemKey: "collect_invoice",
+                  notes: null,
+                  updatedAt: new Date("2026-05-31T12:00:00.000Z"),
+                },
+              ],
+            }),
+          },
+          statusUpdater: {
+            update: async () => {},
+          },
+          writer: {
+            read: async () => null,
+            write: async (writeInput) => {
+              if (writeInput.file === "PROGRESS.md") {
+                progressWrites.push(writeInput.content);
+              }
+              return {
+                key: `tenants/${writeInput.tenantSlug}/threads/${
+                  writeInput.threadFolderName ?? writeInput.threadId
+                }/${writeInput.file}`,
+                bytes: writeInput.content.length,
+              };
+            },
+          },
+        }),
+    );
+
+    await setTaskStatus(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        linkedTaskId: "task-1",
+        status: "completed",
+        actor: { type: "agent", id: "agent-1" },
+      },
+      {
+        db: store.db as never,
+        refreshGoalFolder,
+      },
+    );
+
+    expect(progressWrites).toHaveLength(1);
+    expect(progressWrites[0]).toContain("- Required complete: 1/1");
+    expect(progressWrites[0]).toContain(
+      "| Collect invoice | Completed | Finance | Yes |  |",
+    );
   });
 
   it("rejects status changes away from terminal task states", async () => {

@@ -93,6 +93,7 @@ describe("reconcileChangedFiles", () => {
       { owner: "agent", prefix: "tenants/acme/agents/marco/" },
       { owner: "space", prefix: "tenants/acme/spaces/board-pack/" },
       { owner: "user", prefix: "tenants/acme/users/eric/" },
+      { owner: "thread_goal", prefix: "tenants/acme/threads/thread-1/" },
     ],
     files: [
       {
@@ -122,8 +123,38 @@ describe("reconcileChangedFiles", () => {
         etag: '"agent-old"',
         readOnly: false,
       },
+      {
+        path: "DECISIONS.md",
+        owner: "thread_goal",
+        sourceKey: "tenants/acme/threads/thread-1/DECISIONS.md",
+        sourcePrefix: "tenants/acme/threads/thread-1/",
+        sourcePath: "DECISIONS.md",
+        etag: '"decisions-old"',
+        readOnly: false,
+      },
     ],
-    statusMounts: [],
+    statusMounts: [
+      {
+        path: "GOAL.md",
+        owner: "system",
+        source: "database",
+        provider: "thread-goals",
+        readOnly: true,
+        available: true,
+        sourceKey: "tenants/acme/threads/thread-1/GOAL.md",
+        etag: '"goal-db"',
+      },
+      {
+        path: "PROGRESS.md",
+        owner: "system",
+        source: "database",
+        provider: "thread-goals",
+        readOnly: true,
+        available: true,
+        sourceKey: "tenants/acme/threads/thread-1/PROGRESS.md",
+        etag: '"progress-db"',
+      },
+    ],
   };
 
   function objectStore(): ReconcileObjectStore & {
@@ -225,6 +256,95 @@ describe("reconcileChangedFiles", () => {
         key: "tenants/acme/agents/marco/skills/research/SKILL.md",
         content: "# Skill\n",
         ifMatch: '"agent-old"',
+      },
+    ]);
+  });
+
+  it("rejects DB-rendered status file writes before source reconciliation", async () => {
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "GOAL.md",
+          op: "modify",
+          content: "# Edited goal\n",
+          base_etag: '"goal-db"',
+        },
+        {
+          path: "PROGRESS.md",
+          op: "modify",
+          content: "# Edited progress\n",
+          base_etag: '"progress-db"',
+        },
+      ],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "GOAL.md",
+        owner: "status",
+        status: "rejected",
+        code: "read_only_status_file",
+      }),
+      expect.objectContaining({
+        path: "PROGRESS.md",
+        owner: "status",
+        status: "rejected",
+        code: "read_only_status_file",
+      }),
+    ]);
+    expect(store.puts).toEqual([]);
+    expect(store.deletes).toEqual([]);
+  });
+
+  it("reconciles narrative goal files through the thread goal lane", async () => {
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "DECISIONS.md",
+          op: "modify",
+          content: "# Decisions\n\n- Keep the onboarding lane.\n",
+          base_etag: '"decisions-old"',
+        },
+        {
+          path: "HANDOFFS.md",
+          op: "create",
+          content: "# Handoffs\n",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("complete");
+    expect(store.puts).toEqual([
+      {
+        key: "tenants/acme/threads/thread-1/DECISIONS.md",
+        content: "# Decisions\n\n- Keep the onboarding lane.\n",
+        ifMatch: '"decisions-old"',
+      },
+      {
+        key: "tenants/acme/threads/thread-1/HANDOFFS.md",
+        content: "# Handoffs\n",
+        ifNoneMatch: "*",
       },
     ]);
   });

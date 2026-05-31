@@ -1,6 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { agents, spaces, tenants, users } from "@thinkwork/database-pg/schema";
+import {
+  agents,
+  spaces,
+  tenants,
+  threads,
+  users,
+} from "@thinkwork/database-pg/schema";
 import type {
   ResolvedWorkspaceRenderTuple,
   WorkspaceRenderTupleInput,
@@ -86,6 +92,25 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       }
     }
 
+    let resolvedThreadSlug: string | null = input.threadSlug ?? null;
+    if (input.threadId) {
+      const [thread] = await this.db
+        .select({
+          id: threads.id,
+          workspaceFolderName: threads.workspace_folder_name,
+        })
+        .from(threads)
+        .where(
+          and(
+            eq(threads.id, input.threadId),
+            eq(threads.tenant_id, input.tenantId),
+          ),
+        )
+        .limit(1);
+      resolvedThreadSlug =
+        thread?.workspaceFolderName ?? input.threadSlug ?? input.threadId;
+    }
+
     return {
       tenantId: tenant.id,
       tenantSlug: tenant.slug,
@@ -101,7 +126,7 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       spaceToolPolicy: space.toolPolicy,
       spaceMcpPolicy: space.mcpPolicy,
       threadId: input.threadId ?? null,
-      threadSlug: input.threadSlug ?? input.threadId ?? null,
+      threadSlug: resolvedThreadSlug,
       userId: resolvedUser?.id ?? input.userId ?? null,
       userSlug: resolvedUser?.slug ?? null,
       userName: resolvedUser?.name ?? null,

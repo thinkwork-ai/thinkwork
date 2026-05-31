@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U7 task-status tool.
-- Active branch: `codex/workspace-arch-u7`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u7`.
+- Active unit: U8 DB-rendered read-only status files.
+- Active branch: `codex/workspace-arch-u8`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u8`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1912](https://github.com/thinkwork-ai/thinkwork/pull/1912).
-- CI/deploy: U6 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1913](https://github.com/thinkwork-ai/thinkwork/pull/1913).
+- CI/deploy: U7 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -285,6 +285,62 @@ terraform/modules/app/lambda-api/handlers.tf`, and changed-file Prettier via
   `pnpm --filter @thinkwork/api typecheck`, and changed-file Prettier for the
   touched handler/status doc.
 - Opened PR [#1913](https://github.com/thinkwork-ai/thinkwork/pull/1913).
+- PR [#1913](https://github.com/thinkwork-ai/thinkwork/pull/1913) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `be7af62e9686d6a56112d7c51a69fd35029fe5ce`.
+- Removed U7 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U8 worktree `codex/workspace-arch-u8`
+  from `origin/main` at `be7af62e`.
+- Started U8 DB-rendered read-only status file work.
+- Implemented U8 DB-rendered status projection: the workspace hydrate manifest
+  now discovers thread `GOAL.md` and `PROGRESS.md` under the thread runtime
+  prefix as read-only database status mounts with source metadata, includes
+  those status objects in cache freshness, and keeps them out of writable
+  manifest files.
+- Added the `thread_goal` writable lane for narrative goal files
+  (`DECISIONS.md`, `ARTIFACTS.md`, `HANDOFFS.md`, and stage context/output
+  files) while classifying `GOAL.md` and `PROGRESS.md` as a dedicated
+  read-only `status` owner.
+- Wired reconcile to reject any agent write to `GOAL.md` or `PROGRESS.md`
+  before source writes with `read_only_status_file`, while allowing narrative
+  goal files to reconcile through the mounted thread-goal source prefix.
+- U8 focused verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/task-status-tool.test.ts src/lib/spaces/customer-onboarding-goal-md.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/lib/workspace-renderer/compose-tuple.test.ts src/lib/chat-finalize/reconcile.test.ts src/lib/workspace-renderer/prefixes.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, changed-file Prettier via
+  `pnpm dlx prettier --write <changed files>`, and `git diff --check`.
+- U8 broad local verification passed: `pnpm typecheck`, `pnpm lint`, and a
+  clean rerun of `pnpm test`.
+- Verification note: initial `pnpm install` in the fresh U8 worktree completed
+  with the known optional `node-liblzma` native rebuild warning because
+  `pkg-config` is unavailable. The first broad `pnpm test` attempt then failed
+  before desktop assertions because Electron had not installed correctly in the
+  worktree. Running `pnpm --filter @thinkwork/desktop exec npx install-electron
+--no` repaired the local Electron install; `pnpm --filter @thinkwork/desktop
+test` passed, and the subsequent full `pnpm test` rerun passed.
+- U8 review pass found and fixed five gaps before PR: direct task-status to
+  `PROGRESS.md` projection coverage, stale pre-U8 hydrate-manifest cache hits,
+  accidental narrative status-folder overwrites, desktop TTL reuse for
+  DB-rendered thread status files, and missing thread-goal source-prefix
+  provenance. A follow-up type pass also aligned status keys on the stable
+  thread folder name rather than the opaque thread id.
+- Post-review U8 verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/task-status-tool.test.ts src/lib/thread-goals/storage.test.ts src/lib/thread-progress/storage.test.ts src/lib/spaces/customer-onboarding-goal-md.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/lib/workspace-renderer/compose-tuple.test.ts src/lib/chat-finalize/reconcile.test.ts src/lib/workspace-renderer/prefixes.test.ts`,
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, `pnpm typecheck`,
+  `pnpm lint`, `git diff --check`, and full
+  `pnpm --filter @thinkwork/api test` with 375 files and 3352 tests passing.
+- Verification note: repo-level `pnpm format:check` is still blocked because
+  this worktree lacks a root `prettier` binary. An all-repo
+  `pnpm dlx prettier --check` reports pre-existing unrelated formatting drift;
+  U8 changed files pass the same check via
+  `pnpm dlx prettier --check <changed files>`.
+- Verification note: a post-review full `pnpm test` attempt hit unrelated API
+  timeouts while large Spaces smoke suites were running concurrently. The
+  affected API files passed when rerun directly, and the subsequent full
+  `pnpm --filter @thinkwork/api test` suite passed cleanly.
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 

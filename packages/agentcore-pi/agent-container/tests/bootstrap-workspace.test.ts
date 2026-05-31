@@ -19,6 +19,7 @@ import { bootstrapWorkspace } from "../src/runtime/bootstrap-workspace.js";
 
 const PREFIX = "tenants/acme/agents/marco/workspace/";
 const RENDERED_PREFIX = "tenants/acme/rendered/marco/sales/eric/";
+const THREAD_PREFIX = "tenants/acme/threads/customer-kickoff/";
 // aws-sdk-client-mock's middleware-stack types and @aws-sdk/client-s3
 // drift on minor SDK version bumps; the runtime behavior is correct
 // regardless of the mismatch surfaced at the type level.
@@ -183,6 +184,32 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(files["space/SPACE.md"]).toBe("# Sales");
   });
 
+  it("syncs the per-thread runtime workspace when provided", async () => {
+    stubRemote(
+      {
+        "GOAL.md": "# Goal",
+        "PROGRESS.md": "# Progress",
+        "DECISIONS.md": "# Decisions",
+      },
+      THREAD_PREFIX,
+    );
+
+    const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: THREAD_PREFIX,
+    });
+
+    expect(result).toEqual({
+      synced: 3,
+      deleted: 0,
+      total: 3,
+      prefix: THREAD_PREFIX,
+    });
+    const files = await readFiles(tmp);
+    expect(files["GOAL.md"]).toBe("# Goal");
+    expect(files["PROGRESS.md"]).toBe("# Progress");
+    expect(files["DECISIONS.md"]).toBe("# Decisions");
+  });
+
   it("rejects rendered workspace prefixes outside the tenant/agent scope", async () => {
     await expect(
       bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
@@ -193,6 +220,12 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     await expect(
       bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
         workspacePrefix: "tenants/acme/rendered/other-agent/sales/eric/",
+      }),
+    ).rejects.toThrow("outside the expected tenant/agent scope");
+
+    await expect(
+      bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+        workspacePrefix: "tenants/other/threads/customer-kickoff/",
       }),
     ).rejects.toThrow("outside the expected tenant/agent scope");
   });

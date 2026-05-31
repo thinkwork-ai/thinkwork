@@ -31,6 +31,7 @@ export interface CustomerOnboardingProgressTask {
 export interface CustomerOnboardingProgressState {
   tenantSlug: string;
   threadId: string;
+  threadFolderName: string | null;
   spaceId: string | null;
   threadTitle: string;
   normalized: NormalizedCustomerOnboardingSource;
@@ -48,6 +49,7 @@ export interface CustomerOnboardingProgressWriter {
   write(input: {
     tenantSlug: string;
     threadId: string;
+    threadFolderName?: string | null;
     content: string;
   }): Promise<{ key: string; bytes: number }>;
 }
@@ -82,6 +84,7 @@ export async function refreshCustomerOnboardingProgressMarkdown(
   return writer.write({
     tenantSlug: state.tenantSlug,
     threadId: state.threadId,
+    threadFolderName: state.threadFolderName,
     content,
   });
 }
@@ -172,9 +175,7 @@ export function renderCustomerOnboardingProgressMarkdown(input: {
   ].join("\n");
 }
 
-export class DrizzleCustomerOnboardingProgressRepository
-  implements CustomerOnboardingProgressRepository
-{
+export class DrizzleCustomerOnboardingProgressRepository implements CustomerOnboardingProgressRepository {
   async load(input: {
     tenantId: string;
     threadId: string;
@@ -190,6 +191,7 @@ export class DrizzleCustomerOnboardingProgressRepository
     const [thread] = await db
       .select({
         id: threads.id,
+        workspaceFolderName: threads.workspace_folder_name,
         spaceId: threads.space_id,
         title: threads.title,
         metadata: threads.metadata,
@@ -224,6 +226,7 @@ export class DrizzleCustomerOnboardingProgressRepository
     return {
       tenantSlug: tenant.slug,
       threadId: thread.id,
+      threadFolderName: thread.workspaceFolderName,
       spaceId: thread.spaceId,
       threadTitle: thread.title,
       normalized,

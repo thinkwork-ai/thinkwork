@@ -64,8 +64,15 @@ function normalizeRenderedWorkspacePrefix(
     );
   }
 
-  const allowedPrefix = `tenants/${tenantSlug}/rendered/${agentSlug}/`;
-  if (!normalized.startsWith(allowedPrefix)) {
+  const allowedPrefixes = [
+    `tenants/${tenantSlug}/rendered/${agentSlug}/`,
+    `tenants/${tenantSlug}/threads/`,
+  ];
+  if (
+    !allowedPrefixes.some((allowedPrefix) =>
+      normalized.startsWith(allowedPrefix),
+    )
+  ) {
     throw new Error(
       "rendered_workspace_prefix is outside the expected tenant/agent scope.",
     );

@@ -4,6 +4,7 @@ import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-fold
 import { goals } from "@thinkwork/database-pg/schema";
 
 import {
+  readThreadGoalFile,
   writeThreadGoalFile,
   type ThreadGoalFileName,
   type ThreadGoalStorageDeps,
@@ -40,9 +41,16 @@ export interface CustomerOnboardingGoalFolder {
 }
 
 export interface CustomerOnboardingGoalFolderWriter {
+  read?(input: {
+    tenantSlug: string;
+    threadId: string;
+    threadFolderName?: string | null;
+    file: ThreadGoalFileName;
+  }): Promise<string | null>;
   write(input: {
     tenantSlug: string;
     threadId: string;
+    threadFolderName?: string | null;
     file: ThreadGoalFileName;
     content: string;
   }): Promise<{ key: string; bytes: number }>;
@@ -97,15 +105,26 @@ export async function refreshCustomerOnboardingGoalFolder(
   const writer =
     deps.writer ??
     ({
+      read: (readInput) => readThreadGoalFile(readInput, deps.storage),
       write: (writeInput) => writeThreadGoalFile(writeInput, deps.storage),
     } satisfies CustomerOnboardingGoalFolderWriter);
 
   const writes: Array<{ key: string; bytes: number }> = [];
   for (const file of folder.files) {
+    if (isNarrativeGoalFile(file.file)) {
+      const existing = await writer.read?.({
+        tenantSlug: state.tenantSlug,
+        threadId: state.threadId,
+        threadFolderName: state.threadFolderName,
+        file: file.file,
+      });
+      if (existing !== null && existing !== undefined) continue;
+    }
     writes.push(
       await writer.write({
         tenantSlug: state.tenantSlug,
         threadId: state.threadId,
+        threadFolderName: state.threadFolderName,
         file: file.file,
         content: file.content,
       }),
@@ -162,6 +181,10 @@ export function renderCustomerOnboardingGoalFolder(
       },
     ],
   };
+}
+
+function isNarrativeGoalFile(file: ThreadGoalFileName): boolean {
+  return file !== "GOAL.md" && file !== "PROGRESS.md";
 }
 
 export function customerOnboardingGoalReadiness(
