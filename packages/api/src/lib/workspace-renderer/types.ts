@@ -44,6 +44,8 @@ export interface WorkspaceRuntimeOverrides {
 export interface WorkspaceObjectMetadata {
   key: string;
   lastModified?: Date;
+  etag?: string;
+  size?: number;
 }
 
 export interface WorkspaceRendererObjectStore {
@@ -68,11 +70,49 @@ export interface WorkspaceTupleRepository {
 
 export type WorkspaceRenderCacheStatus = "hit" | "miss";
 
+export type WorkspaceHydrateOwner = "agent" | "space" | "user" | "system";
+
+export interface WorkspaceHydrateSource {
+  owner: Exclude<WorkspaceHydrateOwner, "system">;
+  prefix: string;
+}
+
+export interface WorkspaceHydrateFile {
+  path: string;
+  owner: Exclude<WorkspaceHydrateOwner, "system">;
+  sourceKey: string;
+  sourcePrefix: string;
+  sourcePath: string;
+  lastModified?: string;
+  etag?: string;
+  size?: number;
+  readOnly: false;
+}
+
+export interface WorkspaceHydrateStatusMount {
+  path: "GOAL.md" | "PROGRESS.md";
+  owner: "system";
+  source: "database";
+  provider: "thread-goals";
+  readOnly: true;
+  available: false;
+}
+
+export interface WorkspaceHydrateManifest {
+  version: 1;
+  renderedPrefix: string;
+  generatedAt: string;
+  sources: WorkspaceHydrateSource[];
+  files: WorkspaceHydrateFile[];
+  statusMounts: WorkspaceHydrateStatusMount[];
+}
+
 export interface RenderedWorkspaceTuple {
   renderedPrefix: string;
   cacheStatus: WorkspaceRenderCacheStatus;
   sourcePrefixes: string[];
   writtenFiles: string[];
+  hydrateManifest: WorkspaceHydrateManifest;
   activeSpace: {
     id: string;
     slug: string;

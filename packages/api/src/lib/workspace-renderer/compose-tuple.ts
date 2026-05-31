@@ -1,9 +1,5 @@
 import { S3Client } from "@aws-sdk/client-s3";
-import {
-  contentTypeForWorkspacePath,
-  shouldRenderWorkspaceSourcePath,
-} from "../workspace-renderer.js";
-import { composeAgentsMd } from "./agents-md-composer.js";
+import { shouldRenderWorkspaceSourcePath } from "../workspace-renderer.js";
 import {
   agentWorkspacePrefix,
   spaceSourcePrefix,
@@ -17,8 +13,12 @@ import {
   assertSpaceAccessAllowed,
   type SpaceMembershipRepository,
 } from "./space-membership-check.js";
-import { parseMentionableWorkspaces } from "./space-md-parser.js";
 import type {
+  WorkspaceHydrateFile,
+  WorkspaceHydrateManifest,
+  WorkspaceHydrateOwner,
+  WorkspaceHydrateSource,
+  WorkspaceHydrateStatusMount,
   RenderedWorkspaceTuple,
   ResolvedWorkspaceRenderTuple,
   WorkspaceObjectMetadata,
@@ -31,6 +31,7 @@ import { WorkspaceRenderError } from "./types.js";
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
 const s3 = new S3Client({ region: REGION });
+const HYDRATE_MANIFEST_PATH = ".hydrate_manifest.json";
 
 export interface RenderWorkspaceTupleDeps {
   bucket?: string;
@@ -45,6 +46,7 @@ interface SourceObject extends WorkspaceObjectMetadata {
 }
 
 interface SourceSet {
+  owner: Exclude<WorkspaceHydrateOwner, "system">;
   prefix: string;
   objects: SourceObject[];
 }
@@ -70,10 +72,12 @@ async function listRenderableSource(
   objectStore: WorkspaceRendererObjectStore,
   bucket: string,
   prefix: string,
+  owner: Exclude<WorkspaceHydrateOwner, "system">,
   shouldIncludePath: (relPath: string) => boolean = () => true,
 ): Promise<SourceSet> {
   const listed = await objectStore.listObjects({ bucket, prefix });
   return {
+    owner,
     prefix,
     objects: listed
       .map((object) => ({
@@ -86,30 +90,6 @@ async function listRenderableSource(
           shouldIncludePath(object.relPath),
       ),
   };
-}
-
-async function readSourceFiles(
-  objectStore: WorkspaceRendererObjectStore,
-  bucket: string,
-  source: SourceSet,
-): Promise<Map<string, string>> {
-  const files = new Map<string, string>();
-  for (const object of source.objects) {
-    const content = await objectStore.getText({ bucket, key: object.key });
-    if (content !== null) files.set(object.relPath, content);
-  }
-  return files;
-}
-
-function renderDefaultSpaceMd(tuple: ResolvedWorkspaceRenderTuple): string {
-  const lines = [`# ${tuple.spaceName}`, ""];
-  if (tuple.spacePrompt) {
-    lines.push(tuple.spacePrompt.trim(), "");
-  }
-  lines.push(
-    `This file describes the active Space rendered from ${tuple.spaceSlug}.`,
-  );
-  return `${lines.join("\n").trimEnd()}\n`;
 }
 
 function isDefaultSpace(tuple: ResolvedWorkspaceRenderTuple): boolean {
@@ -127,7 +107,92 @@ function shouldRenderAgentBaselinePath(relPath: string): boolean {
 }
 
 function shouldRenderSpaceSourcePath(relPath: string): boolean {
-  return relPath === "SPACE.md" || relPath.startsWith("knowledge/");
+  return (
+    relPath === "SPACE.md" ||
+    relPath.startsWith("docs/") ||
+    relPath.startsWith("goals/") ||
+    relPath.startsWith("knowledge/")
+  );
+}
+
+function hydratePathForSource(object: SourceObject): string {
+  return object.relPath;
+}
+
+function manifestFileForSource(
+  source: SourceSet,
+  object: SourceObject,
+): WorkspaceHydrateFile {
+  return {
+    path: hydratePathForSource(object),
+    owner: source.owner,
+    sourceKey: object.key,
+    sourcePrefix: source.prefix,
+    sourcePath: object.relPath,
+    lastModified: object.lastModified?.toISOString(),
+    etag: object.etag,
+    size: object.size,
+    readOnly: false,
+  };
+}
+
+function sortedManifestFiles(sources: SourceSet[]): WorkspaceHydrateFile[] {
+  const filesByPath = new Map<string, WorkspaceHydrateFile>();
+  for (const source of sources) {
+    for (const object of source.objects) {
+      const file = manifestFileForSource(source, object);
+      filesByPath.set(file.path, file);
+    }
+  }
+  return Array.from(filesByPath.values()).sort((left, right) =>
+    left.path.localeCompare(right.path),
+  );
+}
+
+function statusMountsForTuple(
+  tuple: ResolvedWorkspaceRenderTuple,
+): WorkspaceHydrateStatusMount[] {
+  if (!tuple.threadId && !tuple.threadSlug) return [];
+  return [
+    {
+      path: "GOAL.md",
+      owner: "system",
+      source: "database",
+      provider: "thread-goals",
+      readOnly: true,
+      available: false,
+    },
+    {
+      path: "PROGRESS.md",
+      owner: "system",
+      source: "database",
+      provider: "thread-goals",
+      readOnly: true,
+      available: false,
+    },
+  ];
+}
+
+function buildHydrateManifest(input: {
+  renderedPrefix: string;
+  generatedAt: string;
+  sources: SourceSet[];
+  tuple: ResolvedWorkspaceRenderTuple;
+}): WorkspaceHydrateManifest {
+  const hydrateSources: WorkspaceHydrateSource[] = input.sources
+    .filter((source) => source.prefix)
+    .map((source) => ({
+      owner: source.owner,
+      prefix: source.prefix,
+    }));
+  return {
+    version: 1,
+    renderedPrefix: input.renderedPrefix,
+    generatedAt: input.generatedAt,
+    sources: hydrateSources,
+    files: sortedManifestFiles(input.sources),
+    statusMounts: statusMountsForTuple(input.tuple),
+  };
 }
 
 export async function renderWorkspaceTuple(
@@ -165,6 +230,7 @@ export async function renderWorkspaceTuple(
   const objectStore =
     deps.objectStore ?? new S3WorkspaceRendererObjectStore(s3);
   const renderedPrefix = threadRuntimePrefix(tuple);
+  const manifestKey = `${renderedPrefix}${HYDRATE_MANIFEST_PATH}`;
   const markerKey = `${renderedPrefix}.rendered_at`;
   const agentPrefix = agentWorkspacePrefix(tuple);
   const spacePrefix = spaceSourcePrefix(tuple);
@@ -181,17 +247,19 @@ export async function renderWorkspaceTuple(
       objectStore,
       bucket,
       agentPrefix,
+      "agent",
       shouldRenderAgentBaselinePath,
     ),
     listRenderableSource(
       objectStore,
       bucket,
       spacePrefix,
+      "space",
       shouldRenderSpaceSourcePath,
     ),
     userPrefix
-      ? listRenderableSource(objectStore, bucket, userPrefix)
-      : Promise.resolve({ prefix: "", objects: [] }),
+      ? listRenderableSource(objectStore, bucket, userPrefix, "user")
+      : Promise.resolve({ owner: "user" as const, prefix: "", objects: [] }),
   ]);
 
   if (agentSource.objects.length === 0) {
@@ -214,15 +282,29 @@ export async function renderWorkspaceTuple(
     agentBlockedTools: input.agentBlockedTools,
     agentAllowedTools: input.agentAllowedTools,
   });
-  const marker = await objectStore.getText({ bucket, key: markerKey });
-  if (
-    markerIsFresh(marker, latestMtime([agentSource, spaceSource, userSource]))
-  ) {
+  const [marker, existingManifest] = await Promise.all([
+    objectStore.getText({ bucket, key: markerKey }),
+    objectStore.getText({ bucket, key: manifestKey }),
+  ]);
+  const sourceLatest = latestMtime([agentSource, spaceSource, userSource]);
+  const cacheIsFresh =
+    existingManifest !== null && markerIsFresh(marker, sourceLatest);
+  const generatedAt = cacheIsFresh
+    ? marker?.trim() || (deps.now?.() ?? new Date()).toISOString()
+    : (deps.now?.() ?? new Date()).toISOString();
+  const hydrateManifest = buildHydrateManifest({
+    renderedPrefix,
+    generatedAt,
+    sources: [agentSource, spaceSource, userSource],
+    tuple,
+  });
+  if (cacheIsFresh) {
     return {
       renderedPrefix,
       cacheStatus: "hit",
       sourcePrefixes,
       writtenFiles: [],
+      hydrateManifest,
       activeSpace: {
         id: tuple.spaceId,
         slug: tuple.spaceSlug,
@@ -238,52 +320,17 @@ export async function renderWorkspaceTuple(
     };
   }
 
-  const [agentFiles, spaceFiles, userFiles] = await Promise.all([
-    readSourceFiles(objectStore, bucket, agentSource),
-    readSourceFiles(objectStore, bucket, spaceSource),
-    readSourceFiles(objectStore, bucket, userSource),
-  ]);
-
-  const rendered = new Map<string, string>();
-  for (const [relPath, content] of agentFiles) rendered.set(relPath, content);
-  for (const [relPath, content] of userFiles) rendered.set(relPath, content);
-  for (const [relPath, content] of spaceFiles) {
-    rendered.set(`space/${relPath}`, content);
-    rendered.set(`spaces/${tuple.spaceSlug}/${relPath}`, content);
-  }
-
-  const spaceMd = spaceFiles.get("SPACE.md") ?? renderDefaultSpaceMd(tuple);
-  rendered.set("SPACE.md", spaceMd);
-
-  rendered.set(
-    "AGENTS.md",
-    composeAgentsMd({
-      baseline: agentFiles.get("AGENTS.md") ?? "",
-      mentionableWorkspaces: parseMentionableWorkspaces(spaceMd),
-      spaceSlug: tuple.spaceSlug,
-      spaceName: tuple.spaceName,
-      isDefaultSpace: isDefaultSpace(tuple),
-      renderedAt: deps.now?.() ?? new Date(),
-      topLevelSpaceMdPath: "SPACE.md",
-      activeSpaceMdPath: "space/SPACE.md",
-      provenanceSpaceMdPath: `spaces/${tuple.spaceSlug}/SPACE.md`,
-      userMdPath: tuple.userId ? "USER.md" : null,
-    }),
-  );
-
-  const writtenFiles = Array.from(rendered.keys()).sort();
-  for (const relPath of writtenFiles) {
-    await objectStore.putText({
-      bucket,
-      key: `${renderedPrefix}${relPath}`,
-      content: rendered.get(relPath) ?? "",
-      contentType: contentTypeForWorkspacePath(relPath),
-    });
-  }
+  const writtenFiles = [HYDRATE_MANIFEST_PATH];
+  await objectStore.putText({
+    bucket,
+    key: manifestKey,
+    content: `${JSON.stringify(hydrateManifest, null, 2)}\n`,
+    contentType: "application/json",
+  });
   await objectStore.putText({
     bucket,
     key: markerKey,
-    content: (deps.now?.() ?? new Date()).toISOString(),
+    content: generatedAt,
     contentType: "text/plain; charset=utf-8",
   });
 
@@ -292,6 +339,7 @@ export async function renderWorkspaceTuple(
     cacheStatus: "miss",
     sourcePrefixes,
     writtenFiles,
+    hydrateManifest,
     activeSpace: {
       id: tuple.spaceId,
       slug: tuple.spaceSlug,

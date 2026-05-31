@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U2 canonical file key builders + three-source layout.
-- Active branch: `codex/workspace-arch-u2`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u2`.
+- Active unit: U3 per-thread render-by-reference.
+- Active branch: `codex/workspace-arch-u3`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u3`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1907](https://github.com/thinkwork-ai/thinkwork/pull/1907).
-- CI/deploy: U1 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1908](https://github.com/thinkwork-ai/thinkwork/pull/1908).
+- CI/deploy: U2 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -92,12 +92,36 @@ Target branch: `main`
   `pnpm --filter @thinkwork/database-pg test`, focused U2 tests, changed-file
   `prettier --check`, and `git diff --check`.
 - Verification note: repo-level `pnpm format:check` is currently blocked
-  because this worktree does not have a root `prettier` binary; `pnpm dlx
-prettier --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` also reports
-  pre-existing formatting drift across hundreds of unrelated files. The U2
-  changed files pass the same check via `pnpm dlx prettier --check <changed
-  files>`.
+  because this worktree does not have a root `prettier` binary. An all-repo
+  `pnpm dlx prettier --check` also reports pre-existing formatting drift across
+  hundreds of unrelated files. The U2 changed files pass the same check via
+  `pnpm dlx prettier --check <changed files>`.
 - Opened PR [#1908](https://github.com/thinkwork-ai/thinkwork/pull/1908).
+- PR [#1908](https://github.com/thinkwork-ai/thinkwork/pull/1908) passed
+  `cla`, `lint`, `Migration Drift Precheck (dev)`, `verify`, `typecheck`, and
+  `test`, then squash-merged into `main`. Merge commit:
+  `f24af9ac8d1d5debfe7641cd5124f400873d6b7c`.
+- Removed U2 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U3 worktree `codex/workspace-arch-u3`
+  from `origin/main` at `f24af9ac`.
+- Started U3 per-thread render-by-reference work.
+- Implemented U3 render-by-reference contract: `renderWorkspaceTuple` now
+  writes only `.hydrate_manifest.json` plus `.rendered_at` under the per-thread
+  runtime prefix, returns the hydrate manifest from the Lambda handler, keeps
+  Agent/Space/User source files canonical under their source prefixes, and
+  reserves read-only database status mounts for U8.
+- The hydrate manifest carries ordered source prefixes, per-file owner/source
+  key/path metadata, last-modified/ETag/size when S3 provides them, and no
+  per-thread copies of Agent skills or Space docs.
+- Compound review pass found and fixed a legacy-cache edge: a pre-U3
+  `.rendered_at` marker without `.hydrate_manifest.json` now forces a cache
+  miss and writes the manifest.
+- U3 local verification passed:
+  `pnpm --filter @thinkwork/api test -- workspace-renderer/compose-tuple.test.ts workspace-renderer.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/api test`, `pnpm typecheck`, `pnpm lint`,
+  changed-file Prettier check via `pnpm dlx prettier --check <changed files>`,
+  and `git diff --check`.
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 

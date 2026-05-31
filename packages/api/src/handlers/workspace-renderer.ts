@@ -3,6 +3,7 @@ import {
   WorkspaceRenderError,
   type EffectiveWorkspacePolicy,
   type RenderWorkspaceTupleDeps,
+  type WorkspaceHydrateManifest,
 } from "../lib/workspace-renderer/index.js";
 
 export interface WorkspaceRendererEvent {
@@ -25,6 +26,7 @@ export interface WorkspaceRendererResponse {
   cacheStatus?: "hit" | "miss";
   sourcePrefixes?: string[];
   writtenFiles?: string[];
+  hydrateManifest?: WorkspaceHydrateManifest;
   activeSpace?: {
     id: string;
     slug: string;
@@ -97,6 +99,7 @@ export function createWorkspaceRendererHandler(
         cacheStatus: result.cacheStatus,
         sourcePrefixes: result.sourcePrefixes,
         writtenFiles: result.writtenFiles,
+        hydrateManifest: result.hydrateManifest,
         activeSpace: result.activeSpace,
         effectivePolicy: result.effectivePolicy,
       };
