@@ -226,6 +226,26 @@ describe("runThreadHarnessTurn", () => {
     expect(provider.requests[0].system).toContain("local `bash` tool");
   });
 
+  it("advertises direct web_search plus MCP gateway when an agent is selected", async () => {
+    const provider = new MockModelProvider([textResponse("ready")]);
+    const recordTurnFn = vi.fn().mockResolvedValue({});
+
+    await runThreadHarnessTurn(
+      {
+        threadId: "t-tools",
+        userText: "what tools do you have?",
+        priorMessages: [],
+        agentId: "agent-1",
+      },
+      { modelProvider: provider, recordTurnFn },
+    );
+
+    expect(provider.requests[0].tools.map((t) => t.name)).toEqual(
+      expect.arrayContaining(["bash", "web_search", "mcp"]),
+    );
+    expect(provider.requests[0].system).toContain("direct `web_search` tool");
+  });
+
   it("advertises cached workspace tools and USER.md context when user context is available", async () => {
     const provider = new MockModelProvider([textResponse("Eric")]);
     const recordTurnFn = vi.fn().mockResolvedValue({});

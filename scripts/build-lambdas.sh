@@ -157,6 +157,11 @@ build_handler "model-converse" \
 build_handler "record-turn" \
   "$REPO_ROOT/packages/api/src/handlers/record-turn.ts"
 
+# Mobile local Pi built-in tool proxy. ThinkWork platform tools live here,
+# separate from MCP connector tools.
+build_handler "mobile-tools" \
+  "$REPO_ROOT/packages/api/src/handlers/mobile-tools.ts"
+
 # Mobile harness MCP proxy: tenant-scoped tools/list + tools/call over the
 # signed-in user's Cognito idToken. Plain fetch JSON-RPC to the tenant MCP
 # server — no MCP SDK, so the default (externalized @aws-sdk/*) flags apply;

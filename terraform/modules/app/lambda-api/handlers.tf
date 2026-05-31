@@ -247,6 +247,9 @@ resource "aws_lambda_function" "handler" {
     # aws_lambda_function.handler, NOT derived from api_routes).
     "model-converse",
     "record-turn",
+    # Mobile local Pi built-in tools. These are ThinkWork platform tools, not
+    # MCP connector tools.
+    "mobile-tools",
     # Mobile agent harness MCP proxy. tools/list + tools/call routes live in
     # local.api_routes; the function name must also be listed here (this set
     # is the for_each source for aws_lambda_function.handler).
@@ -801,6 +804,12 @@ locals {
     # handled inside the Lambda before auth.
     "POST /api/threads/record-turn"    = "record-turn"
     "OPTIONS /api/threads/record-turn" = "record-turn"
+
+    # Mobile local Pi built-in tool proxy. This is intentionally separate from
+    # /api/mcp because web_search is a ThinkWork platform capability, not an
+    # MCP connector.
+    "POST /api/mobile/tools/web-search"    = "mobile-tools"
+    "OPTIONS /api/mobile/tools/web-search" = "mobile-tools"
 
     # Mobile agent harness MCP proxy — tenant-scoped tools/list + tools/call
     # over the signed-in user's Cognito idToken. One Lambda, two routes;
