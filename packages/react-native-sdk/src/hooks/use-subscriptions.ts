@@ -45,6 +45,17 @@ const ThreadUpdatedSubscription = gql`
   }
 `;
 
+const WorkspaceAccessRevokedSubscription = gql`
+  subscription OnWorkspaceAccessRevoked($userId: ID!) {
+    onWorkspaceAccessRevoked(userId: $userId) {
+      tenantId
+      spaceId
+      userId
+      revokedAt
+    }
+  }
+`;
+
 export interface NewMessageEvent {
   messageId: string;
   threadId: string;
@@ -73,6 +84,13 @@ export interface ThreadUpdateEvent {
   status: string;
   title: string;
   updatedAt: string;
+}
+
+export interface WorkspaceAccessRevokedEvent {
+  tenantId: string;
+  spaceId: string;
+  userId: string;
+  revokedAt: string;
 }
 
 export function useNewMessageSubscription(threadId: string | null | undefined) {
@@ -136,5 +154,17 @@ export function useThreadUpdatedSubscription(
     query: ThreadUpdatedSubscription,
     variables: { tenantId },
     pause: !tenantId,
+  });
+}
+
+export function useWorkspaceAccessRevokedSubscription(
+  userId: string | null | undefined,
+) {
+  return useSubscription<{
+    onWorkspaceAccessRevoked: WorkspaceAccessRevokedEvent;
+  }>({
+    query: WorkspaceAccessRevokedSubscription,
+    variables: { userId },
+    pause: !userId,
   });
 }

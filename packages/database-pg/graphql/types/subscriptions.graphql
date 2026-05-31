@@ -106,6 +106,13 @@ type EvalRunUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
+type WorkspaceAccessRevokedEvent {
+  tenantId: ID!
+  spaceId: ID!
+  userId: ID!
+  revokedAt: AWSDateTime!
+}
+
 # ────────────────────────────────────────────────────────────────────
 # Notification mutations
 #
@@ -204,6 +211,13 @@ extend type Mutation {
     passRate: Float
     errorMessage: String
   ): EvalRunUpdateEvent
+
+  notifyWorkspaceAccessRevoked(
+    tenantId: ID!
+    spaceId: ID!
+    userId: ID!
+    revokedAt: AWSDateTime!
+  ): WorkspaceAccessRevokedEvent
 }
 
 # ────────────────────────────────────────────────────────────────────
@@ -240,4 +254,7 @@ extend type Subscription {
 
   onEvalRunUpdated(tenantId: ID!): EvalRunUpdateEvent
     @aws_subscribe(mutations: ["notifyEvalRunUpdate"])
+
+  onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent
+    @aws_subscribe(mutations: ["notifyWorkspaceAccessRevoked"])
 }

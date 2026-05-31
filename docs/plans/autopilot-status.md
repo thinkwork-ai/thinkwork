@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U10 Secret references + quarantine controls.
-- Active branch: `codex/workspace-arch-u10`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u10`.
+- Active unit: U11 Revocation wipe + TTL re-validation.
+- Active branch: `codex/workspace-arch-u11`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u11`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1915](https://github.com/thinkwork-ai/thinkwork/pull/1915).
-- CI/deploy: U9 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1916](https://github.com/thinkwork-ai/thinkwork/pull/1916).
+- CI/deploy: U10 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -31,8 +31,62 @@ Target branch: `main`
 - Read relevant prior solution docs:
   `docs/solutions/architecture-patterns/inert-first-seam-swap-multi-pr-pattern-2026-05-08.md`,
   `docs/solutions/design-patterns/gitkeep-materialization-s3-empty-folders-2026-05-13.md`,
-  and
-  `docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md`.
+  `docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md`,
+  `docs/solutions/architecture-patterns/mobile-pi-background-handoff-2026-05-31.md`,
+  `docs/solutions/architecture-patterns/mobile-pi-compatible-host-contract-2026-05-30.md`,
+  and `docs/solutions/logic-errors/thread-visibility-private-space-mention.md`.
+- PR [#1916](https://github.com/thinkwork-ai/thinkwork/pull/1916)
+  passed `cla`, `lint`, `verify`, `typecheck`, and `test`, then
+  squash-merged into `main`. Merge commit:
+  `2d31d287c0b44542278727820d561fb7b80629f1`.
+- Removed U10 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U11 worktree
+  `codex/workspace-arch-u11` from `origin/main` at `2d31d287`.
+- Implemented U11 revocation + TTL behavior: desktop and mobile workspace
+  caches now stamp access revalidation metadata, allow stale local execution
+  only inside a conservative 15-minute offline execution TTL, and fail closed
+  when an expired cache cannot revalidate against the server.
+- Added best-effort revoked-Space wipe helpers for desktop and mobile caches.
+  Revocation removes only matching Space partitions, leaving still-granted
+  Spaces intact.
+- Added an AppSync `WorkspaceAccessRevokedEvent`/notification mutation and
+  subscription, emitted after `removeSpaceMember` successfully deletes a
+  non-owner member row. AppSync remains best effort; session-start cache sync
+  and reconcile membership checks remain the fallback/final authority.
+- Added AppSync resolver wiring coverage for
+  `notifyWorkspaceAccessRevoked`, removed API-key auth from the user-scoped
+  revocation subscription in the generated Terraform schema, and wired the
+  mobile root subscription to wipe the matching local Space cache partition on
+  receipt.
+- Added a reconcile-context regression test proving a private-Space membership
+  revoked mid-turn rejects reconcile before hydrate-manifest reads or S3 writes.
+- Compound review found three follow-up fixes before PR: missing AppSync
+  resolver wiring, API-key access on the user-scoped revocation subscription,
+  and a fresh-cache path that could bypass the offline execution TTL if cache
+  TTL was longer. All three are fixed and covered by regression tests.
+- U11 focused verification passed:
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/workspace-cache.test.ts lib/agent/workspace-revocation.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/spaces/removeSpaceMember.mutation.test.ts src/__tests__/graphql-contract.test.ts src/lib/chat-finalize/reconcile-context.test.ts`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/react-native-sdk typecheck`, and
+  `pnpm --filter @thinkwork/api typecheck`.
+- U11 broad verification passed:
+  `pnpm schema:build`, `pnpm --filter @thinkwork/mobile codegen`,
+  `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/mobile test`,
+  `pnpm --filter @thinkwork/desktop test`, `pnpm typecheck`, `pnpm lint`,
+  changed-source-file Prettier check via
+  `pnpm dlx prettier@3.8.2 --check <changed source files>` (generated
+  `terraform/schema.graphql` left in `pnpm schema:build` output format),
+  `terraform fmt -check terraform/modules/app/appsync-subscriptions/main.tf`,
+  `bash -n scripts/schema-build.sh`, and `git diff --check`.
+- Verification note: the first broad desktop test attempt failed before
+  assertions in `pi-sidecar-controller.test.ts` because Electron's local app
+  bundle was in an inconsistent symlink state. Re-running Electron's install
+  script and then `pnpm --filter @thinkwork/desktop test` passed all 144
+  desktop tests.
+- Opened PR [#1917](https://github.com/thinkwork-ai/thinkwork/pull/1917).
 - Created isolated U1 worktree `codex/workspace-arch-u1` from `origin/main`.
 - Implemented U1 substrate:
   `workspace_folder_name` columns and partial unique indexes for agents,

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  WorkspaceAccessRevalidationError,
   WorkspaceBoundaryError,
   WorkspaceCache,
   type WorkspaceObjectStore,
@@ -19,6 +20,7 @@ const PARTITION = {
 class FakeStore implements WorkspaceObjectStore {
   listCalls = 0;
   getCalls = 0;
+  failList = false;
 
   constructor(private readonly files: Record<string, string>) {}
 
@@ -31,6 +33,7 @@ class FakeStore implements WorkspaceObjectStore {
     prefix: string;
   }): Promise<Array<{ key: string }>> {
     this.listCalls++;
+    if (this.failList) throw new Error("offline");
     expect(input.bucket).toBe("workspace-bucket");
     return Object.keys(this.files)
       .filter((key) => key.startsWith(input.prefix))
@@ -243,6 +246,119 @@ describe("WorkspaceCache", () => {
     await expect(
       readFile(join(cached.localDir, "AGENTS.md"), "utf8"),
     ).resolves.toBe("# Agent v2");
+  });
+
+  it("fails closed when a stale local copy exceeds the offline execution TTL", async () => {
+    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    let now = new Date("2026-05-28T12:00:00.000Z");
+    const store = new FakeStore({
+      [`${prefix}AGENTS.md`]: "# Agent",
+    });
+    const cache = new WorkspaceCache(root, store, {
+      now: () => now,
+    });
+
+    await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+    store.failList = true;
+    now = new Date("2026-05-28T12:16:00.000Z");
+
+    await expect(
+      cache.sync({
+        bucket: "workspace-bucket",
+        renderedPrefix: prefix,
+        partition: PARTITION,
+      }),
+    ).rejects.toBeInstanceOf(WorkspaceAccessRevalidationError);
+  });
+
+  it("does not serve a fresh cache hit after the offline execution TTL expires", async () => {
+    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    let now = new Date("2026-05-28T12:00:00.000Z");
+    const store = new FakeStore({
+      [`${prefix}AGENTS.md`]: "# Agent",
+    });
+    const cache = new WorkspaceCache(root, store, {
+      cacheTtlMs: 20 * 60 * 1000,
+      offlineExecutionTtlMs: 15 * 60 * 1000,
+      now: () => now,
+    });
+
+    await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+    store.failList = true;
+    now = new Date("2026-05-28T12:16:00.000Z");
+
+    await expect(
+      cache.sync({
+        bucket: "workspace-bucket",
+        renderedPrefix: prefix,
+        partition: PARTITION,
+      }),
+    ).rejects.toBeInstanceOf(WorkspaceAccessRevalidationError);
+    expect(store.listCalls).toBe(2);
+  });
+
+  it("revalidates an expired local copy before serving it again", async () => {
+    const prefix = "tenants/acme/rendered/marco/sales/user-1/";
+    let now = new Date("2026-05-28T12:00:00.000Z");
+    const store = new FakeStore({
+      [`${prefix}AGENTS.md`]: "# Agent",
+    });
+    const cache = new WorkspaceCache(root, store, {
+      now: () => now,
+    });
+
+    await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+    now = new Date("2026-05-28T12:16:00.000Z");
+    const revalidated = await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+
+    expect(revalidated).toMatchObject({
+      synced: 0,
+      accessRevalidated: true,
+    });
+    expect(store.listCalls).toBe(2);
+  });
+
+  it("wipes only the revoked Space subtree", async () => {
+    const cache = new WorkspaceCache(root, new FakeStore({}));
+    const revokedDir = cache.partitionPath(PARTITION);
+    const stillGrantedDir = cache.partitionPath({
+      ...PARTITION,
+      spaceId: "space-2",
+    });
+    await mkdir(revokedDir, { recursive: true });
+    await mkdir(stillGrantedDir, { recursive: true });
+    await writeFile(join(revokedDir, "SPACE.md"), "# Revoked");
+    await writeFile(join(stillGrantedDir, "SPACE.md"), "# Still granted");
+
+    const wiped = await cache.wipeRevokedSpace({
+      stage: PARTITION.stage,
+      tenantSlug: PARTITION.tenantSlug,
+      spaceId: PARTITION.spaceId,
+    });
+
+    expect(wiped).toEqual({ deleted: 1 });
+    await expect(
+      readFile(join(revokedDir, "SPACE.md"), "utf8"),
+    ).rejects.toThrow();
+    await expect(
+      readFile(join(stillGrantedDir, "SPACE.md"), "utf8"),
+    ).resolves.toBe("# Still granted");
   });
 
   it("rejects rendered prefixes outside the tenant and agent scope", async () => {

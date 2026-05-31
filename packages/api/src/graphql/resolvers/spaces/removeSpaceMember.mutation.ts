@@ -1,6 +1,7 @@
 import { ne } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
+import { notifyWorkspaceAccessRevoked } from "../../notify.js";
 import { and, db, eq, spaceMembers, spaces } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
 
@@ -49,5 +50,15 @@ export async function removeSpaceMember(
     )
     .returning({ id: spaceMembers.id });
 
-  return deleted.length > 0;
+  const didDelete = deleted.length > 0;
+  if (didDelete) {
+    await notifyWorkspaceAccessRevoked({
+      tenantId: space.tenant_id,
+      spaceId: args.spaceId,
+      userId: args.userId,
+      revokedAt: new Date().toISOString(),
+    });
+  }
+
+  return didDelete;
 }

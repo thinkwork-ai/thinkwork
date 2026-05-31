@@ -2,6 +2,7 @@ import type { WorkspaceFileMeta, WorkspaceTarget } from "@/lib/workspace-api";
 
 const CACHE_KEY_PREFIX = "thinkwork:mobile-pi:workspace-cache:";
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
+export const DEFAULT_OFFLINE_EXECUTION_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_MAX_PARTITIONS = 12;
 
 export interface WorkspaceCachePartition {
@@ -22,6 +23,7 @@ export interface WorkspaceCachedFile {
 export interface WorkspaceCacheManifest {
   partition: WorkspaceCachePartition;
   syncedAt: string;
+  accessValidatedAt?: string;
   total: number;
   files: Record<string, WorkspaceCachedFile>;
 }
@@ -38,6 +40,7 @@ export interface WorkspaceCacheSyncResult {
   total: number;
   cacheHit?: boolean;
   cacheStale?: boolean;
+  accessRevalidated?: boolean;
 }
 
 export interface WorkspaceCacheStorage {
@@ -56,16 +59,36 @@ export interface WorkspaceCacheSource {
 
 export interface WorkspaceCacheOptions {
   cacheTtlMs?: number;
+  offlineExecutionTtlMs?: number;
   maxPartitions?: number;
   now?: () => Date;
   backgroundRefresh?: (refresh: () => Promise<void>) => void;
   onBackgroundRefreshError?: (err: unknown) => void;
 }
 
+export interface WorkspaceRevocationInput {
+  stage: string;
+  tenantId?: string | null;
+  spaceId: string;
+  agentId?: string | null;
+  userId?: string | null;
+}
+
+export interface WorkspaceWipeResult {
+  deleted: number;
+}
+
 export class WorkspaceBoundaryError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "WorkspaceBoundaryError";
+  }
+}
+
+export class WorkspaceAccessRevalidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkspaceAccessRevalidationError";
   }
 }
 
@@ -100,7 +123,8 @@ export class WorkspaceCache {
     input: WorkspaceCacheSyncInput,
   ): Promise<WorkspaceCacheSyncResult> {
     const cacheKey = cacheKeyForPartition(input.partition);
-    const cached = await this.readFreshManifest(input.partition);
+    const now = this.options.now?.() ?? new Date();
+    const cached = await this.readFreshManifest(input.partition, now);
     if (cached) {
       await this.evictOldPartitions();
       return {
@@ -113,7 +137,11 @@ export class WorkspaceCache {
     }
 
     const stale = await this.readManifest(input.partition);
-    if (stale && Object.keys(stale.files).length > 0) {
+    if (
+      stale &&
+      Object.keys(stale.files).length > 0 &&
+      !this.isOfflineExecutionExpired(stale, now)
+    ) {
       this.refreshInBackground(input);
       await this.evictOldPartitions();
       return {
@@ -126,7 +154,52 @@ export class WorkspaceCache {
       };
     }
 
-    return this.refresh(input);
+    try {
+      return await this.refresh(input);
+    } catch (err) {
+      if (
+        stale &&
+        Object.keys(stale.files).length > 0 &&
+        this.isOfflineExecutionExpired(stale, now)
+      ) {
+        throw new WorkspaceAccessRevalidationError(
+          "Workspace access revalidation is required before using this cached Space.",
+        );
+      }
+      throw err;
+    }
+  }
+
+  async wipeRevokedSpace(
+    input: WorkspaceRevocationInput,
+  ): Promise<WorkspaceWipeResult> {
+    if (!this.storage.getAllKeys) {
+      return { deleted: 0 };
+    }
+    const expected = {
+      stage: safeSegment(input.stage),
+      tenantId: safeSegment(input.tenantId ?? "tenant"),
+      agentId: input.agentId?.trim() ? safeSegment(input.agentId) : null,
+      spaceId: safeSegment(input.spaceId),
+      userId: input.userId?.trim() ? safeSegment(input.userId) : null,
+    };
+    const keys = (await this.storage.getAllKeys()).filter((key) =>
+      key.startsWith(CACHE_KEY_PREFIX),
+    );
+    let deleted = 0;
+    for (const key of keys) {
+      const parts = key.slice(CACHE_KEY_PREFIX.length).split(":");
+      if (parts.length !== 5) continue;
+      const [stage, tenantId, agentId, spaceId, userId] = parts;
+      if (stage !== expected.stage) continue;
+      if (tenantId !== expected.tenantId) continue;
+      if (spaceId !== expected.spaceId) continue;
+      if (expected.agentId && agentId !== expected.agentId) continue;
+      if (expected.userId && userId !== expected.userId) continue;
+      await this.storage.removeItem(key);
+      deleted++;
+    }
+    return { deleted };
   }
 
   async readFile(
@@ -193,9 +266,11 @@ export class WorkspaceCache {
       if (!nextKeys.has(key)) deleted++;
     }
 
+    const validatedAt = (this.options.now?.() ?? new Date()).toISOString();
     await this.writeManifest(input.partition, {
       partition: input.partition,
-      syncedAt: (this.options.now?.() ?? new Date()).toISOString(),
+      syncedAt: validatedAt,
+      accessValidatedAt: validatedAt,
       total: nextKeys.size,
       files,
     });
@@ -206,6 +281,7 @@ export class WorkspaceCache {
       synced,
       deleted,
       total: nextKeys.size,
+      accessRevalidated: true,
     };
   }
 
@@ -225,16 +301,33 @@ export class WorkspaceCache {
 
   private async readFreshManifest(
     partition: WorkspaceCachePartition,
+    now: Date,
   ): Promise<WorkspaceCacheManifest | null> {
     const cacheTtlMs = this.options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     if (cacheTtlMs <= 0) return null;
     const manifest = await this.readManifest(partition);
     if (!manifest) return null;
+    if (this.isOfflineExecutionExpired(manifest, now)) return null;
     const syncedAt = Date.parse(manifest.syncedAt);
     if (!Number.isFinite(syncedAt)) return null;
-    const ageMs = (this.options.now?.() ?? new Date()).getTime() - syncedAt;
+    const ageMs = now.getTime() - syncedAt;
     if (ageMs < 0 || ageMs > cacheTtlMs) return null;
     return Object.keys(manifest.files).length > 0 ? manifest : null;
+  }
+
+  private isOfflineExecutionExpired(
+    manifest: WorkspaceCacheManifest,
+    now: Date,
+  ): boolean {
+    const ttlMs =
+      this.options.offlineExecutionTtlMs ?? DEFAULT_OFFLINE_EXECUTION_TTL_MS;
+    if (ttlMs <= 0) return true;
+    const validatedAt = Date.parse(
+      manifest.accessValidatedAt ?? manifest.syncedAt,
+    );
+    if (!Number.isFinite(validatedAt)) return true;
+    const ageMs = now.getTime() - validatedAt;
+    return ageMs < 0 || ageMs > ttlMs;
   }
 
   private async readManifest(

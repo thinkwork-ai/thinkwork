@@ -66,4 +66,10 @@ sed -i '' "s/): \([A-Za-z]*Event\)\(!\{0,1\}\)$/): \1\2 ${AUTH}/" "$DST"
 # Pattern: "  onXxx(tenantId: ID!): XxxEvent"
 sed -i '' "s/): \([A-Za-z]*Event\)\(!\{0,1\}\)$/): \1\2 ${AUTH}/" "$DST"
 
+# Revocation subscriptions are user-scoped and must not be openable with the
+# public API key. The notification mutation keeps API key auth for Lambda.
+sed -i '' \
+  "s/onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent @aws_api_key @aws_cognito_user_pools @aws_iam/onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent @aws_cognito_user_pools @aws_iam/" \
+  "$DST"
+
 echo "Done — $(wc -l < "$DST" | tr -d ' ') lines written"

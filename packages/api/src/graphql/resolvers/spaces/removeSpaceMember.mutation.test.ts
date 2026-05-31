@@ -1,24 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authCalls, deletes, deleteResults, selectQueue, resetMocks } =
-  vi.hoisted(() => {
-    const authCalls: unknown[] = [];
-    const deletes: unknown[] = [];
-    const deleteResults: unknown[][] = [];
-    const selectQueue: unknown[][] = [];
-    return {
-      authCalls,
-      deletes,
-      deleteResults,
-      selectQueue,
-      resetMocks: () => {
-        authCalls.length = 0;
-        deletes.length = 0;
-        deleteResults.length = 0;
-        selectQueue.length = 0;
-      },
-    };
-  });
+const {
+  authCalls,
+  deletes,
+  deleteResults,
+  notifications,
+  selectQueue,
+  resetMocks,
+} = vi.hoisted(() => {
+  const authCalls: unknown[] = [];
+  const deletes: unknown[] = [];
+  const deleteResults: unknown[][] = [];
+  const notifications: unknown[] = [];
+  const selectQueue: unknown[][] = [];
+  return {
+    authCalls,
+    deletes,
+    deleteResults,
+    notifications,
+    selectQueue,
+    resetMocks: () => {
+      authCalls.length = 0;
+      deletes.length = 0;
+      deleteResults.length = 0;
+      notifications.length = 0;
+      selectQueue.length = 0;
+    },
+  };
+});
 
 vi.mock("../../utils.js", () => {
   const col = (name: string) => ({ name });
@@ -65,6 +74,13 @@ vi.mock("../core/authz.js", () => ({
   },
 }));
 
+vi.mock("../../notify.js", () => ({
+  notifyWorkspaceAccessRevoked: (payload: unknown) => {
+    notifications.push(payload);
+    return Promise.resolve();
+  },
+}));
+
 describe("removeSpaceMember", () => {
   beforeEach(() => {
     resetMocks();
@@ -86,6 +102,12 @@ describe("removeSpaceMember", () => {
 
     expect(result).toBe(true);
     expect(deletes).toHaveLength(1);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      userId: "user-2",
+    });
     expect(authCalls[0]).toEqual([
       { auth: { authType: "cognito" } },
       "tenant-1",
@@ -107,6 +129,7 @@ describe("removeSpaceMember", () => {
       extensions: { code: "CANNOT_REMOVE_OWNER" },
     });
     expect(deletes).toEqual([]);
+    expect(notifications).toEqual([]);
   });
 
   it("returns false when the user is not a member", async () => {
@@ -124,6 +147,7 @@ describe("removeSpaceMember", () => {
 
     expect(result).toBe(false);
     expect(deletes).toEqual([]);
+    expect(notifications).toEqual([]);
   });
 
   it("returns false when role changed to owner between read and delete", async () => {
@@ -142,6 +166,7 @@ describe("removeSpaceMember", () => {
 
     expect(result).toBe(false);
     expect(deletes).toHaveLength(1);
+    expect(notifications).toEqual([]);
   });
 
   it("rejects when the Space is missing", async () => {
@@ -157,5 +182,6 @@ describe("removeSpaceMember", () => {
     ).rejects.toThrow("Space not found");
     expect(authCalls).toEqual([]);
     expect(deletes).toEqual([]);
+    expect(notifications).toEqual([]);
   });
 });
