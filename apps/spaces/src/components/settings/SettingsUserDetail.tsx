@@ -3,6 +3,7 @@ import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import {
+  Badge,
   Button,
   Input,
   Select,
@@ -24,10 +25,11 @@ import {
   SettingsUpdateUserProfileMutation,
 } from "@/lib/settings-queries";
 import {
+  SettingsPageTitle,
   SettingsPane,
-  SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { WorkspaceViewToggle } from "@/components/settings/WorkspaceViewToggle";
 
 export function SettingsUserDetail() {
   const { userId: memberId } = useParams({
@@ -70,12 +72,13 @@ export function SettingsUserDetail() {
           ]
         : [{ label: "Users", href: "/settings/users" }, { label: displayName }],
     subtitle: user && !filesOpen ? (user.email ?? undefined) : undefined,
-    action: filesOpen ? (
-      <Button variant="ghost" size="sm" onClick={() => setFilesOpen(false)}>
-        Done
-      </Button>
+    action: user ? (
+      <WorkspaceViewToggle
+        showingWorkspace={filesOpen}
+        onToggle={() => setFilesOpen(!filesOpen)}
+      />
     ) : undefined,
-    actionKey: filesOpen ? `user-files:${memberId}` : undefined,
+    actionKey: user ? `user-files:${memberId}:${filesOpen}` : undefined,
   });
 
   if (result.fetching && !result.data) {
@@ -117,20 +120,19 @@ export function SettingsUserDetail() {
 
   return (
     <SettingsPane>
+      <SettingsPageTitle
+        title={displayName}
+        badge={<Badge variant="secondary">{titleCase(member.status)}</Badge>}
+      />
       <ProfileSection
         userId={user.id}
         name={user.name ?? ""}
         profile={user.profile ?? null}
-        onSaved={() => refetch({ requestPolicy: "network-only" })}
-        onOpenWorkspace={() => setFilesOpen(true)}
-      />
-
-      <RoleSection
         memberId={member.id}
         currentRole={member.role}
-        status={member.status}
         isSelf={isSelf}
         callerIsOwner={callerIsOwner}
+        onSaved={() => refetch({ requestPolicy: "network-only" })}
       />
     </SettingsPane>
   );
@@ -138,71 +140,8 @@ export function SettingsUserDetail() {
 
 const ROLE_OPTIONS = ["member", "admin", "owner"];
 
-function RoleSection({
-  memberId,
-  currentRole,
-  status,
-  isSelf,
-  callerIsOwner,
-}: {
-  memberId: string;
-  currentRole: string;
-  status: string;
-  isSelf: boolean;
-  callerIsOwner: boolean;
-}) {
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [state, updateMember] = useMutation(SettingsUpdateTenantMemberMutation);
-
-  // Non-owners can't grant owner; you can't change your own role here.
-  const options = ROLE_OPTIONS.filter(
-    (r) => r !== "owner" || callerIsOwner || r === currentRole,
-  );
-
-  async function onRoleChange(role: string) {
-    if (role === currentRole) return;
-    setErrorMsg(null);
-    const result = await updateMember({ id: memberId, input: { role } });
-    if (result.error) setErrorMsg(result.error.message);
-  }
-
-  return (
-    <SettingsSection
-      label="Membership"
-      action={
-        state.fetching ? (
-          <span className="text-sm text-muted-foreground">Saving…</span>
-        ) : errorMsg ? (
-          <span className="text-sm text-destructive">{errorMsg}</span>
-        ) : undefined
-      }
-    >
-      <SettingsRow
-        label="Role"
-        description={
-          isSelf ? "You can’t change your own role here." : undefined
-        }
-      >
-        <Select
-          value={currentRole}
-          onValueChange={onRoleChange}
-          disabled={isSelf || state.fetching}
-        >
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((r) => (
-              <SelectItem key={r} value={r}>
-                {r}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </SettingsRow>
-      <SettingsRow label="Status">{status}</SettingsRow>
-    </SettingsSection>
-  );
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
 type Profile = {
@@ -215,14 +154,20 @@ function ProfileSection({
   userId,
   name,
   profile,
+  memberId,
+  currentRole,
+  isSelf,
+  callerIsOwner,
   onSaved,
-  onOpenWorkspace,
 }: {
   userId: string;
   name: string;
   profile: Profile;
+  memberId: string;
+  currentRole: string;
+  isSelf: boolean;
+  callerIsOwner: boolean;
   onSaved: () => void;
-  onOpenWorkspace: () => void;
 }) {
   const [form, setForm] = useState({
     name,
@@ -238,6 +183,24 @@ function ProfileSection({
   const [{ fetching: savingProfile }, updateProfile] = useMutation(
     SettingsUpdateUserProfileMutation,
   );
+
+  // Role change auto-saves on its own mutation state, independent of the
+  // profile Save button. Non-owners can't grant owner.
+  const [roleState, updateMember] = useMutation(
+    SettingsUpdateTenantMemberMutation,
+  );
+  const [roleErrorMsg, setRoleErrorMsg] = useState<string | null>(null);
+  const roleOptions = ROLE_OPTIONS.filter(
+    (r) => r !== "owner" || callerIsOwner || r === currentRole,
+  );
+
+  async function onRoleChange(role: string) {
+    if (role === currentRole) return;
+    setRoleErrorMsg(null);
+    const result = await updateMember({ id: memberId, input: { role } });
+    if (result.error) setRoleErrorMsg(result.error.message);
+    else onSaved();
+  }
 
   // Re-sync when the underlying record changes (e.g. after refetch).
   useEffect(() => {
@@ -276,18 +239,7 @@ function ProfileSection({
   }
 
   return (
-    <SettingsSection
-      label="Profile"
-      action={
-        <button
-          type="button"
-          onClick={onOpenWorkspace}
-          className="text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
-        >
-          Workspace
-        </button>
-      }
-    >
+    <SettingsSection label="Profile">
       <div className="space-y-4 p-4">
         <Labeled label="User ID">
           <CopyableId value={userId} />
@@ -297,6 +249,31 @@ function ProfileSection({
             value={form.name}
             onChange={(e) => set("name")(e.target.value)}
           />
+        </Labeled>
+        <Labeled label="Role">
+          <div className="flex items-center gap-3">
+            <Select
+              value={currentRole}
+              onValueChange={onRoleChange}
+              disabled={isSelf || roleState.fetching}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {roleOptions.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {roleState.fetching ? (
+              <span className="text-sm text-muted-foreground">Saving…</span>
+            ) : roleErrorMsg ? (
+              <span className="text-sm text-destructive">{roleErrorMsg}</span>
+            ) : null}
+          </div>
         </Labeled>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Labeled label="Title">

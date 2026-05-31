@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
-import { IconFiles, IconInfoCircle } from "@tabler/icons-react";
 import {
   Badge,
   Button,
@@ -12,25 +11,21 @@ import {
   SelectTrigger,
   SelectValue,
   Textarea,
-  cn,
 } from "@thinkwork/ui";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import { SpaceAccessMode } from "@/gql/graphql";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import {
-  desktopToolbarActiveButtonClassName,
-  desktopToolbarButtonClassName,
-} from "@/lib/desktop-chrome";
 import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
 import {
   SettingsSpaceQuery,
   SettingsUpdateSpaceMutation,
 } from "@/lib/settings-queries";
 import {
-  SettingsRow,
+  SettingsPageTitle,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { WorkspaceViewToggle } from "@/components/settings/WorkspaceViewToggle";
 
 type SpaceConfigView = "info" | "files";
 
@@ -58,40 +53,10 @@ export function SettingsSpaceConfig() {
       { label: spaceName },
     ],
     action: (
-      <div className="flex items-center gap-0.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Information"
-          title="Information"
-          className={cn(
-            "size-8",
-            view === "info"
-              ? desktopToolbarActiveButtonClassName
-              : desktopToolbarButtonClassName,
-          )}
-          onClick={() => setView("info")}
-        >
-          <IconInfoCircle className="size-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Workspace files"
-          title="Workspace files"
-          className={cn(
-            "size-8",
-            view === "files"
-              ? desktopToolbarActiveButtonClassName
-              : desktopToolbarButtonClassName,
-          )}
-          onClick={() => setView("files")}
-        >
-          <IconFiles className="size-4" />
-        </Button>
-      </div>
+      <WorkspaceViewToggle
+        showingWorkspace={view === "files"}
+        onToggle={() => setView(view === "files" ? "info" : "files")}
+      />
     ),
     actionKey: `space-config:${spaceId}:${view}`,
   });
@@ -131,6 +96,7 @@ export function SettingsSpaceConfig() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
+        <SettingsPageTitle title={spaceName} />
         <InformationSection
           spaceId={spaceId}
           tenantId={space.tenantId}
@@ -205,22 +171,13 @@ function InformationSection({
   return (
     <SettingsSection label="Information">
       <div className="space-y-4 p-4">
-        <Labeled label="Name">
-          <Input
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-        </Labeled>
-        <Labeled label="Description">
-          <Textarea
-            rows={3}
-            value={form.description}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, description: e.target.value }))
-            }
-          />
-        </Labeled>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[2fr_1fr_1fr]">
+          <Labeled label="Name">
+            <Input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+          </Labeled>
           <Labeled label="Access">
             <Select
               value={form.accessMode}
@@ -239,11 +196,20 @@ function InformationSection({
           </Labeled>
           <div className="space-y-1.5">
             <span className="text-sm font-medium text-foreground">Status</span>
-            <div>
+            <div className="flex h-9 items-center">
               <Badge variant="secondary">{titleCase(status)}</Badge>
             </div>
           </div>
         </div>
+        <Labeled label="Description">
+          <Textarea
+            rows={3}
+            value={form.description}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, description: e.target.value }))
+            }
+          />
+        </Labeled>
         <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
           {saved ? (
             <span className="text-sm text-muted-foreground">Saved</span>

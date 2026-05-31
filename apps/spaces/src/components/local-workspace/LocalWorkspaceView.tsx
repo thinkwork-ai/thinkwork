@@ -101,11 +101,6 @@ export function LocalWorkspaceView({ bridge }: LocalWorkspaceViewProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <p className="border-b bg-muted/30 px-4 py-1.5 text-xs text-muted-foreground">
-        Shows every workspace synced to this machine, including any credentials
-        stored in workspace files.
-      </p>
-
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel
           defaultSize="28%"

@@ -24,6 +24,7 @@ import {
   SettingsPane,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { WorkspaceViewToggle } from "@/components/settings/WorkspaceViewToggle";
 
 const RUNTIME_OPTIONS: { value: AgentRuntime; label: string }[] = [
   // FLUE is the Pi runtime; surfaced as "Pi" per product naming.
@@ -65,13 +66,20 @@ export function SettingsAgentConfig() {
       filesOpen && agent
         ? [{ label: "Agent", href: "/settings/agent" }, { label: "Workspace" }]
         : [{ label: "Agent" }],
+    // Toggle stays visible once workspace view is open even if `agent` briefly
+    // re-fetches to null, so the user can always toggle back. Opening is a
+    // no-op until the agent loads (no workspace target otherwise).
     action:
-      filesOpen && agent ? (
-        <Button variant="ghost" size="sm" onClick={() => setFilesOpen(false)}>
-          Done
-        </Button>
+      filesOpen || agent ? (
+        <WorkspaceViewToggle
+          showingWorkspace={filesOpen}
+          onToggle={() => {
+            if (!filesOpen && !agent) return;
+            setFilesOpen(!filesOpen);
+          }}
+        />
       ) : undefined,
-    actionKey: filesOpen && agent ? "agent-files" : undefined,
+    actionKey: filesOpen || agent ? `agent-files:${filesOpen}` : undefined,
   });
 
   if (agentResult.fetching && !agent) {
@@ -132,20 +140,11 @@ export function SettingsAgentConfig() {
       <SettingsSection
         label="Configuration"
         action={
-          <div className="flex items-center gap-3">
-            {saveState.fetching ? (
-              <span className="text-sm text-muted-foreground">Saving…</span>
-            ) : errorMsg ? (
-              <span className="text-sm text-destructive">{errorMsg}</span>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setFilesOpen(true)}
-              className="text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
-            >
-              Workspace
-            </button>
-          </div>
+          saveState.fetching ? (
+            <span className="text-sm text-muted-foreground">Saving…</span>
+          ) : errorMsg ? (
+            <span className="text-sm text-destructive">{errorMsg}</span>
+          ) : undefined
         }
       >
         <div className="space-y-5 p-5">
