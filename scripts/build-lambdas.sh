@@ -157,6 +157,11 @@ build_handler "model-converse" \
 build_handler "record-turn" \
   "$REPO_ROOT/packages/api/src/handlers/record-turn.ts"
 
+# Mobile Pi durable turn lifecycle: start, heartbeat, checkpoint, background,
+# abort, and one-winner local finalize for handoff-capable local turns.
+build_handler "mobile-turn-session" \
+  "$REPO_ROOT/packages/api/src/handlers/mobile-turn-session.ts"
+
 # Mobile local Pi built-in tool proxy. ThinkWork platform tools live here,
 # separate from MCP connector tools.
 build_handler "mobile-tools" \

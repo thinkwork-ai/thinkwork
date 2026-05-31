@@ -22,6 +22,7 @@ import {
   boolean,
   bigserial,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
@@ -157,6 +158,11 @@ export const threadTurns = pgTable(
     index("idx_thread_turns_kind").on(table.kind),
     index("idx_thread_turns_thread").on(table.thread_id),
     index("idx_thread_turns_webhook").on(table.webhook_id),
+    uniqueIndex("uq_thread_turns_mobile_client_turn")
+      .on(table.tenant_id, table.thread_id, table.external_run_id)
+      .where(
+        sql`${table.invocation_source} = 'mobile_pi' AND ${table.external_run_id} IS NOT NULL`,
+      ),
   ],
 );
 
