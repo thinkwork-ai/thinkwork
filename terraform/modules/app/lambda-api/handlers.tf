@@ -251,6 +251,9 @@ resource "aws_lambda_function" "handler" {
     # Mobile local Pi built-in tools. These are ThinkWork platform tools, not
     # MCP connector tools.
     "mobile-tools",
+    # Agent-visible task status mutation tool. Service/desktop/mobile callers
+    # all land here so linked_tasks remains database-authoritative.
+    "task-status-tool",
     # Mobile agent harness MCP proxy. tools/list + tools/call routes live in
     # local.api_routes; the function name must also be listed here (this set
     # is the for_each source for aws_lambda_function.handler).
@@ -813,6 +816,8 @@ locals {
     # MCP connector.
     "POST /api/mobile/tools/web-search"    = "mobile-tools"
     "OPTIONS /api/mobile/tools/web-search" = "mobile-tools"
+    "POST /api/tasks/status"               = "task-status-tool"
+    "OPTIONS /api/tasks/status"            = "task-status-tool"
 
     # Mobile agent harness MCP proxy — tenant-scoped tools/list + tools/call
     # over the signed-in user's Cognito idToken. One Lambda, two routes;

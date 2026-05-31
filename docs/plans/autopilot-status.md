@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U6 runtime diff capture.
-- Active branch: `codex/workspace-arch-u6`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u6`.
+- Active unit: U7 task-status tool.
+- Active branch: `codex/workspace-arch-u7`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u7`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1911](https://github.com/thinkwork-ai/thinkwork/pull/1911).
-- CI/deploy: U5 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1912](https://github.com/thinkwork-ai/thinkwork/pull/1912).
+- CI/deploy: U6 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -236,6 +236,55 @@ Target branch: `main`
   an inconsistent symlink state. Re-running Electron's install script and then
   `pnpm --filter @thinkwork/desktop test` passed all 140 desktop tests.
 - Opened PR [#1912](https://github.com/thinkwork-ai/thinkwork/pull/1912).
+- PR [#1912](https://github.com/thinkwork-ai/thinkwork/pull/1912) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `d2ed629b25723a227bc4cc87c172e16d4deb17e9`.
+- Removed U6 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U7 worktree `codex/workspace-arch-u7`
+  from `origin/main` at `d2ed629b`.
+- Started U7 task-status tool work. No relevant prior `docs/solutions/`
+  entries were found for linked task status tools, so implementation followed
+  the plan plus existing linked-task, goal-review, platform-extension, and
+  runtime wiring code.
+- Implemented U7's DB-authoritative `set_task_status` path: a new
+  `task-status-tool` API handler and service update ThinkWork linked tasks in a
+  transaction, record linked-task events, reject terminal-state transitions,
+  enforce tenant/thread/agent/user Space boundaries, and advance active goals to
+  `in_review` when required tasks complete.
+- Added the shared Pi `set_task_status` extension in `packages/pi-extensions`
+  and wired it into AgentCore Pi and desktop-local Pi allowlists. Mobile now
+  exposes the same platform tool through its authenticated tool proxy client.
+- U7 focused verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/task-status-tool.test.ts src/handlers/task-status-tool.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/pi-extensions test -- capabilities.test.ts`,
+  `pnpm --filter @thinkwork/pi-extensions typecheck`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/thread-turn.test.ts lib/agent/compat/pi-contract.test.ts`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+  `bash scripts/build-lambdas.sh task-status-tool`, `bash -n
+scripts/build-lambdas.sh`, and `terraform fmt -check
+terraform/modules/app/lambda-api/handlers.tf`.
+- Verification note: the fresh U7 worktree required `pnpm install` before local
+  checks could find `tsc`/Vitest. Install completed with the known optional
+  `node-liblzma` native rebuild warning because `pkg-config` is unavailable,
+  but package checks ran successfully afterward.
+- U7 broad verification passed after repairing the known Electron local install
+  race with `node node_modules/.pnpm/electron@42.2.0/node_modules/electron/install.js`:
+  `pnpm typecheck`, `pnpm lint`, `pnpm test`, `git diff --check`,
+  `pnpm --filter @thinkwork/desktop test`, focused API/mobile/AgentCore/Pi
+  extension suites, `bash scripts/build-lambdas.sh task-status-tool`, `bash -n
+scripts/build-lambdas.sh`, `terraform fmt -check
+terraform/modules/app/lambda-api/handlers.tf`, and changed-file Prettier via
+  `pnpm dlx prettier --check <changed files>`.
+- U7 review pass applied one hardening fix: mobile Cognito task-status requests
+  now scope the caller user lookup by authenticated tenant when Cognito
+  provides one, avoiding same-email cross-tenant ambiguity. Post-review
+  verification passed:
+  `pnpm --filter @thinkwork/api test -- src/handlers/task-status-tool.test.ts src/lib/task-status-tool.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and changed-file Prettier for the
+  touched handler/status doc.
+- Opened PR [#1913](https://github.com/thinkwork-ai/thinkwork/pull/1913).
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 

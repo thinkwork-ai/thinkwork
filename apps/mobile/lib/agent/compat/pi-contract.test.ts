@@ -74,6 +74,7 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
         "workspace-backed-built-ins",
         "workspace-backed-bash-durability",
         "workspace-finalize-diff-capture",
+        "task-status-tool",
         "bounded-mcp-proxy-tool",
         "extension-lifecycle-loop-dispatch",
         "in-flight-abort-follow-up-steer",

@@ -51,6 +51,7 @@ import {
   createMemoryExtension,
   createSendEmailExtension,
   createSystemPromptExtension,
+  createTaskStatusExtension,
   createWebSearchExtension,
   type AgentToolResult,
   formatWorkspaceSkills,
@@ -411,6 +412,28 @@ export async function buildInvocationResources(
           unknown
         >,
         payload: args.payload,
+      }),
+    );
+  }
+
+  if (
+    args.payload.eval_mode !== true &&
+    args.identity.tenantId &&
+    args.identity.agentId &&
+    args.identity.threadId &&
+    asString(args.payload.thinkwork_api_url) &&
+    asString(args.payload.thinkwork_api_secret)
+  ) {
+    addExtension(
+      createTaskStatusExtension({
+        taskStatusConfig: {
+          apiUrl: asString(args.payload.thinkwork_api_url),
+          apiSecret: asString(args.payload.thinkwork_api_secret),
+          tenantId: args.identity.tenantId,
+          agentId: args.identity.agentId,
+          threadId: args.identity.threadId,
+          threadTurnId: asString(args.payload.thread_turn_id),
+        },
       }),
     );
   }
