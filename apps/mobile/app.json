@@ -6,24 +6,24 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#070a0f",
-    "primaryColor": "#070a0f",
+    "backgroundColor": "#000000",
+    "primaryColor": "#000000",
     "newArchEnabled": true,
     "scheme": "thinkwork",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#070a0f"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "userInterfaceStyle": "dark",
-      "backgroundColor": "#070a0f",
+      "backgroundColor": "#000000",
       "supportsTablet": true,
       "bundleIdentifier": "ai.thinkwork.mobile",
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#070a0f"
+        "backgroundColor": "#000000"
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -38,12 +38,12 @@
       "userInterfaceStyle": "dark",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#070a0f"
+        "backgroundColor": "#000000"
       },
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#070a0f"
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.thinkwork.agent",
@@ -58,7 +58,7 @@
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#070a0f"
+        "backgroundColor": "#000000"
       }
     },
     "plugins": [
@@ -71,12 +71,12 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#070a0f",
+          "backgroundColor": "#000000",
           "ios": {
-            "backgroundColor": "#070a0f"
+            "backgroundColor": "#000000"
           },
           "android": {
-            "backgroundColor": "#070a0f"
+            "backgroundColor": "#000000"
           }
         }
       ],
