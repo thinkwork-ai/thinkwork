@@ -51,6 +51,11 @@ Target branch: `main`
   `node-liblzma` native rebuild reported missing `pkg-config`, but `pnpm`
   completed and focused tests/typechecks ran successfully.
 - Opened PR [#1907](https://github.com/thinkwork-ai/thinkwork/pull/1907).
+- CI failure: `Migration Drift Precheck (dev)` reported all objects from
+  `0140_workspace_folder_names.sql` missing on dev.
+- Applied `packages/database-pg/drizzle/0140_workspace_folder_names.sql` to the
+  dev database and verified the scoped drift reporter now finds the five
+  columns and five unique indexes.
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 
