@@ -343,7 +343,13 @@ export function SpacesComposer({
                   >
                     <IconPlanet
                       stroke={2}
-                      className={cn("size-5 shrink-0", spacePickerIconClass)}
+                      // The tabler planet glyph is optically top-heavy and sits
+                      // ~1px high; nudge it down to center with the agent /
+                      // attachment icons.
+                      className={cn(
+                        "size-5 shrink-0 translate-y-px",
+                        spacePickerIconClass,
+                      )}
                     />
                     <SelectValue placeholder="Default" />
                   </SelectTrigger>
