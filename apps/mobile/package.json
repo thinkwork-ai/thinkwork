@@ -14,7 +14,8 @@
     "codegen": "graphql-codegen --config codegen.ts",
     "test": "vitest run --config vitest.config.ts",
     "smoke:pi-harness": "tsx scripts/pi-harness-smoke.ts",
-    "smoke:pi-harness:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities all --json"
+    "smoke:pi-harness:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities all --json",
+    "smoke:pi-harness:full:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities full --json"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

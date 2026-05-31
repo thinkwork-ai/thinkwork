@@ -470,22 +470,30 @@ unit explicitly says otherwise.
   - `docs/plans/autopilot-status.md`
   - `docs/solutions/testing/mobile-pi-smoke-matrix-2026-05-30.md` (new)
 - **Approach:** Expand the existing smoke script and document a repeatable
-  on-device script. Required matrix: plain chat, "what is my name?", bash,
-  workspace read/search, MCP CRM, image attachment, file attachment, abort, and
-  missing MCP credentials. Capture thread id and thread identifier for every
-  smoke. Require both AgentCore Pi and Local/Mobile Pi comparisons for shared
+  on-device script. Required matrix: plain chat, "what is my name?", direct web
+  search, bash, workspace read/search, workspace skills, MCP CRM, image
+  attachment, file attachment, abort, missing MCP credentials, and one managed
+  AgentCore Pi turn. Capture thread id and thread identifier for every smoke.
+  Require both AgentCore Pi and Local/Mobile Pi comparisons for shared
   capabilities when feasible.
 - **Test scenarios:**
   - `plain`: no tools required, first assistant output starts quickly.
   - `workspace`: user identity from `USER.md` with cache hit or stale hit.
+  - `web_search`: direct ThinkWork `web_search` tool is used; it is not routed
+    through MCP.
   - `bash`: command output only after bash tool result.
   - `workspace-tools`: read/grep/find/ls used on cached workspace files.
+  - `skill`: shared `workspace_skill` extension reads skill instructions before
+    answering.
   - `mcp`: CRM read-only call through bounded `mcp` proxy.
   - `image` and `file`: attachments reach the model/tool transcript.
   - `abort`: cancellation is reflected in UI and persisted stop reason.
   - `mcp-auth-failure`: visible reconnection/auth guidance.
+  - `agentcore_pi`: a normal deployed managed Pi thread turn completes and
+    records runtime `pi`.
 - **Verification:**
   - `pnpm --filter @thinkwork/mobile smoke:pi-harness -- --capabilities all --json`
+  - `pnpm --filter @thinkwork/mobile smoke:pi-harness -- --capabilities full --json`
   - `pnpm --filter @thinkwork/mobile ios` simulator validation
   - EAS build and TestFlight submission only after local + deployed smokes pass.
 

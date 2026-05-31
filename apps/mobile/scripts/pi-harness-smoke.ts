@@ -1,7 +1,12 @@
 #!/usr/bin/env tsx
 import { existsSync, readFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, isAbsolute, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
+import {
+  createSkillsExtension,
+  formatWorkspaceSkills,
+} from "../../../packages/pi-extensions/src/skills";
 import { BedrockModelProvider } from "../lib/agent/providers/bedrock";
 import { runThreadHarnessTurn } from "../lib/agent/thread-turn";
 import {
@@ -15,7 +20,10 @@ import {
 } from "../lib/agent/extensions/mobile-native";
 import { workspaceContextExtension } from "../lib/agent/extensions/workspace-context-extension";
 import { workspaceToolsExtension } from "../lib/agent/extensions/workspace-tools-extension";
+import { webSearchExtension } from "../lib/agent/extensions/web-search-extension";
+import { defineExtension } from "../lib/agent/extensions/define-extension";
 import { loadExtensions } from "../lib/agent/extensions/load-extensions";
+import { adaptThinkworkExtension } from "../lib/agent/extensions/thinkwork-extension-adapter";
 import type { ExtensionFactory } from "../lib/agent/extensions/types";
 import { recordTurn } from "../lib/agent/persist-turn";
 import { createAgentSession } from "../lib/agent/session";
@@ -36,17 +44,40 @@ import type {
 } from "../lib/agent/types";
 import type { WorkspaceFileMeta, WorkspaceTarget } from "../lib/workspace-api";
 
-type Capability =
+export type Capability =
   | "plain"
   | "workspace"
   | "workspace_tools"
+  | "web_search"
   | "mcp"
   | "mcp_auth_failure"
   | "execute_code"
   | "bash"
+  | "skill"
   | "image"
   | "file"
+  | "agentcore_pi"
   | "abort";
+
+export const LOCAL_ALL_CAPABILITIES = [
+  "plain",
+  "workspace",
+  "workspace_tools",
+  "web_search",
+  "mcp",
+  "mcp_auth_failure",
+  "bash",
+  "skill",
+  "image",
+  "file",
+  "abort",
+] as const satisfies readonly Capability[];
+
+export const FULL_ALL_CAPABILITIES = [
+  ...LOCAL_ALL_CAPABILITIES.slice(0, -1),
+  "agentcore_pi",
+  "abort",
+] as const satisfies readonly Capability[];
 
 interface Args {
   tenantId: string;
@@ -107,12 +138,13 @@ function readDotEnv(path: string): Record<string, string> {
 function usage(exitCode = 2): never {
   console.error(`Usage:
   pnpm --filter @thinkwork/mobile smoke:pi-harness -- \\
-    --tenant-id <tenant-id> --agent-id <agent-id> --user-id <user-id> \\
+    --tenant-id <tenant-id> --agent-id <agent-id> \\
     --id-token <cognito-id-token> \\
-    [--space-id <space-id>] [--capabilities plain,workspace,workspace_tools,mcp,mcp_auth_failure,execute_code,bash,image,file,abort] \\
+    [--space-id <space-id>] [--capabilities plain,workspace,workspace_tools,web_search,mcp,mcp_auth_failure,execute_code,bash,skill,image,file,agentcore_pi,abort] \\
     [--image-path ./fixtures/card.png] [--file-path ./fixtures/note.txt] [--timeout 90000] [--json]
 
   pnpm --filter @thinkwork/mobile smoke:pi-harness -- --dry-run --capabilities all --json
+  pnpm --filter @thinkwork/mobile smoke:pi-harness -- --dry-run --capabilities full --json
 
 Environment fallbacks:
   MOBILE_PI_SMOKE_ID_TOKEN / THINKWORK_ID_TOKEN
@@ -122,7 +154,9 @@ Environment fallbacks:
   THINKWORK_GRAPHQL_API_KEY / VITE_GRAPHQL_API_KEY / EXPO_PUBLIC_GRAPHQL_API_KEY
   apps/admin/.env and apps/mobile/.env are read when present
 
-Use --dry-run to validate the smoke matrix shape without deployed credentials.`);
+User id is resolved from the Cognito token when possible; THINKWORK_USER_ID is a fallback.
+Use --dry-run to validate the smoke matrix shape without deployed credentials.
+Use --capabilities all for the local/mobile matrix, or full to include managed AgentCore Pi.`);
   process.exit(exitCode);
 }
 
@@ -180,35 +214,28 @@ function parseArgs(): Args {
     else usage();
   }
 
-  const all: Capability[] = [
-    "plain",
-    "workspace",
-    "workspace_tools",
-    "mcp",
-    "mcp_auth_failure",
-    "bash",
-    "image",
-    "file",
-    "abort",
-  ];
+  const all: Capability[] = [...LOCAL_ALL_CAPABILITIES];
+  const full: Capability[] = [...FULL_ALL_CAPABILITIES];
   const capabilities =
     capabilityValue === "all"
       ? all
-      : capabilityValue
-          .split(",")
-          .map((capability) => capability.trim())
-          .filter(Boolean);
+      : capabilityValue === "full"
+        ? full
+        : capabilityValue === "local"
+          ? all
+          : capabilityValue
+              .split(",")
+              .map((capability) => capability.trim())
+              .filter(Boolean);
+  const known = new Set<Capability>([...all, ...full, "execute_code"]);
   for (const capability of capabilities) {
-    if (!all.includes(capability as Capability)) {
+    if (!known.has(capability as Capability)) {
       console.error(`Unknown capability: ${capability}`);
       usage();
     }
   }
 
-  if (
-    !dryRun &&
-    (!tenantId || !agentId || !userId || !graphqlUrl || !apiKey || !idToken)
-  )
+  if (!dryRun && (!tenantId || !agentId || !graphqlUrl || !apiKey || !idToken))
     usage();
   return {
     tenantId,
@@ -236,7 +263,12 @@ async function gql<T>(
 ): Promise<T> {
   const response = await fetch(args.graphqlUrl, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": args.apiKey },
+    headers: {
+      "content-type": "application/json",
+      ...(args.idToken
+        ? { Authorization: args.idToken }
+        : { "x-api-key": args.apiKey }),
+    },
     body: JSON.stringify({ query, variables }),
   });
   const body = (await response.json()) as {
@@ -254,6 +286,7 @@ async function gql<T>(
 async function createThread(
   args: Args,
   capability: Capability,
+  firstMessage?: string,
 ): Promise<Thread> {
   const data = await gql<{ createThread: Thread }>(
     args,
@@ -269,10 +302,22 @@ async function createThread(
         channel: "CHAT",
         createdByType: "user",
         createdById: args.userId,
+        ...(firstMessage ? { firstMessage } : {}),
       },
     },
   );
   return data.createThread;
+}
+
+async function resolveCurrentUserId(args: Args): Promise<string | null> {
+  const data = await gql<{ me: { id: string } | null }>(
+    args,
+    `query {
+      me { id }
+    }`,
+    {},
+  );
+  return data.me?.id ?? null;
 }
 
 async function getWorkspaceFile(
@@ -331,6 +376,67 @@ async function listWorkspaceFiles(
   return { files: body.files ?? [] };
 }
 
+interface ThreadPollState {
+  id: string;
+  identifier?: string | null;
+  lifecycleStatus?: string | null;
+  lastRuntimeType?: string | null;
+  lastResponsePreview?: string | null;
+  messages: Array<{
+    id: string;
+    role: string;
+    content?: string | null;
+    senderType?: string | null;
+    createdAt?: string | null;
+  }>;
+}
+
+async function getThreadPollState(
+  args: Args,
+  threadId: string,
+): Promise<ThreadPollState> {
+  const data = await gql<{ thread: ThreadPollState | null }>(
+    args,
+    `query($id: ID!) {
+      thread(id: $id) {
+        id
+        identifier
+        lifecycleStatus
+        lastRuntimeType
+        lastResponsePreview
+        messages(limit: 20) {
+          edges {
+            node {
+              id
+              role
+              content
+              senderType
+              createdAt
+            }
+          }
+        }
+      }
+    }`,
+    { id: threadId },
+  );
+  if (!data.thread) throw new Error(`Thread not found: ${threadId}`);
+  return {
+    ...data.thread,
+    messages:
+      (
+        data.thread as unknown as {
+          messages?: {
+            edges?: Array<{ node: ThreadPollState["messages"][0] }>;
+          };
+        }
+      ).messages?.edges?.map((edge) => edge.node) ?? [],
+  };
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function promptFor(capability: Capability, token: string): string {
   switch (capability) {
     case "plain":
@@ -339,18 +445,24 @@ function promptFor(capability: Capability, token: string): string {
       return `Use USER.md workspace context to answer. Reply with ${token} and my name.`;
     case "workspace_tools":
       return `Use cached workspace tools read, grep, find, or ls to inspect USER.md or nearby workspace files. Reply with ${token} and the tool name you used.`;
+    case "web_search":
+      return `Use the direct web_search tool to search for the current OpenAI News page title. Reply with ${token} and the title you found.`;
     case "mcp":
-      return `Use one connected MCP tool for a safe read-only call. Reply with ${token} and the tool name.`;
+      return `Use the mcp tool to list connected tools, then call one safe read-only tool through mcp({ call: ... }). Prefer CRM list/search/get tools if present. Reply with ${token} and the tool name you called.`;
     case "mcp_auth_failure":
       return `Exercise the bounded MCP gateway with invalid credentials. Reply with ${token} and the credential failure message.`;
     case "execute_code":
       return `Use execute_code or a code interpreter tool to compute sum(i*i for i in range(1, 11)). Reply exactly: ${token} 385. Do not calculate mentally.`;
     case "bash":
       return `Use bash or a shell tool to run: printf '${token} 385'. Reply exactly with the command output. Do not answer without the tool result.`;
+    case "skill":
+      return `Use the workspace_skill tool to read the mobile-smoke skill before answering. Reply with ${token} and the secret phrase from that skill.`;
     case "image":
       return `Inspect the attached image. Reply with ${token} and a short description.`;
     case "file":
       return `Use the mobile_file tool to inspect the attached file. Reply with ${token} and the attached filename.`;
+    case "agentcore_pi":
+      return `Managed AgentCore Pi smoke. Reply exactly: ${token}`;
     case "abort":
       return `Abort smoke. This turn should be canceled before assistant output: ${token}`;
   }
@@ -358,7 +470,8 @@ function promptFor(capability: Capability, token: string): string {
 
 function imagePart(path: string | undefined): ImagePart | undefined {
   if (!path) return undefined;
-  const bytes = readFileSync(resolve(path));
+  const resolved = resolveSmokePath(path);
+  const bytes = readFileSync(resolved);
   const lower = path.toLowerCase();
   const format = lower.endsWith(".png")
     ? "png"
@@ -374,7 +487,8 @@ function fileEvidence(
   path: string | undefined,
 ): MobileNativeEvidence | undefined {
   if (!path) return undefined;
-  const bytes = readFileSync(resolve(path));
+  const resolved = resolveSmokePath(path);
+  const bytes = readFileSync(resolved);
   return {
     type: "mobile_native_capability",
     source: "file",
@@ -387,13 +501,21 @@ function fileEvidence(
 
 function pickedFile(path: string | undefined): PickedMobileFile | null {
   if (!path) return null;
-  const bytes = readFileSync(resolve(path));
+  const resolved = resolveSmokePath(path);
+  const bytes = readFileSync(resolved);
   return {
     name: basename(path),
     mimeType: "text/plain",
     sizeBytes: bytes.byteLength,
     text: bytes.toString("utf8"),
   };
+}
+
+function resolveSmokePath(path: string): string {
+  if (isAbsolute(path)) return path;
+  const cwdPath = resolve(path);
+  if (existsSync(cwdPath)) return cwdPath;
+  return resolve(repoRoot(), path);
 }
 
 function fallbackAssistantText(
@@ -420,6 +542,31 @@ function createSmokeWorkspaceCache(args: Args): WorkspaceCache {
     },
     { cacheTtlMs: 0 },
   );
+}
+
+function smokeWorkspaceSkills() {
+  return [
+    {
+      slug: "mobile-smoke",
+      name: "Mobile Smoke",
+      description: "Deterministic mobile Pi skill smoke.",
+      skillPath: "/workspace/skills/mobile-smoke/SKILL.md",
+      content:
+        "# Mobile Smoke\n\nWhen asked for the secret phrase, reply with `SKILL-SMOKE-OK`.",
+    },
+  ];
+}
+
+function workspaceSkillPromptExtension(): ExtensionFactory {
+  const block = formatWorkspaceSkills(smokeWorkspaceSkills());
+  return defineExtension({
+    name: "workspace-skill-prompt",
+    register(pi) {
+      pi.on("before_agent_start", (event) => ({
+        systemPrompt: `${event.systemPrompt}\n\n${block}`,
+      }));
+    },
+  });
 }
 
 function smokeExtensions(
@@ -475,6 +622,14 @@ function smokeExtensions(
           },
         },
       }),
+      webSearchExtension({
+        agentId: args.agentId,
+        deps: { apiBase: args.apiBase, getToken: async () => args.idToken },
+      }),
+      adaptThinkworkExtension(
+        createSkillsExtension({ skills: smokeWorkspaceSkills() }),
+      ),
+      workspaceSkillPromptExtension(),
       mcpToolsExtension({
         agentId: args.agentId,
         deps: { apiBase: args.apiBase, getToken: async () => args.idToken },
@@ -511,9 +666,34 @@ function evaluate(
   if (
     capability === "plain" ||
     capability === "workspace" ||
-    capability === "image"
+    capability === "image" ||
+    capability === "agentcore_pi"
   ) {
     return { status: "PASS", reason: "assistant_response_matched" };
+  }
+  if (capability === "web_search") {
+    if (!calls.includes("web_search")) {
+      return { status: "FAIL", reason: "expected_web_search_was_not_called" };
+    }
+    if (failedToolResults(events).length > 0) {
+      return { status: "FAIL", reason: "tool_result_failed" };
+    }
+    return { status: "PASS", reason: "web_search_tool_observed" };
+  }
+  if (capability === "skill") {
+    if (!calls.includes("workspace_skill")) {
+      return {
+        status: "FAIL",
+        reason: "expected_workspace_skill_was_not_called",
+      };
+    }
+    if (!assistantText.includes("SKILL-SMOKE-OK")) {
+      return { status: "FAIL", reason: "assistant_missing_skill_phrase" };
+    }
+    if (failedToolResults(events).length > 0) {
+      return { status: "FAIL", reason: "tool_result_failed" };
+    }
+    return { status: "PASS", reason: "workspace_skill_tool_observed" };
   }
   if (capability === "file") {
     if (!calls.includes("mobile_file")) {
@@ -539,14 +719,33 @@ function evaluate(
     }
     return { status: "PASS", reason: "workspace_tool_observed" };
   }
+  if (capability === "mcp") {
+    const mcpDispatches = events.filter(
+      (event): event is Extract<AgentEvent, { type: "tool_call" }> =>
+        event.type === "tool_call" &&
+        event.call.name.toLowerCase() === "mcp" &&
+        typeof event.call.arguments.call === "object" &&
+        event.call.arguments.call !== null,
+    );
+    if (!calls.includes("mcp")) {
+      return { status: "FAIL", reason: "expected_tool_was_not_called" };
+    }
+    if (mcpDispatches.length === 0) {
+      return {
+        status: "FAIL",
+        reason: "expected_mcp_call_was_not_dispatched",
+      };
+    }
+    if (failedToolResults(events).length > 0) {
+      return { status: "FAIL", reason: "tool_result_failed" };
+    }
+    return { status: "PASS", reason: "mcp_call_observed" };
+  }
+
   const wants =
-    capability === "mcp"
-      ? calls.includes("mcp")
-      : capability === "execute_code"
-        ? calls.some((name) =>
-            /execute_code|code_interpreter|python/.test(name),
-          )
-        : calls.some((name) => /bash|shell/.test(name));
+    capability === "execute_code"
+      ? calls.some((name) => /execute_code|code_interpreter|python/.test(name))
+      : calls.some((name) => /bash|shell/.test(name));
   if (!wants) return { status: "FAIL", reason: "expected_tool_was_not_called" };
   if (failedToolResults(events).length > 0) {
     return { status: "FAIL", reason: "tool_result_failed" };
@@ -667,6 +866,69 @@ async function runAbortCapability(
   }
 }
 
+async function runManagedAgentCoreCapability(args: Args): Promise<SmokeResult> {
+  const token = `MOBILE-PI-AGENTCORE-${Date.now()}`;
+  const prompt = promptFor("agentcore_pi", token);
+  const thread = await createThread(args, "agentcore_pi", prompt);
+  const started = Date.now();
+  let lastState: ThreadPollState | null = null;
+
+  while (Date.now() - started < args.timeoutMs) {
+    lastState = await getThreadPollState(args, thread.id);
+    const assistant = lastState.messages.find(
+      (message) =>
+        message.role.toLowerCase() === "assistant" &&
+        typeof message.content === "string" &&
+        message.content.length > 0,
+    );
+    if (assistant?.content) {
+      const runtime = (lastState.lastRuntimeType ?? "").toLowerCase();
+      if (runtime !== "pi") {
+        return {
+          capability: "agentcore_pi",
+          status: "FAIL",
+          reason: `managed_turn_runtime_was_${lastState.lastRuntimeType ?? "missing"}`,
+          threadId: thread.id,
+          threadIdentifier: thread.identifier,
+          assistantText: assistant.content,
+        };
+      }
+      const verdict = evaluate("agentcore_pi", token, assistant.content, []);
+      return {
+        capability: "agentcore_pi",
+        ...verdict,
+        reason:
+          verdict.status === "PASS"
+            ? "managed_agentcore_pi_turn_completed"
+            : verdict.reason,
+        threadId: thread.id,
+        threadIdentifier: thread.identifier,
+        assistantText: assistant.content,
+      };
+    }
+    if (lastState.lifecycleStatus === "FAILED") {
+      return {
+        capability: "agentcore_pi",
+        status: "FAIL",
+        reason: "managed_turn_failed",
+        threadId: thread.id,
+        threadIdentifier: thread.identifier,
+        assistantText: lastState.lastResponsePreview ?? undefined,
+      };
+    }
+    await sleep(2_000);
+  }
+
+  return {
+    capability: "agentcore_pi",
+    status: "FAIL",
+    reason: `managed_turn_timeout lifecycle=${lastState?.lifecycleStatus ?? "unknown"} runtime=${lastState?.lastRuntimeType ?? "unknown"}`,
+    threadId: thread.id,
+    threadIdentifier: thread.identifier,
+    assistantText: lastState?.lastResponsePreview ?? undefined,
+  };
+}
+
 async function runCapability(
   args: Args,
   capability: Capability,
@@ -676,6 +938,9 @@ async function runCapability(
   }
   if (capability === "file" && !args.filePath) {
     return { capability, status: "SKIP", reason: "file-path not provided" };
+  }
+  if (capability === "agentcore_pi") {
+    return runManagedAgentCoreCapability(args);
   }
   const thread = await createThread(args, capability);
   if (capability === "mcp_auth_failure") {
@@ -743,7 +1008,7 @@ async function runCapability(
   }
 }
 
-function dryRunResults(args: Args): SmokeResult[] {
+export function dryRunResults(args: Pick<Args, "capabilities">): SmokeResult[] {
   return args.capabilities.map((capability, index) => ({
     capability,
     status: "SKIP",
@@ -765,7 +1030,7 @@ function printResult(result: SmokeResult, json: boolean): void {
   );
 }
 
-async function main() {
+export async function main() {
   const args = parseArgs();
   if (args.dryRun) {
     const results = dryRunResults(args);
@@ -776,6 +1041,15 @@ async function main() {
       );
     }
     return;
+  }
+  const currentUserId = await resolveCurrentUserId(args).catch(() => null);
+  if (currentUserId) {
+    args.userId = currentUserId;
+  }
+  if (!args.userId) {
+    throw new Error(
+      "Unable to resolve current user id. Provide THINKWORK_USER_ID or --user-id.",
+    );
   }
   const results: SmokeResult[] = [];
   for (const capability of args.capabilities) {
@@ -801,7 +1075,13 @@ async function main() {
   if (failed.length) process.exit(1);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main()
+    .then(() => {
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
