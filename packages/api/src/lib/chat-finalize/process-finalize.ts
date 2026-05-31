@@ -50,7 +50,7 @@ import {
   notifyNewMessage,
   notifyThreadTurnUpdate,
 } from "./notify.js";
-import { reconcileChangedFiles } from "./reconcile.js";
+import { reconcileChangedFiles, type ReconcileReport } from "./reconcile.js";
 import type { FinalizePayload, FinalizeResponse } from "./types.js";
 
 const db = getDb();
@@ -60,6 +60,8 @@ export interface ProcessFinalizeResult {
   finalized: boolean;
   /** The assistant message id when a new message was inserted; null otherwise. */
   messageId: string | null;
+  /** Per-file workspace reconcile result for this finalize call. */
+  reconcile?: ReconcileReport;
 }
 
 export function capturedSystemPromptFromFinalizePayload(
@@ -148,8 +150,9 @@ export async function processFinalize(
     claimed[0]?.contextSnapshot,
   );
 
+  let reconcileReport: ReconcileReport;
   try {
-    const reconcileReport = await reconcileChangedFiles({
+    reconcileReport = await reconcileChangedFiles({
       tenantId,
       agentId,
       threadId,
@@ -181,7 +184,7 @@ export async function processFinalize(
       suppressAssistantMessage: hiddenDesktopDelegation,
     });
     await markTurnFinalized(turnId);
-    return { finalized: true, messageId: null };
+    return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
   // ---- Completed-turn finalize chain ----------------------------------
@@ -376,7 +379,7 @@ export async function processFinalize(
   if (!responseText || responseText === "{}") {
     console.warn(`[chat-finalize] Empty response from AgentCore`);
     await markTurnFinalized(turnId);
-    return { finalized: true, messageId: null };
+    return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
   if (hiddenDesktopDelegation) {
@@ -384,7 +387,7 @@ export async function processFinalize(
       `[chat-finalize] Hidden desktop delegation ${turnId} finalized without inserting an assistant message`,
     );
     await markTurnFinalized(turnId);
-    return { finalized: true, messageId: null };
+    return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
   // 6. Compute downstream signals
@@ -511,7 +514,11 @@ export async function processFinalize(
   }
 
   await markTurnFinalized(turnId);
-  return { finalized: true, messageId: assistantMsg?.id ?? null };
+  return {
+    finalized: true,
+    messageId: assistantMsg?.id ?? null,
+    reconcile: reconcileReport,
+  };
 }
 
 async function recordWorkspaceReconcileStatus(
@@ -630,5 +637,10 @@ export function toFinalizeResponse(
   result: ProcessFinalizeResult,
 ): FinalizeResponse {
   if (!result.finalized) return { ok: true, idempotent: true };
-  return { ok: true, idempotent: false, messageId: result.messageId };
+  return {
+    ok: true,
+    idempotent: false,
+    messageId: result.messageId,
+    ...(result.reconcile ? { reconcile: result.reconcile } : {}),
+  };
 }

@@ -34,6 +34,7 @@ import {
   diagnosticsFromFinalizePayload,
   isHiddenDesktopDelegation,
   processFinalize,
+  toFinalizeResponse,
 } from "./process-finalize";
 
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
@@ -168,5 +169,46 @@ describe("processFinalize reconcile seam", () => {
         expect.objectContaining({ context_snapshot: expect.anything() }),
       ]),
     );
+  });
+});
+
+describe("toFinalizeResponse", () => {
+  it("surfaces reconcile status on non-idempotent finalize responses", () => {
+    expect(
+      toFinalizeResponse({
+        finalized: true,
+        messageId: "msg-1",
+        reconcile: {
+          status: "complete",
+          files: [
+            {
+              path: "memory/preferences.md",
+              op: "modify",
+              owner: "user",
+              status: "written",
+              sourceKey: "tenants/acme/users/eric/memory/preferences.md",
+              etag: '"new"',
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      ok: true,
+      idempotent: false,
+      messageId: "msg-1",
+      reconcile: {
+        status: "complete",
+        files: [
+          {
+            path: "memory/preferences.md",
+            op: "modify",
+            owner: "user",
+            status: "written",
+            sourceKey: "tenants/acme/users/eric/memory/preferences.md",
+            etag: '"new"',
+          },
+        ],
+      },
+    });
   });
 });

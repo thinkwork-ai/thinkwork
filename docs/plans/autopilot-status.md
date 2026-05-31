@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U4 diff contract + finalize reconcile seam.
-- Active branch: `codex/workspace-arch-u4`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u4`.
+- Active unit: U5 live reconcile handler.
+- Active branch: `codex/workspace-arch-u5`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u5`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: [#1909](https://github.com/thinkwork-ai/thinkwork/pull/1909).
-- CI/deploy: U3 required PR checks passed and merged into `main`.
+- Latest merged PR: [#1910](https://github.com/thinkwork-ai/thinkwork/pull/1910).
+- CI/deploy: U4 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -156,6 +156,37 @@ Target branch: `main`
   worktree because the root `prettier` binary is not installed; changed files
   pass the pinned Prettier check above.
 - Opened PR [#1910](https://github.com/thinkwork-ai/thinkwork/pull/1910).
+- PR [#1910](https://github.com/thinkwork-ai/thinkwork/pull/1910) passed
+  `cla`, `lint`, `verify`, `typecheck`, and `test`, then squash-merged into
+  `main`. Merge commit: `d90c03f971d5e5878f3370f302c4e8b1e95176bf`.
+- Removed U4 worktree/local branch, confirmed the remote branch was deleted,
+  synced `main`, and created isolated U5 worktree `codex/workspace-arch-u5`
+  from `origin/main` at `d90c03f9`.
+- Started U5 live reconcile handler work. U5 includes the KTD3 shared
+  lane/provenance extraction because the plan names it as a prerequisite but
+  does not define a separate numbered implementation unit.
+- Implemented U5 live reconcile: changed files now route through the U3
+  hydrate manifest to Agent, Space, or User source prefixes; create uses
+  `IfNoneMatch: "*"`, modify/delete require matching manifest `base_etag` and
+  use `IfMatch`, S3 412 conflicts become typed per-file failures, and scratch
+  writes return `dropped_scratch`.
+- Extracted shared lane/provenance policy into
+  `packages/api/src/lib/workspace-lanes.ts` and reused it from
+  `workspace-files.ts`, `workspace-renderer/prefixes.ts`, and reconcile.
+- Added minimal secret scanning before canonical S3 writes and typed
+  per-file reconcile reports for partial success, all-failed, lane rejection,
+  missing/invalid manifests, stale ETags, conflicts, and successful writes.
+- Surfaced reconcile status in the finalize HTTP response and persisted the
+  report in `context_snapshot.workspace_reconcile`.
+- U5 local verification passed:
+  `pnpm --filter @thinkwork/api test -- reconcile.test.ts process-finalize.test.ts`,
+  `pnpm --filter @thinkwork/api test -- prefixes.test.ts workspace-files-handler.test.ts`,
+  `pnpm --filter @thinkwork/api test -- chat-agent-finalize.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/api test`, `pnpm typecheck`, `pnpm lint`,
+  changed-file Prettier check via
+  `pnpm dlx prettier@3.8.2 --check <changed files>`, and `git diff --check`.
+- Opened PR [#1911](https://github.com/thinkwork-ai/thinkwork/pull/1911).
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 
