@@ -15,14 +15,14 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: active; implementation unit U3 is in progress.
-- Active unit: U3 Managed Handoff Claim and Dispatch.
-- Active branch: `codex/mobile-pi-handoff-u3`.
+- Status: active; implementation unit U4 is in progress.
+- Active unit: U4 Activity Timeline and Working State Continuity.
+- Active branch: `codex/mobile-pi-handoff-u4`.
 - Active worktree:
-  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u3`.
-- Started: 2026-05-31 from `origin/main` at `d7922bbe`.
-- Active PR: pending.
-- CI: not yet pushed.
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/mobile-pi-handoff-u4`.
+- Started: 2026-05-31 from `origin/main` at `7192b2fd`.
+- Active PR: [#1904](https://github.com/thinkwork-ai/thinkwork/pull/1904).
+- CI: pending.
 
 ### Active Unit Notes
 
@@ -125,6 +125,31 @@ cron-stall-monitor`, and `git diff --check`.
 - Touched-file formatting was applied with `pnpm dlx prettier --write ...`
   because this fresh worktree install did not provide a local `prettier`
   binary for the repo `format:check` script.
+- Opened PR [#1902](https://github.com/thinkwork-ai/thinkwork/pull/1902)
+  for U3. Required CI (`cla`, `lint`, `verify`, `typecheck`, `test`) passed,
+  then the PR was squash-merged into `main`. Merge commit:
+  `7192b2fdec467e5995aa36a049f061e0f4cc0a3c`.
+- Removed the U3 worktree after merge and created U4 worktree
+  `codex/mobile-pi-handoff-u4` from `origin/main` at `7192b2fd`.
+- Started U4 activity timeline and working-state continuity. Verified the
+  existing GraphQL `threadTurns` and `threadTurnEvents` queries already expose
+  the fields mobile needs; no schema/codegen change is planned for this unit.
+- Implemented mobile timeline logic so mobile Pi turns remain visible to
+  regular users, running durable turns keep the footer `Working...` indicator
+  active, and expanded mobile Pi turn rows render the `mobile_pi_*` activity
+  events used by U1-U3 (`mobile Pi turn started`, `checkpoint saved`,
+  `background grace started`, `managed Pi claimed`, `unsafe checkpoint skipped`,
+  and handoff failure/completion events).
+- Focused U4 verification passed:
+  `pnpm --filter @thinkwork/mobile test -- components/threads/ActivityTimeline.test.ts lib/pending-thread-starts.test.ts lib/agent/thread-turn.test.ts`
+  (22 tests), `pnpm --filter @thinkwork/api test --
+src/__tests__/lifecycle-status.test.ts` (15 tests),
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/react-native-sdk build`,
+  `pnpm --filter @thinkwork/mobile build:web`, touched-file Prettier check,
+  and `git diff --check`.
+- Opened PR [#1904](https://github.com/thinkwork-ai/thinkwork/pull/1904)
+  for U4; CI is pending.
 
 ### Blockers
 

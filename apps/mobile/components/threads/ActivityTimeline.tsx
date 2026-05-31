@@ -43,9 +43,18 @@ import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { COLORS } from "@/lib/theme";
 import { getGenUIComponent } from "@/lib/genui-registry";
-import { RefreshGenUIMutation } from "@/lib/graphql-queries";
+import {
+  RefreshGenUIMutation,
+  ThreadTurnEventsQuery,
+} from "@/lib/graphql-queries";
 import { TurnExecutionTimeline } from "@/components/threads/TurnExecutionTimeline";
 import { resolveHumanMessageDisplay } from "@/lib/thread-message-display";
+import {
+  isMobilePiTurn,
+  mobileTurnActivityLabel,
+  shouldShowMobileTurnActivityEvent,
+  shouldShowTurnInTimeline,
+} from "./activity-timeline-logic";
 
 const RESPONSE_COLOR = "#06b6d4";
 
@@ -118,6 +127,14 @@ interface Turn {
   resultJson?: any;
   usageJson?: any;
   totalCost?: number | null;
+  createdAt: string;
+}
+
+interface TurnActivityEvent {
+  id: string;
+  seq: number;
+  eventType: string;
+  message?: string | null;
   createdAt: string;
 }
 
@@ -232,6 +249,7 @@ function formatInvocationSource(source: unknown): string | null {
     webhook: "Webhook",
     api: "Automation",
     email: "Email",
+    mobile_pi: "Mobile Pi",
   };
   return (
     labels[key] ??
@@ -500,6 +518,9 @@ function AgentMessageContent({
   onLinkPress?: (url: string) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
+  useEffect(() => {
+    if (defaultExpanded) setExpanded(true);
+  }, [defaultExpanded]);
   const [copied, setCopied] = useState(false);
   const router = useRouter();
 
@@ -592,6 +613,7 @@ function TurnContent({
   isAdmin,
   agentName,
   tenantId,
+  defaultExpanded,
 }: {
   item: Turn;
   isDark: boolean;
@@ -599,16 +621,18 @@ function TurnContent({
   isAdmin?: boolean;
   agentName: string;
   tenantId?: string | null;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   const { color: stColor } = getTurnStatusStyle(item.status, isDark);
   const hasDuration = item.startedAt && item.finishedAt;
   const usage = parseUsage(item.usageJson);
   const cost = item.totalCost ? `$${item.totalCost.toFixed(2)}` : "";
+  const isMobileTurn = isMobilePiTurn(item);
   const sourceLabel = formatInvocationSource(
     item.triggerName || item.invocationSource,
   );
-  const title = "Thinking";
+  const title = isMobileTurn ? "Mobile Pi" : "Thinking";
 
   const header = (
     <View className="flex-row items-center justify-between">
@@ -652,6 +676,13 @@ function TurnContent({
       </Pressable>
       {expanded && (
         <View className="gap-2">
+          {isMobileTurn ? (
+            <TurnActivityEvents
+              turnId={item.id}
+              expanded={expanded}
+              colors={colors}
+            />
+          ) : null}
           {item.status !== "queued" && item.status !== "running" && (
             <TurnExecutionTimeline
               tenantId={tenantId}
@@ -684,6 +715,59 @@ function TurnContent({
         </View>
       )}
     </>
+  );
+}
+
+function TurnActivityEvents({
+  turnId,
+  expanded,
+  colors,
+}: {
+  turnId: string;
+  expanded: boolean;
+  colors: (typeof COLORS)["dark"];
+}) {
+  const [{ data, fetching }] = useQuery({
+    query: ThreadTurnEventsQuery,
+    variables: { runId: turnId, limit: 100 },
+    pause: !expanded,
+  });
+  const events = (
+    ((data?.threadTurnEvents ?? []) as TurnActivityEvent[]) || []
+  ).filter(shouldShowMobileTurnActivityEvent);
+
+  if (fetching && events.length === 0) {
+    return <Muted className="text-xs">Loading activity...</Muted>;
+  }
+  if (events.length === 0) return null;
+
+  return (
+    <View className="gap-1">
+      <Muted className="text-[10px] uppercase tracking-wider">
+        Mobile handoff activity
+      </Muted>
+      {events.map((event) => (
+        <View key={event.id} className="flex-row items-start gap-2">
+          <View
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: 2.5,
+              backgroundColor: colors.mutedForeground,
+              marginTop: 7,
+            }}
+          />
+          <View className="flex-1">
+            <Text className="text-xs" style={{ color: colors.foreground }}>
+              {mobileTurnActivityLabel(event)}
+            </Text>
+            <Muted className="text-[10px]">
+              {formatRelativeTime(event.createdAt)}
+            </Muted>
+          </View>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -1015,10 +1099,12 @@ export function ActivityTimeline({
 
   const flatListRef = useRef<FlatList>(null);
   const rawTimeline = mergeTimeline(messages, turns, agentName);
-  // Filter out admin-only items (turns) when user is not admin
-  const timeline = isAdmin
-    ? rawTimeline
-    : rawTimeline.filter((t) => t.kind !== "turn");
+  // Keep most turn rows admin-only, but mobile Pi turns are user-facing
+  // lifecycle evidence: they explain local start, background handoff, and
+  // managed AgentCore continuation without creating another visible message.
+  const timeline = rawTimeline.filter(
+    (t) => t.kind !== "turn" || shouldShowTurnInTimeline(t.data, isAdmin),
+  );
   const prevCountRef = useRef(timeline.length);
 
   // Find last agent message index for auto-expand + scroll
@@ -1207,6 +1293,9 @@ export function ActivityTimeline({
             isAdmin={isAdmin}
             agentName={agentName}
             tenantId={tenantId}
+            defaultExpanded={
+              isMobilePiTurn(item.data) && item.data.status === "running"
+            }
           />
         );
       }

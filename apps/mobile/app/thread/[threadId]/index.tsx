@@ -93,6 +93,7 @@ import {
   ActivityTimeline,
   type SaveRecipeInfo,
 } from "@/components/threads/ActivityTimeline";
+import { shouldShowThreadWorkingIndicator } from "@/components/threads/activity-timeline-logic";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import {
   SaveRecipeSheet,
@@ -1579,7 +1580,11 @@ export default function ThreadDetailRoute() {
               tenantId={tenantId}
               isAgentRunning={
                 !!threadId &&
-                (isThreadActive(threadId) || isOptimisticStartRunning)
+                shouldShowThreadWorkingIndicator({
+                  isLocalThreadActive: isThreadActive(threadId),
+                  isOptimisticStartRunning,
+                  hasRunningTurn,
+                })
               }
               onLinkPress={handleLinkPress}
               onSaveRecipe={handleSaveRecipe}

@@ -124,6 +124,16 @@ describe("deriveLifecycleStatus", () => {
     ).toBe("RUNNING");
   });
 
+  it("managed mobile handoff remains RUNNING while the shared turn is still running", () => {
+    expect(
+      deriveLifecycleStatus({
+        hasActiveTurn: true,
+        latestTurn: { status: "running", created_at: FRESH_QUEUED_AT },
+        now: NOW,
+      }),
+    ).toBe("RUNNING");
+  });
+
   // ── No turns ──────────────────────────────────────────────────────
 
   it("no turns → IDLE", () => {
