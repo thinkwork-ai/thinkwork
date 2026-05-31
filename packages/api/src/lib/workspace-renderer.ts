@@ -83,6 +83,10 @@ export function contentTypeForWorkspacePath(path: string): string {
 
 export function shouldRenderWorkspaceSourcePath(path: string): boolean {
   return (
-    Boolean(path) && path !== "manifest.json" && path !== "_defaults_version"
+    Boolean(path) &&
+    path !== "manifest.json" &&
+    path !== "_defaults_version" &&
+    path !== ".gitkeep" &&
+    !path.endsWith("/.gitkeep")
   );
 }

@@ -80,7 +80,7 @@ function installOptions() {
     s3: new S3Client({}),
     bucket: "test-bucket",
     tenantSlug: "acme",
-    targetPrefix: "tenants/acme/agents/marco/workspace/",
+    targetPrefix: "tenants/acme/agents/marco/",
     slug: "finance-audit-xls",
     wiringChoice: "stage-3-gate",
     now: new Date("2026-05-24T16:00:00.000Z"),
@@ -92,12 +92,12 @@ describe("installCatalogSkill", () => {
     mockCatalogSkill();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/",
+        Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/CONTEXT.md",
+        Key: "tenants/acme/agents/marco/CONTEXT.md",
       })
       .resolves(body("# Context\n"));
     s3Mock.on(CopyObjectCommand).resolves({});
@@ -122,17 +122,17 @@ describe("installCatalogSkill", () => {
       expect.objectContaining({
         CopySource:
           "test-bucket/tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
       }),
       expect.objectContaining({
         CopySource:
           "test-bucket/tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
       }),
       expect.objectContaining({
         CopySource:
           "test-bucket/tenants/acme/skill-catalog/finance-audit-xls/scripts/audit.py",
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/scripts/audit.py",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/scripts/audit.py",
       }),
     ]);
 
@@ -142,8 +142,7 @@ describe("installCatalogSkill", () => {
     );
     const contextPut = puts.find(
       (call) =>
-        call.args[0].input.Key ===
-        "tenants/acme/agents/marco/workspace/CONTEXT.md",
+        call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
     );
     expect(JSON.parse(String(refPut?.args[0].input.Body))).toMatchObject({
       slug: "finance-audit-xls",
@@ -161,12 +160,12 @@ describe("installCatalogSkill", () => {
     mockCatalogSkill();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/",
+        Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({
         Contents: [
           {
-            Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+            Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
           },
         ],
       });
@@ -182,7 +181,7 @@ describe("installCatalogSkill", () => {
     mockCatalogSkill();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/",
+        Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({ Contents: [] });
 
@@ -199,12 +198,12 @@ describe("installCatalogSkill", () => {
     mockCatalogSkill();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/",
+        Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/CONTEXT.md",
+        Key: "tenants/acme/agents/marco/CONTEXT.md",
       })
       .rejects(noSuchKey());
 
@@ -219,18 +218,18 @@ describe("installCatalogSkill", () => {
     mockCatalogSkill();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/",
+        Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/CONTEXT.md",
+        Key: "tenants/acme/agents/marco/CONTEXT.md",
       })
       .resolves(body("# Context\n"));
     s3Mock.on(CopyObjectCommand).resolves({});
     s3Mock
       .on(PutObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
       })
       .rejects(new Error("put failed"));
     s3Mock.on(DeleteObjectCommand).resolves({});
@@ -246,16 +245,16 @@ describe("installCatalogSkill", () => {
         .map((call) => call.args[0].input),
     ).toEqual([
       expect.objectContaining({
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
       }),
       expect.objectContaining({
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
       }),
       expect.objectContaining({
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/scripts/audit.py",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/scripts/audit.py",
       }),
       expect.objectContaining({
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
       }),
     ]);
   });
@@ -264,12 +263,12 @@ describe("installCatalogSkill", () => {
     mockCatalogSkill();
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/",
+        Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({ Contents: [] });
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/CONTEXT.md",
+        Key: "tenants/acme/agents/marco/CONTEXT.md",
       })
       .resolves(body("# Context\n"));
     s3Mock.on(CopyObjectCommand).callsFake((input) => {
@@ -291,7 +290,7 @@ describe("installCatalogSkill", () => {
         .map((call) => call.args[0].input),
     ).toEqual([
       expect.objectContaining({
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
       }),
     ]);
     expect(
@@ -299,8 +298,7 @@ describe("installCatalogSkill", () => {
         .commandCalls(PutObjectCommand)
         .some(
           (call) =>
-            call.args[0].input.Key ===
-            "tenants/acme/agents/marco/workspace/CONTEXT.md",
+            call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
         ),
     ).toBe(false);
   });

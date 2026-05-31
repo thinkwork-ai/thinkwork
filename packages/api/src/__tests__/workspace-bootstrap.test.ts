@@ -85,7 +85,7 @@ const AGENT_ID = "agent-marco";
 const TENANT_ID = "tenant-a";
 const TEMPLATE_ID = "template-exec";
 
-const AGENT_PREFIX = "tenants/acme/agents/marco/workspace/";
+const AGENT_PREFIX = "tenants/acme/agents/marco/";
 const TEMPLATE_PREFIX =
   "tenants/acme/agents/_catalog/exec-assistant/workspace/";
 const DEFAULTS_PREFIX = "tenants/acme/agents/_catalog/defaults/workspace/";

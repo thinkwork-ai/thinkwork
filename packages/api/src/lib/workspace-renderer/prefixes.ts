@@ -10,7 +10,7 @@ export function agentWorkspacePrefix(input: {
 }): string {
   return `tenants/${slugSegment(input.tenantSlug)}/agents/${slugSegment(
     input.agentSlug,
-  )}/workspace/`;
+  )}/`;
 }
 
 export function spaceSourcePrefix(input: {
@@ -19,23 +19,54 @@ export function spaceSourcePrefix(input: {
 }): string {
   return `tenants/${slugSegment(input.tenantSlug)}/spaces/${slugSegment(
     input.spaceSlug,
-  )}/source/`;
-}
-
-export function userWorkspacePrefix(input: {
-  tenantId: string;
-  userId: string;
-}): string {
-  return `tenants/${slugSegment(input.tenantId)}/users/${slugSegment(
-    input.userId,
   )}/`;
 }
 
-export function renderedWorkspacePrefix(
+export function userWorkspacePrefix(input: {
+  tenantSlug: string;
+  userSlug: string;
+}): string {
+  return `tenants/${slugSegment(input.tenantSlug)}/users/${slugSegment(
+    input.userSlug,
+  )}/`;
+}
+
+export function threadRuntimePrefix(
   tuple: ResolvedWorkspaceRenderTuple,
 ): string {
-  const userSegment = tuple.userSlug ?? tuple.userId ?? "anon";
-  return `tenants/${slugSegment(tuple.tenantSlug)}/rendered/${slugSegment(
-    tuple.agentSlug,
-  )}/${slugSegment(tuple.spaceSlug)}/${slugSegment(userSegment)}/`;
+  const threadSegment = tuple.threadSlug ?? tuple.threadId ?? "thread";
+  return `tenants/${slugSegment(tuple.tenantSlug)}/threads/${slugSegment(
+    threadSegment,
+  )}/`;
+}
+
+export type WorkspacePathOwner =
+  | "agent"
+  | "space"
+  | "user"
+  | "scratch"
+  | "unowned";
+
+export function workspacePathOwner(path: string): WorkspacePathOwner {
+  const clean = path.replace(/^\/+/, "");
+  if (!clean || clean.includes("..") || clean.includes("\\")) return "unowned";
+  if (clean === "scratch" || clean.startsWith("scratch/")) return "scratch";
+  if (clean === "USER.md" || clean.startsWith("memory/")) return "user";
+  if (
+    clean === "SPACE.md" ||
+    clean === "CONTEXT.md" ||
+    clean.startsWith("docs/") ||
+    clean.startsWith("goals/")
+  ) {
+    return "space";
+  }
+  if (
+    clean === "AGENTS.md" ||
+    clean === "IDENTITY.md" ||
+    clean === "CAPABILITIES.md" ||
+    clean.startsWith("skills/")
+  ) {
+    return "agent";
+  }
+  return "unowned";
 }

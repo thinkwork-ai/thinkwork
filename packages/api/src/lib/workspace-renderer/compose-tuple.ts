@@ -6,8 +6,8 @@ import {
 import { composeAgentsMd } from "./agents-md-composer.js";
 import {
   agentWorkspacePrefix,
-  renderedWorkspacePrefix,
   spaceSourcePrefix,
+  threadRuntimePrefix,
   userWorkspacePrefix,
 } from "./prefixes.js";
 import { composeWorkspacePolicy } from "./effective-policy-composer.js";
@@ -164,12 +164,16 @@ export async function renderWorkspaceTuple(
 
   const objectStore =
     deps.objectStore ?? new S3WorkspaceRendererObjectStore(s3);
-  const renderedPrefix = renderedWorkspacePrefix(tuple);
+  const renderedPrefix = threadRuntimePrefix(tuple);
   const markerKey = `${renderedPrefix}.rendered_at`;
   const agentPrefix = agentWorkspacePrefix(tuple);
   const spacePrefix = spaceSourcePrefix(tuple);
-  const userPrefix = tuple.userId
-    ? userWorkspacePrefix({ tenantId: tuple.tenantId, userId: tuple.userId })
+  const userFolderName = tuple.userSlug ?? tuple.userId;
+  const userPrefix = userFolderName
+    ? userWorkspacePrefix({
+        tenantSlug: tuple.tenantSlug,
+        userSlug: userFolderName,
+      })
     : null;
 
   const [agentSource, spaceSource, userSource] = await Promise.all([

@@ -52,7 +52,7 @@ function uninstallOptions() {
   return {
     s3: new S3Client({}),
     bucket: "test-bucket",
-    targetPrefix: "tenants/acme/agents/marco/workspace/",
+    targetPrefix: "tenants/acme/agents/marco/",
     slug: "finance-audit-xls",
   };
 }
@@ -60,24 +60,24 @@ function uninstallOptions() {
 function mockInstalledSkill(): void {
   s3Mock
     .on(ListObjectsV2Command, {
-      Prefix: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/",
+      Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
     })
     .resolves({
       Contents: [
         {
-          Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+          Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
         },
         {
-          Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+          Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
         },
         {
-          Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+          Key: "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
         },
       ],
     });
   s3Mock
     .on(GetObjectCommand, {
-      Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+      Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
     })
     .resolves(body(catalogRef()));
   s3Mock.on(DeleteObjectCommand).resolves({});
@@ -88,7 +88,7 @@ describe("uninstallCatalogSkill", () => {
     mockInstalledSkill();
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/CONTEXT.md",
+        Key: "tenants/acme/agents/marco/CONTEXT.md",
       })
       .resolves(
         body(`# Context
@@ -114,7 +114,7 @@ describe("uninstallCatalogSkill", () => {
     });
     const contextPut = s3Mock.commandCalls(PutObjectCommand)[0]?.args[0].input;
     expect(contextPut).toMatchObject({
-      Key: "tenants/acme/agents/marco/workspace/CONTEXT.md",
+      Key: "tenants/acme/agents/marco/CONTEXT.md",
     });
     expect(String(contextPut?.Body)).toBe(`# Context
 
@@ -125,27 +125,27 @@ describe("uninstallCatalogSkill", () => {
         .commandCalls(DeleteObjectCommand)
         .map((call) => call.args[0].input.Key),
     ).toEqual([
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
     ]);
   });
 
   it("deletes the folder without touching CONTEXT.md when the catalog ref is absent", async () => {
     s3Mock
       .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/",
+        Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({
         Contents: [
           {
-            Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+            Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
           },
         ],
       });
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
       })
       .rejects(noSuchKey());
     s3Mock.on(DeleteObjectCommand).resolves({});
@@ -164,7 +164,7 @@ describe("uninstallCatalogSkill", () => {
     mockInstalledSkill();
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/CONTEXT.md",
+        Key: "tenants/acme/agents/marco/CONTEXT.md",
       })
       .resolves(body("# Context\n"));
 

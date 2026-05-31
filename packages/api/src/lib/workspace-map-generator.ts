@@ -117,7 +117,7 @@ interface WorkspaceContextPath {
 // ---------------------------------------------------------------------------
 
 function workspacePrefix(tenantSlug: string, agentSlug: string): string {
-  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/`;
 }
 
 function normalizeAgentsMdPath(path = "AGENTS.md"): string {

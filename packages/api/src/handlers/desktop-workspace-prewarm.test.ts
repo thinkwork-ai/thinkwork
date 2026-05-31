@@ -71,7 +71,7 @@ describe("desktop-workspace-prewarm handler", () => {
       },
       workspace: {
         bucket: "workspace-bucket",
-        renderedPrefix: "tenants/acme/rendered/marco/default/user-1/",
+        renderedPrefix: "tenants/acme/threads/thread-1/",
       },
       partition: {
         tenantSlug: "acme",

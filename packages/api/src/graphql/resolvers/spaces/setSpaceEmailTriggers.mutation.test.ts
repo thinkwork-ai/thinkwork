@@ -132,7 +132,7 @@ vi.mock("../../../lib/spaces/space-source-prefix-rename.js", () => ({
     copyCalls.push(input);
     return Promise.resolve({
       copied: 1,
-      copiedKeys: ["tenants/acme/spaces/customer-success/source/AGENTS.md"],
+      copiedKeys: ["tenants/acme/spaces/customer-success/AGENTS.md"],
       total: 1,
     });
   },
@@ -274,7 +274,7 @@ describe("setSpaceEmailTriggers", () => {
 
     expect(cleanupCopiedKeyCalls).toEqual([
       {
-        keys: ["tenants/acme/spaces/customer-success/source/AGENTS.md"],
+        keys: ["tenants/acme/spaces/customer-success/AGENTS.md"],
       },
     ]);
     expect(deleteCalls).toEqual([]);

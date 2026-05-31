@@ -16,12 +16,12 @@ Target branch: `main`
 ### Run Status
 
 - Status: active.
-- Active unit: U1 human-name folder identity.
-- Active branch: `codex/workspace-arch-u1`.
-- Active worktree: `.Codex/worktrees/workspace-arch-u1`.
+- Active unit: U2 canonical file key builders + three-source layout.
+- Active branch: `codex/workspace-arch-u2`.
+- Active worktree: `.Codex/worktrees/workspace-arch-u2`.
 - Started: 2026-05-31 from `origin/main` at `197a47a1`.
-- Latest merged PR: none for this run.
-- CI/deploy: none yet for this run.
+- Latest merged PR: [#1907](https://github.com/thinkwork-ai/thinkwork/pull/1907).
+- CI/deploy: U1 required PR checks passed and merged into `main`.
 
 ### Active Unit Notes
 
@@ -64,6 +64,39 @@ Target branch: `main`
 - Fixed both test failures and verified:
   `pnpm --filter @thinkwork/api test -- src/__tests__/inviteMember-computer-claim.test.ts src/lib/email/cold-contact-trigger.test.ts`,
   `pnpm --filter @thinkwork/api typecheck`, and `git diff --check`.
+- PR [#1907](https://github.com/thinkwork-ai/thinkwork/pull/1907) passed
+  `cla`, `lint`, `Migration Drift Precheck (dev)`, `verify`, `typecheck`, and
+  `test`, then squash-merged into `main`. Merge commit:
+  `1890ba25c372905021a0a339d9fc15e0518b7fca`.
+- Removed U1 worktree/local branch, confirmed the remote branch was already
+  deleted, synced `main`, and created isolated U2 worktree
+  `codex/workspace-arch-u2` from `origin/main` at `1890ba25`.
+- Started U2 canonical key-builder work.
+- Implemented U2 canonical layout:
+  `tenants/<tenant>/agents/<agent>/`,
+  `tenants/<tenant>/spaces/<space>/`,
+  `tenants/<tenant>/users/<user>/`, and
+  `tenants/<tenant>/threads/<thread>/` runtime prefixes. The renderer now
+  passes thread identity through chat, wakeup, and desktop render paths and
+  uses persisted user folder names for User source files.
+- Added deterministic rendered-path owner classification for Agent, Space,
+  User, scratch, and unowned paths, plus `.gitkeep` filtering from rendered
+  source files.
+- Updated direct workspace-file builders, bootstrap/materialization helpers,
+  Space source migration helpers, catalog skill install tests, and workspace
+  map generation tests to the three-source layout while preserving legacy
+  `_catalog/*/workspace/` template/default source prefixes.
+- U2 local verification passed:
+  `pnpm --filter @thinkwork/api test`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/database-pg test`, focused U2 tests, changed-file
+  `prettier --check`, and `git diff --check`.
+- Verification note: repo-level `pnpm format:check` is currently blocked
+  because this worktree does not have a root `prettier` binary; `pnpm dlx
+prettier --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` also reports
+  pre-existing formatting drift across hundreds of unrelated files. The U2
+  changed files pass the same check via `pnpm dlx prettier --check <changed
+files>`.
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 

@@ -9,6 +9,8 @@ export interface WorkspaceRendererEvent {
   tenantId?: string;
   agentId?: string;
   spaceId?: string;
+  threadId?: string | null;
+  threadSlug?: string | null;
   userId?: string | null;
   invokingServiceIdentity?: string | null;
   agentBlockedTools?: unknown;
@@ -76,6 +78,8 @@ export function createWorkspaceRendererHandler(
           tenantId: event.tenantId,
           agentId: event.agentId,
           spaceId: event.spaceId,
+          threadId: event.threadId,
+          threadSlug: event.threadSlug,
           userId: event.userId,
           invokingServiceIdentity: event.invokingServiceIdentity,
           agentBlockedTools: event.agentBlockedTools,

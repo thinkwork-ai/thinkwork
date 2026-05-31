@@ -133,7 +133,7 @@ async function resolveTarget(caller: {
         ),
       );
     if (!agent?.slug) return null;
-    const prefix = `tenants/${tenant.slug}/agents/${agent.slug}/workspace/`;
+    const prefix = `tenants/${tenant.slug}/agents/${agent.slug}/`;
     return {
       kind: "agent",
       label: `agent workspace ${agent.slug}`,

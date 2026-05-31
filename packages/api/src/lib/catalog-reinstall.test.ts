@@ -43,7 +43,7 @@ function reinstallOptions() {
     s3: new S3Client({}),
     bucket: "test-bucket",
     tenantSlug: "acme",
-    targetPrefix: "tenants/acme/agents/marco/workspace/",
+    targetPrefix: "tenants/acme/agents/marco/",
     slug: "finance-audit-xls",
   };
 }
@@ -68,34 +68,34 @@ function catalogRef(sourceSha256 = "a".repeat(64)) {
 function mockInstalledSkill(sourceSha256 = "a".repeat(64)): void {
   s3Mock
     .on(GetObjectCommand, {
-      Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+      Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
     })
     .resolves(body(catalogRef(sourceSha256)));
   s3Mock
     .on(ListObjectsV2Command, {
-      Prefix: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/",
+      Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
     })
     .resolves({
       Contents: [
         {
-          Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+          Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
         },
         {
-          Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+          Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
         },
         {
-          Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/old.txt",
+          Key: "tenants/acme/agents/marco/skills/finance-audit-xls/old.txt",
         },
       ],
     });
   s3Mock
     .on(GetObjectCommand, {
-      Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+      Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
     })
     .resolves(body("# Locally edited\n"));
   s3Mock
     .on(GetObjectCommand, {
-      Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/old.txt",
+      Key: "tenants/acme/agents/marco/skills/finance-audit-xls/old.txt",
     })
     .resolves(body("old extra file\n"));
 }
@@ -148,8 +148,8 @@ describe("reinstallCatalogSkill", () => {
         .commandCalls(DeleteObjectCommand)
         .map((call) => call.args[0].input.Key),
     ).toEqual([
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/old.txt",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/old.txt",
     ]);
     expect(
       s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
@@ -157,12 +157,12 @@ describe("reinstallCatalogSkill", () => {
       expect.objectContaining({
         CopySource:
           "test-bucket/tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
       }),
       expect.objectContaining({
         CopySource:
           "test-bucket/tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/WIRING.md",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
       }),
     ]);
 
@@ -224,7 +224,7 @@ describe("reinstallCatalogSkill", () => {
   it("rejects reinstall when the installed catalog ref is missing", async () => {
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
       })
       .rejects(noSuchKey());
 
@@ -261,9 +261,9 @@ describe("reinstallCatalogSkill", () => {
       .commandCalls(PutObjectCommand)
       .map((call) => call.args[0].input.Key);
     expect(restoredKeys).toEqual([
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/SKILL.md",
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/old.txt",
-      "tenants/acme/agents/marco/workspace/skills/finance-audit-xls/.catalog-ref.json",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/old.txt",
+      "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
     ]);
   });
 });
