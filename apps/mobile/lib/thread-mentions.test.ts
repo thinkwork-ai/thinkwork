@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  currentMentionQuery,
   mentionCandidatesForTargets,
   sendMessageMentionsForInput,
 } from "./thread-mentions";
@@ -61,5 +62,17 @@ describe("thread mentions", () => {
         rawText: "@Scott Hertel",
       },
     ]);
+  });
+
+  it("detects an active mention query at the current cursor", () => {
+    expect(currentMentionQuery("@", 1)).toBe("");
+    expect(currentMentionQuery("hello @bre", 10)).toBe("bre");
+    expect(currentMentionQuery("hello @Brett Odom", 12)).toBe("Brett");
+  });
+
+  it("hides autocomplete when the mention token is deleted or stale cursor moves past text", () => {
+    expect(currentMentionQuery("", 1)).toBeNull();
+    expect(currentMentionQuery("hello ", 50)).toBeNull();
+    expect(currentMentionQuery("hello @bre done", 15)).toBeNull();
   });
 });

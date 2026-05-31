@@ -29,3 +29,13 @@ export function sendMessageMentionsForInput(mentions: MessageInputMention[]) {
     rawText: mention.rawText,
   }));
 }
+
+export function currentMentionQuery(
+  text: string,
+  cursorPos: number,
+): string | null {
+  const safeCursorPos = Math.max(0, Math.min(cursorPos, text.length));
+  const before = text.slice(0, safeCursorPos);
+  const match = /(?:^|\s)@([\w.'-]*)$/u.exec(before);
+  return match ? match[1] : null;
+}
