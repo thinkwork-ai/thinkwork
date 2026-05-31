@@ -127,6 +127,16 @@ interface InvokeEvent {
    * invoke payload as `message_attachments` (snake_case for Python).
    */
   messageAttachments?: InvokeAttachment[];
+  /**
+   * Mobile Pi background handoff reuses the durable local thread_turn row so
+   * AgentCore finalizes the same logical turn instead of creating a second one.
+   */
+  existingThreadTurnId?: string;
+  mobileHandoff?: {
+    checkpointSeq: number;
+    latestObservedCheckpointSeq?: number;
+    unsafeCheckpointSkipped?: boolean;
+  };
 }
 
 export interface RenderWorkspaceTupleForInvokeInput {
@@ -405,14 +415,56 @@ export async function resolveChatInvokeIdentity(
   };
 }
 
+async function markThreadTurnSetupFailed(input: {
+  turnId: string;
+  tenantId: string;
+  threadId: string;
+  agentId: string;
+  message: string;
+}) {
+  try {
+    await db
+      .update(threadTurns)
+      .set({
+        status: "failed",
+        finished_at: new Date(),
+        last_activity_at: new Date(),
+        error: input.message,
+        error_code: "agentcore_setup_failed",
+      })
+      .where(
+        and(
+          eq(threadTurns.id, input.turnId),
+          eq(threadTurns.tenant_id, input.tenantId),
+          eq(threadTurns.status, "running"),
+          sql`${threadTurns.finalized_at} IS NULL`,
+        ),
+      );
+    await notifyThreadTurnUpdate({
+      runId: input.turnId,
+      tenantId: input.tenantId,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      status: "failed",
+      triggerName: "Chat",
+    });
+  } catch (turnErr) {
+    console.error(
+      `[chat-agent-invoke] Failed to mark setup failure on thread_turn:`,
+      turnErr,
+    );
+  }
+}
+
 export async function handler(event: InvokeEvent): Promise<unknown | void> {
   const { threadId, tenantId, agentId, userMessage } = event;
+  const existingThreadTurnId = event.existingThreadTurnId?.trim();
   const traceId = getTraceId();
   console.log(
     `[chat-agent-invoke] threadId=${threadId} agentId=${agentId} traceId=${traceId}`,
   );
 
-  let turnId: string | undefined;
+  let turnId: string | undefined = existingThreadTurnId || undefined;
   try {
     const desktopDelegation = event.desktopDelegation;
     // 1. Resolve per-invoker identity. This is the PER-TURN piece that the
@@ -464,6 +516,15 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     } catch (err) {
       if (err instanceof AgentNotFoundError) {
         console.error(`[chat-agent-invoke] ${err.message}`);
+        if (turnId) {
+          await markThreadTurnSetupFailed({
+            turnId,
+            tenantId,
+            threadId,
+            agentId,
+            message: err.message,
+          });
+        }
         return;
       }
       throw err;
@@ -505,8 +566,49 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // retired the parallel skill.yaml). No sub_agents payload needed —
     // removed DB-based sub-agent query.
 
-    // 2a. Create a thread_turn record so the UI shows normal chat invocations.
-    {
+    // 2a. Create a thread_turn record so the UI shows normal chat invocations,
+    // or reuse the durable mobile turn row when a managed handoff has already
+    // claimed ownership.
+    if (existingThreadTurnId) {
+      turnId = existingThreadTurnId;
+      try {
+        const now = new Date();
+        const [existingTurn] = await db
+          .update(threadTurns)
+          .set({
+            last_activity_at: now,
+            context_snapshot: sql`jsonb_set(jsonb_set(coalesce(${threadTurns.context_snapshot}, '{}'::jsonb), '{mobile_turn,managed_invoke_started_at}', to_jsonb(${now.toISOString()}::text), true), '{mobile_turn,managed_checkpoint_seq}', to_jsonb(${event.mobileHandoff?.checkpointSeq ?? 0}::int), true)`,
+          })
+          .where(
+            and(
+              eq(threadTurns.id, existingThreadTurnId),
+              eq(threadTurns.tenant_id, tenantId),
+              eq(threadTurns.status, "running"),
+              sql`${threadTurns.finalized_at} IS NULL`,
+            ),
+          )
+          .returning({ id: threadTurns.id });
+        if (!existingTurn?.id) {
+          console.warn(
+            `[chat-agent-invoke] Existing mobile handoff turn is no longer dispatchable: ${existingThreadTurnId}`,
+          );
+          return { ok: false, threadTurnId: existingThreadTurnId };
+        }
+        await notifyThreadTurnUpdate({
+          runId: turnId,
+          tenantId,
+          threadId,
+          agentId,
+          status: "running",
+          triggerName: "Mobile Pi",
+        });
+      } catch (turnErr) {
+        console.error(
+          `[chat-agent-invoke] Failed to mark existing thread_turn dispatched:`,
+          turnErr,
+        );
+      }
+    } else {
       try {
         const [countRow] = await db
           .select({ count: sql<number>`COUNT(*)::int` })
@@ -972,6 +1074,15 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // gone, the only paths that reach here are pre-dispatch setup
     // failures (agent lookup, runtime config resolve, etc.).
     console.error(`[chat-agent-invoke] Setup error:`, err);
+    if (turnId) {
+      await markThreadTurnSetupFailed({
+        turnId,
+        tenantId,
+        threadId,
+        agentId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
     return;
   }
 }
