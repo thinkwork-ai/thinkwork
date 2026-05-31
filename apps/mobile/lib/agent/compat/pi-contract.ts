@@ -174,6 +174,15 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
         "Mobile bash runs through just-bash in a durable per-thread /workspace sandbox, hydrated from the rendered workspace cache and snapshotted after commands.",
     },
     {
+      id: "workspace-finalize-diff-capture",
+      status: "implemented",
+      upstreamSurface: "runtime changed_files finalize payload",
+      mobileSurface: "apps/mobile/lib/agent/extensions/local-bash-extension.ts",
+      ownerUnit: "U6",
+      notes:
+        "Mobile captures local bash /workspace before/after snapshots, computes create/modify/delete changed_files for the durable thread_turn_id, and sends them with mobile turn finalization.",
+    },
+    {
       id: "bounded-mcp-proxy-tool",
       status: "implemented",
       upstreamSurface: "pi-mcp-adapter proxy tool",

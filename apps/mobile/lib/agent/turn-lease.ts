@@ -10,6 +10,13 @@ const DEFAULT_API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
   "",
 );
 
+export interface FinalizeChangedFile {
+  path: string;
+  op: "create" | "modify" | "delete";
+  content?: string;
+  base_etag?: string;
+}
+
 export interface MobileTurnAttachmentRef {
   id?: string;
   name?: string;
@@ -48,6 +55,7 @@ export interface MobileTurnLeaseFinalizeInput {
   assistantText: string;
   toolResults?: unknown[];
   usage?: { inputTokens?: number; outputTokens?: number };
+  changedFiles?: FinalizeChangedFile[];
   diagnostics?: Record<string, unknown>;
 }
 

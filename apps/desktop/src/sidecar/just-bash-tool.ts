@@ -2,6 +2,7 @@ import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { WorkspaceSnapshot } from "@thinkwork/pi-runtime-core";
 import { Bash } from "just-bash";
 import type { BashOptions } from "just-bash";
 import { Type } from "typebox";
@@ -33,6 +34,11 @@ export interface DesktopJustBashToolOptions {
   workspaceDir: string;
   network?: boolean;
   timeoutMs?: number;
+}
+
+export interface DesktopJustBashController {
+  tool: ToolDefinition;
+  snapshotWorkspace(): Promise<WorkspaceSnapshot | null>;
 }
 
 function createBash(network: boolean): Bash {
@@ -128,6 +134,24 @@ async function hydrateWorkspace(
   await visit(workspaceDir);
 }
 
+export async function snapshotBashWorkspace(
+  bash: Bash,
+): Promise<WorkspaceSnapshot> {
+  const files: WorkspaceSnapshot = {};
+  for (const filePath of bash.fs.getAllPaths()) {
+    if (!filePath.startsWith("/workspace/")) continue;
+    const relativePath = filePath.slice("/workspace/".length);
+    try {
+      const stat = await bash.fs.stat(filePath);
+      if (!stat.isFile) continue;
+      files[safeRelativePath(relativePath)] = await bash.readFile(filePath);
+    } catch {
+      // Best effort: a concurrently removed or non-text file should not fail the turn.
+    }
+  }
+  return files;
+}
+
 function truncate(value: string): string {
   if (value.length <= MAX_TOOL_RESULT_CHARS) return value;
   return `${value.slice(0, MAX_TOOL_RESULT_CHARS)}\n[truncated after ${MAX_TOOL_RESULT_CHARS} characters]`;
@@ -158,12 +182,18 @@ function recordOf(value: unknown): Record<string, unknown> {
 export function createDesktopJustBashTool(
   options: DesktopJustBashToolOptions,
 ): ToolDefinition {
+  return createDesktopJustBashController(options).tool;
+}
+
+export function createDesktopJustBashController(
+  options: DesktopJustBashToolOptions,
+): DesktopJustBashController {
   const network = options.network ?? true;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const bash = createBash(network);
   let hydrated = false;
 
-  return {
+  const tool: ToolDefinition = {
     name: "bash",
     label: "Bash",
     description:
@@ -231,6 +261,13 @@ export function createDesktopJustBashTool(
         clearTimeout(timeout);
         signal?.removeEventListener("abort", abortFromParent);
       }
+    },
+  };
+
+  return {
+    tool,
+    async snapshotWorkspace() {
+      return hydrated ? snapshotBashWorkspace(bash) : null;
     },
   };
 }

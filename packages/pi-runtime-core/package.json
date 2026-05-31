@@ -14,6 +14,10 @@
     "./desktop-session": {
       "types": "./src/desktop-session.ts",
       "import": "./dist/src/desktop-session.js"
+    },
+    "./workspace-diff": {
+      "types": "./src/workspace-diff.ts",
+      "import": "./dist/src/workspace-diff.js"
     }
   },
   "scripts": {

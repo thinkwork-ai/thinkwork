@@ -121,18 +121,30 @@ export async function processFinalize(
   // Reconcile runs before finalized_at is terminal. The claim records an
   // in-progress reconcile marker in context_snapshot so a non-empty diff can
   // fail, be marked failed, and be retried without finalized_at suppressing it.
+  const claimConditions = [
+    eq(threadTurns.id, turnId),
+    isNull(threadTurns.finalized_at),
+    sql`coalesce(${threadTurns.context_snapshot}->'workspace_reconcile'->>'status', 'idle') != 'running'`,
+  ];
+  if (payload.claim?.invocation_source) {
+    claimConditions.push(
+      eq(threadTurns.invocation_source, payload.claim.invocation_source),
+    );
+  }
+  if (payload.claim?.status) {
+    claimConditions.push(eq(threadTurns.status, payload.claim.status));
+  }
+  if (payload.claim?.context_owner) {
+    claimConditions.push(
+      sql`COALESCE(${threadTurns.context_snapshot} #>> '{mobile_turn,ownership}', 'mobile') = ${payload.claim.context_owner}`,
+    );
+  }
   const claimed = await db
     .update(threadTurns)
     .set({
       context_snapshot: sql`jsonb_set(coalesce(${threadTurns.context_snapshot}, '{}'::jsonb), '{workspace_reconcile,status}', '"running"'::jsonb, true)`,
     })
-    .where(
-      and(
-        eq(threadTurns.id, turnId),
-        isNull(threadTurns.finalized_at),
-        sql`coalesce(${threadTurns.context_snapshot}->'workspace_reconcile'->>'status', 'idle') != 'running'`,
-      ),
-    )
+    .where(and(...claimConditions))
     .returning({
       id: threadTurns.id,
       runtimeType: threadTurns.runtime_type,

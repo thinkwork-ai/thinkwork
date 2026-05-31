@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   InvokeCommand,
   type InvokeCommandInput,
@@ -52,6 +55,7 @@ beforeEach(() => {
   delete process.env.HINDSIGHT_ENDPOINT;
   delete process.env.MEMORY_RETAIN_FN_NAME;
   delete process.env.WORKSPACE_BUCKET;
+  delete process.env.WORKSPACE_DIR;
   delete process.env.AGENTCORE_FILES_BUCKET;
   delete process.env.DB_CLUSTER_ARN;
   delete process.env.DB_SECRET_ARN;
@@ -204,6 +208,90 @@ describe("handleInvocation — happy path", () => {
     expect(bootstrapCalls[0]?.[5]).toEqual({
       workspacePrefix: "tenants/tenant-1/rendered/agent-slug/sales/eric/",
     });
+  });
+
+  it("posts local workspace changes through the finalize callback", async () => {
+    process.env.WORKSPACE_BUCKET = "thinkwork-files-test";
+    const workspaceDir = await mkdtemp(
+      path.join(tmpdir(), "agentcore-pi-workspace-"),
+    );
+    process.env.WORKSPACE_DIR = workspaceDir;
+    const manifest = {
+      version: 1,
+      renderedPrefix: "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+      generatedAt: "2026-05-28T12:00:00.000Z",
+      sources: [
+        { owner: "agent", prefix: "tenants/tenant-1/agents/agent-slug/" },
+      ],
+      files: [
+        {
+          path: "AGENTS.md",
+          owner: "agent",
+          sourceKey: "tenants/tenant-1/agents/agent-slug/AGENTS.md",
+          sourcePrefix: "tenants/tenant-1/agents/agent-slug/",
+          sourcePath: "AGENTS.md",
+          etag: '"etag-agents"',
+          readOnly: false,
+        },
+      ],
+      statusMounts: [],
+    };
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.changed_files).toEqual([
+        {
+          path: "AGENTS.md",
+          op: "modify",
+          content: "# Agent v2",
+          base_etag: '"etag-agents"',
+        },
+      ]);
+      return Response.json({ ok: true });
+    });
+
+    try {
+      const result = await handleInvocation({
+        payload: VALID_PAYLOAD({
+          rendered_workspace_prefix:
+            "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+          finalize_callback_url:
+            "https://api.example.com/api/threads/thread-1/finalize",
+          finalize_callback_secret: "test-secret-do-not-leak",
+          thread_turn_id: "turn-1",
+        }),
+        deps: makeDeps({
+          fetchImpl: fetchImpl as typeof fetch,
+          bootstrapWorkspaceImpl: async (_tenant, _agent, localDir) => {
+            await mkdir(localDir, { recursive: true });
+            await writeFile(path.join(localDir, "AGENTS.md"), "# Agent");
+            await writeFile(
+              path.join(localDir, ".hydrate_manifest.json"),
+              `${JSON.stringify(manifest)}\n`,
+            );
+            return {
+              synced: 2,
+              deleted: 0,
+              total: 2,
+              prefix: "tenants/tenant-1/rendered/agent-slug/sales/eric/",
+            };
+          },
+          runAgentLoop: async () => {
+            await writeFile(path.join(workspaceDir, "AGENTS.md"), "# Agent v2");
+            return {
+              content: "stub response",
+              modelId: "amazon-bedrock/test-model",
+              toolsCalled: [],
+              toolInvocations: [],
+            };
+          },
+        }),
+      });
+
+      expect(result.statusCode).toBe(200);
+      expect(fetchImpl).toHaveBeenCalled();
+    } finally {
+      await rm(workspaceDir, { recursive: true, force: true });
+    }
   });
 
   it("stages message attachments, feeds them to the system-prompt extension, and adds file_read", async () => {

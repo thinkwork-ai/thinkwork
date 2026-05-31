@@ -8,6 +8,12 @@
  */
 import type { ChangedFilePayload, ReconcileReport } from "./reconcile.js";
 
+export interface FinalizeClaimRequirements {
+  invocation_source?: string;
+  status?: string;
+  context_owner?: string;
+}
+
 export interface FinalizePayload {
   /** Idempotency key — `thread_turns.id` that chat-agent-invoke inserted before dispatching. */
   thread_turn_id: string;
@@ -96,6 +102,8 @@ export interface FinalizePayload {
   };
   /** Guardrail id resolved at dispatch time (when set, blocks are recorded). */
   guardrail_id?: string | null;
+  /** Optional internal one-winner claim requirements for alternate hosts. */
+  claim?: FinalizeClaimRequirements;
 }
 
 export interface GuardrailBlockPayload {

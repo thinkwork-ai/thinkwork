@@ -10,6 +10,8 @@ import {
   notifyNewMessage,
   notifyThreadTurnUpdate,
 } from "../chat-finalize/notify.js";
+import { processFinalize } from "../chat-finalize/process-finalize.js";
+import type { ChangedFilePayload } from "../chat-finalize/reconcile.js";
 
 const { users, threads, messages, threadTurns, threadTurnEvents } = schema;
 
@@ -97,6 +99,7 @@ export interface MobileTurnFinalizeInput {
   assistantText: string;
   toolResults?: unknown[];
   usage?: { inputTokens?: number; outputTokens?: number };
+  changedFiles?: ChangedFilePayload[];
   diagnostics?: Record<string, unknown>;
 }
 
@@ -155,6 +158,7 @@ export interface MobileTurnLifecycleDeps {
     assistantText: string;
     toolResults: unknown[];
     usage?: { inputTokens?: number; outputTokens?: number };
+    changedFiles?: ChangedFilePayload[];
     diagnostics?: Record<string, unknown>;
   }): Promise<{ finalized: boolean; assistantMessageId: string | null }>;
 }
@@ -418,6 +422,7 @@ export async function finalizeLocalMobileTurn(
     assistantText,
     toolResults: input.toolResults ?? [],
     usage: input.usage,
+    changedFiles: input.changedFiles ?? [],
     diagnostics: input.diagnostics,
   });
   if (!result.finalized) {
@@ -796,151 +801,75 @@ export function defaultMobileTurnLifecycleDeps(): MobileTurnLifecycleDeps {
       return true;
     },
     async finalizeLocalTurn(input) {
-      const result = await defaultDb.transaction(async (tx) => {
-        const [turn] = await tx
-          .update(threadTurns)
-          .set({
-            finalized_at: input.now,
-            finished_at: input.now,
-            status: "succeeded",
-            last_activity_at: input.now,
-            result_json: {
-              source: "mobile_pi",
-              assistant_text: input.assistantText,
-              diagnostics: input.diagnostics ?? null,
-            },
-            usage_json: input.usage ?? null,
-          })
-          .where(
-            and(
-              eq(threadTurns.id, input.threadTurnId),
-              eq(threadTurns.tenant_id, input.tenantId),
-              eq(threadTurns.invocation_source, MOBILE_PI_INVOCATION_SOURCE),
-              eq(threadTurns.status, "running"),
-              isNull(threadTurns.finalized_at),
-              sql`COALESCE(${threadTurns.context_snapshot} #>> '{mobile_turn,ownership}', 'mobile') = 'mobile'`,
-            ),
-          )
-          .returning({
-            id: threadTurns.id,
-            threadId: threadTurns.thread_id,
-            agentId: threadTurns.agent_id,
-          });
-        if (!turn?.threadId || !turn.agentId) {
-          const [existingTurn] = await tx
-            .select({ id: threadTurns.id, agentId: threadTurns.agent_id })
-            .from(threadTurns)
-            .where(
-              and(
-                eq(threadTurns.id, input.threadTurnId),
-                eq(threadTurns.tenant_id, input.tenantId),
-              ),
-            )
-            .limit(1);
-          if (existingTurn) {
-            await appendThreadTurnEvent(drizzleThreadTurnEventStore(tx), {
-              tenantId: input.tenantId,
-              runId: input.threadTurnId,
-              agentId: existingTurn.agentId,
-              eventType: "mobile_pi_late_finalize",
-              message: "late mobile finalize rejected",
-              payload: {
-                at: input.now.toISOString(),
-                reason: "not_running_or_already_finalized",
-              },
-            });
-          }
-          return {
-            finalized: false,
-            assistantMessageId: null,
-            threadId: null,
-            agentId: null,
-          };
-        }
+      const [turn] = await defaultDb
+        .select({
+          id: threadTurns.id,
+          threadId: threadTurns.thread_id,
+          agentId: threadTurns.agent_id,
+        })
+        .from(threadTurns)
+        .where(
+          and(
+            eq(threadTurns.id, input.threadTurnId),
+            eq(threadTurns.tenant_id, input.tenantId),
+          ),
+        )
+        .limit(1);
+      if (!turn?.threadId || !turn.agentId) {
+        return { finalized: false, assistantMessageId: null };
+      }
 
-        const [assistantMessage] = await tx
-          .insert(messages)
-          .values({
-            thread_id: turn.threadId,
-            tenant_id: input.tenantId,
-            role: "assistant",
-            content: input.assistantText,
-            sender_type: "agent",
-            sender_id: turn.agentId,
-            tool_results:
-              input.toolResults.length > 0 ? input.toolResults : null,
-            token_count:
-              (input.usage?.inputTokens ?? 0) +
-                (input.usage?.outputTokens ?? 0) || null,
-            metadata: {
-              mobile_turn: {
-                thread_turn_id: input.threadTurnId,
-                finalized_by: "mobile",
-              },
-            },
-          })
-          .returning({ id: messages.id });
+      const toolInvocations = input.toolResults.filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === "object" && !Array.isArray(item),
+      );
+      const result = await processFinalize({
+        thread_turn_id: input.threadTurnId,
+        tenant_id: input.tenantId,
+        agent_id: turn.agentId,
+        thread_id: turn.threadId,
+        duration_ms: 0,
+        status: "completed",
+        runtime_type: MOBILE_PI_RUNTIME_TYPE,
+        response: {
+          content: input.assistantText,
+          runtime: MOBILE_PI_RUNTIME_TYPE,
+          tool_invocations: toolInvocations,
+          tools_called: toolInvocations
+            .map((item) => item.name ?? item.tool_name)
+            .filter((name): name is string => typeof name === "string"),
+          diagnostics: input.diagnostics,
+        },
+        usage: {
+          input_tokens: input.usage?.inputTokens ?? 0,
+          output_tokens: input.usage?.outputTokens ?? 0,
+          diagnostics: input.diagnostics,
+        },
+        changed_files: input.changedFiles ?? [],
+        claim: {
+          invocation_source: MOBILE_PI_INVOCATION_SOURCE,
+          status: "running",
+          context_owner: "mobile",
+        },
+      });
 
-        await tx
-          .update(threads)
-          .set({
-            last_turn_completed_at: input.now,
-            last_response_preview: input.assistantText.slice(0, 500),
-            updated_at: input.now,
-          })
-          .where(
-            and(
-              eq(threads.id, turn.threadId),
-              eq(threads.tenant_id, input.tenantId),
-            ),
-          );
-
-        await appendThreadTurnEvent(drizzleThreadTurnEventStore(tx), {
+      if (!result.finalized) {
+        await appendThreadTurnEvent(drizzleThreadTurnEventStore(), {
           tenantId: input.tenantId,
           runId: input.threadTurnId,
           agentId: turn.agentId,
-          eventType: "mobile_pi_completed",
-          message: "mobile Pi completed",
+          eventType: "mobile_pi_late_finalize",
+          message: "late mobile finalize rejected",
           payload: {
             at: input.now.toISOString(),
-            assistant_message_id: assistantMessage.id,
+            reason: "not_running_or_already_finalized",
           },
         });
-
-        return {
-          finalized: true,
-          assistantMessageId: assistantMessage.id,
-          threadId: turn.threadId,
-          agentId: turn.agentId,
-        };
-      });
-      if (
-        result.finalized &&
-        result.assistantMessageId &&
-        result.threadId &&
-        result.agentId
-      ) {
-        await notifyNewMessage({
-          messageId: result.assistantMessageId,
-          threadId: result.threadId,
-          tenantId: input.tenantId,
-          role: "assistant",
-          content: input.assistantText,
-          senderType: "agent",
-          senderId: result.agentId,
-        });
-        await notifyThreadTurnUpdate({
-          runId: input.threadTurnId,
-          tenantId: input.tenantId,
-          threadId: result.threadId,
-          agentId: result.agentId,
-          status: "succeeded",
-          triggerName: "Mobile Pi",
-        });
       }
+
       return {
         finalized: result.finalized,
-        assistantMessageId: result.assistantMessageId,
+        assistantMessageId: result.messageId,
       };
     },
   };

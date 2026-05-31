@@ -7,6 +7,7 @@ import {
 } from "./providers/mock";
 import { defineTool } from "./session";
 import { defineExtension } from "./extensions/define-extension";
+import { MemoryBashSnapshotStorage } from "./extensions/local-bash-extension";
 import {
   MemoryWorkspaceCacheStorage,
   WorkspaceCache,
@@ -101,7 +102,11 @@ describe("runThreadHarnessTurn", () => {
         spaceId: "space-1",
         clientTurnId: "client-1",
       },
-      { modelProvider: provider, turnLeaseClient: lease },
+      {
+        modelProvider: provider,
+        turnLeaseClient: lease,
+        bashSnapshotStorage: new MemoryBashSnapshotStorage(),
+      },
     );
 
     expect(res).toEqual({ assistantText: "on it", ok: true });
@@ -126,6 +131,41 @@ describe("runThreadHarnessTurn", () => {
         threadTurnId: "turn-1",
         assistantText: "on it",
         diagnostics: { clientTurnId: "client-1" },
+      }),
+    );
+  });
+
+  it("finalizes local bash workspace diffs with the durable thread turn", async () => {
+    const lease = fakeLeaseClient();
+    const provider = new MockModelProvider([
+      toolResponse(
+        "call-1",
+        "bash",
+        { command: "printf hello > note.md" },
+        "writing",
+      ),
+      textResponse("done"),
+    ]);
+
+    const res = await runThreadHarnessTurn(
+      {
+        threadId: "thr-bash-diff",
+        userText: "write a note",
+        priorMessages: [],
+        clientTurnId: "client-1",
+      },
+      {
+        modelProvider: provider,
+        turnLeaseClient: lease,
+        bashSnapshotStorage: new MemoryBashSnapshotStorage(),
+      },
+    );
+
+    expect(res).toEqual({ assistantText: "done", ok: true });
+    expect(lease.finalize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadTurnId: "turn-1",
+        changedFiles: [{ path: "note.md", op: "create", content: "hello" }],
       }),
     );
   });

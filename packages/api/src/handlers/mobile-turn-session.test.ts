@@ -142,6 +142,7 @@ describe("mobile-turn-session handler", () => {
         action: "finalize",
         threadTurnId: "turn-1",
         assistantText: "done",
+        changedFiles: [{ path: "note.md", op: "create", content: "hello" }],
       }),
     );
 
@@ -150,6 +151,27 @@ describe("mobile-turn-session handler", () => {
       finalized: true,
       assistantMessageId: "msg-assistant-1",
     });
+    expect(mockFinalizeLocalMobileTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadTurnId: "turn-1",
+        changedFiles: [{ path: "note.md", op: "create", content: "hello" }],
+      }),
+    );
+  });
+
+  it("rejects invalid finalize changed files before lifecycle finalization", async () => {
+    const res = await handler(
+      event({
+        action: "finalize",
+        threadTurnId: "turn-1",
+        assistantText: "done",
+        changedFiles: [{ path: "../secret.md", op: "create", content: "no" }],
+      }),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(parse(res)).toEqual({ error: "Invalid changed_files" });
+    expect(mockFinalizeLocalMobileTurn).not.toHaveBeenCalled();
   });
 
   it("requires Cognito auth", async () => {
