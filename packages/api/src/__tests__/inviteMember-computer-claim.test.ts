@@ -142,6 +142,7 @@ describe("inviteMember onboarding claim", () => {
         tenant_id: "tenant-A",
         email: "alex@acme.example",
         name: "Alex Acme",
+        workspace_folder_name: "alex-acme",
       },
       {
         tenant_id: "tenant-A",

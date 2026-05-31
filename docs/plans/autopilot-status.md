@@ -56,6 +56,14 @@ Target branch: `main`
 - Applied `packages/database-pg/drizzle/0140_workspace_folder_names.sql` to the
   dev database and verified the scoped drift reporter now finds the five
   columns and five unique indexes.
+- CI failure: `test` found two U1-related regressions:
+  `inviteMember-computer-claim.test.ts` needed to expect the new
+  `workspace_folder_name` on inserted users, and
+  `cold-contact-trigger.test.ts` exposed that the mocked transaction does not
+  support an extra `tx.select`.
+- Fixed both test failures and verified:
+  `pnpm --filter @thinkwork/api test -- src/__tests__/inviteMember-computer-claim.test.ts src/lib/email/cold-contact-trigger.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and `git diff --check`.
 
 ## Previous Run: Mobile Pi AgentCore Background Handoff
 

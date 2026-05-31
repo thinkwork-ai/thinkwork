@@ -37,13 +37,6 @@ export async function createColdContactThread(
       .where(eq(tenants.id, input.tenantId))
       .returning({ nextNumber: sql<number>`${tenants.issue_counter}` });
     if (!tenant) throw new Error("Tenant not found");
-    const existingThreads = await tx
-      .select({
-        id: threads.id,
-        workspaceFolderName: threads.workspace_folder_name,
-      })
-      .from(threads)
-      .where(eq(threads.tenant_id, input.tenantId));
     const identifier = `EMAIL-${tenant.nextNumber}`;
 
     const [thread] = await tx
@@ -58,7 +51,7 @@ export async function createColdContactThread(
         title,
         workspace_folder_name: workspaceFolderName(
           title || identifier,
-          existingThreads.map((row) => row.workspaceFolderName ?? row.id),
+          [],
           "thread",
         ),
         status: "in_progress",
