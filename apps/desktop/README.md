@@ -132,6 +132,14 @@ git push origin desktop-v0.1.0
 notarizes the app, publishes DMG and zip artifacts to GitHub Releases, and
 uploads a SHA-256 mirror to the configured docs release endpoint.
 
+> **Note:** the trigger tag is `desktop-v<version>`, but electron-builder
+> publishes the GitHub Release and assets under the **`v`-prefixed** name
+> (`vPrefixedTagName: true` in `scripts/build-desktop.sh`). So pushing
+> `desktop-v0.1.0-canary.73` produces the release `v0.1.0-canary.73` —
+> `gh release view desktop-v...` returns "release not found"; look up `v...`.
+> A `-canary*`/`-beta*`/`-alpha*` suffix selects the matching auto-update
+> channel (`canary-mac.yml`, etc.); a bare `desktop-v<version>` ships stable.
+
 Required GitHub secrets:
 
 - `APPLE_API_KEY_ID`
