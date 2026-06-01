@@ -1,6 +1,11 @@
 import type { ResolvedWorkspaceRenderTuple } from "./types.js";
 export {
+  isGeneratedWorkspaceProjection,
+  workspacePathContract,
   workspacePathOwner,
+  workspaceSourcePath,
+  type WorkspaceContractWriteLane,
+  type WorkspacePathContract,
   type WorkspacePathOwner,
 } from "../workspace-lanes.js";
 

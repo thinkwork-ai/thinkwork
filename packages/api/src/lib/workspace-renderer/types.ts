@@ -74,6 +74,7 @@ export type WorkspaceHydrateOwner =
   | "agent"
   | "space"
   | "user"
+  | "thread_notes"
   | "thread_goal"
   | "system";
 
@@ -91,7 +92,8 @@ export interface WorkspaceHydrateFile {
   lastModified?: string;
   etag?: string;
   size?: number;
-  readOnly: false;
+  readOnly: boolean;
+  generated?: boolean;
 }
 
 export interface WorkspaceHydrateStatusMount {
