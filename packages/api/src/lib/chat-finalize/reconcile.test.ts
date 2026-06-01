@@ -94,6 +94,7 @@ describe("reconcileChangedFiles", () => {
       { owner: "space", prefix: "tenants/acme/spaces/board-pack/" },
       { owner: "user", prefix: "tenants/acme/users/eric/" },
       { owner: "thread_goal", prefix: "tenants/acme/threads/thread-1/" },
+      { owner: "thread_notes", prefix: "tenants/acme/threads/thread-1/" },
     ],
     files: [
       {
@@ -106,7 +107,7 @@ describe("reconcileChangedFiles", () => {
         readOnly: false,
       },
       {
-        path: "docs/brief.md",
+        path: "Spaces/board-pack/docs/brief.md",
         owner: "space",
         sourceKey: "tenants/acme/spaces/board-pack/docs/brief.md",
         sourcePrefix: "tenants/acme/spaces/board-pack/",
@@ -124,7 +125,7 @@ describe("reconcileChangedFiles", () => {
         readOnly: false,
       },
       {
-        path: "DECISIONS.md",
+        path: "Thread/DECISIONS.md",
         owner: "thread_goal",
         sourceKey: "tenants/acme/threads/thread-1/DECISIONS.md",
         sourcePrefix: "tenants/acme/threads/thread-1/",
@@ -132,10 +133,19 @@ describe("reconcileChangedFiles", () => {
         etag: '"decisions-old"',
         readOnly: false,
       },
+      {
+        path: "Thread/notes/findings.md",
+        owner: "thread_notes",
+        sourceKey: "tenants/acme/threads/thread-1/notes/findings.md",
+        sourcePrefix: "tenants/acme/threads/thread-1/",
+        sourcePath: "notes/findings.md",
+        etag: '"thread-notes-old"',
+        readOnly: false,
+      },
     ],
     statusMounts: [
       {
-        path: "GOAL.md",
+        path: "Thread/GOAL.md",
         owner: "system",
         source: "database",
         provider: "thread-goals",
@@ -145,7 +155,7 @@ describe("reconcileChangedFiles", () => {
         etag: '"goal-db"',
       },
       {
-        path: "PROGRESS.md",
+        path: "Thread/PROGRESS.md",
         owner: "system",
         source: "database",
         provider: "thread-goals",
@@ -252,7 +262,7 @@ describe("reconcileChangedFiles", () => {
     ).resolves.toEqual({ status: "no_changes", files: [] });
   });
 
-  it("routes user, space, and agent writes to canonical source keys", async () => {
+  it("routes agent, space, user, and Thread notes writes to canonical source keys", async () => {
     const store = objectStore();
 
     const result = await reconcileChangedFiles({
@@ -272,7 +282,7 @@ describe("reconcileChangedFiles", () => {
           base_etag: '"user-old"',
         },
         {
-          path: "docs/brief.md",
+          path: "Spaces/board-pack/docs/brief.md",
           op: "modify",
           content: "# Brief\n",
           base_etag: '"space-old"',
@@ -282,6 +292,17 @@ describe("reconcileChangedFiles", () => {
           op: "modify",
           content: "# Skill\n",
           base_etag: '"agent-old"',
+        },
+        {
+          path: "Thread/notes/findings.md",
+          op: "modify",
+          content: "# Findings\n",
+          base_etag: '"thread-notes-old"',
+        },
+        {
+          path: "Thread/notes/new.md",
+          op: "create",
+          content: "# New note\n",
         },
       ],
     });
@@ -302,6 +323,16 @@ describe("reconcileChangedFiles", () => {
         key: "tenants/acme/agents/marco/skills/research/SKILL.md",
         content: "# Skill\n",
         ifMatch: '"agent-old"',
+      },
+      {
+        key: "tenants/acme/threads/thread-1/notes/findings.md",
+        content: "# Findings\n",
+        ifMatch: '"thread-notes-old"',
+      },
+      {
+        key: "tenants/acme/threads/thread-1/notes/new.md",
+        content: "# New note\n",
+        ifNoneMatch: "*",
       },
     ]);
   });
@@ -326,10 +357,16 @@ describe("reconcileChangedFiles", () => {
           base_etag: '"goal-db"',
         },
         {
-          path: "PROGRESS.md",
+          path: "Thread/PROGRESS.md",
           op: "modify",
           content: "# Edited progress\n",
           base_etag: '"progress-db"',
+        },
+        {
+          path: "Spaces/INDEX.md",
+          op: "modify",
+          content: "# Spaces\n\n- changed\n",
+          base_etag: '"spaces-index"',
         },
       ],
     });
@@ -343,7 +380,13 @@ describe("reconcileChangedFiles", () => {
         code: "read_only_status_file",
       }),
       expect.objectContaining({
-        path: "PROGRESS.md",
+        path: "Thread/PROGRESS.md",
+        owner: "status",
+        status: "rejected",
+        code: "read_only_status_file",
+      }),
+      expect.objectContaining({
+        path: "Spaces/INDEX.md",
         owner: "status",
         status: "rejected",
         code: "read_only_status_file",
@@ -367,13 +410,13 @@ describe("reconcileChangedFiles", () => {
       objectStore: store,
       changedFiles: [
         {
-          path: "DECISIONS.md",
+          path: "Thread/DECISIONS.md",
           op: "modify",
           content: "# Decisions\n\n- Keep the onboarding lane.\n",
           base_etag: '"decisions-old"',
         },
         {
-          path: "HANDOFFS.md",
+          path: "Thread/HANDOFFS.md",
           op: "create",
           content: "# Handoffs\n",
         },
@@ -410,7 +453,7 @@ describe("reconcileChangedFiles", () => {
       changedFiles: [
         { path: "User/memory/new.md", op: "create", content: "# New\n" },
         {
-          path: "docs/brief.md",
+          path: "Spaces/board-pack/docs/brief.md",
           op: "delete",
           base_etag: '"space-old"',
         },
@@ -648,7 +691,7 @@ describe("reconcileChangedFiles", () => {
           content: "# Prefs\n",
         },
         {
-          path: "docs/brief.md",
+          path: "Spaces/board-pack/docs/brief.md",
           op: "delete",
           base_etag: '"stale"',
         },
@@ -662,6 +705,54 @@ describe("reconcileChangedFiles", () => {
     ]);
     expect(store.puts).toEqual([]);
     expect(store.deletes).toEqual([]);
+  });
+
+  it("rejects only the stale ETag file while persisting other changed files", async () => {
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "Thread/notes/findings.md",
+          op: "modify",
+          content: "# Stale\n",
+          base_etag: '"older-thread-notes"',
+        },
+        {
+          path: "User/memory/new.md",
+          op: "create",
+          content: "# New\n",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("partial_success");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "Thread/notes/findings.md",
+        status: "rejected",
+        code: "base_etag_mismatch",
+      }),
+      expect.objectContaining({
+        path: "User/memory/new.md",
+        status: "written",
+      }),
+    ]);
+    expect(store.puts).toEqual([
+      {
+        key: "tenants/acme/users/eric/memory/new.md",
+        content: "# New\n",
+        ifNoneMatch: "*",
+      },
+    ]);
   });
 
   it("reports an invalid hydrate manifest as per-file failures", async () => {

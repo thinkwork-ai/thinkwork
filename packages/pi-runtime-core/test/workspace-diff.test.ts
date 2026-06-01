@@ -54,4 +54,48 @@ describe("workspace diff", () => {
       }),
     ).toEqual([]);
   });
+
+  it("keeps v1 Thread note and generated projection paths intact", () => {
+    const baseline = buildWorkspaceBaseline({
+      snapshot: {
+        "Thread/notes/findings.md": "old note",
+        "Thread/PROGRESS.md": "old progress",
+      },
+      hydrateManifest: {
+        files: [
+          { path: "Thread/notes/findings.md", etag: '"note-etag"' },
+          { path: "Thread/PROGRESS.md", etag: '"progress-etag"' },
+        ],
+      },
+    });
+
+    expect(
+      computeWorkspaceChangedFiles({
+        baseline,
+        current: {
+          "Thread/notes/findings.md": "new note",
+          "Thread/notes/new.md": "brand new",
+          "Thread/PROGRESS.md": "edited generated progress",
+        },
+      }),
+    ).toEqual([
+      {
+        path: "Thread/notes/findings.md",
+        op: "modify",
+        content: "new note",
+        base_etag: '"note-etag"',
+      },
+      {
+        path: "Thread/notes/new.md",
+        op: "create",
+        content: "brand new",
+      },
+      {
+        path: "Thread/PROGRESS.md",
+        op: "modify",
+        content: "edited generated progress",
+        base_etag: '"progress-etag"',
+      },
+    ]);
+  });
 });
