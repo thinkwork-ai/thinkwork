@@ -192,6 +192,10 @@ old`,
       content: "# Report\n",
       lastModified: "2026-05-22T09:06:00.000Z",
     },
+    "tenants/acme/threads/thread-1/notes/findings.md": {
+      content: "# Findings\n",
+      lastModified: "2026-05-22T09:06:30.000Z",
+    },
   };
   return new Map(
     Object.entries({ ...base, ...overrides }).map(([key, value]) => [
@@ -219,6 +223,7 @@ function compatibleHydrateManifest(
         { owner: "space", prefix: "tenants/acme/spaces/board-pack/" },
         { owner: "user", prefix: "tenants/acme/users/eric/" },
         { owner: "thread_goal", prefix: "tenants/acme/threads/thread-1/" },
+        { owner: "thread_notes", prefix: "tenants/acme/threads/thread-1/" },
       ],
       files: [
         {
@@ -294,6 +299,14 @@ function compatibleHydrateManifest(
           sourcePath: "USER.md",
           readOnly: false,
         },
+        {
+          path: "Thread/notes/findings.md",
+          owner: "thread_notes",
+          sourceKey: "tenants/acme/threads/thread-1/notes/findings.md",
+          sourcePrefix: "tenants/acme/threads/thread-1/",
+          sourcePath: "notes/findings.md",
+          readOnly: false,
+        },
       ],
       statusMounts: [
         {
@@ -367,6 +380,7 @@ describe("renderWorkspaceTuple", () => {
       { owner: "space", prefix: "tenants/acme/spaces/board-pack/" },
       { owner: "user", prefix: "tenants/acme/users/eric/" },
       { owner: "thread_goal", prefix: "tenants/acme/threads/thread-1/" },
+      { owner: "thread_notes", prefix: "tenants/acme/threads/thread-1/" },
     ]);
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
@@ -412,6 +426,12 @@ describe("renderWorkspaceTuple", () => {
           owner: "user",
           path: "User/USER.md",
           sourceKey: "tenants/acme/users/eric/USER.md",
+        }),
+        expect.objectContaining({
+          owner: "thread_notes",
+          path: "Thread/notes/findings.md",
+          sourceKey: "tenants/acme/threads/thread-1/notes/findings.md",
+          sourcePath: "notes/findings.md",
         }),
       ]),
     );
@@ -655,6 +675,7 @@ describe("renderWorkspaceTuple", () => {
     expect(JSON.parse(manifestPut?.content ?? "{}")).toMatchObject({
       sources: expect.arrayContaining([
         { owner: "thread_goal", prefix: "tenants/acme/threads/thread-1/" },
+        { owner: "thread_notes", prefix: "tenants/acme/threads/thread-1/" },
       ]),
       statusMounts: expect.arrayContaining([
         expect.objectContaining({

@@ -553,7 +553,7 @@ async function reconcileOneFile(input: {
       changedFile,
       owner,
       "read_only_status_file",
-      "GOAL.md and PROGRESS.md are database-rendered read-only status files. Use set_task_status for checklist progress updates.",
+      "Spaces/INDEX.md and Thread projection files are generated read-only files. Use set_task_status or refresh progress for checklist updates.",
     );
   }
 

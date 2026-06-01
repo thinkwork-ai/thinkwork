@@ -19,6 +19,10 @@ describe("workspace contract v1 lane mapping", () => {
       "space",
     );
     expect(workspacePathOwner("Thread/notes/finding.md")).toBe("thread_notes");
+    expect(workspacePathOwner("Thread/DECISIONS.md")).toBe("thread_goal");
+    expect(workspacePathOwner("Thread/stages/kickoff/CONTEXT.md")).toBe(
+      "thread_goal",
+    );
   });
 
   it("keeps write-back source paths relative to the backing owner lane", () => {

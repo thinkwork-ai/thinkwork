@@ -102,6 +102,22 @@ export function workspacePathOwner(path: string): WorkspacePathOwner {
     if (sourcePath.startsWith("notes/") && sourcePath !== "notes/") {
       return "thread_notes";
     }
+    if (
+      sourcePath === "THREAD.md" ||
+      sourcePath === "GOAL.md" ||
+      sourcePath === "PROGRESS.md" ||
+      sourcePath === "TASKS.md"
+    ) {
+      return "status";
+    }
+    if (
+      sourcePath === "DECISIONS.md" ||
+      sourcePath === "ARTIFACTS.md" ||
+      sourcePath === "HANDOFFS.md" ||
+      /^stages\/[^/]+\/(?:CONTEXT|OUTPUT)\.md$/.test(sourcePath)
+    ) {
+      return "thread_goal";
+    }
     return "unowned";
   }
   if (

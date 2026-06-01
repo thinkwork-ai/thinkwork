@@ -146,6 +146,10 @@ function shouldRenderThreadGoalStatusPath(relPath: string): boolean {
   return THREAD_GOAL_STATUS_PATHS.has(relPath);
 }
 
+function shouldRenderThreadNotesSourcePath(relPath: string): boolean {
+  return relPath.startsWith("notes/") && relPath !== "notes/";
+}
+
 function runtimeFolderSegment(value: string | null | undefined): string {
   const trimmed = value?.trim();
   if (!trimmed) return "default";
@@ -449,6 +453,7 @@ export async function renderWorkspaceTuple(
     spaceSource,
     userSource,
     threadGoalSource,
+    threadNotesSource,
     threadGoalStatusSource,
   ] = await Promise.all([
     listRenderableSource(
@@ -474,6 +479,13 @@ export async function renderWorkspaceTuple(
       renderedPrefix,
       "thread_goal",
       shouldRenderThreadGoalSourcePath,
+    ),
+    listRenderableSource(
+      objectStore,
+      bucket,
+      renderedPrefix,
+      "thread_notes",
+      shouldRenderThreadNotesSourcePath,
     ),
     listRenderableSource(
       objectStore,
@@ -532,6 +544,7 @@ export async function renderWorkspaceTuple(
     spaceSource,
     userSource,
     threadGoalSource,
+    threadNotesSource,
     threadGoalStatusSource,
   ]);
   const markerFresh = markerIsFresh(marker, sourceLatest);
@@ -542,7 +555,13 @@ export async function renderWorkspaceTuple(
   const hydrateManifest = buildHydrateManifest({
     renderedPrefix,
     generatedAt: generatedAtCandidate,
-    sources: [agentSource, spaceSource, userSource, threadGoalSource],
+    sources: [
+      agentSource,
+      spaceSource,
+      userSource,
+      threadGoalSource,
+      threadNotesSource,
+    ],
     statusObjects: threadGoalStatusSource.objects,
     generatedFiles,
     tuple,
@@ -581,7 +600,13 @@ export async function renderWorkspaceTuple(
       : buildHydrateManifest({
           renderedPrefix,
           generatedAt,
-          sources: [agentSource, spaceSource, userSource, threadGoalSource],
+          sources: [
+            agentSource,
+            spaceSource,
+            userSource,
+            threadGoalSource,
+            threadNotesSource,
+          ],
           statusObjects: threadGoalStatusSource.objects,
           generatedFiles,
           tuple,
