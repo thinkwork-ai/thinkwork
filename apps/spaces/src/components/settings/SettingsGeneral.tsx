@@ -62,8 +62,8 @@ export function SettingsGeneral() {
         <ThemeRow />
         {isDesktop() ? (
           <>
-            <EditorWrapRow />
             <EditorFontSizeRow />
+            <EditorWrapRow />
           </>
         ) : null}
       </SettingsSection>

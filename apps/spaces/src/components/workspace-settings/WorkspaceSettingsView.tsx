@@ -68,8 +68,7 @@ export function WorkspaceSettingsView() {
       targetKey={targetKey}
       client={client}
       readOnly={!isAdmin}
-      title="Source workspace"
-      description="Agent, Spaces, and User are editable source roots. Pi turns render these into an Agent-rooted /workspace with the active Space mounted as Space/."
+      defaultOpenFile="Agent/AGENTS.md"
       bordered={false}
       className="h-full"
     />
