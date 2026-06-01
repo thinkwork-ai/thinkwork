@@ -551,6 +551,7 @@ async function planPrefixMove(input: {
   deleteLegacySources: boolean;
   reason: "legacy-source";
   mapRelativePath?: (relativePath: string) => string | null;
+  destinationConflict?: "conflict" | "prefer-destination-delete-source";
 }): Promise<{
   copies: PlannedCopy[];
   deletes: PlannedDeletePrefix[];
@@ -595,9 +596,13 @@ async function planPrefixMove(input: {
     const destinationObject = destinationByKey.get(destinationKey);
     if (destinationObject) {
       if (!sameObject(sourceObject, destinationObject)) {
-        conflicts.push(
-          `${sourceObject.key} -> ${destinationKey} already exists with different metadata`,
-        );
+        if (input.destinationConflict === "prefer-destination-delete-source") {
+          continue;
+        } else {
+          conflicts.push(
+            `${sourceObject.key} -> ${destinationKey} already exists with different metadata`,
+          );
+        }
       }
       continue;
     }
@@ -731,34 +736,33 @@ export async function planWorkspaceLayoutTenant(input: {
   const deletePlans = [];
   for (const agent of agentFolders.resolved) {
     if (!agent.row.fallbackName) continue;
-    prefixPlans.push(
-      planPrefixMove({
-        bucket: input.bucket,
-        objectStore: input.objectStore,
-        sourcePrefix: legacyAgentWorkspacePrefix(
-          tenantSlug,
-          agent.row.fallbackName,
-        ),
-        destinationPrefix: agentSourcePrefix(tenantSlug, agent.folder),
-        deleteLegacySources: input.deleteLegacySources,
-        reason: "legacy-source",
-      }),
-    );
-    if (input.deleteLegacySources) {
-      deletePlans.push(
-        planDeletePrefix({
+    const agentFolderCandidates = new Set([
+      agent.row.fallbackName,
+      agent.folder,
+    ]);
+    for (const agentFolder of agentFolderCandidates) {
+      prefixPlans.push(
+        planPrefixMove({
           bucket: input.bucket,
           objectStore: input.objectStore,
-          prefix: legacyAgentArchivesPrefix(tenantSlug, agent.row.fallbackName),
+          sourcePrefix: legacyAgentWorkspacePrefix(tenantSlug, agentFolder),
+          destinationPrefix: agentSourcePrefix(tenantSlug, agent.folder),
+          deleteLegacySources: input.deleteLegacySources,
           reason: "legacy-source",
+          destinationConflict:
+            agentFolder === agent.folder
+              ? "prefer-destination-delete-source"
+              : "conflict",
         }),
       );
-      if (agent.folder !== agent.row.fallbackName) {
+    }
+    if (input.deleteLegacySources) {
+      for (const agentFolder of agentFolderCandidates) {
         deletePlans.push(
           planDeletePrefix({
             bucket: input.bucket,
             objectStore: input.objectStore,
-            prefix: legacyAgentArchivesPrefix(tenantSlug, agent.folder),
+            prefix: legacyAgentArchivesPrefix(tenantSlug, agentFolder),
             reason: "legacy-source",
           }),
         );
@@ -766,17 +770,27 @@ export async function planWorkspaceLayoutTenant(input: {
     }
   }
   for (const space of spaceFolders.resolved) {
-    prefixPlans.push(
-      planPrefixMove({
-        bucket: input.bucket,
-        objectStore: input.objectStore,
-        sourcePrefix: spaceSourcePrefix(tenantSlug, space.row.fallbackName),
-        destinationPrefix: spaceSourcePrefix(tenantSlug, space.folder),
-        deleteLegacySources: input.deleteLegacySources,
-        reason: "legacy-source",
-        mapRelativePath: legacySpaceRelativePath,
-      }),
-    );
+    const spaceFolderCandidates = new Set([
+      space.row.fallbackName,
+      space.folder,
+    ]);
+    for (const spaceFolder of spaceFolderCandidates) {
+      prefixPlans.push(
+        planPrefixMove({
+          bucket: input.bucket,
+          objectStore: input.objectStore,
+          sourcePrefix: spaceSourcePrefix(tenantSlug, spaceFolder),
+          destinationPrefix: spaceSourcePrefix(tenantSlug, space.folder),
+          deleteLegacySources: input.deleteLegacySources,
+          reason: "legacy-source",
+          mapRelativePath: legacySpaceRelativePath,
+          destinationConflict:
+            spaceFolder === space.folder
+              ? "prefer-destination-delete-source"
+              : "conflict",
+        }),
+      );
+    }
   }
   for (const user of userFolders.resolved) {
     const oldUserFolder = normalizeWorkspaceFolderName(

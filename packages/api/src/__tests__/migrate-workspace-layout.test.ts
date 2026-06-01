@@ -415,6 +415,151 @@ describe("migrate-workspace-layout", () => {
     });
   });
 
+  it("cleans legacy wrappers under already assigned workspace folders", async () => {
+    const snapshot: WorkspaceLayoutTenantSnapshot = {
+      ...SNAPSHOT,
+      agents: [{ ...SNAPSHOT.agents[0], workspaceFolderName: "marco" }],
+      spaces: [{ ...SNAPSHOT.spaces[0], workspaceFolderName: "board-pack" }],
+      users: [{ ...SNAPSHOT.users[0], workspaceFolderName: "eric-odom" }],
+      threads: [
+        {
+          ...SNAPSHOT.threads[0],
+          workspaceFolderName: "customer-kickoff",
+        },
+      ],
+      goals: [
+        {
+          ...SNAPSHOT.goals[0],
+          workspaceFolderName: "launch-account",
+          folderS3Prefix: "tenants/acme/threads/customer-kickoff/",
+        },
+      ],
+    };
+    const store = FakeObjectStore.from([
+      ["tenants/acme/agents/marco/workspace/AGENTS.md", { etag: "a", size: 1 }],
+      [
+        "tenants/acme/agents/marco/workspace-archives/old/AGENTS.md",
+        { etag: "archive", size: 1 },
+      ],
+      [
+        "tenants/acme/spaces/board-pack/source/CONTEXT.md",
+        { etag: "s", size: 1 },
+      ],
+      [
+        "tenants/acme/threads/customer-kickoff/.hydrate_manifest.json",
+        { etag: "m", size: 1 },
+      ],
+    ]);
+
+    const plan = await planWorkspaceLayoutTenant({
+      bucket: "workspace-bucket",
+      snapshot,
+      objectStore: store,
+      deleteLegacySources: true,
+    });
+
+    expect(plan.status).toBe("dry-run");
+    expect(plan.folderAssignments).toEqual([]);
+    expect(plan.plannedCopies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceKey: "tenants/acme/agents/marco/workspace/AGENTS.md",
+          destinationKey: "tenants/acme/agents/marco/AGENTS.md",
+        }),
+        expect.objectContaining({
+          sourceKey: "tenants/acme/spaces/board-pack/source/CONTEXT.md",
+          destinationKey: "tenants/acme/spaces/board-pack/CONTEXT.md",
+        }),
+      ]),
+    );
+    expect(plan.deletePrefixes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          prefix: "tenants/acme/agents/marco/workspace/",
+          keys: ["tenants/acme/agents/marco/workspace/AGENTS.md"],
+        }),
+        expect.objectContaining({
+          prefix: "tenants/acme/agents/marco/workspace-archives/",
+          keys: ["tenants/acme/agents/marco/workspace-archives/old/AGENTS.md"],
+        }),
+        expect.objectContaining({
+          prefix: "tenants/acme/spaces/board-pack/",
+          keys: ["tenants/acme/spaces/board-pack/source/CONTEXT.md"],
+        }),
+      ]),
+    );
+    expect(plan.plannedRenders).toEqual([
+      {
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        threadId: "thread-1",
+        userId: "user-1",
+        renderedPrefix: "tenants/acme/threads/customer-kickoff/",
+      },
+    ]);
+  });
+
+  it("deletes stale same-folder wrappers when canonical root files already exist", async () => {
+    const snapshot: WorkspaceLayoutTenantSnapshot = {
+      ...SNAPSHOT,
+      agents: [{ ...SNAPSHOT.agents[0], workspaceFolderName: "marco" }],
+      spaces: [{ ...SNAPSHOT.spaces[0], workspaceFolderName: "board-pack" }],
+      users: [{ ...SNAPSHOT.users[0], workspaceFolderName: "eric-odom" }],
+      threads: [
+        {
+          ...SNAPSHOT.threads[0],
+          workspaceFolderName: "customer-kickoff",
+        },
+      ],
+      goals: [
+        {
+          ...SNAPSHOT.goals[0],
+          workspaceFolderName: "launch-account",
+          folderS3Prefix: "tenants/acme/threads/customer-kickoff/",
+        },
+      ],
+    };
+    const store = FakeObjectStore.from([
+      ["tenants/acme/agents/marco/AGENTS.md", { etag: "new", size: 2 }],
+      [
+        "tenants/acme/agents/marco/workspace/AGENTS.md",
+        { etag: "old", size: 1 },
+      ],
+      ["tenants/acme/spaces/board-pack/CONTEXT.md", { etag: "new", size: 2 }],
+      [
+        "tenants/acme/spaces/board-pack/source/CONTEXT.md",
+        { etag: "old", size: 1 },
+      ],
+      [
+        "tenants/acme/threads/customer-kickoff/.hydrate_manifest.json",
+        { etag: "m", size: 1 },
+      ],
+    ]);
+
+    const plan = await planWorkspaceLayoutTenant({
+      bucket: "workspace-bucket",
+      snapshot,
+      objectStore: store,
+      deleteLegacySources: true,
+    });
+
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.plannedCopies).toEqual([]);
+    expect(plan.deletePrefixes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          prefix: "tenants/acme/agents/marco/workspace/",
+          keys: ["tenants/acme/agents/marco/workspace/AGENTS.md"],
+        }),
+        expect.objectContaining({
+          prefix: "tenants/acme/spaces/board-pack/",
+          keys: ["tenants/acme/spaces/board-pack/source/CONTEXT.md"],
+        }),
+      ]),
+    );
+  });
+
   it("returns noop once folder names, thread manifest, and new layout are present", async () => {
     const snapshot: WorkspaceLayoutTenantSnapshot = {
       ...SNAPSHOT,
