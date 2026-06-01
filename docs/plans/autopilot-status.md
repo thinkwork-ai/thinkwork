@@ -10,7 +10,14 @@ status: complete
 
 - Branch: `fix/customer-onboarding-task-prefill`
 - Follow-up branch: `fix/customer-onboarding-natural-task-aliases`
-- Status: follow-up fix in progress after local development desktop validation.
+- Status: complete. PR
+  [#1938](https://github.com/thinkwork-ai/thinkwork/pull/1938) fixed the
+  desktop-local task update path and PR
+  [#1939](https://github.com/thinkwork-ai/thinkwork/pull/1939) fixed the
+  follow-up natural-language D&B alias regression plus the bounded Local Pi
+  console rendering. Deploy run
+  [26752194033](https://github.com/thinkwork-ai/thinkwork/actions/runs/26752194033)
+  passed.
 - Regression context: Customer Space task/progress updates from the thread info
   panel could persist the user message and then launch a desktop-local Pi turn
   instead of updating the linked task immediately. Live thread
@@ -34,7 +41,7 @@ status: complete
   handled `DocuSign is complete` on thread
   `2d74c58b-48d3-4db5-abdc-20a8f622eef2`, marked the DocuSign checklist row
   `COMPLETED`, and avoided creating a new Local Pi turn.
-- Remaining regression found by local development desktop validation:
+- Follow-up regression found by local development desktop validation:
   `Dun and Bradstreet is complete` did not match the existing
   `Dun & Bradstreet` alias and incorrectly started a Local Pi turn that timed
   out after roughly 92 seconds. The follow-up branch adds plain-English
@@ -43,6 +50,14 @@ status: complete
   console output was found to widen past the thread column. The follow-up
   branch also bounds the raw console log in a terminal-like panel with
   horizontal scrolling and component coverage.
+- Final local development desktop validation: after deploy, sending
+  `D and B is done` in thread
+  `2d74c58b-48d3-4db5-abdc-20a8f622eef2` completed the
+  `Check Dun & Bradstreet information` linked task, updated native progress to
+  `2/5 required complete` (`40%`), returned the deterministic "Captured the
+  onboarding update" message, and did not create a new Local Pi turn.
+- Final console validation: the previously overflowing Local Pi diagnostic log
+  now renders inside a bounded console panel with internal horizontal scroll.
 
 ## Mobile Checkpoint Payload Bounds Hotfix - 2026-06-01
 
