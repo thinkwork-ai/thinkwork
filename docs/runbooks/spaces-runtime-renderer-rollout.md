@@ -15,7 +15,8 @@ prefixes.
 
 - Applies to the Space renderer path that writes a per-thread runtime manifest
   for an `(agent, space, user)` invocation.
-- Does not remove legacy per-agent workspace prefixes.
+- Assumes legacy per-agent workspace prefixes have already been removed from
+  runtime compatibility paths.
 - Does not manually mutate production data or bypass the normal deploy
   pipeline.
 
@@ -32,14 +33,15 @@ prefixes.
 
 1. Deploy the renderer with the runtime env unset.
 
-   Confirm normal chat turns still use the legacy per-agent workspace prefix.
-   This is the no-behavior-change stage.
+   Confirm normal chat turns render a Thread runtime manifest without reading
+   legacy per-agent `workspace/` prefixes.
 
 2. Invoke the renderer for one known tenant, agent, Space, and requester user.
 
    Verify the invocation returns a rendered prefix and writes the expected
-   `.hydrate_manifest.json` under the thread runtime prefix. The manifest should
-   reference `Agent/...`, `Spaces/<space>/...`, and `User/...` source paths.
+   `.hydrate_manifest.json` under the Thread runtime prefix. The manifest should
+   reference Agent root files, `Spaces/<space>/...`, `User/...`, and `Thread/...`
+   runtime paths.
 
 3. Enable rendered-prefix reads for one AgentCore runtime.
 
@@ -49,35 +51,40 @@ prefixes.
 4. Observe one thread in a non-default Space.
 
    Confirm the system prompt includes the rendered Space and requester context.
-   Check that the runtime logs reference the rendered prefix rather than the
+   Check that the runtime logs reference the rendered prefix rather than any
    legacy per-agent prefix. In the local `/workspace` sandbox, the Agent source
-   should be at root, `USER.md` should be at root, and the active Space should
-   appear as singular `Space/`.
+   should be at root, requester context should be under `User/USER.md`, the
+   active Space should appear under `Spaces/<active-space>/`, and generated
+   progress should appear under `Thread/`.
 
 5. Propagate to the remaining AgentCore runtimes.
 
    Roll through the same deploy/update path in small batches. Watch renderer
    latency, AgentCore bootstrap logs, and thread-turn failure rates.
 
-6. Leave legacy prefixes in place.
+6. Leave source prefixes in place.
 
-   Legacy per-agent prefixes remain the rollback path for Plan A. Removing them
-   belongs to the later destructive cleanup plan.
+   Agent, Space, User, and Thread source prefixes remain the authority. Legacy
+   wrapper prefixes such as `workspace/`, `source/`, and `workspace-archives/`
+   are not runtime rollback paths after the v1 cutover.
 
 ## Rollback
 
-Unset `RENDERED_WORKSPACE_PREFIX_TEMPLATE` through the normal deploy/update
-path and restart the affected runtime. New turns will fall back to the legacy
-per-agent workspace prefix. Existing rendered prefixes may remain in S3.
+Rollback should go through the normal deploy/update path and restore the last
+known-good renderer/runtime image. Do not re-enable legacy `workspace/`,
+`source/`, or `workspace-archives/` reads as an emergency fallback.
 
 ## Verification
 
 - Renderer logs show cache hits after the first render for the same tuple.
 - AgentCore bootstrap logs show the rendered prefix for enabled runtimes.
 - A non-default Space thread includes Space context in the system prompt and
-  exposes it under `/workspace/Space`.
+  exposes it under `/workspace/Spaces/<active-space>`.
+- Runtime smoke checks show `/workspace/User/USER.md`,
+  `/workspace/Spaces/INDEX.md`, `/workspace/Spaces/<active-space>/`, and
+  `/workspace/Thread/PROGRESS.md`.
 - Runtime smoke checks do not show top-level `/workspace/Agent`,
-  `/workspace/Spaces`, `/workspace/User`, `/workspace/source`,
+  `/workspace/Space`, `/workspace/USER.md`, `/workspace/source`,
   `/workspace/workspace`, or `/workspace/workspace-archives`.
 - Default-Space behavior remains unchanged.
 - Thread-turn error rate does not increase after each batch.

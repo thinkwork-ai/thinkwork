@@ -50,26 +50,38 @@ as Settings -> Workspace.
 /workspace
 ├── AGENTS.md
 ├── CONTEXT.md
-├── USER.md
-├── memory/
 ├── skills/
 ├── workspaces/
-└── Space/
-    ├── CONTEXT.md
-    ├── artifacts/
-    ├── docs/
-    ├── goals/
-    └── plans/
+├── Spaces/
+│   ├── INDEX.md
+│   └── customer-onboarding/
+│       ├── SPACE.md
+│       ├── CONTEXT.md
+│       ├── artifacts/
+│       ├── docs/
+│       ├── goals/
+│       ├── plans/
+│       └── workflows/
+├── User/
+│   ├── USER.md
+│   └── memory/
+└── Thread/
+    ├── THREAD.md
+    ├── GOAL.md
+    ├── PROGRESS.md
+    ├── TASKS.md
+    └── notes/
 ```
 
-The Agent source is the runtime root. The User source is merged into that root.
-Only the active Space is mounted, and it is mounted as singular `Space/`.
+The Agent source is the runtime root. The User source remains explicit under
+`User/`. Only the active Space folder is hydrated under `Spaces/<active-space>/`;
+`Spaces/INDEX.md` lists other authorized Spaces.
 
 Forbidden runtime folders:
 
 - `/workspace/Agent`
-- `/workspace/Spaces`
-- `/workspace/User`
+- `/workspace/Space`
+- `/workspace/USER.md`
 - `/workspace/workspace`
 - `/workspace/source`
 - `/workspace/workspace-archives`
@@ -103,15 +115,19 @@ printf '%s\n' ---
 find . -maxdepth 2 -type d -print | sort
 printf '%s\n' ---
 test -f USER.md && echo USER.md exists || echo USER.md missing
-test -d Space && echo Space exists || echo Space missing
+test -f User/USER.md && echo User/USER.md exists || echo User/USER.md missing
+test -f Spaces/INDEX.md && echo Spaces/INDEX.md exists || echo Spaces/INDEX.md missing
+test -d Space && echo legacy Space exists || echo legacy Space missing
 ```
 
 Expected:
 
 - `pwd` reports `/workspace`.
-- `USER.md exists`.
-- `Space exists`.
-- No top-level `Agent`, `Spaces`, `User`, `workspace`, `source`, or
+- `USER.md missing`.
+- `User/USER.md exists`.
+- `Spaces/INDEX.md exists`.
+- `legacy Space missing`.
+- No top-level `Agent`, singular `Space`, root `USER.md`, `workspace`, `source`, or
   `workspace-archives` directories.
 
 ## Sync and hydration timing
@@ -143,7 +159,7 @@ Only optimize after the slow phase is known.
 - Files own working and narrative content.
 - The database owns task status, Goal lifecycle, review policy, access, and
   thread binding.
-- `Space/GOAL.md` and `Space/PROGRESS.md` are read-only projections of database
-  state.
+- `Thread/GOAL.md`, `Thread/PROGRESS.md`, and `Thread/TASKS.md` are read-only
+  projections of database state.
 - Task completion should use the task-status path. Editing
-  `Space/PROGRESS.md` text is not authoritative.
+  `Thread/PROGRESS.md` text is not authoritative.
