@@ -21,6 +21,7 @@ import type {
   WorkspaceHydrateStatusMount,
   RenderedWorkspaceTuple,
   ResolvedWorkspaceRenderTuple,
+  WorkspaceSpaceIndexEntry,
   WorkspaceObjectMetadata,
   WorkspaceRendererObjectStore,
   WorkspaceRenderTupleInput,
@@ -49,6 +50,13 @@ interface SourceSet {
   owner: Exclude<WorkspaceHydrateOwner, "system">;
   prefix: string;
   objects: SourceObject[];
+}
+
+interface GeneratedWorkspaceFile {
+  path: string;
+  key: string;
+  content: string;
+  owner: Exclude<WorkspaceHydrateOwner, "system">;
 }
 
 function latestMtime(sources: SourceSet[]): Date | null {
@@ -153,13 +161,13 @@ function hydratePathForSource(
   const sourcePath = runtimeSourcePath(object.relPath);
   switch (source.owner) {
     case "agent":
-      return `Agent/${sourcePath}`;
+      return sourcePath;
     case "user":
       return `User/${sourcePath}`;
     case "space":
       return `Spaces/${runtimeFolderSegment(tuple.spaceSlug)}/${sourcePath}`;
     case "thread_goal":
-      return `Spaces/${runtimeFolderSegment(tuple.spaceSlug)}/${sourcePath}`;
+      return `Thread/${sourcePath}`;
     case "thread_notes":
       return `Thread/${sourcePath}`;
   }
@@ -186,6 +194,7 @@ function manifestFileForSource(
 function sortedManifestFiles(
   sources: SourceSet[],
   tuple: ResolvedWorkspaceRenderTuple,
+  generatedFiles: GeneratedWorkspaceFile[],
 ): WorkspaceHydrateFile[] {
   const filesByPath = new Map<string, WorkspaceHydrateFile>();
   for (const source of sources) {
@@ -193,6 +202,21 @@ function sortedManifestFiles(
       const file = manifestFileForSource(source, object, tuple);
       filesByPath.set(file.path, file);
     }
+  }
+  for (const generatedFile of generatedFiles) {
+    filesByPath.set(generatedFile.path, {
+      path: generatedFile.path,
+      owner: generatedFile.owner,
+      sourceKey: generatedFile.key,
+      sourcePrefix: generatedFile.key.slice(
+        0,
+        generatedFile.key.length - generatedFile.path.length,
+      ),
+      sourcePath: generatedFile.path,
+      readOnly: true,
+      generated: true,
+      size: Buffer.byteLength(generatedFile.content),
+    });
   }
   return Array.from(filesByPath.values()).sort((left, right) =>
     left.path.localeCompare(right.path),
@@ -209,7 +233,7 @@ function statusMountsForTuple(input: {
   );
   return ["GOAL.md", "PROGRESS.md"].map((sourcePath) => {
     const object = byPath.get(sourcePath);
-    const path = `Spaces/${runtimeFolderSegment(input.tuple.spaceSlug)}/${sourcePath}`;
+    const path = `Thread/${sourcePath}`;
     return {
       path,
       owner: "system",
@@ -234,6 +258,7 @@ function buildHydrateManifest(input: {
   generatedAt: string;
   sources: SourceSet[];
   statusObjects: SourceObject[];
+  generatedFiles: GeneratedWorkspaceFile[];
   tuple: ResolvedWorkspaceRenderTuple;
 }): WorkspaceHydrateManifest {
   const hydrateSources: WorkspaceHydrateSource[] = input.sources
@@ -247,7 +272,11 @@ function buildHydrateManifest(input: {
     renderedPrefix: input.renderedPrefix,
     generatedAt: input.generatedAt,
     sources: hydrateSources,
-    files: sortedManifestFiles(input.sources, input.tuple),
+    files: sortedManifestFiles(
+      input.sources,
+      input.tuple,
+      input.generatedFiles,
+    ),
     statusMounts: statusMountsForTuple({
       tuple: input.tuple,
       statusObjects: input.statusObjects,
@@ -262,7 +291,11 @@ function existingManifestMatchesContract(
   try {
     const parsed = JSON.parse(existingManifest) as WorkspaceHydrateManifest;
     if (parsed.version !== expectedManifest.version) return false;
-    if (!Array.isArray(parsed.sources) || !Array.isArray(parsed.statusMounts)) {
+    if (
+      !Array.isArray(parsed.sources) ||
+      !Array.isArray(parsed.files) ||
+      !Array.isArray(parsed.statusMounts)
+    ) {
       return false;
     }
 
@@ -293,10 +326,68 @@ function existingManifestMatchesContract(
       }
     }
 
+    for (const file of expectedManifest.files) {
+      const candidate = parsed.files.find(
+        (manifestFile) => manifestFile.path === file.path,
+      );
+      if (
+        !candidate ||
+        candidate.owner !== file.owner ||
+        candidate.sourceKey !== file.sourceKey ||
+        candidate.sourcePath !== file.sourcePath ||
+        candidate.readOnly !== file.readOnly ||
+        Boolean(candidate.generated) !== Boolean(file.generated)
+      ) {
+        return false;
+      }
+    }
+
     return true;
   } catch {
     return false;
   }
+}
+
+function fallbackAuthorizedSpaces(
+  tuple: ResolvedWorkspaceRenderTuple,
+): WorkspaceSpaceIndexEntry[] {
+  return [
+    {
+      id: tuple.spaceId,
+      slug: tuple.spaceSlug,
+      name: tuple.spaceName,
+      accessMode: tuple.spaceAccessMode,
+      isActive: true,
+    },
+  ];
+}
+
+function renderSpaceIndexMarkdown(input: {
+  tuple: ResolvedWorkspaceRenderTuple;
+  spaces: WorkspaceSpaceIndexEntry[];
+}): string {
+  const normalizedSpaces = input.spaces.length
+    ? input.spaces
+    : fallbackAuthorizedSpaces(input.tuple);
+  const active =
+    normalizedSpaces.find((space) => space.isActive) ??
+    fallbackAuthorizedSpaces(input.tuple)[0];
+  const lines = [
+    "# Spaces",
+    "",
+    `Active Space: ${active.name} (${active.slug})`,
+    "",
+    "Only the active Space is fully hydrated in this workspace. Other authorized Spaces are listed here for routing context.",
+    "",
+    "## Authorized Spaces",
+    "",
+  ];
+  for (const space of normalizedSpaces) {
+    const marker = space.isActive ? "active" : space.accessMode;
+    lines.push(`- ${space.name} (${space.slug}) - ${marker}`);
+  }
+  lines.push("");
+  return `${lines.join("\n")}`;
 }
 
 export async function renderWorkspaceTuple(
@@ -335,6 +426,7 @@ export async function renderWorkspaceTuple(
     deps.objectStore ?? new S3WorkspaceRendererObjectStore(s3);
   const renderedPrefix = threadRuntimePrefix(tuple);
   const manifestKey = `${renderedPrefix}${HYDRATE_MANIFEST_PATH}`;
+  const spaceIndexKey = `${renderedPrefix}Spaces/INDEX.md`;
   const markerKey = `${renderedPrefix}.rendered_at`;
   const agentPrefix = agentWorkspacePrefix(tuple);
   const spacePrefix = spaceSourcePrefix(tuple);
@@ -409,10 +501,26 @@ export async function renderWorkspaceTuple(
     agentBlockedTools: input.agentBlockedTools,
     agentAllowedTools: input.agentAllowedTools,
   });
-  const [marker, existingManifest] = await Promise.all([
-    objectStore.getText({ bucket, key: markerKey }),
-    objectStore.getText({ bucket, key: manifestKey }),
-  ]);
+  const [authorizedSpaces, marker, existingManifest, existingSpaceIndex] =
+    await Promise.all([
+      repository.listAuthorizedSpaces?.(tuple) ??
+        Promise.resolve(fallbackAuthorizedSpaces(tuple)),
+      objectStore.getText({ bucket, key: markerKey }),
+      objectStore.getText({ bucket, key: manifestKey }),
+      objectStore.getText({ bucket, key: spaceIndexKey }),
+    ]);
+  const spaceIndex = renderSpaceIndexMarkdown({
+    tuple,
+    spaces: authorizedSpaces,
+  });
+  const generatedFiles: GeneratedWorkspaceFile[] = [
+    {
+      path: "Spaces/INDEX.md",
+      key: spaceIndexKey,
+      content: spaceIndex,
+      owner: "thread_goal",
+    },
+  ];
   const sourceLatest = latestMtime([
     agentSource,
     spaceSource,
@@ -430,10 +538,12 @@ export async function renderWorkspaceTuple(
     generatedAt: generatedAtCandidate,
     sources: [agentSource, spaceSource, userSource, threadGoalSource],
     statusObjects: threadGoalStatusSource.objects,
+    generatedFiles,
     tuple,
   });
   const cacheIsFresh =
     existingManifest !== null &&
+    existingSpaceIndex === spaceIndex &&
     markerFresh &&
     existingManifestMatchesContract(existingManifest, hydrateManifest);
   if (cacheIsFresh) {
@@ -467,9 +577,16 @@ export async function renderWorkspaceTuple(
           generatedAt,
           sources: [agentSource, spaceSource, userSource, threadGoalSource],
           statusObjects: threadGoalStatusSource.objects,
+          generatedFiles,
           tuple,
         });
-  const writtenFiles = [HYDRATE_MANIFEST_PATH];
+  const writtenFiles = ["Spaces/INDEX.md", HYDRATE_MANIFEST_PATH];
+  await objectStore.putText({
+    bucket,
+    key: spaceIndexKey,
+    content: spaceIndex,
+    contentType: "text/markdown; charset=utf-8",
+  });
   await objectStore.putText({
     bucket,
     key: manifestKey,

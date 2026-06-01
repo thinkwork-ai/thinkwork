@@ -64,7 +64,7 @@ describe("localBashExtension", () => {
     expect(result.isError).toBe(false);
   });
 
-  it("hydrates /workspace as the merged agent root with Space beside it", async () => {
+  it("hydrates /workspace into the v1 runtime tree", async () => {
     const workspace = workspaceFixture();
     const loaded = await loadExtensions(
       [
@@ -81,7 +81,7 @@ describe("localBashExtension", () => {
     const result = await bash.execute(
       {
         command:
-          "pwd; find . -maxdepth 1 -mindepth 1 -type d -print | sort; cat AGENTS.md; cat USER.md; cat Space/CONTEXT.md",
+          "pwd; find . -maxdepth 1 -mindepth 1 -type d -print | sort; cat AGENTS.md; cat User/USER.md; cat Spaces/general/CONTEXT.md",
       },
       {},
     );
@@ -90,10 +90,11 @@ describe("localBashExtension", () => {
     expect(result.content).toContain("# Agent");
     expect(result.content).toContain("# Space");
     expect(result.content).toContain("/workspace");
-    expect(result.content).toContain("./Space");
+    expect(result.content).toContain("./Spaces");
+    expect(result.content).toContain("./User");
     expect(result.content).not.toContain("./Agent");
-    expect(result.content).not.toContain("./Spaces");
-    expect(result.content).not.toContain("./User");
+    expect(result.content).not.toMatch(/^\.\/Space$/m);
+    expect(result.content).not.toContain("./USER.md");
     expect(result.isError).toBe(false);
   });
 
@@ -137,8 +138,8 @@ describe("localBashExtension", () => {
     );
     const bash = first.tools.find((tool) => tool.name === "bash")!;
 
-    await bash.execute({ command: "cat USER.md" }, {});
-    await bash.execute({ command: "rm USER.md" }, {});
+    await bash.execute({ command: "cat User/USER.md" }, {});
+    await bash.execute({ command: "rm User/USER.md" }, {});
 
     resetLocalBashSandboxesForTests();
 
@@ -154,7 +155,7 @@ describe("localBashExtension", () => {
     );
     const result = await second.tools
       .find((tool) => tool.name === "bash")!
-      .execute({ command: "cat USER.md" }, {});
+      .execute({ command: "cat User/USER.md" }, {});
 
     expect(result.isError).toBe(true);
     expect(result.content).toContain("exitCode");

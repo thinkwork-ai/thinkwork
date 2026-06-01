@@ -215,14 +215,20 @@ function runtimeWorkspacePath(relPath: string): string | null {
   if (clean.startsWith("User/")) {
     const userPath = stripLegacySourceRoot(clean.slice("User/".length));
     if (!userPath || isWorkspaceArchivesPath(userPath)) return null;
-    return userPath;
+    return `User/${userPath}`;
+  }
+  if (clean.startsWith("Thread/")) {
+    const threadPath = stripLegacySourceRoot(clean.slice("Thread/".length));
+    if (!threadPath || isWorkspaceArchivesPath(threadPath)) return null;
+    return `Thread/${threadPath}`;
   }
   if (clean.startsWith("Spaces/")) {
-    const [, , ...rest] = clean.split("/");
+    if (clean === "Spaces/INDEX.md") return clean;
+    const [, spaceFolder, ...rest] = clean.split("/");
     if (rest.length === 0) return null;
     const spacePath = stripLegacySourceRoot(rest.join("/"));
     if (!spacePath || isWorkspaceArchivesPath(spacePath)) return null;
-    return `Space/${spacePath}`;
+    return `Spaces/${spaceFolder}/${spacePath}`;
   }
 
   const runtimePath = stripLegacySourceRoot(clean);

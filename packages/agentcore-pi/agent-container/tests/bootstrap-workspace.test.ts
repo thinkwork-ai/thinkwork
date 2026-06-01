@@ -83,8 +83,8 @@ function expectNoForbiddenRuntimeRoots(files: Record<string, string>): void {
   expect(paths).not.toEqual(
     expect.arrayContaining([
       expect.stringMatching(/^Agent\//),
-      expect.stringMatching(/^Spaces\//),
-      expect.stringMatching(/^User\//),
+      expect.stringMatching(/^Space\//),
+      expect.stringMatching(/^USER\.md$/),
       expect.stringMatching(/^workspace(\/|$)/),
       expect.stringMatching(/^source(\/|$)/),
       expect.stringMatching(/^workspace-archives(\/|$)/),
@@ -254,12 +254,12 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(files).toMatchObject({
       "AGENTS.md": "# Agent",
       "skills/research/SKILL.md": "# Skill",
-      "USER.md": "# User",
-      "Space/CONTEXT.md": "# Space",
-      "Space/docs/customer.md": "# Customer",
+      "User/USER.md": "# User",
+      "Spaces/default/CONTEXT.md": "# Space",
+      "Spaces/default/docs/customer.md": "# Customer",
     });
     expect(files["Agent/workspace/AGENTS.md"]).toBeUndefined();
-    expect(files["User/USER.md"]).toBeUndefined();
+    expect(files["USER.md"]).toBeUndefined();
     expect(files["Spaces/default/source/CONTEXT.md"]).toBeUndefined();
     expect(files["workspace-archives/old/AGENTS.md"]).toBeUndefined();
     expectNoForbiddenRuntimeRoots(files);
@@ -277,7 +277,7 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
       ],
       files: [
         {
-          path: "Agent/workspace/AGENTS.md",
+          path: "AGENTS.md",
           owner: "agent",
           sourceKey: `${SOURCE_PREFIX}workspace/AGENTS.md`,
           sourcePrefix: SOURCE_PREFIX,
@@ -285,7 +285,7 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
           readOnly: false,
         },
         {
-          path: "Agent/skills/research/SKILL.md",
+          path: "skills/research/SKILL.md",
           owner: "agent",
           sourceKey: `${SOURCE_PREFIX}skills/research/SKILL.md`,
           sourcePrefix: SOURCE_PREFIX,
@@ -301,6 +301,15 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
           readOnly: false,
         },
         {
+          path: "Spaces/INDEX.md",
+          owner: "thread_goal",
+          sourceKey: `${THREAD_PREFIX}Spaces/INDEX.md`,
+          sourcePrefix: THREAD_PREFIX,
+          sourcePath: "Spaces/INDEX.md",
+          readOnly: true,
+          generated: true,
+        },
+        {
           path: "User/USER.md",
           owner: "user",
           sourceKey: "tenants/acme/users/eric/USER.md",
@@ -309,17 +318,17 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
           readOnly: false,
         },
         {
-          path: "Spaces/default/source/CONTEXT.md",
+          path: "Spaces/default/CONTEXT.md",
           owner: "space",
-          sourceKey: "tenants/acme/spaces/default/source/CONTEXT.md",
+          sourceKey: "tenants/acme/spaces/default/CONTEXT.md",
           sourcePrefix: "tenants/acme/spaces/default/",
           sourcePath: "CONTEXT.md",
           readOnly: false,
         },
         {
-          path: "Spaces/default/source/plans/plan.md",
+          path: "Spaces/default/plans/plan.md",
           owner: "space",
-          sourceKey: "tenants/acme/spaces/default/source/plans/plan.md",
+          sourceKey: "tenants/acme/spaces/default/plans/plan.md",
           sourcePrefix: "tenants/acme/spaces/default/",
           sourcePath: "plans/plan.md",
           readOnly: false,
@@ -327,7 +336,7 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
       ],
       statusMounts: [
         {
-          path: "Spaces/default/GOAL.md",
+          path: "Thread/GOAL.md",
           owner: "system",
           source: "database",
           provider: "thread-goals",
@@ -352,24 +361,26 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     stubObject(`${SOURCE_PREFIX}workspace/AGENTS.md`, "# Agent");
     stubObject(`${SOURCE_PREFIX}skills/research/SKILL.md`, "# Skill");
     stubObject(`${SOURCE_PREFIX}workspace-archives/old/AGENTS.md`, "# Old");
+    stubObject(`${THREAD_PREFIX}Spaces/INDEX.md`, "# Spaces");
     stubObject("tenants/acme/users/eric/USER.md", "# User");
-    stubObject("tenants/acme/spaces/default/source/CONTEXT.md", "# Space");
-    stubObject("tenants/acme/spaces/default/source/plans/plan.md", "# Plan");
+    stubObject("tenants/acme/spaces/default/CONTEXT.md", "# Space");
+    stubObject("tenants/acme/spaces/default/plans/plan.md", "# Plan");
     stubObject(`${THREAD_PREFIX}GOAL.md`, "# Goal");
 
     const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
       workspacePrefix: THREAD_PREFIX,
     });
 
-    expect(result).toMatchObject({ synced: 6, total: 6 });
+    expect(result).toMatchObject({ synced: 7, total: 7 });
     const files = await readFiles(tmp);
     expect(files).toMatchObject({
       "AGENTS.md": "# Agent",
       "skills/research/SKILL.md": "# Skill",
-      "USER.md": "# User",
-      "Space/CONTEXT.md": "# Space",
-      "Space/plans/plan.md": "# Plan",
-      "Space/GOAL.md": "# Goal",
+      "Spaces/INDEX.md": "# Spaces",
+      "User/USER.md": "# User",
+      "Spaces/default/CONTEXT.md": "# Space",
+      "Spaces/default/plans/plan.md": "# Plan",
+      "Thread/GOAL.md": "# Goal",
     });
     expect(files["Agent/workspace/AGENTS.md"]).toBeUndefined();
     expect(files["Spaces/default/source/CONTEXT.md"]).toBeUndefined();

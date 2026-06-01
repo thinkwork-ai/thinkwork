@@ -10,17 +10,23 @@ import {
 describe("workspace-diff", () => {
   it("maps merged runtime paths back to tuple manifest paths", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pi-workspace-diff-"));
-    await mkdir(path.join(dir, "Space", "docs"), { recursive: true });
+    await mkdir(path.join(dir, "Spaces", "default", "docs"), {
+      recursive: true,
+    });
+    await mkdir(path.join(dir, "User"), { recursive: true });
     await mkdir(path.join(dir, "memory"), { recursive: true });
     await writeFile(path.join(dir, "AGENTS.md"), "# Agent");
-    await writeFile(path.join(dir, "USER.md"), "# User");
-    await writeFile(path.join(dir, "Space", "docs", "brief.md"), "# Brief");
+    await writeFile(path.join(dir, "User", "USER.md"), "# User");
+    await writeFile(
+      path.join(dir, "Spaces", "default", "docs", "brief.md"),
+      "# Brief",
+    );
     await writeFile(
       path.join(dir, ".hydrate_manifest.json"),
       `${JSON.stringify({
         version: 1,
         files: [
-          { path: "Agent/AGENTS.md", etag: '"agent"' },
+          { path: "AGENTS.md", etag: '"agent"' },
           { path: "User/USER.md", etag: '"user"' },
           { path: "Spaces/default/docs/brief.md", etag: '"space"' },
         ],
@@ -29,9 +35,9 @@ describe("workspace-diff", () => {
 
     const baseline = await createLocalWorkspaceBaseline({ workspaceDir: dir });
     await writeFile(path.join(dir, "AGENTS.md"), "# Agent v2");
-    await writeFile(path.join(dir, "USER.md"), "# User v2");
+    await writeFile(path.join(dir, "User", "USER.md"), "# User v2");
     await writeFile(
-      path.join(dir, "Space", "docs", "brief.md"),
+      path.join(dir, "Spaces", "default", "docs", "brief.md"),
       "# Brief v2",
     );
 
@@ -39,7 +45,7 @@ describe("workspace-diff", () => {
       collectLocalWorkspaceChangedFiles({ workspaceDir: dir, baseline }),
     ).resolves.toEqual([
       {
-        path: "Agent/AGENTS.md",
+        path: "AGENTS.md",
         op: "modify",
         content: "# Agent v2",
         base_etag: '"agent"',

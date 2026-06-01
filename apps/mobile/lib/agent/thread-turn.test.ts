@@ -165,9 +165,7 @@ describe("runThreadHarnessTurn", () => {
     expect(lease.finalize).toHaveBeenCalledWith(
       expect.objectContaining({
         threadTurnId: "turn-1",
-        changedFiles: [
-          { path: "Agent/note.md", op: "create", content: "hello" },
-        ],
+        changedFiles: [{ path: "note.md", op: "create", content: "hello" }],
       }),
     );
   });

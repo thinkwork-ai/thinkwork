@@ -105,9 +105,9 @@ describe("WorkspaceCache", () => {
     await expect(cache.readFile(PARTITION, "USER.md")).resolves.toMatchObject({
       content: "The human's name is Eric.",
     });
-    await expect(
-      cache.readFile(PARTITION, "Agent/AGENTS.md"),
-    ).resolves.toMatchObject({ content: "# Agent" });
+    await expect(cache.readFile(PARTITION, "AGENTS.md")).resolves.toMatchObject(
+      { content: "# Agent" },
+    );
     await expect(
       cache.readFile(PARTITION, "Spaces/general/CONTEXT.md"),
     ).resolves.toMatchObject({ content: "# Space" });
@@ -116,7 +116,7 @@ describe("WorkspaceCache", () => {
     );
     expect(listedPaths).toEqual(
       expect.arrayContaining([
-        "Agent/AGENTS.md",
+        "AGENTS.md",
         "Spaces/general/CONTEXT.md",
         "User/USER.md",
       ]),
@@ -319,13 +319,13 @@ describe("WorkspaceCache", () => {
     ).toEqual([]);
   });
 
-  it("maps API workspace files into Agent, Spaces, and User cache roots", () => {
+  it("maps API workspace files into the v1 runtime tree", () => {
     expect(
       workspaceRuntimePathForFile(
         { agentId: "agent-1" },
         { path: "workspace/skills/tool.md", source: "agent" },
       ),
-    ).toBe("Agent/skills/tool.md");
+    ).toBe("skills/tool.md");
     expect(
       workspaceRuntimePathForFile(
         { spaceId: "space-1", spaceFolderName: "customer-onboarding" },
@@ -343,13 +343,13 @@ describe("WorkspaceCache", () => {
         { userId: "user-1" },
         { path: "Agent/AGENTS.md", source: "agent" },
       ),
-    ).toBe("Agent/AGENTS.md");
+    ).toBe("AGENTS.md");
     expect(
       workspaceRuntimePathForFile(
         { agentId: "agent-1" },
         { path: "Agent/workspace/AGENTS.md", source: "agent" },
       ),
-    ).toBe("Agent/AGENTS.md");
+    ).toBe("AGENTS.md");
     expect(
       workspaceRuntimePathForFile(
         { spaceId: "space-1", spaceFolderName: "customer-onboarding" },
@@ -407,8 +407,8 @@ describe("WorkspaceCache", () => {
     const cache = new WorkspaceCache(storage, new FakeSource({}));
 
     await expect(cache.listFiles(PARTITION)).resolves.toEqual([
-      expect.objectContaining({ path: "Agent/AGENTS.md" }),
-      expect.objectContaining({ path: "Agent/CONTEXT.md" }),
+      expect.objectContaining({ path: "AGENTS.md" }),
+      expect.objectContaining({ path: "CONTEXT.md" }),
       expect.objectContaining({ path: "Spaces/default/CONTEXT.md" }),
       expect.objectContaining({ path: "User/USER.md" }),
     ]);

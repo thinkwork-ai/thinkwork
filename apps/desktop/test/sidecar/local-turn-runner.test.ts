@@ -66,7 +66,7 @@ class FakeStore implements WorkspaceObjectStore {
           sources: [{ owner: "agent", prefix: "tenants/acme/agents/marco/" }],
           files: [
             {
-              path: "Agent/AGENTS.md",
+              path: "AGENTS.md",
               owner: "agent",
               sourceKey: "tenants/acme/agents/marco/AGENTS.md",
               sourcePrefix: "tenants/acme/agents/marco/",
@@ -329,7 +329,7 @@ describe("runLocalDesktopTurn", () => {
     expect(result.content?.[0]?.text).toBe("# Agent");
   });
 
-  it("hydrates desktop just-bash as Agent root, User root, and singular Space", async () => {
+  it("hydrates desktop just-bash into the v1 runtime tree", async () => {
     const manifest = {
       version: 1,
       renderedPrefix: BASE_INVOCATION.rendered_workspace_prefix,
@@ -341,7 +341,7 @@ describe("runLocalDesktopTurn", () => {
       ],
       files: [
         {
-          path: "Agent/workspace/AGENTS.md",
+          path: "AGENTS.md",
           owner: "agent",
           sourceKey: "tenants/acme/agents/marco/workspace/AGENTS.md",
           sourcePrefix: "tenants/acme/agents/marco/",
@@ -425,12 +425,13 @@ describe("runLocalDesktopTurn", () => {
     ).find((tool) => tool.name === "bash");
     const result = await bashTool!.execute!("call-1", {
       command:
-        "pwd; find . -maxdepth 1 -mindepth 1 -type d -print | sort; test -f AGENTS.md; test -f USER.md; test -f Space/CONTEXT.md; test ! -e Agent; test ! -e Spaces; test ! -e User; test ! -e workspace; test ! -e source; cat AGENTS.md; cat USER.md; cat Space/CONTEXT.md",
+        "pwd; find . -maxdepth 1 -mindepth 1 -type d -print | sort; test -f AGENTS.md; test -f User/USER.md; test -f Spaces/default/CONTEXT.md; test ! -e Agent; test ! -e Space; test ! -e USER.md; test ! -e workspace; test ! -e source; cat AGENTS.md; cat User/USER.md; cat Spaces/default/CONTEXT.md",
     });
 
     expect(result.isError).toBe(false);
     expect(result.content?.[0]?.text).toContain("/workspace");
-    expect(result.content?.[0]?.text).toContain("./Space");
+    expect(result.content?.[0]?.text).toContain("./Spaces");
+    expect(result.content?.[0]?.text).toContain("./User");
     expect(result.content?.[0]?.text).toContain("# Agent");
     expect(result.content?.[0]?.text).toContain("Name: Eric");
     expect(result.content?.[0]?.text).toContain("# Space");
@@ -444,7 +445,7 @@ describe("runLocalDesktopTurn", () => {
       sources: [{ owner: "agent", prefix: "tenants/acme/agents/marco/" }],
       files: [
         {
-          path: "Agent/AGENTS.md",
+          path: "AGENTS.md",
           owner: "agent",
           sourceKey: "tenants/acme/agents/marco/AGENTS.md",
           sourcePrefix: "tenants/acme/agents/marco/",
@@ -500,7 +501,7 @@ describe("runLocalDesktopTurn", () => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       expect(body.changed_files).toEqual([
         {
-          path: "Agent/AGENTS.md",
+          path: "AGENTS.md",
           op: "modify",
           content: "# Agent v2",
           base_etag: '"etag-agents"',
@@ -1243,7 +1244,7 @@ describe("runLocalDesktopTurn", () => {
     expect(bundle).toContain("Use bash for shell commands");
     expect(bundle).toContain("backed by just-bash");
     expect(bundle).not.toContain("shell out");
-    expect(bundle).toContain("### Agent/AGENTS.md");
+    expect(bundle).toContain("### AGENTS.md");
     expect(bundle).toContain("# Agent");
   });
 

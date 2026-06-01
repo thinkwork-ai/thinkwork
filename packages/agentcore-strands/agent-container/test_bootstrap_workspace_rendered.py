@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -65,6 +66,85 @@ def test_uses_rendered_tuple_prefix_when_flag_template_is_set(tmp_path):
     assert s3.list_calls[0]["Prefix"] == rendered_prefix
     assert (tmp_path / "AGENTS.md").read_text() == "# Rendered map"
     assert (tmp_path / "SPACE.md").read_text() == "# Default Space"
+
+
+def test_hydrates_rendered_tuple_manifest_into_v1_workspace_tree(tmp_path):
+    rendered_prefix = "tenants/acme/threads/customer-kickoff/"
+    manifest = {
+        "version": 1,
+        "renderedPrefix": rendered_prefix,
+        "generatedAt": "2026-06-01T12:00:00.000Z",
+        "files": [
+            {
+                "path": "AGENTS.md",
+                "sourceKey": "tenants/acme/agents/marco/AGENTS.md",
+            },
+            {
+                "path": "Agent/workspace/LEGACY.md",
+                "sourceKey": "tenants/acme/agents/marco/workspace/LEGACY.md",
+            },
+            {
+                "path": "Agent/workspace-archives/old.md",
+                "sourceKey": "tenants/acme/agents/marco/workspace-archives/old.md",
+            },
+            {
+                "path": "Spaces/INDEX.md",
+                "sourceKey": f"{rendered_prefix}Spaces/INDEX.md",
+                "readOnly": True,
+                "generated": True,
+            },
+            {
+                "path": "Spaces/default/source/CONTEXT.md",
+                "sourceKey": "tenants/acme/spaces/default/source/CONTEXT.md",
+            },
+            {
+                "path": "User/workspace/USER.md",
+                "sourceKey": "tenants/acme/users/eric/workspace/USER.md",
+            },
+        ],
+        "statusMounts": [
+            {
+                "path": "Thread/PROGRESS.md",
+                "available": True,
+                "sourceKey": f"{rendered_prefix}PROGRESS.md",
+            }
+        ],
+    }
+    s3 = FakeS3(
+        {
+            f"{rendered_prefix}.hydrate_manifest.json": json.dumps(manifest).encode(),
+            "tenants/acme/agents/marco/AGENTS.md": b"# Agent",
+            "tenants/acme/agents/marco/workspace/LEGACY.md": b"# Legacy",
+            "tenants/acme/agents/marco/workspace-archives/old.md": b"# Old",
+            f"{rendered_prefix}Spaces/INDEX.md": b"# Spaces",
+            "tenants/acme/spaces/default/source/CONTEXT.md": b"# Space",
+            "tenants/acme/users/eric/workspace/USER.md": b"# User",
+            f"{rendered_prefix}PROGRESS.md": b"# Progress",
+        }
+    )
+
+    result = bootstrap_workspace(
+        tenant_slug="acme",
+        agent_slug="marco",
+        local_dir=str(tmp_path),
+        s3_client=s3,
+        bucket="workspace-bucket",
+        rendered_workspace_prefix=rendered_prefix,
+        rendered_workspace_prefix_template="tenants/{tenantSlug}/threads/{threadSlug}/",
+    )
+
+    assert result.synced == 6
+    assert result.total == 6
+    assert (tmp_path / "AGENTS.md").read_text() == "# Agent"
+    assert (tmp_path / "LEGACY.md").read_text() == "# Legacy"
+    assert (tmp_path / "Spaces" / "INDEX.md").read_text() == "# Spaces"
+    assert (tmp_path / "Spaces" / "default" / "CONTEXT.md").read_text() == "# Space"
+    assert (tmp_path / "User" / "USER.md").read_text() == "# User"
+    assert (tmp_path / "Thread" / "PROGRESS.md").read_text() == "# Progress"
+    assert not (tmp_path / "Agent").exists()
+    assert not (tmp_path / "Space").exists()
+    assert not (tmp_path / "USER.md").exists()
+    assert not (tmp_path / "workspace-archives").exists()
 
 
 def test_falls_back_to_legacy_prefix_when_flag_template_is_absent(tmp_path):

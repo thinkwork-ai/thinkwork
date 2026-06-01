@@ -109,7 +109,7 @@ describe("WorkspaceCache", () => {
     ).rejects.toThrow();
   });
 
-  it("hydrates rendered thread manifests into Agent, Spaces, and User top-level folders", async () => {
+  it("hydrates rendered thread manifests into the v1 workspace tree", async () => {
     const prefix = "tenants/acme/threads/customer-kickoff/";
     const manifest = {
       version: 1,
@@ -129,6 +129,16 @@ describe("WorkspaceCache", () => {
           sourcePath: "workspace/AGENTS.md",
           etag: '"agent"',
           readOnly: false,
+        },
+        {
+          path: "Spaces/INDEX.md",
+          owner: "thread_goal",
+          sourceKey: `${prefix}Spaces/INDEX.md`,
+          sourcePrefix: prefix,
+          sourcePath: "Spaces/INDEX.md",
+          etag: '"space-index"',
+          readOnly: true,
+          generated: true,
         },
         {
           path: "Spaces/default/CONTEXT.md",
@@ -155,10 +165,14 @@ describe("WorkspaceCache", () => {
       root,
       new FakeStore({
         [`${prefix}.hydrate_manifest.json`]: `${JSON.stringify(manifest)}\n`,
+        [`${prefix}Spaces/INDEX.md`]: "# Spaces",
         "tenants/acme/agents/marco/workspace/AGENTS.md": "# Agent",
         "tenants/acme/agents/marco/workspace/skills/report/SKILL.md": "# Skill",
-        "tenants/acme/spaces/default/source/CONTEXT.md": "# Space",
-        "tenants/acme/spaces/support/source/CONTEXT.md": "# Support",
+        "tenants/acme/agents/marco/SPACE_CONTEXT.md": "# Stale Space",
+        "tenants/acme/agents/marco/spaces/old/SPACE.md": "# Old Space",
+        "tenants/acme/spaces/default/CONTEXT.md": "# Space",
+        "tenants/acme/spaces/default/TOOLS.md": "# Space Tools",
+        "tenants/acme/spaces/support/CONTEXT.md": "# Support",
         "tenants/acme/users/eric-odom/USER.md": "# User",
       }),
     );
@@ -181,23 +195,35 @@ describe("WorkspaceCache", () => {
 
     expect(result.localDir).toBe(root);
     expect(result).toMatchObject({ prefix, synced: 6, total: 6 });
-    await expect(readFile(join(root, "Agent/AGENTS.md"), "utf8")).resolves.toBe(
+    await expect(readFile(join(root, "AGENTS.md"), "utf8")).resolves.toBe(
       "# Agent",
     );
     await expect(
-      readFile(join(root, "Agent/skills/report/SKILL.md"), "utf8"),
+      readFile(join(root, "skills/report/SKILL.md"), "utf8"),
     ).resolves.toBe("# Skill");
     await expect(
       readFile(join(root, "Agent/workspace/AGENTS.md"), "utf8"),
     ).rejects.toThrow();
+    await expect(readFile(join(root, "Spaces/INDEX.md"), "utf8")).resolves.toBe(
+      "# Spaces",
+    );
     await expect(
       readFile(join(root, "Spaces/default/CONTEXT.md"), "utf8"),
     ).resolves.toBe("# Space");
     await expect(
       readFile(join(root, "Spaces/support/CONTEXT.md"), "utf8"),
-    ).resolves.toBe("# Support");
+    ).rejects.toThrow();
     await expect(
       readFile(join(root, "Spaces/default/source/CONTEXT.md"), "utf8"),
+    ).rejects.toThrow();
+    await expect(
+      readFile(join(root, "SPACE_CONTEXT.md"), "utf8"),
+    ).rejects.toThrow();
+    await expect(
+      readFile(join(root, "spaces/old/SPACE.md"), "utf8"),
+    ).rejects.toThrow();
+    await expect(
+      readFile(join(root, "Spaces/default/TOOLS.md"), "utf8"),
     ).rejects.toThrow();
     await expect(readFile(join(root, "User/USER.md"), "utf8")).resolves.toBe(
       "# User",
@@ -206,9 +232,9 @@ describe("WorkspaceCache", () => {
       readFile(join(oldNestedDir, "stale.md"), "utf8"),
     ).rejects.toThrow();
     await expect(rootDirectoryNames(root)).resolves.toEqual([
-      "Agent",
       "Spaces",
       "User",
+      "skills",
     ]);
   });
 
@@ -257,7 +283,7 @@ describe("WorkspaceCache", () => {
       partition: PARTITION,
     });
 
-    await expect(rootDirectoryNames(root)).resolves.toEqual(["Agent"]);
+    await expect(rootDirectoryNames(root)).resolves.toEqual([]);
   });
 
   it("hydrates a legacy rendered USER.md into the User root when the user source is empty", async () => {
@@ -443,10 +469,12 @@ describe("WorkspaceCache", () => {
     });
     expect(second.cacheHit).toBeUndefined();
     expect(store.getCalls).toBe(3);
-    await expect(readFile(join(root, "Agent/AGENTS.md"), "utf8")).resolves.toBe(
+    await expect(readFile(join(root, "AGENTS.md"), "utf8")).resolves.toBe(
       "# Agent",
     );
-    await expect(readFile(join(root, "AGENTS.md"), "utf8")).rejects.toThrow();
+    await expect(
+      readFile(join(root, "Agent/AGENTS.md"), "utf8"),
+    ).rejects.toThrow();
   });
 
   it("serves stale local files immediately and refreshes unchanged files in the background", async () => {
