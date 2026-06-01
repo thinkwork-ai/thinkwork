@@ -196,6 +196,14 @@ productName: ${DESKTOP_PRODUCT_NAME}
 artifactName: \${productName}-\${version}-\${arch}.\${ext}
 asar: true
 
+# Skip @electron/rebuild. Our only native modules are @mongodb-js/zstd
+# (prebuilt N-API, ABI-stable, loads without a rebuild) and \`canvas\` — an
+# unused optional transitive of unpdf/pdfjs that has no prebuild and fails
+# node-gyp on the runner (no pangocairo). Rebuilding gained us nothing and
+# broke the release; the JS deps are already bundled into out/** by
+# electron-vite, so nothing here needs compiling against Electron's ABI.
+npmRebuild: false
+
 directories:
   output: dist
   buildResources: build
