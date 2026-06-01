@@ -81,6 +81,34 @@ agent-container/tests/server.test.ts
 agent-container/tests/handler-context.test.ts`,
   `pnpm --filter @thinkwork/agentcore-pi typecheck`, and `git diff --check`
   passed.
+- PR [#1934](https://github.com/thinkwork-ai/thinkwork/pull/1934) merged and
+  deployed in GitHub Actions run
+  [26739291606](https://github.com/thinkwork-ai/thinkwork/actions/runs/26739291606).
+- Live probe after deploy succeeded for thread
+  `d8b56815-4691-4576-8d27-39b1fa5bfe48` / turn
+  `8f03c684-b059-41d7-b36e-c41f823ff4c9`: root contained `AGENTS.md`,
+  `USER.md`, `memory`, and `Space`; forbidden top-level folders `Agent`,
+  `Spaces`, `User`, `workspace`, `source`, `workspace-archives`, and
+  `.thinkwork-pi` were absent. Follow-up needed because bash still reported the
+  physical symlink target `PWD=/tmp/workspace` instead of the public logical
+  contract `PWD=/workspace`.
+
+## AgentCore Logical Workspace PWD Hotfix - 2026-06-01
+
+- Branch: `fix/agentcore-logical-workspace-pwd`
+- Worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-agentcore-logical-workspace-pwd`
+- Status: local verification passed; PR pending.
+- Root cause: `/workspace` is intentionally a symlink to writable
+  `/tmp/workspace`; bash inherited the physical cwd as `PWD`, so probes and
+  agents saw `/tmp/workspace` even though the workspace contents and root shape
+  were correct.
+- Change: the Pi loop now sets logical `PWD` to the configured workspace cwd
+  for the duration of the agent prompt, then restores the previous process
+  value.
+- Local verification: `pnpm --filter @thinkwork/pi-runtime-core test --
+test/agent-loop.test.ts`, `pnpm --filter @thinkwork/pi-runtime-core
+typecheck`, and `git diff --check` passed.
 
 ## Current Run: Workspace Architecture Simplification
 
