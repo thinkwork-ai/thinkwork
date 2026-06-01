@@ -1,12 +1,16 @@
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { Message } from "@earendil-works/pi-ai";
+import { mkdtemp, readlink, rm, stat, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   BUILTIN_TOOL_NAMES,
   buildToolAllowlist,
   buildTurnPrompt,
+  preparePiAgentDirectory,
   runAgentLoop,
   toToolDefinition,
   type AgentSessionLike,
@@ -243,6 +247,25 @@ describe("buildTurnPrompt", () => {
     );
     expect(prompt).not.toContain("user:");
     expect(prompt).toContain("assistant: real");
+  });
+});
+
+describe("preparePiAgentDirectory", () => {
+  it("creates the target for a dangling workspace symlink before creating the Pi agent dir", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "pi-agent-dir-"));
+    const target = path.join(root, "tmp-workspace");
+    const workspace = path.join(root, "workspace");
+    await symlink(target, workspace);
+
+    try {
+      const agentDir = await preparePiAgentDirectory(workspace);
+
+      expect(await readlink(workspace)).toBe(target);
+      expect(agentDir).toBe(path.join(workspace, ".thinkwork-pi"));
+      expect((await stat(agentDir)).isDirectory()).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

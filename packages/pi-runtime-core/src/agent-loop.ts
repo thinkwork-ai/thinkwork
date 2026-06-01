@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { lstat, mkdir, readlink } from "node:fs/promises";
 import path from "node:path";
 
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
@@ -264,8 +264,7 @@ async function defaultOpenSession(
   // desktop-proven path). U6: when omitted, the system-prompt extension composes
   // the prompt via its `before_agent_start` hook instead, so no override is
   // installed and the hook's returned prompt governs the turn.
-  const agentDir = path.join(inputs.cwd, PI_AGENT_DIR);
-  await mkdir(agentDir, { recursive: true });
+  const agentDir = await preparePiAgentDirectory(inputs.cwd);
   const systemPromptValue = inputs.systemPrompt;
   const resourceLoader = new DefaultResourceLoader({
     cwd: inputs.cwd,
@@ -337,6 +336,32 @@ async function defaultOpenSession(
     durable: Boolean(durable),
     persistSession: durable ? () => durable.persist() : undefined,
   };
+}
+
+export async function preparePiAgentDirectory(cwd: string): Promise<string> {
+  const symlinkTarget = await workspaceSymlinkTarget(cwd);
+  if (symlinkTarget) {
+    await mkdir(symlinkTarget, { recursive: true });
+  }
+
+  await mkdir(cwd, { recursive: true });
+  const agentDir = path.join(cwd, PI_AGENT_DIR);
+  await mkdir(agentDir, { recursive: true });
+  return agentDir;
+}
+
+async function workspaceSymlinkTarget(cwd: string): Promise<string | null> {
+  try {
+    const stat = await lstat(cwd);
+    if (!stat.isSymbolicLink()) return null;
+    const target = await readlink(cwd);
+    return path.isAbsolute(target)
+      ? target
+      : path.resolve(path.dirname(cwd), target);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
 }
 
 export async function runAgentLoop(
