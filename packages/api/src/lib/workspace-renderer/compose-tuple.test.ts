@@ -175,10 +175,6 @@ old`,
       content: "# User\n",
       lastModified: "2026-05-22T09:03:00.000Z",
     },
-    "tenants/acme/spaces/board-pack/SPACE.md": {
-      content: "# Board Pack\n",
-      lastModified: "2026-05-22T09:04:00.000Z",
-    },
     "tenants/acme/spaces/board-pack/TOOLS.md": {
       content:
         "---\nadds: [warehouse]\nrestricts:\n  - send_email\n---\n# Space Tools\n",
@@ -296,11 +292,6 @@ describe("renderWorkspaceTuple", () => {
           path: "Agent/LEGACY.md",
           sourceKey: "tenants/acme/agents/finance-agent/workspace/LEGACY.md",
           sourcePath: "LEGACY.md",
-        }),
-        expect.objectContaining({
-          owner: "space",
-          path: "Spaces/board-pack/SPACE.md",
-          sourceKey: "tenants/acme/spaces/board-pack/SPACE.md",
         }),
         expect.objectContaining({
           owner: "space",
@@ -469,8 +460,8 @@ describe("renderWorkspaceTuple", () => {
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: "Spaces/board-pack/SPACE.md",
-          sourceKey: "tenants/acme/spaces/board-pack/SPACE.md",
+          path: "Spaces/board-pack/CONTEXT.md",
+          sourceKey: "tenants/acme/spaces/board-pack/CONTEXT.md",
         }),
       ]),
     );
@@ -568,7 +559,7 @@ describe("renderWorkspaceTuple", () => {
       },
     );
     store.puts.length = 0;
-    store.setObject("tenants/acme/spaces/board-pack/SPACE.md", {
+    store.setObject("tenants/acme/spaces/board-pack/CONTEXT.md", {
       content: "# Board Pack v2\n",
       lastModified: "2026-05-22T10:30:00.000Z",
       etag: '"space-v2"',
@@ -588,8 +579,8 @@ describe("renderWorkspaceTuple", () => {
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: "Spaces/board-pack/SPACE.md",
-          sourceKey: "tenants/acme/spaces/board-pack/SPACE.md",
+          path: "Spaces/board-pack/CONTEXT.md",
+          sourceKey: "tenants/acme/spaces/board-pack/CONTEXT.md",
           etag: '"space-v2"',
           lastModified: "2026-05-22T10:30:00.000Z",
         }),
@@ -709,7 +700,7 @@ describe("renderWorkspaceTuple", () => {
         expect.objectContaining({ path: "Spaces/board-pack/GOAL.md" }),
         expect.objectContaining({ path: "Spaces/board-pack/PROGRESS.md" }),
         expect.objectContaining({
-          path: "Spaces/board-pack/SPACE.md",
+          path: "Spaces/board-pack/CONTEXT.md",
           owner: "space",
         }),
       ]),

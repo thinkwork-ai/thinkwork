@@ -1,7 +1,14 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { updateMemberMock, tenant, queryDocs, members } = vi.hoisted(() => ({
+const {
+  updateMemberMock,
+  tenant,
+  queryDocs,
+  members,
+  editorSpy,
+  headerActions,
+} = vi.hoisted(() => ({
   updateMemberMock: vi.fn(),
   tenant: {
     tenantId: "tenant-1",
@@ -15,6 +22,8 @@ const { updateMemberMock, tenant, queryDocs, members } = vi.hoisted(() => ({
     SettingsUpdateTenantMemberMutation: Symbol("updateMember"),
   },
   members: [] as unknown[],
+  editorSpy: vi.fn(),
+  headerActions: { current: null as Record<string, unknown> | null },
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -35,12 +44,19 @@ vi.mock("urql", () => ({
 
 vi.mock("@/context/TenantContext", () => ({ useTenant: () => tenant }));
 vi.mock("@/context/PageHeaderContext", () => ({
-  usePageHeaderActions: () => {},
+  usePageHeaderActions: (actions: Record<string, unknown> | null) => {
+    headerActions.current = actions;
+  },
 }));
 vi.mock("@/lib/settings-queries", () => queryDocs);
-vi.mock("@/lib/workspace-files-api", () => ({ spacesWorkspaceFilesClient: {} }));
+vi.mock("@/lib/workspace-files-api", () => ({
+  spacesWorkspaceFilesClient: {},
+}));
 vi.mock("@thinkwork/workspace-editor", () => ({
-  WorkspaceFileEditor: () => null,
+  WorkspaceFileEditor: (props: Record<string, unknown>) => {
+    editorSpy(props);
+    return <div data-testid="workspace-editor" />;
+  },
 }));
 
 import { SettingsUserDetail } from "./SettingsUserDetail";
@@ -65,8 +81,10 @@ function seedMember(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   updateMemberMock.mockReset();
   updateMemberMock.mockResolvedValue({ error: null });
+  editorSpy.mockReset();
   tenant.userId = "caller-1";
   tenant.role = "owner";
+  headerActions.current = null;
 });
 afterEach(cleanup);
 
@@ -91,5 +109,25 @@ describe("SettingsUserDetail role merge", () => {
     seedMember();
     render(<SettingsUserDetail />);
     expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("labels the User source workspace when the file view is open", () => {
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    act(() => {
+      const action = headerActions.current?.action as {
+        props?: { onToggle?: () => void };
+      };
+      action.props?.onToggle?.();
+    });
+
+    expect(screen.getByTestId("workspace-editor")).toBeTruthy();
+    const props = editorSpy.mock.calls[0][0];
+    expect(props.target).toEqual({ userId: "user-9" });
+    expect(props.defaultOpenFile).toBe("USER.md");
+    expect(props.title).toBe("User source workspace");
+    expect(props.description).toContain("personalize this user");
+    expect(props.description).toContain("/workspace root");
   });
 });

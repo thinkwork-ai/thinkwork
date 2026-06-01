@@ -108,6 +108,8 @@ export function SettingsUserDetail() {
           target={{ userId: user.id }}
           targetKey={`user:${user.id}`}
           client={spacesWorkspaceFilesClient}
+          title="User source workspace"
+          description="User files personalize this user. During a turn, USER.md and user memory are merged into the /workspace root."
           defaultOpenFile="USER.md"
           className="min-h-0 flex-1"
         />

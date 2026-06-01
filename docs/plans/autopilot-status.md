@@ -6,6 +6,37 @@ status: complete
 
 # Autopilot Status Ledger
 
+## Workspace Architecture Guidance Docs - 2026-06-01
+
+- Branch: `docs/workspace-architecture-guidance`
+- Status: in progress. Local implementation and review fixes are complete; PR
+  creation, CI, and merge are pending.
+- Context: after the source workspace migration, the product needed explicit
+  operator/user documentation that distinguishes the editable source factory
+  (`Agent`, `Spaces`, `User`) from the rendered turn sandbox (`/workspace`
+  with Agent root files, User files merged into root, and singular `Space/`
+  for the active Space).
+- Change: refreshed workspace architecture docs, added concise Settings
+  workspace guidance, created
+  `docs/runbooks/workspace-architecture-verification.md`, and added regression
+  guardrails for Settings source views, API tuple composition, AgentCore Pi
+  bootstrap, desktop just-bash hydration, and mobile local bash/workspace
+  caching.
+- Review fixes: preserved legitimate source-relative folders named `Agent` or
+  `Spaces`, including slash-containing Space names; removed test-only route
+  props in favor of exercising the real header action; clarified cache tests as
+  source/cache shape and added runtime just-bash assertions; qualified
+  `.thinkwork-pi` as runtime implementation state that should be hidden/skipped
+  rather than an S3 source shape failure.
+- Local verification:
+  `pnpm --filter @thinkwork/spaces test -- src/lib/consolidated-workspace-client.test.ts src/components/settings/SettingsAgentConfig.test.tsx src/components/settings/SettingsSpaceConfig.test.tsx src/components/settings/SettingsUserDetail.test.tsx src/components/workspace-settings/WorkspaceSettingsView.test.tsx`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/workspace-cache.test.ts lib/agent/extensions/__tests__/local-bash-extension.test.ts`,
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts test/sidecar/local-turn-runner.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/lib/workspace-renderer/compose-tuple.test.ts`,
+  package typechecks for Spaces, Desktop, API, and AgentCore Pi,
+  `pnpm --filter @thinkwork/docs build`, and `git diff --check` passed.
+
 ## Customer Onboarding Task Progress Hotfix - 2026-06-01
 
 - Branch: `fix/customer-onboarding-task-prefill`

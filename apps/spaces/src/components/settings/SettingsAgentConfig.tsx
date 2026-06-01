@@ -127,6 +127,8 @@ export function SettingsAgentConfig() {
           target={{ agentId: agent.id }}
           targetKey={`agent:${agent.id}`}
           client={spacesWorkspaceFilesClient}
+          title="Agent source workspace"
+          description="Agent files are the tenant-wide runtime base. They hydrate at /workspace root before User context and the active Space are added."
           defaultOpenFile="AGENTS.md"
           className="min-h-0 flex-1"
         />
