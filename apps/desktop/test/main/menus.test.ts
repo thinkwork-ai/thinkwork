@@ -149,10 +149,13 @@ describe("desktop window navigation", () => {
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
   });
 
-  it("uses hidden macOS chrome and ready-to-show-safe window defaults", () => {
+  it("uses hidden macOS chrome and the vibrancy-ready window defaults", () => {
     expect(buildMainWindowOptions("/preload.mjs", "darwin")).toMatchObject({
       show: false,
-      backgroundColor: "#101114",
+      // Transparent backing + the sidebar material make the sidebar translucent.
+      backgroundColor: "#00000000",
+      vibrancy: "sidebar",
+      visualEffectState: "followWindow",
       title: "ThinkWork Spaces",
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 14, y: 14 },
@@ -164,6 +167,16 @@ describe("desktop window navigation", () => {
         preload: "/preload.mjs",
       },
     });
+  });
+
+  it("keeps the opaque background and no vibrancy off macOS", () => {
+    const options = buildMainWindowOptions("/preload.mjs", "win32");
+    expect(options).toMatchObject({
+      backgroundColor: "#101114",
+      titleBarStyle: "default",
+    });
+    expect(options.vibrancy).toBeUndefined();
+    expect(options.visualEffectState).toBeUndefined();
   });
 });
 
