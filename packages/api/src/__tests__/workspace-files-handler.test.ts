@@ -29,23 +29,34 @@ import { computeCatalogSkillSha } from "../lib/catalog-skill-sha.js";
 
 // ─── Hoisted DB mock ─────────────────────────────────────────────────────────
 
-const { dbQueue, pushDbRows, resetDbQueue, eqCalls, resetEqCalls } = vi.hoisted(
-  () => {
-    const queue: unknown[][] = [];
-    const calls: { col: unknown; value: unknown }[] = [];
-    return {
-      dbQueue: queue,
-      pushDbRows: (rows: unknown[]) => queue.push(rows),
-      resetDbQueue: () => {
-        queue.length = 0;
-      },
-      eqCalls: calls,
-      resetEqCalls: () => {
-        calls.length = 0;
-      },
-    };
-  },
-);
+const {
+  dbQueue,
+  pushDbRows,
+  resetDbQueue,
+  eqCalls,
+  resetEqCalls,
+  dbUpdateCalls,
+  resetDbUpdateCalls,
+} = vi.hoisted(() => {
+  const queue: unknown[][] = [];
+  const calls: { col: unknown; value: unknown }[] = [];
+  const updates: unknown[] = [];
+  return {
+    dbQueue: queue,
+    pushDbRows: (rows: unknown[]) => queue.push(rows),
+    resetDbQueue: () => {
+      queue.length = 0;
+    },
+    eqCalls: calls,
+    resetEqCalls: () => {
+      calls.length = 0;
+    },
+    dbUpdateCalls: updates,
+    resetDbUpdateCalls: () => {
+      updates.length = 0;
+    },
+  };
+});
 
 vi.mock("../graphql/utils.js", () => {
   const tableCol = (label: string) => ({ __col: label });
@@ -78,6 +89,14 @@ vi.mock("../graphql/utils.js", () => {
         .mockImplementation((fn: (tx: unknown) => Promise<unknown>) =>
           fn({} as unknown),
         ),
+      update: vi.fn().mockImplementation(() => ({
+        set: vi.fn().mockImplementation((updates: unknown) => {
+          dbUpdateCalls.push(updates);
+          return {
+            where: vi.fn().mockResolvedValue([]),
+          };
+        }),
+      })),
     },
     eq: (a: unknown, b: unknown) => {
       eqCalls.push({ col: a, value: b });
@@ -103,6 +122,12 @@ vi.mock("../graphql/utils.js", () => {
       id: tableCol("spaces.id"),
       slug: tableCol("spaces.slug"),
       tenant_id: tableCol("spaces.tenant_id"),
+      workspace_folder_name: tableCol("spaces.workspace_folder_name"),
+      name: tableCol("spaces.name"),
+      description: tableCol("spaces.description"),
+      config: tableCol("spaces.config"),
+      render_diagnostics: tableCol("spaces.render_diagnostics"),
+      updated_at: tableCol("spaces.updated_at"),
     },
     tenants: {
       id: tableCol("tenants.id"),
@@ -384,6 +409,7 @@ beforeEach(() => {
   lambdaMock.reset();
   resetDbQueue();
   resetEqCalls();
+  resetDbUpdateCalls();
   authMockImpl.mockReset();
   enqueueComputerTaskMock.mockReset();
   enqueueComputerTaskMock.mockResolvedValue({ id: "computer-task-1" });
@@ -2234,7 +2260,7 @@ describe("pinned-file write guard", () => {
     },
   );
 
-  it("allows Space knowledge and SPACE.md writes", async () => {
+  it("allows Space knowledge writes and refreshes SPACE.md projections", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminSpaceTargetRows();
     s3Mock.on(PutObjectCommand).resolves({});
@@ -2258,12 +2284,28 @@ describe("pinned-file write guard", () => {
           action: "put",
           spaceId: SPACE_ID,
           path: "SPACE.md",
-          content: "# Engineering\n",
+          content: `---
+name: Customer Onboarding
+description: Coordinates enterprise onboarding work.
+workflows: [handoff]
+tools:
+  built_in: [web-search]
+skills: [finance-audit-xls]
+---
+# Customer Onboarding
+`,
         }),
       ),
     );
     expect(spaceMdRes.statusCode).toBe(200);
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(2);
+    expect(dbUpdateCalls).toHaveLength(1);
+    expect(dbUpdateCalls[0]).toEqual(
+      expect.objectContaining({
+        name: "Customer Onboarding",
+        description: "Coordinates enterprise onboarding work.",
+      }),
+    );
   });
 
   it.each([

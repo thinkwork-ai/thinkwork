@@ -48,7 +48,7 @@ type Documents = {
     "\n  mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n": typeof types.SettingsRenameTenantSlugDocument,
     "\n  query SettingsSpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.SettingsSpacesListDocument,
     "\n  mutation SettingsCreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.SettingsCreateSpaceDocument,
-    "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n    }\n  }\n": typeof types.SettingsSpaceDocument,
+    "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n      config\n      renderDiagnostics\n      toolPolicy\n      mcpPolicy\n      builtInTools\n    }\n  }\n": typeof types.SettingsSpaceDocument,
     "\n  mutation SettingsUpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      name\n      description\n      accessMode\n    }\n  }\n": typeof types.SettingsUpdateSpaceDocument,
     "\n  query SettingsTenantAgent($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      tenantId\n      runtime\n      model\n    }\n  }\n": typeof types.SettingsTenantAgentDocument,
     "\n  query SettingsModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n    }\n  }\n": typeof types.SettingsModelCatalogDocument,
@@ -100,7 +100,7 @@ const documents: Documents = {
     "\n  mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n": types.SettingsRenameTenantSlugDocument,
     "\n  query SettingsSpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": types.SettingsSpacesListDocument,
     "\n  mutation SettingsCreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": types.SettingsCreateSpaceDocument,
-    "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n    }\n  }\n": types.SettingsSpaceDocument,
+    "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n      config\n      renderDiagnostics\n      toolPolicy\n      mcpPolicy\n      builtInTools\n    }\n  }\n": types.SettingsSpaceDocument,
     "\n  mutation SettingsUpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      name\n      description\n      accessMode\n    }\n  }\n": types.SettingsUpdateSpaceDocument,
     "\n  query SettingsTenantAgent($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      tenantId\n      runtime\n      model\n    }\n  }\n": types.SettingsTenantAgentDocument,
     "\n  query SettingsModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n    }\n  }\n": types.SettingsModelCatalogDocument,
@@ -271,7 +271,7 @@ export function graphql(source: "\n  mutation SettingsCreateSpace($input: Create
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n    }\n  }\n"): (typeof documents)["\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n    }\n  }\n"];
+export function graphql(source: "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n      config\n      renderDiagnostics\n      toolPolicy\n      mcpPolicy\n      builtInTools\n    }\n  }\n"): (typeof documents)["\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n      config\n      renderDiagnostics\n      toolPolicy\n      mcpPolicy\n      builtInTools\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

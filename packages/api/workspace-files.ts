@@ -81,6 +81,7 @@ import {
   and,
   db,
   eq,
+  sql,
   spaces,
   tenantMembers,
   tenants,
@@ -112,6 +113,7 @@ import {
   isSpaceCapabilityWritePath,
   isVisibleUserContextPath,
 } from "./src/lib/workspace-lanes.js";
+import { buildSpaceManifestProjection } from "./src/lib/workspace-renderer/space-md-parser.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -183,6 +185,40 @@ async function refreshAgentAgentsMdSections(
     return json(500, {
       ok: false,
       error: `${operation} succeeded but AGENTS.md section refresh failed: ${message}`,
+    });
+  }
+}
+
+async function refreshSpaceManifestProjection(
+  target: SpaceTarget,
+  content: string,
+): Promise<APIGatewayProxyResult | null> {
+  const projection = buildSpaceManifestProjection(content);
+  const updates: Record<string, unknown> = {
+    config: sql`COALESCE(${spaces.config}, '{}'::jsonb) || ${JSON.stringify(
+      projection.configPatch,
+    )}::jsonb`,
+    render_diagnostics: sql`COALESCE(${spaces.render_diagnostics}, '{}'::jsonb) || ${JSON.stringify(
+      projection.renderDiagnostics,
+    )}::jsonb`,
+    updated_at: new Date(),
+  };
+  if (projection.autoApply.name) updates.name = projection.autoApply.name;
+  if (projection.autoApply.description !== undefined) {
+    updates.description = projection.autoApply.description;
+  }
+
+  try {
+    await db.update(spaces).set(updates).where(eq(spaces.id, target.spaceId));
+    return null;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[workspace-files] SPACE.md projection refresh failed: ${message}`,
+    );
+    return json(500, {
+      ok: false,
+      error: `SPACE.md saved but manifest projection refresh failed: ${message}`,
     });
   }
 }
@@ -649,7 +685,10 @@ function stripLegacyWorkspaceRoot(target: Target, path: string): string | null {
   return clean;
 }
 
-function storagePathCandidatesForTarget(target: Target, path: string): string[] {
+function storagePathCandidatesForTarget(
+  target: Target,
+  path: string,
+): string[] {
   const clean = path.replace(/^\/+/, "");
   const logical = stripLegacyWorkspaceRoot(target, clean) ?? clean;
   const candidates = [logical];
@@ -1070,6 +1109,25 @@ async function handlePut(
         ContentType: "text/plain; charset=utf-8",
       }),
     );
+    return json(200, { ok: true });
+  }
+
+  if (target.kind === "space") {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: target.key(cleanPath),
+        Body: content,
+        ContentType: "text/plain; charset=utf-8",
+      }),
+    );
+    if (cleanPath === "SPACE.md") {
+      const refreshError = await refreshSpaceManifestProjection(
+        target,
+        content,
+      );
+      if (refreshError) return refreshError;
+    }
     return json(200, { ok: true });
   }
 
