@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -23,6 +23,8 @@ import type { DelegationProvider } from "@thinkwork/pi-runtime-core";
 // ---------------------------------------------------------------------------
 // Test fixtures.
 // ---------------------------------------------------------------------------
+
+let defaultWorkspaceRoot: string | undefined;
 
 const VALID_PAYLOAD = (overrides: Record<string, unknown> = {}) => ({
   tenant_id: "tenant-1",
@@ -49,7 +51,7 @@ function fakeS3Client(): unknown {
 }
 
 // Stub out the env so MEMORY_ENGINE doesn't try to actually wire anything.
-beforeEach(() => {
+beforeEach(async () => {
   delete process.env.MEMORY_ENGINE;
   delete process.env.AGENTCORE_MEMORY_ID;
   delete process.env.HINDSIGHT_ENDPOINT;
@@ -59,10 +61,18 @@ beforeEach(() => {
   delete process.env.AGENTCORE_FILES_BUCKET;
   delete process.env.DB_CLUSTER_ARN;
   delete process.env.DB_SECRET_ARN;
+  defaultWorkspaceRoot = await mkdtemp(
+    path.join(tmpdir(), "agentcore-pi-default-workspace-"),
+  );
+  process.env.WORKSPACE_DIR = path.join(defaultWorkspaceRoot, "workspace");
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
+  if (defaultWorkspaceRoot) {
+    await rm(defaultWorkspaceRoot, { recursive: true, force: true });
+    defaultWorkspaceRoot = undefined;
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -177,6 +187,44 @@ describe("handleInvocation — happy path", () => {
       "stub response",
     );
     expect(fetchCalled).toBe(0);
+  });
+
+  it("creates WORKSPACE_DIR before per-turn staging and the agent loop", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agentcore-pi-root-"));
+    const workspaceDir = path.join(root, "workspace");
+    process.env.WORKSPACE_DIR = workspaceDir;
+    let stageSawWorkspace = false;
+    let loopSawWorkspace = false;
+
+    try {
+      const result = await handleInvocation({
+        payload: VALID_PAYLOAD(),
+        deps: makeDeps({
+          stageMessageAttachmentsImpl: async () => {
+            await access(workspaceDir);
+            stageSawWorkspace = true;
+            return { turnDir: "", staged: [] };
+          },
+          runAgentLoop: async ({ cwd }) => {
+            expect(cwd).toBe(workspaceDir);
+            await access(workspaceDir);
+            loopSawWorkspace = true;
+            return {
+              content: "stub response",
+              modelId: "amazon-bedrock/test-model",
+              toolsCalled: [],
+              toolInvocations: [],
+            };
+          },
+        }),
+      });
+
+      expect(result.statusCode).toBe(200);
+      expect(stageSawWorkspace).toBe(true);
+      expect(loopSawWorkspace).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("passes rendered_workspace_prefix through to workspace bootstrap", async () => {
