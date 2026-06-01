@@ -1903,6 +1903,22 @@ describe("TaskThreadView", () => {
                 tools_called: ["crm_search"],
                 input_tokens: 1200,
                 output_tokens: 300,
+                diagnostics: {
+                  workspace_diagnostics: {
+                    workspace_sync_ms: 12,
+                    hydration_copy_ms: 12,
+                    sdk_session_ms: 25,
+                    model_tool_run_ms: 1400,
+                    reconcile_writeback_ms: 18,
+                    file_count: 8,
+                    hydrated_files: 3,
+                    changed_files: 2,
+                    persisted_files: 1,
+                    rejected_files: 1,
+                    cache_hit: false,
+                    reconcile_status: "partial_success",
+                  },
+                },
               },
             },
           ],
@@ -1912,6 +1928,11 @@ describe("TaskThreadView", () => {
 
     expect(screen.getByLabelText("Turn activity")).toBeTruthy();
     openThinkingDisclosure();
+    expect(screen.getByText("Workspace sync")).toBeTruthy();
+    expect(screen.getByText(/workspace sync: 12ms/)).toBeTruthy();
+    expect(screen.getByText(/model tool run: 1.4s/)).toBeTruthy();
+    expect(screen.getByText(/changed files: 2/)).toBeTruthy();
+    expect(screen.getByText(/reconcile status: partial_success/)).toBeTruthy();
     expect(screen.getByText("Finding sources")).toBeTruthy();
     expect(screen.getByText(/Manual chat/)).toBeTruthy();
     expect(screen.getByText(/1.2K in \/ 300 out/)).toBeTruthy();

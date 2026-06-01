@@ -507,6 +507,25 @@ describe("runLocalDesktopTurn", () => {
           base_etag: '"etag-agents"',
         },
       ]);
+      expect(
+        (body.response as { diagnostics?: Record<string, unknown> })
+          .diagnostics,
+      ).toMatchObject({
+        workspace_diagnostics: {
+          file_count: 1,
+          hydrated_files: 1,
+          deleted_files: 0,
+          changed_files: 1,
+          cache_hit: false,
+          workspace_sync_ms: expect.any(Number),
+          hydration_copy_ms: expect.any(Number),
+          model_tool_run_ms: expect.any(Number),
+        },
+        local_pi_timings_ms: expect.objectContaining({
+          workspace_sync_ms: expect.any(Number),
+          workspace_diff_ms: expect.any(Number),
+        }),
+      });
       return Response.json({ ok: true }, { status: 200 });
     });
 

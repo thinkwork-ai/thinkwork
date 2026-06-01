@@ -345,12 +345,7 @@ export async function runLocalDesktopTurn(
       payload.session.invocation,
       preparedSdkSession.session,
       preparedSdkSession.resolvedModelId,
-      { local_pi_timings_ms: timings.snapshot() },
     );
-    logger.info("local Pi turn timing", {
-      phase: "pre_finalize",
-      timings: runResult.diagnostics?.local_pi_timings_ms,
-    });
     const changedFiles = await timings.measure("workspace_diff_ms", () =>
       collectDesktopWorkspaceChangedFiles({
         localDir: preparedWorkspace.localDir,
@@ -359,6 +354,16 @@ export async function runLocalDesktopTurn(
         logger,
       }),
     );
+    runResult.diagnostics = buildLocalTurnDiagnostics({
+      timings: timings.snapshot(),
+      workspace: preparedWorkspace,
+      changedFiles,
+    });
+    logger.info("local Pi turn timing", {
+      phase: "pre_finalize",
+      timings: runResult.diagnostics.local_pi_timings_ms,
+      workspace: runResult.diagnostics.workspace_diagnostics,
+    });
 
     const finalized = await timings.measure("finalize_callback_ms", () =>
       finalizeTurn({
@@ -2148,6 +2153,64 @@ function buildRunResult(
     toolInvocations,
     diagnostics,
   };
+}
+
+function buildLocalTurnDiagnostics(input: {
+  timings: Record<string, number>;
+  workspace?: WorkspaceSyncResult;
+  changedFiles: FinalizeChangedFile[];
+}): Record<string, unknown> {
+  const timings = input.timings;
+  const sdkSessionMs = sumTimingMs(timings, [
+    "sdk_load_ms",
+    "agent_prompt_files_ms",
+    "mcp_adapter_config_ms",
+    "shared_extensions_ms",
+    "resource_loader_reload_ms",
+    "model_config_ms",
+    "sdk_session_create_ms",
+    "bind_extensions_ms",
+  ]);
+  return {
+    local_pi_timings_ms: timings,
+    workspace_diagnostics: compactDiagnosticRecord({
+      workspace_sync_ms: timings.workspace_sync_ms,
+      hydration_copy_ms: timings.workspace_sync_ms,
+      sdk_session_ms: sdkSessionMs,
+      model_tool_run_ms: timings.sdk_prompt_ms,
+      workspace_diff_ms: timings.workspace_diff_ms,
+      file_count: input.workspace?.total,
+      hydrated_files: input.workspace?.synced,
+      deleted_files: input.workspace?.deleted,
+      cache_hit: input.workspace?.cacheHit === true,
+      cache_stale: input.workspace?.cacheStale === true,
+      access_revalidated: input.workspace?.accessRevalidated === true,
+      changed_files: input.changedFiles.length,
+    }),
+  };
+}
+
+function sumTimingMs(
+  timings: Record<string, number>,
+  keys: string[],
+): number | undefined {
+  let total = 0;
+  let seen = false;
+  for (const key of keys) {
+    const value = timings[key];
+    if (!Number.isFinite(value) || value < 0) continue;
+    total += value;
+    seen = true;
+  }
+  return seen ? total : undefined;
+}
+
+function compactDiagnosticRecord(
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  );
 }
 
 type WebSearchProvider = "exa" | "serpapi";

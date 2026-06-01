@@ -32,6 +32,7 @@ vi.mock("./reconcile.js", async (importOriginal) => {
 import {
   capturedSystemPromptFromFinalizePayload,
   diagnosticsFromFinalizePayload,
+  diagnosticsWithWorkspaceReconcile,
   isHiddenDesktopDelegation,
   processFinalize,
   toFinalizeResponse,
@@ -105,6 +106,61 @@ describe("diagnosticsFromFinalizePayload", () => {
         response: { diagnostics: { local_pi_timings_ms: { total_ms: 456 } } },
       }),
     ).toEqual({ local_pi_timings_ms: { total_ms: 456 } });
+  });
+});
+
+describe("diagnosticsWithWorkspaceReconcile", () => {
+  it("adds reconcile timing and file counts to workspace diagnostics", () => {
+    expect(
+      diagnosticsWithWorkspaceReconcile(
+        {
+          workspace_diagnostics: {
+            workspace_sync_ms: 42,
+            changed_files: 1,
+          },
+        },
+        {
+          status: "partial_success",
+          files: [
+            {
+              path: "AGENTS.md",
+              op: "modify",
+              owner: "agent",
+              status: "written",
+              sourceKey: "tenants/acme/agents/marco/AGENTS.md",
+              etag: '"new"',
+            },
+            {
+              path: "Thread/PROGRESS.md",
+              op: "modify",
+              owner: "status",
+              status: "rejected",
+              code: "read_only_status_file",
+              message: "generated",
+            },
+            {
+              path: "User/memory/stale.md",
+              op: "modify",
+              owner: "user",
+              status: "rejected",
+              code: "base_etag_mismatch",
+              message: "stale",
+            },
+          ],
+        },
+        17,
+      ),
+    ).toMatchObject({
+      workspace_diagnostics: {
+        workspace_sync_ms: 42,
+        reconcile_writeback_ms: 17,
+        reconcile_status: "partial_success",
+        changed_files: 3,
+        persisted_files: 1,
+        rejected_files: 2,
+        conflicted_files: 1,
+      },
+    });
   });
 });
 
