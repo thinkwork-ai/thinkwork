@@ -42,6 +42,7 @@
  */
 
 import http from "node:http";
+import { mkdir } from "node:fs/promises";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
   createBrowserAutomationExtension,
@@ -986,8 +987,31 @@ export async function handleInvocation(
     };
   }
 
+  try {
+    await mkdir(env.workspaceDir, { recursive: true });
+  } catch (err) {
+    logStructured({
+      level: "error",
+      event: "workspace_root_prepare_failed",
+      tenantId: identity.tenantId,
+      agentSlug: identity.agentSlug,
+      workspaceDir: env.workspaceDir,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return {
+      statusCode: 500,
+      body: {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Pi invocation could not prepare the workspace directory.",
+        runtime: "pi",
+      },
+    };
+  }
+
   // Workspace S3 sync — required for tenant isolation when WORKSPACE_BUCKET
-  // is configured. Lambda warm containers persist `/tmp/workspace` across
+  // is configured. Warm containers persist the workspace directory across
   // invocations, so a turn that skips the per-tenant sync (because
   // tenant_slug or instance_id is missing from the payload) would discover
   // the prior tenant's SKILL.md files and leak them into the system prompt.
@@ -1008,7 +1032,7 @@ export async function handleInvocation(
         statusCode: 400,
         body: {
           error:
-            "Pi invocation requires `tenant_slug` and `instance_id` (agent slug) when WORKSPACE_BUCKET is configured. Refusing to proceed against a potentially cross-tenant /tmp/workspace.",
+            "Pi invocation requires `tenant_slug` and `instance_id` (agent slug) when WORKSPACE_BUCKET is configured. Refusing to proceed against a potentially cross-tenant workspace.",
           runtime: "pi",
         },
       };

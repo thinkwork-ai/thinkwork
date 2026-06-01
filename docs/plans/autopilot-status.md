@@ -4130,6 +4130,41 @@ Target branch: `main`
 
 None.
 
+# AgentCore Workspace Root Prepare Hotfix - 2026-05-31
+
+## Status
+
+- Branch: `fix/agentcore-ensure-workspace-root`
+- Started: `2026-06-01T03:55:00Z`
+- Trigger:
+  - Post-deploy managed AgentCore shape probe for thread `5ddc958b-9c45-4782-a050-7c7f4578af84` failed before regression could continue.
+  - Failure: `AgentCore invoke failed: 500 {"error":"ENOENT: no such file or directory, mkdir '/workspace/.thinkwork-pi'","runtime":"pi"}`.
+- Root cause:
+  - Pi runtime now uses `/workspace` for the rendered tuple workspace contract, but the invocation path did not guarantee the workspace root exists before per-turn staging, extension setup, or the Pi agent loop can create scratch paths beneath it.
+- Implemented:
+  - `handleInvocation` now creates `WORKSPACE_DIR` with `mkdir(..., { recursive: true })` immediately after payload validation and before workspace bootstrap, attachment staging, skill discovery, MCP config reads, or the agent loop.
+  - Added a server regression test that starts with a missing `WORKSPACE_DIR` and verifies it exists before attachment staging and before the agent loop receives it as `cwd`.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/handler-context.test.ts` - passed, 125 tests.
+- `pnpm --filter @thinkwork/agentcore-pi typecheck` - passed.
+- `git diff --check` - passed.
+
+## CI / PR
+
+- Opened [#1928](https://github.com/thinkwork-ai/thinkwork/pull/1928).
+- GitHub checks on [#1928](https://github.com/thinkwork-ai/thinkwork/pull/1928) passed:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+
+## Blockers
+
+None.
+
 # Workspace Tuple Root / Runtime Merge Hotfix - 2026-05-31
 
 ## Status
