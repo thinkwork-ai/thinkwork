@@ -42,7 +42,8 @@
  */
 
 import http from "node:http";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readlink } from "node:fs/promises";
+import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
   createBrowserAutomationExtension,
@@ -159,6 +160,29 @@ export type {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
+  try {
+    await mkdir(workspaceDir, { recursive: true });
+    return;
+  } catch (err) {
+    if (
+      !(
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        err.code === "ENOENT"
+      )
+    ) {
+      throw err;
+    }
+  }
+
+  const target = await readlink(workspaceDir);
+  const absoluteTarget = path.resolve(path.dirname(workspaceDir), target);
+  await mkdir(absoluteTarget, { recursive: true });
+  await mkdir(workspaceDir, { recursive: true });
 }
 
 function parseMcpConfigs(value: unknown): McpServerConfig[] {
@@ -990,7 +1014,7 @@ export async function handleInvocation(
   }
 
   try {
-    await mkdir(env.workspaceDir, { recursive: true });
+    await ensureWorkspaceDir(env.workspaceDir);
   } catch (err) {
     logStructured({
       level: "error",

@@ -38,7 +38,8 @@ status: complete
 - Branch: `fix/agentcore-payload-workspace-bucket`
 - Worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-agentcore-payload-workspace-bucket`
-- Status: implementation locally verified before PR.
+- Status: merged and deployed via PR
+  [#1933](https://github.com/thinkwork-ai/thinkwork/pull/1933).
 - Live failure: after #1932 deployed, AgentCore just-bash probe thread
   `d5438fe7-9ad3-4a24-9db0-96f2cd62f87a` / turn
   `1ba2b3d6-e758-4152-8ea8-6df8d13b571b` succeeded but showed an empty
@@ -54,6 +55,30 @@ status: complete
 - Verification so far:
   `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts`,
   `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts agent-container/tests/handler-context.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and `git diff --check`
+  passed.
+
+## AgentCore Writable Workspace Hotfix - 2026-06-01
+
+- Branch: `fix/agentcore-writable-workspace`
+- Worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-agentcore-writable-workspace`
+- Status: local verification passed; PR pending.
+- Live failure: after #1933 deployed, AgentCore just-bash probe thread
+  `816a13bf-a7ab-473c-a481-963342a0d0e9` / turn
+  `38ae268c-6275-41a6-b3ad-60affa4f1589` failed during bootstrap with
+  `EROFS: read-only file system, open '/workspace/AGENTS.md'`.
+- Root cause: managed AgentCore treats the image filesystem as read-only. The
+  image created `/workspace` as a real image directory, while only `/tmp` is
+  writable at runtime.
+- Change: the Pi image now exposes `/workspace` as a symlink to
+  `/tmp/workspace`, preserving the public just-bash path while writing hydrated
+  files to the writable runtime area. Startup also creates a missing symlink
+  target before staging and the agent loop.
+- Local verification: `pnpm --filter @thinkwork/agentcore-pi test --
+agent-container/tests/bootstrap-workspace.test.ts
+agent-container/tests/server.test.ts
+agent-container/tests/handler-context.test.ts`,
   `pnpm --filter @thinkwork/agentcore-pi typecheck`, and `git diff --check`
   passed.
 

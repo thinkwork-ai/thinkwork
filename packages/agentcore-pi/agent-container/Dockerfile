@@ -78,7 +78,10 @@ ENV PORT=8080
 ENV AWS_REGION=us-east-1
 ENV NODE_ENV=production
 ENV WORKSPACE_DIR=/workspace
-RUN mkdir -p /workspace
+# AgentCore runs the image filesystem read-only; only /tmp is writable.
+# Keep the public runtime contract at /workspace while storing bytes under
+# /tmp/workspace where S3 hydration and just-bash writes can succeed.
+RUN mkdir -p /tmp/workspace && ln -s /tmp/workspace /workspace
 
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
