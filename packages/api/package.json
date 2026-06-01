@@ -33,6 +33,7 @@
     "@graphql-yoga/plugin-disable-introspection": "^2.22.0",
     "@smithy/node-http-handler": "^4.5.2",
     "@thinkwork/database-pg": "workspace:*",
+    "@thinkwork/evals-core": "workspace:*",
     "@thinkwork/lambda": "workspace:*",
     "@thinkwork/pi-runtime-core": "workspace:*",
     "@thinkwork/ui": "workspace:*",
