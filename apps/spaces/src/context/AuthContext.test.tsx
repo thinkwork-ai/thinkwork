@@ -293,6 +293,7 @@ function makeBridge(): ThinkworkBridge & {
     async readWorkspaceFile() {
       return { status: "vanished" as const };
     },
+    setNativeTheme() {},
     emitDeepLink() {
       deepLinkListener?.();
     },

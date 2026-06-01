@@ -283,7 +283,7 @@ export function SpacesComposer({
           // whether empty, filled, or focused, no dim fill, and no focus ring.
           // We target the inner InputGroup directly and force (`!`) the values
           // so the shared InputGroup's focus-ring + dim-bg defaults can't win.
-          className="[&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]]:!ring-0 [&_[data-slot=input-group]]:focus-within:border-white/10 dark:[&_[data-slot=input-group]]:!bg-[#262626]"
+          className="[&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:border-black/10 [&_[data-slot=input-group]]:!bg-white [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:!ring-0 [&_[data-slot=input-group]]:focus-within:border-black/20 dark:[&_[data-slot=input-group]]:border-white/10 dark:[&_[data-slot=input-group]]:!bg-[#262626] dark:[&_[data-slot=input-group]]:shadow-none dark:[&_[data-slot=input-group]]:focus-within:border-white/10"
           accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
           maxFiles={5}
           maxFileSize={25 * 1024 * 1024}

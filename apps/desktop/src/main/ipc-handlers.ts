@@ -1,4 +1,11 @@
-import { BrowserWindow, app, ipcMain, safeStorage, shell } from "electron";
+import {
+  BrowserWindow,
+  app,
+  ipcMain,
+  nativeTheme,
+  safeStorage,
+  shell,
+} from "electron";
 import { join } from "node:path";
 import { SafeStorageCognitoStorage } from "./cognito-storage.js";
 import { registerAuthBridgeHandlers } from "./auth-bridge.js";
@@ -14,6 +21,7 @@ import {
   READ_WORKSPACE_FILE_CHANNEL,
   READ_WORKSPACE_TREE_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
+  SET_NATIVE_THEME_CHANNEL,
   START_PI_TURN_CHANNEL,
   RAISE_THREAD_NOTIFICATION_CHANNEL,
   UPDATE_STATE_EVENT_CHANNEL,
@@ -133,6 +141,14 @@ export async function registerDesktopIpcHandlers(
         })
       : null);
   piSidecar?.start();
+
+  // Sync the native window appearance to the app theme so macOS vibrancy
+  // materials render light/dark to match (the in-app theme is renderer-owned;
+  // without this the material follows the OS, muddying the light sidebar).
+  ipcMain.on(SET_NATIVE_THEME_CHANNEL, (event, payload) => {
+    assertSafeSenderFrame(event);
+    nativeTheme.themeSource = payload === "light" ? "light" : "dark";
+  });
 
   ipcMain.handle(GET_DESKTOP_CONFIG_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);

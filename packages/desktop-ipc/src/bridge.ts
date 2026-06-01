@@ -79,5 +79,8 @@ export interface ThinkworkBridge {
   readWorkspaceFile(
     request: ReadWorkspaceFileRequest,
   ): Promise<ReadWorkspaceFileResponse>;
+  /** Sync the native window appearance to the app theme (renderer → main) so
+   *  macOS vibrancy materials render light/dark to match. */
+  setNativeTheme(theme: "light" | "dark"): void;
   pi?: PiBridge;
 }

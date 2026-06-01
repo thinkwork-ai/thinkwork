@@ -26,6 +26,21 @@ declare module "@tanstack/react-router" {
 // macOS so Windows/Linux (no vibrancy) keep their opaque background.
 if (isDesktopBuild() && /Mac/i.test(navigator.platform)) {
   document.documentElement.classList.add("desktop-vibrancy");
+
+  // Keep the native window appearance in sync with the in-app theme so the
+  // vibrancy material renders light/dark to match (otherwise it follows the OS
+  // appearance and a light scrim over a dark material reads muddy grey).
+  const root = document.documentElement;
+  const syncNativeTheme = () => {
+    window.thinkworkBridge?.setNativeTheme?.(
+      root.classList.contains("dark") ? "dark" : "light",
+    );
+  };
+  syncNativeTheme();
+  new MutationObserver(syncNativeTheme).observe(root, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
 }
 
 void createTokenStorage().then((tokenStorage) => {

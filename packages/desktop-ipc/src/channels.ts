@@ -34,6 +34,9 @@ export const WINDOW_FOCUS_EVENT_CHANNEL = "desktop:window-focus";
 export const READ_WORKSPACE_TREE_CHANNEL = "desktop:workspace:read-tree";
 // Renderer → main (invoke): read one file from the local Pi workspace cache.
 export const READ_WORKSPACE_FILE_CHANNEL = "desktop:workspace:read-file";
+// Renderer → main (send): sync the native window appearance to the app theme
+// so macOS vibrancy materials render light/dark to match.
+export const SET_NATIVE_THEME_CHANNEL = "desktop:set-native-theme";
 
 export const IPC_CHANNELS = {
   GET_SESSION_TOKENS: GET_SESSION_TOKENS_CHANNEL,

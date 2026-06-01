@@ -73,7 +73,9 @@ export function buildMainWindowOptions(
     // backing color avoids a white flash before the renderer paints. Other
     // platforms keep the opaque app background.
     backgroundColor: darwin ? "#00000000" : "#101114",
-    vibrancy: darwin ? "sidebar" : undefined,
+    // "under-window" is far more transparent than "sidebar" (which floors out
+    // fairly opaque); the per-theme scrim in index.css tints it.
+    vibrancy: darwin ? "under-window" : undefined,
     // followWindow: the sidebar is translucent while ThinkWork is focused and
     // settles to solid grey when it loses focus (matches the macOS norm).
     visualEffectState: darwin ? "followWindow" : undefined,

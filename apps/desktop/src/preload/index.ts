@@ -20,6 +20,7 @@ import {
   READ_WORKSPACE_TREE_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
+  SET_NATIVE_THEME_CHANNEL,
   SIGN_OUT_CHANNEL,
   SIGNED_OUT_EVENT_CHANNEL,
   START_PI_TURN_CHANNEL,
@@ -319,6 +320,9 @@ const bridge = {
         ReadWorkspaceFileRequestSchema.parse(request),
       ),
     );
+  },
+  setNativeTheme(theme) {
+    ipcRenderer.send(SET_NATIVE_THEME_CHANNEL, theme);
   },
   pi: piBridge,
 } satisfies ThinkworkBridge;
