@@ -6,8 +6,7 @@ export interface SendMessageAgentHandlingInput {
   hasAgentMentions: boolean;
 }
 
-export interface DefaultAgentDispatchInput
-  extends SendMessageAgentHandlingInput {
+export interface DefaultAgentDispatchInput extends SendMessageAgentHandlingInput {
   hasComputerThread: boolean;
   customerOnboardingHandled: boolean;
 }
@@ -24,7 +23,12 @@ function canRequestAgentHandling(input: SendMessageAgentHandlingInput) {
 export function shouldApplyCustomerOnboardingChatUpdate(
   input: SendMessageAgentHandlingInput,
 ) {
-  return canRequestAgentHandling(input) && !input.hasAgentMentions;
+  return (
+    input.isUserMessage &&
+    input.senderType === "user" &&
+    input.agentRequested !== false &&
+    !input.hasAgentMentions
+  );
 }
 
 export function shouldDispatchDefaultAgentTurn(

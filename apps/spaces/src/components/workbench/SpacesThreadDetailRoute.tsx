@@ -1265,7 +1265,20 @@ export function SpacesThreadDetailRoute({
           }
           throw result.error;
         }
-        if (sendInput.dispatchMode === "DESKTOP_LOCAL" && desktopLocalAgentId) {
+        const sentMessage = (
+          result.data as { sendMessage?: { metadata?: unknown } } | undefined
+        )?.sendMessage;
+        const customerOnboardingHandled = isCustomerOnboardingChatUpdateHandled(
+          sentMessage?.metadata,
+        );
+        if (customerOnboardingHandled) {
+          setOptimisticMessage(null);
+        }
+        if (
+          !customerOnboardingHandled &&
+          sendInput.dispatchMode === "DESKTOP_LOCAL" &&
+          desktopLocalAgentId
+        ) {
           dispatchDesktopLocalPiEvent("running");
           const startLocalTurn = () =>
             getDesktopBridge()?.pi?.startTurn({
@@ -2000,6 +2013,12 @@ function taskErrorMessage(value: unknown): string | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isCustomerOnboardingChatUpdateHandled(metadata: unknown): boolean {
+  const record = metadataObject(metadata);
+  const update = metadataObject(record?.customerOnboardingChatUpdate);
+  return update?.handled === true && update.agentDispatchRequired !== true;
 }
 
 function threadTitleFallbackFromState(state: unknown, threadId: string) {

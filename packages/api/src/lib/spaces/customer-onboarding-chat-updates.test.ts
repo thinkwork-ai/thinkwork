@@ -329,6 +329,31 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     ]);
   });
 
+  it("maps clicked native task prefills with customer suffixes and ISO timestamps", () => {
+    const completed = extractCustomerOnboardingChatUpdate(
+      "Send and receive DocuSign package - AgentCore workspace shape 2026-06-01T08:05:31.708Z: done",
+    );
+    const blocked = extractCustomerOnboardingChatUpdate(
+      "Check Dun & Bradstreet information - AgentCore workspace shape 2026-06-01T08:05:31.708Z: blocked",
+    );
+
+    expect(completed.taskStatusUpdates).toEqual([
+      {
+        key: "docusign_package",
+        status: "completed",
+        note: "Send and receive DocuSign package - AgentCore workspace shape 2026-06-01T08:05:31.708Z: done",
+      },
+    ]);
+    expect(completed.completedTaskKeys).toEqual(["docusign_package"]);
+    expect(blocked.taskStatusUpdates).toEqual([
+      {
+        key: "dun_and_bradstreet_check",
+        status: "blocked",
+        note: "Check Dun & Bradstreet information - AgentCore workspace shape 2026-06-01T08:05:31.708Z: blocked",
+      },
+    ]);
+  });
+
   it("maps missing onboarding information prefill commands to the native checklist row", () => {
     const completed = extractCustomerOnboardingChatUpdate(
       "Resolve missing onboarding information: done",

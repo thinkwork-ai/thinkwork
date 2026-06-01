@@ -729,6 +729,7 @@ export const SendMessageMutation = gql`
       tenantId
       role
       content
+      metadata
       createdAt
     }
   }
