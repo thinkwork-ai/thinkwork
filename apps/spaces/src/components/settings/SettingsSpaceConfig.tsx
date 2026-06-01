@@ -210,7 +210,7 @@ function InformationSection({
             }
           />
         </Labeled>
-        <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+        <div className="flex items-center justify-end gap-3 pt-4">
           {saved ? (
             <span className="text-sm text-muted-foreground">Saved</span>
           ) : null}
