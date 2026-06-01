@@ -85,6 +85,88 @@
   display: none;
 }
 
+/*
+ * macOS sidebar vibrancy. The window is created with the NSVisualEffectView
+ * "sidebar" material (apps/desktop window.ts). For the material to show, the
+ * document is transparent behind the sidebar, the sidebar surfaces carry a
+ * dark scrim over the frosted material, and the main content stays opaque (so
+ * only the sidebar reveals the desktop). Gated to `.desktop-vibrancy` (macOS
+ * desktop only); selection/hover overlays read lighter — not darker — over the
+ * material.
+ */
+.desktop-vibrancy,
+.desktop-vibrancy body,
+.desktop-vibrancy #root {
+  background: transparent !important;
+}
+
+/*
+ * One element per sidebar carries the scrim — the main shell's visible panel
+ * (`sidebar-inner`) and the Settings `<aside>` — so both read identically;
+ * stacking it on the group wrapper too would double the opacity. The scrim is
+ * theme-scoped so light mode stays light (the native material flips via
+ * nativeTheme in the main process).
+ */
+
+/* Dark: a warm dark scrim (the "sidebar" material is cool/blue, so R > G > B
+   takes the chill off), a softened content canvas, lighter selection overlay. */
+.desktop-vibrancy.dark {
+  --background: oklch(0.19 0 0);
+  --sidebar-accent: rgba(255, 255, 255, 0.09);
+}
+.desktop-vibrancy.dark [data-slot="sidebar-inner"],
+.desktop-vibrancy.dark .tw-vibrancy-panel {
+  background: rgba(19, 18, 16, 0.36) !important;
+}
+
+/* Light: a light scrim over the material; selection reads as a subtle dark
+   overlay; the content canvas keeps the default light background. */
+.desktop-vibrancy:not(.dark) {
+  --sidebar-accent: rgba(0, 0, 0, 0.06);
+}
+.desktop-vibrancy:not(.dark) [data-slot="sidebar-inner"],
+.desktop-vibrancy:not(.dark) .tw-vibrancy-panel {
+  background: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Sub-surfaces transparent so the scrim/material reads uniformly to the very
+   top — including the window-chrome strip (traffic lights + nav) and footer. */
+.desktop-vibrancy [data-slot="sidebar-wrapper"],
+.desktop-vibrancy [data-slot="sidebar"],
+.desktop-vibrancy [data-slot="sidebar-container"],
+.desktop-vibrancy [data-slot="sidebar-header"],
+.desktop-vibrancy [data-slot="sidebar-footer"],
+.desktop-vibrancy .desktop-app-header {
+  background: transparent !important;
+}
+.desktop-vibrancy .desktop-app-header {
+  border-color: transparent !important;
+}
+
+/* New thread is an action, not a destination — never show it selected. */
+.desktop-vibrancy
+  [data-new-thread-row]
+  [data-slot="sidebar-menu-button"][data-active="true"] {
+  background: transparent !important;
+}
+
+/* Keep everything to the right of the sidebar opaque, so only the sidebar is
+   translucent — the conversation/editor stays readable. */
+.desktop-vibrancy [data-slot="sidebar-inset"] {
+  background: var(--background);
+}
+
+/* The Settings takeover wraps its sidebar + content in an opaque `bg-background`
+   `.desktop-shell` div, which would block the material behind the Settings nav.
+   Make that wrapper transparent (so the nav shows the same vibrancy as the main
+   shell) and re-paint the Settings content pane opaque. */
+.desktop-vibrancy .desktop-shell {
+  background: transparent !important;
+}
+.desktop-vibrancy .desktop-shell > main {
+  background: var(--background);
+}
+
 .desktop-shell {
   --desktop-app-header-height: 2.75rem;
 }

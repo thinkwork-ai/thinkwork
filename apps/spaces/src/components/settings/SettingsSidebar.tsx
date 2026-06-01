@@ -30,7 +30,7 @@ export function SettingsSidebar() {
   });
 
   return (
-    <aside className="flex h-svh w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <aside className="tw-vibrancy-panel flex h-svh w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
       {/* Web carries the brand header from the chat shell; desktop relies on
           its own window chrome. Padding mirrors the shell SidebarHeader
           (p-2 + pb-3, inner brand px-1) so the logo aligns across surfaces. */}

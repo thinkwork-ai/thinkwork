@@ -20,6 +20,14 @@ declare module "@tanstack/react-router" {
   }
 }
 
+// macOS desktop only: opt into the NSVisualEffectView sidebar material. The
+// window is created with `vibrancy: "sidebar"`; this class makes the renderer
+// paint transparent behind the sidebar so the material shows through. Gated to
+// macOS so Windows/Linux (no vibrancy) keep their opaque background.
+if (isDesktopBuild() && /Mac/i.test(navigator.platform)) {
+  document.documentElement.classList.add("desktop-vibrancy");
+}
+
 void createTokenStorage().then((tokenStorage) => {
   configureTokenStorage(tokenStorage);
 

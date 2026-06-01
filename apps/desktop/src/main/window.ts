@@ -60,16 +60,26 @@ export function buildMainWindowOptions(
   preloadPath: string,
   platform: NodeJS.Platform = process.platform,
 ): BrowserWindowConstructorOptions {
+  const darwin = platform === "darwin";
   return {
     width: 1100,
     height: 780,
     minWidth: 840,
     minHeight: 620,
     show: false,
-    backgroundColor: "#101114",
+    // On macOS the window background is the NSVisualEffectView "sidebar"
+    // material; the renderer paints the sidebar transparent so the material
+    // shows through (see the .desktop-vibrancy CSS). A fully-transparent
+    // backing color avoids a white flash before the renderer paints. Other
+    // platforms keep the opaque app background.
+    backgroundColor: darwin ? "#00000000" : "#101114",
+    vibrancy: darwin ? "sidebar" : undefined,
+    // followWindow: the sidebar is translucent while ThinkWork is focused and
+    // settles to solid grey when it loses focus (matches the macOS norm).
+    visualEffectState: darwin ? "followWindow" : undefined,
     title: "ThinkWork Spaces",
-    titleBarStyle: platform === "darwin" ? "hiddenInset" : "default",
-    trafficLightPosition: platform === "darwin" ? { x: 14, y: 14 } : undefined,
+    titleBarStyle: darwin ? "hiddenInset" : "default",
+    trafficLightPosition: darwin ? { x: 14, y: 14 } : undefined,
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
