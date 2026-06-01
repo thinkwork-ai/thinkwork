@@ -2,13 +2,56 @@ export type WorkspacePathOwner =
   | "agent"
   | "space"
   | "user"
+  | "thread_notes"
   | "thread_goal"
   | "status"
   | "scratch"
   | "unowned";
 
+export type WorkspaceContractWriteLane =
+  | "agent_source"
+  | "space_source"
+  | "user_source"
+  | "thread_notes"
+  | "thread_goal"
+  | "generated_read_only"
+  | "scratch"
+  | "none";
+
+export interface WorkspacePathContract {
+  path: string;
+  owner: WorkspacePathOwner;
+  sourcePath: string;
+  writeLane: WorkspaceContractWriteLane;
+  readOnly: boolean;
+  generated: boolean;
+}
+
+const GENERATED_WORKSPACE_PROJECTION_PATHS = new Set([
+  "Spaces/INDEX.md",
+  "Thread/THREAD.md",
+  "Thread/GOAL.md",
+  "Thread/PROGRESS.md",
+  "Thread/TASKS.md",
+]);
+
+function isAgentSourcePath(path: string): boolean {
+  return (
+    path === "AGENTS.md" ||
+    path === "CONTEXT.md" ||
+    path === "GUARDRAILS.md" ||
+    path === "MEMORY_GUIDE.md" ||
+    path === "ROUTER.md" ||
+    path === "TOOLS.md" ||
+    path === "MCP.md" ||
+    path.startsWith("memory/") ||
+    path.startsWith("skills/") ||
+    path.startsWith("workspaces/")
+  );
+}
+
 function stripTopLevelWorkspaceFolder(path: string): {
-  owner: "agent" | "space" | "user" | null;
+  owner: "agent" | "space" | "user" | "thread" | null;
   sourcePath: string;
 } {
   const clean = path.replace(/^\/+/, "");
@@ -25,6 +68,10 @@ function stripTopLevelWorkspaceFolder(path: string): {
     const [, _spaceFolder, ...rest] = clean.split("/");
     return { owner: "space", sourcePath: rest.join("/") };
   }
+  if (clean === "Thread") return { owner: "thread", sourcePath: "" };
+  if (clean.startsWith("Thread/")) {
+    return { owner: "thread", sourcePath: clean.slice("Thread/".length) };
+  }
   if (clean === "Space") return { owner: "space", sourcePath: "" };
   if (clean.startsWith("Space/")) {
     return { owner: "space", sourcePath: clean.slice("Space/".length) };
@@ -36,13 +83,27 @@ export function workspaceSourcePath(path: string): string {
   return stripTopLevelWorkspaceFolder(path).sourcePath;
 }
 
+export function isGeneratedWorkspaceProjection(path: string): boolean {
+  const clean = path.replace(/^\/+/, "");
+  return GENERATED_WORKSPACE_PROJECTION_PATHS.has(clean);
+}
+
 export function workspacePathOwner(path: string): WorkspacePathOwner {
   const clean = path.replace(/^\/+/, "");
   if (!clean || clean.includes("..") || clean.includes("\\")) return "unowned";
   if (clean === "scratch" || clean.startsWith("scratch/")) return "scratch";
+  if (isGeneratedWorkspaceProjection(clean)) return "status";
   const topLevel = stripTopLevelWorkspaceFolder(clean);
   const sourcePath = topLevel.sourcePath;
-  if (!sourcePath && topLevel.owner) return topLevel.owner;
+  if (!sourcePath && topLevel.owner) {
+    return topLevel.owner === "thread" ? "unowned" : topLevel.owner;
+  }
+  if (topLevel.owner === "thread") {
+    if (sourcePath.startsWith("notes/") && sourcePath !== "notes/") {
+      return "thread_notes";
+    }
+    return "unowned";
+  }
   if (sourcePath === "GOAL.md" || sourcePath === "PROGRESS.md") {
     return "status";
   }
@@ -65,16 +126,18 @@ export function workspacePathOwner(path: string): WorkspacePathOwner {
       sourcePath === "CONTEXT.md" ||
       sourcePath.startsWith("docs/") ||
       sourcePath.startsWith("goals/") ||
+      sourcePath.startsWith("plans/") ||
+      sourcePath.startsWith("artifacts/") ||
+      sourcePath.startsWith("workflows/") ||
       sourcePath.startsWith("knowledge/"))
   ) {
     return "space";
   }
   if (
     topLevel.owner === "agent" &&
-    (sourcePath === "AGENTS.md" ||
+    (isAgentSourcePath(sourcePath) ||
       sourcePath === "IDENTITY.md" ||
-      sourcePath === "CAPABILITIES.md" ||
-      sourcePath.startsWith("skills/"))
+      sourcePath === "CAPABILITIES.md")
   ) {
     return "agent";
   }
@@ -88,25 +151,111 @@ export function workspacePathOwner(path: string): WorkspacePathOwner {
   ) {
     return "thread_goal";
   }
-  if (clean === "USER.md" || clean.startsWith("memory/")) return "user";
+  if (clean === "USER.md") return "user";
   if (
     clean === "SPACE.md" ||
-    clean === "CONTEXT.md" ||
     clean.startsWith("docs/") ||
     clean.startsWith("goals/") ||
+    clean.startsWith("plans/") ||
+    clean.startsWith("artifacts/") ||
+    clean.startsWith("workflows/") ||
     clean.startsWith("knowledge/")
   ) {
     return "space";
   }
   if (
-    clean === "AGENTS.md" ||
+    isAgentSourcePath(clean) ||
     clean === "IDENTITY.md" ||
-    clean === "CAPABILITIES.md" ||
-    clean.startsWith("skills/")
+    clean === "CAPABILITIES.md"
   ) {
     return "agent";
   }
   return "unowned";
+}
+
+export function workspacePathContract(path: string): WorkspacePathContract {
+  const clean = path.replace(/^\/+/, "");
+  const owner = workspacePathOwner(clean);
+  const sourcePath = workspaceSourcePath(clean);
+  const generated = isGeneratedWorkspaceProjection(clean);
+
+  if (generated || owner === "status") {
+    return {
+      path: clean,
+      owner,
+      sourcePath,
+      writeLane: "generated_read_only",
+      readOnly: true,
+      generated: true,
+    };
+  }
+
+  switch (owner) {
+    case "agent":
+      return {
+        path: clean,
+        owner,
+        sourcePath,
+        writeLane: "agent_source",
+        readOnly: false,
+        generated: false,
+      };
+    case "space":
+      return {
+        path: clean,
+        owner,
+        sourcePath,
+        writeLane: "space_source",
+        readOnly: false,
+        generated: false,
+      };
+    case "user":
+      return {
+        path: clean,
+        owner,
+        sourcePath,
+        writeLane: "user_source",
+        readOnly: false,
+        generated: false,
+      };
+    case "thread_notes":
+      return {
+        path: clean,
+        owner,
+        sourcePath,
+        writeLane: "thread_notes",
+        readOnly: false,
+        generated: false,
+      };
+    case "thread_goal":
+      return {
+        path: clean,
+        owner,
+        sourcePath,
+        writeLane: "thread_goal",
+        readOnly: false,
+        generated: false,
+      };
+    case "scratch":
+      return {
+        path: clean,
+        owner,
+        sourcePath,
+        writeLane: "scratch",
+        readOnly: false,
+        generated: false,
+      };
+    case "unowned":
+    default:
+      return {
+        path: clean,
+        owner,
+        sourcePath,
+        writeLane: "none",
+        readOnly: true,
+        generated: false,
+      };
+  }
 }
 
 export function isVisibleUserContextPath(path: string): boolean {

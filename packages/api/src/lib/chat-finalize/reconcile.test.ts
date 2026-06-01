@@ -97,7 +97,7 @@ describe("reconcileChangedFiles", () => {
     ],
     files: [
       {
-        path: "memory/preferences.md",
+        path: "User/memory/preferences.md",
         owner: "user",
         sourceKey: "tenants/acme/users/eric/memory/preferences.md",
         sourcePrefix: "tenants/acme/users/eric/",
@@ -180,12 +180,19 @@ describe("reconcileChangedFiles", () => {
         return `${JSON.stringify(hydrateManifest)}\n`;
       },
       async putText(input) {
-        puts.push({
+        const put: {
+          key: string;
+          content: string;
+          ifNoneMatch?: string;
+          ifMatch?: string;
+        } = {
           key: input.key,
           content: input.content,
-          ifNoneMatch: input.ifNoneMatch,
-          ifMatch: input.ifMatch,
-        });
+        };
+        if (input.ifNoneMatch !== undefined)
+          put.ifNoneMatch = input.ifNoneMatch;
+        if (input.ifMatch !== undefined) put.ifMatch = input.ifMatch;
+        puts.push(put);
         return '"new-etag"';
       },
       async deleteObject(input) {
@@ -259,7 +266,7 @@ describe("reconcileChangedFiles", () => {
       objectStore: store,
       changedFiles: [
         {
-          path: "memory/preferences.md",
+          path: "User/memory/preferences.md",
           op: "modify",
           content: "# Prefs\n",
           base_etag: '"user-old"',
@@ -401,7 +408,7 @@ describe("reconcileChangedFiles", () => {
       hydrateManifest,
       objectStore: store,
       changedFiles: [
-        { path: "memory/new.md", op: "create", content: "# New\n" },
+        { path: "User/memory/new.md", op: "create", content: "# New\n" },
         {
           path: "docs/brief.md",
           op: "delete",
@@ -471,12 +478,16 @@ describe("reconcileChangedFiles", () => {
         });
       },
       changedFiles: [
-        { path: "memory/ok.md", op: "create", content: "# OK\n" },
-        { path: "memory/conflict.md", op: "create", content: "# Conflict\n" },
+        { path: "User/memory/ok.md", op: "create", content: "# OK\n" },
+        {
+          path: "User/memory/conflict.md",
+          op: "create",
+          content: "# Conflict\n",
+        },
         { path: "scratch/tmp.md", op: "create", content: "tmp" },
         { path: "unknown/file.md", op: "create", content: "nope" },
         {
-          path: "memory/secret.md",
+          path: "User/memory/secret.md",
           op: "create",
           content: "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456",
         },
@@ -486,9 +497,12 @@ describe("reconcileChangedFiles", () => {
     expect(result.status).toBe("partial_success");
     expect(result.files).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: "memory/ok.md", status: "written" }),
         expect.objectContaining({
-          path: "memory/conflict.md",
+          path: "User/memory/ok.md",
+          status: "written",
+        }),
+        expect.objectContaining({
+          path: "User/memory/conflict.md",
           status: "rejected",
           code: "precondition_failed",
         }),
@@ -502,7 +516,7 @@ describe("reconcileChangedFiles", () => {
           code: "unowned_path",
         }),
         expect.objectContaining({
-          path: "memory/secret.md",
+          path: "User/memory/secret.md",
           status: "rejected",
           code: "secret_detected",
           rule: "openai_api_key",
@@ -527,7 +541,7 @@ describe("reconcileChangedFiles", () => {
     expect(quarantine.writes[0]?.metadata).not.toHaveProperty("content");
     expect(notifications).toEqual([
       {
-        path: "memory/secret.md",
+        path: "User/memory/secret.md",
         rule: "openai_api_key",
         key: quarantine.writes[0]?.key,
       },
@@ -561,7 +575,7 @@ describe("reconcileChangedFiles", () => {
       },
       changedFiles: [
         {
-          path: "memory/secret.md",
+          path: "User/memory/secret.md",
           op: "create",
           content: "fixture=sk-abcdefghijklmnopqrstuvwxyz123456",
         },
@@ -598,7 +612,7 @@ describe("reconcileChangedFiles", () => {
       },
       changedFiles: [
         {
-          path: "memory/secret.md",
+          path: "User/memory/secret.md",
           op: "create",
           content: "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456",
         },
@@ -628,7 +642,11 @@ describe("reconcileChangedFiles", () => {
       hydrateManifest,
       objectStore: store,
       changedFiles: [
-        { path: "memory/preferences.md", op: "modify", content: "# Prefs\n" },
+        {
+          path: "User/memory/preferences.md",
+          op: "modify",
+          content: "# Prefs\n",
+        },
         {
           path: "docs/brief.md",
           op: "delete",
@@ -659,14 +677,14 @@ describe("reconcileChangedFiles", () => {
       context,
       objectStore: store,
       changedFiles: [
-        { path: "memory/new.md", op: "create", content: "# New\n" },
+        { path: "User/memory/new.md", op: "create", content: "# New\n" },
       ],
     });
 
     expect(result.status).toBe("failed");
     expect(result.files).toEqual([
       expect.objectContaining({
-        path: "memory/new.md",
+        path: "User/memory/new.md",
         status: "rejected",
         code: "manifest_invalid",
       }),

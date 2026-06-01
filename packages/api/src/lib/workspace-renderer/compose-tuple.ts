@@ -160,6 +160,8 @@ function hydratePathForSource(
       return `Spaces/${runtimeFolderSegment(tuple.spaceSlug)}/${sourcePath}`;
     case "thread_goal":
       return `Spaces/${runtimeFolderSegment(tuple.spaceSlug)}/${sourcePath}`;
+    case "thread_notes":
+      return `Thread/${sourcePath}`;
   }
 }
 

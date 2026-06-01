@@ -65,11 +65,12 @@ describe("workspace renderer prefixes", () => {
       "thread_goal",
     );
     expect(workspacePathOwner("USER.md")).toBe("user");
-    expect(workspacePathOwner("memory/preferences.md")).toBe("user");
+    expect(workspacePathOwner("memory/preferences.md")).toBe("agent");
     expect(workspacePathOwner("SPACE.md")).toBe("space");
     expect(workspacePathOwner("docs/customer.md")).toBe("space");
     expect(workspacePathOwner("goals/launch/notes.md")).toBe("space");
     expect(workspacePathOwner("AGENTS.md")).toBe("agent");
+    expect(workspacePathOwner("CONTEXT.md")).toBe("agent");
     expect(workspacePathOwner("skills/reporting/SKILL.md")).toBe("agent");
     expect(workspacePathOwner("GOAL.md")).toBe("status");
     expect(workspacePathOwner("PROGRESS.md")).toBe("status");
