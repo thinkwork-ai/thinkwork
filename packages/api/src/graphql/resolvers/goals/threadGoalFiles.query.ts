@@ -29,10 +29,15 @@ export async function threadGoalFiles(
   if (!tenant?.slug) return null;
 
   const files = [];
+  const threadFolderName =
+    typeof goal.workspaceFolderName === "string"
+      ? goal.workspaceFolderName
+      : null;
   for (const file of THREAD_GOAL_REQUIRED_FILES) {
     const address = {
       tenantSlug: tenant.slug,
       threadId: args.threadId,
+      threadFolderName,
       file,
     };
     files.push({

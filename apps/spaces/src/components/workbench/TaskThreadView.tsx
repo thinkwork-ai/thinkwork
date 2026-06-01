@@ -282,6 +282,8 @@ export interface ThreadInfoChecklistState {
   error?: string | null;
   completedAt?: string | null;
   isCompleting?: boolean;
+  isRefreshing?: boolean;
+  onRefreshProgress?: () => Promise<void> | void;
   onCompleteThread?: () => Promise<void> | void;
 }
 
@@ -1120,9 +1122,29 @@ function ThreadInfoChecklist({
         <h2 className="text-xs font-semibold uppercase tracking-wider text-white/55">
           Progress
         </h2>
-        <span className="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/75">
-          {progress}%
-        </span>
+        <div className="flex items-center gap-2">
+          {checklist.onRefreshProgress ? (
+            <button
+              type="button"
+              className="grid size-6 place-items-center rounded-md text-white/45 transition-colors hover:bg-white/8 hover:text-white/75 disabled:cursor-wait disabled:opacity-60"
+              aria-label="Refresh progress"
+              title="Refresh progress"
+              disabled={checklist.isRefreshing}
+              onClick={() => void checklist.onRefreshProgress?.()}
+            >
+              <RotateCcw
+                className={cn(
+                  "size-3.5",
+                  checklist.isRefreshing ? "animate-spin" : "",
+                )}
+                aria-hidden
+              />
+            </button>
+          ) : null}
+          <span className="rounded-full bg-white/8 px-2 py-0.5 text-xs text-white/75">
+            {progress}%
+          </span>
+        </div>
       </div>
 
       {total > 0 ? (

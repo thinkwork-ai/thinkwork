@@ -104,7 +104,12 @@ export function workspacePathOwner(path: string): WorkspacePathOwner {
     }
     return "unowned";
   }
-  if (sourcePath === "GOAL.md" || sourcePath === "PROGRESS.md") {
+  if (
+    sourcePath === "THREAD.md" ||
+    sourcePath === "GOAL.md" ||
+    sourcePath === "PROGRESS.md" ||
+    sourcePath === "TASKS.md"
+  ) {
     return "status";
   }
   if (
@@ -142,7 +147,14 @@ export function workspacePathOwner(path: string): WorkspacePathOwner {
     return "agent";
   }
   if (topLevel.owner) return "unowned";
-  if (clean === "GOAL.md" || clean === "PROGRESS.md") return "status";
+  if (
+    clean === "THREAD.md" ||
+    clean === "GOAL.md" ||
+    clean === "PROGRESS.md" ||
+    clean === "TASKS.md"
+  ) {
+    return "status";
+  }
   if (
     clean === "DECISIONS.md" ||
     clean === "ARTIFACTS.md" ||

@@ -177,8 +177,10 @@ describe("thread goal storage", () => {
     });
 
     expect(files.map((file) => file.file)).toEqual([
+      "THREAD.md",
       "GOAL.md",
       "PROGRESS.md",
+      "TASKS.md",
       "DECISIONS.md",
       "HANDOFFS.md",
     ]);

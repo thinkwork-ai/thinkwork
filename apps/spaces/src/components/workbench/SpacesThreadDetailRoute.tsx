@@ -42,6 +42,7 @@ import {
   ThreadMentionTargetsQuery,
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
+  RefreshThreadProgressMutation,
   ReviewGoalMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
@@ -398,6 +399,9 @@ export function SpacesThreadDetailRoute({
     useMutation(UpdateThreadMutation);
   const [{ fetching: reviewingGoal }, reviewGoal] =
     useMutation(ReviewGoalMutation);
+  const [{ fetching: refreshingProgress }, refreshThreadProgress] = useMutation(
+    RefreshThreadProgressMutation,
+  );
   const {
     chunks,
     streamState,
@@ -587,9 +591,9 @@ export function SpacesThreadDetailRoute({
     : false;
   const hasPendingStartRealActivity = Boolean(
     optimisticThreadStart &&
-    (optimisticThreadStart.expectAssistantResponse === false ||
-      threadTurns.length > 0 ||
-      hasDurableAssistantAfterLatestUser(thread)),
+      (optimisticThreadStart.expectAssistantResponse === false ||
+        threadTurns.length > 0 ||
+        hasDurableAssistantAfterLatestUser(thread)),
   );
   const shouldKeepPendingStartSignal = Boolean(
     optimisticThreadStart && !hasPendingStartRealActivity,
@@ -650,10 +654,19 @@ export function SpacesThreadDetailRoute({
     runbookRunsFetching ||
     linkedTasksFetching ||
     progressMarkdownFetching ||
-    goalFilesFetching;
-  const handleRefreshThread = useCallback(() => {
+    goalFilesFetching ||
+    refreshingProgress;
+  const handleRefreshThread = useCallback(async () => {
     setManualRefreshStartedAt(Date.now());
     setManualRefreshObservedFetching(false);
+    if (tenantId) {
+      const result = await refreshThreadProgress({
+        input: { tenantId, threadId },
+      });
+      if (result.error) {
+        toast.error(result.error.message);
+      }
+    }
     reexecuteQuery({ requestPolicy: "network-only" });
     reexecuteTasksQuery({ requestPolicy: "network-only" });
     reexecuteEventsQuery({ requestPolicy: "network-only" });
@@ -671,6 +684,9 @@ export function SpacesThreadDetailRoute({
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
+    refreshThreadProgress,
+    tenantId,
+    threadId,
   ]);
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
   const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
@@ -720,7 +736,7 @@ export function SpacesThreadDetailRoute({
   useEffect(() => {
     function handleDesktopRefresh(event: Event) {
       event.preventDefault();
-      handleRefreshThread();
+      void handleRefreshThread();
     }
 
     window.addEventListener("thinkwork:desktop-refresh", handleDesktopRefresh);
@@ -938,6 +954,8 @@ export function SpacesThreadDetailRoute({
                 ? routeThread?.updatedAt
                 : null,
             isCompleting: completingThread,
+            isRefreshing: refreshingProgress || manualRefreshStartedAt !== null,
+            onRefreshProgress: handleRefreshThread,
             onCompleteThread: goalReviewRequired(goal?.reviewPolicy)
               ? undefined
               : handleCompleteThread,
@@ -952,6 +970,7 @@ export function SpacesThreadDetailRoute({
       goalRecords,
       goalReviewError,
       goalReadiness.readyForReview,
+      handleRefreshThread,
       handleReviewGoal,
       routeThread,
       infoPanelChecklistTasks,
@@ -959,6 +978,8 @@ export function SpacesThreadDetailRoute({
       linkedTasksFetching,
       progressMarkdownError?.message,
       progressMarkdownFetching,
+      refreshingProgress,
+      manualRefreshStartedAt,
       reviewingGoal,
       showOnboardingChecklist,
       threadId,
@@ -2016,9 +2037,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 

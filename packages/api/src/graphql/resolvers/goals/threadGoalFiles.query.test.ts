@@ -49,15 +49,19 @@ vi.mock("./threadGoal.query.js", () => ({
 
 vi.mock("../../../lib/thread-goals/storage.js", () => ({
   THREAD_GOAL_REQUIRED_FILES: [
+    "THREAD.md",
     "GOAL.md",
     "PROGRESS.md",
+    "TASKS.md",
     "DECISIONS.md",
     "ARTIFACTS.md",
     "HANDOFFS.md",
   ],
   readThreadGoalFile: mockReadGoalFile,
   threadGoalFileKey: (input: Record<string, unknown>) =>
-    `tenants/${input.tenantSlug}/threads/${input.threadId}/${input.file}`,
+    `tenants/${input.tenantSlug}/threads/${
+      input.threadFolderName ?? input.threadId
+    }/${input.file}`,
 }));
 
 import { threadGoalFiles } from "./threadGoalFiles.query.js";
@@ -78,6 +82,7 @@ describe("threadGoalFiles", () => {
     mockFindGoal.mockResolvedValue({
       id: "goal-1",
       threadId: "thread-1",
+      workspaceFolderName: "customer-kickoff",
       status: "IN_REVIEW",
     });
     captures.tenantRows.push({ slug: "acme" });
@@ -91,31 +96,44 @@ describe("threadGoalFiles", () => {
     expect(result?.goal).toMatchObject({ id: "goal-1" });
     expect(result?.files).toEqual([
       {
+        file: "THREAD",
+        key: "tenants/acme/threads/customer-kickoff/THREAD.md",
+        content: "THREAD.md content",
+      },
+      {
         file: "GOAL",
-        key: "tenants/acme/threads/thread-1/GOAL.md",
+        key: "tenants/acme/threads/customer-kickoff/GOAL.md",
         content: "GOAL.md content",
       },
       {
         file: "PROGRESS",
-        key: "tenants/acme/threads/thread-1/PROGRESS.md",
+        key: "tenants/acme/threads/customer-kickoff/PROGRESS.md",
         content: "PROGRESS.md content",
       },
       {
+        file: "TASKS",
+        key: "tenants/acme/threads/customer-kickoff/TASKS.md",
+        content: "TASKS.md content",
+      },
+      {
         file: "DECISIONS",
-        key: "tenants/acme/threads/thread-1/DECISIONS.md",
+        key: "tenants/acme/threads/customer-kickoff/DECISIONS.md",
         content: "DECISIONS.md content",
       },
       {
         file: "ARTIFACTS",
-        key: "tenants/acme/threads/thread-1/ARTIFACTS.md",
+        key: "tenants/acme/threads/customer-kickoff/ARTIFACTS.md",
         content: "ARTIFACTS.md content",
       },
       {
         file: "HANDOFFS",
-        key: "tenants/acme/threads/thread-1/HANDOFFS.md",
+        key: "tenants/acme/threads/customer-kickoff/HANDOFFS.md",
         content: "HANDOFFS.md content",
       },
     ]);
+    expect(captures.readInputs[0]).toMatchObject({
+      threadFolderName: "customer-kickoff",
+    });
   });
 
   it("returns null for a visible legacy Thread with no Goal row", async () => {

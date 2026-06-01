@@ -39,7 +39,11 @@ export async function threadProgress(
   }
 
   const [thread] = await db
-    .select({ id: threads.id, tenant_id: threads.tenant_id })
+    .select({
+      id: threads.id,
+      tenant_id: threads.tenant_id,
+      workspace_folder_name: threads.workspace_folder_name,
+    })
     .from(threads)
     .where(threadConditions);
   if (!thread) return null;
@@ -53,6 +57,10 @@ export async function threadProgress(
   const markdown = await readThreadProgressMarkdown({
     tenantSlug: tenant.slug,
     threadId: args.threadId,
+    threadFolderName:
+      typeof thread.workspace_folder_name === "string"
+        ? thread.workspace_folder_name
+        : null,
   });
   if (!markdown?.trim()) return null;
 

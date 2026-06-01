@@ -16,6 +16,7 @@ export async function threadProgressMarkdown(
       threadId: threads.id,
       tenantId: threads.tenant_id,
       spaceId: threads.space_id,
+      threadFolderName: threads.workspace_folder_name,
       tenantSlug: tenants.slug,
     })
     .from(threads)
@@ -38,6 +39,7 @@ export async function threadProgressMarkdown(
   const content = await readThreadProgressMarkdown({
     tenantSlug: row.tenantSlug,
     threadId: row.threadId,
+    threadFolderName: row.threadFolderName,
   });
   if (!content) return null;
 
@@ -48,6 +50,7 @@ export async function threadProgressMarkdown(
     key: threadProgressKey({
       tenantSlug: row.tenantSlug,
       threadId: row.threadId,
+      threadFolderName: row.threadFolderName,
     }),
     content,
   };

@@ -123,7 +123,13 @@ function shouldRenderSpaceSourcePath(relPath: string): boolean {
   );
 }
 
-const THREAD_GOAL_STATUS_PATHS = new Set(["GOAL.md", "PROGRESS.md"]);
+const THREAD_GOAL_STATUS_FILES = [
+  "THREAD.md",
+  "GOAL.md",
+  "PROGRESS.md",
+  "TASKS.md",
+] as const;
+const THREAD_GOAL_STATUS_PATHS = new Set<string>(THREAD_GOAL_STATUS_FILES);
 const THREAD_GOAL_NARRATIVE_PATHS = new Set([
   "DECISIONS.md",
   "ARTIFACTS.md",
@@ -231,7 +237,7 @@ function statusMountsForTuple(input: {
   const byPath = new Map(
     input.statusObjects.map((object) => [object.relPath, object]),
   );
-  return ["GOAL.md", "PROGRESS.md"].map((sourcePath) => {
+  return THREAD_GOAL_STATUS_FILES.map((sourcePath) => {
     const object = byPath.get(sourcePath);
     const path = `Thread/${sourcePath}`;
     return {

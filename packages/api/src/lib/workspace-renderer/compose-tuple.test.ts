@@ -297,6 +297,14 @@ function compatibleHydrateManifest(
       ],
       statusMounts: [
         {
+          path: "Thread/THREAD.md",
+          owner: "system",
+          source: "database",
+          provider: "thread-goals",
+          readOnly: true,
+          available: false,
+        },
+        {
           path: "Thread/GOAL.md",
           owner: "system",
           source: "database",
@@ -306,6 +314,14 @@ function compatibleHydrateManifest(
         },
         {
           path: "Thread/PROGRESS.md",
+          owner: "system",
+          source: "database",
+          provider: "thread-goals",
+          readOnly: true,
+          available: false,
+        },
+        {
+          path: "Thread/TASKS.md",
           owner: "system",
           source: "database",
           provider: "thread-goals",
@@ -412,6 +428,12 @@ describe("renderWorkspaceTuple", () => {
     );
     expect(result.hydrateManifest.statusMounts).toEqual([
       expect.objectContaining({
+        path: "Thread/THREAD.md",
+        source: "database",
+        readOnly: true,
+        available: false,
+      }),
+      expect.objectContaining({
         path: "Thread/GOAL.md",
         source: "database",
         readOnly: true,
@@ -419,6 +441,12 @@ describe("renderWorkspaceTuple", () => {
       }),
       expect.objectContaining({
         path: "Thread/PROGRESS.md",
+        source: "database",
+        readOnly: true,
+        available: false,
+      }),
+      expect.objectContaining({
+        path: "Thread/TASKS.md",
         source: "database",
         readOnly: true,
         available: false,
@@ -456,10 +484,20 @@ describe("renderWorkspaceTuple", () => {
       lastModified: "2026-05-22T09:08:00.000Z",
       etag: '"goal-db"',
     });
+    store.setObject("tenants/acme/threads/customer-kickoff/THREAD.md", {
+      content: "# Thread\n",
+      lastModified: "2026-05-22T09:07:00.000Z",
+      etag: '"thread-db"',
+    });
     store.setObject("tenants/acme/threads/customer-kickoff/PROGRESS.md", {
       content: "# Progress\n",
       lastModified: "2026-05-22T09:09:00.000Z",
       etag: '"progress-db"',
+    });
+    store.setObject("tenants/acme/threads/customer-kickoff/TASKS.md", {
+      content: "# Tasks\n",
+      lastModified: "2026-05-22T09:09:30.000Z",
+      etag: '"tasks-db"',
     });
     store.setObject("tenants/acme/threads/customer-kickoff/DECISIONS.md", {
       content: "# Decisions\n",
@@ -485,6 +523,13 @@ describe("renderWorkspaceTuple", () => {
     );
     expect(result.hydrateManifest.statusMounts).toEqual([
       expect.objectContaining({
+        path: "Thread/THREAD.md",
+        available: true,
+        sourceKey: "tenants/acme/threads/customer-kickoff/THREAD.md",
+        etag: '"thread-db"',
+        readOnly: true,
+      }),
+      expect.objectContaining({
         path: "Thread/GOAL.md",
         available: true,
         sourceKey: "tenants/acme/threads/customer-kickoff/GOAL.md",
@@ -496,6 +541,13 @@ describe("renderWorkspaceTuple", () => {
         available: true,
         sourceKey: "tenants/acme/threads/customer-kickoff/PROGRESS.md",
         etag: '"progress-db"',
+        readOnly: true,
+      }),
+      expect.objectContaining({
+        path: "Thread/TASKS.md",
+        available: true,
+        sourceKey: "tenants/acme/threads/customer-kickoff/TASKS.md",
+        etag: '"tasks-db"',
         readOnly: true,
       }),
     ]);
@@ -513,6 +565,8 @@ describe("renderWorkspaceTuple", () => {
       expect.arrayContaining([
         expect.objectContaining({ path: "Thread/GOAL.md" }),
         expect.objectContaining({ path: "Thread/PROGRESS.md" }),
+        expect.objectContaining({ path: "Thread/TASKS.md" }),
+        expect.objectContaining({ path: "Thread/THREAD.md" }),
       ]),
     );
   });
@@ -603,6 +657,12 @@ describe("renderWorkspaceTuple", () => {
         { owner: "thread_goal", prefix: "tenants/acme/threads/thread-1/" },
       ]),
       statusMounts: expect.arrayContaining([
+        expect.objectContaining({
+          path: "Thread/THREAD.md",
+          source: "database",
+          provider: "thread-goals",
+          readOnly: true,
+        }),
         expect.objectContaining({
           path: "Thread/PROGRESS.md",
           source: "database",
@@ -805,8 +865,10 @@ describe("renderWorkspaceTuple", () => {
     );
     expect(result.hydrateManifest.files).not.toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ path: "Thread/THREAD.md" }),
         expect.objectContaining({ path: "Thread/GOAL.md" }),
         expect.objectContaining({ path: "Thread/PROGRESS.md" }),
+        expect.objectContaining({ path: "Thread/TASKS.md" }),
         expect.objectContaining({
           path: "Spaces/board-pack/CONTEXT.md",
           owner: "space",
@@ -815,6 +877,11 @@ describe("renderWorkspaceTuple", () => {
     );
     expect(
       result.hydrateManifest.statusMounts.map((mount) => mount.path),
-    ).toEqual(["Thread/GOAL.md", "Thread/PROGRESS.md"]);
+    ).toEqual([
+      "Thread/THREAD.md",
+      "Thread/GOAL.md",
+      "Thread/PROGRESS.md",
+      "Thread/TASKS.md",
+    ]);
   });
 });

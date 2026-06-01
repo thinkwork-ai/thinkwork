@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
+  RefreshThreadProgressMutation,
   ReviewGoalMutation,
   ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
@@ -101,6 +102,7 @@ const reexecuteTasksQuery = vi.fn();
 const sendMessage = vi.fn();
 const updateThreadMock = vi.fn();
 const reviewGoalMock = vi.fn();
+const refreshThreadProgressMock = vi.fn();
 const resetStreamingChunks = vi.fn();
 
 let threadData: unknown;
@@ -125,6 +127,7 @@ beforeEach(() => {
   sendMessage.mockReset();
   updateThreadMock.mockReset();
   reviewGoalMock.mockReset();
+  refreshThreadProgressMock.mockReset();
   resetStreamingChunks.mockReset();
   apiFetchMock.apiFetch.mockReset();
   apiFetchMock.apiFetch.mockResolvedValue([]);
@@ -172,6 +175,7 @@ beforeEach(() => {
   sendMessage.mockResolvedValue({});
   updateThreadMock.mockResolvedValue({});
   reviewGoalMock.mockResolvedValue({});
+  refreshThreadProgressMock.mockResolvedValue({});
   vi.mocked(useMutation).mockImplementation((mutation) => {
     if (mutation === UpdateThreadMutation) {
       return [
@@ -183,6 +187,12 @@ beforeEach(() => {
       return [
         { fetching: false, stale: false, hasNext: false },
         reviewGoalMock,
+      ];
+    }
+    if (mutation === RefreshThreadProgressMutation) {
+      return [
+        { fetching: false, stale: false, hasNext: false },
+        refreshThreadProgressMock,
       ];
     }
     return [{ fetching: false, stale: false, hasNext: false }, sendMessage];
@@ -420,13 +430,20 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.getByRole("button", { name: "Thread actions" })).toBeTruthy();
   });
 
-  it("refetches thread data for a manual desktop refresh event", () => {
+  it("refreshes generated progress and refetches thread data for a manual desktop refresh event", async () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     window.dispatchEvent(new CustomEvent("thinkwork:desktop-refresh"));
 
-    expect(reexecuteThreadQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
+    await waitFor(() => {
+      expect(refreshThreadProgressMock).toHaveBeenCalledWith({
+        input: { tenantId: "tenant-1", threadId: "thread-1" },
+      });
+    });
+    await waitFor(() => {
+      expect(reexecuteThreadQuery).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
     });
     expect(reexecuteTasksQuery).toHaveBeenCalledWith({
       requestPolicy: "network-only",
@@ -706,6 +723,26 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.getByText("Sales · Completed")).toBeTruthy();
     expect(screen.queryByText("signed package received")).toBeNull();
     expect(screen.queryByText("Stale linked task title")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh progress" }));
+
+    await waitFor(() => {
+      expect(refreshThreadProgressMock).toHaveBeenCalledWith({
+        input: { tenantId: "tenant-1", threadId: "thread-1" },
+      });
+    });
+    await waitFor(() => {
+      expect(reexecuteProgressMarkdownQuery).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+    });
+    expect(reexecuteLinkedTasksQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteGoalFilesQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+
     const originalFocus = HTMLTextAreaElement.prototype.focus;
     let focusAttempts = 0;
     const focusSpy = vi

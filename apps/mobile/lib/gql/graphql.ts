@@ -1787,6 +1787,7 @@ export type Mutation = {
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
   refreshGenUI?: Maybe<Message>;
+  refreshThreadProgress: RefreshThreadProgressPayload;
   regenerateApplet: SaveAppletPayload;
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars['Boolean']['output'];
@@ -2375,6 +2376,11 @@ export type MutationRebuildRoutineVersionArgs = {
 export type MutationRefreshGenUiArgs = {
   messageId: Scalars['ID']['input'];
   toolIndex: Scalars['Int']['input'];
+};
+
+
+export type MutationRefreshThreadProgressArgs = {
+  input: RefreshThreadProgressInput;
 };
 
 
@@ -4136,6 +4142,16 @@ export type Recipe = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type RefreshThreadProgressInput = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
+};
+
+export type RefreshThreadProgressPayload = {
+  __typename?: 'RefreshThreadProgressPayload';
+  threadGoalFiles?: Maybe<ThreadGoalFiles>;
+};
+
 export type RegisterPushTokenInput = {
   platform: Scalars['String']['input'];
   token: Scalars['String']['input'];
@@ -5295,7 +5311,9 @@ export enum ThreadGoalFileKind {
   Decisions = 'DECISIONS',
   Goal = 'GOAL',
   Handoffs = 'HANDOFFS',
-  Progress = 'PROGRESS'
+  Progress = 'PROGRESS',
+  Tasks = 'TASKS',
+  Thread = 'THREAD'
 }
 
 export type ThreadGoalFiles = {

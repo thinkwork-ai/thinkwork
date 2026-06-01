@@ -552,12 +552,12 @@ describe("GraphQL Schema Contract", () => {
 
     it("does not allow API-key revocation subscriptions", () => {
       const sdl = readFileSync(TF_SCHEMA, "utf-8");
-      expect(sdl).toContain(
-        "onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent @aws_cognito_user_pools @aws_iam",
+      const block = sdl.match(
+        /onWorkspaceAccessRevoked\(userId: ID!\): WorkspaceAccessRevokedEvent[\s\S]*?@aws_subscribe\(mutations: \["notifyWorkspaceAccessRevoked"\]\)/,
       );
-      expect(sdl).not.toContain(
-        "onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent @aws_api_key",
-      );
+      expect(block?.[0]).toContain("@aws_cognito_user_pools");
+      expect(block?.[0]).toContain("@aws_iam");
+      expect(block?.[0]).not.toContain("@aws_api_key");
     });
 
     it("wires notification mutations to AppSync resolvers", () => {

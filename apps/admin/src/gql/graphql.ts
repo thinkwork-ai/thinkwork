@@ -932,6 +932,10 @@ export type CreateThreadInput = {
   firstMessage?: InputMaybe<Scalars['String']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  mobileTurnAttachments?: InputMaybe<Scalars['AWSJSON']['input']>;
+  mobileTurnClientId?: InputMaybe<Scalars['String']['input']>;
+  mobileTurnMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  mobileTurnUserText?: InputMaybe<Scalars['String']['input']>;
   spaceId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
@@ -1776,12 +1780,14 @@ export type Mutation = {
   notifyThreadActivity?: Maybe<ThreadActivityEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
+  notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
   refreshGenUI?: Maybe<Message>;
+  refreshThreadProgress: RefreshThreadProgressPayload;
   regenerateApplet: SaveAppletPayload;
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars['Boolean']['output'];
@@ -2333,6 +2339,14 @@ export type MutationNotifyThreadUpdateArgs = {
 };
 
 
+export type MutationNotifyWorkspaceAccessRevokedArgs = {
+  revokedAt: Scalars['AWSDateTime']['input'];
+  spaceId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+  userId: Scalars['ID']['input'];
+};
+
+
 export type MutationPinThreadArgs = {
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
@@ -2362,6 +2376,11 @@ export type MutationRebuildRoutineVersionArgs = {
 export type MutationRefreshGenUiArgs = {
   messageId: Scalars['ID']['input'];
   toolIndex: Scalars['Int']['input'];
+};
+
+
+export type MutationRefreshThreadProgressArgs = {
+  input: RefreshThreadProgressInput;
 };
 
 
@@ -4123,6 +4142,16 @@ export type Recipe = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type RefreshThreadProgressInput = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
+};
+
+export type RefreshThreadProgressPayload = {
+  __typename?: 'RefreshThreadProgressPayload';
+  threadGoalFiles?: Maybe<ThreadGoalFiles>;
+};
+
 export type RegisterPushTokenInput = {
   platform: Scalars['String']['input'];
   token: Scalars['String']['input'];
@@ -4901,6 +4930,7 @@ export type Subscription = {
   onThreadActivity?: Maybe<ThreadActivityEvent>;
   onThreadTurnUpdated?: Maybe<ThreadTurnUpdateEvent>;
   onThreadUpdated?: Maybe<ThreadUpdateEvent>;
+  onWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
 };
 
 
@@ -4951,6 +4981,11 @@ export type SubscriptionOnThreadTurnUpdatedArgs = {
 
 export type SubscriptionOnThreadUpdatedArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type SubscriptionOnWorkspaceAccessRevokedArgs = {
+  userId: Scalars['ID']['input'];
 };
 
 export type Tenant = {
@@ -5276,7 +5311,9 @@ export enum ThreadGoalFileKind {
   Decisions = 'DECISIONS',
   Goal = 'GOAL',
   Handoffs = 'HANDOFFS',
-  Progress = 'PROGRESS'
+  Progress = 'PROGRESS',
+  Tasks = 'TASKS',
+  Thread = 'THREAD'
 }
 
 export type ThreadGoalFiles = {
@@ -6152,6 +6189,14 @@ export type WorkflowCatalogItem = {
   slug: Scalars['String']['output'];
   status: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
+};
+
+export type WorkspaceAccessRevokedEvent = {
+  __typename?: 'WorkspaceAccessRevokedEvent';
+  revokedAt: Scalars['AWSDateTime']['output'];
+  spaceId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 export enum WorkspaceReviewKind {
