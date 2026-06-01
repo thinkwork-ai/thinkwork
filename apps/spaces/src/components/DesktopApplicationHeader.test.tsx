@@ -26,12 +26,24 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({
     children,
     to,
+    search,
     ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }) => (
-    <a href={to} {...props}>
-      {children}
-    </a>
-  ),
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+    to: string;
+    search?: Record<string, unknown>;
+  }) => {
+    const query = search
+      ? Object.entries(search)
+          .filter(([, v]) => v != null)
+          .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+          .join("&")
+      : "";
+    return (
+      <a href={query ? `${to}?${query}` : to} {...props}>
+        {children}
+      </a>
+    );
+  },
   useNavigate: () => vi.fn(),
   useRouterState: () => "/threads/thread-1",
 }));
@@ -183,6 +195,73 @@ describe("DesktopApplicationHeader", () => {
       ).not.toContain("animate-spin");
     });
     window.removeEventListener("thinkwork:desktop-refresh", onRefresh);
+  });
+
+  it("renders a breadcrumb trail with a linked parent and plain last crumb", () => {
+    pageHeaderMock.actions = {
+      title: "My thread",
+      breadcrumbs: [
+        {
+          label: "Chats",
+          href: "/threads",
+          search: { spaceId: "s1", spaceName: "Chats" },
+        },
+        { label: "My thread" },
+      ],
+    };
+
+    render(<DesktopApplicationHeader />);
+
+    const parent = screen.getByRole("link", { name: "Chats" });
+    expect(parent.getAttribute("href")).toBe(
+      "/threads?spaceId=s1&spaceName=Chats",
+    );
+    // Last crumb (no titleContent) renders as plain, non-link text.
+    const last = screen.getByText("My thread");
+    expect(last.tagName).not.toBe("A");
+  });
+
+  it("hosts titleContent (inline rename) in the final breadcrumb crumb", () => {
+    pageHeaderMock.actions = {
+      title: "My thread",
+      breadcrumbs: [
+        {
+          label: "Customer",
+          href: "/threads",
+          search: { spaceId: "s2", spaceName: "Customer" },
+        },
+        { label: "My thread" },
+      ],
+      titleContent: <input data-testid="rename" defaultValue="My thread" />,
+      titleTrailing: <button type="button">Thread menu</button>,
+    };
+
+    render(<DesktopApplicationHeader />);
+
+    // The parent space crumb is still a link...
+    expect(screen.getByRole("link", { name: "Customer" })).toBeTruthy();
+    // ...and the last crumb hosts the rename input instead of plain text.
+    expect(screen.getByTestId("rename")).toBeTruthy();
+    // The plain label is not rendered as duplicate text in the last crumb.
+    expect(screen.queryByText("My thread")).toBeNull();
+    // The trailing cluster still renders after the breadcrumb nav.
+    expect(screen.getByText("Thread menu")).toBeTruthy();
+  });
+
+  it("renders an href-only breadcrumb trail unchanged (no search, plain last crumb)", () => {
+    pageHeaderMock.actions = {
+      title: "LastMile Tasks",
+      breadcrumbs: [
+        { label: "MCP Servers", href: "/settings/mcp-servers" },
+        { label: "LastMile Tasks" },
+      ],
+    };
+
+    render(<DesktopApplicationHeader />);
+
+    const parent = screen.getByRole("link", { name: "MCP Servers" });
+    expect(parent.getAttribute("href")).toBe("/settings/mcp-servers");
+    expect(screen.getByText("LastMile Tasks").tagName).not.toBe("A");
   });
 
   it("keeps local Pi status out of the desktop header", async () => {

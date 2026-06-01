@@ -23,8 +23,18 @@ export interface PageHeaderActions {
   backBehavior?: "href" | "history";
   /** Optional secondary text displayed next to the title (e.g., "216 threads") */
   subtitle?: string;
-  /** Optional breadcrumb trail rendered in place of the plain title. */
-  breadcrumbs?: { label: string; href?: string }[];
+  /**
+   * Optional breadcrumb trail rendered in place of the plain title. Each crumb
+   * may carry TanStack Router `search` params (a query string in `href` is not
+   * parsed by `<Link to>`); when the final crumb is reached the renderer hosts
+   * `titleContent` (e.g. an inline rename input) in its place, falling back to
+   * the plain `label`.
+   */
+  breadcrumbs?: {
+    label: string;
+    href?: string;
+    search?: Record<string, unknown>;
+  }[];
   /** Optional title renderer for inline title affordances such as rename inputs. */
   titleContent?: ReactNode;
   /**
@@ -87,8 +97,12 @@ export function usePageHeaderActions(actions: PageHeaderActions | null) {
   const tabsKey =
     actions?.tabs?.map((t) => `${t.to}:${t.label}`).join(",") ?? "";
   const breadcrumbsKey =
-    actions?.breadcrumbs?.map((b) => `${b.href ?? ""}:${b.label}`).join(",") ??
-    "";
+    actions?.breadcrumbs
+      ?.map(
+        (b) =>
+          `${b.href ?? ""}:${b.search ? JSON.stringify(b.search) : ""}:${b.label}`,
+      )
+      .join(",") ?? "";
   const key = actions
     ? `${actions.title}|${actions.documentTitle ?? ""}|${actions.backHref ?? ""}|${actions.backBehavior ?? ""}|${actions.subtitle ?? ""}|${actions.hideTopBar ? "hidden" : "shown"}|${tabsKey}|${breadcrumbsKey}|${actions.actionKey ?? ""}|${actions.titleContent ? "tc1" : "tc0"}|${actions.titleTrailing ? "tt1" : "tt0"}`
     : null;

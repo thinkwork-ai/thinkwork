@@ -466,6 +466,11 @@ export const ComputerThreadQuery = gql`
       title
       status
       spaceId
+      space {
+        id
+        name
+        slug
+      }
       channel
       lifecycleStatus
       metadata
