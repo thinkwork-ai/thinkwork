@@ -77,9 +77,10 @@ describe("WorkspaceSettingsView", () => {
     const props = editorSpy.mock.calls[0][0];
     expect(props.target).toEqual(resolved.subTargets);
     expect(props.client).toBeTruthy();
-    expect(props.title).toBe("Source workspace");
-    expect(props.description).toContain("Agent, Spaces, and User");
-    expect(props.description).toContain("Space/");
+    // The header block is gone; the editor opens AGENTS.md by default.
+    expect(props.title).toBeUndefined();
+    expect(props.description).toBeUndefined();
+    expect(props.defaultOpenFile).toBe("Agent/AGENTS.md");
     // targetKey is derived from the source ids so the editor resets when they change.
     expect(props.targetKey).toContain("agent-1");
     expect(props.targetKey).toContain("s-fin");

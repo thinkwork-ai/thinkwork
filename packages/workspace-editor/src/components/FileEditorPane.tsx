@@ -16,6 +16,11 @@ const blackEditorSurface = EditorView.theme({
   ".cm-gutterElement": { backgroundColor: "black" },
   ".cm-activeLine": { backgroundColor: "transparent" },
   ".cm-activeLineGutter": { backgroundColor: "black" },
+  // Forcing the surface black hid the selection highlight — restore a visible
+  // selection for both the drawn layer (focused + blurred) and native selection.
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
+    { backgroundColor: "#264f78 !important" },
+  ".cm-selectionMatch": { backgroundColor: "#3a3d41" },
 });
 
 export interface FileEditorPaneProps {

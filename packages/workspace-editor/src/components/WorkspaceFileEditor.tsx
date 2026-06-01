@@ -28,6 +28,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
   cn,
 } from "@thinkwork/ui";
 import { FileEditorPane } from "./FileEditorPane.js";
@@ -113,6 +116,9 @@ export function WorkspaceFileEditor<TTarget>({
   const openFileRef = useRef<string | null>(null);
   const fileListRequestId = useRef(0);
   const loadRequestId = useRef(0);
+  // Expand the top-level source roots once per target, the first time files
+  // load. A ref (not state) so a user collapsing a root afterwards sticks.
+  const didAutoExpandRef = useRef(false);
 
   useEffect(() => {
     openFileRef.current = openFile;
@@ -162,6 +168,7 @@ export function WorkspaceFileEditor<TTarget>({
   useEffect(() => {
     loadRequestId.current += 1;
     fileListRequestId.current += 1;
+    didAutoExpandRef.current = false;
     setFiles([]);
     setFileSources({});
     setExpandedFolders(new Set());
@@ -188,6 +195,24 @@ export function WorkspaceFileEditor<TTarget>({
     (path: string) => folderPaths.has(path),
     [folderPaths],
   );
+
+  // Default the tree to all root folders expanded so the source roots
+  // (Agent / Spaces / User) are visible without a click.
+  useEffect(() => {
+    if (didAutoExpandRef.current || files.length === 0) return;
+    const roots = new Set<string>();
+    for (const file of files) {
+      const top = file.split("/")[0];
+      if (top && folderPaths.has(top)) roots.add(top);
+    }
+    if (roots.size === 0) return;
+    didAutoExpandRef.current = true;
+    setExpandedFolders((current) => {
+      const next = new Set(current);
+      for (const root of roots) next.add(root);
+      return next;
+    });
+  }, [files, folderPaths]);
 
   const openWorkspaceFile = useCallback(
     async (filePath: string) => {
@@ -591,73 +616,88 @@ export function WorkspaceFileEditor<TTarget>({
             bordered && "rounded-md border",
           )}
         >
-          <div className="flex min-h-0 w-64 shrink-0 flex-col border-r">
-            <div className="flex h-9 items-center justify-between border-b bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
-              <span>{files.length} files</span>
-              {addMenu}
-            </div>
-            <div
-              className="min-h-0 flex-1 overflow-y-auto outline-none"
-              ref={treeContainerRef}
-              tabIndex={-1}
+          <ResizablePanelGroup
+            orientation="horizontal"
+            className="min-h-0 flex-1"
+          >
+            <ResizablePanel
+              defaultSize="28%"
+              minSize="15%"
+              className="flex min-h-0 flex-col border-r"
             >
-              <FolderTree
-                nodes={tree}
-                selectedPath={openFile}
-                expandedFolders={expandedFolders}
-                mutatingPaths={mutatingPaths}
-                clipboardItem={readOnly ? null : clipboardItem}
-                sourceFor={(path) => fileSources[path]}
-                updateAvailableFor={() => false}
-                onSelect={requestOpenWorkspaceFile}
-                onToggle={toggleFolder}
-                onAcceptUpdate={() => {}}
-                onNewFile={startNewFile}
-                onNewFolder={startNewFolder}
-                onDelete={(path, isFolder) =>
-                  setDeleteConfirmTarget({ path, isFolder })
-                }
-                onRename={startRename}
-                inlineEdit={inlineEdit}
-                onInlineEditChange={(value) =>
-                  setInlineEdit((current) =>
-                    current ? { ...current, value, error: undefined } : current,
-                  )
-                }
-                onInlineEditCommit={commitInlineEdit}
-                onInlineEditCancel={() => setInlineEdit(null)}
-                onCut={readOnly ? undefined : handleCut}
-                onPaste={readOnly ? undefined : handlePaste}
-                onClearClipboard={readOnly ? undefined : clearClipboard}
-                onDropMove={
-                  readOnly
-                    ? undefined
-                    : (sourcePath, toFolder) =>
-                        void performMove(sourcePath, toFolder)
-                }
-              />
-            </div>
-          </div>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {files.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-                <Folder className="h-12 w-12 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No files yet.</p>
+              <div className="flex h-9 items-center justify-between border-b bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
+                <span>{files.length} files</span>
+                {addMenu}
               </div>
-            ) : (
-              <FileEditorPane
-                openFile={openFile}
-                content={content}
-                value={editValue}
-                loading={loadingContent}
-                saving={saving}
-                readOnly={readOnly}
-                onChange={setEditValue}
-                onSave={handleSave}
-                onDiscard={() => setEditValue(content)}
-              />
-            )}
-          </div>
+              <div
+                className="min-h-0 flex-1 overflow-y-auto outline-none"
+                ref={treeContainerRef}
+                tabIndex={-1}
+              >
+                <FolderTree
+                  nodes={tree}
+                  selectedPath={openFile}
+                  expandedFolders={expandedFolders}
+                  mutatingPaths={mutatingPaths}
+                  clipboardItem={readOnly ? null : clipboardItem}
+                  sourceFor={(path) => fileSources[path]}
+                  updateAvailableFor={() => false}
+                  onSelect={requestOpenWorkspaceFile}
+                  onToggle={toggleFolder}
+                  onAcceptUpdate={() => {}}
+                  onNewFile={startNewFile}
+                  onNewFolder={startNewFolder}
+                  onDelete={(path, isFolder) =>
+                    setDeleteConfirmTarget({ path, isFolder })
+                  }
+                  onRename={startRename}
+                  inlineEdit={inlineEdit}
+                  onInlineEditChange={(value) =>
+                    setInlineEdit((current) =>
+                      current
+                        ? { ...current, value, error: undefined }
+                        : current,
+                    )
+                  }
+                  onInlineEditCommit={commitInlineEdit}
+                  onInlineEditCancel={() => setInlineEdit(null)}
+                  onCut={readOnly ? undefined : handleCut}
+                  onPaste={readOnly ? undefined : handlePaste}
+                  onClearClipboard={readOnly ? undefined : clearClipboard}
+                  onDropMove={
+                    readOnly
+                      ? undefined
+                      : (sourcePath, toFolder) =>
+                          void performMove(sourcePath, toFolder)
+                  }
+                />
+              </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel
+              defaultSize="72%"
+              className="flex min-h-0 min-w-0 flex-col"
+            >
+              {files.length === 0 ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+                  <Folder className="h-12 w-12 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">No files yet.</p>
+                </div>
+              ) : (
+                <FileEditorPane
+                  openFile={openFile}
+                  content={content}
+                  value={editValue}
+                  loading={loadingContent}
+                  saving={saving}
+                  readOnly={readOnly}
+                  onChange={setEditValue}
+                  onSave={handleSave}
+                  onDiscard={() => setEditValue(content)}
+                />
+              )}
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
       )}
       <DeleteConfirmDialog
