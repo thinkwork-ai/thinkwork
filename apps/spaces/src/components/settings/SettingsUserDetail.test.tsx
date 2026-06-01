@@ -38,10 +38,6 @@ vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: () => {},
 }));
 vi.mock("@/lib/settings-queries", () => queryDocs);
-vi.mock("@/lib/workspace-files-api", () => ({ spacesWorkspaceFilesClient: {} }));
-vi.mock("@thinkwork/workspace-editor", () => ({
-  WorkspaceFileEditor: () => null,
-}));
 
 import { SettingsUserDetail } from "./SettingsUserDetail";
 

@@ -12,11 +12,9 @@ import {
   SelectValue,
   Textarea,
 } from "@thinkwork/ui";
-import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import { SpaceAccessMode } from "@/gql/graphql";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
 import {
   SettingsSpaceQuery,
   SettingsUpdateSpaceMutation,
@@ -25,15 +23,11 @@ import {
   SettingsPageTitle,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
-import { WorkspaceViewToggle } from "@/components/settings/WorkspaceViewToggle";
-
-type SpaceConfigView = "info" | "files";
 
 export function SettingsSpaceConfig() {
   const { spaceId } = useParams({
     from: "/_authed/settings/spaces/$spaceId",
   });
-  const [view, setView] = useState<SpaceConfigView>("info");
 
   const [result, refetch] = useQuery({
     query: SettingsSpaceQuery,
@@ -44,21 +38,13 @@ export function SettingsSpaceConfig() {
   const spaceName =
     space?.name?.trim() || (result.fetching ? "Space" : "Space");
 
-  // Title lives in the settings header as nested breadcrumbs. The header
-  // action toggles between the Information form and the full workspace files.
+  // Title lives in the settings header as nested breadcrumbs.
   usePageHeaderActions({
     title: spaceName,
     breadcrumbs: [
       { label: "Spaces", href: "/settings/spaces" },
       { label: spaceName },
     ],
-    action: (
-      <WorkspaceViewToggle
-        showingWorkspace={view === "files"}
-        onToggle={() => setView(view === "files" ? "info" : "files")}
-      />
-    ),
-    actionKey: `space-config:${spaceId}:${view}`,
   });
 
   if (result.fetching && !result.data) {
@@ -75,20 +61,6 @@ export function SettingsSpaceConfig() {
         <p className="text-sm text-muted-foreground">
           This space could not be loaded — it may have been removed.
         </p>
-      </div>
-    );
-  }
-
-  if (view === "files") {
-    return (
-      <div className="flex h-full min-h-0 w-full flex-col p-6">
-        <WorkspaceFileEditor
-          target={{ spaceId }}
-          targetKey={`space:${spaceId}`}
-          client={spacesWorkspaceFilesClient}
-          defaultOpenFile="CONTEXT.md"
-          className="min-h-0 flex-1"
-        />
       </div>
     );
   }

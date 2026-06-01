@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
@@ -12,6 +12,7 @@ import {
   Switch,
   useTheme,
 } from "@thinkwork/ui";
+import { AgentRuntime } from "@/gql/graphql";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktop } from "@/lib/desktop-detection";
@@ -29,8 +30,11 @@ import {
 } from "@/lib/editor-prefs";
 import {
   SettingsDeploymentStatusQuery,
+  SettingsModelCatalogQuery,
   SettingsRenameTenantSlugMutation,
+  SettingsTenantAgentQuery,
   SettingsTenantDetailQuery,
+  SettingsUpdateTenantAgentMutation,
 } from "@/lib/settings-queries";
 import {
   SettingsHeader,
@@ -132,18 +136,19 @@ export function SettingsGeneral() {
 
       <SettingsSection label="Appearance">
         <ThemeRow />
+        {isDesktop() ? (
+          <>
+            <EditorWrapRow />
+            <EditorFontSizeRow />
+          </>
+        ) : null}
       </SettingsSection>
+
+      {showOperator ? <AgentConfigSection /> : null}
 
       {isDesktop() ? (
         <SettingsSection label="Notifications">
           <ThreadNotificationsRow />
-        </SettingsSection>
-      ) : null}
-
-      {isDesktop() ? (
-        <SettingsSection label="Editor">
-          <EditorWrapRow />
-          <EditorFontSizeRow />
         </SettingsSection>
       ) : null}
 
@@ -190,6 +195,120 @@ export function SettingsGeneral() {
   );
 }
 
+const RUNTIME_OPTIONS: { value: AgentRuntime; label: string }[] = [
+  // FLUE is the Pi runtime; surfaced as "Pi" per product naming.
+  { value: AgentRuntime.Flue, label: "Pi" },
+  { value: AgentRuntime.Strands, label: "Strands" },
+];
+
+/**
+ * Tenant agent runtime + default model. Folded into General (operator-only);
+ * formerly its own "Agent" settings page. Edits auto-save on change. The
+ * AGENTS.md workspace editor now lives solely in Settings → Workspace.
+ */
+function AgentConfigSection() {
+  const { tenantId } = useTenant();
+  const [agentResult] = useQuery({
+    query: SettingsTenantAgentQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const [catalogResult] = useQuery({ query: SettingsModelCatalogQuery });
+  const [saveState, save] = useMutation(SettingsUpdateTenantAgentMutation);
+
+  const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
+  const [model, setModel] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const agent = agentResult.data?.agent;
+
+  useEffect(() => {
+    if (agent) {
+      setRuntime(agent.runtime);
+      setModel(agent.model ?? null);
+    }
+  }, [agent]);
+
+  const catalog = catalogResult.data?.modelCatalog ?? [];
+  const catalogFailed = !!catalogResult.error;
+
+  async function persist(input: {
+    runtime?: AgentRuntime;
+    model?: string | null;
+  }) {
+    if (!tenantId) return;
+    setErrorMsg(null);
+    const result = await save({ tenantId, input });
+    if (result.error) setErrorMsg(result.error.message);
+  }
+
+  return (
+    <SettingsSection
+      label="Agent"
+      action={
+        saveState.fetching ? (
+          <span className="text-sm text-muted-foreground">Saving…</span>
+        ) : errorMsg ? (
+          <span className="text-sm text-destructive">{errorMsg}</span>
+        ) : undefined
+      }
+    >
+      <SettingsRow label="Runtime">
+        <Select
+          value={runtime ?? undefined}
+          onValueChange={(v) => {
+            const next = v as AgentRuntime;
+            setRuntime(next);
+            void persist({ runtime: next });
+          }}
+        >
+          <SelectTrigger className="w-60">
+            <SelectValue placeholder="Select runtime" />
+          </SelectTrigger>
+          <SelectContent>
+            {RUNTIME_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </SettingsRow>
+
+      <SettingsRow label="Default model">
+        {catalogFailed ? (
+          <div className="text-sm text-muted-foreground">
+            {model ?? "—"}{" "}
+            <span className="text-destructive">
+              (model catalog unavailable)
+            </span>
+          </div>
+        ) : (
+          <Select
+            value={model ?? undefined}
+            onValueChange={(v) => {
+              setModel(v);
+              void persist({ model: v });
+            }}
+            disabled={catalogResult.fetching}
+          >
+            <SelectTrigger className="w-60">
+              <SelectValue placeholder="Select model" />
+            </SelectTrigger>
+            <SelectContent>
+              {catalog.map((m) => (
+                <SelectItem key={m.id} value={m.modelId}>
+                  {m.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
+
 function ResourceRow({
   label,
   value,
@@ -209,7 +328,7 @@ function ResourceRow({
 function EditorWrapRow() {
   const wrap = useEditorWrap();
   return (
-    <SettingsRow label="Wrap text">
+    <SettingsRow label="Editor Wrap Text">
       <Switch
         checked={wrap}
         onCheckedChange={(next) => setEditorWrap(next)}
@@ -222,7 +341,7 @@ function EditorWrapRow() {
 function EditorFontSizeRow() {
   const fontSize = useEditorFontSize();
   return (
-    <SettingsRow label="Font size">
+    <SettingsRow label="Editor Font size">
       <Select
         value={String(fontSize)}
         onValueChange={(v) => setEditorFontSize(Number(v))}

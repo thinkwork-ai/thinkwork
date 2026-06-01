@@ -37,9 +37,9 @@ describe("visibleSettingsNavItems", () => {
       roleResolved: true,
       isDesktop: false,
     });
-    // An operator-only section (Agent) stays hidden for a non-operator, while
+    // An operator-only section (Users) stays hidden for a non-operator, while
     // Workspace shows for everyone.
-    expect(memberWeb.some((i) => i.to === "/settings/agent")).toBe(false);
+    expect(memberWeb.some((i) => i.to === "/settings/users")).toBe(false);
     expect(memberWeb.some((i) => i.to === LOCAL_WORKSPACE)).toBe(true);
   });
 });
