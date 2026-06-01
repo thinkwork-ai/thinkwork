@@ -37,6 +37,7 @@ import {
 import {
   createWorkspaceCachePartition,
   getDefaultWorkspaceCache,
+  workspaceRuntimePathForFile,
   workspaceTargetsForContext,
   type WorkspaceCache,
 } from "./workspace-cache";
@@ -307,14 +308,15 @@ export async function runThreadHarnessTurn(
   const workspaceReader =
     workspaceTargets.length > 0
       ? {
-          getWorkspaceFile: async (_target: unknown, path: string) => {
+          getWorkspaceFile: async (target, path) => {
             await workspaceCache.sync({
               partition: workspacePartition,
               targets: workspaceTargets,
             });
+            const runtimePath = workspaceRuntimePathForFile(target, { path });
             const file = await workspaceCache.readFile(
               workspacePartition,
-              path,
+              runtimePath ?? path,
             );
             return {
               content: file?.content ?? null,

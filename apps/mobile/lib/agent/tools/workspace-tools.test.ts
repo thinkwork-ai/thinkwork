@@ -77,7 +77,7 @@ describe("workspace tools", () => {
     await expect(
       tools
         .find((tool) => tool.name === "read")
-        ?.execute({ path: "USER.md" }, {}),
+        ?.execute({ path: "User/USER.md" }, {}),
     ).resolves.toMatchObject({ content: "Name: Eric\nRole: Builder" });
     await expect(
       tools
