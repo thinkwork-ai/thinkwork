@@ -385,9 +385,10 @@ export async function runAgentLoop(
     args.extensionToolNames,
   );
   const requestedModelId = resolveModelIdString(args.modelId);
+  const cwd = args.cwd?.trim() || process.cwd();
 
   const { session, modelId, durable, persistSession } = await openSession({
-    cwd: args.cwd?.trim() || process.cwd(),
+    cwd,
     agentDir: args.agentDir?.trim() || undefined,
     systemPrompt: args.systemPrompt,
     modelId: requestedModelId,
@@ -447,7 +448,17 @@ export async function runAgentLoop(
 
     // A durable session carries prior context (resumed or seeded), so send only
     // the new message. Without one, fall back to prepending conversation text.
-    await session.prompt(durable ? args.message : buildTurnPrompt(args));
+    const previousPwd = process.env.PWD;
+    process.env.PWD = cwd;
+    try {
+      await session.prompt(durable ? args.message : buildTurnPrompt(args));
+    } finally {
+      if (previousPwd === undefined) {
+        delete process.env.PWD;
+      } else {
+        process.env.PWD = previousPwd;
+      }
+    }
 
     // Persist the durable session only after a successful turn — a failed turn
     // leaves the stored session at its prior good state for the retry to resume.

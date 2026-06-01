@@ -328,6 +328,30 @@ describe("runAgentLoop", () => {
     expect(session.disposed).toBe(true);
   });
 
+  it("sets logical PWD to the workspace cwd while prompting", async () => {
+    const originalPwd = process.env.PWD;
+    process.env.PWD = "/previous";
+    const session = makeFakeSession({ messages: [assistantMessage("ok")] });
+    let promptPwd: string | undefined;
+    session.prompt = vi.fn(async () => {
+      promptPwd = process.env.PWD;
+    });
+
+    try {
+      await runAgentLoop(baseArgs({ cwd: "/workspace" }), {
+        openSession: async () => ({ session, modelId: "m" }),
+      });
+      expect(promptPwd).toBe("/workspace");
+      expect(process.env.PWD).toBe("/previous");
+    } finally {
+      if (originalPwd === undefined) {
+        delete process.env.PWD;
+      } else {
+        process.env.PWD = originalPwd;
+      }
+    }
+  });
+
   it("collects tool invocations and called tools from session events", async () => {
     const session = makeFakeSession({
       messages: [assistantMessage("done")],
