@@ -343,7 +343,7 @@ describe("runLocalDesktopTurn", () => {
         {
           path: "AGENTS.md",
           owner: "agent",
-          sourceKey: "tenants/acme/agents/marco/workspace/AGENTS.md",
+          sourceKey: "tenants/acme/agents/marco/AGENTS.md",
           sourcePrefix: "tenants/acme/agents/marco/",
           sourcePath: "AGENTS.md",
           etag: '"agent"',
@@ -359,9 +359,9 @@ describe("runLocalDesktopTurn", () => {
           readOnly: false,
         },
         {
-          path: "Spaces/default/source/CONTEXT.md",
+          path: "Spaces/default/CONTEXT.md",
           owner: "space",
-          sourceKey: "tenants/acme/spaces/default/source/CONTEXT.md",
+          sourceKey: "tenants/acme/spaces/default/CONTEXT.md",
           sourcePrefix: "tenants/acme/spaces/default/",
           sourcePath: "CONTEXT.md",
           etag: '"space"',
@@ -383,9 +383,9 @@ describe("runLocalDesktopTurn", () => {
           return new TextEncoder().encode(`${JSON.stringify(manifest)}\n`);
         }
         const contentByKey: Record<string, string> = {
-          "tenants/acme/agents/marco/workspace/AGENTS.md": "# Agent",
+          "tenants/acme/agents/marco/AGENTS.md": "# Agent",
           "tenants/acme/users/eric/USER.md": "Name: Eric",
-          "tenants/acme/spaces/default/source/CONTEXT.md": "# Space",
+          "tenants/acme/spaces/default/CONTEXT.md": "# Space",
         };
         return new TextEncoder().encode(contentByKey[input.key] ?? "");
       },

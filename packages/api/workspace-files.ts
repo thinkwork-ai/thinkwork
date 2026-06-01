@@ -573,13 +573,6 @@ async function resolveUserContextTarget(
     userSlug,
     userId,
     prefix: userContextPrefix(tenant.slug, userSlug),
-    readPrefixes: [
-      // Pre-stable-folder USER.md bootstrap wrote by database ids. Keep
-      // reading it so existing user workspaces don't disappear while new
-      // writes go to the human-readable canonical prefix.
-      `tenants/${tenant.slug}/users/${userId}/`,
-      `tenants/${tenantId}/users/${userId}/`,
-    ],
     key: (path) => userContextKey(tenant.slug, userSlug, path),
   };
 }
@@ -660,29 +653,38 @@ function targetReadPrefixes(target: Target): string[] {
   ];
 }
 
-function stripLegacyWorkspaceRoot(target: Target, path: string): string | null {
-  if (path.startsWith("/")) return path;
+function canonicalWorkspacePath(target: Target, path: string): string | null {
+  if (path.startsWith("/")) return null;
   const clean = path.replace(/^\/+/, "");
   if (!clean) return null;
+  if (isLegacyWorkspacePath(target, clean)) return null;
+  return clean;
+}
+
+function isLegacyWorkspacePath(target: Target, path: string): boolean {
+  const clean = path.replace(/^\/+/, "");
   if (
     clean === "workspace-archives" ||
     clean.startsWith("workspace-archives/")
   ) {
-    return null;
+    return true;
   }
-  if (target.kind === "space" && clean.startsWith("source/")) {
-    return clean.slice("source/".length);
+  if (
+    target.kind === "space" &&
+    (clean === "source" || clean.startsWith("source/"))
+  ) {
+    return true;
   }
   if (
     (target.kind === "agent" ||
       target.kind === "template" ||
       target.kind === "defaults" ||
       target.kind === "space") &&
-    clean.startsWith("workspace/")
+    (clean === "workspace" || clean.startsWith("workspace/"))
   ) {
-    return clean.slice("workspace/".length);
+    return true;
   }
-  return clean;
+  return false;
 }
 
 function storagePathCandidatesForTarget(
@@ -690,20 +692,7 @@ function storagePathCandidatesForTarget(
   path: string,
 ): string[] {
   const clean = path.replace(/^\/+/, "");
-  const logical = stripLegacyWorkspaceRoot(target, clean) ?? clean;
-  const candidates = [logical];
-  if (
-    target.kind === "agent" ||
-    target.kind === "template" ||
-    target.kind === "defaults" ||
-    target.kind === "space"
-  ) {
-    candidates.push(`workspace/${logical}`);
-  }
-  if (target.kind === "space") {
-    candidates.push(`source/${logical}`);
-  }
-  return [...new Set(candidates.filter(Boolean))];
+  return clean && !isLegacyWorkspacePath(target, clean) ? [clean] : [];
 }
 
 function isVisibleListedPath(target: Target, path: string): boolean {
@@ -726,7 +715,7 @@ async function listVisibleWorkspaceObjects(
   for (const prefix of targetReadPrefixes(target)) {
     const rawPaths = await listPrefix(prefix);
     for (const rawPath of rawPaths) {
-      const logicalPath = stripLegacyWorkspaceRoot(target, rawPath);
+      const logicalPath = canonicalWorkspacePath(target, rawPath);
       if (!logicalPath || !isVisibleListedPath(target, logicalPath)) continue;
 
       const canonicalScore =
@@ -798,7 +787,14 @@ async function handleGet(
   path: string,
 ): Promise<APIGatewayProxyResult> {
   const { target } = deps;
-  const logicalPath = stripLegacyWorkspaceRoot(target, path) ?? path;
+  const logicalPath = canonicalWorkspacePath(target, path);
+  if (!logicalPath) {
+    return json(400, {
+      ok: false,
+      error:
+        "Legacy workspace wrapper paths are no longer supported after Workspace Contract v1 migration.",
+    });
+  }
   if (target.kind === "user" && !isVisibleUserContextPath(logicalPath)) {
     return json(403, {
       ok: false,
@@ -1032,9 +1028,15 @@ async function handlePut(
   const { target, tenantId, auth } = deps;
   let cleanPath: string;
   try {
-    cleanPath = normalizeWorkspacePath(
-      stripLegacyWorkspaceRoot(target, path) ?? path,
-    );
+    const canonicalPath = canonicalWorkspacePath(target, path);
+    if (!canonicalPath) {
+      return json(400, {
+        ok: false,
+        error:
+          "Legacy workspace wrapper paths are no longer supported after Workspace Contract v1 migration.",
+      });
+    }
+    cleanPath = normalizeWorkspacePath(canonicalPath);
   } catch (err) {
     return json(400, {
       ok: false,
@@ -1417,7 +1419,14 @@ async function handleDelete(
   path: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  const cleanPath = stripLegacyWorkspaceRoot(target, path) ?? path;
+  const cleanPath = canonicalWorkspacePath(target, path);
+  if (!cleanPath) {
+    return json(400, {
+      ok: false,
+      error:
+        "Legacy workspace wrapper paths are no longer supported after Workspace Contract v1 migration.",
+    });
+  }
   if (target.kind === "user" && !isVisibleUserContextPath(cleanPath)) {
     return json(403, {
       ok: false,
@@ -1730,15 +1739,19 @@ async function handleMove(
   let cleanFrom: string;
   let cleanToFolder: string;
   try {
-    cleanFrom = normalizeWorkspacePath(
-      stripLegacyWorkspaceRoot(target, fromPath) ?? fromPath,
-    );
+    const canonicalFrom = canonicalWorkspacePath(target, fromPath);
+    const canonicalToFolder =
+      toFolder === "" ? "" : canonicalWorkspacePath(target, toFolder);
+    if (!canonicalFrom || canonicalToFolder === null) {
+      return json(400, {
+        ok: false,
+        error:
+          "Legacy workspace wrapper paths are no longer supported after Workspace Contract v1 migration.",
+      });
+    }
+    cleanFrom = normalizeWorkspacePath(canonicalFrom);
     cleanToFolder =
-      toFolder === ""
-        ? ""
-        : normalizeWorkspacePath(
-            stripLegacyWorkspaceRoot(target, toFolder) ?? toFolder,
-          );
+      canonicalToFolder === "" ? "" : normalizeWorkspacePath(canonicalToFolder);
   } catch (err) {
     return json(400, {
       ok: false,
@@ -2062,12 +2075,17 @@ async function handleRename(
   let cleanFrom: string;
   let cleanTo: string;
   try {
-    cleanFrom = normalizeWorkspacePath(
-      stripLegacyWorkspaceRoot(target, fromPath) ?? fromPath,
-    );
-    cleanTo = normalizeWorkspacePath(
-      stripLegacyWorkspaceRoot(target, toPath) ?? toPath,
-    );
+    const canonicalFrom = canonicalWorkspacePath(target, fromPath);
+    const canonicalTo = canonicalWorkspacePath(target, toPath);
+    if (!canonicalFrom || !canonicalTo) {
+      return json(400, {
+        ok: false,
+        error:
+          "Legacy workspace wrapper paths are no longer supported after Workspace Contract v1 migration.",
+      });
+    }
+    cleanFrom = normalizeWorkspacePath(canonicalFrom);
+    cleanTo = normalizeWorkspacePath(canonicalTo);
   } catch (err) {
     return json(400, {
       ok: false,

@@ -129,28 +129,18 @@ function runtimeToManifestPathMap(
 function runtimeWorkspacePath(manifestPath: string): string {
   const clean = manifestPath.replace(/^\/+/, "");
   if (clean.startsWith("Agent/")) {
-    return stripLegacySourceRoot(clean.slice("Agent/".length));
+    return clean.slice("Agent/".length);
   }
   if (clean.startsWith("User/")) {
-    return `User/${stripLegacySourceRoot(clean.slice("User/".length))}`;
+    return `User/${clean.slice("User/".length)}`;
   }
   if (clean.startsWith("Thread/")) {
-    return `Thread/${stripLegacySourceRoot(clean.slice("Thread/".length))}`;
+    return `Thread/${clean.slice("Thread/".length)}`;
   }
   if (clean.startsWith("Spaces/")) {
     if (clean === "Spaces/INDEX.md") return clean;
     const [, spaceFolder, ...rest] = clean.split("/");
-    return ["Spaces", spaceFolder, stripLegacySourceRoot(rest.join("/"))].join(
-      "/",
-    );
+    return ["Spaces", spaceFolder, rest.join("/")].join("/");
   }
-  return stripLegacySourceRoot(clean);
-}
-
-function stripLegacySourceRoot(relativePath: string): string {
-  let current = relativePath;
-  while (current.startsWith("source/") || current.startsWith("workspace/")) {
-    current = current.replace(/^(source|workspace)\//, "");
-  }
-  return current;
+  return clean;
 }

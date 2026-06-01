@@ -232,15 +232,15 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(files["DECISIONS.md"]).toBe("# Decisions");
   });
 
-  it("unwraps tuple-rendered workspaces into the runtime sandbox layout", async () => {
+  it("hydrates tuple-rendered workspaces into the runtime sandbox layout", async () => {
     stubRemote(
       {
-        "Agent/workspace/AGENTS.md": "# Agent",
+        "Agent/AGENTS.md": "# Agent",
         "Agent/skills/research/SKILL.md": "# Skill",
         "Agent/workspace-archives/old/AGENTS.md": "# Old",
         "User/USER.md": "# User",
-        "Spaces/default/source/CONTEXT.md": "# Space",
-        "Spaces/default/source/docs/customer.md": "# Customer",
+        "Spaces/default/CONTEXT.md": "# Space",
+        "Spaces/default/docs/customer.md": "# Customer",
       },
       THREAD_PREFIX,
     );
@@ -279,7 +279,7 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
         {
           path: "AGENTS.md",
           owner: "agent",
-          sourceKey: `${SOURCE_PREFIX}workspace/AGENTS.md`,
+          sourceKey: `${SOURCE_PREFIX}AGENTS.md`,
           sourcePrefix: SOURCE_PREFIX,
           sourcePath: "AGENTS.md",
           readOnly: false,
@@ -358,7 +358,7 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
       `${THREAD_PREFIX}.hydrate_manifest.json`,
       JSON.stringify(manifest),
     );
-    stubObject(`${SOURCE_PREFIX}workspace/AGENTS.md`, "# Agent");
+    stubObject(`${SOURCE_PREFIX}AGENTS.md`, "# Agent");
     stubObject(`${SOURCE_PREFIX}skills/research/SKILL.md`, "# Skill");
     stubObject(`${SOURCE_PREFIX}workspace-archives/old/AGENTS.md`, "# Old");
     stubObject(`${THREAD_PREFIX}Spaces/INDEX.md`, "# Spaces");

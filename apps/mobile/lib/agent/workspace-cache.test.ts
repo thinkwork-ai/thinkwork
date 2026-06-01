@@ -69,8 +69,8 @@ function targetKey(target: WorkspaceTarget): string {
 describe("WorkspaceCache", () => {
   it("syncs workspace targets into a durable partition and serves fresh cache hits", async () => {
     const source = new FakeSource({
-      "agent:agent-1": { "workspace/AGENTS.md": "# Agent" },
-      "space:space-1": { "source/CONTEXT.md": "# Space" },
+      "agent:agent-1": { "AGENTS.md": "# Agent" },
+      "space:space-1": { "CONTEXT.md": "# Space" },
       "user:user-1": { "USER.md": "The human's name is Eric." },
     });
     const cache = new WorkspaceCache(
@@ -102,9 +102,6 @@ describe("WorkspaceCache", () => {
     await expect(
       cache.readFile(PARTITION, "User/USER.md"),
     ).resolves.toMatchObject({ content: "The human's name is Eric." });
-    await expect(cache.readFile(PARTITION, "USER.md")).resolves.toMatchObject({
-      content: "The human's name is Eric.",
-    });
     await expect(cache.readFile(PARTITION, "AGENTS.md")).resolves.toMatchObject(
       { content: "# Agent" },
     );
@@ -323,13 +320,13 @@ describe("WorkspaceCache", () => {
     expect(
       workspaceRuntimePathForFile(
         { agentId: "agent-1" },
-        { path: "workspace/skills/tool.md", source: "agent" },
+        { path: "skills/tool.md", source: "agent" },
       ),
     ).toBe("skills/tool.md");
     expect(
       workspaceRuntimePathForFile(
         { spaceId: "space-1", spaceFolderName: "customer-onboarding" },
-        { path: "source/CONTEXT.md", source: "space" },
+        { path: "CONTEXT.md", source: "space" },
       ),
     ).toBe("Spaces/customer-onboarding/CONTEXT.md");
     expect(
@@ -347,18 +344,15 @@ describe("WorkspaceCache", () => {
     expect(
       workspaceRuntimePathForFile(
         { agentId: "agent-1" },
-        { path: "Agent/workspace/AGENTS.md", source: "agent" },
+        { path: "workspace/AGENTS.md", source: "agent" },
       ),
-    ).toBe("AGENTS.md");
+    ).toBeNull();
     expect(
       workspaceRuntimePathForFile(
         { spaceId: "space-1", spaceFolderName: "customer-onboarding" },
-        {
-          path: "Spaces/customer-onboarding/source/CONTEXT.md",
-          source: "space",
-        },
+        { path: "source/CONTEXT.md", source: "space" },
       ),
-    ).toBe("Spaces/customer-onboarding/CONTEXT.md");
+    ).toBeNull();
     expect(
       workspaceRuntimePathForFile(
         { agentId: "agent-1" },
@@ -367,7 +361,7 @@ describe("WorkspaceCache", () => {
     ).toBeNull();
   });
 
-  it("normalizes stale cached workspace roots before hydrating bash", async () => {
+  it("drops stale cached legacy workspace roots before hydrating bash", async () => {
     const storage = new MemoryWorkspaceCacheStorage();
     await storage.setItem(
       cacheKeyForPartition(PARTITION),
@@ -407,9 +401,6 @@ describe("WorkspaceCache", () => {
     const cache = new WorkspaceCache(storage, new FakeSource({}));
 
     await expect(cache.listFiles(PARTITION)).resolves.toEqual([
-      expect.objectContaining({ path: "AGENTS.md" }),
-      expect.objectContaining({ path: "CONTEXT.md" }),
-      expect.objectContaining({ path: "Spaces/default/CONTEXT.md" }),
       expect.objectContaining({ path: "User/USER.md" }),
     ]);
     await expect(

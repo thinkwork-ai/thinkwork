@@ -68,7 +68,7 @@ describe("listFiles", () => {
     ]);
   });
 
-  it("normalizes legacy source wrappers out of the visible source tree", async () => {
+  it("omits legacy source wrappers from the visible source tree", async () => {
     listFiles.mockImplementation((sub: Record<string, string>) => {
       if (sub.agentId)
         return Promise.resolve({
@@ -88,13 +88,7 @@ describe("listFiles", () => {
 
     const { files } = await client.listFiles(target);
     const paths = files.map((f) => f.path).sort();
-    expect(paths).toEqual([
-      "Agent/AGENTS.md",
-      "Agent/Agent/workspace/CONTEXT.md",
-      "Spaces/finance/CONTEXT.md",
-      "Spaces/finance/plans/kickoff.md",
-      "User/USER.md",
-    ]);
+    expect(paths).toEqual(["Agent/Agent/workspace/CONTEXT.md", "User/USER.md"]);
   });
 
   it("preserves source-relative folders named like synthetic roots", async () => {
