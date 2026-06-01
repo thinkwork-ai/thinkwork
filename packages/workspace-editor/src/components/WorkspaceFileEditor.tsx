@@ -59,6 +59,9 @@ export interface WorkspaceFileEditorProps<TTarget> {
   defaultOpenFile?: string;
   readOnly?: boolean;
   className?: string;
+  /** Draw the outer border + rounded corners around the tree/editor split.
+   *  Default true; full-screen hosts can opt out for an edge-to-edge look. */
+  bordered?: boolean;
 }
 
 interface ClipboardItem {
@@ -80,6 +83,7 @@ export function WorkspaceFileEditor<TTarget>({
   defaultOpenFile,
   readOnly = false,
   className,
+  bordered = true,
 }: WorkspaceFileEditorProps<TTarget>) {
   const stableTarget = useMemo(() => target, [targetKey, target]);
   const [files, setFiles] = useState<string[]>([]);
@@ -88,7 +92,9 @@ export function WorkspaceFileEditor<TTarget>({
   >({});
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [loadedFilesOnce, setLoadedFilesOnce] = useState(false);
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    new Set(),
+  );
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [editValue, setEditValue] = useState("");
@@ -96,7 +102,9 @@ export function WorkspaceFileEditor<TTarget>({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mutatingPaths, setMutatingPaths] = useState<Set<string>>(new Set());
-  const [clipboardItem, setClipboardItem] = useState<ClipboardItem | null>(null);
+  const [clipboardItem, setClipboardItem] = useState<ClipboardItem | null>(
+    null,
+  );
   const [focusedTreePath, setFocusedTreePath] = useState<string | null>(null);
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null);
   const [deleteConfirmTarget, setDeleteConfirmTarget] =
@@ -172,7 +180,10 @@ export function WorkspaceFileEditor<TTarget>({
   }, [fetchFiles]);
 
   const tree = useMemo(() => buildWorkspaceTree(files), [files]);
-  const folderPaths = useMemo(() => collectFolderPathsFromFiles(files), [files]);
+  const folderPaths = useMemo(
+    () => collectFolderPathsFromFiles(files),
+    [files],
+  );
   const isFolderPath = useCallback(
     (path: string) => folderPaths.has(path),
     [folderPaths],
@@ -263,7 +274,8 @@ export function WorkspaceFileEditor<TTarget>({
 
   const startRename = (path: string, kind: "file" | "folder") => {
     if (readOnly) return;
-    if (kind === "folder") setExpandedFolders((current) => new Set(current).add(path));
+    if (kind === "folder")
+      setExpandedFolders((current) => new Set(current).add(path));
     setFocusedTreePath(path);
     setInlineEdit({ mode: "rename", path, kind, value: basenameOf(path) });
   };
@@ -385,7 +397,11 @@ export function WorkspaceFileEditor<TTarget>({
       if (activeOpenFile) {
         const nextOpen =
           renameEdit.kind === "folder"
-            ? replacePathPrefix(activeOpenFile, renameEdit.path, result.destPath)
+            ? replacePathPrefix(
+                activeOpenFile,
+                renameEdit.path,
+                result.destPath,
+              )
             : activeOpenFile === renameEdit.path
               ? result.destPath
               : activeOpenFile;
@@ -548,9 +564,7 @@ export function WorkspaceFileEditor<TTarget>({
   );
 
   return (
-    <div
-      className={cn("flex h-full min-h-[400px] flex-col gap-3", className)}
-    >
+    <div className={cn("flex h-full min-h-[400px] flex-col gap-3", className)}>
       {title || description ? (
         <div className="shrink-0">
           {title ? <div className="text-sm font-medium">{title}</div> : null}
@@ -571,7 +585,12 @@ export function WorkspaceFileEditor<TTarget>({
           <Loader2 className="h-4 w-4 animate-spin" /> Loading files...
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 overflow-hidden",
+            bordered && "rounded-md border",
+          )}
+        >
           <div className="flex min-h-0 w-64 shrink-0 flex-col border-r">
             <div className="flex h-9 items-center justify-between border-b bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
               <span>{files.length} files</span>

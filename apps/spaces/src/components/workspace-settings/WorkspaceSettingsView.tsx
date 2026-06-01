@@ -68,11 +68,7 @@ export function WorkspaceSettingsView() {
       targetKey={targetKey}
       client={client}
       readOnly={!isAdmin}
-      description={
-        isAdmin
-          ? "Edits save to S3. Agent governance files (AGENTS.md, GUARDRAILS.md) are live — changes take effect on the next agent turn."
-          : "Read-only. Workspace editing is available to owners and admins."
-      }
+      bordered={false}
       className="h-full"
     />
   );
