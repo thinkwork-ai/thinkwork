@@ -1,9 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const desktopRuntimeMocks = vi.hoisted(() => ({
   isDesktopBuild: vi.fn(() => false),
 }));
+const authMocks = vi.hoisted(() => ({ signOut: vi.fn() }));
 
 vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
 vi.mock("@/lib/composer-focus", () => ({
@@ -12,7 +13,7 @@ vi.mock("@/lib/composer-focus", () => ({
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({
     user: { name: "Eric Odom", email: "eric@example.com" },
-    signOut: vi.fn(),
+    signOut: authMocks.signOut,
   }),
 }));
 vi.mock("@/components/shell/ChatSidebar", () => ({
@@ -61,8 +62,51 @@ vi.mock("@thinkwork/ui", () => ({
   DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  DropdownMenuItem: ({ children }: { children: React.ReactNode }) => (
+  DropdownMenuItem: ({
+    children,
+    onSelect,
+  }: {
+    children: React.ReactNode;
+    onSelect?: () => void;
+  }) => (
+    <div role="menuitem" onClick={() => onSelect?.()}>
+      {children}
+    </div>
+  ),
+  AlertDialog: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode;
+    open?: boolean;
+  }) => (open ? <div>{children}</div> : null),
+  AlertDialogContent: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+  AlertDialogHeader: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
+  ),
+  AlertDialogTitle: ({ children }: { children: React.ReactNode }) => (
+    <h2>{children}</h2>
+  ),
+  AlertDialogDescription: ({ children }: { children: React.ReactNode }) => (
+    <p>{children}</p>
+  ),
+  AlertDialogFooter: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  AlertDialogCancel: ({ children }: { children: React.ReactNode }) => (
+    <button type="button">{children}</button>
+  ),
+  AlertDialogAction: ({
+    children,
+    onClick,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" onClick={onClick} {...props}>
+      {children}
+    </button>
   ),
   DropdownMenuLabel: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -109,6 +153,7 @@ import { SpacesSidebar } from "./SpacesSidebar";
 afterEach(() => {
   cleanup();
   desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
+  authMocks.signOut.mockReset();
 });
 
 describe("SpacesSidebar", () => {
@@ -135,5 +180,22 @@ describe("SpacesSidebar", () => {
       "pt-",
     );
     expect(screen.getByTestId("chat-sidebar")).toBeTruthy();
+  });
+
+  it("confirms before logging out instead of signing out immediately", () => {
+    render(<SpacesSidebar />);
+
+    // The confirm dialog is closed and no logout has fired yet.
+    expect(screen.queryByTestId("logout-confirm-dialog")).toBeNull();
+
+    fireEvent.click(screen.getByText("Log out"));
+
+    // Clicking the menu item opens the dialog but does NOT sign out.
+    expect(screen.getByTestId("logout-confirm-dialog")).toBeTruthy();
+    expect(authMocks.signOut).not.toHaveBeenCalled();
+
+    // Confirming in the dialog performs the sign-out.
+    fireEvent.click(screen.getByTestId("logout-confirm"));
+    expect(authMocks.signOut).toHaveBeenCalledTimes(1);
   });
 });
