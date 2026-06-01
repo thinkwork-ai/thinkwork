@@ -105,7 +105,6 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Workspace",
     to: "/settings/local-workspace",
     icon: FolderTree,
-    desktopOnly: true,
   },
 ];
 
