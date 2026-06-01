@@ -163,6 +163,8 @@ export async function processFinalize(
   );
 
   let reconcileReport: ReconcileReport;
+  const reconcileStartedAt = Date.now();
+  let reconcileDurationMs = 0;
   try {
     reconcileReport = await reconcileChangedFiles({
       tenantId,
@@ -171,11 +173,13 @@ export async function processFinalize(
       threadTurnId: turnId,
       changedFiles: payload.changed_files ?? [],
     });
+    reconcileDurationMs = Math.max(0, Date.now() - reconcileStartedAt);
     await recordWorkspaceReconcileStatus(turnId, {
       status: "complete",
       report: reconcileReport,
     });
   } catch (err) {
+    reconcileDurationMs = Math.max(0, Date.now() - reconcileStartedAt);
     await recordWorkspaceReconcileStatus(turnId, {
       status: "failed",
       error: err instanceof Error ? err.message : String(err),
@@ -343,13 +347,18 @@ export async function processFinalize(
   }
 
   // 5. Update thread_turn as succeeded
+  const diagnostics = diagnosticsWithWorkspaceReconcile(
+    diagnosticsFromFinalizePayload(payload),
+    reconcileReport,
+    reconcileDurationMs,
+  );
   const turnUsage = {
     duration_ms: durationMs,
     runtime_type: runtimeType,
     input_tokens: usage.inputTokens,
     output_tokens: usage.outputTokens,
     cached_read_tokens: usage.cachedReadTokens,
-    diagnostics: diagnosticsFromFinalizePayload(payload),
+    diagnostics,
     tools_called: invokeResult.tools_called ?? [],
     tool_costs: toolCosts.map((tc) => ({
       event_type: tc.event_type,
@@ -531,6 +540,44 @@ export async function processFinalize(
     messageId: assistantMsg?.id ?? null,
     reconcile: reconcileReport,
   };
+}
+
+export function diagnosticsWithWorkspaceReconcile(
+  diagnostics: Record<string, unknown> | undefined,
+  reconcileReport: ReconcileReport,
+  reconcileDurationMs: number,
+): Record<string, unknown> {
+  const base = diagnostics ?? {};
+  const existingWorkspaceDiagnostics = readRecord(base.workspace_diagnostics);
+  const rejectedFiles = reconcileReport.files.filter(
+    (file) => file.status === "rejected",
+  );
+  const persistedFiles = reconcileReport.files.filter(
+    (file) => file.status === "written" || file.status === "deleted",
+  );
+  const conflictedFiles = rejectedFiles.filter(
+    (file) =>
+      file.code === "base_etag_mismatch" || file.code === "precondition_failed",
+  );
+
+  return {
+    ...base,
+    workspace_diagnostics: {
+      ...existingWorkspaceDiagnostics,
+      reconcile_writeback_ms: reconcileDurationMs,
+      reconcile_status: reconcileReport.status,
+      changed_files: reconcileReport.files.length,
+      persisted_files: persistedFiles.length,
+      rejected_files: rejectedFiles.length,
+      conflicted_files: conflictedFiles.length,
+    },
+  };
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 async function recordWorkspaceReconcileStatus(

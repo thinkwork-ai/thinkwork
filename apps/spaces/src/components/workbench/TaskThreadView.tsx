@@ -3334,8 +3334,8 @@ function actionRowsForTurn(
     .filter(Boolean) as string[];
   const toolInvocations = parseArray(usage.tool_invocations);
   const seen = new Set<string>();
-  const localPiTimingRow = actionRowForLocalPiTimings(usage);
-  if (localPiTimingRow) rows.push(localPiTimingRow);
+  const workspaceDiagnosticsRow = actionRowForWorkspaceDiagnostics(usage);
+  if (workspaceDiagnosticsRow) rows.push(workspaceDiagnosticsRow);
 
   for (const invocation of toolInvocations) {
     const record = parseRecord(invocation);
@@ -3398,47 +3398,141 @@ function actionRowsForTurn(
   return rows;
 }
 
-function actionRowForLocalPiTimings(usage: Record<string, unknown>) {
+function actionRowForWorkspaceDiagnostics(usage: Record<string, unknown>) {
   const diagnostics = parseRecord(usage.diagnostics);
+  const workspaceDiagnostics = parseRecord(diagnostics.workspace_diagnostics);
   const timings = parseRecord(diagnostics.local_pi_timings_ms);
-  if (Object.keys(timings).length === 0) return null;
-  const detail = formatLocalPiTimings(timings);
+  if (
+    Object.keys(workspaceDiagnostics).length === 0 &&
+    Object.keys(timings).length === 0
+  ) {
+    return null;
+  }
+  const detail = formatWorkspaceDiagnostics(workspaceDiagnostics, timings);
   if (!detail) return null;
   return {
-    title: "Local Pi timings",
+    title: "Workspace sync",
     detail,
-    kind: "thinking" as const,
+    kind: "source" as const,
   };
 }
 
-function formatLocalPiTimings(timings: Record<string, unknown>) {
-  const orderedKeys = [
+function formatWorkspaceDiagnostics(
+  workspaceDiagnostics: Record<string, unknown>,
+  timings: Record<string, unknown>,
+) {
+  const normalized: Record<string, unknown> =
+    Object.keys(workspaceDiagnostics).length > 0
+      ? workspaceDiagnostics
+      : workspaceDiagnosticsFromLegacyTimings(timings);
+  const timingKeys = [
+    "source_freshness_ms",
+    "manifest_render_ms",
+    "hydration_copy_ms",
     "workspace_sync_ms",
-    "sdk_load_ms",
-    "agent_prompt_files_ms",
-    "mcp_adapter_config_ms",
-    "shared_extensions_ms",
-    "resource_loader_reload_ms",
-    "model_config_ms",
-    "sdk_session_create_ms",
-    "bind_extensions_ms",
-    "sdk_prompt_ms",
-    "finalize_callback_ms",
-    "total_ms",
+    "sdk_session_ms",
+    "model_tool_run_ms",
+    "workspace_diff_ms",
+    "reconcile_writeback_ms",
   ];
+  const countKeys = [
+    "file_count",
+    "hydrated_files",
+    "deleted_files",
+    "changed_files",
+    "persisted_files",
+    "rejected_files",
+    "conflicted_files",
+  ];
+
   const seen = new Set<string>();
-  const lines: string[] = [];
+  const timingLines: string[] = [];
   for (const key of [
-    ...orderedKeys,
-    ...Object.keys(timings).sort((a, b) => a.localeCompare(b)),
+    ...timingKeys,
+    ...Object.keys(normalized)
+      .filter((key) => key.endsWith("_ms"))
+      .sort((a, b) => a.localeCompare(b)),
   ]) {
     if (seen.has(key)) continue;
     seen.add(key);
+    const value = Number(normalized[key]);
+    if (!Number.isFinite(value) || value < 0) continue;
+    timingLines.push(`${humanizeTimingKey(key)}: ${formatTimingMs(value)}`);
+  }
+
+  const countLines: string[] = [];
+  for (const key of countKeys) {
+    const value = Number(normalized[key]);
+    if (!Number.isFinite(value) || value < 0) continue;
+    countLines.push(`${humanizeTimingKey(key)}: ${Math.round(value)}`);
+  }
+
+  const stateLines = [
+    booleanDiagnosticLine(normalized, "cache_hit", "cache hit"),
+    booleanDiagnosticLine(normalized, "cache_stale", "cache stale"),
+    booleanDiagnosticLine(
+      normalized,
+      "access_revalidated",
+      "access revalidated",
+    ),
+    stringValue(normalized.reconcile_status)
+      ? `reconcile status: ${stringValue(normalized.reconcile_status)}`
+      : null,
+  ].filter(Boolean);
+
+  const sections = [
+    timingLines.length ? `Timings\n${timingLines.join("\n")}` : null,
+    countLines.length ? `Counts\n${countLines.join("\n")}` : null,
+    stateLines.length ? `State\n${stateLines.join("\n")}` : null,
+  ].filter(Boolean);
+  return sections.length > 0 ? sections.join("\n\n") : null;
+}
+
+function workspaceDiagnosticsFromLegacyTimings(
+  timings: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    workspace_sync_ms: timings.workspace_sync_ms,
+    hydration_copy_ms: timings.workspace_sync_ms,
+    sdk_session_ms: sumDiagnosticTimings(timings, [
+      "sdk_load_ms",
+      "agent_prompt_files_ms",
+      "mcp_adapter_config_ms",
+      "shared_extensions_ms",
+      "resource_loader_reload_ms",
+      "model_config_ms",
+      "sdk_session_create_ms",
+      "bind_extensions_ms",
+    ]),
+    model_tool_run_ms: timings.sdk_prompt_ms,
+    workspace_diff_ms: timings.workspace_diff_ms,
+    reconcile_writeback_ms: timings.finalize_callback_ms,
+  };
+}
+
+function sumDiagnosticTimings(
+  timings: Record<string, unknown>,
+  keys: string[],
+) {
+  let total = 0;
+  let seen = false;
+  for (const key of keys) {
     const value = Number(timings[key]);
     if (!Number.isFinite(value) || value < 0) continue;
-    lines.push(`${humanizeTimingKey(key)}: ${formatTimingMs(value)}`);
+    total += value;
+    seen = true;
   }
-  return lines.length > 0 ? lines.join("\n") : null;
+  return seen ? total : undefined;
+}
+
+function booleanDiagnosticLine(
+  diagnostics: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  return typeof diagnostics[key] === "boolean"
+    ? `${label}: ${diagnostics[key] ? "yes" : "no"}`
+    : null;
 }
 
 function humanizeTimingKey(key: string) {
