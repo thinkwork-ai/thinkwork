@@ -77,6 +77,8 @@ RUN pnpm --filter @thinkwork/agentcore-pi build
 ENV PORT=8080
 ENV AWS_REGION=us-east-1
 ENV NODE_ENV=production
+ENV WORKSPACE_DIR=/workspace
+RUN mkdir -p /workspace
 
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown

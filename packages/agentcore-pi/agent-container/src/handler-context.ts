@@ -174,7 +174,7 @@ export function snapshotRuntimeEnv(
     dbSecretArn: env.DB_SECRET_ARN || "",
     dbName: env.DB_NAME || "thinkwork",
     workspaceBucket: env.WORKSPACE_BUCKET || env.AGENTCORE_FILES_BUCKET || "",
-    workspaceDir: env.WORKSPACE_DIR || "/tmp/workspace",
+    workspaceDir: env.WORKSPACE_DIR || "/workspace",
     gitSha: env.THINKWORK_GIT_SHA || "unknown",
   };
 }

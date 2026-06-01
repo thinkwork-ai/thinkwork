@@ -1151,6 +1151,61 @@ jobs:
           export WORKSPACE_BUCKET="${{ steps.outputs.outputs.bucket }}"
           npx tsx packages/api/src/handlers/seed-workspace-defaults.ts
 
+  workspace-layout-migration:
+    name: Workspace Layout Migration
+    needs: [detect-changes, terraform-apply]
+    if: >-
+      always()
+      && needs.terraform-apply.result == 'success'
+      && (
+        needs.detect-changes.outputs.lambdas == 'true' ||
+        needs.detect-changes.outputs.container == 'true' ||
+        github.event_name == 'workflow_dispatch'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Get deploy outputs
+        id: outputs
+        working-directory: terraform/examples/greenfield
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
+          source ../../../scripts/lib/terraform-output.sh
+          echo "bucket=$(tf_output_raw bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "db_endpoint=$(tf_output_raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "db_secret_arn=$(tf_output_raw db_secret_arn)" >> "$GITHUB_OUTPUT"
+
+      - name: Migrate tuple workspace source layout
+        run: |
+          DB_PASS=$(aws secretsmanager get-secret-value \
+            --secret-id "${{ steps.outputs.outputs.db_secret_arn }}" \
+            --query SecretString --output text | jq -r .password)
+          export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=no-verify"
+          pnpm exec tsx scripts/migrate-workspace-layout.ts \
+            --apply \
+            --delete-legacy-sources \
+            --workspace-bucket "${{ steps.outputs.outputs.bucket }}"
+
   # ── Deploy summary ──────────────────────────────────────────────
   summary:
     name: Deploy Summary
@@ -1166,6 +1221,7 @@ jobs:
         build-spaces,
         build-docs,
         bootstrap,
+        workspace-layout-migration,
       ]
     if: always() && !cancelled()
     runs-on: ubuntu-latest

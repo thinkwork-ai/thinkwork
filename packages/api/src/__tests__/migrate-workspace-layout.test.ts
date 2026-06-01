@@ -173,6 +173,14 @@ describe("migrate-workspace-layout", () => {
         "tenants/acme/rendered/marco/sales/eric/AGENTS.md",
         { etag: "r", size: 1 },
       ],
+      [
+        "tenants/acme/rendered/marco/sales/eric/USER.md",
+        { etag: "ru", size: 1 },
+      ],
+      [
+        "tenants/acme/rendered/marco/sales/eric/memory/preferences.md",
+        { etag: "rp", size: 1 },
+      ],
     ]);
 
     const plan = await planWorkspaceLayoutTenant({
@@ -211,8 +219,7 @@ describe("migrate-workspace-layout", () => {
         }),
         expect.objectContaining({
           sourceKey: "tenants/acme/spaces/sales/source/artifacts/brief.md",
-          destinationKey:
-            "tenants/acme/spaces/board-pack/artifacts/brief.md",
+          destinationKey: "tenants/acme/spaces/board-pack/artifacts/brief.md",
         }),
         expect.objectContaining({
           sourceKey: "tenants/acme/users/eric/USER.md",
@@ -233,14 +240,14 @@ describe("migrate-workspace-layout", () => {
         expect.objectContaining({
           prefix: "tenants/acme/agents/marco/workspace-archives/",
           reason: "legacy-source",
-          keys: [
-            "tenants/acme/agents/marco/workspace-archives/old/AGENTS.md",
-          ],
+          keys: ["tenants/acme/agents/marco/workspace-archives/old/AGENTS.md"],
         }),
         expect.objectContaining({
           prefix: "tenants/acme/rendered/",
           reason: "retired-rendered",
-          keys: ["tenants/acme/rendered/marco/sales/eric/AGENTS.md"],
+          keys: expect.arrayContaining([
+            "tenants/acme/rendered/marco/sales/eric/AGENTS.md",
+          ]),
         }),
       ]),
     );
@@ -275,6 +282,51 @@ describe("migrate-workspace-layout", () => {
     );
   });
 
+  it("recovers user files from retired rendered tuple prefixes when user source is empty", async () => {
+    const store = FakeObjectStore.from([
+      [
+        "tenants/acme/rendered/marco/sales/eric/USER.md",
+        { etag: "ru", size: 1 },
+      ],
+      [
+        "tenants/acme/rendered/marco/sales/eric/memory/preferences.md",
+        { etag: "rp", size: 1 },
+      ],
+      [
+        "tenants/acme/rendered/marco/sales/eric/AGENTS.md",
+        { etag: "agent", size: 1 },
+      ],
+    ]);
+
+    const plan = await planWorkspaceLayoutTenant({
+      bucket: "workspace-bucket",
+      snapshot: SNAPSHOT,
+      objectStore: store,
+      deleteLegacySources: true,
+    });
+
+    expect(plan.plannedCopies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceKey: "tenants/acme/rendered/marco/sales/eric/USER.md",
+          destinationKey: "tenants/acme/users/eric-odom/USER.md",
+        }),
+        expect.objectContaining({
+          sourceKey:
+            "tenants/acme/rendered/marco/sales/eric/memory/preferences.md",
+          destinationKey: "tenants/acme/users/eric-odom/memory/preferences.md",
+        }),
+      ]),
+    );
+    expect(plan.plannedCopies).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceKey: "tenants/acme/rendered/marco/sales/eric/AGENTS.md",
+        }),
+      ]),
+    );
+  });
+
   it("rejects non-positive apply batch sizes", async () => {
     await expect(
       runWorkspaceLayoutMigration(
@@ -301,6 +353,10 @@ describe("migrate-workspace-layout", () => {
       [
         "tenants/acme/rendered/marco/sales/eric/AGENTS.md",
         { etag: "r", size: 1 },
+      ],
+      [
+        "tenants/acme/rendered/marco/sales/eric/USER.md",
+        { etag: "ru", size: 1 },
       ],
     ]);
     const repository = new FakeRepository(SNAPSHOT);
@@ -339,6 +395,10 @@ describe("migrate-workspace-layout", () => {
         {
           sourceKey: "tenants/acme/threads/thread-1/DECISIONS.md",
           destinationKey: "tenants/acme/threads/customer-kickoff/DECISIONS.md",
+        },
+        {
+          sourceKey: "tenants/acme/rendered/marco/sales/eric/USER.md",
+          destinationKey: "tenants/acme/users/eric-odom/USER.md",
         },
       ]),
     );

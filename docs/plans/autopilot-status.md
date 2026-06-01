@@ -31,6 +31,35 @@ Target branch: `main`
 
 ### Run Notes
 
+- 2026-05-31 managed AgentCore regression found that Desktop and mobile
+  just-bash rendered the tuple workspace correctly, but managed Pi bootstrapped
+  an empty `/tmp/workspace` and did not expose `/workspace`. Root cause: the API
+  renderer writes per-thread `.hydrate_manifest.json` files that point at
+  Agent/User/Space source objects, while the managed Pi bootstrap listed only
+  the rendered thread prefix and skipped the manifest, so it downloaded zero
+  source files.
+- Started follow-up branch `fix/agentcore-hydrate-rendered-workspace`.
+  Implemented managed Pi manifest hydration, changed the Pi container default
+  workspace to `/workspace`, broadened Space rendering so the current Space
+  workspace (`CONTEXT.md`, plans, artifacts/docs/goals, etc.) is included, and
+  added tests for manifest hydration into the runtime `Space/` folder.
+- Read-only S3 inspection confirmed live legacy source objects still existed:
+  agent files under `agents/<agent>/workspace/`, Space files under
+  `spaces/<space>/source/`, an empty canonical `users/eric/` prefix, and
+  `workspace-archives/` under the agent prefix. Added the existing workspace
+  layout migration to the normal deploy pipeline with `--delete-legacy-sources`
+  and extended it to recover `USER.md` and `memory/` files from retired
+  `rendered/<agent>/<space>/<user>/` tuple prefixes before deleting rendered
+  objects.
+- Live dry-run of the migration against `thinkwork-dev-storage` completed with
+  no conflicts or errors: 3 tenants, 460 folder assignments, 7 goal prefix
+  assignments, 631 planned copies, 1164 legacy keys to delete, and 346 thread
+  renders.
+- Focused verification passed:
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/handler-context.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/__tests__/migrate-workspace-layout.test.ts src/lib/workspace-renderer/compose-tuple.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`.
 - 2026-05-31 post-merge regression fix: user reported the desktop
   Settings > Workspace tree still exposed the retired UUID/petname cache
   layout. Started branch `fix/workspace-agent-spaces-user-root`.

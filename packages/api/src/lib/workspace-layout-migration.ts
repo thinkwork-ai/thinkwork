@@ -556,7 +556,10 @@ async function planPrefixMove(input: {
   deletes: PlannedDeletePrefix[];
   conflicts: string[];
 }> {
-  if (input.sourcePrefix === input.destinationPrefix && !input.mapRelativePath) {
+  if (
+    input.sourcePrefix === input.destinationPrefix &&
+    !input.mapRelativePath
+  ) {
     return { copies: [], deletes: [], conflicts: [] };
   }
 
@@ -650,6 +653,13 @@ function legacySpaceRelativePath(relativePath: string): string | null {
     return relativePath.slice("source/".length);
   }
   return relativePath;
+}
+
+function legacyRenderedUserRelativePath(relativePath: string): string | null {
+  if (relativePath === "USER.md" || relativePath.startsWith("memory/")) {
+    return relativePath;
+  }
+  return null;
 }
 
 async function planRenderedDelete(input: {
@@ -804,6 +814,51 @@ export async function planWorkspaceLayoutTenant(input: {
       }),
     );
   }
+  const renderedUserPrefixPlans = [];
+  for (const agent of agentFolders.resolved) {
+    const agentFolderCandidates = new Set([
+      agent.folder,
+      agent.row.fallbackName,
+    ]);
+    for (const space of spaceFolders.resolved) {
+      const spaceFolderCandidates = new Set([
+        space.folder,
+        space.row.fallbackName,
+      ]);
+      for (const user of userFolders.resolved) {
+        const userFolderCandidates = new Set([
+          user.folder,
+          normalizeWorkspaceFolderName(user.row.fallbackName, "user"),
+          normalizeWorkspaceFolderName(user.row.displayName, "user"),
+          user.row.id,
+        ]);
+        for (const agentFolder of agentFolderCandidates) {
+          for (const spaceFolder of spaceFolderCandidates) {
+            for (const userFolder of userFolderCandidates) {
+              renderedUserPrefixPlans.push(
+                planPrefixMove({
+                  bucket: input.bucket,
+                  objectStore: input.objectStore,
+                  sourcePrefix: prefix([
+                    "tenants",
+                    tenantSlug,
+                    "rendered",
+                    agentFolder,
+                    spaceFolder,
+                    userFolder,
+                  ]),
+                  destinationPrefix: userSourcePrefix(tenantSlug, user.folder),
+                  deleteLegacySources: false,
+                  reason: "legacy-source",
+                  mapRelativePath: legacyRenderedUserRelativePath,
+                }),
+              );
+            }
+          }
+        }
+      }
+    }
+  }
   for (const thread of threadFolders.resolved) {
     prefixPlans.push(
       planPrefixMove({
@@ -817,10 +872,24 @@ export async function planWorkspaceLayoutTenant(input: {
     );
   }
 
-  const [prefixResults, deleteResults] = await Promise.all([
-    Promise.all(prefixPlans),
-    Promise.all(deletePlans),
-  ]);
+  const [legacyPrefixResults, renderedUserPrefixResults, deleteResults] =
+    await Promise.all([
+      Promise.all(prefixPlans),
+      Promise.all(renderedUserPrefixPlans),
+      Promise.all(deletePlans),
+    ]);
+  const legacyPlannedDestinations = new Set(
+    legacyPrefixResults.flatMap((result) =>
+      result.copies.map((copy) => copy.destinationKey),
+    ),
+  );
+  const renderedUserResults = renderedUserPrefixResults.map((result) => ({
+    ...result,
+    copies: result.copies.filter(
+      (copy) => !legacyPlannedDestinations.has(copy.destinationKey),
+    ),
+  }));
+  const prefixResults = [...legacyPrefixResults, ...renderedUserResults];
   const renderedDeletes = await planRenderedDelete({
     bucket: input.bucket,
     objectStore: input.objectStore,

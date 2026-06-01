@@ -2,11 +2,12 @@
  * Workspace bootstrap — flat S3 sync of a scoped workspace prefix to local disk.
  *
  * Per docs/plans/2026-04-27-003 (materialize-at-write-time): the runtime
- * reads one already-materialized S3 prefix. There is no overlay walk, no
- * template fallback, no read-time substitution. Bootstrap is "list the prefix,
- * download every file." Most invocations use the per-thread runtime prefix
- * prepared by the API; legacy invocations fall back to the agent's canonical
- * source prefix.
+ * reads one already-materialized S3 prefix. Most invocations use a per-thread
+ * runtime prefix prepared by the API. That prefix carries a hydrate manifest
+ * whose entries point back to the Agent/User/Space source objects so the
+ * runtime can copy the tuple into the local bash workspace without duplicating
+ * every source object in S3. Legacy invocations fall back to listing and
+ * downloading the agent's canonical source prefix directly.
  *
  * TypeScript port of the Strands `bootstrap_workspace.py` helper —
  * intentionally identical contract so an agent invoked on either runtime
@@ -29,6 +30,8 @@ import {
 } from "@aws-sdk/client-s3";
 
 const SKIP_FILES = new Set(["manifest.json", "_defaults_version"]);
+const HYDRATE_MANIFEST_PATH = ".hydrate_manifest.json";
+const RENDERED_MARKER_PATH = ".rendered_at";
 
 export interface BootstrapResult {
   synced: number;
@@ -44,6 +47,22 @@ export interface BootstrapWorkspaceOptions {
 interface RemoteEntry {
   key: string;
   rel: string;
+}
+
+interface HydrateManifestFile {
+  path?: unknown;
+  sourceKey?: unknown;
+}
+
+interface HydrateManifestStatusMount {
+  path?: unknown;
+  available?: unknown;
+  sourceKey?: unknown;
+}
+
+interface HydrateManifest {
+  files?: unknown;
+  statusMounts?: unknown;
 }
 
 function agentPrefix(tenantSlug: string, agentSlug: string): string {
@@ -105,6 +124,30 @@ async function listAgentKeys(
   bucket: string,
   prefix: string,
 ): Promise<RemoteEntry[]> {
+  const listed = await listObjects(s3, bucket, prefix);
+  const manifestObject = listed.find(
+    (object) => object.rel === HYDRATE_MANIFEST_PATH,
+  );
+  if (manifestObject) {
+    const manifestText = (
+      await readRemoteBytes(s3, bucket, manifestObject.key)
+    ).toString("utf8");
+    return remoteEntriesFromManifest(manifestText);
+  }
+
+  return listed
+    .map((object) => {
+      const rel = runtimeWorkspacePath(object.rel);
+      return rel && !SKIP_FILES.has(rel) ? { key: object.key, rel } : null;
+    })
+    .filter((entry): entry is RemoteEntry => entry !== null);
+}
+
+async function listObjects(
+  s3: S3Client,
+  bucket: string,
+  prefix: string,
+): Promise<RemoteEntry[]> {
   const out: RemoteEntry[] = [];
   let continuationToken: string | undefined;
   do {
@@ -117,9 +160,7 @@ async function listAgentKeys(
     );
     for (const obj of resp.Contents ?? []) {
       if (!obj.Key) continue;
-      const rel = runtimeWorkspacePath(obj.Key.slice(prefix.length));
-      if (!rel || SKIP_FILES.has(rel)) continue;
-      out.push({ key: obj.Key, rel });
+      out.push({ key: obj.Key, rel: obj.Key.slice(prefix.length) });
     }
     continuationToken = resp.IsTruncated
       ? resp.NextContinuationToken
@@ -128,9 +169,42 @@ async function listAgentKeys(
   return out;
 }
 
+function remoteEntriesFromManifest(manifestText: string): RemoteEntry[] {
+  const parsed = JSON.parse(manifestText) as HydrateManifest;
+  const entries = new Map<string, RemoteEntry>();
+  const files = Array.isArray(parsed.files)
+    ? (parsed.files as HydrateManifestFile[])
+    : [];
+  for (const file of files) {
+    addManifestEntry(entries, file);
+  }
+  const statusMounts = Array.isArray(parsed.statusMounts)
+    ? (parsed.statusMounts as HydrateManifestStatusMount[])
+    : [];
+  for (const mount of statusMounts) {
+    if (mount.available === true) addManifestEntry(entries, mount);
+  }
+  return [...entries.values()];
+}
+
+function addManifestEntry(
+  entries: Map<string, RemoteEntry>,
+  file: HydrateManifestFile | HydrateManifestStatusMount,
+): void {
+  if (typeof file.path !== "string" || typeof file.sourceKey !== "string") {
+    return;
+  }
+  const rel = runtimeWorkspacePath(file.path);
+  if (!rel || SKIP_FILES.has(rel)) return;
+  entries.set(rel, { key: file.sourceKey, rel });
+}
+
 function runtimeWorkspacePath(relPath: string): string | null {
   const clean = relPath.replace(/^\/+/, "");
   if (!clean) return null;
+  if (clean === HYDRATE_MANIFEST_PATH || clean === RENDERED_MARKER_PATH) {
+    return null;
+  }
   if (isWorkspaceArchivesPath(clean)) return null;
 
   if (clean.startsWith("Agent/")) {
@@ -217,11 +291,7 @@ export async function bootstrapWorkspace(
     const localPath = path.join(localDir, rel);
     const parent = path.dirname(localPath);
     if (parent) await mkdir(parent, { recursive: true });
-    const resp = await s3.send(
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-    );
-    const body = await resp.Body?.transformToByteArray();
-    await writeFile(localPath, body ?? new Uint8Array(0));
+    await writeFile(localPath, await readRemoteBytes(s3, bucket, key));
     synced++;
   }
 
@@ -275,4 +345,16 @@ export async function _readLocalForTest(localDir: string): Promise<string[]> {
 // Test seam — exposes the file content reader.
 export async function _readFileForTest(filePath: string): Promise<string> {
   return (await readFile(filePath)).toString("utf-8");
+}
+
+async function readRemoteBytes(
+  s3: S3Client,
+  bucket: string,
+  key: string,
+): Promise<Buffer> {
+  const resp = await s3.send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+  );
+  const body = await resp.Body?.transformToByteArray();
+  return Buffer.from(body ?? new Uint8Array(0));
 }
