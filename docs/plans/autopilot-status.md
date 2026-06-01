@@ -6,6 +6,30 @@ status: complete
 
 # Autopilot Status Ledger
 
+## Customer Onboarding Task Progress Hotfix - 2026-06-01
+
+- Branch: `fix/customer-onboarding-task-prefill`
+- Status: in progress.
+- Regression context: Customer Space task/progress updates from the thread info
+  panel could persist the user message and then launch a desktop-local Pi turn
+  instead of updating the linked task immediately. Live thread
+  `2d74c58b-48d3-4db5-abdc-20a8f622eef2` showed two failed local Pi turns for
+  `Send and receive DocuSign package ...: done`, while the linked task stayed
+  `TODO` and progress stayed `0/5`.
+- Root cause: `sendMessage` skipped Customer Onboarding chat-update extraction
+  when the desktop client requested `DESKTOP_LOCAL`, so the deterministic
+  checklist updater never ran. A secondary parser bug split clicked task
+  commands on the first colon, which broke titles containing ISO timestamps.
+- Change: Customer Onboarding chat updates now run before runtime dispatch even
+  for desktop-local sends; handled updates are stamped into the returned
+  message metadata so the desktop client can skip starting Local Pi. The task
+  prefill parser now splits on the command separator after the full title.
+- Local verification:
+  `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/messages/sendMessage.mentions.test.ts src/lib/spaces/customer-onboarding-chat-updates.test.ts`,
+  `pnpm --filter @thinkwork/spaces test -- --run src/components/workbench/SpacesThreadDetailRoute.test.tsx src/lib/graphql-queries.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/spaces typecheck`, and `git diff --check` passed.
+
 ## Mobile Checkpoint Payload Bounds Hotfix - 2026-06-01
 
 - Branch: `fix/mobile-checkpoint-payload-bounds`

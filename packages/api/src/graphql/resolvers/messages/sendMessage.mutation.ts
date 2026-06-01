@@ -242,6 +242,7 @@ export const sendMessage = async (
     (mention) => mention.targetType === "agent",
   );
   let customerOnboardingHandled = false;
+  let responseMessage = row;
   if (
     shouldApplyCustomerOnboardingChatUpdate({
       isUserMessage,
@@ -261,6 +262,27 @@ export const sendMessage = async (
       customerOnboardingHandled =
         (onboardingUpdate?.handled ?? false) &&
         !onboardingUpdate?.agentDispatchRequired;
+      if (customerOnboardingHandled) {
+        const handledMetadata = {
+          ...(canonicalMetadata ?? {}),
+          customerOnboardingChatUpdate: {
+            handled: true,
+            agentDispatchRequired: false,
+            statusChanges: onboardingUpdate?.statusChanges ?? [],
+            assignmentChanges: onboardingUpdate?.assignmentChanges ?? [],
+            addedTasks: onboardingUpdate?.addedTasks ?? [],
+            removedTasks: onboardingUpdate?.removedTasks ?? [],
+          },
+        };
+        const [updatedMessage] = await db
+          .update(messages)
+          .set({ metadata: handledMetadata })
+          .where(eq(messages.id, row.id))
+          .returning();
+        if (updatedMessage) {
+          responseMessage = updatedMessage;
+        }
+      }
       if (onboardingUpdate?.assistantMessageId) {
         notifyNewMessage({
           messageId: onboardingUpdate.assistantMessageId,
@@ -391,7 +413,7 @@ export const sendMessage = async (
     }).catch(() => {});
   }
 
-  return messageToCamel(row);
+  return messageToCamel(responseMessage);
 };
 
 function validateExplicitMentions(

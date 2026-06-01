@@ -954,7 +954,7 @@ function taskCommandFromPrefixedSegment(segment: string):
       assigneeDisplay: string;
     }
   | null {
-  const match = segment.match(/^(.+?)\s*:\s*(.+)$/);
+  const match = segment.match(/^(.+)\s*:\s*(.+)$/);
   const rawTitle = match?.[1]?.trim();
   if (rawTitle && taskMutationIntro(rawTitle)) return null;
   const title = cleanTaskMutationTitle(rawTitle);

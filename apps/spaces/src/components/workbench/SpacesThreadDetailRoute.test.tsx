@@ -737,6 +737,56 @@ describe("SpacesThreadDetailRoute", () => {
     }
   });
 
+  it("sends clicked onboarding task completion commands with timestamped customer suffixes intact", async () => {
+    const title =
+      "Send and receive DocuSign package - AgentCore workspace shape 2026-06-01T08:05:31.708Z";
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "AgentCore workspace shape onboarding",
+        status: "OPEN",
+        metadata: {
+          customerOnboarding: {
+            workflow: "customer_onboarding",
+          },
+        },
+        messages: { edges: [] },
+      },
+    };
+    linkedTasksData = {
+      threadLinkedTasks: [
+        {
+          id: "linked-1",
+          provider: "THINKWORK",
+          title,
+          required: true,
+          status: "TODO",
+          syncStatus: "SYNCED",
+        },
+      ],
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+    fireEvent.click(screen.getByRole("button", { name: "Open thread info" }));
+    fireEvent.click(screen.getByRole("button", { name: `Update ${title}` }));
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: `${title}: done` },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        input: {
+          threadId: "thread-1",
+          role: "USER",
+          content: `${title}: done`,
+        },
+      });
+    });
+  });
+
   it("completes an onboarding Thread after required checklist rows are complete", async () => {
     threadData = {
       thread: {
@@ -1031,6 +1081,72 @@ describe("SpacesThreadDetailRoute", () => {
         messageId: "message-local-1",
         userMessage: "Run this on the desktop sidecar",
       });
+    });
+  });
+
+  it("does not start desktop-local Pi when the API handled an onboarding task update", async () => {
+    vi.stubGlobal("__DESKTOP_BUILD__", true);
+    const startTurn = vi.fn(async () => ({
+      accepted: true,
+      requestId: "local-turn-1",
+    }));
+    Object.defineProperty(window, "thinkworkBridge", {
+      configurable: true,
+      value: {
+        pi: {
+          status: "healthy",
+          startTurn,
+          getStatus: vi.fn(async () => ({ status: "healthy" })),
+          onStatusChanged: vi.fn(() => () => {}),
+        },
+      },
+    });
+    threadData = {
+      thread: {
+        id: "thread-1",
+        agentId: "agent-1",
+        title: "Customer onboarding",
+        lifecycleStatus: "COMPLETED",
+        messages: { edges: [] },
+      },
+    };
+    sendMessage.mockResolvedValue({
+      data: {
+        sendMessage: {
+          id: "message-local-1",
+          metadata: {
+            customerOnboardingChatUpdate: {
+              handled: true,
+              agentDispatchRequired: false,
+            },
+          },
+        },
+      },
+    });
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "DocuSign is complete" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        input: {
+          threadId: "thread-1",
+          role: "USER",
+          content: "DocuSign is complete",
+          dispatchMode: "DESKTOP_LOCAL",
+        },
+      });
+    });
+    expect(startTurn).not.toHaveBeenCalled();
+    expect(reexecuteLinkedTasksQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteGoalFilesQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
     });
   });
 

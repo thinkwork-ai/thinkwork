@@ -108,7 +108,7 @@ describe("sendMessage agent handling", () => {
     ).toBe(false);
   });
 
-  it("suppresses server-owned automatic agent work when desktop local owns dispatch", () => {
+  it("still applies onboarding chat updates when desktop local owns agent dispatch", () => {
     expect(
       shouldApplyCustomerOnboardingChatUpdate({
         isUserMessage: true,
@@ -116,7 +116,7 @@ describe("sendMessage agent handling", () => {
         dispatchMode: "DESKTOP_LOCAL",
         hasAgentMentions: false,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldDispatchDefaultAgentTurn({
         isUserMessage: true,
