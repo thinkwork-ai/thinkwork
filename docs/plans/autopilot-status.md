@@ -4130,6 +4130,38 @@ Target branch: `main`
 
 None.
 
+# Deploy Pi Runtime Dependency Filter Hotfix - 2026-05-31
+
+## Status
+
+- Branch: `fix/deploy-pi-runtime-core-filter`
+- Started: `2026-06-01T04:40:00Z`
+- Trigger:
+  - Deploy run `26735427423` for [#1929](https://github.com/thinkwork-ai/thinkwork/pull/1929) skipped `Build Container` because the deploy path filter did not treat `packages/pi-runtime-core/**` as AgentCore container input.
+  - The Pi Dockerfile copies `packages/pi-runtime-core`, `packages/pi-extensions`, and `packages/pi-aws`, so changes in those packages must rebuild/update the Pi AgentCore image.
+- Implemented:
+  - Added `packages/pi-aws/**`, `packages/pi-extensions/**`, and `packages/pi-runtime-core/**` to the deploy workflow `container` path filter.
+  - Added those same package paths to the Pi container source SHA calculation so stale-runtime detection notices shared Pi runtime dependency changes.
+
+## Verification Log
+
+- `git diff --check` - passed.
+- Inspected `.github/workflows/deploy.yml` diff to confirm both the path filter and Pi source SHA calculation include `packages/pi-aws/**`, `packages/pi-extensions/**`, and `packages/pi-runtime-core/**`.
+
+## CI / PR
+
+- Opened [#1930](https://github.com/thinkwork-ai/thinkwork/pull/1930).
+- GitHub checks on [#1930](https://github.com/thinkwork-ai/thinkwork/pull/1930) passed:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+
+## Blockers
+
+None.
+
 # Pi Runtime Workspace Symlink Hotfix - 2026-05-31
 
 ## Status
