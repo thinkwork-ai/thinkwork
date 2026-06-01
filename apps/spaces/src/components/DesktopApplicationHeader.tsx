@@ -175,7 +175,11 @@ export function DesktopApplicationHeader() {
                       {index > 0 ? (
                         <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" />
                       ) : null}
-                      {isLast || !crumb.href ? (
+                      {isLast && headerActions.titleContent ? (
+                        <div className="min-w-0">
+                          {headerActions.titleContent}
+                        </div>
+                      ) : isLast || !crumb.href ? (
                         <span
                           className={
                             isLast
@@ -188,6 +192,7 @@ export function DesktopApplicationHeader() {
                       ) : (
                         <Link
                           to={crumb.href}
+                          search={crumb.search}
                           className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
                         >
                           {crumb.label}

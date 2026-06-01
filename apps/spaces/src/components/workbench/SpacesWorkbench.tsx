@@ -14,6 +14,7 @@ import {
   type SpacesComposerMention,
 } from "@/components/workbench/SpacesComposer";
 import type { SpaceSummary } from "@/components/spaces/space-types";
+import { isDefaultSpace } from "@/components/spaces/space-utils";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -477,20 +478,6 @@ function titleFromPromptWithAttachments(prompt: string, files: File[]): string {
   const first = files[0]?.name ?? "attachment";
   const suffix = files.length > 1 ? ` (+${files.length - 1})` : "";
   return `Analyze ${first}${suffix}`;
-}
-
-function isDefaultSpace(space: SpaceSummary) {
-  const slug = space.slug?.toLowerCase();
-  const name = space.name?.toLowerCase();
-  const templateKey = space.templateKey?.toLowerCase();
-  return (
-    slug === "default" ||
-    slug === "general" ||
-    name === "default" ||
-    name === "general" ||
-    templateKey === "default" ||
-    templateKey === "general"
-  );
 }
 
 function isPrimaryDefaultSpace(space: SpaceSummary) {

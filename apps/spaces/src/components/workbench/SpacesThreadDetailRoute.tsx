@@ -9,6 +9,7 @@ import {
   parseSpaceRecord,
   type LinkedTaskSummary,
 } from "@/components/spaces/space-types";
+import { spaceCrumbLabel } from "@/components/spaces/space-utils";
 import {
   TaskThreadView,
   normalizePersistedParts,
@@ -96,6 +97,11 @@ interface ThreadResult {
     title?: string | null;
     status?: string | null;
     spaceId?: string | null;
+    space?: {
+      id: string;
+      name?: string | null;
+      slug?: string | null;
+    } | null;
     lifecycleStatus?: string | null;
     metadata?: unknown;
     costSummary?: number | null;
@@ -962,9 +968,27 @@ export function SpacesThreadDetailRoute({
     ],
   );
 
+  // Space breadcrumb: a clickable parent crumb (the thread's Space) before the
+  // thread title, navigating to that Space's scoped thread list — mirroring the
+  // sidebar's "Thread list" action. The final crumb hosts the inline-rename
+  // titleContent (see AppTopBar/DesktopApplicationHeader). Degrades to the
+  // title-only header when the thread has no resolved space yet (R4).
+  const spaceLabel = spaceCrumbLabel(routeThread?.space ?? null);
+  const spaceBreadcrumbs = routeThread?.spaceId
+    ? [
+        {
+          label: spaceLabel,
+          href: "/threads",
+          search: { spaceId: routeThread.spaceId, spaceName: spaceLabel },
+        },
+        { label: threadTitle },
+      ]
+    : undefined;
+
   usePageHeaderActions({
     backHref,
     title: threadTitle,
+    breadcrumbs: spaceBreadcrumbs,
     // Tab title gets the "Thread · " prefix to match the section pattern
     // used by Memory and other pages ("Memory · ThinkWork", etc.). The
     // in-page header keeps the bare thread title — no need to repeat

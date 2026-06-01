@@ -11,6 +11,7 @@ import {
 } from "@/lib/mcp-api";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import {
+  SettingsPageTitle,
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
@@ -104,6 +105,13 @@ export function SettingsMcpServerDetail() {
 
   const tools = server.tools ?? [];
 
+  const statusBadge =
+    server.status && server.status !== "approved" ? (
+      <Badge variant="outline">{server.status}</Badge>
+    ) : (
+      <Badge variant="secondary">Approved</Badge>
+    );
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
@@ -111,19 +119,15 @@ export function SettingsMcpServerDetail() {
           <p className="mb-4 text-sm text-destructive">{error}</p>
         ) : null}
 
+        <SettingsPageTitle title={server.name} badge={statusBadge} />
+
         <SettingsSection label="Server">
           <SettingsRow label="URL">
             <span className="max-w-md truncate font-mono text-xs">
               {server.url}
             </span>
           </SettingsRow>
-          <SettingsRow label="Status">
-            {server.status && server.status !== "approved" ? (
-              <Badge variant="outline">{server.status}</Badge>
-            ) : (
-              <Badge variant="secondary">Approved</Badge>
-            )}
-          </SettingsRow>
+          <SettingsRow label="Status">{statusBadge}</SettingsRow>
           <SettingsRow
             label="Enabled"
             description="Make this server's tools available to the agent."

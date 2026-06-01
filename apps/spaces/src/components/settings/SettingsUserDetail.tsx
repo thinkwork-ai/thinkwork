@@ -13,11 +13,9 @@ import {
   SelectValue,
   Textarea,
 } from "@thinkwork/ui";
-import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
-import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
 import {
   SettingsTenantMembersQuery,
   SettingsUpdateTenantMemberMutation,
@@ -29,14 +27,12 @@ import {
   SettingsPane,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
-import { WorkspaceViewToggle } from "@/components/settings/WorkspaceViewToggle";
 
 export function SettingsUserDetail() {
   const { userId: memberId } = useParams({
     from: "/_authed/settings/users/$userId",
   });
   const { tenantId, userId: callerUserId, role: callerRole } = useTenant();
-  const [filesOpen, setFilesOpen] = useState(false);
 
   const [result, refetch] = useQuery({
     query: SettingsTenantMembersQuery,
@@ -54,8 +50,8 @@ export function SettingsUserDetail() {
   const user = member?.user ?? null;
 
   // Title + back navigation live in the settings header bar as nested
-  // breadcrumbs (Users > <name> [> Workspace]). Must be called unconditionally
-  // before any early return.
+  // breadcrumbs (Users > <name>). Must be called unconditionally before any
+  // early return.
   const displayName = user
     ? (user.name ?? user.email)
     : result.fetching
@@ -63,22 +59,11 @@ export function SettingsUserDetail() {
       : "User not found";
   usePageHeaderActions({
     title: displayName,
-    breadcrumbs:
-      user && filesOpen
-        ? [
-            { label: "Users", href: "/settings/users" },
-            { label: displayName, href: `/settings/users/${memberId}` },
-            { label: "Workspace" },
-          ]
-        : [{ label: "Users", href: "/settings/users" }, { label: displayName }],
-    subtitle: user && !filesOpen ? (user.email ?? undefined) : undefined,
-    action: user ? (
-      <WorkspaceViewToggle
-        showingWorkspace={filesOpen}
-        onToggle={() => setFilesOpen(!filesOpen)}
-      />
-    ) : undefined,
-    actionKey: user ? `user-files:${memberId}:${filesOpen}` : undefined,
+    breadcrumbs: [
+      { label: "Users", href: "/settings/users" },
+      { label: displayName },
+    ],
+    subtitle: user ? (user.email ?? undefined) : undefined,
   });
 
   if (result.fetching && !result.data) {
@@ -98,22 +83,6 @@ export function SettingsUserDetail() {
           This member could not be loaded — they may have been removed.
         </p>
       </SettingsPane>
-    );
-  }
-
-  if (filesOpen) {
-    return (
-      <div className="flex h-full min-h-0 w-full flex-col p-6">
-        <WorkspaceFileEditor
-          target={{ userId: user.id }}
-          targetKey={`user:${user.id}`}
-          client={spacesWorkspaceFilesClient}
-          title="User source workspace"
-          description="User files personalize this user. During a turn, USER.md and user memory are merged into the /workspace root."
-          defaultOpenFile="USER.md"
-          className="min-h-0 flex-1"
-        />
-      </div>
     );
   }
 

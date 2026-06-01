@@ -932,6 +932,10 @@ export type CreateThreadInput = {
   firstMessage?: InputMaybe<Scalars['String']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  mobileTurnAttachments?: InputMaybe<Scalars['AWSJSON']['input']>;
+  mobileTurnClientId?: InputMaybe<Scalars['String']['input']>;
+  mobileTurnMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  mobileTurnUserText?: InputMaybe<Scalars['String']['input']>;
   spaceId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
@@ -1776,6 +1780,7 @@ export type Mutation = {
   notifyThreadActivity?: Maybe<ThreadActivityEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
+  notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
@@ -2330,6 +2335,14 @@ export type MutationNotifyThreadUpdateArgs = {
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
+};
+
+
+export type MutationNotifyWorkspaceAccessRevokedArgs = {
+  revokedAt: Scalars['AWSDateTime']['input'];
+  spaceId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -4901,6 +4914,7 @@ export type Subscription = {
   onThreadActivity?: Maybe<ThreadActivityEvent>;
   onThreadTurnUpdated?: Maybe<ThreadTurnUpdateEvent>;
   onThreadUpdated?: Maybe<ThreadUpdateEvent>;
+  onWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
 };
 
 
@@ -4951,6 +4965,11 @@ export type SubscriptionOnThreadTurnUpdatedArgs = {
 
 export type SubscriptionOnThreadUpdatedArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type SubscriptionOnWorkspaceAccessRevokedArgs = {
+  userId: Scalars['ID']['input'];
 };
 
 export type Tenant = {
@@ -6152,6 +6171,14 @@ export type WorkflowCatalogItem = {
   slug: Scalars['String']['output'];
   status: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
+};
+
+export type WorkspaceAccessRevokedEvent = {
+  __typename?: 'WorkspaceAccessRevokedEvent';
+  revokedAt: Scalars['AWSDateTime']['output'];
+  spaceId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 export enum WorkspaceReviewKind {

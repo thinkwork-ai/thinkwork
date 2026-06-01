@@ -1,7 +1,6 @@
 import type { ComponentType } from "react";
 import {
   BookOpen,
-  Bot,
   Brain,
   FolderTree,
   NotebookText,
@@ -32,7 +31,6 @@ export interface SettingsNavItem {
 // folded into General as a "Color mode" control rather than a nav item.
 export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { label: "General", to: "/settings/general", icon: SettingsIcon },
-  { label: "Agent", to: "/settings/agent", icon: Bot, operatorOnly: true },
   {
     label: "Spaces",
     to: "/settings/spaces",
@@ -40,6 +38,11 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
+  {
+    label: "Workspace",
+    to: "/settings/local-workspace",
+    icon: FolderTree,
+  },
   {
     label: "Evaluations",
     to: "/settings/evaluations",
@@ -100,11 +103,6 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/analytics",
     icon: IconChartBar,
     operatorOnly: true,
-  },
-  {
-    label: "Workspace",
-    to: "/settings/local-workspace",
-    icon: FolderTree,
   },
 ];
 

@@ -72,6 +72,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@thinkwork/ui";
+import { isDefaultSpace } from "@/components/spaces/space-utils";
 import { useTenant } from "@/context/TenantContext";
 import { useThreadNotifications } from "@/hooks/useThreadNotifications";
 import { useThreadNotificationsEnabled } from "@/lib/thread-notifications-pref";
@@ -1901,17 +1902,6 @@ function threadIdFromThreadPath(pathname: string) {
 function spaceIdFromThreadPath(pathname: string) {
   const match = /^\/spaces\/([^/]+)\/threads\/[^/]+/.exec(pathname);
   return match ? decodeURIComponent(match[1]) : undefined;
-}
-
-function isDefaultSpace(space: SpaceNavSummary) {
-  const slug = space.slug?.toLowerCase();
-  const name = space.name?.toLowerCase();
-  return (
-    slug === "default" ||
-    slug === "general" ||
-    name === "default" ||
-    name === "general"
-  );
 }
 
 function threadPinsStorageKey(tenantId: string | null, userId: string | null) {
