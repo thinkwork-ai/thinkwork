@@ -11,7 +11,8 @@ status: complete
 - Branch: `fix/agentcore-pi-agent-dir`
 - Worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-agentcore-pi-agent-dir`
-- Status: implementation in local verification before PR.
+- Status: merged and deployed via PR
+  [#1932](https://github.com/thinkwork-ai/thinkwork/pull/1932).
 - Context: after PR #1931 migrated active S3 source workspace prefixes, live
   AgentCore just-bash probes still failed before the model/tool turn with
   `ENOENT: no such file or directory, mkdir '/workspace/.thinkwork-pi'`.
@@ -31,6 +32,30 @@ status: complete
   `node-liblzma` native rebuild still logged missing `pkg-config`, but install
   exited successfully. `pnpm exec prettier` is not available in this worktree;
   changed files were formatted with `pnpm dlx prettier@3.8.2 --write ...`.
+
+## AgentCore Managed Workspace Bucket Hotfix - 2026-06-01
+
+- Branch: `fix/agentcore-payload-workspace-bucket`
+- Worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-agentcore-payload-workspace-bucket`
+- Status: implementation locally verified before PR.
+- Live failure: after #1932 deployed, AgentCore just-bash probe thread
+  `d5438fe7-9ad3-4a24-9db0-96f2cd62f87a` / turn
+  `1ba2b3d6-e758-4152-8ea8-6df8d13b571b` succeeded but showed an empty
+  `/workspace`: no `AGENTS.md`, no `USER.md`, and no `Space/`.
+- Root cause: the managed AgentCore runtime does not receive the Lambda
+  Terraform environment variables, while `chat-agent-invoke` sends the
+  workspace bucket in the invocation payload as `workspace_bucket`. The Pi
+  handler only checked env `WORKSPACE_BUCKET`/`AGENTCORE_FILES_BUCKET`, skipped
+  bootstrap, and continued with an empty workspace.
+- Change: the Pi handler now uses payload `workspace_bucket` as the managed
+  fallback, passes it to workspace bootstrap, attachments, and the S3 session
+  store, and fails closed if workspace bootstrap fails instead of continuing.
+- Verification so far:
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts agent-container/tests/handler-context.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and `git diff --check`
+  passed.
 
 ## Current Run: Workspace Architecture Simplification
 
