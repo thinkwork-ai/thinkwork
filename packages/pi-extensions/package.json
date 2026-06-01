@@ -20,7 +20,9 @@
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.76.0",
     "@thinkwork/pi-runtime-core": "workspace:*",
-    "typebox": "^1.1.38"
+    "typebox": "^1.1.38",
+    "unpdf": "^0.12.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

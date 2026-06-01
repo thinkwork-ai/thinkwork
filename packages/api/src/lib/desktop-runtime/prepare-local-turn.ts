@@ -1,6 +1,8 @@
 import { and, eq, ne, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type {
   DesktopPiRuntimeInvocation,
   PiSdkEmbeddingContract,
@@ -207,6 +209,15 @@ export interface PrepareLocalPiRuntimeSessionDeps {
     agentId: string;
   }): Promise<void>;
   getTraceId(): string;
+  /**
+   * Mint a short-lived presigned GET URL so the desktop runtime (which holds
+   * no AWS credentials) can download an attachment over plain HTTPS. Returns
+   * null when presigning is unavailable.
+   */
+  presignAttachmentDownload(input: {
+    bucket: string;
+    key: string;
+  }): Promise<string | null>;
   env: {
     thinkworkApiUrl?: string;
     workspaceBucket?: string;
@@ -539,6 +550,9 @@ export function defaultPrepareLocalPiRuntimeSessionDeps(): PrepareLocalPiRuntime
       const rootMatch = xrayTraceId?.match(/Root=([^;]+)/);
       return rootMatch?.[1] ?? randomBytes(16).toString("hex");
     },
+    async presignAttachmentDownload({ bucket, key }) {
+      return presignAttachmentDownloadUrl({ bucket, key });
+    },
     env: {
       thinkworkApiUrl:
         process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL,
@@ -546,6 +560,78 @@ export function defaultPrepareLocalPiRuntimeSessionDeps(): PrepareLocalPiRuntime
       hindsightEndpoint: process.env.HINDSIGHT_ENDPOINT,
     },
   };
+}
+
+const ATTACHMENT_DOWNLOAD_TTL_SECONDS = 15 * 60;
+let cachedAttachmentS3Client: S3Client | null = null;
+
+function attachmentS3Client(): S3Client {
+  if (!cachedAttachmentS3Client) {
+    cachedAttachmentS3Client = new S3Client({});
+  }
+  return cachedAttachmentS3Client;
+}
+
+export async function presignAttachmentDownloadUrl(input: {
+  bucket: string;
+  key: string;
+}): Promise<string | null> {
+  if (!input.bucket || !input.key) return null;
+  try {
+    return await getSignedUrl(
+      attachmentS3Client(),
+      new GetObjectCommand({ Bucket: input.bucket, Key: input.key }),
+      { expiresIn: ATTACHMENT_DOWNLOAD_TTL_SECONDS },
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Map staged attachment refs into the desktop invocation payload, attaching a
+ * short-lived presigned `download_url` for each so the credential-less desktop
+ * runtime can fetch the bytes. Attachments that can't be presigned are dropped
+ * (the turn proceeds without them rather than failing).
+ */
+async function buildDesktopMessageAttachments(
+  attachments: DesktopRuntimeAttachment[] | undefined,
+  deps: PrepareLocalPiRuntimeSessionDeps,
+): Promise<
+  | Array<{
+      attachment_id: string;
+      s3_key: string;
+      download_url: string;
+      name: string;
+      mime_type: string;
+      size_bytes: number;
+    }>
+  | undefined
+> {
+  if (!attachments || attachments.length === 0) return undefined;
+  const bucket = deps.env.workspaceBucket;
+  if (!bucket) return undefined;
+  const mapped = await Promise.all(
+    attachments.map(async (att) => {
+      const downloadUrl = await deps.presignAttachmentDownload({
+        bucket,
+        key: att.s3Key,
+      });
+      if (!downloadUrl) return null;
+      return {
+        attachment_id: att.attachmentId,
+        s3_key: att.s3Key,
+        download_url: downloadUrl,
+        name: att.name,
+        mime_type: att.mimeType,
+        size_bytes: att.sizeBytes,
+      };
+    }),
+  );
+  const present = mapped.filter(
+    (entry): entry is NonNullable<typeof entry> => entry !== null,
+  );
+  return present.length > 0 ? present : undefined;
 }
 
 export async function prepareLocalPiRuntimeSession(
@@ -764,6 +850,11 @@ export async function prepareLocalPiRuntimeSession(
     ? `${deps.env.thinkworkApiUrl.replace(/\/$/, "")}/api/threads/${input.threadId}/finalize`
     : null;
 
+  const messageAttachments = await buildDesktopMessageAttachments(
+    input.messageAttachments,
+    deps,
+  );
+
   const invocation: DesktopPiRuntimeInvocation = {
     pi_sdk: DESKTOP_PI_SDK_EMBEDDING_CONTRACT,
     tenant_id: caller.tenantId,
@@ -843,16 +934,7 @@ export async function prepareLocalPiRuntimeSession(
         : (space.slug ?? undefined),
       renderedWorkspacePrefix,
     },
-    message_attachments:
-      input.messageAttachments && input.messageAttachments.length > 0
-        ? input.messageAttachments.map((att) => ({
-            attachment_id: att.attachmentId,
-            s3_key: att.s3Key,
-            name: att.name,
-            mime_type: att.mimeType,
-            size_bytes: att.sizeBytes,
-          }))
-        : undefined,
+    message_attachments: messageAttachments,
     finalize_callback_url: finalizeCallbackUrl || undefined,
     finalize_callback_secret: finalizeToken,
     thread_turn_id: turn.id,

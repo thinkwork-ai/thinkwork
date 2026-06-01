@@ -63,6 +63,17 @@ export interface DesktopPiRuntimeInvocation extends Record<string, unknown> {
   thinkwork_api_url?: string;
   hindsight_endpoint?: string;
   finalize_callback_url?: string;
+  message_attachments?: DesktopRuntimeMessageAttachment[];
+}
+
+export interface DesktopRuntimeMessageAttachment {
+  attachment_id: string;
+  s3_key: string;
+  /** Short-lived presigned GET URL the credential-less runtime fetches. */
+  download_url: string;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
 }
 
 export interface PreparedDesktopPiRuntimeSession<SidecarCredentials = unknown> {

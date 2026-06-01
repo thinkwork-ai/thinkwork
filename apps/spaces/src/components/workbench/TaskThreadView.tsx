@@ -624,14 +624,32 @@ function ThreadInfoPanel({
     >
       <div className="min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
         <div className="space-y-5 p-5">
-          {state.goal ? <ThreadInfoGoal goal={state.goal} /> : null}
-
-          {state.checklist ? (
-            <ThreadInfoChecklist
-              checklist={state.checklist}
-              onTaskPrompt={onTaskPrompt}
-            />
-          ) : null}
+          <section>
+            <h2 className="mb-3 text-sm font-medium text-white/55">Thread</h2>
+            <div className="space-y-3">
+              {state.threadIdentifier ? (
+                <InfoPanelCopyRow
+                  label="Thread number"
+                  value={state.threadIdentifier}
+                />
+              ) : null}
+              {state.threadId ? (
+                <InfoPanelCopyRow
+                  label="Thread ID"
+                  value={state.threadId}
+                  valueClassName="block break-all font-mono text-[10px] leading-snug text-white/80"
+                />
+              ) : null}
+              <InfoPanelInlineRow
+                icon={<CalendarDays className="size-4" />}
+                value={startedAt || "Unknown"}
+              />
+              <InfoPanelInlineRow
+                icon={<Zap className="size-4" />}
+                value={`Triggered by ${startedBy}`}
+              />
+            </div>
+          </section>
 
           {state.attachments.length > 0 ? (
             <section className="border-t border-white/10 pt-4">
@@ -650,28 +668,18 @@ function ThreadInfoPanel({
             </section>
           ) : null}
 
-          <section className="border-t border-white/10 pt-4">
-            <h2 className="mb-3 text-sm font-medium text-white/55">Thread</h2>
-            <div className="space-y-3">
-              {state.threadIdentifier ? (
-                <InfoPanelCopyRow
-                  label="Thread number"
-                  value={state.threadIdentifier}
-                />
-              ) : null}
-              {state.threadId ? (
-                <InfoPanelCopyRow label="Thread ID" value={state.threadId} />
-              ) : null}
-              <InfoPanelInlineRow
-                icon={<CalendarDays className="size-4" />}
-                value={startedAt || "Unknown"}
-              />
-              <InfoPanelInlineRow
-                icon={<Zap className="size-4" />}
-                value={`Triggered by ${startedBy}`}
-              />
+          {state.goal ? (
+            <div className="border-t border-white/10 pt-4">
+              <ThreadInfoGoal goal={state.goal} />
             </div>
-          </section>
+          ) : null}
+
+          {state.checklist ? (
+            <ThreadInfoChecklist
+              checklist={state.checklist}
+              onTaskPrompt={onTaskPrompt}
+            />
+          ) : null}
         </div>
       </div>
     </aside>
@@ -1296,7 +1304,15 @@ function InfoPanelInlineRow({
   );
 }
 
-function InfoPanelCopyRow({ label, value }: { label: string; value: string }) {
+function InfoPanelCopyRow({
+  label,
+  value,
+  valueClassName = "block truncate font-mono text-xs text-white/80",
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -1326,9 +1342,7 @@ function InfoPanelCopyRow({ label, value }: { label: string; value: string }) {
         <span className="block text-[11px] uppercase tracking-normal text-white/35">
           {label}
         </span>
-        <span className="block truncate font-mono text-xs text-white/80">
-          {value}
-        </span>
+        <span className={valueClassName}>{value}</span>
       </span>
       {copied ? (
         <span className="shrink-0 text-xs text-white/45">Copied</span>

@@ -1,4 +1,5 @@
 export * from "./define-extension.js";
+export * from "./attachments.js";
 export * from "./browser.js";
 export * from "./context-engine.js";
 export * from "./delegation.js";
