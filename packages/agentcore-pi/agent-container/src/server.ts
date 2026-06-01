@@ -969,6 +969,8 @@ export async function handleInvocation(
   }
   const secrets = snapshotSecrets(args.payload);
   const env = snapshotRuntimeEnv();
+  const workspaceBucket =
+    env.workspaceBucket || asString(args.payload.workspace_bucket);
 
   const userMessage = asString(args.payload.message);
   if (!userMessage) {
@@ -1010,15 +1012,13 @@ export async function handleInvocation(
     };
   }
 
-  // Workspace S3 sync — required for tenant isolation when WORKSPACE_BUCKET
-  // is configured. Warm containers persist the workspace directory across
-  // invocations, so a turn that skips the per-tenant sync (because
-  // tenant_slug or instance_id is missing from the payload) would discover
-  // the prior tenant's SKILL.md files and leak them into the system prompt.
-  // Fail-closed: if the bucket is configured but the payload doesn't carry
-  // the slugs, refuse the invocation.
+  // Workspace S3 sync — required for tenant isolation when the environment or
+  // managed-runtime payload carries a workspace bucket. Warm containers persist
+  // the workspace directory across invocations, so a turn that skips the
+  // per-tenant sync would discover the prior tenant's SKILL.md files and leak
+  // them into the system prompt. Fail closed when the bucket is known.
   let workspaceBaseline: WorkspaceBaseline | undefined;
-  if (env.workspaceBucket) {
+  if (workspaceBucket) {
     if (!identity.tenantSlug || !identity.agentSlug) {
       logStructured({
         level: "error",
@@ -1032,7 +1032,7 @@ export async function handleInvocation(
         statusCode: 400,
         body: {
           error:
-            "Pi invocation requires `tenant_slug` and `instance_id` (agent slug) when WORKSPACE_BUCKET is configured. Refusing to proceed against a potentially cross-tenant workspace.",
+            "Pi invocation requires `tenant_slug` and `instance_id` (agent slug) when a workspace bucket is configured. Refusing to proceed against a potentially cross-tenant workspace.",
           runtime: "pi",
         },
       };
@@ -1044,7 +1044,7 @@ export async function handleInvocation(
         identity.agentSlug,
         env.workspaceDir,
         s3,
-        env.workspaceBucket,
+        workspaceBucket,
         {
           workspacePrefix: asString(args.payload.rendered_workspace_prefix),
         },
@@ -1057,9 +1057,19 @@ export async function handleInvocation(
         agentSlug: identity.agentSlug,
         error: err instanceof Error ? err.message : String(err),
       });
+      return {
+        statusCode: 500,
+        body: {
+          error:
+            err instanceof Error
+              ? err.message
+              : "Pi workspace bootstrap failed.",
+          runtime: "pi",
+        },
+      };
     }
   }
-  if (env.workspaceBucket) {
+  if (workspaceBucket) {
     workspaceBaseline = await createLocalWorkspaceBaseline({
       workspaceDir: env.workspaceDir,
       log: (event, fields) =>
@@ -1220,7 +1230,7 @@ export async function handleInvocation(
     deps.stageMessageAttachmentsImpl ?? stageMessageAttachments;
   const stagedAttachments = await stageAttachments({
     attachments: args.payload.message_attachments,
-    workspaceBucket: env.workspaceBucket,
+    workspaceBucket,
     expectedTenantId: identity.tenantId,
     expectedThreadId: identity.threadId,
     s3Client: deps.s3ClientFactory(env.awsRegion),
@@ -1281,10 +1291,10 @@ export async function handleInvocation(
     // workspace bucket + a tenant slug for isolation; otherwise the loop falls
     // back to the transitional history-prepend path.
     const sessionStore =
-      env.workspaceBucket && identity.tenantSlug
+      workspaceBucket && identity.tenantSlug
         ? createS3SessionStore({
             s3: deps.s3ClientFactory(env.awsRegion),
-            bucket: env.workspaceBucket,
+            bucket: workspaceBucket,
             keyPrefix: `pi-sessions/${identity.tenantSlug}/`,
           })
         : undefined;

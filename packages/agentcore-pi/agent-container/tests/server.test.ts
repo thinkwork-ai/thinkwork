@@ -261,6 +261,54 @@ describe("handleInvocation — happy path", () => {
     });
   });
 
+  it("uses payload workspace_bucket for managed AgentCore workspace bootstrap", async () => {
+    const bootstrapCalls: unknown[][] = [];
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        workspace_bucket: "thinkwork-managed-files-test",
+        rendered_workspace_prefix: "tenants/tenant-1/threads/customer-kickoff/",
+      }),
+      deps: makeDeps({
+        bootstrapWorkspaceImpl: (async (...args: unknown[]) => {
+          bootstrapCalls.push(args);
+          return {
+            synced: 0,
+            deleted: 0,
+            total: 0,
+            prefix: "tenants/tenant-1/threads/customer-kickoff/",
+          };
+        }) as never,
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(bootstrapCalls).toHaveLength(1);
+    expect(bootstrapCalls[0]?.[4]).toBe("thinkwork-managed-files-test");
+    expect(bootstrapCalls[0]?.[5]).toEqual({
+      workspacePrefix: "tenants/tenant-1/threads/customer-kickoff/",
+    });
+  });
+
+  it("fails closed when managed AgentCore workspace bootstrap fails", async () => {
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        workspace_bucket: "thinkwork-managed-files-test",
+        rendered_workspace_prefix: "tenants/tenant-1/threads/customer-kickoff/",
+      }),
+      deps: makeDeps({
+        bootstrapWorkspaceImpl: (async () => {
+          throw new Error("rendered workspace manifest missing");
+        }) as never,
+      }),
+    });
+
+    expect(result.statusCode).toBe(500);
+    expect(result.body).toMatchObject({
+      error: "rendered workspace manifest missing",
+      runtime: "pi",
+    });
+  });
+
   it("posts local workspace changes through the finalize callback", async () => {
     process.env.WORKSPACE_BUCKET = "thinkwork-files-test";
     const workspaceDir = await mkdtemp(
