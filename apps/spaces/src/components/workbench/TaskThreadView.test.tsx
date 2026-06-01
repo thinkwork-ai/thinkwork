@@ -3214,7 +3214,7 @@ describe("TaskThreadView", () => {
       diagnosticListener?.({
         level: "info",
         message:
-          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1"}',
+          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1","longPayload":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}',
         emittedAt: "2026-05-28T20:53:00.000Z",
         source: "sidecar",
         requestId: "request-1",
@@ -3224,7 +3224,7 @@ describe("TaskThreadView", () => {
       diagnosticListener?.({
         level: "info",
         message:
-          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1"}',
+          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1","longPayload":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}',
         emittedAt: "2026-05-28T20:53:00.000Z",
         source: "sidecar",
         requestId: "request-1",
@@ -3263,6 +3263,9 @@ describe("TaskThreadView", () => {
     });
     expect(output.textContent).toContain("local Pi sidecar received turn");
     expect(output.textContent).not.toContain("other thread event");
+    expect(output.className).toContain("max-w-full");
+    expect(output.className).toContain("overflow-x-auto");
+    expect(output.className).toContain("whitespace-pre");
     expect(
       output.textContent?.match(/local Pi sidecar received turn/g),
     ).toHaveLength(1);
