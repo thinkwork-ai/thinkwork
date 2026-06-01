@@ -55,6 +55,29 @@ Target branch: `main`
   no conflicts or errors: 3 tenants, 460 folder assignments, 7 goal prefix
   assignments, 631 planned copies, 1164 legacy keys to delete, and 346 thread
   renders.
+- Post-merge S3 verification showed the first migration populated canonical
+  `users/eric-odom/USER.md` and flattened Space prefixes, but still left
+  `agents/<current-folder>/workspace/` wrappers for agents whose
+  `workspace_folder_name` had already been assigned before the migration reran.
+  Started follow-up branch `fix/workspace-migration-current-folders`.
+- Updated the migration to inspect both the previous slug and the current
+  stable workspace folder for Agent and Space wrapper cleanup. For same-folder
+  stale wrappers where canonical root files already exist, the canonical root
+  now wins and the wrapper objects are deleted instead of blocking on a
+  conflict.
+- Live dry-run from `fix/workspace-migration-current-folders` against
+  `thinkwork-dev-storage` completed with zero conflicts/errors: 3 tenants,
+  12 planned copies, 26 legacy keys to delete, and 346 thread renders. The
+  planned deletes include `tenants/sleek-squirrel-230/agents/loki/workspace/*`
+  and the remaining legacy runtime event prefixes under old agent folders.
+- The previous main deploy marked failed after workspace migration because the
+  unrelated Computer Runtime image push targeted a missing ECR repository
+  (`thinkwork-dev-computer-runtime`). Added a deploy-pipeline guard to create
+  that repository before pushing so the next merge can complete the whole
+  deploy cleanly without manual AWS mutation.
+- Focused verification passed:
+  `pnpm --filter @thinkwork/api test -- src/__tests__/migrate-workspace-layout.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and `git diff --check`.
 - Focused verification passed:
   `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/handler-context.test.ts`,
   `pnpm --filter @thinkwork/api test -- src/__tests__/migrate-workspace-layout.test.ts src/lib/workspace-renderer/compose-tuple.test.ts`,

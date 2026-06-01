@@ -790,6 +790,18 @@ jobs:
       - name: Build Computer runtime TypeScript
         run: pnpm --filter @thinkwork/computer-runtime build
 
+      - name: Ensure Computer runtime ECR repository
+        run: |
+          set -euo pipefail
+          REPO="thinkwork-${{ env.STAGE }}-computer-runtime"
+          aws ecr describe-repositories \
+            --repository-names "$REPO" \
+            --region ${{ env.AWS_REGION }} >/dev/null 2>&1 || \
+            aws ecr create-repository \
+              --repository-name "$REPO" \
+              --image-scanning-configuration scanOnPush=true \
+              --region ${{ env.AWS_REGION }} >/dev/null
+
       - name: Build and push Computer runtime arm64
         uses: docker/build-push-action@v6
         with:
