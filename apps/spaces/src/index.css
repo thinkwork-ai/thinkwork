@@ -111,12 +111,16 @@
 /* Dark: a warm dark scrim (the "sidebar" material is cool/blue, so R > G > B
    takes the chill off), a softened content canvas, lighter selection overlay. */
 .desktop-vibrancy.dark {
-  --background: oklch(0.19 0 0);
+  --background: oklch(0.22 0 0);
+  /* Lift dropdown/popover menus off the very dark default. */
+  --popover: oklch(0.26 0 0);
+  /* Lift the user-message bubble (bg-muted/70) so it reads above the canvas. */
+  --muted: oklch(0.32 0 0);
   --sidebar-accent: rgba(255, 255, 255, 0.09);
 }
 .desktop-vibrancy.dark [data-slot="sidebar-inner"],
 .desktop-vibrancy.dark .tw-vibrancy-panel {
-  background: rgba(19, 18, 16, 0.36) !important;
+  background: rgba(48, 46, 42, 0.24) !important;
 }
 
 /* Light: a light scrim over the material; selection reads as a subtle dark
@@ -126,7 +130,7 @@
 }
 .desktop-vibrancy:not(.dark) [data-slot="sidebar-inner"],
 .desktop-vibrancy:not(.dark) .tw-vibrancy-panel {
-  background: rgba(255, 255, 255, 0.8) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
 }
 
 /* Sub-surfaces transparent so the scrim/material reads uniformly to the very

@@ -154,7 +154,7 @@ describe("desktop window navigation", () => {
       show: false,
       // Transparent backing + the sidebar material make the sidebar translucent.
       backgroundColor: "#00000000",
-      vibrancy: "sidebar",
+      vibrancy: "under-window",
       visualEffectState: "followWindow",
       title: "ThinkWork Spaces",
       titleBarStyle: "hiddenInset",

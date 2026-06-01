@@ -116,6 +116,7 @@ function makeBridge(
     async readWorkspaceFile() {
       return { status: "vanished" as const };
     },
+    setNativeTheme() {},
     emitTokensChanged(nextSnapshot) {
       snapshot = nextSnapshot;
       listener?.(nextSnapshot);
