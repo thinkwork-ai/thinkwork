@@ -9,8 +9,11 @@ status: complete
 ## Workspace Architecture Guidance Docs - 2026-06-01
 
 - Branch: `docs/workspace-architecture-guidance`
-- Status: in progress. Local implementation and review fixes are complete; PR
-  creation, CI, and merge are pending.
+- Status: complete. PR
+  [#1942](https://github.com/thinkwork-ai/thinkwork/pull/1942) was squash
+  merged into `main` as
+  `3242d3e3a5784010252a853367d8cf5058bd11d1`; the remote and local feature
+  branches were deleted.
 - Context: after the source workspace migration, the product needed explicit
   operator/user documentation that distinguishes the editable source factory
   (`Agent`, `Spaces`, `User`) from the rendered turn sandbox (`/workspace`
@@ -36,6 +39,8 @@ status: complete
   `pnpm --filter @thinkwork/api test -- src/lib/workspace-renderer/compose-tuple.test.ts`,
   package typechecks for Spaces, Desktop, API, and AgentCore Pi,
   `pnpm --filter @thinkwork/docs build`, and `git diff --check` passed.
+- CI verification: PR #1942 passed `cla`, `lint`, `verify`, `typecheck`, and
+  `test` before merge.
 
 ## Customer Onboarding Task Progress Hotfix - 2026-06-01
 
