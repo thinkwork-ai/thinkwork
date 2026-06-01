@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  mkdir,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -225,6 +232,42 @@ describe("handleInvocation — happy path", () => {
 
       expect(result.statusCode).toBe(200);
       expect(stageSawWorkspace).toBe(true);
+      expect(loopSawWorkspace).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("creates a missing symlinked WORKSPACE_DIR target before the agent loop", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agentcore-pi-root-"));
+    const workspaceDir = path.join(root, "workspace");
+    const workspaceTarget = path.join(root, "tmp", "workspace");
+    process.env.WORKSPACE_DIR = workspaceDir;
+    let loopSawWorkspace = false;
+
+    try {
+      await mkdir(path.dirname(workspaceTarget), { recursive: true });
+      await symlink(workspaceTarget, workspaceDir);
+
+      const result = await handleInvocation({
+        payload: VALID_PAYLOAD(),
+        deps: makeDeps({
+          runAgentLoop: async ({ cwd }) => {
+            expect(cwd).toBe(workspaceDir);
+            await writeFile(path.join(workspaceDir, "AGENTS.md"), "# Agent");
+            await access(path.join(workspaceTarget, "AGENTS.md"));
+            loopSawWorkspace = true;
+            return {
+              content: "stub response",
+              modelId: "amazon-bedrock/test-model",
+              toolsCalled: [],
+              toolInvocations: [],
+            };
+          },
+        }),
+      });
+
+      expect(result.statusCode).toBe(200);
       expect(loopSawWorkspace).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
