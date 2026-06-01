@@ -69,7 +69,26 @@ function SpaceWorkroomHome() {
   const { spaceId } = Route.useParams();
   const { tenantId } = useTenant();
   const navigate = useNavigate();
-  const [filesModeOpen, setFilesModeOpen] = useState(false);
+  const spaceFilesState = useRouterState({
+    select: (state) => {
+      const locationState = state.location.state as
+        | {
+            openSpaceFiles?: unknown;
+            defaultOpenFile?: unknown;
+          }
+        | undefined;
+      return {
+        openSpaceFiles: locationState?.openSpaceFiles === true,
+        defaultOpenFile:
+          typeof locationState?.defaultOpenFile === "string"
+            ? locationState.defaultOpenFile
+            : "CONTEXT.md",
+      };
+    },
+  });
+  const [filesModeOpen, setFilesModeOpen] = useState(
+    spaceFilesState.openSpaceFiles,
+  );
   const [{ data: spaceData, fetching: spaceFetching, error: spaceError }] =
     useQuery<SpaceResult>({
       query: SpaceQuery,
@@ -95,10 +114,7 @@ function SpaceWorkroomHome() {
   usePageHeaderActions({
     title: spaceName,
     documentTitle: `Spaces > ${spaceName}`,
-    breadcrumbs: [
-      { label: "Spaces", href: "/new" },
-      { label: spaceName },
-    ],
+    breadcrumbs: [{ label: "Spaces", href: "/new" }, { label: spaceName }],
     action: (
       <Button
         type="button"
@@ -139,7 +155,7 @@ function SpaceWorkroomHome() {
           target={{ spaceId }}
           targetKey={`space:${spaceId}`}
           client={spacesWorkspaceFilesClient}
-          defaultOpenFile="CONTEXT.md"
+          defaultOpenFile={spaceFilesState.defaultOpenFile}
           className="min-h-0 flex-1"
         />
       </main>

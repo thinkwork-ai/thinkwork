@@ -97,6 +97,11 @@ export const SettingsSpaceQuery = graphql(`
       status
       accessMode
       slug
+      config
+      renderDiagnostics
+      toolPolicy
+      mcpPolicy
+      builtInTools
     }
   }
 `);
