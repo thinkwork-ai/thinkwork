@@ -564,7 +564,7 @@ describe("runThreadHarnessTurn", () => {
     expect(provider.requests[0].system).toContain("direct `web_search` tool");
   });
 
-  it("advertises cached workspace tools and USER.md context when user context is available", async () => {
+  it("advertises cached workspace tools and User/USER.md context when user context is available", async () => {
     const provider = new MockModelProvider([textResponse("Eric")]);
     const recordTurnFn = vi.fn().mockResolvedValue({});
     const workspaceCache = new WorkspaceCache(

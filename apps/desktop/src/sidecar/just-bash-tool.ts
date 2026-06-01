@@ -107,36 +107,20 @@ async function writeWorkspaceFile(
 function workspaceRuntimePath(relativePath: string): string {
   const safePath = safeRelativePath(relativePath);
   if (safePath.startsWith("Agent/")) {
-    return safeRelativePath(
-      stripLegacySourceRoot(safePath.slice("Agent/".length)),
-    );
+    return safeRelativePath(safePath.slice("Agent/".length));
   }
   if (safePath.startsWith("User/")) {
-    return safeRelativePath(
-      `User/${stripLegacySourceRoot(safePath.slice("User/".length))}`,
-    );
+    return safeRelativePath(`User/${safePath.slice("User/".length)}`);
   }
   if (safePath.startsWith("Thread/")) {
-    return safeRelativePath(
-      `Thread/${stripLegacySourceRoot(safePath.slice("Thread/".length))}`,
-    );
+    return safeRelativePath(`Thread/${safePath.slice("Thread/".length)}`);
   }
   if (safePath.startsWith("Spaces/")) {
     if (safePath === "Spaces/INDEX.md") return safePath;
     const [, spaceFolder, ...rest] = safePath.split("/");
-    return safeRelativePath(
-      ["Spaces", spaceFolder, stripLegacySourceRoot(rest.join("/"))].join("/"),
-    );
+    return safeRelativePath(["Spaces", spaceFolder, rest.join("/")].join("/"));
   }
-  return stripLegacySourceRoot(safePath);
-}
-
-function stripLegacySourceRoot(relativePath: string): string {
-  let current = relativePath;
-  while (current.startsWith("source/") || current.startsWith("workspace/")) {
-    current = current.replace(/^(source|workspace)\//, "");
-  }
-  return current;
+  return safePath;
 }
 
 function workspaceTuplePath(
@@ -153,22 +137,7 @@ function workspaceTuplePath(
   ) {
     return safePath;
   }
-  if (safePath.startsWith("Space/")) {
-    const spaceFolder = firstMappedSpaceFolder(pathMap);
-    return `Spaces/${spaceFolder}/${safePath.slice("Space/".length)}`;
-  }
-  if (safePath === "USER.md" || safePath.startsWith("memory/")) {
-    return `User/${safePath}`;
-  }
   return safePath;
-}
-
-function firstMappedSpaceFolder(pathMap: RuntimeTuplePathMap): string {
-  for (const tuplePath of pathMap.values()) {
-    const match = tuplePath.match(/^Spaces\/([^/]+)\//);
-    if (match) return match[1];
-  }
-  return "default";
 }
 
 function hasNulByte(bytes: Uint8Array): boolean {

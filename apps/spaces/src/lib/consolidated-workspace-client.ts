@@ -114,22 +114,18 @@ function normalizeListedFilePath(path: string): string | null {
   if (!clean) return null;
   assertSafe(clean);
 
-  const logical = stripLegacySourceRoot(clean);
-  if (!logical || isWorkspaceArchivesPath(logical)) return null;
-  return logical;
+  if (isLegacyWorkspacePath(clean)) return null;
+  return clean;
 }
 
-function stripLegacySourceRoot(path: string): string {
-  let current = path;
-  while (current.startsWith("source/") || current.startsWith("workspace/")) {
-    current = current.replace(/^(source|workspace)\//, "");
-  }
-  return current;
-}
-
-function isWorkspaceArchivesPath(path: string): boolean {
+function isLegacyWorkspacePath(path: string): boolean {
   return (
-    path === "workspace-archives" || path.startsWith("workspace-archives/")
+    path === "workspace-archives" ||
+    path.startsWith("workspace-archives/") ||
+    path === "source" ||
+    path.startsWith("source/") ||
+    path === "workspace" ||
+    path.startsWith("workspace/")
   );
 }
 

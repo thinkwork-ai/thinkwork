@@ -1810,7 +1810,7 @@ describe("agent GET / LIST", () => {
     ]);
   });
 
-  it("LIST presents legacy agent workspace/ objects as root files and hides workspace archives", async () => {
+  it("LIST omits legacy agent workspace/ objects and workspace archives", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -1831,15 +1831,12 @@ describe("agent GET / LIST", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.files.map((f: { path: string }) => f.path)).toEqual([
-      "AGENTS.md",
-      "skills/report/SKILL.md",
-    ]);
+    expect(res.body.files.map((f: { path: string }) => f.path)).toEqual([]);
   });
 });
 
 describe("space workspace GET / LIST", () => {
-  it("LIST presents legacy source/ objects at the Space workspace root", async () => {
+  it("LIST omits legacy source/ objects from the Space workspace root", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([spaceRowTenantA()]);
@@ -1859,8 +1856,6 @@ describe("space workspace GET / LIST", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.files.map((f: { path: string }) => f.path)).toEqual([
-      "artifacts/brief.md",
-      "docs/customer.md",
       "SPACE.md",
     ]);
   });
@@ -1961,7 +1956,7 @@ describe("user context workspace target", () => {
     expect(lambdaMock.commandCalls(InvokeCommand)).toHaveLength(0);
   });
 
-  it("lists legacy id-keyed USER.md objects through the logical User workspace", async () => {
+  it("does not list legacy id-keyed USER.md objects through the logical User workspace", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
@@ -1976,17 +1971,10 @@ describe("user context workspace target", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.files).toEqual([
-      {
-        path: "USER.md",
-        source: "user",
-        sha256: "",
-        overridden: false,
-      },
-    ]);
+    expect(res.body.files).toEqual([]);
   });
 
-  it("reads legacy id-keyed USER.md objects when the canonical slugged key is absent", async () => {
+  it("does not read legacy id-keyed USER.md objects when the canonical slugged key is absent", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
@@ -2008,7 +1996,7 @@ describe("user context workspace target", () => {
     expect(res.body).toMatchObject({
       ok: true,
       source: "user",
-      content: "# USER.md\nEric",
+      content: null,
     });
   });
 

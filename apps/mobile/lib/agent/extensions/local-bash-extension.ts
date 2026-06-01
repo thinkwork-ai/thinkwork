@@ -188,42 +188,27 @@ async function writeWorkspaceFile(
 function workspaceRuntimePath(relativePath: string): string {
   const safePath = assertSafeRelativePath(relativePath);
   if (safePath.startsWith("Agent/")) {
-    return assertSafeRelativePath(
-      stripLegacySourceRoot(safePath.slice("Agent/".length)),
-    );
+    return assertSafeRelativePath(safePath.slice("Agent/".length));
   }
   if (safePath.startsWith("User/")) {
-    return assertSafeRelativePath(
-      `User/${stripLegacySourceRoot(safePath.slice("User/".length))}`,
-    );
+    return assertSafeRelativePath(`User/${safePath.slice("User/".length)}`);
   }
   if (safePath.startsWith("Thread/")) {
-    return assertSafeRelativePath(
-      `Thread/${stripLegacySourceRoot(safePath.slice("Thread/".length))}`,
-    );
+    return assertSafeRelativePath(`Thread/${safePath.slice("Thread/".length)}`);
   }
   if (safePath.startsWith("Spaces/")) {
     if (safePath === "Spaces/INDEX.md") return safePath;
     const [, spaceFolder, ...rest] = safePath.split("/");
     return assertSafeRelativePath(
-      ["Spaces", spaceFolder, stripLegacySourceRoot(rest.join("/"))].join("/"),
+      ["Spaces", spaceFolder, rest.join("/")].join("/"),
     );
   }
-  return stripLegacySourceRoot(safePath);
-}
-
-function stripLegacySourceRoot(relativePath: string): string {
-  let current = relativePath;
-  while (current.startsWith("source/") || current.startsWith("workspace/")) {
-    current = current.replace(/^(source|workspace)\//, "");
-  }
-  return current;
+  return safePath;
 }
 
 function workspaceTuplePath(
   relativePath: string,
   pathMap: RuntimeTuplePathMap,
-  spaceFolderName: string,
 ): string {
   const safePath = assertSafeRelativePath(relativePath);
   const mapped = pathMap.get(safePath);
@@ -234,12 +219,6 @@ function workspaceTuplePath(
     safePath.startsWith("Thread/")
   ) {
     return safePath;
-  }
-  if (safePath.startsWith("Space/")) {
-    return `Spaces/${spaceFolderName}/${safePath.slice("Space/".length)}`;
-  }
-  if (safePath === "USER.md" || safePath.startsWith("memory/")) {
-    return `User/${safePath}`;
   }
   return safePath;
 }
@@ -288,7 +267,6 @@ async function snapshotWorkspace(
   key: string,
   storage: BashSnapshotStorage,
   pathMap: RuntimeTuplePathMap,
-  spaceFolderName: string,
 ): Promise<WorkspaceSnapshot> {
   const files: WorkspaceSnapshot = {};
   for (const path of bash.fs.getAllPaths()) {
@@ -297,7 +275,7 @@ async function snapshotWorkspace(
     try {
       const stat = await bash.fs.stat(path);
       if (!stat.isFile) continue;
-      files[workspaceTuplePath(relativePath, pathMap, spaceFolderName)] =
+      files[workspaceTuplePath(relativePath, pathMap)] =
         await bash.readFile(path);
     } catch {
       // Snapshot best effort: a concurrently removed or non-text file should not fail the turn.
@@ -305,16 +283,6 @@ async function snapshotWorkspace(
   }
   await storage.setItem(snapshotKey(key), JSON.stringify(files));
   return files;
-}
-
-function spaceFolderNameForTargets(
-  targets: readonly WorkspaceTarget[] | undefined,
-): string {
-  const space = targets?.find(
-    (target): target is WorkspaceTarget & { spaceFolderName?: string | null } =>
-      "spaceId" in target,
-  );
-  return space?.spaceFolderName?.trim() || "default";
 }
 
 function truncate(value: string): string {
@@ -349,7 +317,6 @@ export function localBashExtension(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const snapshotStorage =
     options.snapshotStorage ?? createAsyncStorageAdapter();
-  const spaceFolderName = spaceFolderNameForTargets(options.workspace?.targets);
 
   return defineExtension({
     name: "local-bash",
@@ -402,7 +369,6 @@ export function localBashExtension(
               key,
               snapshotStorage,
               pathMap,
-              spaceFolderName,
             );
             options.onWorkspaceSnapshot?.("baseline", baselineFiles);
             const result = await bash.exec(command, {
@@ -413,7 +379,6 @@ export function localBashExtension(
               key,
               snapshotStorage,
               pathMap,
-              spaceFolderName,
             );
             options.onWorkspaceSnapshot?.("current", currentFiles);
             return formatResult(result);

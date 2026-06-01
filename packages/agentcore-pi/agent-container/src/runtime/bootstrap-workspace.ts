@@ -208,17 +208,17 @@ function runtimeWorkspacePath(relPath: string): string | null {
   if (isWorkspaceArchivesPath(clean)) return null;
 
   if (clean.startsWith("Agent/")) {
-    const agentPath = stripLegacySourceRoot(clean.slice("Agent/".length));
+    const agentPath = clean.slice("Agent/".length);
     if (!agentPath || isWorkspaceArchivesPath(agentPath)) return null;
     return agentPath;
   }
   if (clean.startsWith("User/")) {
-    const userPath = stripLegacySourceRoot(clean.slice("User/".length));
+    const userPath = clean.slice("User/".length);
     if (!userPath || isWorkspaceArchivesPath(userPath)) return null;
     return `User/${userPath}`;
   }
   if (clean.startsWith("Thread/")) {
-    const threadPath = stripLegacySourceRoot(clean.slice("Thread/".length));
+    const threadPath = clean.slice("Thread/".length);
     if (!threadPath || isWorkspaceArchivesPath(threadPath)) return null;
     return `Thread/${threadPath}`;
   }
@@ -226,22 +226,14 @@ function runtimeWorkspacePath(relPath: string): string | null {
     if (clean === "Spaces/INDEX.md") return clean;
     const [, spaceFolder, ...rest] = clean.split("/");
     if (rest.length === 0) return null;
-    const spacePath = stripLegacySourceRoot(rest.join("/"));
+    const spacePath = rest.join("/");
     if (!spacePath || isWorkspaceArchivesPath(spacePath)) return null;
     return `Spaces/${spaceFolder}/${spacePath}`;
   }
 
-  const runtimePath = stripLegacySourceRoot(clean);
+  const runtimePath = clean;
   if (!runtimePath || isWorkspaceArchivesPath(runtimePath)) return null;
   return runtimePath;
-}
-
-function stripLegacySourceRoot(relPath: string): string {
-  let current = relPath;
-  while (current.startsWith("source/") || current.startsWith("workspace/")) {
-    current = current.replace(/^(source|workspace)\//, "");
-  }
-  return current;
 }
 
 function isWorkspaceArchivesPath(relPath: string): boolean {
@@ -249,7 +241,11 @@ function isWorkspaceArchivesPath(relPath: string): boolean {
     relPath === "workspace-archives" ||
     relPath.startsWith("workspace-archives/") ||
     relPath === "Agent/workspace-archives" ||
-    relPath.startsWith("Agent/workspace-archives/")
+    relPath.startsWith("Agent/workspace-archives/") ||
+    relPath === "source" ||
+    relPath.startsWith("source/") ||
+    relPath === "workspace" ||
+    relPath.startsWith("workspace/")
   );
 }
 

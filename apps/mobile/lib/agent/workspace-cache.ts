@@ -211,7 +211,7 @@ export class WorkspaceCache {
     const manifest = await this.readManifest(partition);
     if (!manifest) return null;
     const path = assertSafeRelativePath(filePath);
-    for (const candidate of workspaceReadCandidates(path, manifest.files)) {
+    for (const candidate of workspaceReadCandidates(path)) {
       const file = manifest.files[candidate];
       if (file) return file;
     }
@@ -490,23 +490,21 @@ export function workspaceRuntimePathForFile(
   file: Pick<WorkspaceFileMeta, "path" | "source">,
 ): string | null {
   const safePath = assertSafeRelativePath(file.path);
-  if (isWorkspaceArchivesPath(safePath)) return null;
+  if (isLegacyWorkspacePath(safePath)) return null;
   if (hasTupleRoot(safePath)) return normalizeTupleRuntimePath(safePath);
 
-  const relativePath = stripLegacySourceRoot(safePath);
-  if (isWorkspaceArchivesPath(relativePath)) return null;
   const source = file.source;
   if (
     source === "user" ||
     (!source && "userId" in target) ||
     ("userId" in target && source !== "agent" && source !== "space")
   ) {
-    return `User/${relativePath}`;
+    return `User/${safePath}`;
   }
   if (source === "space" || "spaceId" in target) {
-    return `Spaces/${spaceFolderNameForTarget(target)}/${relativePath}`;
+    return `Spaces/${spaceFolderNameForTarget(target)}/${safePath}`;
   }
-  return relativePath;
+  return safePath;
 }
 
 function normalizeStoredManifest(
@@ -527,93 +525,66 @@ function normalizeStoredManifest(
 
 function normalizeStoredRuntimePath(file: WorkspaceCachedFile): string | null {
   const safePath = assertSafeRelativePath(file.path);
-  if (isWorkspaceArchivesPath(safePath)) return null;
+  if (isLegacyWorkspacePath(safePath)) return null;
 
   const tuplePath = normalizeTupleRuntimePath(safePath);
   if (!tuplePath) return null;
   if (tuplePath !== safePath || hasTupleRoot(tuplePath)) return tuplePath;
 
-  const relativePath = stripLegacySourceRoot(safePath);
-  if (isWorkspaceArchivesPath(relativePath)) return null;
-  if (file.source === "user") return `User/${relativePath}`;
+  if (file.source === "user") return `User/${safePath}`;
   if (file.source === "space") {
-    return `Spaces/${DEFAULT_SPACE_FOLDER_NAME}/${relativePath}`;
+    return `Spaces/${DEFAULT_SPACE_FOLDER_NAME}/${safePath}`;
   }
-  return relativePath;
+  return safePath;
 }
 
 function normalizeTupleRuntimePath(path: string): string | null {
   if (path.startsWith("Agent/")) {
-    const relativePath = stripLegacySourceRoot(path.slice("Agent/".length));
-    if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
+    const relativePath = path.slice("Agent/".length);
+    if (!relativePath || isLegacyWorkspacePath(relativePath)) return null;
     return relativePath;
   }
   if (path.startsWith("Spaces/")) {
     const [, folder, ...rest] = path.split("/");
     if (!folder || rest.length === 0) return path;
-    const relativePath = stripLegacySourceRoot(rest.join("/"));
-    if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
+    const relativePath = rest.join("/");
+    if (!relativePath || isLegacyWorkspacePath(relativePath)) return null;
     return `Spaces/${folder}/${relativePath}`;
   }
   if (path.startsWith("User/")) {
-    const relativePath = stripLegacySourceRoot(path.slice("User/".length));
-    if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
+    const relativePath = path.slice("User/".length);
+    if (!relativePath || isLegacyWorkspacePath(relativePath)) return null;
     return `User/${relativePath}`;
   }
   if (path.startsWith("Thread/")) {
-    const relativePath = stripLegacySourceRoot(path.slice("Thread/".length));
-    if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
+    const relativePath = path.slice("Thread/".length);
+    if (!relativePath || isLegacyWorkspacePath(relativePath)) return null;
     return `Thread/${relativePath}`;
   }
   return path;
 }
 
-function workspaceReadCandidates(
-  path: string,
-  files: Record<string, WorkspaceCachedFile>,
-): string[] {
+function workspaceReadCandidates(path: string): string[] {
   if (hasTupleRoot(path)) {
     const normalized = normalizeTupleRuntimePath(path);
     return normalized && normalized !== path ? [normalized, path] : [path];
   }
 
-  const candidates = [path];
-  if (path === "AGENTS.md") candidates.unshift("Agent/AGENTS.md");
-  if (path === "USER.md") candidates.unshift("User/USER.md");
-  if (path === "SPACE.md") {
-    candidates.unshift("Spaces/default/SPACE.md");
-    for (const key of Object.keys(files)) {
-      if (/^Spaces\/[^/]+\/SPACE\.md$/.test(key)) {
-        candidates.unshift(key);
-      }
-    }
-  }
-
-  candidates.push(`Agent/${path}`, `User/${path}`);
-  for (const key of Object.keys(files)) {
-    if (key.endsWith(`/${path}`) && key.startsWith("Spaces/")) {
-      candidates.push(key);
-    }
-  }
-
-  return [...new Set(candidates)];
+  return [path];
 }
 
 function hasTupleRoot(path: string): boolean {
   return TUPLE_ROOTS.has(path.split("/")[0] ?? "");
 }
 
-function stripLegacySourceRoot(path: string): string {
-  let current = path;
-  while (current.startsWith("source/") || current.startsWith("workspace/")) {
-    current = current.replace(/^(source|workspace)\//, "");
-  }
-  return current;
-}
-
-function isWorkspaceArchivesPath(path: string): boolean {
+function isLegacyWorkspacePath(path: string): boolean {
   return (
-    path === "workspace-archives" || path.startsWith("workspace-archives/")
+    path === "workspace-archives" ||
+    path.startsWith("workspace-archives/") ||
+    path === "source" ||
+    path.startsWith("source/") ||
+    path === "workspace" ||
+    path.startsWith("workspace/")
   );
 }
 

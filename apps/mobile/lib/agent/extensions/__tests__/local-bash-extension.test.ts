@@ -283,7 +283,7 @@ function workspaceFixture() {
         return {
           files: [
             {
-              path: "workspace/AGENTS.md",
+              path: "AGENTS.md",
               content: "# Agent\n",
               source: "agent",
               sha256: "sha-agent",
@@ -296,7 +296,7 @@ function workspaceFixture() {
         return {
           files: [
             {
-              path: "source/CONTEXT.md",
+              path: "CONTEXT.md",
               content: "# Space\n",
               source: "space",
               sha256: "sha-space",

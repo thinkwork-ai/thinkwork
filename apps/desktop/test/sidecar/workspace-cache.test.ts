@@ -122,11 +122,11 @@ describe("WorkspaceCache", () => {
       ],
       files: [
         {
-          path: "workspace/AGENTS.md",
+          path: "AGENTS.md",
           owner: "agent",
-          sourceKey: "tenants/acme/agents/marco/workspace/AGENTS.md",
+          sourceKey: "tenants/acme/agents/marco/AGENTS.md",
           sourcePrefix: "tenants/acme/agents/marco/",
-          sourcePath: "workspace/AGENTS.md",
+          sourcePath: "AGENTS.md",
           etag: '"agent"',
           readOnly: false,
         },
@@ -166,11 +166,13 @@ describe("WorkspaceCache", () => {
       new FakeStore({
         [`${prefix}.hydrate_manifest.json`]: `${JSON.stringify(manifest)}\n`,
         [`${prefix}Spaces/INDEX.md`]: "# Spaces",
-        "tenants/acme/agents/marco/workspace/AGENTS.md": "# Agent",
-        "tenants/acme/agents/marco/workspace/skills/report/SKILL.md": "# Skill",
+        "tenants/acme/agents/marco/AGENTS.md": "# Agent",
+        "tenants/acme/agents/marco/skills/report/SKILL.md": "# Skill",
+        "tenants/acme/agents/marco/workspace/LEGACY.md": "# Legacy",
         "tenants/acme/agents/marco/SPACE_CONTEXT.md": "# Stale Space",
         "tenants/acme/agents/marco/spaces/old/SPACE.md": "# Old Space",
         "tenants/acme/spaces/default/CONTEXT.md": "# Space",
+        "tenants/acme/spaces/default/source/LEGACY.md": "# Legacy Space",
         "tenants/acme/spaces/default/TOOLS.md": "# Space Tools",
         "tenants/acme/spaces/support/CONTEXT.md": "# Support",
         "tenants/acme/users/eric-odom/USER.md": "# User",
@@ -286,7 +288,7 @@ describe("WorkspaceCache", () => {
     await expect(rootDirectoryNames(root)).resolves.toEqual([]);
   });
 
-  it("hydrates a legacy rendered USER.md into the User root when the user source is empty", async () => {
+  it("ignores retired rendered USER.md prefixes when the user source is empty", async () => {
     const prefix = "tenants/acme/threads/customer-kickoff/";
     const manifest = {
       version: 1,
@@ -328,13 +330,13 @@ describe("WorkspaceCache", () => {
       partition: PARTITION,
     });
 
-    expect(result).toMatchObject({ prefix, synced: 4, total: 4 });
-    await expect(readFile(join(root, "User/USER.md"), "utf8")).resolves.toBe(
-      "# Legacy rendered user",
-    );
+    expect(result).toMatchObject({ prefix, synced: 2, total: 2 });
+    await expect(
+      readFile(join(root, "User/USER.md"), "utf8"),
+    ).rejects.toThrow();
     await expect(
       readFile(join(root, "User/memory/MEMORY.md"), "utf8"),
-    ).resolves.toBe("# Legacy rendered memory");
+    ).rejects.toThrow();
     await expect(
       readFile(join(root, "User/memory/.snapshots/run-1/MEMORY.md"), "utf8"),
     ).rejects.toThrow();
@@ -343,14 +345,9 @@ describe("WorkspaceCache", () => {
     ).resolves.toMatchObject({
       files: expect.arrayContaining([
         expect.objectContaining({
-          owner: "user",
-          path: "User/USER.md",
-          sourceKey: "tenants/acme/users/eric-odom/USER.md",
-        }),
-        expect.objectContaining({
-          owner: "user",
-          path: "User/memory/MEMORY.md",
-          sourceKey: "tenants/acme/users/eric-odom/memory/MEMORY.md",
+          owner: "agent",
+          path: "AGENTS.md",
+          sourceKey: "tenants/acme/agents/marco/AGENTS.md",
         }),
       ]),
     });
