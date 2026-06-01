@@ -36,7 +36,7 @@ import {
   ClipboardList,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
-import { useMutation } from "urql";
+import { useMutation, useQuery } from "urql";
 import { Text, Muted } from "@/components/ui/typography";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
