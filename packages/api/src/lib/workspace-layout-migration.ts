@@ -815,6 +815,7 @@ export async function planWorkspaceLayoutTenant(input: {
         destinationPrefix: userSourcePrefix(tenantSlug, user.folder),
         deleteLegacySources: input.deleteLegacySources,
         reason: "legacy-source",
+        destinationConflict: "prefer-destination-delete-source",
       }),
     );
     prefixPlans.push(
@@ -825,6 +826,7 @@ export async function planWorkspaceLayoutTenant(input: {
         destinationPrefix: userSourcePrefix(tenantSlug, user.folder),
         deleteLegacySources: input.deleteLegacySources,
         reason: "legacy-source",
+        destinationConflict: "prefer-destination-delete-source",
       }),
     );
   }

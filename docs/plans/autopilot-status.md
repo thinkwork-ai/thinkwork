@@ -4130,6 +4130,31 @@ Target branch: `main`
 
 None.
 
+# Workspace Migration Legacy User Conflict Hotfix - 2026-06-01
+
+## Status
+
+- Branch: `fix/workspace-migration-legacy-user-conflicts`
+- Started: `2026-06-01T05:00:00Z`
+- Trigger:
+  - Deploy run `26735874966` rebuilt and updated the Pi AgentCore runtime successfully, but failed the `Workspace Layout Migration` job.
+  - Migration reported two blocking conflicts where legacy UUID user prefixes such as `tenants/<tenant-id>/users/<user-id>/memory/DREAMS.md` collided with already-migrated canonical named user workspace files under `tenants/<tenant-slug>/users/<user-folder>/memory/DREAMS.md`.
+- Implemented:
+  - Canonical named user workspace objects now win over stale UUID user-prefix copies during workspace layout migration.
+  - The migration schedules the legacy UUID source keys for deletion instead of failing on metadata differences when the destination already exists.
+  - Space/agent destination conflicts remain blocking unless they are same-folder cleanup cases already covered by the prior migration behavior.
+
+## Verification Log
+
+- `pnpm install --frozen-lockfile` - completed in the isolated worktree; optional `node-liblzma` native rebuild logged missing `pkg-config` but install exited successfully.
+- `pnpm --filter @thinkwork/api test src/__tests__/migrate-workspace-layout.test.ts` - passed, 10 tests.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `git diff --check` - passed.
+
+## CI / PR
+
+- Pending PR creation.
+
 # Deploy Pi Runtime Dependency Filter Hotfix - 2026-05-31
 
 ## Status

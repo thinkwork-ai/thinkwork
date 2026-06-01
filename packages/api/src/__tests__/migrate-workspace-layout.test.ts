@@ -282,6 +282,44 @@ describe("migrate-workspace-layout", () => {
     );
   });
 
+  it("prefers canonical user workspace objects over legacy UUID copies", async () => {
+    const store = FakeObjectStore.from([
+      [
+        "tenants/acme/users/eric-odom/memory/DREAMS.md",
+        { etag: "new", size: 10 },
+      ],
+      [
+        "tenants/tenant-1/users/user-1/memory/DREAMS.md",
+        { etag: "old", size: 10 },
+      ],
+    ]);
+
+    const plan = await planWorkspaceLayoutTenant({
+      bucket: "workspace-bucket",
+      snapshot: SNAPSHOT,
+      objectStore: store,
+      deleteLegacySources: true,
+    });
+
+    expect(plan.status).toBe("dry-run");
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.plannedCopies).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceKey: "tenants/tenant-1/users/user-1/memory/DREAMS.md",
+        }),
+      ]),
+    );
+    expect(plan.deletePrefixes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          prefix: "tenants/tenant-1/users/user-1/",
+          keys: ["tenants/tenant-1/users/user-1/memory/DREAMS.md"],
+        }),
+      ]),
+    );
+  });
+
   it("recovers user files from retired rendered tuple prefixes when user source is empty", async () => {
     const store = FakeObjectStore.from([
       [
