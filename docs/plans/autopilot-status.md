@@ -9,7 +9,10 @@ status: complete
 ## Mobile Checkpoint Payload Bounds Hotfix - 2026-06-01
 
 - Branch: `fix/mobile-checkpoint-payload-bounds`
-- Status: local verification passed; PR pending.
+- Status: merged and deployed via PR
+  [#1936](https://github.com/thinkwork-ai/thinkwork/pull/1936) and deploy
+  run
+  [26741857288](https://github.com/thinkwork-ai/thinkwork/actions/runs/26741857288).
 - Regression context: the full mobile Pi harness passed all capability rows,
   but CloudWatch for `thinkwork-dev-api-mobile-turn-session` showed repeated
   checkpoint failures during attachment/image rows:
@@ -26,6 +29,12 @@ status: complete
   `pnpm --filter @thinkwork/api test -- src/lib/mobile-turns/lifecycle.test.ts src/lib/thread-turn-events.test.ts`,
   `pnpm --filter @thinkwork/api test -- src/handlers/mobile-turn-session.test.ts src/lib/mobile-turns/lifecycle.test.ts src/lib/mobile-turns/managed-dispatch.test.ts src/lib/mobile-turns/checkpoint.test.ts`,
   `pnpm --filter @thinkwork/api typecheck`, and `git diff --check` passed.
+- Post-deploy verification: reran the checkpoint-sensitive mobile harness rows
+  `image`, `file`, `handoff_local`, `handoff_managed`,
+  `handoff_late_finalize`, `handoff_unsafe_checkpoint`, and `abort`; all
+  passed. CloudWatch for `thinkwork-dev-api-mobile-turn-session` had no
+  matches for `PAYLOAD_TOO_LARGE`, `ThreadTurnEventError`, `checkpoint failed`,
+  or `payload exceeds` in the post-deploy window.
 
 ## Full Regression Restart - 2026-06-01
 
@@ -52,6 +61,41 @@ status: complete
 - Mobile workspace row proved the local workspace path is not model memory:
   the run explicitly called the `read` workspace tool for `USER.md` and then
   answered the user identity prompt.
+- Source workspace data verification after S3 migration/backfill:
+  `tenants/sleek-squirrel-230/agents/loki/` lists root agent files such as
+  `AGENTS.md`, `CONTEXT.md`, `GUARDRAILS.md`, `MEMORY_GUIDE.md`,
+  `PLATFORM.md`, and `SOUL.md` directly at the agent root with no
+  `workspace/` or `workspace-archives/` keys; Customer Space lists
+  `CONTEXT.md`, `artifacts/`, `docs/`, `goals/`, and `plans/` directly under
+  `tenants/sleek-squirrel-230/spaces/customer/`; Eric Odom's user workspace
+  lists `USER.md`, `knowledge-pack.md`, and `memory/` directly under
+  `tenants/sleek-squirrel-230/users/eric-odom/`.
+- Manual dev S3 cleanup: moved the misspelled Customer Space
+  `artficats/` prefix to `artifacts/` and deleted the old misspelled prefix.
+  Follow-up S3 verification found no `source/` or `artficats/` keys under the
+  tenant Spaces prefix and no `workspace/` or `workspace-archives/` keys under
+  the current `loki` agent prefix.
+- Deployed Settings workspace API verification:
+  - Agent detail list returned 26 logical paths rooted at files/folders such as
+    `AGENTS.md`, `CONTEXT.md`, `skills/`, and `workspaces/`, with no
+    `workspace`, `source`, or `workspace-archives` paths.
+  - Customer Space detail list returned 13 logical paths rooted at
+    `CONTEXT.md`, `artifacts/`, `docs/`, `goals/`, and `plans/`, with no
+    `source` wrapper and no misspelled `artficats` path.
+  - User detail list returned 53 logical paths rooted at `USER.md` and
+    `memory/`, with no legacy user UUID path.
+- Live AgentCore rendered workspace verification after all deploys and S3
+  cleanup: thread `697ff702-aa88-4a24-85d0-3fd2aa67a877` (`CHAT-1010`) /
+  turn `0bed9695-6de6-4bc7-89c0-1bf5ab873ba1` forced `bash` and reported
+  `PWD=/workspace`; root contained `AGENTS.md`, `USER.md`, `memory`, and
+  singular `Space`; `Space/` contained `CONTEXT.md`, `artifacts`, `docs`,
+  `goals`, and `plans`; forbidden roots `Agent`, `Spaces`, `User`,
+  `workspace`, `source`, `workspace-archives`, and `.thinkwork-pi` were absent.
+- Final regression refresh passed:
+  `pnpm --filter @thinkwork/desktop test` (19 files, 150 tests),
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts agent-container/tests/sandbox-factory.test.ts`
+  (3 files, 72 tests), plus the post-deploy mobile checkpoint harness slice
+  listed above.
 
 ## AgentCore Pi Private Agent Dir Hotfix - 2026-06-01
 
@@ -110,7 +154,8 @@ status: complete
 - Branch: `fix/agentcore-writable-workspace`
 - Worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-agentcore-writable-workspace`
-- Status: local verification passed; PR pending.
+- Status: merged and deployed via PR
+  [#1934](https://github.com/thinkwork-ai/thinkwork/pull/1934).
 - Live failure: after #1933 deployed, AgentCore just-bash probe thread
   `816a13bf-a7ab-473c-a481-963342a0d0e9` / turn
   `38ae268c-6275-41a6-b3ad-60affa4f1589` failed during bootstrap with
@@ -145,7 +190,8 @@ agent-container/tests/handler-context.test.ts`,
 - Branch: `fix/agentcore-logical-workspace-pwd`
 - Worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-agentcore-logical-workspace-pwd`
-- Status: local verification passed; PR pending.
+- Status: merged and deployed via PR
+  [#1935](https://github.com/thinkwork-ai/thinkwork/pull/1935).
 - Root cause: `/workspace` is intentionally a symlink to writable
   `/tmp/workspace`; bash inherited the physical cwd as `PWD`, so probes and
   agents saw `/tmp/workspace` even though the workspace contents and root shape
