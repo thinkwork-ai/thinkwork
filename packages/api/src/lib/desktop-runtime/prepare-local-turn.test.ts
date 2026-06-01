@@ -106,6 +106,11 @@ function makeDeps(
     updateTurnWakeupRequestId: vi.fn(async () => {}),
     notifyTurnStarted: vi.fn(async () => {}),
     getTraceId: () => "trace-1",
+    loadMessageAttachments: vi.fn(async () => []),
+    presignAttachmentDownload: vi.fn(
+      async ({ key }: { bucket: string; key: string }) =>
+        `https://signed.example/${key}`,
+    ),
     env: {
       thinkworkApiUrl: "https://api.example.com",
       workspaceBucket: "bucket",
@@ -173,6 +178,126 @@ describe("prepareLocalPiRuntimeSession", () => {
         }),
       }),
     );
+  });
+
+  it("attaches a presigned download_url to each message attachment", async () => {
+    const deps = makeDeps();
+
+    const session = await prepareLocalPiRuntimeSession(
+      {
+        auth: {
+          authType: "cognito",
+          email: "user@example.com",
+          principalId: "cognito-sub",
+          tenantId: null,
+          agentId: null,
+        },
+        agentId: AGENT_ID,
+        threadId: THREAD_ID,
+        userMessage: "Analyze this GL file",
+        messageAttachments: [
+          {
+            attachmentId: "att-1",
+            s3Key: `tenants/acme/attachments/${THREAD_ID}/att-1/General-Ledger.xlsx`,
+            name: "General-Ledger.xlsx",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            sizeBytes: 1024,
+          },
+        ],
+      },
+      deps,
+    );
+
+    expect(deps.presignAttachmentDownload).toHaveBeenCalledWith({
+      bucket: "bucket",
+      key: `tenants/acme/attachments/${THREAD_ID}/att-1/General-Ledger.xlsx`,
+    });
+    expect(session.invocation.message_attachments).toEqual([
+      expect.objectContaining({
+        attachment_id: "att-1",
+        name: "General-Ledger.xlsx",
+        download_url: `https://signed.example/tenants/acme/attachments/${THREAD_ID}/att-1/General-Ledger.xlsx`,
+      }),
+    ]);
+  });
+
+  it("resolves attachments from the message id (DB) and presigns them", async () => {
+    const deps = makeDeps({
+      loadMessageAttachments: vi.fn(async () => [
+        {
+          attachmentId: "att-db",
+          s3Key: `tenants/acme/attachments/${THREAD_ID}/att-db/General-Ledger.xlsx`,
+          name: "General-Ledger.xlsx",
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          sizeBytes: 116870,
+        },
+      ]),
+    });
+
+    const session = await prepareLocalPiRuntimeSession(
+      {
+        auth: {
+          authType: "cognito",
+          email: "user@example.com",
+          principalId: "cognito-sub",
+          tenantId: null,
+          agentId: null,
+        },
+        agentId: AGENT_ID,
+        threadId: THREAD_ID,
+        messageId: "11111111-1111-4111-8111-111111111111",
+        userMessage: "Analyze the general ledger",
+      },
+      deps,
+    );
+
+    expect(deps.loadMessageAttachments).toHaveBeenCalledWith({
+      tenantId: expect.any(String),
+      threadId: THREAD_ID,
+      messageId: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(session.invocation.message_attachments).toEqual([
+      expect.objectContaining({
+        attachment_id: "att-db",
+        name: "General-Ledger.xlsx",
+        download_url: `https://signed.example/tenants/acme/attachments/${THREAD_ID}/att-db/General-Ledger.xlsx`,
+      }),
+    ]);
+  });
+
+  it("drops attachments that cannot be presigned", async () => {
+    const deps = makeDeps({
+      presignAttachmentDownload: vi.fn(async () => null),
+    });
+
+    const session = await prepareLocalPiRuntimeSession(
+      {
+        auth: {
+          authType: "cognito",
+          email: "user@example.com",
+          principalId: "cognito-sub",
+          tenantId: null,
+          agentId: null,
+        },
+        agentId: AGENT_ID,
+        threadId: THREAD_ID,
+        userMessage: "Analyze this GL file",
+        messageAttachments: [
+          {
+            attachmentId: "att-1",
+            s3Key: `tenants/acme/attachments/${THREAD_ID}/att-1/x.xlsx`,
+            name: "x.xlsx",
+            mimeType: "application/vnd.ms-excel",
+            sizeBytes: 1024,
+          },
+        ],
+      },
+      deps,
+    );
+
+    expect(session.invocation.message_attachments).toBeUndefined();
   });
 
   it("denies private Space access before creating a turn or credentials", async () => {

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { isIP } from "node:net";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
@@ -33,7 +34,12 @@ import {
   createTaskStatusExtension,
   createWebSearchExtension,
   toExtensionFactory,
+  buildFileReadToolDefinition,
+  cleanupStagedAttachments,
+  formatMessageAttachmentsPreamble,
+  stageAttachmentsViaFetch,
   type ProviderBundle,
+  type StagedMessageAttachment,
   type ThinkworkExtension,
 } from "@thinkwork/pi-extensions";
 import {
@@ -227,6 +233,7 @@ export async function runLocalDesktopTurn(
   let workspaceBaseline: WorkspaceBaseline | undefined;
   let snapshotWorkspace: (() => Promise<WorkspaceSnapshot | null>) | undefined;
   let unbindAbort: (() => void) | undefined;
+  let attachmentBaseDir = "";
   // Snapshot the composed prompt at turn entry so the finalize callback
   // (incl. the catch path) persists exactly what the SDK received, not the
   // raw invocation base. See feedback_completion_callback_snapshot_pattern.
@@ -256,6 +263,17 @@ export async function runLocalDesktopTurn(
       cacheHit: preparedWorkspace.cacheHit === true,
       cacheStale: preparedWorkspace.cacheStale === true,
     });
+    const { staged: stagedAttachments, baseDir: stagedBaseDir } =
+      await timings.measure("attachment_stage_ms", () =>
+        stageDesktopAttachments(payload, deps, logger),
+      );
+    attachmentBaseDir = stagedBaseDir;
+    if (stagedAttachments.length > 0) {
+      logger.info("local Pi attachments staged", {
+        count: stagedAttachments.length,
+        names: stagedAttachments.map((a) => a.name),
+      });
+    }
     const systemPrompt = await timings.measure("system_prompt_ms", () =>
       buildSystemPrompt(payload.session.invocation),
     );
@@ -286,6 +304,7 @@ export async function runLocalDesktopTurn(
       logger,
       deps,
       timings,
+      stagedAttachments,
     );
     sdkSession = preparedSdkSession;
     snapshotWorkspace = preparedSdkSession.snapshotWorkspace;
@@ -297,7 +316,10 @@ export async function runLocalDesktopTurn(
       preparedSdkSession.session,
       logger,
     );
-    const prompt = buildTurnPrompt(payload.session.invocation);
+    const prompt = buildTurnPrompt(
+      payload.session.invocation,
+      stagedAttachments,
+    );
     throwIfAborted(deps.signal);
     logger.info("local Pi SDK prompt starting", {
       promptChars: prompt.length,
@@ -412,7 +434,47 @@ export async function runLocalDesktopTurn(
         }
       }
     }
+    if (attachmentBaseDir) {
+      try {
+        await cleanupStagedAttachments(attachmentBaseDir);
+      } catch (err) {
+        logger.warn("local Pi attachment cleanup failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   }
+}
+
+/**
+ * Download the turn's attachments over their presigned URLs into a host temp
+ * dir the `file_read` tool can read. The desktop runtime holds no AWS
+ * credentials, so the bytes arrive over plain HTTPS, not S3. The just-bash
+ * sandbox is text-only and cannot hold binary files — `file_read` (a sidecar
+ * Node tool) reads from this dir directly. See
+ * `project_desktop_justbash_text_only_sandbox`.
+ */
+async function stageDesktopAttachments(
+  payload: LocalDesktopTurnPayload,
+  deps: LocalTurnRunnerDeps,
+  logger: RedactedLogger,
+): Promise<{ staged: StagedMessageAttachment[]; baseDir: string }> {
+  const attachments = payload.session.invocation.message_attachments;
+  if (!attachments || attachments.length === 0) {
+    return { staged: [], baseDir: "" };
+  }
+  const baseDir = path.join(
+    tmpdir(),
+    `pi-turn-${payload.session.invocation.thread_turn_id || randomUUID()}`,
+  );
+  const turnDir = path.join(baseDir, "attachments");
+  const staged = await stageAttachmentsViaFetch({
+    attachments,
+    turnDir,
+    fetchImpl: deps.fetchImpl ?? fetch,
+    logger: (message, details) => logger.info(message, details ?? {}),
+  });
+  return { staged, baseDir };
 }
 
 export function validatePreparedSession(
@@ -614,6 +676,7 @@ async function createSdkSession(
   logger: RedactedLogger,
   deps: LocalTurnRunnerDeps,
   timings: LocalTurnTimings,
+  stagedAttachments: StagedMessageAttachment[] = [],
 ): Promise<{
   session: PiSdkSessionLike;
   modelFallbackMessage?: string;
@@ -686,10 +749,19 @@ async function createSdkSession(
     const hindsight = createHindsightRuntimeAdapter(prepared);
     const desktopBash = createDesktopJustBashController({ workspaceDir });
     const desktopBashTool = defineDesktopTool(sdk, desktopBash.tool);
+    // file_read reads turn attachments from a host temp dir (not the
+    // text-only just-bash sandbox), converting binary spreadsheets to CSV.
+    // It must be in the `tools` allowlist or createAgentSession drops it —
+    // see project_pi_extension_tool_activation_allowlist.
+    const fileReadToolDef = buildFileReadToolDefinition(stagedAttachments);
+    const fileReadTool = fileReadToolDef
+      ? defineDesktopTool(sdk, fileReadToolDef)
+      : null;
     const tools = [
       ...DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
       ...DESKTOP_JUST_BASH_TOOL_NAMES,
       ...extensions.toolNames,
+      ...(fileReadTool ? ["file_read"] : []),
     ];
 
     logger.info("local Pi SDK session creating", {
@@ -712,7 +784,11 @@ async function createSdkSession(
       sdk.createAgentSession({
         cwd: workspaceDir,
         tools,
-        customTools: [desktopBashTool, ...extensions.customTools],
+        customTools: [
+          desktopBashTool,
+          ...(fileReadTool ? [fileReadTool] : []),
+          ...extensions.customTools,
+        ],
         resourceLoader,
         sessionManager: sdk.SessionManager?.inMemory(),
         settingsManager,
@@ -1987,12 +2063,17 @@ function renderDebugBundle(args: {
   ].join("\n");
 }
 
-function buildTurnPrompt(invocation: DesktopPiRuntimeInvocation): string {
+function buildTurnPrompt(
+  invocation: DesktopPiRuntimeInvocation,
+  stagedAttachments: StagedMessageAttachment[] = [],
+): string {
   const history = invocation.messages_history
     .map((message) => `${message.role}: ${message.content}`)
     .join("\n");
   const historyBlock = history ? `Prior conversation:\n${history}\n\n` : "";
-  return `${historyBlock}Current user message:\n${invocation.message}`;
+  const preamble = formatMessageAttachmentsPreamble(stagedAttachments);
+  const attachmentBlock = preamble ? `${preamble}\n\n` : "";
+  return `${attachmentBlock}${historyBlock}Current user message:\n${invocation.message}`;
 }
 
 async function promptWithTimeout(

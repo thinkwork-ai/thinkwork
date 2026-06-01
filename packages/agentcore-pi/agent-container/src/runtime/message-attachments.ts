@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 
 import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { extractAttachmentText } from "@thinkwork/pi-extensions";
 import { Type } from "typebox";
 
 export interface MessageAttachmentRef {
@@ -103,7 +104,7 @@ export async function stageMessageAttachments(
       staged.push({
         ...ref,
         localPath,
-        textPreview: previewText(body, ref),
+        textPreview: await previewText(body, ref),
       });
     } catch (err) {
       input.logger?.("message_attachment_download_failed", {
@@ -180,33 +181,36 @@ export function buildFileReadTool(
           `Access denied. Available attachment paths: ${[...byPath.keys()].join(", ")}`,
         );
       }
-      if (!isProbablyTextAttachment(entry)) {
+      const bytes = await readFile(entry.localPath);
+      const extracted = await extractAttachmentText({
+        name: entry.name,
+        mimeType: entry.mimeType,
+        bytes,
+      });
+      if (!extracted.readable) {
         return {
           content: [
             {
               type: "text",
               text:
-                `${entry.name} is available, but this runtime can only read ` +
-                "text-like attachments directly. Use a specialist parser for " +
-                `${entry.mimeType || "binary"} files.`,
+                `${entry.name} is attached, but text could not be extracted ` +
+                `from ${entry.mimeType || "this binary format"}. Use a ` +
+                "specialist parser (e.g. python) for this file.",
             },
           ],
           details: { path: entry.localPath, name: entry.name, readable: false },
         };
       }
-      const bytes = await readFile(entry.localPath);
-      const truncated = bytes.length > FILE_READ_LIMIT_BYTES;
-      const text = bytes.subarray(0, FILE_READ_LIMIT_BYTES).toString("utf-8");
+      const truncated = extracted.text.length > FILE_READ_LIMIT_BYTES;
+      const text = truncated
+        ? `${extracted.text.slice(0, FILE_READ_LIMIT_BYTES)}\n\n[truncated after 512 KB]`
+        : extracted.text;
       return {
-        content: [
-          {
-            type: "text",
-            text: truncated ? `${text}\n\n[truncated after 512 KB]` : text,
-          },
-        ],
+        content: [{ type: "text", text }],
         details: {
           path: entry.localPath,
           name: entry.name,
+          kind: extracted.kind,
           readable: true,
           truncated,
         },
@@ -271,42 +275,21 @@ async function bodyToBuffer(body: unknown): Promise<Buffer> {
   throw new Error("Unsupported S3 body type");
 }
 
-function previewText(
+async function previewText(
   body: Buffer,
   entry: { mimeType: string; name: string },
-): string {
-  if (!isProbablyTextAttachment(entry)) return "";
-  const text = body.subarray(0, TEXT_PREVIEW_BYTES).toString("utf-8").trim();
+): Promise<string> {
+  const extracted = await extractAttachmentText({
+    name: entry.name,
+    mimeType: entry.mimeType,
+    bytes: body,
+  });
+  if (!extracted.readable) return "";
+  const text = extracted.text.slice(0, TEXT_PREVIEW_BYTES).trim();
   if (!text) return "";
-  return body.length > TEXT_PREVIEW_BYTES
+  return extracted.text.length > TEXT_PREVIEW_BYTES
     ? `${text}\n\n[preview truncated]`
     : text;
-}
-
-function isProbablyTextAttachment(entry: {
-  mimeType: string;
-  name: string;
-}): boolean {
-  const mime = entry.mimeType.toLowerCase();
-  const ext = path.extname(entry.name).toLowerCase();
-  const textExtensions = [
-    "",
-    ".csv",
-    ".json",
-    ".md",
-    ".markdown",
-    ".txt",
-    ".tsv",
-    ".xml",
-    ".yaml",
-    ".yml",
-  ];
-  return (
-    mime.startsWith("text/") ||
-    mime.includes("json") ||
-    mime.includes("xml") ||
-    textExtensions.includes(ext)
-  );
 }
 
 function indentFence(text: string): string {

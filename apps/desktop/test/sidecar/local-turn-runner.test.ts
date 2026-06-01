@@ -127,6 +127,80 @@ describe("runLocalDesktopTurn", () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it("stages a turn attachment and registers file_read with a prompt preamble", async () => {
+    const store = new FakeStore();
+    let promptText = "";
+    let toolsSeen: string[] = [];
+    let customToolNames: string[] = [];
+    const sdk: PiSdkModuleLike = {
+      createAgentSession: vi.fn(async (options) => {
+        toolsSeen = (options?.tools as string[]) ?? [];
+        customToolNames = (
+          (options?.customTools as Array<{ name: string }>) ?? []
+        ).map((t) => t.name);
+        return {
+          session: {
+            messages: [
+              {
+                role: "assistant",
+                model: "bedrock-model",
+                usage: { input: 1, output: 1, cacheRead: 0 },
+                content: [{ type: "text", text: "done" }],
+              },
+            ],
+            prompt: vi.fn(async (text: string) => {
+              promptText = text;
+            }),
+            dispose: vi.fn(),
+          },
+        };
+      }),
+    };
+    const csv = "Account,Q1\nRevenue,100\n";
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (!init?.body) {
+        // Attachment download over the presigned URL.
+        expect(String(url)).toBe("https://signed.example/gl.csv");
+        return new Response(csv, { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            message: "Analyze this GL file",
+            message_attachments: [
+              {
+                attachment_id: "att-1",
+                s3_key: "tenants/acme/attachments/thread-1/att-1/gl.csv",
+                download_url: "https://signed.example/gl.csv",
+                name: "gl.csv",
+                mime_type: "text/csv",
+                size_bytes: csv.length,
+              },
+            ],
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: store,
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(toolsSeen).toContain("file_read");
+    expect(customToolNames).toContain("file_read");
+    expect(promptText).toContain("Files attached to this turn:");
+    expect(promptText).toContain("gl.csv");
+    expect(promptText).toContain("Analyze this GL file");
+  });
+
   it("runs a prepared desktop turn through the Pi SDK and finalizes success", async () => {
     const store = new FakeStore();
     let promptText = "";
