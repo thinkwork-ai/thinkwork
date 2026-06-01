@@ -2801,7 +2801,7 @@ function ThinkingRow({
   return (
     <Reasoning
       defaultOpen={defaultOpen}
-      className="mb-0 w-fit text-muted-foreground"
+      className="mb-0 min-w-0 max-w-full text-muted-foreground"
       aria-label={ariaLabel}
     >
       <ReasoningTrigger
@@ -2833,10 +2833,10 @@ function ThinkingRow({
         )}
       />
       {detail || hasChildren ? (
-        <ReasoningContent className="ml-6 mt-2 max-w-none text-sm leading-6 text-muted-foreground">
+        <ReasoningContent className="ml-6 mt-2 min-w-0 max-w-full text-sm leading-6 text-muted-foreground">
           {detail ? <p className="max-w-xl">{detail}</p> : null}
           {hasChildren ? (
-            <div className="mt-3 grid gap-2">{children}</div>
+            <div className="mt-3 grid min-w-0 max-w-full gap-2">{children}</div>
           ) : null}
         </ReasoningContent>
       ) : null}
@@ -2847,8 +2847,9 @@ function ThinkingRow({
 /**
  * Quiet "view console log" affordance for the raw local-Pi sidecar lines,
  * rendered inside the expanded turn surface and only when console data exists
- * (R5). Collapsed by default and intentionally un-boxed — the human-readable
- * step rows above are the primary view; this is the verbatim debug log.
+ * (R5). Collapsed by default; expanded output is bounded like an embedded
+ * terminal so very long JSON lines scroll horizontally instead of widening the
+ * thread.
  */
 function ConsoleLogToggle({
   entries,
@@ -2868,7 +2869,7 @@ function ConsoleLogToggle({
   if (entries.length === 0) return null;
 
   return (
-    <div className="w-full text-muted-foreground">
+    <div className="min-w-0 max-w-full text-muted-foreground">
       <button
         type="button"
         className="flex w-fit cursor-pointer items-center gap-2 text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
@@ -2882,15 +2883,27 @@ function ConsoleLogToggle({
         />
       </button>
       {open ? (
-        <pre
-          ref={outputRef}
-          role="log"
-          aria-label="Local Pi console output"
-          aria-live="polite"
-          className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-muted-foreground/80"
-        >
-          {entries.map((entry) => formatLocalPiConsoleEntry(entry)).join("\n")}
-        </pre>
+        <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-lg border border-white/10 bg-zinc-950/80 shadow-inner">
+          <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
+            <span className="size-2 rounded-full bg-red-400/70" />
+            <span className="size-2 rounded-full bg-yellow-400/70" />
+            <span className="size-2 rounded-full bg-emerald-400/70" />
+            <span className="ml-2 text-[10px] uppercase tracking-wide text-zinc-500">
+              Local Pi Console
+            </span>
+          </div>
+          <pre
+            ref={outputRef}
+            role="log"
+            aria-label="Local Pi console output"
+            aria-live="polite"
+            className="max-h-56 max-w-full overflow-x-auto overflow-y-auto whitespace-pre p-3 font-mono text-xs leading-5 text-zinc-300"
+          >
+            {entries
+              .map((entry) => formatLocalPiConsoleEntry(entry))
+              .join("\n")}
+          </pre>
+        </div>
       ) : null}
     </div>
   );

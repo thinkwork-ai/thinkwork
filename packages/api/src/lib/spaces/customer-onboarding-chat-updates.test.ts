@@ -182,6 +182,28 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     ]);
   });
 
+  it("maps plain-English Dun and Bradstreet completion variants", () => {
+    for (const content of [
+      "Dun and Bradstreet is complete",
+      "D and B is done",
+      "D&B checked",
+    ]) {
+      const result = extractCustomerOnboardingChatUpdate(content);
+
+      expect(result.taskStatusUpdates).toEqual([
+        {
+          key: "dun_and_bradstreet_check",
+          status: "completed",
+          note: content,
+        },
+      ]);
+      expect(result.completedTaskKeys).toEqual(["dun_and_bradstreet_check"]);
+      expect(shouldDispatchAgentForCustomerOnboardingMessage(content)).toBe(
+        false,
+      );
+    }
+  });
+
   it("extracts checklist task additions from message commands", () => {
     const result = extractCustomerOnboardingChatUpdate(
       "Add a new task to the thread:\n\nConfirm Tank Certification",

@@ -9,7 +9,8 @@ status: complete
 ## Customer Onboarding Task Progress Hotfix - 2026-06-01
 
 - Branch: `fix/customer-onboarding-task-prefill`
-- Status: in progress.
+- Follow-up branch: `fix/customer-onboarding-natural-task-aliases`
+- Status: follow-up fix in progress after local development desktop validation.
 - Regression context: Customer Space task/progress updates from the thread info
   panel could persist the user message and then launch a desktop-local Pi turn
   instead of updating the linked task immediately. Live thread
@@ -29,6 +30,19 @@ status: complete
   `pnpm --filter @thinkwork/spaces test -- --run src/components/workbench/SpacesThreadDetailRoute.test.tsx src/lib/graphql-queries.test.ts`,
   `pnpm --filter @thinkwork/api typecheck`,
   `pnpm --filter @thinkwork/spaces typecheck`, and `git diff --check` passed.
+- Post-merge/deploy validation: live API and the local development desktop app
+  handled `DocuSign is complete` on thread
+  `2d74c58b-48d3-4db5-abdc-20a8f622eef2`, marked the DocuSign checklist row
+  `COMPLETED`, and avoided creating a new Local Pi turn.
+- Remaining regression found by local development desktop validation:
+  `Dun and Bradstreet is complete` did not match the existing
+  `Dun & Bradstreet` alias and incorrectly started a Local Pi turn that timed
+  out after roughly 92 seconds. The follow-up branch adds plain-English
+  `Dun and Bradstreet` / `D and B` matching and regression coverage.
+- While validating in the local development desktop app, the expanded Local Pi
+  console output was found to widen past the thread column. The follow-up
+  branch also bounds the raw console log in a terminal-like panel with
+  horizontal scrolling and component coverage.
 
 ## Mobile Checkpoint Payload Bounds Hotfix - 2026-06-01
 

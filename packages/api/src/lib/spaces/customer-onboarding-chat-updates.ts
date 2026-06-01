@@ -61,7 +61,11 @@ const TASK_KEY_ALIASES: Array<{
 }> = [
   {
     key: "dun_and_bradstreet_check",
-    patterns: [/\b(?:dun\s*&\s*bradstreet|d&b|dnb)\b/i],
+    patterns: [
+      /\bdun\s*(?:&|and)\s*bradstreet\b/i,
+      /\bd\s*(?:&|and)\s*b\b/i,
+      /\bdnb\b/i,
+    ],
   },
   {
     key: "tax_exemption_forms",
