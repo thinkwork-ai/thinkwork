@@ -59,22 +59,33 @@ Workspace
 
 The **runtime workspace** is what the agent sees for one Thread turn. It is rendered per Thread under a stable thread folder and hydrated into `/workspace` for Pi on AgentCore, desktop, and mobile. Runtime rendering is by reference: it writes a hydrate manifest that points back to the source files instead of copying every Agent, Space, and User file into a permanent per-user tuple.
 
-The runtime does not show the same top-level source folders. It uses the Agent source as the root, merges User context into the root, and mounts only the active Space as singular `Space/`:
+The runtime does not show the same top-level source folders. It uses the Agent source as the root, keeps User context explicit under `User/`, hydrates only the active Space under `Spaces/<active-space>/`, and renders Thread status under `Thread/`:
 
 ```text
 /workspace
 ├── AGENTS.md
 ├── CONTEXT.md
-├── USER.md
-├── memory/
 ├── skills/
 ├── workspaces/
-└── Space/
-    ├── CONTEXT.md
-    ├── artifacts/
-    ├── docs/
-    ├── goals/
-    └── plans/
+├── Spaces/
+│   ├── INDEX.md
+│   └── board-pack/
+│       ├── SPACE.md
+│       ├── CONTEXT.md
+│       ├── artifacts/
+│       ├── docs/
+│       ├── goals/
+│       ├── plans/
+│       └── workflows/
+├── User/
+│   ├── USER.md
+│   └── memory/
+└── Thread/
+    ├── THREAD.md
+    ├── GOAL.md
+    ├── PROGRESS.md
+    ├── TASKS.md
+    └── notes/
 ```
 
 ## Canonical S3 shape
@@ -100,20 +111,20 @@ tenants/{tenant}/
 └── threads/{thread-folder}/
     ├── .hydrate_manifest.json
     ├── .rendered_at
+    ├── THREAD.md
     ├── GOAL.md
     ├── PROGRESS.md
-    ├── DECISIONS.md
-    ├── ARTIFACTS.md
-    └── HANDOFFS.md
+    ├── TASKS.md
+    └── notes/
 ```
 
 Folder names are human-readable and filesystem-safe. The stable identity remains the database UUID; the folder name is the readable path.
 
 ## Why status is not file-authoritative
 
-`GOAL.md` and `PROGRESS.md` are status files, but they are not the authority for status. They are read-only projections rendered from database rows so the agent can understand the work in normal workspace form.
+`Thread/GOAL.md`, `Thread/PROGRESS.md`, and `Thread/TASKS.md` are status files, but they are not the authority for status. They are read-only projections rendered from database rows so the agent can understand the work in normal workspace form.
 
-When an agent completes a task, it uses the task-status tool. That tool writes the database transaction, then the status files can be re-rendered from the new structured state. Editing `PROGRESS.md` text does not change the task row.
+When an agent completes a task, it uses the task-status tool. That tool writes the database transaction, then the status files can be re-rendered from the new structured state. Editing `Thread/PROGRESS.md` text does not change the task row.
 
 ## How a turn flows
 
@@ -130,7 +141,7 @@ Structured state changes do not go through reconcile. They go through tools and 
 
 Workspace sync is incremental. Desktop, mobile, and AgentCore check source and manifest freshness, then hydrate the files needed for the turn. They should not download the entire tenant bucket before every turn.
 
-Structured task and Goal progress still depends on platform tools and resolvers. If a user says "DocuSign is complete", the agent should route that intent through task-status tooling; editing `PROGRESS.md` text is not an authoritative status change.
+Structured task and Goal progress still depends on platform tools and resolvers. If a user says "DocuSign is complete", the agent should route that intent through task-status tooling; editing `Thread/PROGRESS.md` text is not an authoritative status change.
 
 ## Related pages
 

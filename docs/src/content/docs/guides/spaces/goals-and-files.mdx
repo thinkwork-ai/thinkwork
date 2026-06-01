@@ -13,14 +13,14 @@ Use this page when a Thread has structured progress, a review step, a Files butt
 
 A Goal should be clear enough that a reviewer can decide whether the work is actually done.
 
-| Field | What it should say | Weak version |
-| --- | --- | --- |
-| Outcome | The finished state. | "Work on onboarding." |
-| Owner | The person or role accountable for completion. | "Someone from ops." |
-| Mode | Delegate or Collaborate. | Not specified. |
-| Progress model | How status is measured. | "Keep me updated." |
-| Completion rule | What must be true before review. | "When it feels done." |
-| Review policy | Who confirms or requests changes. | "The agent will close it." |
+| Field           | What it should say                             | Weak version               |
+| --------------- | ---------------------------------------------- | -------------------------- |
+| Outcome         | The finished state.                            | "Work on onboarding."      |
+| Owner           | The person or role accountable for completion. | "Someone from ops."        |
+| Mode            | Delegate or Collaborate.                       | Not specified.             |
+| Progress model  | How status is measured.                        | "Keep me updated."         |
+| Completion rule | What must be true before review.               | "When it feels done."      |
+| Review policy   | Who confirms or requests changes.              | "The agent will close it." |
 
 For Customer Onboarding, the outcome might be: "Complete onboarding for Acme so they can be billed, shipped to, and serviced without missing finance, accounting, sales, or operations steps."
 
@@ -28,10 +28,10 @@ For Customer Onboarding, the outcome might be: "Complete onboarding for Acme so 
 
 Mode is the promise between the user and the agent.
 
-| Mode | Use it when | What the agent should do |
-| --- | --- | --- |
-| Delegate | The work is repeatable and the agent can safely drive most steps. | Run the playbook, ask only for missing facts or approvals, and return with a finished or review-ready result. |
-| Collaborate | The work needs human judgment, negotiation, cross-team handoffs, or ongoing decisions. | Maintain context, progress, questions, and handoffs while humans make important calls. |
+| Mode        | Use it when                                                                            | What the agent should do                                                                                      |
+| ----------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Delegate    | The work is repeatable and the agent can safely drive most steps.                      | Run the playbook, ask only for missing facts or approvals, and return with a finished or review-ready result. |
+| Collaborate | The work needs human judgment, negotiation, cross-team handoffs, or ongoing decisions. | Maintain context, progress, questions, and handoffs while humans make important calls.                        |
 
 Most customer-facing operational workflows should start as Collaborate. Move toward Delegate only when the Space has enough context, tools, and review rules to make that safe.
 
@@ -39,10 +39,10 @@ Most customer-facing operational workflows should start as Collaborate. Move tow
 
 There are two file scopes users commonly inspect from the Spaces app:
 
-| File scope | Default file | Purpose |
-| --- | --- | --- |
-| Space Workspace | `CONTEXT.md` | Parent operating context for the Space: instructions, examples, docs, and reusable workflow templates. |
-| Thread Goal Folder | `GOAL.md` | Instance-specific workflow context for one promoted Thread. |
+| File scope         | Default file | Purpose                                                                                                |
+| ------------------ | ------------ | ------------------------------------------------------------------------------------------------------ |
+| Space Workspace    | `CONTEXT.md` | Parent operating context for the Space: instructions, examples, docs, and reusable workflow templates. |
+| Thread Goal Folder | `GOAL.md`    | Instance-specific workflow context for one promoted Thread.                                            |
 
 Open the Space Workspace from the Space detail header Files button. Open the Thread Goal Folder from the Thread detail header Files button.
 
@@ -56,14 +56,14 @@ Open the Space Workspace from the Space detail header Files button. Open the Thr
 
 A typical Goal Folder contains:
 
-| File | Job |
-| --- | --- |
-| `GOAL.md` | Outcome, owner, mode, progress model, completion rule, review policy, and canonical sources. |
-| `PROGRESS.md` | Current operational briefing, usually rendered from structured workflow state. |
-| `DECISIONS.md` | Important decisions, rationale, evidence, and follow-up. |
+| File           | Job                                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------------------- |
+| `GOAL.md`      | Outcome, owner, mode, progress model, completion rule, review policy, and canonical sources.         |
+| `PROGRESS.md`  | Current operational briefing, usually rendered from structured workflow state.                       |
+| `DECISIONS.md` | Important decisions, rationale, evidence, and follow-up.                                             |
 | `ARTIFACTS.md` | Produced or referenced artifacts such as contracts, exports, screenshots, reports, and deliverables. |
-| `HANDOFFS.md` | Team, stage, reviewer, or owner handoffs. |
-| `stages/` | Optional staged workflow context when a Goal has meaningful phases. |
+| `HANDOFFS.md`  | Team, stage, reviewer, or owner handoffs.                                                            |
+| `stages/`      | Optional staged workflow context when a Goal has meaningful phases.                                  |
 
 These files should help a person or agent understand the work without reading every message in the Thread.
 
@@ -71,13 +71,13 @@ These files should help a person or agent understand the work without reading ev
 
 ThinkWork intentionally splits structured state from narrative context.
 
-| Layer | Owns | Why |
-| --- | --- | --- |
+| Layer            | Owns                                                                              | Why                                                                              |
+| ---------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Structured state | lifecycle, permissions, status, task rows, owner/reviewer, audit-friendly indexes | Multi-player Threads need consistent state that can be queried and permissioned. |
-| Markdown files | goal contract, progress briefing, decisions, artifacts, handoffs, local context | Agents and operators need readable, portable context. |
-| Company Brain | distilled learning from reviewed source material | Completed work should improve future work. |
+| Markdown files   | goal contract, progress briefing, decisions, artifacts, handoffs, local context   | Agents and operators need readable, portable context.                            |
+| Company Brain    | distilled learning from reviewed source material                                  | Completed work should improve future work.                                       |
 
-`PROGRESS.md` is not a second task database. Treat it as the readable briefing that helps humans and agents understand the structured state.
+At runtime, Goal and task projections are mounted under `Thread/` as generated files such as `Thread/GOAL.md`, `Thread/PROGRESS.md`, and `Thread/TASKS.md`. `Thread/PROGRESS.md` is not a second task database. Treat it as the readable briefing that helps humans and agents understand the structured state; task changes should go through the UI or `set_task_status`.
 
 <Aside type="tip">
   <strong>North Star:</strong> A Goal folder should be useful even outside
@@ -128,4 +128,3 @@ The checklist is not the whole workflow. It is one progress model inside the Goa
 - [Goals](/concepts/goals/) - formal Goal concept reference.
 - [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - folder-native architecture.
 - [Compounding Memory Pipeline](/concepts/knowledge/compounding-memory-pipeline/) - how reviewed source material becomes Company Brain.
-

@@ -34,26 +34,33 @@ The runtime downloads the manifest-backed workspace into `/workspace`.
 ```text
 /workspace
 ├── AGENTS.md
-├── USER.md
-├── memory/
+├── CONTEXT.md
 ├── skills/
 ├── workspaces/
-└── Space/
-    ├── CONTEXT.md
+├── Spaces/
+│   ├── INDEX.md
+│   └── board-pack/
+│       ├── SPACE.md
+│       ├── CONTEXT.md
+│       ├── artifacts/
+│       ├── docs/
+│       ├── goals/
+│       ├── plans/
+│       └── workflows/
+├── User/
+│   ├── USER.md
+│   └── memory/
+└── Thread/
+    ├── THREAD.md
     ├── GOAL.md
     ├── PROGRESS.md
-    ├── DECISIONS.md
-    ├── ARTIFACTS.md
-    ├── HANDOFFS.md
-    ├── artifacts/
-    ├── docs/
-    ├── goals/
-    └── plans/
+    ├── TASKS.md
+    └── notes/
 ```
 
-The Agent source becomes the root of `/workspace`. The User source is merged into the root. The active Space is mounted as singular `Space/`; the runtime should not have top-level `Agent/`, `Spaces/`, or `User/` folders.
+The Agent source becomes the root of `/workspace`. The User source remains under `User/`. The active Space is mounted under `Spaces/<active-space>/`, and `Spaces/INDEX.md` lists other authorized Spaces without hydrating all of them. The runtime should not have a top-level `Agent/`, singular `Space/`, root `USER.md`, `workspace/`, `source/`, or `workspace-archives/`.
 
-`Space/GOAL.md` and `Space/PROGRESS.md` are mounted read-only because they describe database state. Narrative files such as `Space/DECISIONS.md`, `Space/ARTIFACTS.md`, and `Space/HANDOFFS.md` are writable Thread Goal files.
+`Thread/GOAL.md`, `Thread/PROGRESS.md`, and `Thread/TASKS.md` are mounted read-only because they describe database state. Narrative files under `Thread/notes/` are writable Thread-scoped working files.
 
 ## 3. Run
 
@@ -84,7 +91,7 @@ After the turn, the runtime sends changed files to the finalize path. The API re
 Reconcile is file-side only. Structured state changes use transactional tools and resolvers.
 
 <Aside type="caution">
-  Do not ask an agent to change task status by editing `Space/PROGRESS.md`. Ask
+  Do not ask an agent to change task status by editing `Thread/PROGRESS.md`. Ask
   it to use the task-status tool. The file will re-render from the database.
 </Aside>
 
@@ -92,7 +99,7 @@ Reconcile is file-side only. Structured state changes use transactional tools an
 
 Workspace hydration is cache-aware and manifest-backed. A runtime should check for workspace changes, hydrate the files it needs, and reuse fresh local material; it should not fetch the entire tenant bucket before every turn.
 
-Natural-language task completion depends on the agent selecting the structured task-status path. The user may say "DocuSign is complete"; the model/tool layer should map that to the task action. The fallback is not an exact file-name match, and it is not a hand edit to `Space/PROGRESS.md`.
+Natural-language task completion depends on the agent selecting the structured task-status path. The user may say "DocuSign is complete"; the model/tool layer should map that to the task action. The fallback is not an exact file-name match, and it is not a hand edit to `Thread/PROGRESS.md`.
 
 ## Failure behavior
 
