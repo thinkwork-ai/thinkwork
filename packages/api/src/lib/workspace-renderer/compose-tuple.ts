@@ -109,10 +109,9 @@ function shouldRenderAgentBaselinePath(relPath: string): boolean {
 function shouldRenderSpaceSourcePath(relPath: string): boolean {
   const sourcePath = runtimeSourcePath(relPath);
   return (
-    sourcePath === "SPACE.md" ||
-    sourcePath.startsWith("docs/") ||
-    sourcePath.startsWith("goals/") ||
-    sourcePath.startsWith("knowledge/")
+    sourcePath !== "effective-policy.json" &&
+    sourcePath !== "TOOLS.md" &&
+    sourcePath !== "MCP.md"
   );
 }
 

@@ -41,6 +41,15 @@ function stubRemote(files: Record<string, string>, prefix = PREFIX) {
   }
 }
 
+function stubObject(key: string, body: string) {
+  const bytes = new TextEncoder().encode(body);
+  s3Mock.on(GetObjectCommand, { Key: key }).resolves({
+    Body: {
+      transformToByteArray: async () => bytes,
+    } as unknown as never,
+  });
+}
+
 let tmp: string;
 
 beforeEach(async () => {
@@ -238,6 +247,117 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(files["Agent/workspace/AGENTS.md"]).toBeUndefined();
     expect(files["User/USER.md"]).toBeUndefined();
     expect(files["Spaces/default/source/SPACE.md"]).toBeUndefined();
+    expect(files["workspace-archives/old/AGENTS.md"]).toBeUndefined();
+  });
+
+  it("hydrates tuple-rendered workspaces from the rendered manifest", async () => {
+    const manifest = {
+      version: 1,
+      renderedPrefix: THREAD_PREFIX,
+      generatedAt: "2026-05-31T12:00:00.000Z",
+      sources: [
+        { owner: "agent", prefix: SOURCE_PREFIX },
+        { owner: "space", prefix: "tenants/acme/spaces/default/" },
+        { owner: "user", prefix: "tenants/acme/users/eric/" },
+      ],
+      files: [
+        {
+          path: "Agent/workspace/AGENTS.md",
+          owner: "agent",
+          sourceKey: `${SOURCE_PREFIX}workspace/AGENTS.md`,
+          sourcePrefix: SOURCE_PREFIX,
+          sourcePath: "AGENTS.md",
+          readOnly: false,
+        },
+        {
+          path: "Agent/skills/research/SKILL.md",
+          owner: "agent",
+          sourceKey: `${SOURCE_PREFIX}skills/research/SKILL.md`,
+          sourcePrefix: SOURCE_PREFIX,
+          sourcePath: "skills/research/SKILL.md",
+          readOnly: false,
+        },
+        {
+          path: "Agent/workspace-archives/old/AGENTS.md",
+          owner: "agent",
+          sourceKey: `${SOURCE_PREFIX}workspace-archives/old/AGENTS.md`,
+          sourcePrefix: SOURCE_PREFIX,
+          sourcePath: "workspace-archives/old/AGENTS.md",
+          readOnly: false,
+        },
+        {
+          path: "User/USER.md",
+          owner: "user",
+          sourceKey: "tenants/acme/users/eric/USER.md",
+          sourcePrefix: "tenants/acme/users/eric/",
+          sourcePath: "USER.md",
+          readOnly: false,
+        },
+        {
+          path: "Spaces/default/source/CONTEXT.md",
+          owner: "space",
+          sourceKey: "tenants/acme/spaces/default/source/CONTEXT.md",
+          sourcePrefix: "tenants/acme/spaces/default/",
+          sourcePath: "CONTEXT.md",
+          readOnly: false,
+        },
+        {
+          path: "Spaces/default/source/plans/plan.md",
+          owner: "space",
+          sourceKey: "tenants/acme/spaces/default/source/plans/plan.md",
+          sourcePrefix: "tenants/acme/spaces/default/",
+          sourcePath: "plans/plan.md",
+          readOnly: false,
+        },
+      ],
+      statusMounts: [
+        {
+          path: "Spaces/default/GOAL.md",
+          owner: "system",
+          source: "database",
+          provider: "thread-goals",
+          readOnly: true,
+          available: true,
+          sourceKey: `${THREAD_PREFIX}GOAL.md`,
+        },
+      ],
+    };
+
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [
+        { Key: `${THREAD_PREFIX}.hydrate_manifest.json` },
+        { Key: `${THREAD_PREFIX}.rendered_at` },
+      ],
+      IsTruncated: false,
+    } as never);
+    stubObject(
+      `${THREAD_PREFIX}.hydrate_manifest.json`,
+      JSON.stringify(manifest),
+    );
+    stubObject(`${SOURCE_PREFIX}workspace/AGENTS.md`, "# Agent");
+    stubObject(`${SOURCE_PREFIX}skills/research/SKILL.md`, "# Skill");
+    stubObject(`${SOURCE_PREFIX}workspace-archives/old/AGENTS.md`, "# Old");
+    stubObject("tenants/acme/users/eric/USER.md", "# User");
+    stubObject("tenants/acme/spaces/default/source/CONTEXT.md", "# Space");
+    stubObject("tenants/acme/spaces/default/source/plans/plan.md", "# Plan");
+    stubObject(`${THREAD_PREFIX}GOAL.md`, "# Goal");
+
+    const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: THREAD_PREFIX,
+    });
+
+    expect(result).toMatchObject({ synced: 6, total: 6 });
+    const files = await readFiles(tmp);
+    expect(files).toMatchObject({
+      "AGENTS.md": "# Agent",
+      "skills/research/SKILL.md": "# Skill",
+      "USER.md": "# User",
+      "Space/CONTEXT.md": "# Space",
+      "Space/plans/plan.md": "# Plan",
+      "Space/GOAL.md": "# Goal",
+    });
+    expect(files["Agent/workspace/AGENTS.md"]).toBeUndefined();
+    expect(files["Spaces/default/source/CONTEXT.md"]).toBeUndefined();
     expect(files["workspace-archives/old/AGENTS.md"]).toBeUndefined();
   });
 

@@ -123,7 +123,7 @@ describe("snapshotRuntimeEnv", () => {
       awsRegion: "us-east-1",
       memoryEngine: "managed",
       dbName: "thinkwork",
-      workspaceDir: "/tmp/workspace",
+      workspaceDir: "/workspace",
       gitSha: "unknown",
     });
   });

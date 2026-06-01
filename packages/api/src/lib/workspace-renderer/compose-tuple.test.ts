@@ -184,6 +184,14 @@ old`,
         "---\nadds: [warehouse]\nrestricts:\n  - send_email\n---\n# Space Tools\n",
       lastModified: "2026-05-22T09:05:00.000Z",
     },
+    "tenants/acme/spaces/board-pack/CONTEXT.md": {
+      content: "# Space Context\n",
+      lastModified: "2026-05-22T09:05:30.000Z",
+    },
+    "tenants/acme/spaces/board-pack/plans/kickoff.md": {
+      content: "# Kickoff\n",
+      lastModified: "2026-05-22T09:05:45.000Z",
+    },
     "tenants/acme/spaces/board-pack/knowledge/board.md": {
       content: "# Report\n",
       lastModified: "2026-05-22T09:06:00.000Z",
@@ -296,6 +304,16 @@ describe("renderWorkspaceTuple", () => {
         }),
         expect.objectContaining({
           owner: "space",
+          path: "Spaces/board-pack/CONTEXT.md",
+          sourceKey: "tenants/acme/spaces/board-pack/CONTEXT.md",
+        }),
+        expect.objectContaining({
+          owner: "space",
+          path: "Spaces/board-pack/plans/kickoff.md",
+          sourceKey: "tenants/acme/spaces/board-pack/plans/kickoff.md",
+        }),
+        expect.objectContaining({
+          owner: "space",
           path: "Spaces/board-pack/knowledge/board.md",
           sourceKey: "tenants/acme/spaces/board-pack/knowledge/board.md",
         }),
@@ -313,6 +331,7 @@ describe("renderWorkspaceTuple", () => {
         expect.objectContaining({ path: "space/SPACE.md" }),
         expect.objectContaining({ path: "spaces/old/SPACE.md" }),
         expect.objectContaining({ path: "Agent/workspace/LEGACY.md" }),
+        expect.objectContaining({ path: "Spaces/board-pack/TOOLS.md" }),
       ]),
     );
     expect(result.hydrateManifest.statusMounts).toEqual([
