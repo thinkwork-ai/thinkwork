@@ -78,6 +78,20 @@ async function readFiles(dir: string): Promise<Record<string, string>> {
   return out;
 }
 
+function expectNoForbiddenRuntimeRoots(files: Record<string, string>): void {
+  const paths = Object.keys(files);
+  expect(paths).not.toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(/^Agent\//),
+      expect.stringMatching(/^Spaces\//),
+      expect.stringMatching(/^User\//),
+      expect.stringMatching(/^workspace(\/|$)/),
+      expect.stringMatching(/^source(\/|$)/),
+      expect.stringMatching(/^workspace-archives(\/|$)/),
+    ]),
+  );
+}
+
 describe("bootstrapWorkspace (Pi runtime)", () => {
   const s3 = new S3Client({ region: "us-east-1" });
 
@@ -225,7 +239,7 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
         "Agent/skills/research/SKILL.md": "# Skill",
         "Agent/workspace-archives/old/AGENTS.md": "# Old",
         "User/USER.md": "# User",
-        "Spaces/default/source/SPACE.md": "# Space",
+        "Spaces/default/source/CONTEXT.md": "# Space",
         "Spaces/default/source/docs/customer.md": "# Customer",
       },
       THREAD_PREFIX,
@@ -241,13 +255,14 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
       "AGENTS.md": "# Agent",
       "skills/research/SKILL.md": "# Skill",
       "USER.md": "# User",
-      "Space/SPACE.md": "# Space",
+      "Space/CONTEXT.md": "# Space",
       "Space/docs/customer.md": "# Customer",
     });
     expect(files["Agent/workspace/AGENTS.md"]).toBeUndefined();
     expect(files["User/USER.md"]).toBeUndefined();
-    expect(files["Spaces/default/source/SPACE.md"]).toBeUndefined();
+    expect(files["Spaces/default/source/CONTEXT.md"]).toBeUndefined();
     expect(files["workspace-archives/old/AGENTS.md"]).toBeUndefined();
+    expectNoForbiddenRuntimeRoots(files);
   });
 
   it("hydrates tuple-rendered workspaces from the rendered manifest", async () => {
@@ -359,6 +374,7 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(files["Agent/workspace/AGENTS.md"]).toBeUndefined();
     expect(files["Spaces/default/source/CONTEXT.md"]).toBeUndefined();
     expect(files["workspace-archives/old/AGENTS.md"]).toBeUndefined();
+    expectNoForbiddenRuntimeRoots(files);
   });
 
   it("rejects workspace prefixes outside the tenant/agent scope", async () => {

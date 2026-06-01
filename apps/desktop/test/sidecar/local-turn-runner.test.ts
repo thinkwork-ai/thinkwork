@@ -255,6 +255,113 @@ describe("runLocalDesktopTurn", () => {
     expect(result.content?.[0]?.text).toBe("# Agent");
   });
 
+  it("hydrates desktop just-bash as Agent root, User root, and singular Space", async () => {
+    const manifest = {
+      version: 1,
+      renderedPrefix: BASE_INVOCATION.rendered_workspace_prefix,
+      generatedAt: "2026-06-01T12:00:00.000Z",
+      sources: [
+        { owner: "agent", prefix: "tenants/acme/agents/marco/" },
+        { owner: "space", prefix: "tenants/acme/spaces/default/" },
+        { owner: "user", prefix: "tenants/acme/users/eric/" },
+      ],
+      files: [
+        {
+          path: "Agent/workspace/AGENTS.md",
+          owner: "agent",
+          sourceKey: "tenants/acme/agents/marco/workspace/AGENTS.md",
+          sourcePrefix: "tenants/acme/agents/marco/",
+          sourcePath: "AGENTS.md",
+          etag: '"agent"',
+          readOnly: false,
+        },
+        {
+          path: "User/USER.md",
+          owner: "user",
+          sourceKey: "tenants/acme/users/eric/USER.md",
+          sourcePrefix: "tenants/acme/users/eric/",
+          sourcePath: "USER.md",
+          etag: '"user"',
+          readOnly: false,
+        },
+        {
+          path: "Spaces/default/source/CONTEXT.md",
+          owner: "space",
+          sourceKey: "tenants/acme/spaces/default/source/CONTEXT.md",
+          sourcePrefix: "tenants/acme/spaces/default/",
+          sourcePath: "CONTEXT.md",
+          etag: '"space"',
+          readOnly: false,
+        },
+      ],
+      statusMounts: [],
+    };
+    const store: WorkspaceObjectStore = {
+      async listObjects() {
+        return [
+          {
+            key: `${BASE_INVOCATION.rendered_workspace_prefix}.hydrate_manifest.json`,
+          },
+        ];
+      },
+      async getObjectBytes(input) {
+        if (input.key.endsWith(".hydrate_manifest.json")) {
+          return new TextEncoder().encode(`${JSON.stringify(manifest)}\n`);
+        }
+        const contentByKey: Record<string, string> = {
+          "tenants/acme/agents/marco/workspace/AGENTS.md": "# Agent",
+          "tenants/acme/users/eric/USER.md": "Name: Eric",
+          "tenants/acme/spaces/default/source/CONTEXT.md": "# Space",
+        };
+        return new TextEncoder().encode(contentByKey[input.key] ?? "");
+      },
+    };
+    const sdk: PiSdkModuleLike = {
+      defineTool: vi.fn((definition) => definition),
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [{ role: "assistant", content: "Done" }],
+          prompt: vi.fn(async () => {}),
+        },
+      })),
+    };
+
+    await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: store,
+        fetchImpl: vi.fn(async () =>
+          Response.json({ ok: true }, { status: 200 }),
+        ) as typeof fetch,
+      },
+    );
+
+    const optionsSeen = vi.mocked(sdk.createAgentSession).mock.calls[0]?.[0];
+    const bashTool = (
+      optionsSeen?.customTools as Array<{
+        name?: string;
+        execute?: (
+          toolCallId: string,
+          params: Record<string, unknown>,
+          signal?: AbortSignal,
+        ) => Promise<{ content?: Array<{ text?: string }>; isError?: boolean }>;
+      }>
+    ).find((tool) => tool.name === "bash");
+    const result = await bashTool!.execute!("call-1", {
+      command:
+        "pwd; find . -maxdepth 1 -mindepth 1 -type d -print | sort; test -f AGENTS.md; test -f USER.md; test -f Space/CONTEXT.md; test ! -e Agent; test ! -e Spaces; test ! -e User; test ! -e workspace; test ! -e source; cat AGENTS.md; cat USER.md; cat Space/CONTEXT.md",
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content?.[0]?.text).toContain("/workspace");
+    expect(result.content?.[0]?.text).toContain("./Space");
+    expect(result.content?.[0]?.text).toContain("# Agent");
+    expect(result.content?.[0]?.text).toContain("Name: Eric");
+    expect(result.content?.[0]?.text).toContain("# Space");
+  });
+
   it("sends just-bash workspace modifications as finalize changed_files", async () => {
     const manifest = {
       version: 1,

@@ -68,6 +68,58 @@ describe("listFiles", () => {
     ]);
   });
 
+  it("normalizes legacy source wrappers out of the visible source tree", async () => {
+    listFiles.mockImplementation((sub: Record<string, string>) => {
+      if (sub.agentId)
+        return Promise.resolve({
+          files: [
+            meta("workspace/AGENTS.md"),
+            meta("Agent/workspace/CONTEXT.md"),
+            meta("workspace-archives/old/AGENTS.md"),
+          ],
+        });
+      if (sub.spaceId === "space-fin")
+        return Promise.resolve({
+          files: [meta("source/CONTEXT.md"), meta("source/plans/kickoff.md")],
+        });
+      if (sub.userId) return Promise.resolve({ files: [meta("USER.md")] });
+      return Promise.resolve({ files: [] });
+    });
+
+    const { files } = await client.listFiles(target);
+    const paths = files.map((f) => f.path).sort();
+    expect(paths).toEqual([
+      "Agent/AGENTS.md",
+      "Agent/Agent/workspace/CONTEXT.md",
+      "Spaces/finance/CONTEXT.md",
+      "Spaces/finance/plans/kickoff.md",
+      "User/USER.md",
+    ]);
+  });
+
+  it("preserves source-relative folders named like synthetic roots", async () => {
+    const slashTarget: ConsolidatedTarget = {
+      agentId: "agent-1",
+      spaces: [{ id: "space-q", name: "Q1/Q2 Planning" }],
+      userId: null,
+    };
+    listFiles.mockImplementation((sub: Record<string, string>) => {
+      if (sub.agentId)
+        return Promise.resolve({ files: [meta("Agent/README.md")] });
+      if (sub.spaceId === "space-q")
+        return Promise.resolve({
+          files: [meta("Spaces/Q1/source/CONTEXT.md")],
+        });
+      return Promise.resolve({ files: [] });
+    });
+
+    const { files } = await client.listFiles(slashTarget);
+    expect(files.map((f) => f.path).sort()).toEqual([
+      "Agent/Agent/README.md",
+      "Spaces/Q1/Q2 Planning/Spaces/Q1/source/CONTEXT.md",
+    ]);
+  });
+
   it("degrades to a partial tree when one source rejects", async () => {
     listFiles.mockImplementation((sub: Record<string, string>) => {
       if (sub.spaceId === "space-fin") return Promise.reject(new Error("403"));

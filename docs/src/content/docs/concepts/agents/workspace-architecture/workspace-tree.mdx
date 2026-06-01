@@ -8,72 +8,83 @@ The workspace tree is meant to be legible. Folder names come from human names, s
 ## Source folders
 
 ```text
-tenants/acme/
-├── agents/marco/
+Workspace
+├── Agent
 │   ├── AGENTS.md
 │   ├── CONTEXT.md
 │   ├── GUARDRAILS.md
 │   ├── TOOLS.md
 │   ├── memory/
 │   └── skills/
-├── spaces/board-pack/
-│   ├── SPACE.md
-│   ├── docs/
-│   ├── goals/
-│   │   └── customer-onboarding/
-│   └── knowledge/
-└── users/eric-odom/
+├── Spaces
+│   └── board-pack/
+│       ├── CONTEXT.md
+│       ├── artifacts/
+│       ├── docs/
+│       ├── goals/
+│       │   └── customer-onboarding/
+│       └── plans/
+└── User
     ├── USER.md
     └── memory/
 ```
 
-The tenant segment is the S3 security boundary. Local runtime trees omit that tenant prefix and hydrate only the current view.
+Settings -> Workspace shows the editable source workspace. The S3 backing keys are tenant-scoped (`tenants/acme/agents/...`, `tenants/acme/spaces/...`, `tenants/acme/users/...`), but operators should think in terms of these three roots.
 
-## Thread runtime folders
+## Runtime workspace
+
+When a turn starts, ThinkWork hydrates a different tree into `/workspace`:
 
 ```text
-tenants/acme/threads/customer-kickoff/
-├── .hydrate_manifest.json
-├── .rendered_at
-├── GOAL.md
-├── PROGRESS.md
-├── DECISIONS.md
-├── ARTIFACTS.md
-└── HANDOFFS.md
+/workspace
+├── AGENTS.md
+├── CONTEXT.md
+├── USER.md
+├── memory/
+├── skills/
+├── workspaces/
+└── Space/
+    ├── CONTEXT.md
+    ├── artifacts/
+    ├── docs/
+    ├── goals/
+    └── plans/
 ```
 
-Thread folders hold runtime metadata and Thread Goal files. The manifest points back to the Agent, Space, User, and Thread sources used for hydration.
+The Agent source becomes the root of `/workspace`. User context is merged into the root. Only the active Space is mounted, and it is mounted as singular `Space/`, not `Spaces/`.
+
+Thread runtime folders in S3 hold `.hydrate_manifest.json`, `.rendered_at`, and Thread Goal files. The manifest points back to the Agent, Space, User, and Thread sources used for hydration.
 
 ## How to read common files
 
-| Path                       | Meaning                                                      | Edit how                                                |
-| -------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
-| `AGENTS.md`                | Agent identity, routing, and high-priority instructions      | Edit Agent source                                       |
-| `CONTEXT.md`               | Durable Agent-level context                                  | Edit Agent source                                       |
-| `SPACE.md`                 | Active Space context                                         | Edit Space source                                       |
-| `USER.md`                  | User/requester context                                       | Edit user/profile source, not the runtime copy          |
-| `memory/*.md`              | Working memory notes                                         | Edit the owning Agent or User source                    |
-| `skills/<slug>/SKILL.md`   | Installed skill instructions                                 | Install or update skills                                |
-| `goals/<template>/GOAL.md` | Reusable Space Goal template                                 | Edit Space source                                       |
-| `GOAL.md`                  | Thread Goal status projection                                | Use Goal actions; runtime projection is read-only       |
-| `PROGRESS.md`              | Thread progress projection from database task rows           | Use `set_task_status` or UI actions                     |
-| `DECISIONS.md`             | Durable narrative decisions for this Thread Goal             | Agent or operator can edit as narrative work            |
-| `ARTIFACTS.md`             | References to generated or collected outputs                 | Agent or operator can edit as narrative work            |
-| `HANDOFFS.md`              | Handoff notes between people, automations, and agent workers | Agent or operator can edit as narrative work            |
-| `.hydrate_manifest.json`   | Runtime source map, provenance, ETags, and read-only mounts  | Do not edit; regenerate by rendering the Thread runtime |
-| `.rendered_at`             | Runtime freshness marker                                     | Do not edit                                             |
+| Path                             | Meaning                                                      | Edit how                                                |
+| -------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| `AGENTS.md`                      | Agent identity, routing, and high-priority instructions      | Edit Agent source                                       |
+| `CONTEXT.md`                     | Durable Agent-level context                                  | Edit Agent source                                       |
+| `Space/CONTEXT.md`               | Active Space context                                         | Edit Space source                                       |
+| `USER.md`                        | User/requester context                                       | Edit user/profile source, not the runtime copy          |
+| `memory/*.md`                    | Working memory notes                                         | Edit the owning Agent or User source                    |
+| `skills/<slug>/SKILL.md`         | Installed skill instructions                                 | Install or update skills                                |
+| `Space/goals/<template>/GOAL.md` | Reusable Space Goal template                                 | Edit Space source                                       |
+| `Space/GOAL.md`                  | Thread Goal status projection                                | Use Goal actions; runtime projection is read-only       |
+| `Space/PROGRESS.md`              | Thread progress projection from database task rows           | Use `set_task_status` or UI actions                     |
+| `Space/DECISIONS.md`             | Durable narrative decisions for this Thread Goal             | Agent or operator can edit as narrative work            |
+| `Space/ARTIFACTS.md`             | References to generated or collected outputs                 | Agent or operator can edit as narrative work            |
+| `Space/HANDOFFS.md`              | Handoff notes between people, automations, and agent workers | Agent or operator can edit as narrative work            |
+| `.hydrate_manifest.json`         | Runtime source map, provenance, ETags, and read-only mounts  | Do not edit; regenerate by rendering the Thread runtime |
+| `.rendered_at`                   | Runtime freshness marker                                     | Do not edit                                             |
 
 ## Owner lanes
 
 Reconcile routes changed files back to their owning source:
 
-| Runtime path pattern                          | Owner lane  | Backing source                              |
-| --------------------------------------------- | ----------- | ------------------------------------------- |
-| Agent root files and `skills/**`              | Agent       | `tenants/{tenant}/agents/{agent-folder}/`   |
-| Space docs, knowledge, and Goal templates     | Space       | `tenants/{tenant}/spaces/{space-folder}/`   |
-| User memory and user context                  | User        | `tenants/{tenant}/users/{user-folder}/`     |
-| `DECISIONS.md`, `ARTIFACTS.md`, `HANDOFFS.md` | Thread Goal | `tenants/{tenant}/threads/{thread-folder}/` |
-| `GOAL.md`, `PROGRESS.md`                      | Status      | Database-rendered read-only projection      |
+| Runtime path pattern                                            | Owner lane  | Backing source                              |
+| --------------------------------------------------------------- | ----------- | ------------------------------------------- |
+| Agent root files and `skills/**`                                | Agent       | `tenants/{tenant}/agents/{agent-folder}/`   |
+| `Space/**` docs, artifacts, plans, and Goal templates           | Space       | `tenants/{tenant}/spaces/{space-folder}/`   |
+| User memory and user context                                    | User        | `tenants/{tenant}/users/{user-folder}/`     |
+| `Space/DECISIONS.md`, `Space/ARTIFACTS.md`, `Space/HANDOFFS.md` | Thread Goal | `tenants/{tenant}/threads/{thread-folder}/` |
+| `Space/GOAL.md`, `Space/PROGRESS.md`                            | Status      | Database-rendered read-only projection      |
 
 If a changed file does not map to an allowed lane, reconcile rejects it and records the rejection on the turn.
 
@@ -85,3 +96,4 @@ If a changed file does not map to an allowed lane, reconcile rejects it and reco
 - Use Thread Goal narrative files for what happened during a particular Goal.
 - Use platform actions and tools for task status, review gates, access, and policy.
 - Treat runtime metadata as rebuildable output.
+- In runtime smoke tests, expect `Space/` and reject top-level `Agent/`, `Spaces/`, `User/`, `workspace/`, `source/`, and `workspace-archives/`.

@@ -6,15 +6,15 @@ status: draft
 
 # Spaces Runtime Renderer Rollout
 
-This runbook turns on rendered per-Space runtime workspaces after the renderer
-Lambda has shipped. The rollout is intentionally staged so the deployed
-renderer can be verified before any AgentCore runtime starts reading from its
-rendered prefixes.
+This historical rollout runbook is kept for renderer changes, but the canonical
+shape is now covered by [Workspace Architecture Verification](./workspace-architecture-verification.md).
+Use that runbook for source/runtime folder checks before changing runtime
+prefixes.
 
 ## Scope
 
-- Applies to the Space renderer path that writes rendered tuple prefixes for an
-  `(agent, space, user?)` runtime invocation.
+- Applies to the Space renderer path that writes a per-thread runtime manifest
+  for an `(agent, space, user)` invocation.
 - Does not remove legacy per-agent workspace prefixes.
 - Does not manually mutate production data or bypass the normal deploy
   pipeline.
@@ -38,7 +38,8 @@ rendered prefixes.
 2. Invoke the renderer for one known tenant, agent, Space, and requester user.
 
    Verify the invocation returns a rendered prefix and writes the expected
-   `space/`, `user/`, `AGENTS.md`, and provenance files under that prefix.
+   `.hydrate_manifest.json` under the thread runtime prefix. The manifest should
+   reference `Agent/...`, `Spaces/<space>/...`, and `User/...` source paths.
 
 3. Enable rendered-prefix reads for one AgentCore runtime.
 
@@ -49,7 +50,9 @@ rendered prefixes.
 
    Confirm the system prompt includes the rendered Space and requester context.
    Check that the runtime logs reference the rendered prefix rather than the
-   legacy per-agent prefix.
+   legacy per-agent prefix. In the local `/workspace` sandbox, the Agent source
+   should be at root, `USER.md` should be at root, and the active Space should
+   appear as singular `Space/`.
 
 5. Propagate to the remaining AgentCore runtimes.
 
@@ -71,6 +74,10 @@ per-agent workspace prefix. Existing rendered prefixes may remain in S3.
 
 - Renderer logs show cache hits after the first render for the same tuple.
 - AgentCore bootstrap logs show the rendered prefix for enabled runtimes.
-- A non-default Space thread includes Space context in the system prompt.
+- A non-default Space thread includes Space context in the system prompt and
+  exposes it under `/workspace/Space`.
+- Runtime smoke checks do not show top-level `/workspace/Agent`,
+  `/workspace/Spaces`, `/workspace/User`, `/workspace/source`,
+  `/workspace/workspace`, or `/workspace/workspace-archives`.
 - Default-Space behavior remains unchanged.
 - Thread-turn error rate does not increase after each batch.
