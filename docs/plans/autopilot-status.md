@@ -6,6 +6,32 @@ status: complete
 
 # Autopilot Status Ledger
 
+## AgentCore Pi Private Agent Dir Hotfix - 2026-06-01
+
+- Branch: `fix/agentcore-pi-agent-dir`
+- Worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-agentcore-pi-agent-dir`
+- Status: implementation in local verification before PR.
+- Context: after PR #1931 migrated active S3 source workspace prefixes, live
+  AgentCore just-bash probes still failed before the model/tool turn with
+  `ENOENT: no such file or directory, mkdir '/workspace/.thinkwork-pi'`.
+- Root cause: the managed Pi runtime still placed Pi SDK private state under
+  the rendered workspace (`/workspace/.thinkwork-pi`). In AgentCore this path
+  can fail before a just-bash probe runs, and even when it succeeds it pollutes
+  the rendered workspace contract.
+- Change: added an explicit `agentDir` runtime option and passed
+  `/tmp/thinkwork-pi-agent` from the AgentCore container, while keeping
+  `cwd=/workspace` for the rendered Agent/User/Space files.
+- Verification so far:
+  `pnpm --filter @thinkwork/pi-runtime-core test -- test/agent-loop.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts agent-container/tests/handler-context.test.ts agent-container/tests/memory-retain-client.test.ts`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`, and
+  `pnpm --filter @thinkwork/agentcore-pi typecheck` passed.
+- Notes: `pnpm install --frozen-lockfile` completed; optional
+  `node-liblzma` native rebuild still logged missing `pkg-config`, but install
+  exited successfully. `pnpm exec prettier` is not available in this worktree;
+  changed files were formatted with `pnpm dlx prettier@3.8.2 --write ...`.
+
 ## Current Run: Workspace Architecture Simplification
 
 Plan:

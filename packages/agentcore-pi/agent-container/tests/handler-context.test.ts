@@ -124,6 +124,7 @@ describe("snapshotRuntimeEnv", () => {
       memoryEngine: "managed",
       dbName: "thinkwork",
       workspaceDir: "/workspace",
+      piAgentDir: "/tmp/thinkwork-pi-agent",
       gitSha: "unknown",
     });
   });

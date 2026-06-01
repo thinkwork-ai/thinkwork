@@ -148,6 +148,7 @@ export interface RuntimeEnvSnapshot {
   dbName: string;
   workspaceBucket: string;
   workspaceDir: string;
+  piAgentDir: string;
   gitSha: string;
 }
 
@@ -175,6 +176,7 @@ export function snapshotRuntimeEnv(
     dbName: env.DB_NAME || "thinkwork",
     workspaceBucket: env.WORKSPACE_BUCKET || env.AGENTCORE_FILES_BUCKET || "",
     workspaceDir: env.WORKSPACE_DIR || "/workspace",
+    piAgentDir: env.THINKWORK_PI_AGENT_DIR || "/tmp/thinkwork-pi-agent",
     gitSha: env.THINKWORK_GIT_SHA || "unknown",
   };
 }

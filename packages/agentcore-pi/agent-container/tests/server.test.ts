@@ -58,6 +58,7 @@ beforeEach(async () => {
   delete process.env.MEMORY_RETAIN_FN_NAME;
   delete process.env.WORKSPACE_BUCKET;
   delete process.env.WORKSPACE_DIR;
+  delete process.env.THINKWORK_PI_AGENT_DIR;
   delete process.env.AGENTCORE_FILES_BUCKET;
   delete process.env.DB_CLUSTER_ARN;
   delete process.env.DB_SECRET_ARN;
@@ -192,7 +193,9 @@ describe("handleInvocation — happy path", () => {
   it("creates WORKSPACE_DIR before per-turn staging and the agent loop", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agentcore-pi-root-"));
     const workspaceDir = path.join(root, "workspace");
+    const piAgentDir = path.join(root, "pi-agent");
     process.env.WORKSPACE_DIR = workspaceDir;
+    process.env.THINKWORK_PI_AGENT_DIR = piAgentDir;
     let stageSawWorkspace = false;
     let loopSawWorkspace = false;
 
@@ -205,8 +208,9 @@ describe("handleInvocation — happy path", () => {
             stageSawWorkspace = true;
             return { turnDir: "", staged: [] };
           },
-          runAgentLoop: async ({ cwd }) => {
+          runAgentLoop: async ({ cwd, agentDir }) => {
             expect(cwd).toBe(workspaceDir);
+            expect(agentDir).toBe(piAgentDir);
             await access(workspaceDir);
             loopSawWorkspace = true;
             return {
@@ -1109,6 +1113,7 @@ describe("buildInvocationResources — bearer never reaches the connect factory"
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1158,6 +1163,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1196,6 +1202,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1241,6 +1248,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1282,6 +1290,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1323,6 +1332,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1382,6 +1392,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1426,6 +1437,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1475,6 +1487,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1535,6 +1548,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         dbName: "thinkwork",
         workspaceBucket: "",
         workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
         gitSha: "test",
       },
       agentCoreClient: fakeAgentCoreClient() as never,
@@ -1581,6 +1595,7 @@ describe("buildInvocationResources — mcp proxy registration (Plan §006 U4)", 
     dbName: "thinkwork",
     workspaceBucket: "",
     workspaceDir: "/tmp/workspace",
+    piAgentDir: "/tmp/thinkwork-pi-agent",
     gitSha: "test",
   };
 

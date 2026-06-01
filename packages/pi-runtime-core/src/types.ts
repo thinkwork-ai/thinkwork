@@ -88,6 +88,12 @@ export interface RunAgentLoopArgs {
    */
   cwd?: string;
   /**
+   * Private Pi SDK state directory for auth/settings/session scratch. Defaults
+   * under `cwd` for local hosts; managed AgentCore passes a `/tmp` directory so
+   * SDK control files never appear in the rendered workspace.
+   */
+  agentDir?: string;
+  /**
    * Durable per-thread session store. When present (with a non-empty
    * `threadId`), the turn resumes the thread's persisted session instead of
    * replaying `history` as prompt text. U4.

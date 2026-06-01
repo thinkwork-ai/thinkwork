@@ -267,18 +267,44 @@ describe("preparePiAgentDirectory", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("supports keeping the Pi agent dir outside the rendered workspace", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "pi-agent-dir-"));
+    const workspace = path.join(root, "workspace");
+    const agentDir = path.join(root, "scratch", "pi-agent");
+
+    try {
+      const resolved = await preparePiAgentDirectory(workspace, agentDir);
+
+      expect(resolved).toBe(agentDir);
+      expect((await stat(workspace)).isDirectory()).toBe(true);
+      expect((await stat(agentDir)).isDirectory()).toBe(true);
+      await expect(
+        stat(path.join(workspace, ".thinkwork-pi")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("runAgentLoop", () => {
   it("passes the built-ins + custom tool allowlist and prompt to the session", async () => {
     let captured: OpenSessionInputs | undefined;
     const session = makeFakeSession({ messages: [assistantMessage("hi")] });
-    await runAgentLoop(baseArgs({ tools: [fakeAgentTool("web_search")] }), {
-      openSession: async (inputs) => {
-        captured = inputs;
-        return { session, modelId: inputs.modelId };
+    await runAgentLoop(
+      baseArgs({
+        agentDir: "/tmp/thinkwork-pi-agent",
+        tools: [fakeAgentTool("web_search")],
+      }),
+      {
+        openSession: async (inputs) => {
+          captured = inputs;
+          return { session, modelId: inputs.modelId };
+        },
       },
-    });
+    );
+    expect(captured?.agentDir).toBe("/tmp/thinkwork-pi-agent");
     expect(captured?.toolAllowlist).toEqual([
       ...BUILTIN_TOOL_NAMES,
       "web_search",
