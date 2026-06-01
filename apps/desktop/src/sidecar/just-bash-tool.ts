@@ -107,14 +107,26 @@ async function writeWorkspaceFile(
 function workspaceRuntimePath(relativePath: string): string {
   const safePath = safeRelativePath(relativePath);
   if (safePath.startsWith("Agent/")) {
-    return safeRelativePath(stripLegacySourceRoot(safePath.slice("Agent/".length)));
+    return safeRelativePath(
+      stripLegacySourceRoot(safePath.slice("Agent/".length)),
+    );
   }
   if (safePath.startsWith("User/")) {
-    return safeRelativePath(stripLegacySourceRoot(safePath.slice("User/".length)));
+    return safeRelativePath(
+      `User/${stripLegacySourceRoot(safePath.slice("User/".length))}`,
+    );
+  }
+  if (safePath.startsWith("Thread/")) {
+    return safeRelativePath(
+      `Thread/${stripLegacySourceRoot(safePath.slice("Thread/".length))}`,
+    );
   }
   if (safePath.startsWith("Spaces/")) {
-    const [, , ...rest] = safePath.split("/");
-    return safeRelativePath(["Space", stripLegacySourceRoot(rest.join("/"))].join("/"));
+    if (safePath === "Spaces/INDEX.md") return safePath;
+    const [, spaceFolder, ...rest] = safePath.split("/");
+    return safeRelativePath(
+      ["Spaces", spaceFolder, stripLegacySourceRoot(rest.join("/"))].join("/"),
+    );
   }
   return stripLegacySourceRoot(safePath);
 }
@@ -134,6 +146,13 @@ function workspaceTuplePath(
   const safePath = safeRelativePath(relativePath);
   const mapped = pathMap.get(safePath);
   if (mapped) return mapped;
+  if (
+    safePath.startsWith("User/") ||
+    safePath.startsWith("Spaces/") ||
+    safePath.startsWith("Thread/")
+  ) {
+    return safePath;
+  }
   if (safePath.startsWith("Space/")) {
     const spaceFolder = firstMappedSpaceFolder(pathMap);
     return `Spaces/${spaceFolder}/${safePath.slice("Space/".length)}`;
@@ -141,7 +160,7 @@ function workspaceTuplePath(
   if (safePath === "USER.md" || safePath.startsWith("memory/")) {
     return `User/${safePath}`;
   }
-  return `Agent/${safePath}`;
+  return safePath;
 }
 
 function firstMappedSpaceFolder(pathMap: RuntimeTuplePathMap): string {

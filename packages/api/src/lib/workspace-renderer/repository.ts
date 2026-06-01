@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
+  spaceMembers,
   spaces,
   tenants,
   threads,
@@ -9,6 +10,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type {
   ResolvedWorkspaceRenderTuple,
+  WorkspaceSpaceIndexEntry,
   WorkspaceRenderTupleInput,
   WorkspaceTupleRepository,
 } from "./types.js";
@@ -22,7 +24,9 @@ function userSlug(user: { email: string | null; name: string | null }): string {
     .slice(0, 80);
 }
 
-export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository {
+export class DrizzleWorkspaceTupleRepository
+  implements WorkspaceTupleRepository
+{
   private readonly db = getDb();
 
   async resolve(
@@ -131,5 +135,57 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       userSlug: resolvedUser?.slug ?? null,
       userName: resolvedUser?.name ?? null,
     };
+  }
+
+  async listAuthorizedSpaces(
+    tuple: ResolvedWorkspaceRenderTuple,
+  ): Promise<WorkspaceSpaceIndexEntry[]> {
+    const rows = await this.db
+      .select({
+        id: spaces.id,
+        slug: spaces.slug,
+        workspaceFolderName: spaces.workspace_folder_name,
+        name: spaces.name,
+        accessMode: spaces.access_mode,
+      })
+      .from(spaces)
+      .where(
+        and(eq(spaces.tenant_id, tuple.tenantId), eq(spaces.status, "active")),
+      );
+
+    const memberSpaceIds = new Set<string>();
+    if (tuple.userId) {
+      const memberships = await this.db
+        .select({ spaceId: spaceMembers.space_id })
+        .from(spaceMembers)
+        .where(
+          and(
+            eq(spaceMembers.tenant_id, tuple.tenantId),
+            eq(spaceMembers.user_id, tuple.userId),
+          ),
+        );
+      for (const membership of memberships) {
+        memberSpaceIds.add(membership.spaceId);
+      }
+    }
+
+    return rows
+      .filter(
+        (space) =>
+          space.id === tuple.spaceId ||
+          space.accessMode === "public" ||
+          memberSpaceIds.has(space.id),
+      )
+      .map((space) => ({
+        id: space.id,
+        slug: space.workspaceFolderName ?? space.slug,
+        name: space.name,
+        accessMode: space.accessMode,
+        isActive: space.id === tuple.spaceId,
+      }))
+      .sort((left, right) => {
+        if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
+        return left.name.localeCompare(right.name);
+      });
   }
 }

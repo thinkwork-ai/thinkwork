@@ -66,6 +66,9 @@ export interface WorkspaceTupleRepository {
   resolve(
     input: WorkspaceRenderTupleInput,
   ): Promise<ResolvedWorkspaceRenderTuple | null>;
+  listAuthorizedSpaces?(
+    tuple: ResolvedWorkspaceRenderTuple,
+  ): Promise<WorkspaceSpaceIndexEntry[]>;
 }
 
 export type WorkspaceRenderCacheStatus = "hit" | "miss";
@@ -116,6 +119,14 @@ export interface WorkspaceHydrateManifest {
   sources: WorkspaceHydrateSource[];
   files: WorkspaceHydrateFile[];
   statusMounts: WorkspaceHydrateStatusMount[];
+}
+
+export interface WorkspaceSpaceIndexEntry {
+  id: string;
+  slug: string;
+  name: string;
+  accessMode: string;
+  isActive: boolean;
 }
 
 export interface RenderedWorkspaceTuple {

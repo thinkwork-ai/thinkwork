@@ -5,7 +5,7 @@ const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 export const DEFAULT_OFFLINE_EXECUTION_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_MAX_PARTITIONS = 12;
 const DEFAULT_SPACE_FOLDER_NAME = "default";
-const TUPLE_ROOTS = new Set(["Agent", "Spaces", "User"]);
+const TUPLE_ROOTS = new Set(["Agent", "Spaces", "Thread", "User"]);
 
 export interface WorkspaceCachePartition {
   stage: string;
@@ -506,7 +506,7 @@ export function workspaceRuntimePathForFile(
   if (source === "space" || "spaceId" in target) {
     return `Spaces/${spaceFolderNameForTarget(target)}/${relativePath}`;
   }
-  return `Agent/${relativePath}`;
+  return relativePath;
 }
 
 function normalizeStoredManifest(
@@ -525,9 +525,7 @@ function normalizeStoredManifest(
   };
 }
 
-function normalizeStoredRuntimePath(
-  file: WorkspaceCachedFile,
-): string | null {
+function normalizeStoredRuntimePath(file: WorkspaceCachedFile): string | null {
   const safePath = assertSafeRelativePath(file.path);
   if (isWorkspaceArchivesPath(safePath)) return null;
 
@@ -541,14 +539,14 @@ function normalizeStoredRuntimePath(
   if (file.source === "space") {
     return `Spaces/${DEFAULT_SPACE_FOLDER_NAME}/${relativePath}`;
   }
-  return `Agent/${relativePath}`;
+  return relativePath;
 }
 
 function normalizeTupleRuntimePath(path: string): string | null {
   if (path.startsWith("Agent/")) {
     const relativePath = stripLegacySourceRoot(path.slice("Agent/".length));
     if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
-    return `Agent/${relativePath}`;
+    return relativePath;
   }
   if (path.startsWith("Spaces/")) {
     const [, folder, ...rest] = path.split("/");
@@ -557,6 +555,16 @@ function normalizeTupleRuntimePath(path: string): string | null {
     if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
     return `Spaces/${folder}/${relativePath}`;
   }
+  if (path.startsWith("User/")) {
+    const relativePath = stripLegacySourceRoot(path.slice("User/".length));
+    if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
+    return `User/${relativePath}`;
+  }
+  if (path.startsWith("Thread/")) {
+    const relativePath = stripLegacySourceRoot(path.slice("Thread/".length));
+    if (!relativePath || isWorkspaceArchivesPath(relativePath)) return null;
+    return `Thread/${relativePath}`;
+  }
   return path;
 }
 
@@ -564,7 +572,10 @@ function workspaceReadCandidates(
   path: string,
   files: Record<string, WorkspaceCachedFile>,
 ): string[] {
-  if (hasTupleRoot(path)) return [path];
+  if (hasTupleRoot(path)) {
+    const normalized = normalizeTupleRuntimePath(path);
+    return normalized && normalized !== path ? [normalized, path] : [path];
+  }
 
   const candidates = [path];
   if (path === "AGENTS.md") candidates.unshift("Agent/AGENTS.md");
@@ -601,7 +612,9 @@ function stripLegacySourceRoot(path: string): string {
 }
 
 function isWorkspaceArchivesPath(path: string): boolean {
-  return path === "workspace-archives" || path.startsWith("workspace-archives/");
+  return (
+    path === "workspace-archives" || path.startsWith("workspace-archives/")
+  );
 }
 
 function spaceFolderNameForTarget(target: WorkspaceTarget): string {

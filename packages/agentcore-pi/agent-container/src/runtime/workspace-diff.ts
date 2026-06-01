@@ -102,8 +102,8 @@ async function readLocalWorkspaceSnapshot(
         .relative(workspaceDir, absolutePath)
         .split(path.sep)
         .join("/");
-      files[pathMap.get(relativePath) ?? relativePath] = new TextDecoder()
-        .decode(bytes);
+      files[pathMap.get(relativePath) ?? relativePath] =
+        new TextDecoder().decode(bytes);
     }
   }
   await visit(workspaceDir);
@@ -132,11 +132,17 @@ function runtimeWorkspacePath(manifestPath: string): string {
     return stripLegacySourceRoot(clean.slice("Agent/".length));
   }
   if (clean.startsWith("User/")) {
-    return stripLegacySourceRoot(clean.slice("User/".length));
+    return `User/${stripLegacySourceRoot(clean.slice("User/".length))}`;
+  }
+  if (clean.startsWith("Thread/")) {
+    return `Thread/${stripLegacySourceRoot(clean.slice("Thread/".length))}`;
   }
   if (clean.startsWith("Spaces/")) {
-    const [, , ...rest] = clean.split("/");
-    return ["Space", stripLegacySourceRoot(rest.join("/"))].join("/");
+    if (clean === "Spaces/INDEX.md") return clean;
+    const [, spaceFolder, ...rest] = clean.split("/");
+    return ["Spaces", spaceFolder, stripLegacySourceRoot(rest.join("/"))].join(
+      "/",
+    );
   }
   return stripLegacySourceRoot(clean);
 }

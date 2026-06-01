@@ -408,10 +408,7 @@ export class WorkspaceCache {
     const sources = normalizedHydrateSources(input.manifest);
     let hasUserSourceEntries = false;
     for (const source of sources) {
-      const listPrefix =
-        source.owner === "space"
-          ? (tenantSpacesPrefix(source.prefix) ?? source.prefix)
-          : source.prefix;
+      const listPrefix = source.prefix;
       const objects = await this.store.listObjects({
         bucket: input.bucket,
         prefix: listPrefix,
@@ -826,11 +823,6 @@ function normalizedHydrateSources(
   return out;
 }
 
-function tenantSpacesPrefix(prefix: string): string | null {
-  const match = prefix.match(/^(tenants\/[^/]+\/)spaces\/[^/]+\//);
-  return match ? `${match[1]}spaces/` : null;
-}
-
 function desktopHydratePathForSourceObject(input: {
   owner: "agent" | "space" | "user";
   sourcePrefix: string;
@@ -841,9 +833,9 @@ function desktopHydratePathForSourceObject(input: {
   if (!shouldHydrateSourcePath(relPath)) return null;
   if (input.owner === "agent") {
     const sourcePath = stripLegacySourceRoot(relPath);
-    if (!shouldHydrateSourcePath(sourcePath)) return null;
+    if (!shouldHydrateAgentSourcePath(sourcePath)) return null;
     return {
-      path: `Agent/${sourcePath}`,
+      path: sourcePath,
       sourcePrefix: input.sourcePrefix,
       sourcePath,
     };
@@ -857,15 +849,39 @@ function desktopHydratePathForSourceObject(input: {
       sourcePath,
     };
   }
-  const [spaceFolder, ...rest] = relPath.split("/");
-  if (!spaceFolder || rest.length === 0) return null;
-  const sourcePath = stripLegacySourceRoot(rest.join("/"));
-  if (!shouldHydrateSourcePath(sourcePath)) return null;
+  const spaceFolder = workspaceFolderFromSourcePrefix(input.sourcePrefix);
+  const sourcePath = stripLegacySourceRoot(relPath);
+  if (!shouldHydrateSpaceSourcePath(sourcePath)) return null;
   return {
     path: `Spaces/${spaceFolder}/${sourcePath}`,
-    sourcePrefix: `${input.sourcePrefix}${spaceFolder}/`,
+    sourcePrefix: input.sourcePrefix,
     sourcePath,
   };
+}
+
+function shouldHydrateAgentSourcePath(relPath: string): boolean {
+  return (
+    shouldHydrateSourcePath(relPath) &&
+    relPath !== "SPACE.md" &&
+    relPath !== "SPACE_CONTEXT.md" &&
+    relPath !== "effective-policy.json" &&
+    !relPath.startsWith("space/") &&
+    !relPath.startsWith("spaces/")
+  );
+}
+
+function shouldHydrateSpaceSourcePath(relPath: string): boolean {
+  return (
+    shouldHydrateSourcePath(relPath) &&
+    relPath !== "effective-policy.json" &&
+    relPath !== "TOOLS.md" &&
+    relPath !== "MCP.md"
+  );
+}
+
+function workspaceFolderFromSourcePrefix(prefix: string): string {
+  const match = prefix.match(/\/spaces\/([^/]+)\//);
+  return match?.[1] ?? "default";
 }
 
 function legacyRenderedUserWorkspacePrefix(
@@ -967,20 +983,24 @@ function desktopHydratePath(input: {
   if (
     path.startsWith("Agent/") ||
     path.startsWith("User/") ||
-    path.startsWith("Spaces/")
+    path.startsWith("Spaces/") ||
+    path.startsWith("Thread/")
   ) {
     return normalizeTupleHydratePath(path);
   }
   const sourcePath = stripLegacySourceRoot(input.sourcePath ?? path);
   if (!sourcePath || isWorkspaceArchivesPath(sourcePath)) return undefined;
-  if (input.owner === "agent") return `Agent/${sourcePath}`;
+  if (input.owner === "agent") return sourcePath;
   if (input.owner === "user") return `User/${sourcePath}`;
+  if (input.owner === "space") {
+    return `Spaces/${input.spaceFolder}/${sourcePath}`;
+  }
   if (
-    input.owner === "space" ||
     input.owner === "thread_goal" ||
+    input.owner === "thread_notes" ||
     input.owner === "system"
   ) {
-    return `Spaces/${input.spaceFolder}/${sourcePath}`;
+    return `Thread/${sourcePath}`;
   }
   return path || undefined;
 }
@@ -989,12 +1009,17 @@ function normalizeTupleHydratePath(path: string): string | undefined {
   if (path.startsWith("Agent/")) {
     const sourcePath = stripLegacySourceRoot(path.slice("Agent/".length));
     if (!sourcePath || isWorkspaceArchivesPath(sourcePath)) return undefined;
-    return `Agent/${sourcePath}`;
+    return sourcePath;
   }
   if (path.startsWith("User/")) {
     const sourcePath = stripLegacySourceRoot(path.slice("User/".length));
     if (!sourcePath || isWorkspaceArchivesPath(sourcePath)) return undefined;
     return `User/${sourcePath}`;
+  }
+  if (path.startsWith("Thread/")) {
+    const sourcePath = stripLegacySourceRoot(path.slice("Thread/".length));
+    if (!sourcePath || isWorkspaceArchivesPath(sourcePath)) return undefined;
+    return `Thread/${sourcePath}`;
   }
   if (path.startsWith("Spaces/")) {
     const [root, folder, ...rest] = path.split("/");

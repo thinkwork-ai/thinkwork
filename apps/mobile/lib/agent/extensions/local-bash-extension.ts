@@ -194,13 +194,19 @@ function workspaceRuntimePath(relativePath: string): string {
   }
   if (safePath.startsWith("User/")) {
     return assertSafeRelativePath(
-      stripLegacySourceRoot(safePath.slice("User/".length)),
+      `User/${stripLegacySourceRoot(safePath.slice("User/".length))}`,
+    );
+  }
+  if (safePath.startsWith("Thread/")) {
+    return assertSafeRelativePath(
+      `Thread/${stripLegacySourceRoot(safePath.slice("Thread/".length))}`,
     );
   }
   if (safePath.startsWith("Spaces/")) {
-    const [, , ...rest] = safePath.split("/");
+    if (safePath === "Spaces/INDEX.md") return safePath;
+    const [, spaceFolder, ...rest] = safePath.split("/");
     return assertSafeRelativePath(
-      ["Space", stripLegacySourceRoot(rest.join("/"))].join("/"),
+      ["Spaces", spaceFolder, stripLegacySourceRoot(rest.join("/"))].join("/"),
     );
   }
   return stripLegacySourceRoot(safePath);
@@ -222,13 +228,20 @@ function workspaceTuplePath(
   const safePath = assertSafeRelativePath(relativePath);
   const mapped = pathMap.get(safePath);
   if (mapped) return mapped;
+  if (
+    safePath.startsWith("User/") ||
+    safePath.startsWith("Spaces/") ||
+    safePath.startsWith("Thread/")
+  ) {
+    return safePath;
+  }
   if (safePath.startsWith("Space/")) {
     return `Spaces/${spaceFolderName}/${safePath.slice("Space/".length)}`;
   }
   if (safePath === "USER.md" || safePath.startsWith("memory/")) {
     return `User/${safePath}`;
   }
-  return `Agent/${safePath}`;
+  return safePath;
 }
 
 async function hydrateWorkspace(
