@@ -1310,6 +1310,7 @@ export async function handleInvocation(
         gitSha: env.gitSha,
         identity,
         cwd: env.workspaceDir,
+        agentDir: env.piAgentDir,
         sessionStore,
         // Session scratch lives outside the workspace dir so the per-turn
         // workspace S3 sync (delete-extraneous) cannot reap an in-flight

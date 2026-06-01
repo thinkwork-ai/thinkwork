@@ -83,6 +83,7 @@ function makeEnv(
     dbName: "thinkwork",
     workspaceBucket: "",
     workspaceDir: "/tmp/workspace",
+    piAgentDir: "/tmp/thinkwork-pi-agent",
     gitSha: "test",
     ...overrides,
   };

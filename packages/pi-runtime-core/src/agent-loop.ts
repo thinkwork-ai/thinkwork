@@ -83,6 +83,8 @@ export interface RunAgentLoopDeps {
 
 export interface OpenSessionInputs {
   cwd: string;
+  /** Private Pi SDK state directory for auth/settings/session scratch. */
+  agentDir?: string;
   /**
    * Prebuilt system prompt to override the resource loader's default with. U6
    * makes this optional: when a system-prompt extension composes the prompt via
@@ -264,7 +266,7 @@ async function defaultOpenSession(
   // desktop-proven path). U6: when omitted, the system-prompt extension composes
   // the prompt via its `before_agent_start` hook instead, so no override is
   // installed and the hook's returned prompt governs the turn.
-  const agentDir = await preparePiAgentDirectory(inputs.cwd);
+  const agentDir = await preparePiAgentDirectory(inputs.cwd, inputs.agentDir);
   const systemPromptValue = inputs.systemPrompt;
   const resourceLoader = new DefaultResourceLoader({
     cwd: inputs.cwd,
@@ -291,9 +293,7 @@ async function defaultOpenSession(
           store: inputs.sessionStore,
           threadId: inputs.threadId,
           cwd: inputs.cwd,
-          sessionDir:
-            inputs.sessionDir ??
-            path.join(inputs.cwd, PI_AGENT_DIR, "sessions"),
+          sessionDir: inputs.sessionDir ?? path.join(agentDir, "sessions"),
           seedHistory: inputs.seedHistory,
           factories: {
             open: (file, dir, cwdOverride) =>
@@ -310,6 +310,7 @@ async function defaultOpenSession(
     cwd: inputs.cwd,
     tools: inputs.toolAllowlist,
     customTools: inputs.customTools,
+    agentDir,
     resourceLoader,
     sessionManager,
     authStorage,
@@ -338,16 +339,21 @@ async function defaultOpenSession(
   };
 }
 
-export async function preparePiAgentDirectory(cwd: string): Promise<string> {
+export async function preparePiAgentDirectory(
+  cwd: string,
+  agentDir = path.join(cwd, PI_AGENT_DIR),
+): Promise<string> {
   const symlinkTarget = await workspaceSymlinkTarget(cwd);
   if (symlinkTarget) {
     await mkdir(symlinkTarget, { recursive: true });
   }
 
   await mkdir(cwd, { recursive: true });
-  const agentDir = path.join(cwd, PI_AGENT_DIR);
-  await mkdir(agentDir, { recursive: true });
-  return agentDir;
+  const resolvedAgentDir = path.isAbsolute(agentDir)
+    ? agentDir
+    : path.resolve(cwd, agentDir);
+  await mkdir(resolvedAgentDir, { recursive: true });
+  return resolvedAgentDir;
 }
 
 async function workspaceSymlinkTarget(cwd: string): Promise<string | null> {
@@ -382,6 +388,7 @@ export async function runAgentLoop(
 
   const { session, modelId, durable, persistSession } = await openSession({
     cwd: args.cwd?.trim() || process.cwd(),
+    agentDir: args.agentDir?.trim() || undefined,
     systemPrompt: args.systemPrompt,
     modelId: requestedModelId,
     toolAllowlist,
