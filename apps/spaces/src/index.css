@@ -94,30 +94,39 @@
  * desktop only); selection/hover overlays read lighter — not darker — over the
  * material.
  */
-.desktop-vibrancy {
-  /* Lift the near-black content canvas to a softer dark so it doesn't read as
-     pure black next to the translucent sidebar (desktop only). */
-  --background: oklch(0.19 0 0);
-  /* Active/hover rows tint lighter over the material instead of the opaque
-     dark accent. Drives bg-sidebar-accent everywhere (main + settings nav). */
-  --sidebar-accent: rgba(255, 255, 255, 0.09);
-}
-
 .desktop-vibrancy,
 .desktop-vibrancy body,
 .desktop-vibrancy #root {
   background: transparent !important;
 }
 
-/* Sidebar panels (main shell + Settings nav): a single warm dark scrim over
-   the frosted macOS material. The "sidebar" material itself is cool/blue, so
-   the scrim leans warm (R > G > B) to take the chill off. Exactly ONE element
-   per sidebar carries the scrim — the main shell's visible panel
-   (`sidebar-inner`) and the Settings `<aside>` — so both read identically;
-   stacking it on the group wrapper too would double the opacity. */
-.desktop-vibrancy [data-slot="sidebar-inner"],
-.desktop-vibrancy .tw-vibrancy-panel {
+/*
+ * One element per sidebar carries the scrim — the main shell's visible panel
+ * (`sidebar-inner`) and the Settings `<aside>` — so both read identically;
+ * stacking it on the group wrapper too would double the opacity. The scrim is
+ * theme-scoped so light mode stays light (the native material flips via
+ * nativeTheme in the main process).
+ */
+
+/* Dark: a warm dark scrim (the "sidebar" material is cool/blue, so R > G > B
+   takes the chill off), a softened content canvas, lighter selection overlay. */
+.desktop-vibrancy.dark {
+  --background: oklch(0.19 0 0);
+  --sidebar-accent: rgba(255, 255, 255, 0.09);
+}
+.desktop-vibrancy.dark [data-slot="sidebar-inner"],
+.desktop-vibrancy.dark .tw-vibrancy-panel {
   background: rgba(19, 18, 16, 0.36) !important;
+}
+
+/* Light: a light scrim over the material; selection reads as a subtle dark
+   overlay; the content canvas keeps the default light background. */
+.desktop-vibrancy:not(.dark) {
+  --sidebar-accent: rgba(0, 0, 0, 0.06);
+}
+.desktop-vibrancy:not(.dark) [data-slot="sidebar-inner"],
+.desktop-vibrancy:not(.dark) .tw-vibrancy-panel {
+  background: rgba(255, 255, 255, 0.8) !important;
 }
 
 /* Sub-surfaces transparent so the scrim/material reads uniformly to the very
