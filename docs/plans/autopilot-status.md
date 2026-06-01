@@ -4130,6 +4130,45 @@ Target branch: `main`
 
 None.
 
+# Pi Runtime Workspace Symlink Hotfix - 2026-05-31
+
+## Status
+
+- Branch: `fix/pi-runtime-workspace-symlink`
+- Started: `2026-06-01T04:22:00Z`
+- Trigger:
+  - Post-merge/deploy managed AgentCore probes still failed on threads `f345725c-0a72-4130-bc14-ece50d18e3e5` and `264b3803-d817-479f-af52-e06ffaec41ea`.
+  - Failure repeated: `AgentCore invoke failed: 500 {"error":"ENOENT: no such file or directory, mkdir '/workspace/.thinkwork-pi'","runtime":"pi"}`.
+- Root cause:
+  - The failing `mkdir` is in `@thinkwork/pi-runtime-core` while opening the Pi SDK session. A dangling or runtime-mounted `/workspace` symlink can make `mkdir('/workspace/.thinkwork-pi', { recursive: true })` return `ENOENT` even though the logical workspace path is correct.
+- Implemented:
+  - Added `preparePiAgentDirectory(cwd)` to resolve a symlinked workspace root, create its target first, then create `.thinkwork-pi`.
+  - Switched the default Pi SDK session open path to use this helper.
+  - Added a regression test for a dangling workspace symlink.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/pi-runtime-core test -- test/agent-loop.test.ts` - passed, 29 tests.
+- `pnpm --filter @thinkwork/pi-runtime-core typecheck` - passed.
+- `pnpm --filter @thinkwork/pi-runtime-core build` - passed.
+- `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts agent-container/tests/handler-context.test.ts` - passed, 113 tests.
+- `pnpm --filter @thinkwork/agentcore-pi typecheck` - passed.
+- `git diff --check` - passed.
+
+## CI / PR
+
+- Opened [#1929](https://github.com/thinkwork-ai/thinkwork/pull/1929).
+- GitHub checks on [#1929](https://github.com/thinkwork-ai/thinkwork/pull/1929) passed:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+
+## Blockers
+
+None.
+
 # AgentCore Workspace Root Prepare Hotfix - 2026-05-31
 
 ## Status
