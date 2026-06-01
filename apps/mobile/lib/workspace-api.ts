@@ -17,7 +17,7 @@ const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
 export type WorkspaceTarget =
   | { agentId: string }
   | { templateId: string }
-  | { spaceId: string }
+  | { spaceId: string; spaceFolderName?: string | null }
   | { userId: string }
   | { defaults: true };
 
@@ -67,7 +67,7 @@ export async function listWorkspaceFiles(
 ): Promise<{ files: WorkspaceFileMeta[] }> {
   return (await request({
     action: "list",
-    ...target,
+    ...workspaceTargetRequestBody(target),
     includeContent: options.includeContent === true,
   })) as {
     files: WorkspaceFileMeta[];
@@ -78,7 +78,11 @@ export async function getWorkspaceFile(
   target: WorkspaceTarget,
   path: string,
 ): Promise<{ content: string | null; source: ComposeSource; sha256: string }> {
-  return (await request({ action: "get", ...target, path })) as {
+  return (await request({
+    action: "get",
+    ...workspaceTargetRequestBody(target),
+    path,
+  })) as {
     content: string | null;
     source: ComposeSource;
     sha256: string;
@@ -90,7 +94,22 @@ export async function putWorkspaceFile(
   path: string,
   content: string,
 ): Promise<void> {
-  await request({ action: "put", ...target, path, content });
+  await request({
+    action: "put",
+    ...workspaceTargetRequestBody(target),
+    path,
+    content,
+  });
+}
+
+function workspaceTargetRequestBody(
+  target: WorkspaceTarget,
+): Record<string, unknown> {
+  if ("agentId" in target) return { agentId: target.agentId };
+  if ("templateId" in target) return { templateId: target.templateId };
+  if ("spaceId" in target) return { spaceId: target.spaceId };
+  if ("userId" in target) return { userId: target.userId };
+  return { defaults: true };
 }
 
 /**

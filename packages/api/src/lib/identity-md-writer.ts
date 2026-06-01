@@ -49,7 +49,7 @@ function bucket(): string {
 export type DbOrTx = { select: typeof defaultDb.select };
 
 function agentKey(tenantSlug: string, agentSlug: string): string {
-  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/AGENTS.md`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/AGENTS.md`;
 }
 
 function isNotFound(err: unknown): boolean {

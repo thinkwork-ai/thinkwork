@@ -50,6 +50,20 @@ describe("workspace renderer prefixes", () => {
   });
 
   it("maps rendered relative paths to deterministic owners", () => {
+    expect(workspacePathOwner("Agent/AGENTS.md")).toBe("agent");
+    expect(workspacePathOwner("Agent/skills/reporting/SKILL.md")).toBe("agent");
+    expect(workspacePathOwner("Spaces/board-pack/SPACE.md")).toBe("space");
+    expect(workspacePathOwner("Spaces/board-pack/docs/customer.md")).toBe(
+      "space",
+    );
+    expect(workspacePathOwner("Space/docs/customer.md")).toBe("space");
+    expect(workspacePathOwner("User/USER.md")).toBe("user");
+    expect(workspacePathOwner("User/memory/preferences.md")).toBe("user");
+    expect(workspacePathOwner("Spaces/board-pack/GOAL.md")).toBe("status");
+    expect(workspacePathOwner("Spaces/board-pack/PROGRESS.md")).toBe("status");
+    expect(workspacePathOwner("Spaces/board-pack/DECISIONS.md")).toBe(
+      "thread_goal",
+    );
     expect(workspacePathOwner("USER.md")).toBe("user");
     expect(workspacePathOwner("memory/preferences.md")).toBe("user");
     expect(workspacePathOwner("SPACE.md")).toBe("space");

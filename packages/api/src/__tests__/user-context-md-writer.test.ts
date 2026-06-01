@@ -4,7 +4,9 @@ import { renderUserContextMd } from "../lib/user-context-md-writer.js";
 describe("renderUserContextMd", () => {
   it("renders USER.md for the user context root", () => {
     const rendered = renderUserContextMd({
+      tenantSlug: "acme",
       tenantName: "Acme",
+      userWorkspaceFolderName: "eric-odom",
       userName: "Eric Odom",
       email: "eric@example.com",
       phone: "+15551234567",
@@ -44,7 +46,9 @@ describe("renderUserContextMd", () => {
 
   it("renders missing profile fields as em dashes", () => {
     const rendered = renderUserContextMd({
+      tenantSlug: "acme",
       tenantName: "Acme",
+      userWorkspaceFolderName: "eric-odom",
       userName: null,
       email: null,
       phone: null,

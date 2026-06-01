@@ -183,7 +183,7 @@ export async function copyDefaultsToTemplate(
 /**
  * Copy template workspace files to a new agent.
  * Source: tenants/{tenantSlug}/agent-catalog/{templateSlug}/workspace/
- * Dest:   tenants/{tenantSlug}/agents/{agentSlug}/workspace/
+ * Dest:   tenants/{tenantSlug}/agents/{agentSlug}/
  */
 export async function copyTemplateWorkspace(
   tenantId: string,
@@ -192,7 +192,7 @@ export async function copyTemplateWorkspace(
 ): Promise<number> {
   const tenantSlug = await resolveTenantSlug(tenantId);
   const srcPrefix = `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/`;
-  const dstPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+  const dstPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/`;
 
   const copied = await copyS3Prefix(srcPrefix, dstPrefix);
 
@@ -222,7 +222,7 @@ export async function overlayTemplateWorkspace(
 ): Promise<number> {
   const tenantSlug = await resolveTenantSlug(tenantId);
   const srcPrefix = `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/`;
-  const dstPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+  const dstPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/`;
 
   const copied = await copyS3Prefix(srcPrefix, dstPrefix);
 
@@ -255,7 +255,7 @@ export async function listAgentFiles(
   agentSlug: string,
 ): Promise<string[]> {
   const tenantSlug = await resolveTenantSlug(tenantId);
-  const prefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+  const prefix = `tenants/${tenantSlug}/agents/${agentSlug}/`;
   return listWorkspaceFilePaths(prefix);
 }
 

@@ -128,7 +128,7 @@ function queueBase(overrides: Record<string, unknown> = {}) {
   pushDbRows([tenantRow()]);
 }
 
-const AGENT_IDENTITY_KEY = "tenants/acme/agents/marco/workspace/AGENTS.md";
+const AGENT_IDENTITY_KEY = "tenants/acme/agents/marco/AGENTS.md";
 
 beforeEach(() => {
   s3Mock.reset();

@@ -107,6 +107,87 @@ describe("BedrockModelProvider", () => {
     );
   });
 
+  it("normalizes raw Bedrock toolUse blocks from older proxy responses", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          text: "",
+          toolCalls: [
+            {
+              toolUse: {
+                toolUseId: "c1",
+                name: "echo",
+                input: { v: "ping" },
+              },
+            },
+          ],
+          stopReason: "tool_use",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          text: "the echo said ping",
+          toolCalls: [],
+          stopReason: "end",
+        }),
+      );
+    const provider = makeProvider(fetchImpl as unknown as typeof fetch);
+
+    const result = await runAgentTurn({
+      provider,
+      tools: [echoTool()],
+      messages: [user("echo ping")],
+    });
+
+    expect(result.stopReason).toBe("completed");
+    expect(result.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "tool",
+          toolCallId: "c1",
+          name: "echo",
+          content: "echo:ping",
+        }),
+      ]),
+    );
+  });
+
+  it("normalizes direct toolUseId/input calls from proxy responses", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          text: "",
+          toolCalls: [{ toolUseId: "c1", name: "echo", input: { v: "pong" } }],
+          stopReason: "tool_use",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          text: "done",
+          toolCalls: [],
+          stopReason: "completed",
+        }),
+      );
+    const provider = makeProvider(fetchImpl as unknown as typeof fetch);
+
+    const result = await runAgentTurn({
+      provider,
+      tools: [echoTool()],
+      messages: [user("echo pong")],
+    });
+
+    expect(result.stopReason).toBe("completed");
+    expect(result.finalText).toBe("done");
+    expect(result.messages.at(-2)).toMatchObject({
+      role: "tool",
+      toolCallId: "c1",
+      name: "echo",
+      content: "echo:pong",
+    });
+  });
+
   it("throws on a non-ok proxy response so the loop reports an error stop reason", async () => {
     const fetchImpl = vi
       .fn()

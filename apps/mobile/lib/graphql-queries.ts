@@ -890,6 +890,12 @@ export const ThreadQuery = graphql(`
       id
       tenantId
       agentId
+      spaceId
+      space {
+        id
+        name
+        slug
+      }
       number
       identifier
       title

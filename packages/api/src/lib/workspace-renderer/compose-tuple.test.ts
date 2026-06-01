@@ -147,6 +147,10 @@ old`,
       content: "---\nadds: [browser]\n---\n# Tools\n",
       lastModified: "2026-05-22T09:01:00.000Z",
     },
+    "tenants/acme/agents/finance-agent/workspace/LEGACY.md": {
+      content: "# Legacy workspace wrapper\n",
+      lastModified: "2026-05-22T09:01:30.000Z",
+    },
     "tenants/acme/agents/finance-agent/IDENTITY.md": {
       content: "# Identity\n",
       lastModified: "2026-05-22T09:02:00.000Z",
@@ -215,7 +219,7 @@ function compatibleHydrateManifest(
       files: [],
       statusMounts: [
         {
-          path: "GOAL.md",
+          path: "Spaces/board-pack/GOAL.md",
           owner: "system",
           source: "database",
           provider: "thread-goals",
@@ -223,7 +227,7 @@ function compatibleHydrateManifest(
           available: false,
         },
         {
-          path: "PROGRESS.md",
+          path: "Spaces/board-pack/PROGRESS.md",
           owner: "system",
           source: "database",
           provider: "thread-goals",
@@ -271,27 +275,33 @@ describe("renderWorkspaceTuple", () => {
       expect.arrayContaining([
         expect.objectContaining({
           owner: "agent",
-          path: "AGENTS.md",
+          path: "Agent/AGENTS.md",
           sourceKey: "tenants/acme/agents/finance-agent/AGENTS.md",
         }),
         expect.objectContaining({
           owner: "agent",
-          path: "TOOLS.md",
+          path: "Agent/TOOLS.md",
           sourceKey: "tenants/acme/agents/finance-agent/TOOLS.md",
         }),
         expect.objectContaining({
+          owner: "agent",
+          path: "Agent/LEGACY.md",
+          sourceKey: "tenants/acme/agents/finance-agent/workspace/LEGACY.md",
+          sourcePath: "LEGACY.md",
+        }),
+        expect.objectContaining({
           owner: "space",
-          path: "SPACE.md",
+          path: "Spaces/board-pack/SPACE.md",
           sourceKey: "tenants/acme/spaces/board-pack/SPACE.md",
         }),
         expect.objectContaining({
           owner: "space",
-          path: "knowledge/board.md",
+          path: "Spaces/board-pack/knowledge/board.md",
           sourceKey: "tenants/acme/spaces/board-pack/knowledge/board.md",
         }),
         expect.objectContaining({
           owner: "user",
-          path: "USER.md",
+          path: "User/USER.md",
           sourceKey: "tenants/acme/users/eric/USER.md",
         }),
       ]),
@@ -302,17 +312,18 @@ describe("renderWorkspaceTuple", () => {
         expect.objectContaining({ path: "effective-policy.json" }),
         expect.objectContaining({ path: "space/SPACE.md" }),
         expect.objectContaining({ path: "spaces/old/SPACE.md" }),
+        expect.objectContaining({ path: "Agent/workspace/LEGACY.md" }),
       ]),
     );
     expect(result.hydrateManifest.statusMounts).toEqual([
       expect.objectContaining({
-        path: "GOAL.md",
+        path: "Spaces/board-pack/GOAL.md",
         source: "database",
         readOnly: true,
         available: false,
       }),
       expect.objectContaining({
-        path: "PROGRESS.md",
+        path: "Spaces/board-pack/PROGRESS.md",
         source: "database",
         readOnly: true,
         available: false,
@@ -335,7 +346,7 @@ describe("renderWorkspaceTuple", () => {
       renderedPrefix: "tenants/acme/threads/thread-1/",
       files: expect.arrayContaining([
         expect.objectContaining({
-          path: "knowledge/board.md",
+          path: "Spaces/board-pack/knowledge/board.md",
           sourceKey: "tenants/acme/spaces/board-pack/knowledge/board.md",
         }),
       ]),
@@ -378,14 +389,14 @@ describe("renderWorkspaceTuple", () => {
     );
     expect(result.hydrateManifest.statusMounts).toEqual([
       expect.objectContaining({
-        path: "GOAL.md",
+        path: "Spaces/board-pack/GOAL.md",
         available: true,
         sourceKey: "tenants/acme/threads/customer-kickoff/GOAL.md",
         etag: '"goal-db"',
         readOnly: true,
       }),
       expect.objectContaining({
-        path: "PROGRESS.md",
+        path: "Spaces/board-pack/PROGRESS.md",
         available: true,
         sourceKey: "tenants/acme/threads/customer-kickoff/PROGRESS.md",
         etag: '"progress-db"',
@@ -395,7 +406,7 @@ describe("renderWorkspaceTuple", () => {
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: "DECISIONS.md",
+          path: "Spaces/board-pack/DECISIONS.md",
           owner: "thread_goal",
           sourceKey: "tenants/acme/threads/customer-kickoff/DECISIONS.md",
           etag: '"decisions-file"',
@@ -404,8 +415,8 @@ describe("renderWorkspaceTuple", () => {
     );
     expect(result.hydrateManifest.files).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: "GOAL.md" }),
-        expect.objectContaining({ path: "PROGRESS.md" }),
+        expect.objectContaining({ path: "Spaces/board-pack/GOAL.md" }),
+        expect.objectContaining({ path: "Spaces/board-pack/PROGRESS.md" }),
       ]),
     );
   });
@@ -439,7 +450,7 @@ describe("renderWorkspaceTuple", () => {
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: "SPACE.md",
+          path: "Spaces/board-pack/SPACE.md",
           sourceKey: "tenants/acme/spaces/board-pack/SPACE.md",
         }),
       ]),
@@ -489,7 +500,7 @@ describe("renderWorkspaceTuple", () => {
       ]),
       statusMounts: expect.arrayContaining([
         expect.objectContaining({
-          path: "PROGRESS.md",
+          path: "Spaces/board-pack/PROGRESS.md",
           source: "database",
           provider: "thread-goals",
           readOnly: true,
@@ -558,7 +569,7 @@ describe("renderWorkspaceTuple", () => {
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: "SPACE.md",
+          path: "Spaces/board-pack/SPACE.md",
           sourceKey: "tenants/acme/spaces/board-pack/SPACE.md",
           etag: '"space-v2"',
           lastModified: "2026-05-22T10:30:00.000Z",
@@ -670,19 +681,22 @@ describe("renderWorkspaceTuple", () => {
     expect(result.writtenFiles).toEqual([".hydrate_manifest.json"]);
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ owner: "agent", path: "AGENTS.md" }),
-        expect.objectContaining({ owner: "user", path: "USER.md" }),
+        expect.objectContaining({ owner: "agent", path: "Agent/AGENTS.md" }),
+        expect.objectContaining({ owner: "user", path: "User/USER.md" }),
       ]),
     );
     expect(result.hydrateManifest.files).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: "GOAL.md" }),
-        expect.objectContaining({ path: "PROGRESS.md" }),
-        expect.objectContaining({ path: "SPACE.md", owner: "space" }),
+        expect.objectContaining({ path: "Spaces/board-pack/GOAL.md" }),
+        expect.objectContaining({ path: "Spaces/board-pack/PROGRESS.md" }),
+        expect.objectContaining({
+          path: "Spaces/board-pack/SPACE.md",
+          owner: "space",
+        }),
       ]),
     );
     expect(
       result.hydrateManifest.statusMounts.map((mount) => mount.path),
-    ).toEqual(["GOAL.md", "PROGRESS.md"]);
+    ).toEqual(["Spaces/default/GOAL.md", "Spaces/default/PROGRESS.md"]);
   });
 });

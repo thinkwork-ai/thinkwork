@@ -107,11 +107,12 @@ function shouldRenderAgentBaselinePath(relPath: string): boolean {
 }
 
 function shouldRenderSpaceSourcePath(relPath: string): boolean {
+  const sourcePath = runtimeSourcePath(relPath);
   return (
-    relPath === "SPACE.md" ||
-    relPath.startsWith("docs/") ||
-    relPath.startsWith("goals/") ||
-    relPath.startsWith("knowledge/")
+    sourcePath === "SPACE.md" ||
+    sourcePath.startsWith("docs/") ||
+    sourcePath.startsWith("goals/") ||
+    sourcePath.startsWith("knowledge/")
   );
 }
 
@@ -132,20 +133,48 @@ function shouldRenderThreadGoalStatusPath(relPath: string): boolean {
   return THREAD_GOAL_STATUS_PATHS.has(relPath);
 }
 
-function hydratePathForSource(object: SourceObject): string {
-  return object.relPath;
+function runtimeFolderSegment(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return "default";
+  return trimmed.replace(/^\/+|\/+$/g, "").replaceAll("/", "-") || "default";
+}
+
+function runtimeSourcePath(relPath: string): string {
+  if (relPath.startsWith("source/")) return relPath.slice("source/".length);
+  return relPath.startsWith("workspace/")
+    ? relPath.slice("workspace/".length)
+    : relPath;
+}
+
+function hydratePathForSource(
+  source: SourceSet,
+  object: SourceObject,
+  tuple: ResolvedWorkspaceRenderTuple,
+): string {
+  const sourcePath = runtimeSourcePath(object.relPath);
+  switch (source.owner) {
+    case "agent":
+      return `Agent/${sourcePath}`;
+    case "user":
+      return `User/${sourcePath}`;
+    case "space":
+      return `Spaces/${runtimeFolderSegment(tuple.spaceSlug)}/${sourcePath}`;
+    case "thread_goal":
+      return `Spaces/${runtimeFolderSegment(tuple.spaceSlug)}/${sourcePath}`;
+  }
 }
 
 function manifestFileForSource(
   source: SourceSet,
   object: SourceObject,
+  tuple: ResolvedWorkspaceRenderTuple,
 ): WorkspaceHydrateFile {
   return {
-    path: hydratePathForSource(object),
+    path: hydratePathForSource(source, object, tuple),
     owner: source.owner,
     sourceKey: object.key,
     sourcePrefix: source.prefix,
-    sourcePath: object.relPath,
+    sourcePath: runtimeSourcePath(object.relPath),
     lastModified: object.lastModified?.toISOString(),
     etag: object.etag,
     size: object.size,
@@ -153,11 +182,14 @@ function manifestFileForSource(
   };
 }
 
-function sortedManifestFiles(sources: SourceSet[]): WorkspaceHydrateFile[] {
+function sortedManifestFiles(
+  sources: SourceSet[],
+  tuple: ResolvedWorkspaceRenderTuple,
+): WorkspaceHydrateFile[] {
   const filesByPath = new Map<string, WorkspaceHydrateFile>();
   for (const source of sources) {
     for (const object of source.objects) {
-      const file = manifestFileForSource(source, object);
+      const file = manifestFileForSource(source, object, tuple);
       filesByPath.set(file.path, file);
     }
   }
@@ -174,10 +206,11 @@ function statusMountsForTuple(input: {
   const byPath = new Map(
     input.statusObjects.map((object) => [object.relPath, object]),
   );
-  return ["GOAL.md", "PROGRESS.md"].map((path) => {
-    const object = byPath.get(path);
+  return ["GOAL.md", "PROGRESS.md"].map((sourcePath) => {
+    const object = byPath.get(sourcePath);
+    const path = `Spaces/${runtimeFolderSegment(input.tuple.spaceSlug)}/${sourcePath}`;
     return {
-      path: path as "GOAL.md" | "PROGRESS.md",
+      path,
       owner: "system",
       source: "database",
       provider: "thread-goals",
@@ -213,7 +246,7 @@ function buildHydrateManifest(input: {
     renderedPrefix: input.renderedPrefix,
     generatedAt: input.generatedAt,
     sources: hydrateSources,
-    files: sortedManifestFiles(input.sources),
+    files: sortedManifestFiles(input.sources, input.tuple),
     statusMounts: statusMountsForTuple({
       tuple: input.tuple,
       statusObjects: input.statusObjects,

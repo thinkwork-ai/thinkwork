@@ -85,16 +85,16 @@ describe("workspace tools", () => {
         ?.execute({ pattern: "bash" }, {}),
     ).resolves.toMatchObject({
       content:
-        "docs/notes.md:1: Mobile Pi should rely on bash and workspace tools.",
+        "Agent/docs/notes.md:1: Mobile Pi should rely on bash and workspace tools.",
     });
     await expect(
       tools
         .find((tool) => tool.name === "find")
         ?.execute({ query: "notes" }, {}),
-    ).resolves.toMatchObject({ content: "docs/notes.md" });
+    ).resolves.toMatchObject({ content: "Agent/docs/notes.md" });
     await expect(
       tools.find((tool) => tool.name === "ls")?.execute({}, {}),
-    ).resolves.toMatchObject({ content: "docs/\nUSER.md" });
+    ).resolves.toMatchObject({ content: "Agent/\nUser/" });
   });
 
   it("rejects path traversal from read-only tools", async () => {

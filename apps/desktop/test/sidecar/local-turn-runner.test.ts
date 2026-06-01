@@ -50,13 +50,35 @@ class FakeStore implements WorkspaceObjectStore {
     this.listed = true;
     return [
       {
-        key: "tenants/acme/threads/customer-kickoff/AGENTS.md",
+        key: "tenants/acme/threads/customer-kickoff/.hydrate_manifest.json",
       },
     ];
   }
 
   async getObjectBytes(input: { key: string }): Promise<Uint8Array> {
     this.fetched.push(input.key);
+    if (input.key.endsWith(".hydrate_manifest.json")) {
+      return new TextEncoder().encode(
+        JSON.stringify({
+          version: 1,
+          renderedPrefix: BASE_INVOCATION.rendered_workspace_prefix,
+          generatedAt: "2026-05-28T12:00:00.000Z",
+          sources: [{ owner: "agent", prefix: "tenants/acme/agents/marco/" }],
+          files: [
+            {
+              path: "Agent/AGENTS.md",
+              owner: "agent",
+              sourceKey: "tenants/acme/agents/marco/AGENTS.md",
+              sourcePrefix: "tenants/acme/agents/marco/",
+              sourcePath: "AGENTS.md",
+              etag: '"etag-agents"',
+              readOnly: false,
+            },
+          ],
+          statusMounts: [],
+        }),
+      );
+    }
     return new TextEncoder().encode("# Agent");
   }
 }
@@ -110,7 +132,7 @@ describe("runLocalDesktopTurn", () => {
     let promptText = "";
     const sdk: PiSdkModuleLike = {
       createAgentSession: vi.fn(async (options) => {
-        expect(options?.cwd).toContain("acme");
+        expect(options?.cwd).toBe(root);
         expect(options?.tools).toEqual([
           ...DESKTOP_LOCAL_PI_BUILTIN_TOOL_NAMES,
           ...DESKTOP_JUST_BASH_TOOL_NAMES,
@@ -173,7 +195,8 @@ describe("runLocalDesktopTurn", () => {
     expect(promptText).toContain("Current user message:");
     expect(store.listed).toBe(true);
     expect(store.fetched).toEqual([
-      "tenants/acme/threads/customer-kickoff/AGENTS.md",
+      "tenants/acme/threads/customer-kickoff/.hydrate_manifest.json",
+      "tenants/acme/agents/marco/AGENTS.md",
     ]);
   });
 
@@ -225,7 +248,7 @@ describe("runLocalDesktopTurn", () => {
     expect(bashTool?.description).not.toContain("native macOS shell access");
 
     const result = await bashTool!.execute!("call-1", {
-      command: "cat AGENTS.md",
+      command: "test -f AGENTS.md && test ! -e Agent && cat AGENTS.md",
     });
 
     expect(result.isError).toBe(false);
@@ -240,7 +263,7 @@ describe("runLocalDesktopTurn", () => {
       sources: [{ owner: "agent", prefix: "tenants/acme/agents/marco/" }],
       files: [
         {
-          path: "AGENTS.md",
+          path: "Agent/AGENTS.md",
           owner: "agent",
           sourceKey: "tenants/acme/agents/marco/AGENTS.md",
           sourcePrefix: "tenants/acme/agents/marco/",
@@ -254,10 +277,6 @@ describe("runLocalDesktopTurn", () => {
     const store: WorkspaceObjectStore = {
       async listObjects() {
         return [
-          {
-            key: `${BASE_INVOCATION.rendered_workspace_prefix}AGENTS.md`,
-            eTag: '"rendered-agents"',
-          },
           {
             key: `${BASE_INVOCATION.rendered_workspace_prefix}.hydrate_manifest.json`,
             eTag: '"manifest"',
@@ -300,7 +319,7 @@ describe("runLocalDesktopTurn", () => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       expect(body.changed_files).toEqual([
         {
-          path: "AGENTS.md",
+          path: "Agent/AGENTS.md",
           op: "modify",
           content: "# Agent v2",
           base_etag: '"etag-agents"',
@@ -1043,7 +1062,7 @@ describe("runLocalDesktopTurn", () => {
     expect(bundle).toContain("Use bash for shell commands");
     expect(bundle).toContain("backed by just-bash");
     expect(bundle).not.toContain("shell out");
-    expect(bundle).toContain("### AGENTS.md");
+    expect(bundle).toContain("### Agent/AGENTS.md");
     expect(bundle).toContain("# Agent");
   });
 

@@ -19,7 +19,9 @@ const s3 = new S3Client({ region: REGION });
 export type DbOrTx = { select: typeof defaultDb.select };
 
 export interface UserContextMdProfile {
+  tenantSlug: string | null;
   tenantName: string | null;
+  userWorkspaceFolderName: string | null;
   userName: string | null;
   email: string | null;
   phone: string | null;
@@ -62,8 +64,23 @@ function bucket(): string {
   return process.env.WORKSPACE_BUCKET || "";
 }
 
-function userContextKey(tenantId: string, userId: string): string {
-  return `tenants/${tenantId}/users/${userId}/USER.md`;
+function workspaceSegment(value: string | null | undefined): string {
+  return (
+    value
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "user"
+  );
+}
+
+function userContextKey(profile: UserContextMdProfile): string {
+  const tenantSlug = workspaceSegment(profile.tenantSlug);
+  const userSlug = workspaceSegment(
+    profile.userWorkspaceFolderName ?? profile.userName ?? profile.email,
+  );
+  return `tenants/${tenantSlug}/users/${userSlug}/USER.md`;
 }
 
 export function renderUserContextMd(
@@ -126,7 +143,7 @@ export async function writeUserContextMdForUser(
     );
   }
 
-  const key = userContextKey(tenantId, userId);
+  const key = userContextKey(profile);
   const rendered = renderUserContextMd(profile, {
     onViolation: opts.onViolation,
   });
@@ -149,7 +166,7 @@ async function resolveUserContextProfile(
   userId: string,
 ): Promise<UserContextMdProfile | null> {
   const [tenant] = await tx
-    .select({ id: tenants.id, name: tenants.name })
+    .select({ id: tenants.id, slug: tenants.slug, name: tenants.name })
     .from(tenants)
     .where(eq(tenants.id, tenantId));
   if (!tenant) return null;
@@ -157,6 +174,7 @@ async function resolveUserContextProfile(
   const [user] = await tx
     .select({
       id: users.id,
+      workspace_folder_name: users.workspace_folder_name,
       name: users.name,
       email: users.email,
       phone: users.phone,
@@ -180,7 +198,9 @@ async function resolveUserContextProfile(
     .where(eq(userProfiles.user_id, userId));
 
   return {
+    tenantSlug: tenant.slug,
     tenantName: tenant.name,
+    userWorkspaceFolderName: user.workspace_folder_name,
     userName: user.name,
     email: user.email,
     phone: user.phone,

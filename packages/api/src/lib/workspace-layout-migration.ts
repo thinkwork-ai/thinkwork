@@ -504,6 +504,19 @@ function legacyAgentWorkspacePrefix(
   return prefix(["tenants", tenantSlug, "agents", agentSlug, "workspace"]);
 }
 
+function legacyAgentArchivesPrefix(
+  tenantSlug: string,
+  agentSlug: string,
+): string {
+  return prefix([
+    "tenants",
+    tenantSlug,
+    "agents",
+    agentSlug,
+    "workspace-archives",
+  ]);
+}
+
 function spaceSourcePrefix(tenantSlug: string, spaceFolder: string): string {
   return prefix(["tenants", tenantSlug, "spaces", spaceFolder]);
 }
@@ -518,14 +531,6 @@ function threadRuntimePrefix(tenantSlug: string, threadFolder: string): string {
 
 function renderedPrefix(tenantSlug: string): string {
   return prefix(["tenants", tenantSlug, "rendered"]);
-}
-
-function destinationFor(
-  sourceKey: string,
-  sourcePrefix: string,
-  destinationPrefix: string,
-): string {
-  return `${destinationPrefix}${sourceKey.slice(sourcePrefix.length)}`;
 }
 
 function sameObject(left: ListedObject, right: ListedObject): boolean {
@@ -545,12 +550,13 @@ async function planPrefixMove(input: {
   destinationPrefix: string;
   deleteLegacySources: boolean;
   reason: "legacy-source";
+  mapRelativePath?: (relativePath: string) => string | null;
 }): Promise<{
   copies: PlannedCopy[];
   deletes: PlannedDeletePrefix[];
   conflicts: string[];
 }> {
-  if (input.sourcePrefix === input.destinationPrefix) {
+  if (input.sourcePrefix === input.destinationPrefix && !input.mapRelativePath) {
     return { copies: [], deletes: [], conflicts: [] };
   }
 
@@ -573,12 +579,16 @@ async function planPrefixMove(input: {
   );
   const copies: PlannedCopy[] = [];
   const conflicts: string[] = [];
+  const legacyKeysToDelete: string[] = [];
   for (const sourceObject of sourceObjects) {
-    const destinationKey = destinationFor(
-      sourceObject.key,
-      input.sourcePrefix,
-      input.destinationPrefix,
-    );
+    const relativePath = sourceObject.key.slice(input.sourcePrefix.length);
+    const mappedPath = input.mapRelativePath
+      ? input.mapRelativePath(relativePath)
+      : relativePath;
+    if (!mappedPath) continue;
+    const destinationKey = `${input.destinationPrefix}${mappedPath}`;
+    if (sourceObject.key === destinationKey) continue;
+    legacyKeysToDelete.push(sourceObject.key);
     const destinationObject = destinationByKey.get(destinationKey);
     if (destinationObject) {
       if (!sameObject(sourceObject, destinationObject)) {
@@ -605,11 +615,41 @@ async function planPrefixMove(input: {
             {
               prefix: input.sourcePrefix,
               reason: input.reason,
-              keys: sourceObjects.map((object) => object.key),
+              keys: legacyKeysToDelete,
             },
           ]
         : [],
   };
+}
+
+async function planDeletePrefix(input: {
+  bucket: string;
+  objectStore: WorkspaceLayoutObjectStore;
+  prefix: string;
+  reason: "legacy-source";
+}): Promise<PlannedDeletePrefix[]> {
+  const objects = await input.objectStore.listObjects({
+    bucket: input.bucket,
+    prefix: input.prefix,
+  });
+  return objects.length > 0
+    ? [
+        {
+          prefix: input.prefix,
+          reason: input.reason,
+          keys: objects.map((object) => object.key),
+        },
+      ]
+    : [];
+}
+
+function legacySpaceRelativePath(relativePath: string): string | null {
+  if (!relativePath) return null;
+  if (relativePath === "source") return null;
+  if (relativePath.startsWith("source/")) {
+    return relativePath.slice("source/".length);
+  }
+  return relativePath;
 }
 
 async function planRenderedDelete(input: {
@@ -678,6 +718,7 @@ export async function planWorkspaceLayoutTenant(input: {
   }
 
   const prefixPlans = [];
+  const deletePlans = [];
   for (const agent of agentFolders.resolved) {
     if (!agent.row.fallbackName) continue;
     prefixPlans.push(
@@ -693,6 +734,26 @@ export async function planWorkspaceLayoutTenant(input: {
         reason: "legacy-source",
       }),
     );
+    if (input.deleteLegacySources) {
+      deletePlans.push(
+        planDeletePrefix({
+          bucket: input.bucket,
+          objectStore: input.objectStore,
+          prefix: legacyAgentArchivesPrefix(tenantSlug, agent.row.fallbackName),
+          reason: "legacy-source",
+        }),
+      );
+      if (agent.folder !== agent.row.fallbackName) {
+        deletePlans.push(
+          planDeletePrefix({
+            bucket: input.bucket,
+            objectStore: input.objectStore,
+            prefix: legacyAgentArchivesPrefix(tenantSlug, agent.folder),
+            reason: "legacy-source",
+          }),
+        );
+      }
+    }
   }
   for (const space of spaceFolders.resolved) {
     prefixPlans.push(
@@ -703,6 +764,7 @@ export async function planWorkspaceLayoutTenant(input: {
         destinationPrefix: spaceSourcePrefix(tenantSlug, space.folder),
         deleteLegacySources: input.deleteLegacySources,
         reason: "legacy-source",
+        mapRelativePath: legacySpaceRelativePath,
       }),
     );
   }
@@ -716,6 +778,26 @@ export async function planWorkspaceLayoutTenant(input: {
         bucket: input.bucket,
         objectStore: input.objectStore,
         sourcePrefix: userSourcePrefix(tenantSlug, oldUserFolder),
+        destinationPrefix: userSourcePrefix(tenantSlug, user.folder),
+        deleteLegacySources: input.deleteLegacySources,
+        reason: "legacy-source",
+      }),
+    );
+    prefixPlans.push(
+      planPrefixMove({
+        bucket: input.bucket,
+        objectStore: input.objectStore,
+        sourcePrefix: userSourcePrefix(user.row.tenantId, user.row.id),
+        destinationPrefix: userSourcePrefix(tenantSlug, user.folder),
+        deleteLegacySources: input.deleteLegacySources,
+        reason: "legacy-source",
+      }),
+    );
+    prefixPlans.push(
+      planPrefixMove({
+        bucket: input.bucket,
+        objectStore: input.objectStore,
+        sourcePrefix: userSourcePrefix(tenantSlug, user.row.id),
         destinationPrefix: userSourcePrefix(tenantSlug, user.folder),
         deleteLegacySources: input.deleteLegacySources,
         reason: "legacy-source",
@@ -735,7 +817,10 @@ export async function planWorkspaceLayoutTenant(input: {
     );
   }
 
-  const prefixResults = await Promise.all(prefixPlans);
+  const [prefixResults, deleteResults] = await Promise.all([
+    Promise.all(prefixPlans),
+    Promise.all(deletePlans),
+  ]);
   const renderedDeletes = await planRenderedDelete({
     bucket: input.bucket,
     objectStore: input.objectStore,
@@ -744,6 +829,7 @@ export async function planWorkspaceLayoutTenant(input: {
   const plannedCopies = prefixResults.flatMap((result) => result.copies);
   const deletePrefixes = [
     ...prefixResults.flatMap((result) => result.deletes),
+    ...deleteResults.flat(),
     ...renderedDeletes,
   ];
   const conflicts = prefixResults.flatMap((result) => result.conflicts);

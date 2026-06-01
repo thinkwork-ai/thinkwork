@@ -165,7 +165,9 @@ describe("runThreadHarnessTurn", () => {
     expect(lease.finalize).toHaveBeenCalledWith(
       expect.objectContaining({
         threadTurnId: "turn-1",
-        changedFiles: [{ path: "note.md", op: "create", content: "hello" }],
+        changedFiles: [
+          { path: "Agent/note.md", op: "create", content: "hello" },
+        ],
       }),
     );
   });
@@ -429,6 +431,33 @@ describe("runThreadHarnessTurn", () => {
 
     expect(res.assistantText).toBe("created opp_1");
     expect(recordTurnFn.mock.calls[0][0].assistantText).toBe("created opp_1");
+  });
+
+  it("uses the last safe tool result when the model completes with empty text", async () => {
+    const provider = new MockModelProvider([
+      toolResponse("bash-1", "bash", { command: "printf OK" }),
+      textResponse(""),
+    ]);
+    const recordTurnFn = vi.fn().mockResolvedValue({});
+    const bashTool = defineTool({
+      name: "bash",
+      description: "run shell commands",
+      parameters: { type: "object" },
+      execute: async () => ({ content: "OK" }),
+    });
+
+    const res = await runThreadHarnessTurn(
+      {
+        threadId: "t",
+        userText: "run bash and reply with output only",
+        priorMessages: [],
+        tools: [bashTool],
+      },
+      { modelProvider: provider, recordTurnFn, extensions: [] },
+    );
+
+    expect(res.assistantText).toBe("OK");
+    expect(recordTurnFn.mock.calls[0][0].assistantText).toBe("OK");
   });
 
   it("emits turn events for smoke tests and future activity rendering", async () => {

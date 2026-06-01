@@ -23,6 +23,7 @@ import {
   isSpaceCapabilityWritePath,
   isVisibleUserContextPath,
   workspacePathOwner,
+  workspaceSourcePath,
   type WorkspacePathOwner,
 } from "../workspace-lanes.js";
 
@@ -530,6 +531,7 @@ async function reconcileOneFile(input: {
 }): Promise<ReconcileFileResult> {
   const { changedFile } = input;
   const owner = workspacePathOwner(changedFile.path);
+  const sourcePath = workspaceSourcePath(changedFile.path);
 
   if (owner === "scratch") {
     return {
@@ -601,7 +603,7 @@ async function reconcileOneFile(input: {
   );
   const sourceKey =
     changedFile.op === "create"
-      ? `${sourcePrefix}${changedFile.path}`
+      ? `${sourcePrefix}${sourcePath}`
       : manifestFile?.sourceKey;
   if (!sourceKey) {
     return rejected(

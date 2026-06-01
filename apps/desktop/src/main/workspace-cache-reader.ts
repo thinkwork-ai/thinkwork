@@ -17,6 +17,9 @@ export const MAX_TREE_DEPTH = 12;
 export const MAX_TREE_NODES = 5_000;
 /** Bytes sniffed for a NUL to classify a file as binary. */
 const BINARY_SNIFF_BYTES = 8_000;
+const INSPECTOR_SKIP_FILES = new Set([...SKIP_FILES, ".hydrate_manifest.json"]);
+const INSPECTOR_SKIP_DIRS = new Set([".thinkwork-pi", "debug"]);
+const INSPECTOR_ROOT_DIRS = new Set(["Agent", "Spaces", "User"]);
 
 /** Thrown when a requested relative path escapes the cache root. */
 export class PathEscapeError extends Error {
@@ -118,10 +121,11 @@ async function walkDir(
     }
     const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
     if (entry.isFile()) {
-      if (SKIP_FILES.has(entry.name)) continue;
+      if (INSPECTOR_SKIP_FILES.has(entry.name)) continue;
       state.budget -= 1;
       nodes.push({ name: entry.name, path: relPath, kind: "file" });
     } else {
+      if (INSPECTOR_SKIP_DIRS.has(entry.name)) continue;
       state.budget -= 1;
       const children = await walkDir(
         path.join(absDir, entry.name),
@@ -132,7 +136,7 @@ async function walkDir(
       // Prune directories with no file descendants (empty or sentinel-only),
       // unless the walk was truncated inside them.
       const hasFiles = children.length > 0;
-      if (hasFiles) {
+      if (hasFiles || (depth === 0 && INSPECTOR_ROOT_DIRS.has(entry.name))) {
         nodes.push({ name: entry.name, path: relPath, kind: "dir", children });
       } else if (depth + 1 > state.maxDepth || state.budget <= 0) {
         nodes.push({

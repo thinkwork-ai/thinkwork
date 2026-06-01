@@ -15,18 +15,175 @@ Target branch: `main`
 
 ### Run Status
 
-- Status: complete.
-- Active unit: none; all 14 implementation units are complete.
-- Active branch: none.
+- Status: post-merge regression PR in final CI/merge stage.
+- Active unit: desktop workspace architecture live regression fix.
+- Active branch: `fix/workspace-agent-spaces-user-root`.
 - Active worktree: none.
 - Started: 2026-05-31 from `origin/main` at `22b2acba`.
 - Completed: 2026-05-31 after U14 merged into `main`.
 - Latest merged implementation PR:
   [#1920](https://github.com/thinkwork-ai/thinkwork/pull/1920).
-- CI/deploy: U14 required PR checks passed and merged into `main`.
+- Active regression PR:
+  [#1922](https://github.com/thinkwork-ai/thinkwork/pull/1922).
+- CI/deploy: U14 required PR checks passed and merged into `main`; regression
+  PR verification is being rerun after full Desktop + Mobile + AgentCore
+  regression on the tuple workspace roots.
 
 ### Run Notes
 
+- 2026-05-31 post-merge regression fix: user reported the desktop
+  Settings > Workspace tree still exposed the retired UUID/petname cache
+  layout. Started branch `fix/workspace-agent-spaces-user-root`.
+- Reproduced the issue in the live desktop app. The local cache still exposed
+  legacy `default/.../<space UUID>/<user UUID>`, `empty-workspace`,
+  `workspace`, and `workspace-archives` roots, and the inspector could also
+  reveal sidecar/debug implementation directories.
+- Implemented the runtime/inspector correction: desktop hydration now flattens
+  the local cache into `Agent`, `Spaces`, and `User`, hydrates source files
+  from `.hydrate_manifest.json`, normalizes legacy deployed manifests locally,
+  preserves the three top-level roots even when a source is empty, prunes stale
+  legacy empty roots, and hides `.thinkwork-pi`, `debug`, and hydrate manifest
+  files from the Settings tree.
+- Implemented API-side path/provenance alignment for the same architecture:
+  runtime manifests compose source files into `Agent/...`, `Spaces/<space>/...`,
+  and `User/...`, and reconcile maps those runtime paths back to canonical S3
+  source keys.
+- Fixed the desktop Settings workspace tree `EREQUEST` seen during live
+  verification by removing the read-only tree IPC rate limit that could trip on
+  duplicate initial reads.
+- Local live verification passed in the desktop app: sent
+  `Workspace layout verification 2026-05-31T18:23`, received
+  `WORKSPACE_LAYOUT_OK_1823`, confirmed the synced cache has only visible root
+  directories `Agent`, `Spaces`, and `User`, and confirmed Settings >
+  Workspace renders those three top-level folders without UUID thread/user
+  folders.
+- Follow-up live review found two remaining legacy source wrappers:
+  `Agent/workspace/...` and `Spaces/<space>/source/...`. Updated hydration to
+  strip those wrappers so Agent files live directly under `Agent/` and Spaces
+  files live directly under `Spaces/<space-name>/`. Desktop hydration also now
+  lists the manifest source prefixes so all tenant Space workspaces are shown by
+  name. The current `tenants/sleek-squirrel-230/users/` S3 prefix listed no
+  objects, so `User/` remains an empty architectural root until user workspace
+  files exist upstream.
+- Second local live verification passed in the desktop app: sent
+  `Workspace layout verification 2026-05-31T18:36`, received
+  `WORKSPACE_LAYOUT_OK_1836`, and confirmed Settings > Workspace shows
+  `Agent` files directly at the root, named folders under `Spaces`, and no
+  `Agent/workspace` or `Spaces/<space>/source` wrapper.
+- Follow-up live review found the `User` root was still empty. S3 showed the
+  new user source prefix `tenants/sleek-squirrel-230/users/eric/` had no
+  objects, while the legacy tuple cache
+  `tenants/sleek-squirrel-230/rendered/fleet-caterpillar-456/default/eric/`
+  contained `USER.md` and user memory files. Updated desktop hydration to
+  fall back to that legacy rendered tuple user prefix only when the canonical
+  user source is empty, while preserving canonical `User/...` paths and
+  `tenants/<tenant>/users/<user>/...` source keys in the local hydrate
+  manifest for write-back.
+- Third local live verification passed in the desktop app: sent
+  `Workspace user layout verification 2026-05-31T18:51`, received
+  `WORKSPACE_USER_LAYOUT_OK_1851`. Sidecar logs showed
+  `selectedPromptFiles` included `User/USER.md`. Local disk verification
+  confirmed `User/USER.md`, `User/memory/MEMORY.md`, `User/memory/DREAMS.md`,
+  `User/memory/contacts.md`, `User/memory/lessons.md`, and
+  `User/memory/preferences.md` under the rendered workspace cache, with the
+  hydrate manifest mapping them to canonical user source keys.
+- Performance regression root cause: live sidecar timings for trivial
+  user-context questions showed `workspace_sync_ms` dominated latency
+  (`41707ms` of a `49790ms` turn, then `26205ms` of a `31588ms` turn).
+  Because each new thread has a distinct rendered thread prefix, the desktop
+  cache ignored the previous per-file signature map and re-downloaded the same
+  267 Agent/Space/User files. Updated refresh to reuse unchanged local files
+  across thread prefixes after revalidating the current manifest/source
+  listings, so new turns should fetch the manifest and changed files instead of
+  rehydrating the entire mounted workspace.
+- Fourth local live verification passed after the cache reuse fix: sent
+  `Performance check 2026-05-31T18:56. What is my name?`, received the expected
+  user-context answer, and sidecar logs showed `synced: 1`, `total: 267`,
+  `workspace_sync_ms: 791`, and `total_ms: 8655`.
+- Rebased the regression branch onto `origin/main` at `03c503ce`
+  (`refactor(spaces): settings detail UI cleanup (#1923)`) after another
+  session updated `main`.
+- Fresh full regression passed after the tuple workspace changes:
+  `pnpm --filter @thinkwork/desktop test` (150 tests),
+  `pnpm --filter @thinkwork/mobile test` (213 tests),
+  `pnpm --filter @thinkwork/agentcore-pi test` (423 tests, 5 todo),
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and root
+  `pnpm typecheck`.
+- Focused AgentCore tuple/sandbox regression passed:
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts agent-container/tests/sandbox-factory.test.ts`
+  (66 tests). Coverage includes canonical agent-source sync, per-thread runtime
+  prefix sync, prefix rejection outside tenant/agent scope, workspace bootstrap
+  during invocation handling, and sandbox factory behavior.
+- Mobile local agent smoke regression initially caught a standalone `tsx`
+  resolver failure for `just-bash/browser` because the dry-run smoke harness
+  does not go through Metro. Updated the mobile local bash extension to import
+  `just-bash`; Metro still maps `just-bash` to the browser bundle for device
+  builds. Reruns passed:
+  `pnpm --filter @thinkwork/mobile smoke:pi-harness:full:dry-run` and
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/extensions/__tests__/local-bash-extension.test.ts lib/agent/thread-turn.test.ts scripts/pi-harness-smoke.test.ts`.
+- iOS simulator regression passed using local Xcode CLI because XcodeBuildMCP
+  was unavailable in this session. Built `apps/mobile/ios/Thinkwork.xcworkspace`
+  scheme `Thinkwork` Debug for simulator on iPhone 17 Pro
+  (`EC60373F-DFCC-4F30-AA7D-D0D4454E6359`), installed
+  `/tmp/thinkwork-ios-regression/DerivedData/Build/Products/Debug-iphonesimulator/Thinkwork.app`,
+  launched bundle `ai.thinkwork.mobile`, captured
+  `/tmp/thinkwork-ios-regression/launch.png`, and verified launch logs showed
+  successful localhost Metro asset fetches with no crash.
+- Fresh desktop live just-bash regression passed in the running local Electron
+  app. Thread `a22e83b0-a898-4f51-99eb-9ec4c163662a` forced the `bash` tool and
+  the actual just-bash `/workspace` returned
+  `PWD=/workspace`, `TOP=Agent,Spaces,User,`, `USER_FILE=yes`, and
+  `SPACE_COUNT=5`. Sidecar logs for turn
+  `570efb9b-198f-4b3c-b856-28742591db5c` showed
+  `selectedPromptFiles:["Agent/AGENTS.md","Spaces/general/SPACE.md","User/USER.md"]`,
+  registered `bash`, `toolCount:1`, `tools:["bash"]`, `workspace_sync_ms:1936`,
+  and `total_ms:18702`.
+- Focused verification passed:
+  `pnpm --filter @thinkwork/desktop test -- test/sidecar/workspace-cache.test.ts test/sidecar/local-turn-runner.test.ts test/main/workspace-cache-reader.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/lib/workspace-renderer/prefixes.test.ts src/lib/workspace-renderer/compose-tuple.test.ts src/lib/chat-finalize/reconcile.test.ts`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/api typecheck`, and changed-file Prettier write via
+  `pnpm dlx prettier@3.8.2 --write <changed workspace files>`.
+- Full regression restart after user screenshots found three remaining
+  cross-surface issues: API workspace listing still exposed `source/`,
+  `workspace/`, and `workspace-archives/` wrappers in Settings detail views;
+  user `USER.md` writes/checks were still using the old tenant UUID/user UUID
+  key; and mobile could hydrate stale/deployed pre-fix cache entries back into
+  just-bash sandboxes.
+- Fixed API workspace listing/get/write normalization so Agent, Space, and User
+  detail panels present logical tuple paths: Agent files directly under
+  `Agent`, Space files directly under `Spaces/<space-name>`, User files under
+  `User`, while hiding `workspace-archives`. Reads remain backward-compatible
+  with existing `workspace/`, `source/`, and legacy user UUID S3 objects.
+- Fixed `USER.md` generation and bootstrap checks to write/read
+  `tenants/<tenantSlug>/users/<userWorkspaceFolderName>/USER.md`, which should
+  populate Settings > Users > User > Workspace after deploy/backfill instead of
+  leaving it empty.
+- Hardened mobile local Pi against the live simulator failures: the Bedrock
+  provider now normalizes raw Bedrock `toolUse` payloads from older proxy
+  responses, completed turns with an empty model answer persist the last safe
+  tool output, and mobile workspace cache hydration strips stale `source/` and
+  `workspace/` wrappers while dropping `workspace-archives` from both fresh and
+  previously persisted cache manifests.
+- iOS simulator follow-up: after reloading the running logged-in simulator,
+  `Mobile simple bash retry 1956` successfully ran Mobile Pi + bash in 16s and
+  returned just-bash output from `/workspace`; because the simulator is pointed
+  at the currently deployed API, the live sandbox still showed only `Agent` and
+  `Spaces` until this branch's API/user-key fixes deploy.
+- Latest verification passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/workspace-cache.test.ts lib/agent/providers/bedrock.test.ts lib/agent/thread-turn.test.ts lib/agent/extensions/__tests__/local-bash-extension.test.ts lib/agent/tools/workspace-tools.test.ts scripts/pi-harness-smoke.test.ts`
+  (49 tests),
+  `pnpm --filter @thinkwork/api test -- src/__tests__/workspace-files-handler.test.ts src/__tests__/user-context-md-writer.test.ts`
+  (137 tests),
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts agent-container/tests/sandbox-factory.test.ts`
+  (66 tests),
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, root `pnpm typecheck`,
+  `pnpm --filter @thinkwork/desktop test` (150 tests),
+  `pnpm --filter @thinkwork/mobile test` (218 tests),
+  `pnpm --filter @thinkwork/mobile smoke:pi-harness:full:dry-run`, and
+  `git diff --check`.
 - Read `AGENTS.md`.
 - Read the Workspace + Agent-Turn Architecture plan and confirmed U1 is the
   first implementation unit.
@@ -3916,6 +4073,55 @@ Target branch: `main`
   - `test`
   - `typecheck`
   - `verify`
+
+## Blockers
+
+None.
+
+# Workspace Tuple Root / Runtime Merge Hotfix - 2026-05-31
+
+## Status
+
+- Branch: `fix/workspace-agent-spaces-user-root`
+- PR: [#1922](https://github.com/thinkwork-ai/thinkwork/pull/1922)
+- Started: `2026-05-31T19:00:00Z`
+- Current state: local and GitHub verification passed; ready for squash merge.
+- Root cause:
+  - Source workspace views and runtime sandboxes still carried legacy `workspace/`, `source/`, and `workspace-archives/` wrappers from old S3 prefixes.
+  - User workspace reads missed some legacy user-id keyed prefixes, causing Settings > Users > Workspace to show empty even when `USER.md` existed.
+  - just-bash runtimes were hydrating tuple/source paths directly instead of mounting the merged runtime contract.
+- Implemented:
+  - Source workspace cache/listing now presents canonical top-level `Agent`, `Spaces`, and `User` roots while stripping stale `workspace/` and `source/` wrappers and filtering `workspace-archives`.
+  - Agent source writes now use `tenants/<tenant>/agents/<agent>/AGENTS.md` at the agent root; Space files use `tenants/<tenant>/spaces/<space>/...`; User reads include canonical slug and legacy id-keyed prefixes.
+  - Workspace layout migration now plans canonical copies for legacy agent/space/user prefixes and plans deletion of legacy `workspace-archives/` prefixes when `--delete-legacy-sources` is used.
+  - Desktop, mobile, and AgentCore just-bash hydration now renders `/workspace` as the Agent workspace root with `AGENTS.md` directly at `/workspace/AGENTS.md`, User files merged into root (`USER.md`, `memory/...`), and the active Space under singular `/workspace/Space/...`.
+  - Runtime snapshot/finalize maps edits back to tuple source paths: root files to `Agent/...`, user paths to `User/...`, and `Space/...` to `Spaces/<current-space>/...`.
+
+## Verification Log
+
+- `pnpm --filter @thinkwork/mobile test -- lib/agent/extensions/__tests__/local-bash-extension.test.ts lib/agent/workspace-cache.test.ts` - passed, 19 tests.
+- `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts test/sidecar/workspace-cache.test.ts` - passed, 31 tests.
+- `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/workspace-diff.test.ts` - passed, 12 tests.
+- `pnpm --filter @thinkwork/api test -- src/__tests__/migrate-workspace-layout.test.ts src/__tests__/workspace-files-handler.test.ts src/__tests__/identity-md-writer.test.ts src/__tests__/user-context-md-writer.test.ts src/lib/workspace-renderer/prefixes.test.ts src/lib/workspace-renderer/compose-tuple.test.ts` - passed, 164 tests.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/agentcore-pi typecheck` - passed.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- `pnpm typecheck` - passed.
+- `pnpm --filter @thinkwork/desktop test` - passed, 150 tests.
+- `pnpm --filter @thinkwork/agentcore-pi test` - passed, 425 passed / 5 todo.
+- `pnpm --filter @thinkwork/mobile test` - passed after updating the stale expected writeback path, 218 tests.
+- `pnpm --filter @thinkwork/api test` - passed, 3376 passed / 9 skipped.
+- `git diff --check` - passed.
+- `pnpm exec prettier --write ...` - blocked locally because `prettier` is not installed in this workspace (`Command "prettier" not found`).
+
+## CI / PR
+
+- GitHub checks on [#1922](https://github.com/thinkwork-ai/thinkwork/pull/1922) passed:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
 
 ## Blockers
 

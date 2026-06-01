@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+  mkdir,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -102,6 +109,224 @@ describe("WorkspaceCache", () => {
     ).rejects.toThrow();
   });
 
+  it("hydrates rendered thread manifests into Agent, Spaces, and User top-level folders", async () => {
+    const prefix = "tenants/acme/threads/customer-kickoff/";
+    const manifest = {
+      version: 1,
+      renderedPrefix: prefix,
+      generatedAt: "2026-05-31T18:00:00.000Z",
+      sources: [
+        { owner: "agent", prefix: "tenants/acme/agents/marco/" },
+        { owner: "space", prefix: "tenants/acme/spaces/default/" },
+        { owner: "user", prefix: "tenants/acme/users/eric-odom/" },
+      ],
+      files: [
+        {
+          path: "workspace/AGENTS.md",
+          owner: "agent",
+          sourceKey: "tenants/acme/agents/marco/workspace/AGENTS.md",
+          sourcePrefix: "tenants/acme/agents/marco/",
+          sourcePath: "workspace/AGENTS.md",
+          etag: '"agent"',
+          readOnly: false,
+        },
+        {
+          path: "Spaces/default/SPACE.md",
+          owner: "space",
+          sourceKey: "tenants/acme/spaces/default/SPACE.md",
+          sourcePrefix: "tenants/acme/spaces/default/",
+          sourcePath: "SPACE.md",
+          etag: '"space"',
+          readOnly: false,
+        },
+        {
+          path: "User/USER.md",
+          owner: "user",
+          sourceKey: "tenants/acme/users/eric-odom/USER.md",
+          sourcePrefix: "tenants/acme/users/eric-odom/",
+          sourcePath: "USER.md",
+          etag: '"user"',
+          readOnly: false,
+        },
+      ],
+      statusMounts: [],
+    };
+    const cache = new WorkspaceCache(
+      root,
+      new FakeStore({
+        [`${prefix}.hydrate_manifest.json`]: `${JSON.stringify(manifest)}\n`,
+        "tenants/acme/agents/marco/workspace/AGENTS.md": "# Agent",
+        "tenants/acme/agents/marco/workspace/skills/report/SKILL.md": "# Skill",
+        "tenants/acme/spaces/default/source/SPACE.md": "# Space",
+        "tenants/acme/spaces/support/source/SPACE.md": "# Support",
+        "tenants/acme/users/eric-odom/USER.md": "# User",
+      }),
+    );
+    const oldNestedDir = join(
+      root,
+      "dev",
+      "acme",
+      "marco",
+      "space-uuid",
+      "user-uuid",
+    );
+    await mkdir(oldNestedDir, { recursive: true });
+    await writeFile(join(oldNestedDir, "stale.md"), "stale");
+
+    const result = await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+
+    expect(result.localDir).toBe(root);
+    expect(result).toMatchObject({ prefix, synced: 6, total: 6 });
+    await expect(readFile(join(root, "Agent/AGENTS.md"), "utf8")).resolves.toBe(
+      "# Agent",
+    );
+    await expect(
+      readFile(join(root, "Agent/skills/report/SKILL.md"), "utf8"),
+    ).resolves.toBe("# Skill");
+    await expect(
+      readFile(join(root, "Agent/workspace/AGENTS.md"), "utf8"),
+    ).rejects.toThrow();
+    await expect(
+      readFile(join(root, "Spaces/default/SPACE.md"), "utf8"),
+    ).resolves.toBe("# Space");
+    await expect(
+      readFile(join(root, "Spaces/support/SPACE.md"), "utf8"),
+    ).resolves.toBe("# Support");
+    await expect(readFile(join(root, "User/USER.md"), "utf8")).resolves.toBe(
+      "# User",
+    );
+    await expect(
+      readFile(join(oldNestedDir, "stale.md"), "utf8"),
+    ).rejects.toThrow();
+    await expect(rootDirectoryNames(root)).resolves.toEqual([
+      "Agent",
+      "Spaces",
+      "User",
+    ]);
+  });
+
+  it("does not create empty tuple roots when some sources are empty", async () => {
+    const prefix = "tenants/acme/threads/customer-kickoff/";
+    const manifest = {
+      version: 1,
+      renderedPrefix: prefix,
+      generatedAt: "2026-05-31T18:00:00.000Z",
+      sources: [
+        { owner: "agent", prefix: "tenants/acme/agents/marco/" },
+        { owner: "space", prefix: "tenants/acme/spaces/default/" },
+        { owner: "user", prefix: "tenants/acme/users/eric-odom/" },
+      ],
+      files: [
+        {
+          path: "Agent/AGENTS.md",
+          owner: "agent",
+          sourceKey: "tenants/acme/agents/marco/AGENTS.md",
+          sourcePath: "AGENTS.md",
+          etag: '"agent"',
+        },
+      ],
+      statusMounts: [
+        {
+          path: "Spaces/default/GOAL.md",
+          sourceKey: null,
+          available: false,
+        },
+      ],
+    };
+    const cache = new WorkspaceCache(
+      root,
+      new FakeStore({
+        [`${prefix}.hydrate_manifest.json`]: `${JSON.stringify(manifest)}\n`,
+        "tenants/acme/agents/marco/AGENTS.md": "# Agent",
+      }),
+    );
+    await mkdir(join(root, "default", "tenant", "agent"), {
+      recursive: true,
+    });
+
+    await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+
+    await expect(rootDirectoryNames(root)).resolves.toEqual(["Agent"]);
+  });
+
+  it("hydrates a legacy rendered USER.md into the User root when the user source is empty", async () => {
+    const prefix = "tenants/acme/threads/customer-kickoff/";
+    const manifest = {
+      version: 1,
+      renderedPrefix: prefix,
+      generatedAt: "2026-05-31T18:30:00.000Z",
+      sources: [
+        { owner: "agent", prefix: "tenants/acme/agents/marco/" },
+        { owner: "space", prefix: "tenants/acme/spaces/default/" },
+        { owner: "user", prefix: "tenants/acme/users/eric-odom/" },
+      ],
+      files: [
+        {
+          path: "Agent/AGENTS.md",
+          owner: "agent",
+          sourceKey: "tenants/acme/agents/marco/AGENTS.md",
+          sourcePath: "AGENTS.md",
+          etag: '"agent"',
+        },
+      ],
+      statusMounts: [],
+    };
+    const cache = new WorkspaceCache(
+      root,
+      new FakeStore({
+        [`${prefix}.hydrate_manifest.json`]: `${JSON.stringify(manifest)}\n`,
+        "tenants/acme/rendered/marco/default/eric-odom/USER.md":
+          "# Legacy rendered user",
+        "tenants/acme/rendered/marco/default/eric-odom/memory/MEMORY.md":
+          "# Legacy rendered memory",
+        "tenants/acme/rendered/marco/default/eric-odom/memory/.snapshots/run-1/MEMORY.md":
+          "# Snapshot",
+        "tenants/acme/agents/marco/AGENTS.md": "# Agent",
+      }),
+    );
+
+    const result = await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: prefix,
+      partition: PARTITION,
+    });
+
+    expect(result).toMatchObject({ prefix, synced: 4, total: 4 });
+    await expect(readFile(join(root, "User/USER.md"), "utf8")).resolves.toBe(
+      "# Legacy rendered user",
+    );
+    await expect(
+      readFile(join(root, "User/memory/MEMORY.md"), "utf8"),
+    ).resolves.toBe("# Legacy rendered memory");
+    await expect(
+      readFile(join(root, "User/memory/.snapshots/run-1/MEMORY.md"), "utf8"),
+    ).rejects.toThrow();
+    await expect(
+      readFile(join(root, ".hydrate_manifest.json"), "utf8").then(JSON.parse),
+    ).resolves.toMatchObject({
+      files: expect.arrayContaining([
+        expect.objectContaining({
+          owner: "user",
+          path: "User/USER.md",
+          sourceKey: "tenants/acme/users/eric-odom/USER.md",
+        }),
+        expect.objectContaining({
+          owner: "user",
+          path: "User/memory/MEMORY.md",
+          sourceKey: "tenants/acme/users/eric-odom/memory/MEMORY.md",
+        }),
+      ]),
+    });
+  });
+
   it("reuses a fresh local workspace cache without redownloading every file", async () => {
     const prefix = "tenants/acme/agents/marco/";
     const store = new FakeStore({
@@ -162,6 +387,65 @@ describe("WorkspaceCache", () => {
     await expect(
       readFile(join(second.localDir, "PROGRESS.md"), "utf8"),
     ).resolves.toBe("# Progress v2");
+  });
+
+  it("reuses unchanged local files when a new thread prefix remounts the same sources", async () => {
+    const firstPrefix = "tenants/acme/threads/customer-kickoff/";
+    const secondPrefix = "tenants/acme/threads/customer-followup/";
+    const agentKey = "tenants/acme/agents/marco/AGENTS.md";
+    const firstManifest = {
+      version: 1,
+      renderedPrefix: firstPrefix,
+      generatedAt: "2026-05-31T18:55:00.000Z",
+      sources: [{ owner: "agent", prefix: "tenants/acme/agents/marco/" }],
+      files: [
+        {
+          path: "Agent/AGENTS.md",
+          owner: "agent",
+          sourceKey: agentKey,
+          sourcePrefix: "tenants/acme/agents/marco/",
+          sourcePath: "AGENTS.md",
+          etag: '"agent"',
+          readOnly: false,
+        },
+      ],
+      statusMounts: [],
+    };
+    const secondManifest = { ...firstManifest, renderedPrefix: secondPrefix };
+    const store = new FakeStore({
+      [`${firstPrefix}.hydrate_manifest.json`]: `${JSON.stringify(firstManifest)}\n`,
+      [`${secondPrefix}.hydrate_manifest.json`]: `${JSON.stringify(secondManifest)}\n`,
+      [agentKey]: "# Agent",
+    });
+    const cache = new WorkspaceCache(root, store, {
+      now: () => new Date("2026-05-31T18:55:00.000Z"),
+    });
+
+    const first = await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: firstPrefix,
+      partition: PARTITION,
+    });
+    const second = await cache.sync({
+      bucket: "workspace-bucket",
+      renderedPrefix: secondPrefix,
+      partition: PARTITION,
+    });
+
+    expect(first).toMatchObject({ prefix: firstPrefix, synced: 2, total: 2 });
+    expect(second).toMatchObject({
+      prefix: secondPrefix,
+      synced: 1,
+      total: 2,
+    });
+    expect(second.cacheHit).toBeUndefined();
+    expect(store.getCalls).toBe(3);
+    await expect(readFile(join(root, "Agent/AGENTS.md"), "utf8")).resolves.toBe(
+      "# Agent",
+    );
+    await expect(
+      readFile(join(root, "AGENTS.md"), "utf8"),
+    ).rejects.toThrow();
   });
 
   it("serves stale local files immediately and refreshes unchanged files in the background", async () => {
@@ -334,17 +618,10 @@ describe("WorkspaceCache", () => {
     expect(store.listCalls).toBe(2);
   });
 
-  it("wipes only the revoked Space subtree", async () => {
+  it("wipes the flat workspace cache when a Space is revoked", async () => {
     const cache = new WorkspaceCache(root, new FakeStore({}));
-    const revokedDir = cache.partitionPath(PARTITION);
-    const stillGrantedDir = cache.partitionPath({
-      ...PARTITION,
-      spaceId: "space-2",
-    });
-    await mkdir(revokedDir, { recursive: true });
-    await mkdir(stillGrantedDir, { recursive: true });
-    await writeFile(join(revokedDir, "SPACE.md"), "# Revoked");
-    await writeFile(join(stillGrantedDir, "SPACE.md"), "# Still granted");
+    await mkdir(join(root, "Spaces/default"), { recursive: true });
+    await writeFile(join(root, "Spaces/default/SPACE.md"), "# Revoked");
 
     const wiped = await cache.wipeRevokedSpace({
       stage: PARTITION.stage,
@@ -354,11 +631,8 @@ describe("WorkspaceCache", () => {
 
     expect(wiped).toEqual({ deleted: 1 });
     await expect(
-      readFile(join(revokedDir, "SPACE.md"), "utf8"),
+      readFile(join(root, "Spaces/default/SPACE.md"), "utf8"),
     ).rejects.toThrow();
-    await expect(
-      readFile(join(stillGrantedDir, "SPACE.md"), "utf8"),
-    ).resolves.toBe("# Still granted");
   });
 
   it("rejects workspace prefixes outside the tenant and agent scope", async () => {
@@ -440,3 +714,11 @@ describe("WorkspaceCache", () => {
     ).rejects.toThrow("workspace object key is unsafe");
   });
 });
+
+async function rootDirectoryNames(root: string): Promise<string[]> {
+  const entries = await readdir(root, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}

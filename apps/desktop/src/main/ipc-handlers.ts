@@ -215,7 +215,6 @@ export async function registerDesktopIpcHandlers(
   ipcMain.handle(READ_WORKSPACE_TREE_CHANNEL, async (event, payload) => {
     assertSafeSenderFrame(event);
     ReadWorkspaceTreeRequestSchema.parse(payload);
-    rateLimit({ key: "read-workspace-tree", intervalMs: 100 });
     return walkCacheTree(resolveCacheRoot(app));
   });
   ipcMain.handle(READ_WORKSPACE_FILE_CHANNEL, async (event, payload) => {
