@@ -131,11 +131,11 @@ describe("WorkspaceCache", () => {
           readOnly: false,
         },
         {
-          path: "Spaces/default/SPACE.md",
+          path: "Spaces/default/CONTEXT.md",
           owner: "space",
-          sourceKey: "tenants/acme/spaces/default/SPACE.md",
+          sourceKey: "tenants/acme/spaces/default/CONTEXT.md",
           sourcePrefix: "tenants/acme/spaces/default/",
-          sourcePath: "SPACE.md",
+          sourcePath: "CONTEXT.md",
           etag: '"space"',
           readOnly: false,
         },
@@ -157,8 +157,8 @@ describe("WorkspaceCache", () => {
         [`${prefix}.hydrate_manifest.json`]: `${JSON.stringify(manifest)}\n`,
         "tenants/acme/agents/marco/workspace/AGENTS.md": "# Agent",
         "tenants/acme/agents/marco/workspace/skills/report/SKILL.md": "# Skill",
-        "tenants/acme/spaces/default/source/SPACE.md": "# Space",
-        "tenants/acme/spaces/support/source/SPACE.md": "# Support",
+        "tenants/acme/spaces/default/source/CONTEXT.md": "# Space",
+        "tenants/acme/spaces/support/source/CONTEXT.md": "# Support",
         "tenants/acme/users/eric-odom/USER.md": "# User",
       }),
     );
@@ -191,11 +191,14 @@ describe("WorkspaceCache", () => {
       readFile(join(root, "Agent/workspace/AGENTS.md"), "utf8"),
     ).rejects.toThrow();
     await expect(
-      readFile(join(root, "Spaces/default/SPACE.md"), "utf8"),
+      readFile(join(root, "Spaces/default/CONTEXT.md"), "utf8"),
     ).resolves.toBe("# Space");
     await expect(
-      readFile(join(root, "Spaces/support/SPACE.md"), "utf8"),
+      readFile(join(root, "Spaces/support/CONTEXT.md"), "utf8"),
     ).resolves.toBe("# Support");
+    await expect(
+      readFile(join(root, "Spaces/default/source/CONTEXT.md"), "utf8"),
+    ).rejects.toThrow();
     await expect(readFile(join(root, "User/USER.md"), "utf8")).resolves.toBe(
       "# User",
     );
@@ -443,9 +446,7 @@ describe("WorkspaceCache", () => {
     await expect(readFile(join(root, "Agent/AGENTS.md"), "utf8")).resolves.toBe(
       "# Agent",
     );
-    await expect(
-      readFile(join(root, "AGENTS.md"), "utf8"),
-    ).rejects.toThrow();
+    await expect(readFile(join(root, "AGENTS.md"), "utf8")).rejects.toThrow();
   });
 
   it("serves stale local files immediately and refreshes unchanged files in the background", async () => {

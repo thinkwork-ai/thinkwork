@@ -44,11 +44,38 @@ flowchart TB
   Tools --> DB
 ```
 
-## Factory and runtime
+## Source and runtime
 
-The **factory** is the editable source side of the workspace. It contains one canonical Agent source, Space sources, and User sources. Operators edit these sources in the workspace UI or through platform actions.
+The **source workspace** is the editable side of the workspace. Settings -> Workspace shows it as three top-level folders:
+
+```text
+Workspace
+├── Agent
+├── Spaces
+└── User
+```
+
+`Agent` is the tenant-wide baseline. `Spaces` contains one folder per Space. `User` contains the current user's personalization and memory notes.
 
 The **runtime workspace** is what the agent sees for one Thread turn. It is rendered per Thread under a stable thread folder and hydrated into `/workspace` for Pi on AgentCore, desktop, and mobile. Runtime rendering is by reference: it writes a hydrate manifest that points back to the source files instead of copying every Agent, Space, and User file into a permanent per-user tuple.
+
+The runtime does not show the same top-level source folders. It uses the Agent source as the root, merges User context into the root, and mounts only the active Space as singular `Space/`:
+
+```text
+/workspace
+├── AGENTS.md
+├── CONTEXT.md
+├── USER.md
+├── memory/
+├── skills/
+├── workspaces/
+└── Space/
+    ├── CONTEXT.md
+    ├── artifacts/
+    ├── docs/
+    ├── goals/
+    └── plans/
+```
 
 ## Canonical S3 shape
 
@@ -62,10 +89,11 @@ tenants/{tenant}/
 │   ├── skills/
 │   └── memory/
 ├── spaces/{space-folder}/
-│   ├── SPACE.md
+│   ├── CONTEXT.md
+│   ├── artifacts/
 │   ├── docs/
 │   ├── goals/
-│   └── knowledge/
+│   └── plans/
 ├── users/{user-folder}/
 │   ├── USER.md
 │   └── memory/
@@ -94,9 +122,15 @@ Every Pi runtime follows the same turn shape:
 1. **Compose.** Resolve the Agent, Space, User, Thread, and database status sources.
 2. **Hydrate.** Download the manifest-backed files into `/workspace`.
 3. **Run.** The agent reads and writes files, calls tools, and produces the reply.
-4. **Reconcile.** The runtime sends changed files to the API. The API checks provenance, lanes, access, secret scanning, and object freshness before writing source files back to S3.
+4. **Reconcile.** File-side changes go through the finalize path. The API checks provenance, lanes, access, secret scanning, and object freshness before writing allowed source files back to S3.
 
 Structured state changes do not go through reconcile. They go through tools and resolvers that write the database.
+
+## Current limits
+
+Workspace sync is incremental. Desktop, mobile, and AgentCore check source and manifest freshness, then hydrate the files needed for the turn. They should not download the entire tenant bucket before every turn.
+
+Structured task and Goal progress still depends on platform tools and resolvers. If a user says "DocuSign is complete", the agent should route that intent through task-status tooling; editing `PROGRESS.md` text is not an authoritative status change.
 
 ## Related pages
 

@@ -109,6 +109,30 @@ function listableSources(
   return sources;
 }
 
+function normalizeListedFilePath(path: string): string | null {
+  const clean = path.replace(/^\/+/, "");
+  if (!clean) return null;
+  assertSafe(clean);
+
+  const logical = stripLegacySourceRoot(clean);
+  if (!logical || isWorkspaceArchivesPath(logical)) return null;
+  return logical;
+}
+
+function stripLegacySourceRoot(path: string): string {
+  let current = path;
+  while (current.startsWith("source/") || current.startsWith("workspace/")) {
+    current = current.replace(/^(source|workspace)\//, "");
+  }
+  return current;
+}
+
+function isWorkspaceArchivesPath(path: string): boolean {
+  return (
+    path === "workspace-archives" || path.startsWith("workspace-archives/")
+  );
+}
+
 /**
  * Resolves both endpoints of a move/rename and enforces that they live in the
  * same source — a single API call can't relocate across the Agent/Spaces/User
@@ -186,7 +210,12 @@ async function listPrefixed(
   prefix: string,
 ): Promise<WorkspaceFileMeta[]> {
   const { files } = await spacesWorkspaceFilesClient.listFiles(sub);
-  return files.map((file) => ({ ...file, path: `${prefix}${file.path}` }));
+  return files
+    .map((file) => {
+      const path = normalizeListedFilePath(file.path);
+      return path ? { ...file, path: `${prefix}${path}` } : null;
+    })
+    .filter((file): file is WorkspaceFileMeta => file !== null);
 }
 
 export function createConsolidatedWorkspaceClient(): WorkspaceFilesClient<ConsolidatedTarget> {

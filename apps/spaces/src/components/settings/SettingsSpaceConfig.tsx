@@ -86,6 +86,8 @@ export function SettingsSpaceConfig() {
           target={{ spaceId }}
           targetKey={`space:${spaceId}`}
           client={spacesWorkspaceFilesClient}
+          title="Space source workspace"
+          description="Space files apply only inside this Space. During a turn, the active Space mounts in /workspace as Space/."
           defaultOpenFile="CONTEXT.md"
           className="min-h-0 flex-1"
         />

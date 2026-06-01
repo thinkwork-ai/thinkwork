@@ -70,7 +70,7 @@ describe("WorkspaceCache", () => {
   it("syncs workspace targets into a durable partition and serves fresh cache hits", async () => {
     const source = new FakeSource({
       "agent:agent-1": { "workspace/AGENTS.md": "# Agent" },
-      "space:space-1": { "source/SPACE.md": "# Space" },
+      "space:space-1": { "source/CONTEXT.md": "# Space" },
       "user:user-1": { "USER.md": "The human's name is Eric." },
     });
     const cache = new WorkspaceCache(
@@ -109,13 +109,23 @@ describe("WorkspaceCache", () => {
       cache.readFile(PARTITION, "Agent/AGENTS.md"),
     ).resolves.toMatchObject({ content: "# Agent" });
     await expect(
-      cache.readFile(PARTITION, "Spaces/general/SPACE.md"),
+      cache.readFile(PARTITION, "Spaces/general/CONTEXT.md"),
     ).resolves.toMatchObject({ content: "# Space" });
-    await expect(cache.listFiles(PARTITION)).resolves.toEqual(
+    const listedPaths = (await cache.listFiles(PARTITION)).map(
+      (file) => file.path,
+    );
+    expect(listedPaths).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: "Agent/AGENTS.md" }),
-        expect.objectContaining({ path: "Spaces/general/SPACE.md" }),
-        expect.objectContaining({ path: "User/USER.md" }),
+        "Agent/AGENTS.md",
+        "Spaces/general/CONTEXT.md",
+        "User/USER.md",
+      ]),
+    );
+    expect(listedPaths).not.toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^workspace(\/|$)/),
+        expect.stringMatching(/^source(\/|$)/),
+        expect.stringMatching(/^workspace-archives(\/|$)/),
       ]),
     );
   });
@@ -145,12 +155,16 @@ describe("WorkspaceCache", () => {
 
     expect(stale).toMatchObject({ cacheHit: true, cacheStale: true });
     expect(refreshes).toHaveLength(1);
-    await expect(cache.readFile(PARTITION, "User/USER.md")).resolves.toMatchObject({
+    await expect(
+      cache.readFile(PARTITION, "User/USER.md"),
+    ).resolves.toMatchObject({
       content: "v1",
     });
 
     await refreshes[0]();
-    await expect(cache.readFile(PARTITION, "User/USER.md")).resolves.toMatchObject({
+    await expect(
+      cache.readFile(PARTITION, "User/USER.md"),
+    ).resolves.toMatchObject({
       content: "v2",
     });
   });
@@ -158,7 +172,7 @@ describe("WorkspaceCache", () => {
   it("fails closed when cached access is older than the offline execution TTL", async () => {
     let now = new Date("2026-05-30T12:00:00.000Z");
     const source = new FakeSource({
-      "space:space-1": { "SPACE.md": "v1" },
+      "space:space-1": { "CONTEXT.md": "v1" },
     });
     const cache = new WorkspaceCache(
       new MemoryWorkspaceCacheStorage(),
@@ -184,7 +198,7 @@ describe("WorkspaceCache", () => {
   it("does not serve a fresh cache hit after the offline execution TTL expires", async () => {
     let now = new Date("2026-05-30T12:00:00.000Z");
     const source = new FakeSource({
-      "space:space-1": { "SPACE.md": "v1" },
+      "space:space-1": { "CONTEXT.md": "v1" },
     });
     const cache = new WorkspaceCache(
       new MemoryWorkspaceCacheStorage(),
@@ -215,7 +229,7 @@ describe("WorkspaceCache", () => {
   it("revalidates expired cached access before serving a Space", async () => {
     let now = new Date("2026-05-30T12:00:00.000Z");
     const source = new FakeSource({
-      "space:space-1": { "SPACE.md": "v1" },
+      "space:space-1": { "CONTEXT.md": "v1" },
     });
     const cache = new WorkspaceCache(
       new MemoryWorkspaceCacheStorage(),
@@ -243,8 +257,8 @@ describe("WorkspaceCache", () => {
   it("wipes only cache partitions for the revoked Space", async () => {
     const storage = new MemoryWorkspaceCacheStorage();
     const source = new FakeSource({
-      "space:space-1": { "SPACE.md": "revoked" },
-      "space:space-2": { "SPACE.md": "still granted" },
+      "space:space-1": { "CONTEXT.md": "revoked" },
+      "space:space-2": { "CONTEXT.md": "still granted" },
     });
     const cache = new WorkspaceCache(storage, source, {
       now: () => new Date("2026-05-30T12:00:00.000Z"),
@@ -271,10 +285,10 @@ describe("WorkspaceCache", () => {
 
     expect(wiped).toEqual({ deleted: 1 });
     await expect(
-      cache.readFile(PARTITION, "Spaces/default/SPACE.md"),
+      cache.readFile(PARTITION, "Spaces/default/CONTEXT.md"),
     ).resolves.toBeNull();
     await expect(
-      cache.readFile(otherPartition, "Spaces/default/SPACE.md"),
+      cache.readFile(otherPartition, "Spaces/default/CONTEXT.md"),
     ).resolves.toMatchObject({
       content: "still granted",
     });
@@ -305,7 +319,7 @@ describe("WorkspaceCache", () => {
     ).toEqual([]);
   });
 
-  it("maps API workspace files into Agent, Spaces, and User runtime roots", () => {
+  it("maps API workspace files into Agent, Spaces, and User cache roots", () => {
     expect(
       workspaceRuntimePathForFile(
         { agentId: "agent-1" },
@@ -315,9 +329,9 @@ describe("WorkspaceCache", () => {
     expect(
       workspaceRuntimePathForFile(
         { spaceId: "space-1", spaceFolderName: "customer-onboarding" },
-        { path: "source/SPACE.md", source: "space" },
+        { path: "source/CONTEXT.md", source: "space" },
       ),
-    ).toBe("Spaces/customer-onboarding/SPACE.md");
+    ).toBe("Spaces/customer-onboarding/CONTEXT.md");
     expect(
       workspaceRuntimePathForFile(
         { userId: "user-1" },
@@ -339,9 +353,12 @@ describe("WorkspaceCache", () => {
     expect(
       workspaceRuntimePathForFile(
         { spaceId: "space-1", spaceFolderName: "customer-onboarding" },
-        { path: "Spaces/customer-onboarding/source/SPACE.md", source: "space" },
+        {
+          path: "Spaces/customer-onboarding/source/CONTEXT.md",
+          source: "space",
+        },
       ),
-    ).toBe("Spaces/customer-onboarding/SPACE.md");
+    ).toBe("Spaces/customer-onboarding/CONTEXT.md");
     expect(
       workspaceRuntimePathForFile(
         { agentId: "agent-1" },
@@ -364,8 +381,8 @@ describe("WorkspaceCache", () => {
             source: "agent",
             content: "# Agent",
           },
-          "source/SPACE.md": {
-            path: "source/SPACE.md",
+          "source/CONTEXT.md": {
+            path: "source/CONTEXT.md",
             source: "space",
             content: "# Space",
           },
@@ -392,7 +409,7 @@ describe("WorkspaceCache", () => {
     await expect(cache.listFiles(PARTITION)).resolves.toEqual([
       expect.objectContaining({ path: "Agent/AGENTS.md" }),
       expect.objectContaining({ path: "Agent/CONTEXT.md" }),
-      expect.objectContaining({ path: "Spaces/default/SPACE.md" }),
+      expect.objectContaining({ path: "Spaces/default/CONTEXT.md" }),
       expect.objectContaining({ path: "User/USER.md" }),
     ]);
     await expect(

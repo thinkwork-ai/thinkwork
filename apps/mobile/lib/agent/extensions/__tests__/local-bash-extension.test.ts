@@ -81,7 +81,7 @@ describe("localBashExtension", () => {
     const result = await bash.execute(
       {
         command:
-          "pwd; find . -maxdepth 1 -mindepth 1 -type d -print | sort; cat AGENTS.md; cat USER.md; cat Space/SPACE.md",
+          "pwd; find . -maxdepth 1 -mindepth 1 -type d -print | sort; cat AGENTS.md; cat USER.md; cat Space/CONTEXT.md",
       },
       {},
     );
@@ -295,7 +295,7 @@ function workspaceFixture() {
         return {
           files: [
             {
-              path: "source/SPACE.md",
+              path: "source/CONTEXT.md",
               content: "# Space\n",
               source: "space",
               sha256: "sha-space",

@@ -56,6 +56,8 @@ Project-specific context belongs in a Space. Specialty behaviors belong in
 
 The Workspace tab shows files the tenant platform agent reads as part of its baseline context. These files are the tenant layer of the runtime workspace. Use them for shared operating principles, standing instructions, and reusable context that should apply across Spaces.
 
+During a turn, these Agent files hydrate at the root of `/workspace`. User context is merged into that root, and the active Space mounts separately as `Space/`.
+
 Do not put Space-specific procedures here if they only apply to one workroom. Put those files on the Space workspace instead so other Spaces do not inherit irrelevant instructions.
 
 ### Folder specialists

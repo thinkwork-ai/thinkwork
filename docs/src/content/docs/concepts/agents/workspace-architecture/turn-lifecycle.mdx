@@ -34,19 +34,26 @@ The runtime downloads the manifest-backed workspace into `/workspace`.
 ```text
 /workspace
 ├── AGENTS.md
-├── SPACE.md
 ├── USER.md
-├── GOAL.md
-├── PROGRESS.md
-├── DECISIONS.md
-├── ARTIFACTS.md
-├── HANDOFFS.md
-├── docs/
 ├── memory/
-└── skills/
+├── skills/
+├── workspaces/
+└── Space/
+    ├── CONTEXT.md
+    ├── GOAL.md
+    ├── PROGRESS.md
+    ├── DECISIONS.md
+    ├── ARTIFACTS.md
+    ├── HANDOFFS.md
+    ├── artifacts/
+    ├── docs/
+    ├── goals/
+    └── plans/
 ```
 
-`GOAL.md` and `PROGRESS.md` are mounted read-only because they describe database state. Narrative files such as `DECISIONS.md`, `ARTIFACTS.md`, and `HANDOFFS.md` are writable Thread Goal files.
+The Agent source becomes the root of `/workspace`. The User source is merged into the root. The active Space is mounted as singular `Space/`; the runtime should not have top-level `Agent/`, `Spaces/`, or `User/` folders.
+
+`Space/GOAL.md` and `Space/PROGRESS.md` are mounted read-only because they describe database state. Narrative files such as `Space/DECISIONS.md`, `Space/ARTIFACTS.md`, and `Space/HANDOFFS.md` are writable Thread Goal files.
 
 ## 3. Run
 
@@ -77,9 +84,15 @@ After the turn, the runtime sends changed files to the finalize path. The API re
 Reconcile is file-side only. Structured state changes use transactional tools and resolvers.
 
 <Aside type="caution">
-  Do not ask an agent to change task status by editing `PROGRESS.md`. Ask it to
-  use the task-status tool. The file will re-render from the database.
+  Do not ask an agent to change task status by editing `Space/PROGRESS.md`. Ask
+  it to use the task-status tool. The file will re-render from the database.
 </Aside>
+
+## Current limitations
+
+Workspace hydration is cache-aware and manifest-backed. A runtime should check for workspace changes, hydrate the files it needs, and reuse fresh local material; it should not fetch the entire tenant bucket before every turn.
+
+Natural-language task completion depends on the agent selecting the structured task-status path. The user may say "DocuSign is complete"; the model/tool layer should map that to the task action. The fallback is not an exact file-name match, and it is not a hand edit to `Space/PROGRESS.md`.
 
 ## Failure behavior
 

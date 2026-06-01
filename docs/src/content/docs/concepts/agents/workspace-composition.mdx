@@ -47,7 +47,7 @@ The current default workspace file set is:
 | `CONTEXT.md`                               | live          | Root scope and responsibilities                                 |
 | `GUARDRAILS.md`                            | pinned        | Guardrail baseline; template/default changes require acceptance |
 | `USER.md`                                  | managed       | Rewritten from requester profile data                           |
-| `SPACE.md`                                 | rendered      | Active Space context for the turn                               |
+| `Space/CONTEXT.md`                         | rendered      | Active Space context for the turn                               |
 | `MEMORY_GUIDE.md`                          | live          | Memory tool and workspace-note instructions                     |
 | `ROUTER.md`                                | live          | Legacy channel-profile loading guidance                         |
 | `TOOLS.md`                                 | live          | Tool-surface guidance                                           |
@@ -77,7 +77,7 @@ Most files are live. The highest matching layer wins, and edits are visible on t
 
 ### Rendered files
 
-`SPACE.md` is replaced with the active Space context for the turn. Space-specific procedures should live on the Space workspace so they do not leak into unrelated Spaces.
+`Space/CONTEXT.md` and the rest of `Space/` are replaced with the active Space context for the turn. Space-specific procedures should live on the Space workspace so they do not leak into unrelated Spaces.
 
 Goal folders are rendered operational records for promoted Threads. `GOAL.md` and `PROGRESS.md` are highest-priority Goal context for a Goal-backed Thread; `DECISIONS.md`, `ARTIFACTS.md`, and `HANDOFFS.md` are narrative context and Company Brain source material. The runtime treats these files as data about the work, not as permission grants or higher-priority instructions.
 
@@ -89,8 +89,8 @@ For a target such as `workspaces/expenses/`, the runtime composes the baseline f
 AGENTS.md
 CONTEXT.md
 GUARDRAILS.md
-SPACE.md
 USER.md
+Space/CONTEXT.md
 workspaces/expenses/CONTEXT.md
 workspaces/expenses/memory/lessons.md
 workspaces/expenses/skills/finance-audit-xls/SKILL.md
@@ -111,10 +111,11 @@ tenants/{tenantSlug}/
 │   ├── memory/
 │   └── skills/
 ├── spaces/{spaceFolder}/
-│   ├── SPACE.md
+│   ├── CONTEXT.md
+│   ├── artifacts/
 │   ├── docs/
 │   ├── goals/
-│   └── knowledge/
+│   └── plans/
 ├── users/{userFolder}/
 │   ├── USER.md
 │   └── memory/
