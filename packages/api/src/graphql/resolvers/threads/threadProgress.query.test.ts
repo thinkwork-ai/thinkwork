@@ -11,6 +11,9 @@ const { captures, mockDb, mockReadThreadProgressMarkdown, tables } = vi.hoisted(
       threads: {
         id: { __column__: "threads.id" },
         tenant_id: { __column__: "threads.tenant_id" },
+        workspace_folder_name: {
+          __column__: "threads.workspace_folder_name",
+        },
         __table__: "threads",
       },
     };
@@ -82,7 +85,11 @@ beforeEach(() => {
 
 describe("threadProgress", () => {
   it("reads tenant-scoped PROGRESS.md for visible threads", async () => {
-    captures.threadRows.push({ id: "thread-1", tenant_id: "tenant-1" });
+    captures.threadRows.push({
+      id: "thread-1",
+      tenant_id: "tenant-1",
+      workspace_folder_name: "customer-kickoff",
+    });
     captures.tenantRows.push({ slug: "acme" });
     mockReadThreadProgressMarkdown.mockResolvedValue("# PROGRESS\n\n## Tasks");
 
@@ -95,6 +102,7 @@ describe("threadProgress", () => {
     expect(mockReadThreadProgressMarkdown).toHaveBeenCalledWith({
       tenantSlug: "acme",
       threadId: "thread-1",
+      threadFolderName: "customer-kickoff",
     });
   });
 

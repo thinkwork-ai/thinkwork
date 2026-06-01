@@ -21,18 +21,26 @@ describe("customer onboarding Goal folder", () => {
     });
 
     expect(folder.files.map((file) => file.file)).toEqual([
+      "THREAD.md",
       "GOAL.md",
       "PROGRESS.md",
+      "TASKS.md",
       "DECISIONS.md",
       "ARTIFACTS.md",
       "HANDOFFS.md",
     ]);
+    expect(
+      folder.files.find((file) => file.file === "THREAD.md")?.content,
+    ).toContain("Use task/status tools to change checklist state");
     expect(
       folder.files.find((file) => file.file === "GOAL.md")?.content,
     ).toContain("Review policy: human final review is required");
     expect(
       folder.files.find((file) => file.file === "PROGRESS.md")?.content,
     ).toContain("- Required complete: 1/2");
+    expect(
+      folder.files.find((file) => file.file === "TASKS.md")?.content,
+    ).toContain("| Run credit check | Todo | Finance | Yes | No |  |");
     expect(
       folder.files.find((file) => file.file === "DECISIONS.md")?.content,
     ).toContain("- Credit approval notes: Approved up to 25k.");
@@ -80,7 +88,10 @@ describe("customer onboarding Goal folder", () => {
     );
 
     expect(statusUpdates).toEqual([{ status: "in_review" }]);
-    expect(writes).toHaveLength(5);
+    expect(writes).toHaveLength(7);
+    expect(
+      writes.find((write) => write.file === "THREAD.md")?.content,
+    ).toContain("Ready for review: yes");
     expect(writes.find((write) => write.file === "GOAL.md")?.content).toContain(
       "Ready for human final review.",
     );
@@ -120,8 +131,10 @@ describe("customer onboarding Goal folder", () => {
     );
 
     expect(writes.map((write) => write.file)).toEqual([
+      "THREAD.md",
       "GOAL.md",
       "PROGRESS.md",
+      "TASKS.md",
       "HANDOFFS.md",
     ]);
   });

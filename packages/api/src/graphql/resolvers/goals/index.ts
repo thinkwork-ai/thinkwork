@@ -1,6 +1,7 @@
 import { threadGoal } from "./threadGoal.query.js";
 import { threadGoalFiles } from "./threadGoalFiles.query.js";
 import { reviewGoal } from "./reviewGoal.mutation.js";
+import { refreshThreadProgress } from "./refreshThreadProgress.mutation.js";
 
 export const goalQueries = {
   threadGoal,
@@ -8,5 +9,6 @@ export const goalQueries = {
 };
 
 export const goalMutations = {
+  refreshThreadProgress,
   reviewGoal,
 };

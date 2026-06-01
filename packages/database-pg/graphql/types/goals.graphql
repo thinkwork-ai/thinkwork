@@ -13,8 +13,10 @@ enum ThreadGoalStatus {
 }
 
 enum ThreadGoalFileKind {
+  THREAD
   GOAL
   PROGRESS
+  TASKS
   DECISIONS
   ARTIFACTS
   HANDOFFS
@@ -69,11 +71,20 @@ type ReviewGoalPayload {
   thread: Thread!
 }
 
+type RefreshThreadProgressPayload {
+  threadGoalFiles: ThreadGoalFiles
+}
+
 input ReviewGoalInput {
   tenantId: ID!
   goalId: ID!
   action: ReviewGoalAction!
   notes: String
+}
+
+input RefreshThreadProgressInput {
+  tenantId: ID!
+  threadId: ID!
 }
 
 extend type Query {
@@ -82,5 +93,8 @@ extend type Query {
 }
 
 extend type Mutation {
+  refreshThreadProgress(
+    input: RefreshThreadProgressInput!
+  ): RefreshThreadProgressPayload!
   reviewGoal(input: ReviewGoalInput!): ReviewGoalPayload!
 }

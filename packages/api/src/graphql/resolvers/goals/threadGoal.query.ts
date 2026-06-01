@@ -55,6 +55,7 @@ export async function findThreadGoalForVisibleThread(
       thread_id: goals.thread_id,
       agent_id: threads.agent_id,
       user_id: threads.user_id,
+      workspace_folder_name: threads.workspace_folder_name,
       template_key: goals.template_key,
       outcome: goals.outcome,
       owner_type: goals.owner_type,

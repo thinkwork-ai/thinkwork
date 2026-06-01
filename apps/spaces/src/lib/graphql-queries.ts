@@ -431,6 +431,43 @@ export const ReviewGoalMutation = gql`
   }
 `;
 
+export const RefreshThreadProgressMutation = gql`
+  mutation RefreshThreadProgress($input: RefreshThreadProgressInput!) {
+    refreshThreadProgress(input: $input) {
+      threadGoalFiles {
+        goal {
+          id
+          tenantId
+          spaceId
+          threadId
+          templateKey
+          outcome
+          ownerType
+          ownerId
+          mode
+          status
+          progressModel
+          completionRule
+          reviewPolicy
+          reviewerType
+          reviewerId
+          startedAt
+          reviewedAt
+          completedAt
+          cancelledAt
+          metadata
+          updatedAt
+        }
+        files {
+          file
+          key
+          content
+        }
+      }
+    }
+  }
+`;
+
 export const StartCustomerOnboardingMutation = gql`
   mutation StartCustomerOnboarding($input: StartCustomerOnboardingInput!) {
     startCustomerOnboarding(input: $input) {

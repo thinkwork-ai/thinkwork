@@ -161,12 +161,20 @@ export function renderCustomerOnboardingGoalFolder(
     readiness,
     files: [
       {
+        file: "THREAD.md",
+        content: renderThreadMarkdown(input, readiness, input.goalStatus),
+      },
+      {
         file: "GOAL.md",
         content: renderGoalMarkdown(input, readiness, input.goalStatus),
       },
       {
         file: "PROGRESS.md",
         content: renderCustomerOnboardingProgressMarkdown(input),
+      },
+      {
+        file: "TASKS.md",
+        content: renderTasksMarkdown(input),
       },
       {
         file: "DECISIONS.md",
@@ -185,7 +193,12 @@ export function renderCustomerOnboardingGoalFolder(
 }
 
 function isNarrativeGoalFile(file: ThreadGoalFileName): boolean {
-  return file !== "GOAL.md" && file !== "PROGRESS.md";
+  return (
+    file !== "THREAD.md" &&
+    file !== "GOAL.md" &&
+    file !== "PROGRESS.md" &&
+    file !== "TASKS.md"
+  );
 }
 
 export function customerOnboardingGoalReadiness(
@@ -201,7 +214,9 @@ export function customerOnboardingGoalReadiness(
   };
 }
 
-class DrizzleCustomerOnboardingGoalStatusUpdater implements CustomerOnboardingGoalStatusUpdater {
+class DrizzleCustomerOnboardingGoalStatusUpdater
+  implements CustomerOnboardingGoalStatusUpdater
+{
   async update(input: {
     tenantId: string;
     threadId: string;
@@ -315,6 +330,36 @@ class DrizzleCustomerOnboardingGoalStatusUpdater implements CustomerOnboardingGo
   }
 }
 
+function renderThreadMarkdown(
+  input: CustomerOnboardingProgressState & { updatedAt: Date },
+  readiness: CustomerOnboardingGoalReadiness,
+  goalStatus?: CustomerOnboardingGoalStatus,
+): string {
+  const customer = customerLabel(input);
+  return [
+    "# THREAD",
+    "",
+    `Thread: ${input.threadTitle}`,
+    `Workflow: Customer onboarding`,
+    `Customer: ${customer}`,
+    `Status: ${goalStatus ? goalStatusText(goalStatus) : goalStatusText(readiness.status)}`,
+    `Updated: ${input.updatedAt.toISOString()}`,
+    "",
+    "## Runtime Context",
+    "- This is a generated Thread projection from database state.",
+    "- Use task/status tools to change checklist state; do not edit generated Thread projections directly.",
+    "- Use Thread/notes/ for raw findings or compounding candidates.",
+    "",
+    "## Current Completion",
+    `- Required complete: ${readiness.completedRequired}/${readiness.totalRequired}`,
+    `- Ready for review: ${readiness.readyForReview ? "yes" : "no"}`,
+    "",
+    "## Source References",
+    ...externalIdLines(input),
+    "",
+  ].join("\n");
+}
+
 function renderGoalMarkdown(
   input: CustomerOnboardingProgressState & { updatedAt: Date },
   readiness: CustomerOnboardingGoalReadiness,
@@ -351,6 +396,35 @@ function renderGoalMarkdown(
     readiness.readyForReview
       ? "- Ask the human owner to confirm final onboarding review before closing the Thread."
       : "- Continue the listed handoffs until required applicable rows are complete.",
+    "",
+  ].join("\n");
+}
+
+function renderTasksMarkdown(
+  input: CustomerOnboardingProgressState & { updatedAt: Date },
+): string {
+  return [
+    "# TASKS",
+    "",
+    `Thread: ${input.threadTitle}`,
+    `Updated: ${input.updatedAt.toISOString()}`,
+    "",
+    "Structured task state lives in Aurora linked_tasks rows. This file is a generated checklist snapshot for agents and reports.",
+    "",
+    "## Checklist",
+    "| Task | Status | Owner | Required | Blocked | Notes |",
+    "| --- | --- | --- | --- | --- | --- |",
+    ...input.tasks.map((task) => {
+      const owner = task.owner ?? formatRoleLabel(task.roleKey) ?? "Unassigned";
+      return `| ${[
+        tableCell(task.title),
+        tableCell(formatStatusLabel(task.status)),
+        tableCell(owner),
+        task.required ? "Yes" : "No",
+        task.blocked ? "Yes" : "No",
+        tableCell(task.notes ?? ""),
+      ].join(" | ")} |`;
+    }),
     "",
   ].join("\n");
 }
@@ -545,6 +619,10 @@ function formatStatusLabel(status: string): string {
 function formatRoleLabel(roleKey: string | null): string | null {
   if (!roleKey) return null;
   return formatStatusLabel(roleKey);
+}
+
+function tableCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
 }
 
 function compactObject(
