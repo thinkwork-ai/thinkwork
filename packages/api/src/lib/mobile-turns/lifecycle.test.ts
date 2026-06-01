@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   abortMobileTurn,
+  boundMobileCheckpointPayload,
   checkpointMobileTurn,
   finalizeLocalMobileTurn,
   heartbeatMobileTurn,
@@ -160,6 +161,32 @@ describe("mobile turn lifecycle", () => {
     expect(subject.appendCheckpoint).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-1", safe: true }),
     );
+  });
+
+  it("bounds oversized mobile checkpoint evidence before persistence", () => {
+    const largeResult = "x".repeat(120_000);
+    const payload = boundMobileCheckpointPayload({
+      event_type: "tool_result",
+      safe: true,
+      transcript: Array.from({ length: 20 }, (_, index) => ({
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: `message-${index} ${"y".repeat(8_000)}`,
+      })),
+      event_log: Array.from({ length: 20 }, (_, index) => ({
+        type: "tool_result",
+        result: { content: `${index}-${largeResult}` },
+      })),
+      name: "mobile_file",
+      result: { content: largeResult, isError: false },
+    });
+
+    expect(Buffer.byteLength(JSON.stringify(payload), "utf8")).toBeLessThan(
+      64 * 1024,
+    );
+    expect(payload.checkpoint_truncated).toBe(true);
+    expect(payload.event_type).toBe("tool_result");
+    expect(payload.safe).toBe(true);
+    expect(payload.name).toBe("mobile_file");
   });
 
   it("marks aborted turns non-handoff-eligible through the abort path", async () => {

@@ -6,6 +6,53 @@ status: complete
 
 # Autopilot Status Ledger
 
+## Mobile Checkpoint Payload Bounds Hotfix - 2026-06-01
+
+- Branch: `fix/mobile-checkpoint-payload-bounds`
+- Status: local verification passed; PR pending.
+- Regression context: the full mobile Pi harness passed all capability rows,
+  but CloudWatch for `thinkwork-dev-api-mobile-turn-session` showed repeated
+  checkpoint failures during attachment/image rows:
+  `ThreadTurnEventError: thread turn event payload exceeds 65536 bytes`.
+- Root cause: mobile checkpoints persisted full transcript/event-log evidence,
+  including large tool/image/file result payloads. The handler wrote that raw
+  payload directly into `thread_turn_events`, whose event payload guard is
+  intentionally capped at 64 KiB.
+- Change: the mobile turn lifecycle now bounds checkpoint payloads before
+  writing both the checkpoint event and the latest checkpoint snapshot, trimming
+  transcript/event-log evidence while preserving safe/unsafe metadata, result
+  summaries, sequence, and handoff-relevant fields.
+- Verification:
+  `pnpm --filter @thinkwork/api test -- src/lib/mobile-turns/lifecycle.test.ts src/lib/thread-turn-events.test.ts`,
+  `pnpm --filter @thinkwork/api test -- src/handlers/mobile-turn-session.test.ts src/lib/mobile-turns/lifecycle.test.ts src/lib/mobile-turns/managed-dispatch.test.ts src/lib/mobile-turns/checkpoint.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and `git diff --check` passed.
+
+## Full Regression Restart - 2026-06-01
+
+- AgentCore rendered workspace deploy confirmation after PR
+  [#1935](https://github.com/thinkwork-ai/thinkwork/pull/1935): live thread
+  `b7847210-1427-44b9-bf0b-50fae3b7bf62` / turn
+  `3ce7b58d-336a-4809-965d-8fae441c424f` (`CHAT-984`) reported
+  `PWD=/workspace`, root files `AGENTS.md` and `USER.md`, `memory/`, and
+  singular `Space/`; forbidden roots `Agent`, `Spaces`, `User`, `workspace`,
+  `source`, `workspace-archives`, and `.thinkwork-pi` were absent.
+- Automated regression floor on `main` passed:
+  `pnpm --filter @thinkwork/desktop test`,
+  `pnpm --filter @thinkwork/mobile test`,
+  `pnpm --filter @thinkwork/mobile smoke:pi-harness:full:dry-run`, and
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts agent-container/tests/handler-context.test.ts`.
+- iOS simulator state confirmed: booted `iPhone 17 Pro`
+  `EC60373F-DFCC-4F30-AA7D-D0D4454E6359`, installed app bundle
+  `ai.thinkwork.mobile`.
+- Mobile full deployed harness was rerun with a refreshed Cognito ID token and
+  passed every row: `plain`, `workspace`, `workspace_tools`, `web_search`,
+  `mcp`, `mcp_auth_failure`, `bash`, `skill`, `image`, `file`,
+  `handoff_local`, `agentcore_pi`, `handoff_managed`,
+  `handoff_late_finalize`, `handoff_unsafe_checkpoint`, and `abort`.
+- Mobile workspace row proved the local workspace path is not model memory:
+  the run explicitly called the `read` workspace tool for `USER.md` and then
+  answered the user identity prompt.
+
 ## AgentCore Pi Private Agent Dir Hotfix - 2026-06-01
 
 - Branch: `fix/agentcore-pi-agent-dir`

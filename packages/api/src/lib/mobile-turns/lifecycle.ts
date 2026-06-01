@@ -19,6 +19,10 @@ export const MOBILE_PI_INVOCATION_SOURCE = "mobile_pi";
 export const MOBILE_PI_RUNTIME_TYPE = "mobile-pi";
 
 const MAX_TEXT_LENGTH = 200_000;
+const MAX_CHECKPOINT_PAYLOAD_BYTES = 48 * 1024;
+const CHECKPOINT_ARRAY_LIMIT = 12;
+const CHECKPOINT_TEXT_LIMIT = 6_000;
+const CHECKPOINT_NESTED_TEXT_LIMIT = 2_000;
 
 export interface MobileTurnAuth {
   email: string | null;
@@ -230,6 +234,103 @@ function requireBoundedText(value: unknown, field: string): string {
     );
   }
   return text;
+}
+
+function checkpointBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value ?? null), "utf8");
+}
+
+function truncateCheckpointText(value: string, limit: number): string {
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit)}\n[truncated ${value.length - limit} chars]`;
+}
+
+function compactCheckpointValue(
+  value: unknown,
+  key = "",
+  depth = 0,
+): unknown {
+  if (typeof value === "string") {
+    return truncateCheckpointText(
+      value,
+      key === "text" || key === "content"
+        ? CHECKPOINT_TEXT_LIMIT
+        : CHECKPOINT_NESTED_TEXT_LIMIT,
+    );
+  }
+  if (typeof value !== "object" || value === null) return value;
+  if (depth >= 4) return "[truncated nested checkpoint value]";
+
+  if (Array.isArray(value)) {
+    if (key === "transcript") {
+      const messages = value.slice(-CHECKPOINT_ARRAY_LIMIT);
+      const compacted = messages.map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          return compactCheckpointValue(item, key, depth + 1);
+        }
+        const message = item as Record<string, unknown>;
+        return {
+          role: typeof message.role === "string" ? message.role : "unknown",
+          content:
+            typeof message.content === "string"
+              ? truncateCheckpointText(message.content, 1_000)
+              : "",
+        };
+      });
+      if (messages.length < value.length) {
+        compacted.push({ truncated_items: value.length - messages.length });
+      }
+      return compacted;
+    }
+    const items =
+      key === "event_log"
+        ? value.slice(-CHECKPOINT_ARRAY_LIMIT)
+        : value.slice(0, CHECKPOINT_ARRAY_LIMIT);
+    const compacted = items.map((item) =>
+      compactCheckpointValue(item, key, depth + 1),
+    );
+    if (items.length < value.length) {
+      compacted.push({ truncated_items: value.length - items.length });
+    }
+    return compacted;
+  }
+
+  const out: Record<string, unknown> = {};
+  for (const [entryKey, entryValue] of Object.entries(value)) {
+    out[entryKey] = compactCheckpointValue(entryValue, entryKey, depth + 1);
+  }
+  return out;
+}
+
+export function boundMobileCheckpointPayload(
+  checkpoint: Record<string, unknown>,
+): Record<string, unknown> {
+  let payload = compactCheckpointValue(checkpoint) as Record<string, unknown>;
+  if (checkpointBytes(payload) <= MAX_CHECKPOINT_PAYLOAD_BYTES) return payload;
+
+  payload = {
+    ...payload,
+    checkpoint_truncated: true,
+    event_log: undefined,
+  };
+  if (checkpointBytes(payload) <= MAX_CHECKPOINT_PAYLOAD_BYTES) return payload;
+
+  return {
+    checkpoint_truncated: true,
+    event_type: payload.event_type,
+    safe: payload.safe,
+    seq: payload.seq,
+    checkpointed_at: payload.checkpointed_at,
+    unsafe_reason: payload.unsafe_reason,
+    stop_reason: payload.stop_reason,
+    text:
+      typeof payload.text === "string"
+        ? truncateCheckpointText(payload.text, CHECKPOINT_TEXT_LIMIT)
+        : undefined,
+    name: payload.name,
+    result: compactCheckpointValue(payload.result, "result", 1),
+    transcript: compactCheckpointValue(payload.transcript, "transcript", 1),
+  };
 }
 
 function latestCheckpointSeqPatch(seq: number | undefined) {
@@ -681,6 +782,12 @@ export function defaultMobileTurnLifecycleDeps(): MobileTurnLifecycleDeps {
     },
     async appendCheckpoint(input) {
       return defaultDb.transaction(async (tx) => {
+        const checkpointedAt = input.now.toISOString();
+        const eventPayload = boundMobileCheckpointPayload({
+          ...input.checkpoint,
+          safe: input.safe,
+          checkpointed_at: checkpointedAt,
+        });
         const event = await appendThreadTurnEvent(
           drizzleThreadTurnEventStore(tx),
           {
@@ -689,24 +796,21 @@ export function defaultMobileTurnLifecycleDeps(): MobileTurnLifecycleDeps {
             eventType: "mobile_pi_checkpoint",
             message: input.message,
             agentId: null,
-            payload: {
-              ...input.checkpoint,
-              safe: input.safe,
-              checkpointed_at: input.now.toISOString(),
-            },
+            payload: eventPayload,
           },
         );
+        const snapshotPayload = boundMobileCheckpointPayload({
+          ...input.checkpoint,
+          safe: input.safe,
+          seq: event.seq,
+          checkpointed_at: checkpointedAt,
+        });
         await tx
           .update(threadTurns)
           .set({
             last_activity_at: input.now,
             context_snapshot: sql`jsonb_set(jsonb_set(coalesce(${threadTurns.context_snapshot}, '{}'::jsonb), '{mobile_turn,latest_checkpoint}', ${JSON.stringify(
-              {
-                ...input.checkpoint,
-                safe: input.safe,
-                seq: event.seq,
-                checkpointed_at: input.now.toISOString(),
-              },
+              snapshotPayload,
             )}::jsonb, true), '{mobile_turn,latest_checkpoint_seq}', to_jsonb(${event.seq}::int), true)`,
           })
           .where(
