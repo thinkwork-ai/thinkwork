@@ -1,4 +1,4 @@
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -14,6 +14,7 @@ import {
   spaceMembers,
   spaces,
   tenantMembers,
+  threadAttachments,
   threadTurns,
   threads,
   users,
@@ -209,6 +210,17 @@ export interface PrepareLocalPiRuntimeSessionDeps {
     agentId: string;
   }): Promise<void>;
   getTraceId(): string;
+  /**
+   * Resolve the attachments linked to a message from the database (canonical
+   * s3 keys), the same way the cloud wakeup-processor does. The desktop client
+   * only knows attachment ids, so the server derives the rest — never trusting
+   * a client-supplied s3 key.
+   */
+  loadMessageAttachments(input: {
+    tenantId: string;
+    threadId: string;
+    messageId: string;
+  }): Promise<DesktopRuntimeAttachment[]>;
   /**
    * Mint a short-lived presigned GET URL so the desktop runtime (which holds
    * no AWS credentials) can download an attachment over plain HTTPS. Returns
@@ -550,6 +562,48 @@ export function defaultPrepareLocalPiRuntimeSessionDeps(): PrepareLocalPiRuntime
       const rootMatch = xrayTraceId?.match(/Root=([^;]+)/);
       return rootMatch?.[1] ?? randomBytes(16).toString("hex");
     },
+    async loadMessageAttachments({ tenantId, threadId, messageId }) {
+      const [message] = await db
+        .select({ metadata: messages.metadata })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenant_id, tenantId),
+            eq(messages.thread_id, threadId),
+            eq(messages.id, messageId),
+          ),
+        )
+        .limit(1);
+      const currentIds = new Set(
+        parseAttachmentIdsFromMessageMetadata(message?.metadata),
+      );
+      if (currentIds.size === 0) return [];
+      const rows = await db
+        .select({
+          id: threadAttachments.id,
+          s3Key: threadAttachments.s3_key,
+          name: threadAttachments.name,
+          mimeType: threadAttachments.mime_type,
+          sizeBytes: threadAttachments.size_bytes,
+        })
+        .from(threadAttachments)
+        .where(
+          and(
+            eq(threadAttachments.tenant_id, tenantId),
+            eq(threadAttachments.thread_id, threadId),
+          ),
+        )
+        .orderBy(asc(threadAttachments.created_at), asc(threadAttachments.id));
+      return rows
+        .filter((row) => currentIds.has(row.id) && row.s3Key)
+        .map((row) => ({
+          attachmentId: row.id,
+          s3Key: row.s3Key as string,
+          name: row.name ?? "attachment",
+          mimeType: row.mimeType ?? "application/octet-stream",
+          sizeBytes: row.sizeBytes ?? 0,
+        }));
+    },
     async presignAttachmentDownload({ bucket, key }) {
       return presignAttachmentDownloadUrl({ bucket, key });
     },
@@ -560,6 +614,34 @@ export function defaultPrepareLocalPiRuntimeSessionDeps(): PrepareLocalPiRuntime
       hindsightEndpoint: process.env.HINDSIGHT_ENDPOINT,
     },
   };
+}
+
+/** Extract attachment ids from a message's `metadata.attachments` JSON. */
+export function parseAttachmentIdsFromMessageMetadata(
+  metadata: unknown,
+): string[] {
+  let parsed: unknown = metadata;
+  if (typeof metadata === "string") {
+    try {
+      parsed = JSON.parse(metadata);
+    } catch {
+      return [];
+    }
+  }
+  const attachments = (parsed as { attachments?: unknown })?.attachments;
+  if (!Array.isArray(attachments)) return [];
+  const ids: string[] = [];
+  for (const entry of attachments) {
+    const id =
+      typeof entry === "string"
+        ? entry
+        : typeof (entry as { attachmentId?: unknown })?.attachmentId ===
+            "string"
+          ? (entry as { attachmentId: string }).attachmentId
+          : "";
+    if (id) ids.push(id);
+  }
+  return [...new Set(ids)];
 }
 
 const ATTACHMENT_DOWNLOAD_TTL_SECONDS = 15 * 60;
@@ -850,8 +932,18 @@ export async function prepareLocalPiRuntimeSession(
     ? `${deps.env.thinkworkApiUrl.replace(/\/$/, "")}/api/threads/${input.threadId}/finalize`
     : null;
 
+  // The desktop client only knows attachment ids, so resolve the canonical
+  // attachment list (with s3 keys) server-side from the message — same as the
+  // cloud wakeup-processor. Fall back to any explicitly-passed list for tests.
+  const resolvedAttachments = input.messageId
+    ? await deps.loadMessageAttachments({
+        tenantId: caller.tenantId,
+        threadId: input.threadId,
+        messageId: input.messageId,
+      })
+    : (input.messageAttachments ?? []);
   const messageAttachments = await buildDesktopMessageAttachments(
-    input.messageAttachments,
+    resolvedAttachments,
     deps,
   );
 

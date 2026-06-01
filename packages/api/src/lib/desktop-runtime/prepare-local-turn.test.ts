@@ -106,6 +106,7 @@ function makeDeps(
     updateTurnWakeupRequestId: vi.fn(async () => {}),
     notifyTurnStarted: vi.fn(async () => {}),
     getTraceId: () => "trace-1",
+    loadMessageAttachments: vi.fn(async () => []),
     presignAttachmentDownload: vi.fn(
       async ({ key }: { bucket: string; key: string }) =>
         `https://signed.example/${key}`,
@@ -217,6 +218,51 @@ describe("prepareLocalPiRuntimeSession", () => {
         attachment_id: "att-1",
         name: "General-Ledger.xlsx",
         download_url: `https://signed.example/tenants/acme/attachments/${THREAD_ID}/att-1/General-Ledger.xlsx`,
+      }),
+    ]);
+  });
+
+  it("resolves attachments from the message id (DB) and presigns them", async () => {
+    const deps = makeDeps({
+      loadMessageAttachments: vi.fn(async () => [
+        {
+          attachmentId: "att-db",
+          s3Key: `tenants/acme/attachments/${THREAD_ID}/att-db/General-Ledger.xlsx`,
+          name: "General-Ledger.xlsx",
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          sizeBytes: 116870,
+        },
+      ]),
+    });
+
+    const session = await prepareLocalPiRuntimeSession(
+      {
+        auth: {
+          authType: "cognito",
+          email: "user@example.com",
+          principalId: "cognito-sub",
+          tenantId: null,
+          agentId: null,
+        },
+        agentId: AGENT_ID,
+        threadId: THREAD_ID,
+        messageId: "11111111-1111-4111-8111-111111111111",
+        userMessage: "Analyze the general ledger",
+      },
+      deps,
+    );
+
+    expect(deps.loadMessageAttachments).toHaveBeenCalledWith({
+      tenantId: expect.any(String),
+      threadId: THREAD_ID,
+      messageId: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(session.invocation.message_attachments).toEqual([
+      expect.objectContaining({
+        attachment_id: "att-db",
+        name: "General-Ledger.xlsx",
+        download_url: `https://signed.example/tenants/acme/attachments/${THREAD_ID}/att-db/General-Ledger.xlsx`,
       }),
     ]);
   });
