@@ -244,37 +244,39 @@ function ProfileSection({
         <Labeled label="User ID">
           <CopyableId value={userId} />
         </Labeled>
-        <Labeled label="Name">
-          <Input
-            value={form.name}
-            onChange={(e) => set("name")(e.target.value)}
-          />
-        </Labeled>
-        <Labeled label="Role">
-          <div className="flex items-center gap-3">
-            <Select
-              value={currentRole}
-              onValueChange={onRoleChange}
-              disabled={isSelf || roleState.fetching}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {roleOptions.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {roleState.fetching ? (
-              <span className="text-sm text-muted-foreground">Saving…</span>
-            ) : roleErrorMsg ? (
-              <span className="text-sm text-destructive">{roleErrorMsg}</span>
-            ) : null}
-          </div>
-        </Labeled>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Labeled label="Name">
+            <Input
+              value={form.name}
+              onChange={(e) => set("name")(e.target.value)}
+            />
+          </Labeled>
+          <Labeled label="Role">
+            <div className="flex items-center gap-3">
+              <Select
+                value={currentRole}
+                onValueChange={onRoleChange}
+                disabled={isSelf || roleState.fetching}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {roleState.fetching ? (
+                <span className="text-sm text-muted-foreground">Saving…</span>
+              ) : roleErrorMsg ? (
+                <span className="text-sm text-destructive">{roleErrorMsg}</span>
+              ) : null}
+            </div>
+          </Labeled>
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Labeled label="Title">
             <Input

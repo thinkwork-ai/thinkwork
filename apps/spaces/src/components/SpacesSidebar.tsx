@@ -1,6 +1,15 @@
+import { useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { LogOut, Settings } from "lucide-react";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Avatar,
   AvatarFallback,
   DropdownMenu,
@@ -104,6 +113,10 @@ function AccountMenu({
 }) {
   const displayName = name ?? email ?? "Account";
   const initials = getInitials(name, email);
+  // Logout is easy to hit by accident, so confirm before signing out. The
+  // dialog is controlled (not trigger-based) because the dropdown unmounts its
+  // own children on select, which would tear down a nested trigger mid-open.
+  const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
 
   return (
     <DropdownMenu>
@@ -147,11 +160,36 @@ function AccountMenu({
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onSignOut}>
+        <DropdownMenuItem onSelect={() => setConfirmSignOutOpen(true)}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </DropdownMenuItem>
       </DropdownMenuContent>
+      <AlertDialog
+        open={confirmSignOutOpen}
+        onOpenChange={setConfirmSignOutOpen}
+      >
+        <AlertDialogContent data-testid="logout-confirm-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Log out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You&rsquo;ll need to sign in again to get back to your spaces.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="logout-confirm"
+              onClick={(event) => {
+                event.preventDefault();
+                onSignOut();
+              }}
+            >
+              Log out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DropdownMenu>
   );
 }
