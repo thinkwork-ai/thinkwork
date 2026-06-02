@@ -573,6 +573,46 @@ describe("runLocalDesktopTurn", () => {
     expect(fetchImpl).toHaveBeenCalled();
   });
 
+  it("returns partial assistant output when the Pi SDK turn fails after responding", async () => {
+    const sdk: PiSdkModuleLike = {
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [
+            {
+              role: "assistant",
+              content: "I can't help with that destructive action.",
+            },
+          ],
+          prompt: vi.fn(async () => {
+            throw new Error("model stream interrupted");
+          }),
+          dispose: vi.fn(),
+        },
+      })),
+    };
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        thread_turn_id: "turn-1",
+        status: "failed",
+      });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    const result = await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        fetchImpl: fetchImpl as typeof fetch,
+        workspaceStore: new FakeStore(),
+      },
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.output).toBe("I can't help with that destructive action.");
+  });
+
   it("aborts the active Pi SDK session when a local turn is cancelled", async () => {
     const abortController = new AbortController();
     const abort = vi.fn(async () => {});

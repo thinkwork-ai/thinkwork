@@ -393,9 +393,17 @@ export async function runLocalDesktopTurn(
       workspace,
     };
   } catch (error) {
+    const partialRunResult = sdkSession
+      ? buildRunResult(
+          payload.session.invocation,
+          sdkSession.session,
+          sdkSession.resolvedModelId,
+        )
+      : null;
     logger.error("local Pi turn failed", {
       error: error instanceof Error ? error.message : String(error),
       threadTurnId: payload.session.threadTurnId,
+      partialOutput: partialRunResult?.content ? true : false,
     });
     const changedFiles = await collectDesktopWorkspaceChangedFiles({
       localDir: workspace?.localDir,
@@ -425,7 +433,7 @@ export async function runLocalDesktopTurn(
       finalized,
       status: "failed",
       fallbackEligible: !payload.session.invocation.thread_turn_id,
-      output: "",
+      output: partialRunResult?.content ?? "",
       workspace,
     };
   } finally {
