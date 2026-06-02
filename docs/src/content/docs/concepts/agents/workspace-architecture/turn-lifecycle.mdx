@@ -5,13 +5,15 @@ description: How ThinkWork composes, hydrates, runs, and reconciles a Pi workspa
 
 import { Aside } from "@astrojs/starlight/components";
 
-Every Pi turn follows the same lifecycle on AgentCore, desktop, and mobile:
+Every Pi turn follows the same lifecycle inside the AWS-managed AgentCore
+runtime:
 
 ```text
 compose -> hydrate -> run -> reconcile
 ```
 
-That consistency is what lets the same workspace contract work in a Linux container, on a Mac desktop executor, and inside the mobile harness.
+That consistency is what lets desktop, mobile, web, and automation clients share
+one workspace contract while agent execution remains in AgentCore.
 
 ## 1. Compose
 
@@ -105,4 +107,6 @@ Natural-language task completion depends on the agent selecting the structured t
 
 Reconcile is per-file best effort. One file can fail because of a stale ETag or secret scan while another file succeeds. The turn records a structured report so operators can see what wrote, what was rejected, and what needs retry.
 
-If access is revoked before reconcile, the API rejects the write. Desktop and mobile caches also carry access revalidation metadata and wipe revoked Space subtrees when notified.
+If access is revoked before reconcile, the API rejects the write. Client caches
+only carry rendered UI state; source-of-truth workspace access is revalidated by
+the managed API/runtime path.

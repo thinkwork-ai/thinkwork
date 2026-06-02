@@ -138,10 +138,10 @@ every turn.
 
 Look here when a turn spends too long before the model starts:
 
-- AgentCore: Pi sidecar logs around workspace render, workspace sync, SDK session
-  creation, and prompt start.
-- Desktop: sidecar logs around `WorkspaceCache` sync and local Pi turn start.
-- Mobile: `workspace-cache` prewarm/sync logs and local bash extension setup.
+- AgentCore: phase logs around workspace render, workspace bootstrap,
+  session-store setup, SDK session creation, and prompt start.
+- Desktop/mobile: client submit, subscription, and render logs around the
+  managed turn; they do not hydrate or execute a local Pi workspace.
 - API: workspace renderer logs for manifest generation/cache hit behavior.
 
 When debugging a slow "read USER.md" turn, separate these phases:

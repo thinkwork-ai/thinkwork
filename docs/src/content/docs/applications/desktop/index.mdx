@@ -72,22 +72,17 @@ Desktop raises a native macOS notification when a new message lands in a thread 
   track of a thread even if its notification didn't fire.
 </Aside>
 
-## Desktop Pi evaluations
+## Agent execution and evaluations
 
-Desktop can run the RedTeam evaluation catalog against local Desktop Pi from
-**Settings -> Evaluations**. When local Pi is healthy, the Run Evaluation dialog
-offers **Desktop Pi** as a target alongside the normal cloud/backend path.
+Desktop is a client for the deployed ThinkWork stack. Agent execution runs in
+AWS-managed AgentCore isolation; the Electron shell does not start a local Pi
+runtime, sidecar sandbox, or local agent process.
 
-Desktop Pi evals use the same run list and run detail pages as cloud evals, but
-execution happens inside the Electron sidecar. The backend creates the run and
-planned rows, then the sidecar runs selected cases through local Pi and reports
-results back through the API. Run rows are labeled with Desktop Pi provenance so
-operators can tell local desktop runs apart from AgentCore/backend runs.
-
-Use Desktop Pi evals when you need to validate local workspace hydration,
-host-contained `just-bash`, connector availability assumptions, and desktop
-sidecar behavior. For the focused/category/full-catalog checklist, use the
-repo-local runbook at `docs/runbooks/desktop-pi-redteam-evals.md`.
+Evaluation runs started from Desktop use the same managed evaluation path as the
+web app: the backend creates the run, invokes AgentCore, records per-test
+results, and streams status back through the normal run list and detail pages.
+Historical Desktop Pi/local sidecar eval rows may still appear in old tenants,
+but they are legacy provenance only and are not a current execution target.
 
 ## Install
 

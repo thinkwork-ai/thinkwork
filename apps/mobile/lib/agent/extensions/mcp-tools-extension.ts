@@ -1,4 +1,4 @@
-// mcp-tools — bounded Pi-style MCP gateway for the mobile harness.
+// mcp-tools — bounded Pi-style MCP gateway retained for compatibility tests.
 //
 // Mobile does not run MCP transports inside Hermes. The device gets one model-visible
 // `mcp` tool; ThinkWork resolves tenant servers and per-user bearer/OAuth server-side.
