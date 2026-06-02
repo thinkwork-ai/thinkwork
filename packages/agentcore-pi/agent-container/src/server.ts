@@ -224,12 +224,15 @@ function instrumentSessionStore(
     agentId: string;
     agentSlug: string;
     threadId: string;
+    threadTurnId?: string;
+    traceId?: string;
   },
 ): SessionStore {
   return {
     async read(key) {
       const start = Date.now();
       const result = await store.read(key);
+      const durationMs = Date.now() - start;
       logStructured({
         level: "info",
         event: "session_store_read",
@@ -239,7 +242,20 @@ function instrumentSessionStore(
         threadId: context.threadId,
         key,
         status: result ? "hit" : "miss",
-        durationMs: Date.now() - start,
+        durationMs,
+      });
+      logAgentCorePhase({
+        phase: "runtime.session_resume",
+        status: result ? "completed" : "skipped",
+        tenantId: context.tenantId,
+        agentId: context.agentId,
+        agentSlug: context.agentSlug,
+        threadId: context.threadId,
+        threadTurnId: context.threadTurnId,
+        traceId: context.traceId,
+        runtimeType: "pi",
+        durationMs,
+        detail: result ? "hit" : "miss",
       });
       return result;
     },
@@ -1151,6 +1167,7 @@ export async function handleInvocation(
         deleted: bootstrapResult.deleted,
         total: bootstrapResult.total,
         durationMs: Date.now() - workspaceBootstrapStart,
+        skipped: bootstrapResult.skipped ?? 0,
       });
       logAgentCorePhase({
         phase: "runtime.workspace_bootstrap",
@@ -1164,7 +1181,7 @@ export async function handleInvocation(
         runtimeType: "pi",
         durationMs: Date.now() - workspaceBootstrapStart,
         count: bootstrapResult.total,
-        detail: `synced=${bootstrapResult.synced};deleted=${bootstrapResult.deleted}`,
+        detail: `synced=${bootstrapResult.synced};skipped=${bootstrapResult.skipped ?? 0};deleted=${bootstrapResult.deleted}`,
       });
     } catch (err) {
       logStructured({
@@ -1464,8 +1481,17 @@ export async function handleInvocation(
           agentId: identity.agentId,
           agentSlug: identity.agentSlug,
           threadId: identity.threadId,
+          threadTurnId,
+          traceId: identity.traceId,
         })
       : undefined;
+    const sessionStoreFallbackReason = sessionStore
+      ? "s3"
+      : !workspaceBucket
+        ? "missing_workspace_bucket"
+        : !identity.tenantSlug
+          ? "missing_tenant_slug"
+          : "unavailable";
     logStructured({
       level: "info",
       event: "session_store_configured",
@@ -1474,6 +1500,7 @@ export async function handleInvocation(
       agentSlug: identity.agentSlug,
       threadId: identity.threadId,
       backing: sessionStore ? "s3" : "history_prompt",
+      fallbackReason: sessionStore ? undefined : sessionStoreFallbackReason,
       workspaceBucketConfigured: Boolean(workspaceBucket),
       hasTenantSlug: Boolean(identity.tenantSlug),
     });
@@ -1487,7 +1514,7 @@ export async function handleInvocation(
       threadTurnId,
       traceId: identity.traceId,
       runtimeType: "pi",
-      detail: sessionStore ? "s3" : "history_prompt",
+      detail: sessionStore ? "s3" : sessionStoreFallbackReason,
     });
     logStructured({
       level: "info",

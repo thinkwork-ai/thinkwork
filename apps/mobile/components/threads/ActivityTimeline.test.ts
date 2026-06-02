@@ -13,7 +13,16 @@ describe("activity timeline logic", () => {
       shouldShowTurnInTimeline({ invocationSource: "mobile_pi" }, false),
     ).toBe(true);
     expect(
-      shouldShowTurnInTimeline({ invocationSource: "chat_message" }, false),
+      shouldShowTurnInTimeline(
+        { invocationSource: "chat_message", status: "running" },
+        false,
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowTurnInTimeline(
+        { invocationSource: "chat_message", status: "succeeded" },
+        false,
+      ),
     ).toBe(false);
     expect(
       shouldShowTurnInTimeline({ invocationSource: "chat_message" }, true),

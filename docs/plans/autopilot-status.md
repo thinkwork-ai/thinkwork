@@ -5209,24 +5209,24 @@ None.
 ## Status
 
 - Plan: `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
-- Branch: `codex/agentcore-u5`
-- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u5`
+- Branch: `codex/agentcore-u6`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u6`
 - Started: `2026-06-02T13:42:51Z`
-- Current unit: U5 Instrument AgentCore turn latency by phase.
+- Current unit: U6 Improve managed-path perceived responsiveness.
 - Target branch: `main`
 
 ## Unit Ledger
 
-| Unit | Scope                                             | Branch               | PR                                                           | State       | Notes                                                                   |
-| ---- | ------------------------------------------------- | -------------------- | ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------- |
-| U0   | Spike: Route desktop and mobile to AgentCore now  | `codex/agentcore-u0` | [#1988](https://github.com/thinkwork-ai/thinkwork/pull/1988) | Merged      | CI passed; squash merged as `f0c378623a6a2a68168901a9147595c6fb09b656`. |
-| U1   | Remove Spaces desktop-local dispatch and surfaces | `codex/agentcore-u1` | [#1989](https://github.com/thinkwork-ai/thinkwork/pull/1989) | Merged      | CI passed; squash merged as `116665de0113d1855a4d1e570998067e8aa29c6f`. |
-| U2   | Remove Electron Pi sidecar and IPC bridge         | `codex/agentcore-u2` | [#1990](https://github.com/thinkwork-ai/thinkwork/pull/1990) | Merged      | CI passed; squash merged as `66011fc16c39684d5193ba4bf42e9f1049b8ab0c`. |
-| U3   | Retire desktop-local backend contracts            | `codex/agentcore-u3` | [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991) | Merged      | CI passed; squash merged as `39395b16afe539891aae8c4b50db9e19dd2db7b2`. |
-| U4   | Remove mobile on-device harness execution         | `codex/agentcore-u4` | [#1992](https://github.com/thinkwork-ai/thinkwork/pull/1992) | Merged      | CI passed; squash merged as `7acf3185ebb6e3a2f5e2349c3e34d704543b5ac1`. |
-| U5   | Instrument AgentCore turn latency by phase        | `codex/agentcore-u5` | [#1993](https://github.com/thinkwork-ai/thinkwork/pull/1993) | In progress | PR opened; watching CI.                                                 |
-| U6   | Improve managed-path perceived responsiveness     | Pending              | Pending                                                      | Pending     | Starts after U5 merges.                                                 |
-| U7   | Update docs, tests, and operational language      | Pending              | Pending                                                      | Pending     | Final cleanup and docs alignment.                                       |
+| Unit | Scope                                             | Branch               | PR                                                           | State   | Notes                                                                   |
+| ---- | ------------------------------------------------- | -------------------- | ------------------------------------------------------------ | ------- | ----------------------------------------------------------------------- |
+| U0   | Spike: Route desktop and mobile to AgentCore now  | `codex/agentcore-u0` | [#1988](https://github.com/thinkwork-ai/thinkwork/pull/1988) | Merged  | CI passed; squash merged as `f0c378623a6a2a68168901a9147595c6fb09b656`. |
+| U1   | Remove Spaces desktop-local dispatch and surfaces | `codex/agentcore-u1` | [#1989](https://github.com/thinkwork-ai/thinkwork/pull/1989) | Merged  | CI passed; squash merged as `116665de0113d1855a4d1e570998067e8aa29c6f`. |
+| U2   | Remove Electron Pi sidecar and IPC bridge         | `codex/agentcore-u2` | [#1990](https://github.com/thinkwork-ai/thinkwork/pull/1990) | Merged  | CI passed; squash merged as `66011fc16c39684d5193ba4bf42e9f1049b8ab0c`. |
+| U3   | Retire desktop-local backend contracts            | `codex/agentcore-u3` | [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991) | Merged  | CI passed; squash merged as `39395b16afe539891aae8c4b50db9e19dd2db7b2`. |
+| U4   | Remove mobile on-device harness execution         | `codex/agentcore-u4` | [#1992](https://github.com/thinkwork-ai/thinkwork/pull/1992) | Merged  | CI passed; squash merged as `7acf3185ebb6e3a2f5e2349c3e34d704543b5ac1`. |
+| U5   | Instrument AgentCore turn latency by phase        | `codex/agentcore-u5` | [#1993](https://github.com/thinkwork-ai/thinkwork/pull/1993) | Merged  | CI passed; squash merged as `e78fd569be173524be89d6923f4138fda86d3acd`. |
+| U6   | Improve managed-path perceived responsiveness     | `codex/agentcore-u6` | [#1994](https://github.com/thinkwork-ai/thinkwork/pull/1994) | PR open | Local verification complete; CI pending.                                |
+| U7   | Update docs, tests, and operational language      | Pending              | Pending                                                      | Pending | Final cleanup and docs alignment.                                       |
 
 ## U0 Implementation Notes
 
@@ -5570,7 +5570,67 @@ None.
 ## U5 CI / PR
 
 - Opened [#1993](https://github.com/thinkwork-ai/thinkwork/pull/1993).
-- Pending: CI monitoring, squash merge, branch cleanup.
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `e78fd569be173524be89d6923f4138fda86d3acd`.
+- Remote branch `codex/agentcore-u5` deleted; local U5 worktree and branch
+  removed.
+
+## U6 Implementation Notes
+
+- Started: `2026-06-02T15:52:45Z`.
+- Synced from `origin/main` after U5 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u6` on branch
+  `codex/agentcore-u6`.
+- Began by reading the U6 plan section and the copied-workspace skill loading
+  solution doc, because U6 touches the S3-to-runtime workspace hydration path.
+- Added a local hydrate cache for rendered workspace bootstrap. The cache lives
+  beside the runtime workspace directory, skips unchanged source downloads when
+  tenant, agent, rendered prefix, runtime path, source key, and source ETag
+  match, and still deletes files removed from the current manifest.
+- Extended runtime workspace bootstrap logs to include skipped hydrate counts
+  so U5 phase telemetry can distinguish cold sync from warm reuse.
+- Added session-store fallback reasons and `runtime.session_resume` phase
+  records for S3 session hit/miss timing.
+- Relabeled managed turn-start subscription events as `AgentCore` and updated
+  mobile timeline filtering so active managed turns are visible to regular
+  users before the assistant response arrives.
+- Left prewarm out of U6 because no deployed U5 phase evidence yet proves a
+  safe/cost-effective prewarm trigger.
+
+## U6 Verification Log
+
+- `pnpm install` completed in the U6 worktree; optional `canvas` native rebuild
+  failed under local Node 25/missing `pkg-config`, but install exited
+  successfully.
+- Focused AgentCore Pi tests passed:
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts`
+  (2 files, 67 tests).
+- Focused mobile timeline test passed:
+  `pnpm --filter @thinkwork/mobile test -- components/threads/ActivityTimeline.test.ts`
+  (4 tests).
+- Focused API routing test passed:
+  `pnpm --filter @thinkwork/api test -- src/handlers/chat-agent-invoke.runtime-routing.test.ts`
+  (4 tests).
+- Touched package checks passed: `pnpm --filter @thinkwork/api typecheck` and
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`.
+- Root gates passed: `pnpm lint`, `pnpm typecheck`, and
+  `bash scripts/verify-supply-chain.sh`.
+- `git diff --check` passed.
+- Touched-file Prettier check passed with
+  `pnpm dlx prettier@3.8.2 --check ...`.
+- Broad root `pnpm test` completed most packages but failed locally in
+  `packages/api/src/__tests__/applets-resolvers.test.ts`: the first applet
+  resolver test timed out at 30s and stale mock S3 calls affected the next
+  assertion. The file passed immediately in isolation with
+  `pnpm --filter @thinkwork/api test -- src/__tests__/applets-resolvers.test.ts`
+  (15 tests), so this is recorded as local broad-suite contention rather than
+  a U6 responsiveness regression.
+
+## U6 CI / PR
+
+- Opened [#1994](https://github.com/thinkwork-ai/thinkwork/pull/1994).
+- Local verification complete; CI monitoring, squash merge, and branch cleanup
+  pending.
 
 ## Blockers
 

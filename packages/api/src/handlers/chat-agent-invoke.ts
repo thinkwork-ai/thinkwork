@@ -451,7 +451,7 @@ async function markThreadTurnSetupFailed(input: {
       threadId: input.threadId,
       agentId: input.agentId,
       status: "failed",
-      triggerName: "Chat",
+      triggerName: "AgentCore",
     });
   } catch (turnErr) {
     console.error(
@@ -638,7 +638,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           threadId,
           agentId,
           status: "running",
-          triggerName: "Mobile Pi",
+          triggerName: "AgentCore",
         });
         logAgentCorePhase({
           source: "chat-agent-invoke",
@@ -718,7 +718,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           threadId,
           agentId,
           status: "running",
-          triggerName: "Chat",
+          triggerName: "AgentCore",
         });
         logAgentCorePhase({
           source: "chat-agent-invoke",
@@ -883,7 +883,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
                 threadId,
                 agentId,
                 status: "failed",
-                triggerName: "Chat",
+                triggerName: "AgentCore",
               });
             } catch (turnErr) {
               console.error(

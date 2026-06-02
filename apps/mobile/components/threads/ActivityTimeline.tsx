@@ -250,6 +250,7 @@ function formatInvocationSource(source: unknown): string | null {
     api: "Automation",
     email: "Email",
     mobile_pi: "Mobile Pi",
+    agentcore: "AgentCore",
   };
   return (
     labels[key] ??
@@ -1099,9 +1100,8 @@ export function ActivityTimeline({
 
   const flatListRef = useRef<FlatList>(null);
   const rawTimeline = mergeTimeline(messages, turns, agentName);
-  // Keep most turn rows admin-only, but mobile Pi turns are user-facing
-  // lifecycle evidence: they explain local start, background handoff, and
-  // managed AgentCore continuation without creating another visible message.
+  // Keep most terminal turn rows admin-only, but active managed work is
+  // user-facing progress evidence before the assistant response arrives.
   const timeline = rawTimeline.filter(
     (t) => t.kind !== "turn" || shouldShowTurnInTimeline(t.data, isAdmin),
   );
@@ -1294,7 +1294,8 @@ export function ActivityTimeline({
             agentName={agentName}
             tenantId={tenantId}
             defaultExpanded={
-              isMobilePiTurn(item.data) && item.data.status === "running"
+              (isMobilePiTurn(item.data) || item.data.status === "running") &&
+              item.data.status !== "queued"
             }
           />
         );

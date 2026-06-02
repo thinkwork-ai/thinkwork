@@ -14,6 +14,7 @@ import {
   type InvokeCommandInput,
   type LambdaClient,
 } from "@aws-sdk/client-lambda";
+import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 
 import {
   CompletionCallbackAuthError,
@@ -230,7 +231,7 @@ describe("handleInvocation — happy path", () => {
         }),
       });
 
-      expect(result.statusCode).toBe(200);
+      expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
       expect(stageSawWorkspace).toBe(true);
       expect(loopSawWorkspace).toBe(true);
     } finally {
@@ -267,7 +268,7 @@ describe("handleInvocation — happy path", () => {
         }),
       });
 
-      expect(result.statusCode).toBe(200);
+      expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
       expect(loopSawWorkspace).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -350,6 +351,88 @@ describe("handleInvocation — happy path", () => {
       error: "rendered workspace manifest missing",
       runtime: "pi",
     });
+  });
+
+  it("uses durable sessions when workspace bucket and tenant slug are available", async () => {
+    const writes: string[] = [];
+    const stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk: string | Uint8Array) => {
+        writes.push(String(chunk));
+        return true;
+      });
+    const sessionReads: string[] = [];
+    const s3Client = {
+      send: vi.fn(async (command: { input?: { Key?: string } }) => {
+        if (command instanceof GetObjectCommand) {
+          sessionReads.push(command.input.Key ?? "");
+          return {
+            ETag: '"session-v1"',
+            Body: { transformToString: async () => "session\n" },
+          };
+        }
+        return {};
+      }),
+    } as unknown as S3Client;
+
+    try {
+      const result = await handleInvocation({
+        payload: VALID_PAYLOAD({
+          workspace_bucket: "thinkwork-managed-files-test",
+          thread_turn_id: "turn-1",
+        }),
+        deps: makeDeps({
+          bootstrapWorkspaceImpl: async () => ({
+            synced: 0,
+            deleted: 0,
+            total: 0,
+            prefix: "tenants/tenant-1/agents/agent-slug/",
+          }),
+          s3ClientFactory: () => s3Client,
+          runAgentLoop: async (args) => {
+            await args.sessionStore?.read(args.threadId);
+            return {
+              content: "stub response",
+              modelId: "amazon-bedrock/test-model",
+              toolsCalled: [],
+              toolInvocations: [],
+            };
+          },
+        }),
+      });
+
+      expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+      expect(sessionReads).toContain("pi-sessions/tenant-1/thread-1");
+      const phaseRecords = writes
+        .flatMap((line) => line.split("\n"))
+        .filter(Boolean)
+        .map((line) => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        })
+        .filter((record): record is Record<string, unknown> => record !== null)
+        .filter((record) => record.event === "agentcore_phase");
+      expect(phaseRecords).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            phase: "runtime.session_store",
+            status: "completed",
+            detail: "s3",
+          }),
+          expect.objectContaining({
+            phase: "runtime.session_resume",
+            status: "completed",
+            detail: "hit",
+            threadTurnId: "turn-1",
+          }),
+        ]),
+      );
+    } finally {
+      stdoutSpy.mockRestore();
+    }
   });
 
   it("posts local workspace changes through the finalize callback", async () => {
@@ -2015,6 +2098,7 @@ interface MakeDepsOptions {
   connectMcpServerFactory?: ConnectMcpServerFn;
   runAgentLoop?: typeof import("../src/server.js").runAgentLoop;
   bootstrapWorkspaceImpl?: typeof import("../src/runtime/bootstrap-workspace.js").bootstrapWorkspace;
+  s3ClientFactory?: (region: string) => S3Client;
   fetchImpl?: typeof fetch;
   stageMessageAttachmentsImpl?: typeof import("../src/runtime/message-attachments.js").stageMessageAttachments;
   /** Hook fired after the agent loop finally block (before returning). */
@@ -2041,7 +2125,7 @@ function makeDeps(opts: MakeDepsOptions = {}) {
 
   return {
     agentCoreClientFactory: () => fakeAgentCoreClient() as never,
-    s3ClientFactory: () => fakeS3Client() as never,
+    s3ClientFactory: opts.s3ClientFactory ?? (() => fakeS3Client() as never),
     lambdaClientFactory: opts.lambdaClientFactory ?? (() => fakeLambdaClient()),
     connectMcpServerFactory: opts.connectMcpServerFactory ?? noopConnect,
     sessionStoreFactory: () => ({}) as never,
