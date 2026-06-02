@@ -122,6 +122,37 @@ describe("runDesktopEvalRun", () => {
     });
   });
 
+  it("posts failed local turns as eval errors with the runner message", async () => {
+    const posts: unknown[] = [];
+    const fetchImpl = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        posts.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+
+    const summary = await runDesktopEvalRun(payload(), {
+      fetchImpl,
+      runTurn: vi.fn().mockResolvedValue({
+        finalized: true,
+        status: "failed",
+        fallbackEligible: false,
+        output: "",
+        errorMessage:
+          "Local Pi SDK returned an assistant error turn with no assistant text.",
+      }),
+    });
+
+    expect(summary).toEqual({ completed: 1, failed: 1, cancelled: false });
+    expect(posts[0]).toMatchObject({
+      testCaseId: CASE_ID,
+      status: "error",
+      actualOutput: "",
+      errorMessage:
+        "Local Pi SDK returned an assistant error turn with no assistant text.",
+    });
+  });
+
   it("posts an error callback for a failed case and continues", async () => {
     const secondCaseId = "33333333-3333-3333-3333-333333333333";
     const posts: unknown[] = [];

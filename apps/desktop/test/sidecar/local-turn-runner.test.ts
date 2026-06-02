@@ -367,6 +367,50 @@ describe("runLocalDesktopTurn", () => {
     );
   });
 
+  it("reports SDK assistant error turns with no text as local turn failures", async () => {
+    const sdk: PiSdkModuleLike = {
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [
+            {
+              role: "assistant",
+              stopReason: "error",
+              content: [],
+            },
+          ],
+          prompt: vi.fn(async () => {}),
+          dispose: vi.fn(),
+        },
+      })),
+    };
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        thread_turn_id: "turn-1",
+        runtime_type: "pi",
+        status: "error",
+      });
+      return Response.json({ ok: true }, { status: 200 });
+    });
+
+    const result = await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "failed",
+      output: "",
+      errorMessage:
+        "Local Pi SDK returned an assistant error turn with no assistant text.",
+    });
+  });
+
   it("captures assistant output from wrapped SDK message entries and provider text blocks", async () => {
     const sdk: PiSdkModuleLike = {
       createAgentSession: vi.fn(async () => ({

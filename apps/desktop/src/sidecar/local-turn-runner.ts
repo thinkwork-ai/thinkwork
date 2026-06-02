@@ -128,6 +128,7 @@ export interface LocalTurnRunnerResult {
   status: "completed" | "failed";
   fallbackEligible: boolean;
   output: string;
+  errorMessage?: string;
   workspace?: WorkspaceSyncResult;
 }
 
@@ -357,6 +358,11 @@ export async function runLocalDesktopTurn(
       outputChars: runResult.content.length,
       ...(runResult.content.length === 0 ? assistantDetails : {}),
     });
+    const assistantErrorMessage = localPiAssistantErrorMessage(
+      sessionMessages,
+      runResult.content,
+    );
+    if (assistantErrorMessage) throw new Error(assistantErrorMessage);
     const changedFiles = await timings.measure("workspace_diff_ms", () =>
       collectDesktopWorkspaceChangedFiles({
         localDir: preparedWorkspace.localDir,
@@ -403,6 +409,7 @@ export async function runLocalDesktopTurn(
       workspace,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     const partialRunResult = sdkSession
       ? buildRunResult(
           payload.session.invocation,
@@ -411,7 +418,7 @@ export async function runLocalDesktopTurn(
         )
       : null;
     logger.error("local Pi turn failed", {
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
       threadTurnId: payload.session.threadTurnId,
       partialOutput: partialRunResult?.content ? true : false,
       partialOutputChars: partialRunResult?.content.length ?? 0,
@@ -445,6 +452,7 @@ export async function runLocalDesktopTurn(
       status: "failed",
       fallbackEligible: !payload.session.invocation.thread_turn_id,
       output: partialRunResult?.content ?? "",
+      errorMessage,
       workspace,
     };
   } finally {
@@ -2480,6 +2488,18 @@ function describeLastAssistantMessage(
         )
       : typeof content,
   };
+}
+
+function localPiAssistantErrorMessage(
+  messages: unknown[],
+  output: string,
+): string | null {
+  if (output.length > 0) return null;
+  const assistant = readRecord(findLastAssistantMessage(messages));
+  const stopReason =
+    stringValue(assistant?.stopReason) ?? stringValue(assistant?.stop_reason);
+  if (stopReason !== "error") return null;
+  return "Local Pi SDK returned an assistant error turn with no assistant text.";
 }
 
 function collectToolNames(messages: unknown[]): string[] {

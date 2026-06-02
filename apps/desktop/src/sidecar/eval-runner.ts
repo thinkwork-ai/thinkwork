@@ -98,11 +98,14 @@ export async function runDesktopEvalRun(
       const evaluatorResults = skippedEvaluatorResults(
         item.agentcoreEvaluatorIds,
       );
+      const errorMessage =
+        result.status === "failed"
+          ? (result.errorMessage ?? "Local Pi turn failed")
+          : null;
       const outcome = scoreEvalOutcome({
         assertionResults,
         evaluatorResults,
-        errorMessage:
-          result.status === "failed" ? "Local Pi turn failed" : null,
+        errorMessage,
       });
       await postCaseResult(
         payload,
@@ -118,8 +121,7 @@ export async function runDesktopEvalRun(
           systemPrompt: item.session.invocation.system_prompt ?? null,
           evaluatorResults,
           assertions: assertionResults,
-          errorMessage:
-            result.status === "failed" ? "Local Pi turn failed" : null,
+          errorMessage,
         },
         deps.fetchImpl ?? fetch,
       );

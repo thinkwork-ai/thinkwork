@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
 - Target branch: `main`.
-- Current unit: U11 Output-capture sweep and workspace remediation.
-- Current branch: `codex/desktop-pi-evals-u11-remediation`.
-- Current worktree: `.Codex/worktrees/desktop-pi-evals-u11-remediation`.
+- Current unit: U12 Post-capture full Desktop Pi sweep and remediation.
+- Current branch: `codex/desktop-pi-evals-u12-full-rerun`.
+- Current worktree: `.Codex/worktrees/desktop-pi-evals-u12-full-rerun`.
 
 | Unit                                               | Branch                                   | PR                                                           | State       | Notes                                                                                                   |
 | -------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
@@ -27,7 +27,8 @@ status: complete
 | U8 Bounded Desktop Pi eval parallelism             | `codex/desktop-pi-evals-u8-parallel`     | [#1968](https://github.com/thinkwork-ai/thinkwork/pull/1968) | Merged      | Squash merged as `e60c6571`; parallel sidecar workers and local cancellation propagation.               |
 | U9 Full-catalog Desktop Pi sweep/remediation       | `codex/desktop-pi-evals-u9-full-sweep`   | [#1969](https://github.com/thinkwork-ai/thinkwork/pull/1969) | Merged      | Squash merged as `5c4df7e1`; concurrency default, partial-output capture, and workspace hardening.      |
 | U10 Post-deploy Desktop Pi full sweep              | `codex/desktop-pi-evals-u10-rerun`       | [#1970](https://github.com/thinkwork-ai/thinkwork/pull/1970) | Merged      | Squash merged as `72bea28f`; full sweep completed in 13m35s and output capture was hardened.            |
-| U11 Output-capture sweep and workspace remediation | `codex/desktop-pi-evals-u11-remediation` | [#1971](https://github.com/thinkwork-ai/thinkwork/pull/1971) | In progress | Full sweep completed in 9m18s; all failures still had empty output, so runner capture is being fixed.   |
+| U11 Output-capture sweep and workspace remediation | `codex/desktop-pi-evals-u11-remediation` | [#1971](https://github.com/thinkwork-ai/thinkwork/pull/1971) | Merged      | Squash merged as `8f0a4767`; SDK last-assistant output capture and empty-output diagnostics.            |
+| U12 Post-capture full Desktop Pi sweep/remediation | `codex/desktop-pi-evals-u12-full-rerun`  | [#1972](https://github.com/thinkwork-ai/thinkwork/pull/1972) | In progress | Full sweep completed in 10m38s; classifying SDK assistant-error blank outputs as eval errors.           |
 
 ### Progress Log
 
@@ -276,6 +277,38 @@ status: complete
   No subset run was created.
 - Opened U11 PR
   [#1971](https://github.com/thinkwork-ai/thinkwork/pull/1971).
+- U11 PR
+  [#1971](https://github.com/thinkwork-ai/thinkwork/pull/1971) passed
+  required PR checks (`cla`, `lint`, `verify`, `typecheck`, `test`) and was
+  squash merged as `8f0a4767c9d731ba8b641318d6d1e002160ec394`; the remote
+  branch was deleted and the local worktree/branch were removed.
+- U11 post-merge `main` workflows passed `Lint`, `Supply Chain`, `Typecheck`,
+  `Test`, and `Deploy`, so the Desktop Pi output-capture fix is deployed.
+- Synced from `origin/main` and created isolated U12 worktree
+  `.Codex/worktrees/desktop-pi-evals-u12-full-rerun` on branch
+  `codex/desktop-pi-evals-u12-full-rerun`.
+- U12 live Desktop Pi full sweep completed through the local desktop sidecar
+  runner and deployed Desktop eval APIs. Run
+  `2d1a4ac6-da04-4592-a449-ea002bb58cef` evaluated all 189 cases with
+  concurrency 8 in about 10m38s. Result: 111 passed, 78 failed, 58.73% pass
+  rate.
+- Category split for run `2d1a4ac6-da04-4592-a449-ea002bb58cef`:
+  `red-team-data-boundary` 29/48 pass with 19 fail,
+  `red-team-prompt-injection` 33/48 pass with 15 fail,
+  `red-team-safety-scope` 25/41 pass with 16 fail, and
+  `red-team-tool-misuse` 24/52 pass with 28 fail.
+- U12 failure triage found 76 of 78 failures still had empty `actualOutput`.
+  Live sidecar diagnostics showed these empty outputs were SDK assistant turns
+  with `stopReason: "error"` and no content blocks, so prompt/workspace
+  remediation remains blocked on classifying those provider/SDK errors instead
+  of treating blank output as a normal model answer.
+- Patched the Desktop Pi local turn runner so assistant error turns with no
+  captured assistant text return a failed local turn with a stable diagnostic
+  message. The desktop eval runner now passes that message into eval scoring
+  and callbacks so these rows persist as `error` results with an explicit
+  `errorMessage`.
+- Opened U12 PR
+  [#1972](https://github.com/thinkwork-ai/thinkwork/pull/1972).
 
 ### Verification Log
 
@@ -368,11 +401,25 @@ status: complete
     regression for tool-only assistant message blocks.
 - `pnpm --filter @thinkwork/desktop typecheck` - passed.
 - `git diff --check` - passed.
+- `pnpm --filter @thinkwork/pi-runtime-core build` - passed in U12 before the
+  live sweep.
+- `pnpm --filter @thinkwork/evals-core build` - passed in U12 before the live
+  sweep.
+- `pnpm --filter @thinkwork/pi-extensions build` - passed in U12 before the
+  live sweep.
+- U12 live Desktop Pi run
+  `2d1a4ac6-da04-4592-a449-ea002bb58cef` - completed: 189/189 cases terminal,
+  111 pass, 78 fail, 58.73% pass rate, about 10m38s runtime. Detailed results
+  saved outside the repo at `/tmp/desktop-pi-eval-run-2d1a4ac6.json`.
+- `pnpm --filter @thinkwork/desktop test -- local-turn-runner.test.ts eval-runner.test.ts`
+  - passed after adding assistant-error classification and eval callback
+    propagation regressions.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
 
 ### Blockers
 
-None currently. U11 is fixing the remaining Desktop Pi output-capture gap
-before the next full sweep and workspace-prompt remediation pass.
+None currently. U12 is classifying SDK assistant-error blank outputs as explicit
+eval errors before the next workspace-prompt remediation sweep.
 
 ## Workspace Architecture Guidance Docs - 2026-06-01
 
