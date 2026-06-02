@@ -5204,6 +5204,86 @@ Target branch: `main`
 
 None.
 
+# AgentCore Latency Observability and Warm Follow-Up Proof - 2026-06-02
+
+## Status
+
+- Plan:
+  `docs/plans/2026-06-02-002-feat-agentcore-latency-observability-plan.md`.
+- Branch: `codex/agentcore-latency-observability`.
+- Worktree: `.Codex/worktrees/agentcore-latency-observability`.
+- State: implementation verified locally; PR pending.
+
+## Implemented
+
+- Hardened `thinkwork trace turn` by normalizing Bedrock invocation log
+  timestamps to GraphQL-safe ISO strings, coercing token counts, constraining
+  turn lookup by tenant, and printing clear empty-result messages in the CLI.
+- Persisted AgentCore Pi runtime phase diagnostics into the existing finalize
+  payload diagnostics path:
+  `runtime.workspace_bootstrap`, `runtime.tool_assembly`,
+  `runtime.session_store`, and `runtime.agent_loop`.
+- Persisted workspace hydration summary fields for warm-container analysis:
+  `prefix`, `total_files`, `synced_files`, `skipped_files`, `deleted_files`,
+  and `cache_hit`.
+- Extended the Spaces desktop turn activity disclosure to show `Workspace sync`
+  hydrate counts and an `AgentCore phases` row.
+
+## Warm Follow-Up Baseline
+
+- Desktop AgentCore thread:
+  `f4c13c1e-d5ff-4681-a4b1-5e0e440dc99b`.
+- First measured turn:
+  `a0927259-5a83-4126-a9b3-6d53e07f42bf`, started
+  `2026-06-02T16:43:44Z`, finished `2026-06-02T16:44:12Z`, displayed
+  `Worked for 28s`.
+- Same-thread follow-up:
+  `89432e84-23c5-466e-bec0-a5c070874daf`, started
+  `2026-06-02T16:56:55Z`, finished `2026-06-02T16:57:05Z`, displayed
+  `Worked for 10s`; expanded detail showed
+  `Manual chat · moonshotai.kimi-k2.5 · succeeded · 10.5s`.
+- Current deployed trace command returned a generic GraphQL error for both turn
+  ids before this branch. This branch fixes the likely timestamp serialization
+  failure and keeps empty CloudWatch results explicit.
+
+## Verification Log
+
+- `pnpm dlx prettier@3.8.2 --write ...` - passed for touched files.
+- `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/observability/turnInvocationLogs.query.test.ts src/lib/chat-finalize/process-finalize.test.ts` -
+  passed, 12 tests.
+- `pnpm --filter thinkwork-cli exec vitest run __tests__/trace.test.ts` -
+  passed, 1 test.
+- `pnpm --filter @thinkwork/spaces exec vitest run src/components/workbench/TaskThreadView.test.tsx` -
+  passed, 82 tests.
+- `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/server.test.ts` -
+  passed, 53 tests.
+- `git diff --check` - passed.
+- `pnpm dlx prettier@3.8.2 --check ...` - passed for touched files.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter thinkwork-cli typecheck` - passed.
+- `pnpm --filter @thinkwork/spaces typecheck` - passed.
+- `pnpm --filter @thinkwork/agentcore-pi typecheck` - passed.
+- `ce-code-review mode:autofix` fallback completed locally; one safe autofix
+  preserved pre-existing workspace diagnostics when merging AgentCore runtime
+  diagnostics. Residual actionable work: none. Artifact:
+  `.context/compound-engineering/ce-code-review/2026-06-02-agentcore-latency-observability/review.md`.
+- `ce-test-browser mode:pipeline` used `agent-browser` against the local Spaces
+  dev server. Spaces booted and redirected to
+  `http://localhost:5174/sign-in?next=%2Fnew`; screenshot saved at
+  `/tmp/thinkwork-spaces-signin-5174.png`. Authenticated thread activity UI is
+  covered by `TaskThreadView.test.tsx`.
+- Note: `pnpm install` in this isolated worktree completed, but optional
+  `canvas@2.11.2` native postinstall could not build on local Node 25 because
+  `pkg-config` is unavailable. The install still exited 0 and targeted suites
+  passed.
+
+## Post-Merge Proof Needed
+
+- After deployment, rerun the same desktop/mobile AgentCore follow-up test and
+  confirm the expanded activity row shows hydrate counts and runtime phases.
+- Rerun `thinkwork trace turn <turnId> --stage dev` and confirm it exits 0 with
+  either normalized model invocation rows or the explicit no-logs message.
+
 # AgentCore-First Pi Execution Autopilot - 2026-06-02
 
 ## Status

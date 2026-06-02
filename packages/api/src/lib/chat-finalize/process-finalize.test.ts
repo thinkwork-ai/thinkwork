@@ -114,6 +114,13 @@ describe("diagnosticsWithWorkspaceReconcile", () => {
     expect(
       diagnosticsWithWorkspaceReconcile(
         {
+          agentcore_phases: [
+            {
+              phase: "runtime.workspace_bootstrap",
+              status: "completed",
+              duration_ms: 42,
+            },
+          ],
           workspace_diagnostics: {
             workspace_sync_ms: 42,
             changed_files: 1,
@@ -151,6 +158,13 @@ describe("diagnosticsWithWorkspaceReconcile", () => {
         17,
       ),
     ).toMatchObject({
+      agentcore_phases: [
+        {
+          phase: "runtime.workspace_bootstrap",
+          status: "completed",
+          duration_ms: 42,
+        },
+      ],
       workspace_diagnostics: {
         workspace_sync_ms: 42,
         reconcile_writeback_ms: 17,

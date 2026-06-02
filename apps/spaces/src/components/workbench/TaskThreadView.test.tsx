@@ -1911,12 +1911,29 @@ describe("TaskThreadView", () => {
                     reconcile_writeback_ms: 18,
                     file_count: 8,
                     hydrated_files: 3,
+                    skipped_files: 5,
                     changed_files: 2,
                     persisted_files: 1,
                     rejected_files: 1,
                     cache_hit: false,
+                    prefix:
+                      "tenants/acme/threads/thread-1/agent-slug/rendered/",
                     reconcile_status: "partial_success",
                   },
+                  agentcore_phases: [
+                    {
+                      phase: "runtime.workspace_bootstrap",
+                      status: "completed",
+                      duration_ms: 12,
+                      count: 8,
+                      detail: "synced=3;skipped=5;deleted=0",
+                    },
+                    {
+                      phase: "runtime.agent_loop",
+                      status: "completed",
+                      duration_ms: 1400,
+                    },
+                  ],
                 },
               },
             },
@@ -1930,8 +1947,15 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("Workspace sync")).toBeTruthy();
     expect(screen.getByText(/workspace sync: 12ms/)).toBeTruthy();
     expect(screen.getByText(/model tool run: 1.4s/)).toBeTruthy();
+    expect(screen.getByText(/skipped files: 5/)).toBeTruthy();
     expect(screen.getByText(/changed files: 2/)).toBeTruthy();
+    expect(screen.getByText(/prefix: tenants\/acme/)).toBeTruthy();
     expect(screen.getByText(/reconcile status: partial_success/)).toBeTruthy();
+    expect(screen.getByText("AgentCore phases")).toBeTruthy();
+    expect(
+      screen.getByText(/workspace bootstrap: completed · 12ms · count 8/),
+    ).toBeTruthy();
+    expect(screen.getByText(/agent loop: completed · 1.4s/)).toBeTruthy();
     expect(screen.getByText("Finding sources")).toBeTruthy();
     expect(screen.getByText(/Manual chat/)).toBeTruthy();
     expect(screen.getByText(/1.2K in \/ 300 out/)).toBeTruthy();
