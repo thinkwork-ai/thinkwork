@@ -49,10 +49,6 @@ import {
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 import {
-  getDesktopBridge,
-  shouldUseDesktopLocalPiDispatchNow,
-} from "@/lib/desktop-runtime";
-import {
   clearPendingThreadStart,
   getPendingThreadStart,
   type PendingThreadStart,
@@ -518,7 +514,6 @@ export function SpacesThreadDetailRoute({
       reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
-      dispatchDesktopLocalPiEvent("idle");
       void refreshThreadTurns();
     }
   }, [
@@ -1288,18 +1283,6 @@ export function SpacesThreadDetailRoute({
         if (agentRequested === false) {
           sendInput.agentRequested = false;
         }
-        // Runtime is host-derived: on desktop with a ready local sidecar +
-        // agent we drive the turn locally (DESKTOP_LOCAL); everywhere else the
-        // server runs it on managed cloud (any dispatchMode other than
-        // DESKTOP_LOCAL triggers the default managed dispatch).
-        const desktopLocalAgentId = routeThread?.agentId ?? null;
-        const shouldStartDesktopLocalPi =
-          agentRequested !== false &&
-          Boolean(desktopLocalAgentId) &&
-          (await shouldUseDesktopLocalPiDispatchNow());
-        if (shouldStartDesktopLocalPi) {
-          sendInput.dispatchMode = "DESKTOP_LOCAL";
-        }
         const result = await sendMessage({ input: sendInput });
         if (result.error) {
           setOptimisticMessage(null);
@@ -1318,52 +1301,6 @@ export function SpacesThreadDetailRoute({
         );
         if (customerOnboardingHandled) {
           setOptimisticMessage(null);
-        }
-        if (
-          !customerOnboardingHandled &&
-          sendInput.dispatchMode === "DESKTOP_LOCAL" &&
-          desktopLocalAgentId
-        ) {
-          dispatchDesktopLocalPiEvent("running");
-          const startLocalTurn = () =>
-            getDesktopBridge()?.pi?.startTurn({
-              agentId: desktopLocalAgentId,
-              threadId,
-              messageId:
-                stringValue(
-                  (
-                    result.data as
-                      | { sendMessage?: { id?: unknown } }
-                      | undefined
-                  )?.sendMessage?.id,
-                ) ?? undefined,
-              userMessage: content,
-            });
-          // The local sidecar may be mid-restart; retry once before surfacing
-          // an error. We do NOT silently fall back to managed cloud — local and
-          // managed run against different filesystems, so swapping runtimes
-          // under the user would change what the agent can see.
-          try {
-            await startLocalTurn();
-          } catch (firstErr) {
-            console.warn(
-              "[desktop-local-pi] startTurn failed; retrying once:",
-              firstErr,
-            );
-            await new Promise((resolve) => setTimeout(resolve, 400));
-            try {
-              await startLocalTurn();
-            } catch (retryErr) {
-              dispatchDesktopLocalPiEvent("idle");
-              toast.error(
-                "Local agent is unavailable. Your message was saved — try again once Local Pi is running.",
-              );
-              console.warn(
-                "[desktop-local-pi] startTurn retry failed:",
-                retryErr,
-              );
-            }
-          }
         }
         reexecuteQuery({ requestPolicy: "network-only" });
         reexecuteTasksQuery({ requestPolicy: "network-only" });
@@ -1826,14 +1763,6 @@ function withOptimisticUserTurn(
         ],
     turns,
   };
-}
-
-function dispatchDesktopLocalPiEvent(status: "running" | "idle" | "fallback") {
-  window.dispatchEvent(
-    new CustomEvent("thinkwork:desktop-local-pi-turn", {
-      detail: { status },
-    }),
-  );
 }
 
 function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {

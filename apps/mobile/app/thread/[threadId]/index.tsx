@@ -57,7 +57,6 @@ import {
   type WebViewSheetRef,
 } from "@/components/chat/WebViewSheet";
 import { useAuth } from "@/lib/auth-context";
-import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
 import { prewarmWorkspaceCache } from "@/lib/agent/workspace-cache";
 import {
   clearPendingThreadStart,
@@ -79,7 +78,6 @@ import {
   type PickedDocument,
 } from "@/lib/agent/tools/file-picker";
 import type { ImagePart } from "@/lib/agent/types";
-import type { MobileNativeEvidence } from "@/lib/agent/extensions/mobile-native";
 import {
   useNewMessageSubscription,
   useThreadUpdatedSubscription,
@@ -1035,7 +1033,7 @@ export default function ThreadDetailRoute() {
       id: `optimistic-${pendingThreadStart.threadId}-first-message`,
       role: "user",
       content: pendingThreadStart.content,
-      senderType: "human",
+      senderType: "user",
       senderId: pendingThreadStart.userId ?? currentUser?.id ?? user?.sub ?? "",
       createdAt: pendingThreadStart.createdAt,
       metadata: { optimistic: true },
@@ -1336,78 +1334,28 @@ export default function ThreadDetailRoute() {
     );
     setSelectedMentions([]);
     Keyboard.dismiss();
-    // Real messages run through the on-device Pi-inspired harness (the agent loop runs in
-    // Hermes → Bedrock via /api/model/converse), and the completed turn is persisted into
-    // the thread via record-turn so it renders through the normal message query +
-    // subscription. (No production users yet — this is the on-device agent handling live
-    // mobile messages.)
-    //
     try {
-      const nativeAttachments: MobileNativeEvidence[] = file
-        ? [
-            {
-              type: "mobile_native_capability",
-              source: "file",
-              name: file.name,
-              mimeType: file.mimeType ?? null,
-              sizeBytes: file.sizeBytes ?? null,
-              textExtracted: false,
-            },
-          ]
-        : [];
       const userText =
         text ||
         (file
           ? `Attached file: ${file.name}.`
           : "Attached image for this turn.");
-      if (!effectiveAgentEnabled) {
-        await executeSendMessage({
-          input: {
-            threadId,
-            role: "USER" as any,
-            content: userText,
-            senderType: "human",
-            senderId: currentUser?.id,
-            agentRequested: false,
-            mentions: sendMessageMentionsForInput(mentions) as any,
-          },
-        });
-        reexecuteThread({ requestPolicy: "network-only" });
-        reexecuteMessages({ requestPolicy: "network-only" });
-        reexecuteTurns({ requestPolicy: "network-only" });
-        return;
+      if (effectiveAgentEnabled) {
+        markThreadActive(threadId);
       }
-      // Show the "Working…" indicator for the duration of the on-device turn and
-      // always clear it when the turn settles. record-turn inserts the messages
-      // directly, so there's no onNewMessage subscription event to clear it the way
-      // the cloud path does (see the onNewMessage effect) — we own the lifecycle here.
-      markThreadActive(threadId);
-      await runThreadHarnessTurn({
-        threadId,
-        userText,
-        // The thread's agent selects which tenant MCP tools the on-device agent can
-        // call (mcp-tools extension + proxy).
-        agentId: thread?.agentId ?? undefined,
-        userId: currentUser?.id,
-        userName: currentUser?.name,
-        userEmail: currentUser?.email,
-        tenantId: currentUser?.tenantId ?? tenantId,
-        spaceId: thread?.spaceId ?? undefined,
-        // Attached image is model-vision input on the user turn.
-        images: image ? [image] : undefined,
-        nativeAttachments,
-        // `messages` comes back newest-first (resolver orders desc(created_at));
-        // the harness needs chronological order so prior turns alternate correctly.
-        priorMessages: [...messages]
-          .sort(
-            (a: any, b: any) =>
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-          )
-          .map((m: any) => ({ role: m.role, content: m.content })),
+      await executeSendMessage({
+        input: {
+          threadId,
+          role: "USER" as any,
+          content: userText,
+          senderType: "user",
+          senderId: currentUser?.id,
+          agentRequested: effectiveAgentEnabled ? true : false,
+          mentions: sendMessageMentionsForInput(mentions) as any,
+        },
       });
     } catch (e) {
-      console.error("[harness] thread turn failed:", e);
-    } finally {
+      console.error("[mobile-agentcore] thread turn dispatch failed:", e);
       clearThreadActive(threadId);
     }
     // Re-fetch so the persisted user + assistant messages appear and auto-scroll kicks in
@@ -1421,14 +1369,7 @@ export default function ThreadDetailRoute() {
     selectedMentions,
     effectiveAgentEnabled,
     threadId,
-    messages,
-    thread?.agentId,
-    thread?.spaceId,
     currentUser?.id,
-    currentUser?.name,
-    currentUser?.email,
-    currentUser?.tenantId,
-    tenantId,
     executeSendMessage,
     reexecuteThread,
     reexecuteMessages,
@@ -1662,7 +1603,7 @@ export default function ThreadDetailRoute() {
                   threadId: threadId,
                   role: "USER" as any,
                   content: text,
-                  senderType: "human",
+                  senderType: "user",
                   senderId: currentUser?.id,
                 },
               }).then(() => {

@@ -5204,6 +5204,65 @@ Target branch: `main`
 
 None.
 
+# AgentCore-First Pi Execution Autopilot - 2026-06-02
+
+## Status
+
+- Plan: `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
+- Branch: `codex/agentcore-u0`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u0`
+- Started: `2026-06-02T13:42:51Z`
+- Current unit: U0 Spike, route desktop and mobile Pi turns through AgentCore.
+- Target branch: `main`
+
+## U0 Implementation Notes
+
+- Desktop Spaces sends no longer force `dispatchMode: DESKTOP_LOCAL`.
+- Mobile new-thread, follow-up, and question-card sends now use the managed AgentCore path instead of invoking the on-device harness loop.
+- API message dispatch normalizes legacy `human` sender values to `user`, so mobile clients cannot accidentally suppress managed agent dispatch.
+- API dispatch no longer treats a client-supplied desktop-local hint as a reason to skip managed AgentCore handling.
+- AgentCore Pi and `chat-agent-invoke` now emit lightweight phase logs around workspace render/bootstrap, session-store setup, and runtime loop activity.
+- The plan document is included in this unit because it had been restored from an earlier checkpoint and was not present on `origin/main`.
+
+## U0 Verification Log
+
+- Desktop Electron local E2E passed against AgentCore: thread `db33fd9b-ec38-4eea-938a-7328df4467c5` returned `U0_DESKTOP_E2E_OK`; no local `pi-sidecar` process was running.
+- iOS simulator first managed turn passed after mobile/API sender normalization: thread `c5b81919-a954-4bfc-acdb-11f258d4c9a4`, turn `5500af30-18d5-4b72-b6bf-a74b22df2138`, `runtimeType: pi`, `invocationSource: chat_message`, `status: succeeded`, response `U0_MOBILE_SIM_PATCHED_OK`, duration `15550ms`.
+- iOS simulator warm follow-up passed in the same thread: turn `87ad6693-aae0-4709-9fbd-9a3f37d24fc7`, `runtimeType: pi`, `invocationSource: chat_message`, `status: succeeded`, response `U0_MOBILE_SIM_FOLLOWUP_OK`, duration `14025ms`.
+- `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/messages/sendMessage.mentions.test.ts` passed.
+- `pnpm --filter @thinkwork/mobile test -- lib/thread-agent-mode.test.ts` passed.
+- `pnpm --filter @thinkwork/react-native-sdk build` passed.
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/messages/sendMessage.mentions.test.ts` (15 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/mobile test -- lib/thread-agent-mode.test.ts` (8 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/spaces test -- src/lib/use-chat-appsync-transport.test.ts src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx` (43 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/desktop test -- test/main/env.test.ts` (5 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts` (51 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `git diff --check`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/api typecheck`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/spaces typecheck`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/desktop typecheck`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/agentcore-pi typecheck`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/react-native-sdk build`.
+- Rebased cleanly onto `origin/main` at `2026-06-02T13:44Z`.
+- Post-rebase focused rerun passed: API mentions test + typecheck, mobile thread-agent-mode test + React Native SDK build, Spaces routing tests + typecheck, desktop env test + typecheck, AgentCore Pi server test + typecheck, and `git diff --check`.
+- Root gate passed: `pnpm lint`.
+- Root gate passed: `pnpm typecheck`.
+- Root gate passed: `pnpm test`, including `test:release`.
+
+## U0 Known Local Verification Notes
+
+- `pnpm --filter @thinkwork/mobile exec tsc --noEmit` fails on existing unrelated mobile type errors in fleet/routines/navigation areas; this is recorded as non-gating for U0 because the focused mobile regression passed and the failures are outside the touched AgentCore routing paths.
+- `pnpm format:check` is blocked locally because the root script calls `prettier`, but this checkout does not have a `prettier` binary installed (`sh: prettier: command not found`). CI should still run its configured formatter gate.
+
+## U0 CI / PR
+
+- Opened [#1988](https://github.com/thinkwork-ai/thinkwork/pull/1988).
+- Pending: monitor required checks, fix failures, squash merge, delete branch.
+
+## Blockers
+
+None.
+
 # Workspace Migration Legacy User Conflict Hotfix - 2026-06-01
 
 ## Status

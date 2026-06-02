@@ -21,8 +21,8 @@ existing backend path.
 - Use the Desktop app, not web Spaces. Desktop Pi is only exposed through the
   Electron bridge.
 - Sign in to the deployed stage you want to evaluate.
-- Local Pi must be available in the Desktop app. In development, the gate is on
-  for `dev` and can be forced with `VITE_DESKTOP_LOCAL_PI_ENABLED=true`.
+- Local Pi must be available in the Desktop app. It is disabled by default,
+  including in development; force it on with `VITE_DESKTOP_LOCAL_PI_ENABLED=true`.
 - The local sidecar must be healthy or starting. Settings disables Desktop Pi
   while the sidecar is unavailable or busy.
 - The tenant must have the RedTeam starter pack seeded. The starter pack is 189

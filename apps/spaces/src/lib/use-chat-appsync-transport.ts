@@ -25,7 +25,6 @@ import {
   parseChunkPayload,
   __PROTOCOL_TYPE_SETS,
 } from "./ui-message-chunk-parser";
-import { shouldUseDesktopLocalPiDispatch } from "./desktop-runtime";
 import type {
   ParsedChunk,
   UIMessage,
@@ -56,7 +55,6 @@ export interface CreateAppSyncChatTransportOptions {
    * exposed here so tests can simulate without hitting urql.
    */
   now?: () => number;
-  shouldUseDesktopLocalDispatch?: () => boolean;
 }
 
 export interface AppSyncChatTransport extends ChatTransport<UIMessage> {
@@ -104,7 +102,6 @@ export function createAppSyncChatTransport(
     urqlClient,
     onLegacyChunk,
     onChunkDrop,
-    shouldUseDesktopLocalDispatch = shouldUseDesktopLocalPiDispatch,
   } = options;
   let status: TransportStatus = "idle";
   let mutationCallCount = 0;
@@ -156,9 +153,6 @@ export function createAppSyncChatTransport(
               trigger: "regenerate-message",
               regenerateOf: input.messageId ?? null,
             },
-          }),
-          ...(shouldUseDesktopLocalDispatch() && {
-            dispatchMode: "DESKTOP_LOCAL" as const,
           }),
         },
       };
