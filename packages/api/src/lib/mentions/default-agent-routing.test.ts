@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDefaultAgentTurnWakeup,
+  dispatchDefaultAgentChatTurn,
   dispatchDefaultAgentTurn,
   type DefaultAgentRoutingRepository,
 } from "./default-agent-routing.js";
@@ -47,6 +48,86 @@ describe("default agent routing", () => {
       ),
     ).resolves.toBeNull();
     expect(repository.wakeups).toEqual([]);
+  });
+
+  it("directly invokes immediate chat turns without waiting for the wakeup scheduler", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const invoked: unknown[] = [];
+
+    await expect(
+      dispatchDefaultAgentChatTurn(
+        {
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+          spaceId: "space-1",
+          messageId: "message-1",
+          content: "Please answer now",
+          sender: { type: "user", id: "user-1" },
+        },
+        repository,
+        {
+          async invokeChatAgent(input) {
+            invoked.push(input);
+            return true;
+          },
+        },
+      ),
+    ).resolves.toEqual({
+      agentId: "agent-1",
+      directInvoked: true,
+      enqueued: false,
+      wakeupRequestId: null,
+    });
+
+    expect(invoked).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        messageId: "message-1",
+        userMessage: "Please answer now",
+      },
+    ]);
+    expect(repository.wakeups).toEqual([]);
+    expect(repository.assignments).toEqual([
+      { tenantId: "tenant-1", threadId: "thread-1", agentId: "agent-1" },
+    ]);
+  });
+
+  it("falls back to the wakeup queue when direct chat invoke is unavailable", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+
+    await expect(
+      dispatchDefaultAgentChatTurn(
+        {
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+          messageId: "message-1",
+          content: "Fallback please",
+        },
+        repository,
+        {
+          async invokeChatAgent() {
+            return false;
+          },
+        },
+      ),
+    ).resolves.toEqual({
+      agentId: "agent-1",
+      directInvoked: false,
+      enqueued: true,
+      wakeupRequestId: "wakeup-created",
+    });
+
+    expect(repository.wakeups[0]).toMatchObject({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      payload: {
+        threadId: "thread-1",
+        messageId: "message-1",
+        userMessage: "Fallback please",
+      },
+    });
   });
 
   it("does not duplicate existing default agent wakeups", async () => {

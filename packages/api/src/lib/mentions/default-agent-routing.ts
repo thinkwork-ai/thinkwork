@@ -52,6 +52,63 @@ export interface DispatchDefaultAgentTurnInput {
   } | null;
 }
 
+export interface DefaultAgentChatInvoke {
+  tenantId: string;
+  threadId: string;
+  agentId: string;
+  userMessage: string;
+  messageId: string;
+}
+
+export interface DefaultAgentChatExecutor {
+  invokeChatAgent(input: DefaultAgentChatInvoke): Promise<boolean>;
+}
+
+export async function dispatchDefaultAgentChatTurn(
+  input: DispatchDefaultAgentTurnInput,
+  repository: DefaultAgentRoutingRepository = new DrizzleDefaultAgentRoutingRepository(),
+  executor: DefaultAgentChatExecutor = defaultChatExecutor,
+) {
+  const defaultAgent = await repository.loadDefaultAgent({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+  });
+  if (!defaultAgent) return null;
+
+  await repository.assignThreadDefaultAgent({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+    agentId: defaultAgent.agentId,
+  });
+
+  const directInvoked = await executor.invokeChatAgent({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+    agentId: defaultAgent.agentId,
+    messageId: input.messageId,
+    userMessage: input.content ?? "",
+  });
+  if (directInvoked) {
+    return {
+      agentId: defaultAgent.agentId,
+      directInvoked: true,
+      enqueued: false,
+      wakeupRequestId: null,
+    };
+  }
+
+  const wakeup = buildDefaultAgentTurnWakeup({
+    ...input,
+    agentId: defaultAgent.agentId,
+  });
+  const fallback = await enqueueDefaultAgentWakeup(wakeup, repository);
+  return {
+    agentId: defaultAgent.agentId,
+    directInvoked: false,
+    ...fallback,
+  };
+}
+
 export async function dispatchDefaultAgentTurn(
   input: DispatchDefaultAgentTurnInput,
   repository: DefaultAgentRoutingRepository = new DrizzleDefaultAgentRoutingRepository(),
@@ -71,6 +128,17 @@ export async function dispatchDefaultAgentTurn(
     threadId: input.threadId,
     agentId: wakeup.agentId,
   });
+  const enqueued = await enqueueDefaultAgentWakeup(wakeup, repository);
+  return {
+    agentId: wakeup.agentId,
+    ...enqueued,
+  };
+}
+
+async function enqueueDefaultAgentWakeup(
+  wakeup: DefaultAgentTurnWakeup,
+  repository: DefaultAgentRoutingRepository,
+) {
   const existing = await repository.findExistingWakeup({
     tenantId: wakeup.tenantId,
     agentId: wakeup.agentId,
@@ -78,7 +146,6 @@ export async function dispatchDefaultAgentTurn(
   });
   if (existing) {
     return {
-      agentId: wakeup.agentId,
       enqueued: false,
       wakeupRequestId: existing.id,
     };
@@ -86,11 +153,17 @@ export async function dispatchDefaultAgentTurn(
 
   const created = await repository.createWakeup(wakeup);
   return {
-    agentId: wakeup.agentId,
     enqueued: true,
     wakeupRequestId: created.id,
   };
 }
+
+const defaultChatExecutor: DefaultAgentChatExecutor = {
+  async invokeChatAgent(input) {
+    const { invokeChatAgent } = await import("../../graphql/utils.js");
+    return invokeChatAgent(input);
+  },
+};
 
 export function buildDefaultAgentTurnWakeup(
   input: DispatchDefaultAgentTurnInput & { agentId: string },

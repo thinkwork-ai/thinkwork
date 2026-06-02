@@ -21,7 +21,7 @@ import {
   toThreadParticipantInsert,
 } from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
-import { dispatchDefaultAgentTurn } from "../../../lib/mentions/default-agent-routing.js";
+import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agent-routing.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { applyCustomerOnboardingChatUpdate } from "../../../lib/spaces/customer-onboarding-chat-updates.js";
@@ -328,7 +328,7 @@ export const sendMessage = async (
     })
   ) {
     try {
-      await dispatchDefaultAgentTurn({
+      await dispatchDefaultAgentChatTurn({
         tenantId: thread.tenant_id,
         threadId: i.threadId,
         spaceId: thread.space_id,

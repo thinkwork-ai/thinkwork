@@ -168,18 +168,18 @@ vi.mock("urql", () => ({
           data: {
             spaces: [
               {
-                id: "space-default",
-                slug: "default",
-                name: "Default",
-                unreadThreadCount: 0,
-                lastActivityAt: "2026-05-19T19:00:00Z",
-              },
-              {
                 id: "space-general",
                 slug: "general",
                 name: "General",
                 unreadThreadCount: 0,
                 lastActivityAt: "2026-05-19T18:30:00Z",
+              },
+              {
+                id: "space-default",
+                slug: "default",
+                name: "Default",
+                unreadThreadCount: 0,
+                lastActivityAt: "2026-05-19T19:00:00Z",
               },
               {
                 id: "space-1",
@@ -606,6 +606,11 @@ describe("ChatSidebar", () => {
       screen.getByRole("link", { name: "General" }).getAttribute("href"),
     ).toBe("/spaces/space-general");
     expect(screen.getByRole("button", { name: /toggle chats/i })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "New thread in Chats" })
+        .getAttribute("href"),
+    ).toBe("/new?spaceId=space-default");
     expect(
       screen.getByRole("button", { name: /toggle customer onboarding/i }),
     ).toBeTruthy();

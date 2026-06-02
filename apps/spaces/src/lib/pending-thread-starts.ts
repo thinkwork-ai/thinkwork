@@ -3,6 +3,7 @@ export interface PendingThreadStart {
   title: string;
   content: string;
   expectAssistantResponse: boolean;
+  startedAt?: string | null;
 }
 
 const pendingThreadStarts = new Map<string, PendingThreadStart>();

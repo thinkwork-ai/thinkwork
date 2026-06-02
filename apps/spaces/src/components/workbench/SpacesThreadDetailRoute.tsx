@@ -72,7 +72,10 @@ interface SpacesThreadDetailRouteProps {
 interface OptimisticMessage {
   content: string;
   expectAssistantResponse: boolean;
+  startedAt?: string | null;
 }
+
+const ACTIVE_AGENT_REFRESH_MS = 2_000;
 
 interface ThreadResult {
   thread: {
@@ -532,7 +535,7 @@ export function SpacesThreadDetailRoute({
 
   useEffect(() => {
     if (
-      optimisticMessage &&
+      optimisticMessage?.expectAssistantResponse === false &&
       hasPersistedUserMessage(
         routeThread?.messages?.edges,
         optimisticMessage.content,
@@ -616,6 +619,7 @@ export function SpacesThreadDetailRoute({
           content: optimisticThreadStart.content,
           expectAssistantResponse:
             optimisticThreadStart.expectAssistantResponse,
+          startedAt: optimisticThreadStart.startedAt ?? null,
         }
       : null;
   const effectiveOptimisticMessage =
@@ -624,6 +628,7 @@ export function SpacesThreadDetailRoute({
     ? withOptimisticUserTurn(thread, effectiveOptimisticMessage.content, {
         expectAssistantResponse:
           effectiveOptimisticMessage.expectAssistantResponse,
+        startedAt: effectiveOptimisticMessage.startedAt,
       })
     : thread;
   const threadArtifacts = useMemo(
@@ -684,6 +689,51 @@ export function SpacesThreadDetailRoute({
     threadId,
   ]);
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
+  const latestMessageAwaitsAssistant =
+    latestMessageRole(visibleThread) === "USER" && !hasDurableAssistant;
+  const hasActiveAgentTurn =
+    hasRunningThreadTurn(visibleThread) ||
+    isActiveLifecycleStatus(visibleThread?.lifecycleStatus);
+  const shouldPollActiveAgentResult = Boolean(
+    latestMessageAwaitsAssistant &&
+      (hasActiveAgentTurn ||
+        (effectiveOptimisticMessage &&
+          effectiveOptimisticMessage.expectAssistantResponse !== false)),
+  );
+
+  useEffect(() => {
+    if (!optimisticMessage || !hasDurableAssistant) return;
+    setOptimisticMessage(null);
+  }, [hasDurableAssistant, optimisticMessage]);
+
+  useEffect(() => {
+    if (!shouldPollActiveAgentResult) return;
+
+    const refreshActiveThread = () => {
+      reexecuteQuery({ requestPolicy: "network-only" });
+      reexecuteTasksQuery({ requestPolicy: "network-only" });
+      reexecuteEventsQuery({ requestPolicy: "network-only" });
+      reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
+      reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
+      void refreshThreadTurns();
+    };
+
+    const intervalId = window.setInterval(
+      refreshActiveThread,
+      ACTIVE_AGENT_REFRESH_MS,
+    );
+    return () => window.clearInterval(intervalId);
+  }, [
+    reexecuteEventsQuery,
+    reexecuteLinkedTasksQuery,
+    reexecuteProgressMarkdownQuery,
+    reexecuteQuery,
+    reexecuteRunbookRunsQuery,
+    reexecuteTasksQuery,
+    refreshThreadTurns,
+    shouldPollActiveAgentResult,
+  ]);
   const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
   const goalFiles = goalFilesData?.threadGoalFiles ?? null;
   const goal = goalFiles?.goal ?? null;
@@ -1215,6 +1265,7 @@ export function SpacesThreadDetailRoute({
         setOptimisticMessage({
           content,
           expectAssistantResponse: agentRequested !== false,
+          startedAt: new Date().toISOString(),
         });
         resetStreamingChunks();
 
@@ -1723,7 +1774,7 @@ async function downloadThreadAttachment(
 function withOptimisticUserTurn(
   thread: TaskThread | null,
   content: string,
-  options: { expectAssistantResponse?: boolean } = {},
+  options: { expectAssistantResponse?: boolean; startedAt?: string | null } = {},
 ): TaskThread | null {
   if (!thread) return null;
   const alreadyPersisted = thread.messages.some(
@@ -1734,16 +1785,27 @@ function withOptimisticUserTurn(
   const hasOptimisticTurn = (thread.turns ?? []).some(
     (turn) => turn.id === "optimistic-computer-turn",
   );
+  const hasRealActivity = hasRealActivityForOptimisticMessage(thread, content);
+  const optimisticStartedAt =
+    options.startedAt ??
+    thread.messages.find(
+      (message) =>
+        message.role.toUpperCase() === "USER" &&
+        message.content?.trim() === content.trim(),
+    )?.createdAt ??
+    new Date().toISOString();
 
   const turns =
-    options.expectAssistantResponse === false || hasOptimisticTurn
+    options.expectAssistantResponse === false ||
+    hasOptimisticTurn ||
+    hasRealActivity
       ? (thread.turns ?? [])
       : [
           {
             id: "optimistic-computer-turn",
             status: "running",
             invocationSource: "chat_message",
-            startedAt: new Date().toISOString(),
+            startedAt: optimisticStartedAt,
           },
           ...(thread.turns ?? []),
         ];
@@ -1758,10 +1820,63 @@ function withOptimisticUserTurn(
             id: "optimistic-user-message",
             role: "USER",
             content,
+            createdAt: optimisticStartedAt,
           },
         ],
     turns,
   };
+}
+
+function hasRealActivityForOptimisticMessage(
+  thread: TaskThread,
+  content: string,
+): boolean {
+  const normalizedContent = content.trim();
+  let userIndex = -1;
+  for (let index = thread.messages.length - 1; index >= 0; index -= 1) {
+    const message = thread.messages[index];
+    if (
+      message.role.toUpperCase() === "USER" &&
+      message.content?.trim() === normalizedContent
+    ) {
+      userIndex = index;
+      break;
+    }
+  }
+  const userMessage = userIndex >= 0 ? thread.messages[userIndex] : undefined;
+
+  if (!userMessage) return false;
+
+  const hasAssistantAfterUser = thread.messages
+    .slice(userIndex + 1)
+    .some((message) => message.role.toUpperCase() === "ASSISTANT");
+  if (hasAssistantAfterUser) return true;
+
+  const userTime = Date.parse(userMessage.createdAt ?? "");
+  if (!Number.isFinite(userTime)) return false;
+
+  return (thread.turns ?? []).some((turn) => {
+    if (turn.id === "optimistic-computer-turn") return false;
+    const turnTime = Date.parse(turn.startedAt ?? "");
+    return Number.isFinite(turnTime) && turnTime >= userTime;
+  });
+}
+
+function latestMessageRole(thread: TaskThread | null): string | null {
+  const role = thread?.messages.at(-1)?.role;
+  return role ? role.toUpperCase() : null;
+}
+
+function hasRunningThreadTurn(thread: TaskThread | null): boolean {
+  return Boolean(
+    thread?.turns?.some((turn) => isActiveLifecycleStatus(turn.status)),
+  );
+}
+
+function isActiveLifecycleStatus(status: string | null | undefined): boolean {
+  return ["queued", "pending", "running", "started", "in_progress"].includes(
+    String(status ?? "").toLowerCase(),
+  );
 }
 
 function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
