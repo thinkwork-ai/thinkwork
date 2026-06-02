@@ -22,7 +22,7 @@ status: complete
 | U3 Desktop IPC and sidecar eval execution         | `codex/desktop-pi-evals-u3-sidecar`  | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | Merged      | IPC bridge, sidecar eval runner, result callbacks; CI passed.                                         |
 | U4 Settings Evaluations Desktop Pi target         | `codex/desktop-pi-evals-u4-settings` | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | Merged      | Settings target selection and Desktop Pi provenance; CI passed.                                       |
 | U5 Convert and harden catalog for Desktop Pi      | `codex/desktop-pi-evals-u5-catalog`  | [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965) | Merged      | Squash merged as `81fd1fb9`; catalog metadata/prose conversion, shape gate, and testing solution doc. |
-| U6 Full-catalog proof, docs, and guardrails       | `codex/desktop-pi-evals-u6-proof`    | TBD                                                          | In progress | Operator runbook, docs updates, focused Desktop Pi proof, and full-run prep hardening.                |
+| U6 Full-catalog proof, docs, and guardrails       | `codex/desktop-pi-evals-u6-proof`    | [#1966](https://github.com/thinkwork-ai/thinkwork/pull/1966) | In progress | Operator runbook, docs updates, focused Desktop Pi proof, and full-run prep hardening.                |
 
 ### Progress Log
 
@@ -72,6 +72,8 @@ status: complete
 - Parallel Desktop Pi execution remains a follow-up: safe parallelism should use
   a bounded sidecar worker pool with per-case isolated workspace/session state,
   not shared in-flight mutation of one `/workspace`.
+- Opened U6 PR
+  [#1966](https://github.com/thinkwork-ai/thinkwork/pull/1966).
 
 ### Verification Log
 
