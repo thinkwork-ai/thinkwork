@@ -288,7 +288,7 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.tenantSlug).toBe("acme");
     expect(cfg.agentName).toBe("Ada");
     expect(cfg.agentSystemPrompt).toBe("You are Ada.");
-    expect(cfg.runtimeType).toBe("strands");
+    expect(cfg.runtimeType).toBe("pi");
     expect(cfg.templateModel).toBe("us.anthropic.claude-sonnet-4-6");
     expect(cfg.guardrailId).toBeNull();
     expect(cfg.guardrailConfig).toBeUndefined();
@@ -438,7 +438,7 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.runtimeType).toBe("pi");
   });
 
-  it("uses the Agent runtime instead of falling back to a Template runtime", async () => {
+  it("uses pi when the Agent runtime selector is missing", async () => {
     stageAgentRow({ runtime: null });
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
@@ -448,10 +448,10 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.runtimeType).toBe("strands");
+    expect(cfg.runtimeType).toBe("pi");
   });
 
-  it("defaults unknown runtime values to Strands", async () => {
+  it("defaults unknown runtime values to pi", async () => {
     stageAgentRow({ runtime: "unknown" });
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
@@ -461,7 +461,7 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.runtimeType).toBe("strands");
+    expect(cfg.runtimeType).toBe("pi");
   });
 
   it("honors the template blocked_tools filter", async () => {

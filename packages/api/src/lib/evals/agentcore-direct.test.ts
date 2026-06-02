@@ -30,7 +30,7 @@ const runtimeConfig: AgentRuntimeConfig = {
   contextEngineEnabled: false,
   guardrailId: null,
   guardrailConfig: undefined,
-  runtimeType: "strands",
+  runtimeType: "pi",
   skillsConfig: [],
   knowledgeBasesConfig: undefined,
   mcpConfigs: [],

@@ -5,7 +5,9 @@ import {
 } from "./runtime.js";
 
 describe("parseAgentRuntimeInput", () => {
-  it("accepts both legacy FLUE and new PI inputs as the internal pi runtime", () => {
+  it("accepts legacy runtime inputs as the internal pi runtime", () => {
+    expect(parseAgentRuntimeInput(null)).toBe("pi");
+    expect(parseAgentRuntimeInput("STRANDS")).toBe("pi");
     expect(parseAgentRuntimeInput("FLUE")).toBe("pi");
     expect(parseAgentRuntimeInput("PI")).toBe("pi");
   });
@@ -17,7 +19,7 @@ describe("agentRuntimeToGraphqlEnum", () => {
     expect(agentRuntimeToGraphqlEnum("PI")).toBe("FLUE");
   });
 
-  it("serializes strands as the GraphQL enum value", () => {
-    expect(agentRuntimeToGraphqlEnum("strands")).toBe("STRANDS");
+  it("serializes legacy strands runtime rows through the deployed Pi enum", () => {
+    expect(agentRuntimeToGraphqlEnum("strands")).toBe("FLUE");
   });
 });

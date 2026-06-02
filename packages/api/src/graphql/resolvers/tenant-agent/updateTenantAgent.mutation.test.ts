@@ -90,7 +90,7 @@ describe("updateTenantAgent", () => {
     ]);
     expect(updateSets[0]).toMatchObject({
       name: "Platform agent",
-      runtime: "strands",
+      runtime: "pi",
       model: "us.anthropic.claude-sonnet-4-5",
       sandbox: { enabled: true },
       budget_paused: true,

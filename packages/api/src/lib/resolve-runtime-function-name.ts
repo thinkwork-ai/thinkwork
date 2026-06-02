@@ -2,17 +2,13 @@ export type AgentRuntimeType = "strands" | "pi";
 
 export class RuntimeNotProvisionedError extends Error {
   constructor(public readonly runtimeType: AgentRuntimeType) {
-    super(
-      runtimeType === "pi"
-        ? "Pi runtime not yet provisioned in this stage."
-        : "Strands runtime not provisioned in this stage.",
-    );
+    super("Pi runtime not yet provisioned in this stage.");
     this.name = "RuntimeNotProvisionedError";
   }
 }
 
-export function normalizeAgentRuntimeType(value: unknown): AgentRuntimeType {
-  return value === "pi" || value === "flue" ? "pi" : "strands";
+export function normalizeAgentRuntimeType(_value: unknown): AgentRuntimeType {
+  return "pi";
 }
 
 export function resolveRuntimeFunctionName(
@@ -24,13 +20,11 @@ export function resolveRuntimeFunctionName(
     >
   > = process.env,
 ): string {
-  const functionName =
-    runtimeType === "pi"
-      ? env.AGENTCORE_PI_FUNCTION_NAME
-      : env.AGENTCORE_FUNCTION_NAME;
+  const normalizedRuntimeType = normalizeAgentRuntimeType(runtimeType);
+  const functionName = env.AGENTCORE_PI_FUNCTION_NAME;
 
   if (!functionName) {
-    throw new RuntimeNotProvisionedError(runtimeType);
+    throw new RuntimeNotProvisionedError(normalizedRuntimeType);
   }
 
   return functionName;
