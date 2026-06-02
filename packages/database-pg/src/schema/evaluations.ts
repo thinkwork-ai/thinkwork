@@ -104,11 +104,17 @@ export const evalRuns = pgTable(
       },
     ),
     status: text("status").notNull().default("pending"), // 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+    execution_target: text("execution_target").notNull().default("agentcore"), // 'agentcore' | 'desktop-pi'
+    runtime_host: text("runtime_host").notNull().default("aws-agentcore"), // 'aws-agentcore' | 'desktop-local'
     model: text("model"), // model_id used for the agent under test (informational)
     categories: text("categories")
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    selected_test_case_ids: uuid("selected_test_case_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
     total_tests: integer("total_tests").notNull().default(0),
     passed: integer("passed").notNull().default(0),
     failed: integer("failed").notNull().default(0),
@@ -136,6 +142,11 @@ export const evalRuns = pgTable(
       table.created_at,
     ),
     index("idx_eval_runs_tenant_status").on(table.tenant_id, table.status),
+    index("idx_eval_runs_tenant_execution_target_created").on(
+      table.tenant_id,
+      table.execution_target,
+      table.created_at,
+    ),
     index("idx_eval_runs_scheduled_job_id").on(table.scheduled_job_id),
   ],
 );

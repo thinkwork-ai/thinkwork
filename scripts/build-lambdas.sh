@@ -146,6 +146,9 @@ build_handler "desktop-workspace-prewarm" \
 build_handler "managed-delegation" \
   "$REPO_ROOT/packages/api/src/handlers/managed-delegation.ts"
 
+build_handler "desktop-eval-runs" \
+  "$REPO_ROOT/packages/api/src/handlers/desktop-eval-runs.ts"
+
 # Mobile agent harness model proxy: stateless Bedrock Converse call per loop
 # step. Bundles the newer Bedrock SDK (Converse + tool-use). OPTIONS handled
 # inside the Lambda before auth.

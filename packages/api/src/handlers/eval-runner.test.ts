@@ -55,14 +55,29 @@ describe("selectedTestCaseIdsFromEvent", () => {
   });
 
   it("excludes Computer-surface cases from direct AgentCore category runs by default", () => {
-    expect(excludesComputerSurfaceByDefault({ computer_id: null }, [])).toBe(
-      true,
-    );
     expect(
-      excludesComputerSurfaceByDefault({ computer_id: "computer-1" }, []),
+      excludesComputerSurfaceByDefault(
+        { computer_id: null, execution_target: "agentcore" },
+        [],
+      ),
+    ).toBe(true);
+    expect(
+      excludesComputerSurfaceByDefault(
+        { computer_id: "computer-1", execution_target: "agentcore" },
+        [],
+      ),
     ).toBe(false);
     expect(
-      excludesComputerSurfaceByDefault({ computer_id: null }, ["tc-1"]),
+      excludesComputerSurfaceByDefault(
+        { computer_id: null, execution_target: "agentcore" },
+        ["tc-1"],
+      ),
+    ).toBe(false);
+    expect(
+      excludesComputerSurfaceByDefault(
+        { computer_id: null, execution_target: "desktop-pi" },
+        [],
+      ),
     ).toBe(false);
   });
 });

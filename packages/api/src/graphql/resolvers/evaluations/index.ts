@@ -38,8 +38,11 @@ function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
     computerId: row.computer_id ?? null,
     scheduledJobId: row.scheduled_job_id ?? null,
     status: row.status,
+    executionTarget: row.execution_target ?? "agentcore",
+    runtimeHost: row.runtime_host ?? "aws-agentcore",
     model: row.model,
     categories: row.categories,
+    selectedTestCaseIds: row.selected_test_case_ids ?? [],
     totalTests: row.total_tests,
     passed: row.passed,
     failed: row.failed,
@@ -141,9 +144,9 @@ export function shouldIncludePlannedEvalRows(runStatus: string): boolean {
 }
 
 export function excludesComputerSurfacePlaceholders(
-  run: Pick<typeof evalRuns.$inferSelect, "computer_id">,
+  run: Pick<typeof evalRuns.$inferSelect, "computer_id" | "execution_target">,
 ): boolean {
-  return !run.computer_id;
+  return run.execution_target !== "desktop-pi" && !run.computer_id;
 }
 
 function plannedResultToGraphql(
@@ -378,7 +381,9 @@ const evalRunResults = async (
     eq(evalTestCases.tenant_id, run.tenant_id),
     eq(evalTestCases.enabled, true),
   ];
-  if (run.categories.length > 0) {
+  if (run.selected_test_case_ids.length > 0) {
+    caseConditions.push(inArray(evalTestCases.id, run.selected_test_case_ids));
+  } else if (run.categories.length > 0) {
     caseConditions.push(inArray(evalTestCases.category, run.categories));
   }
   if (excludesComputerSurfacePlaceholders(run)) {
@@ -662,8 +667,11 @@ const startEvalRun = async (
       agent_id: null,
       computer_id: null,
       status: "pending",
+      execution_target: "agentcore",
+      runtime_host: "aws-agentcore",
       model,
       categories: args.input.categories ?? [],
+      selected_test_case_ids: args.input.testCaseIds ?? [],
     })
     .returning();
   const runId = (run as { id: string }).id;

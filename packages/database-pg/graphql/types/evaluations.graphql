@@ -41,10 +41,13 @@ type EvalRun {
   agentName: String
   scheduledJobId: ID
   status: String!
+  executionTarget: String!
+  runtimeHost: String!
   # Model used for the direct-AgentCore eval run. Manual runs default to
   # Kimi K2.5; explicit overrides must be available in model_catalog.
   model: String
   categories: [String!]!
+  selectedTestCaseIds: [ID!]!
   totalTests: Int!
   passed: Int!
   failed: Int!

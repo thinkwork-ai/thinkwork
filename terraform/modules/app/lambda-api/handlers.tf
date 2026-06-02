@@ -267,6 +267,10 @@ resource "aws_lambda_function" "handler" {
     # authenticates with its per-turn finalizer token, and the handler
     # reuses chat-agent-invoke to start managed AgentCore worker turns.
     "managed-delegation",
+    # Desktop-local Pi eval preparation + result callback endpoint.
+    # Cognito-authenticated desktop callers create runs; the sidecar writes
+    # per-case results with a short-lived per-run callback token.
+    "desktop-eval-runs",
     # chat-agent-finalize — POST /api/threads/{threadId}/finalize. The
     # Strands runtime POSTs here at end-of-turn so the post-AgentCore
     # bookkeeping (cost recording, message insert, AppSync notify,
@@ -792,12 +796,16 @@ locals {
 
     # Desktop-local Pi runtime setup. Specific route before broad REST
     # handlers; OPTIONS is handled inside the Lambda before auth.
-    "POST /api/desktop/runtime-session"       = "desktop-runtime-session"
-    "OPTIONS /api/desktop/runtime-session"    = "desktop-runtime-session"
-    "POST /api/desktop/workspace-prewarm"     = "desktop-workspace-prewarm"
-    "OPTIONS /api/desktop/workspace-prewarm"  = "desktop-workspace-prewarm"
-    "POST /api/desktop/managed-delegation"    = "managed-delegation"
-    "OPTIONS /api/desktop/managed-delegation" = "managed-delegation"
+    "POST /api/desktop/runtime-session"              = "desktop-runtime-session"
+    "OPTIONS /api/desktop/runtime-session"           = "desktop-runtime-session"
+    "POST /api/desktop/workspace-prewarm"            = "desktop-workspace-prewarm"
+    "OPTIONS /api/desktop/workspace-prewarm"         = "desktop-workspace-prewarm"
+    "POST /api/desktop/managed-delegation"           = "managed-delegation"
+    "OPTIONS /api/desktop/managed-delegation"        = "managed-delegation"
+    "POST /api/desktop/eval-runs"                    = "desktop-eval-runs"
+    "OPTIONS /api/desktop/eval-runs"                 = "desktop-eval-runs"
+    "POST /api/desktop/eval-runs/{runId}/results"    = "desktop-eval-runs"
+    "OPTIONS /api/desktop/eval-runs/{runId}/results" = "desktop-eval-runs"
 
     # Mobile agent harness model proxy (cloud Bedrock Converse). OPTIONS is
     # handled inside the Lambda before auth.

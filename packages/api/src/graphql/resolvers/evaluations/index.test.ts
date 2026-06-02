@@ -50,11 +50,23 @@ describe("placeholderStatusForEvalRun", () => {
   });
 
   it("matches direct AgentCore planning to the runner's Computer-surface exclusion", () => {
-    expect(excludesComputerSurfacePlaceholders({ computer_id: null })).toBe(
-      true,
-    );
     expect(
-      excludesComputerSurfacePlaceholders({ computer_id: "computer-1" }),
+      excludesComputerSurfacePlaceholders({
+        computer_id: null,
+        execution_target: "agentcore",
+      }),
+    ).toBe(true);
+    expect(
+      excludesComputerSurfacePlaceholders({
+        computer_id: "computer-1",
+        execution_target: "agentcore",
+      }),
+    ).toBe(false);
+    expect(
+      excludesComputerSurfacePlaceholders({
+        computer_id: null,
+        execution_target: "desktop-pi",
+      }),
     ).toBe(false);
   });
 });
