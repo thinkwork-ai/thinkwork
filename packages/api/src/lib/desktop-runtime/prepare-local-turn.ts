@@ -93,6 +93,15 @@ export interface PrepareLocalPiWorkspacePrewarmInput {
   purpose?: "chat" | "eval";
 }
 
+export interface PrepareLocalPiEvalRuntimeSessionInput {
+  auth: DesktopRuntimeAuth;
+  agentId: string;
+  spaceId: string;
+  evalRunId: string;
+  testCaseId: string;
+  userMessage: string;
+}
+
 export type PreparedLocalPiRuntimeSession =
   PreparedDesktopPiRuntimeSession<DesktopSidecarCredentials>;
 
@@ -1041,6 +1050,226 @@ export async function prepareLocalPiRuntimeSession(
     threadTurnId: turn.id,
     expiresAt,
     finalizeCallbackUrl,
+    finalizeCallbackSecret: finalizeToken,
+    sidecarCredentials,
+    invocation,
+  };
+}
+
+export async function prepareLocalPiEvalRuntimeSession(
+  input: PrepareLocalPiEvalRuntimeSessionInput,
+  deps: PrepareLocalPiRuntimeSessionDeps = defaultPrepareLocalPiRuntimeSessionDeps(),
+): Promise<PreparedLocalPiRuntimeSession> {
+  assertUuid(input.agentId, "agentId");
+  assertUuid(input.spaceId, "spaceId");
+  assertUuid(input.evalRunId, "evalRunId");
+  assertUuid(input.testCaseId, "testCaseId");
+  if (!input.userMessage.trim()) {
+    throw new DesktopRuntimeSessionError(
+      "userMessage is required",
+      400,
+      "BAD_REQUEST",
+    );
+  }
+  if (input.auth.authType !== "cognito" || !input.auth.email) {
+    throw new DesktopRuntimeSessionError(
+      "Desktop eval runtime sessions require Cognito user authentication",
+      401,
+      "UNAUTHORIZED",
+    );
+  }
+
+  const caller = await deps.loadCallerByEmail(input.auth.email.toLowerCase());
+  if (!caller) {
+    throw new DesktopRuntimeSessionError(
+      "Caller is not bootstrapped",
+      403,
+      "CALLER_NOT_BOOTSTRAPPED",
+    );
+  }
+  if (input.auth.tenantId && input.auth.tenantId !== caller.tenantId) {
+    throw new DesktopRuntimeSessionError(
+      "Caller tenant does not match token tenant",
+      403,
+      "TENANT_MISMATCH",
+    );
+  }
+
+  const membership = await deps.loadTenantMembership({
+    tenantId: caller.tenantId,
+    userId: caller.id,
+  });
+  if (!membership || membership.status !== "active") {
+    throw new DesktopRuntimeSessionError(
+      "Caller is not an active tenant member",
+      403,
+      "TENANT_ACCESS_DENIED",
+    );
+  }
+
+  const space = await deps.loadSpaceForAccess({
+    tenantId: caller.tenantId,
+    spaceId: input.spaceId,
+  });
+  if (!space || space.status !== "active") {
+    throw new DesktopRuntimeSessionError(
+      "Space not found",
+      404,
+      "SPACE_NOT_FOUND",
+    );
+  }
+  if (space.accessMode === "private") {
+    const spaceMember = await deps.loadSpaceMembership({
+      tenantId: caller.tenantId,
+      spaceId: space.id,
+      userId: caller.id,
+    });
+    if (!spaceMember) {
+      throw new DesktopRuntimeSessionError(
+        "Caller does not have access to this Space",
+        403,
+        "SPACE_ACCESS_DENIED",
+      );
+    }
+  }
+
+  let runtimeConfig: AgentRuntimeConfig;
+  try {
+    runtimeConfig = await deps.resolveRuntimeConfig({
+      tenantId: caller.tenantId,
+      agentId: input.agentId,
+      spaceId: input.spaceId,
+      currentUserId: caller.id,
+      currentUserEmail: caller.email,
+    });
+  } catch (err) {
+    if (err instanceof AgentNotFoundError) {
+      throw new DesktopRuntimeSessionError(
+        "Agent not found",
+        404,
+        "AGENT_NOT_FOUND",
+      );
+    }
+    throw err;
+  }
+
+  const runtimeType: AgentRuntimeType = runtimeConfig.runtimeType;
+  const agentModel = runtimeConfig.templateModel;
+  const threadSlug = `eval-${input.evalRunId}-${input.testCaseId}`;
+  let renderedWorkspace: RenderWorkspaceTupleForInvokeResult = {
+    rendered: false,
+    reason: "not_attempted",
+  };
+  let renderedWorkspacePrefix: string | undefined;
+  let effectiveBlockedTools = runtimeConfig.blockedTools;
+  renderedWorkspace = await deps.renderWorkspace({
+    tenantId: caller.tenantId,
+    agentId: input.agentId,
+    spaceId: input.spaceId,
+    threadId: input.evalRunId,
+    threadSlug,
+    userId: caller.id,
+    agentBlockedTools: runtimeConfig.blockedTools,
+  });
+  if (renderedWorkspace.rendered) {
+    renderedWorkspacePrefix = renderedWorkspace.renderedPrefix;
+    effectiveBlockedTools =
+      renderedWorkspace.effectivePolicy?.blockedTools ??
+      runtimeConfig.blockedTools;
+  } else if (renderedWorkspace.errorCode === "SpaceAccessDenied") {
+    throw new DesktopRuntimeSessionError(
+      renderedWorkspace.reason ?? "Workspace render access denied",
+      403,
+      "SPACE_ACCESS_DENIED",
+    );
+  }
+
+  const finalizeToken = createDesktopFinalizeToken();
+  const now = deps.now();
+  const expiresAt = new Date(
+    now.getTime() + DEFAULT_DESKTOP_SESSION_TTL_MS,
+  ).toISOString();
+  const sidecarCredentials = buildDesktopSidecarCredentials({
+    now,
+    workspaceBucket: deps.env.workspaceBucket,
+    renderedWorkspacePrefix,
+    hindsightEndpoint: undefined,
+  });
+
+  const isEffectivelyBlocked = (toolName: string): boolean =>
+    effectiveBlockedTools.includes(toolName);
+  const isAnyEffectivelyBlocked = (...toolNames: string[]): boolean =>
+    toolNames.some((toolName) => isEffectivelyBlocked(toolName));
+
+  const evalThreadTurnId = `eval-${input.evalRunId}-${input.testCaseId}`;
+  const invocation: DesktopPiRuntimeInvocation = {
+    pi_sdk: DESKTOP_PI_SDK_EMBEDDING_CONTRACT,
+    tenant_id: caller.tenantId,
+    workspace_tenant_id: caller.tenantId,
+    assistant_id: input.agentId,
+    thread_id: input.evalRunId,
+    user_id: caller.id,
+    current_user_email: caller.email,
+    trace_id: deps.getTraceId(),
+    message: input.userMessage,
+    messages_history: [],
+    use_memory: false,
+    tenant_slug: runtimeConfig.tenantSlug || undefined,
+    instance_id: runtimeConfig.agentSlug || undefined,
+    agent_name: runtimeConfig.agentName,
+    system_prompt: runtimeConfig.agentSystemPrompt || undefined,
+    human_name: runtimeConfig.humanName || caller.name || undefined,
+    workspace_bucket: deps.env.workspaceBucket || undefined,
+    rendered_workspace_prefix: renderedWorkspacePrefix,
+    web_search_config: !isAnyEffectivelyBlocked("web-search", "web_search")
+      ? runtimeConfig.webSearchConfig
+      : undefined,
+    runtime_type: runtimeType,
+    model: agentModel,
+    budget_monthly_cents: runtimeConfig.budgetMonthlyCents,
+    budget_paused: runtimeConfig.budgetPaused,
+    skills:
+      runtimeConfig.skillsConfig.length > 0
+        ? runtimeConfig.skillsConfig
+        : undefined,
+    knowledge_bases: runtimeConfig.knowledgeBasesConfig,
+    trigger_channel: "desktop",
+    runtime_host: DESKTOP_RUNTIME_HOST,
+    guardrail_config: runtimeConfig.guardrailConfig || undefined,
+    blocked_tools:
+      effectiveBlockedTools.length > 0 ? effectiveBlockedTools : undefined,
+    browser_automation_enabled:
+      runtimeConfig.browserAutomationEnabled &&
+      !isAnyEffectivelyBlocked("browser_automation", "browser")
+        ? true
+        : undefined,
+    effective_workspace_policy: renderedWorkspace.rendered
+      ? renderedWorkspace.effectivePolicy
+      : undefined,
+    turn_context: {
+      evalRunId: input.evalRunId,
+      testCaseId: input.testCaseId,
+      spaceId: renderedWorkspace.rendered
+        ? (renderedWorkspace.activeSpace?.id ?? input.spaceId)
+        : input.spaceId,
+      tenantSlug: runtimeConfig.tenantSlug || undefined,
+      spaceSlug: renderedWorkspace.rendered
+        ? (renderedWorkspace.activeSpace?.slug ?? space.slug ?? undefined)
+        : (space.slug ?? undefined),
+      renderedWorkspacePrefix,
+    },
+    finalize_callback_secret: finalizeToken,
+    thread_turn_id: evalThreadTurnId,
+  };
+
+  delete invocation.thinkwork_api_secret;
+  delete invocation.api_auth_secret;
+  delete invocation.appsync_api_key;
+
+  return {
+    threadTurnId: evalThreadTurnId,
+    expiresAt,
+    finalizeCallbackUrl: null,
     finalizeCallbackSecret: finalizeToken,
     sidecarCredentials,
     invocation,

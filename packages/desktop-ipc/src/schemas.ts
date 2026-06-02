@@ -299,6 +299,37 @@ export const PiCancelTurnResponseSchema = z
   })
   .strict();
 
+export const PiStartEvalRunRequestSchema = z
+  .object({
+    tenantId: z.string().min(1),
+    categories: z.array(z.string().min(1)).optional(),
+    testCaseIds: z.array(z.string().min(1)).optional(),
+    model: z.string().min(1).nullable().optional(),
+    spaceId: z.string().min(1).nullable().optional(),
+  })
+  .strict();
+
+export const PiStartEvalRunResponseSchema = z
+  .object({
+    accepted: z.literal(true),
+    requestId: z.string().min(1),
+    runId: z.string().min(1),
+    totalTests: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const PiCancelEvalRunRequestSchema = z
+  .object({
+    requestId: z.string().min(1),
+  })
+  .strict();
+
+export const PiCancelEvalRunResponseSchema = z
+  .object({
+    cancelled: z.boolean(),
+  })
+  .strict();
+
 export const GetPiStatusRequestSchema = EmptyRequestSchema;
 export const GetPiStatusResponseSchema = PiSidecarStateSchema;
 export const PiStatusEventSchema = PiSidecarStateSchema;
@@ -481,6 +512,14 @@ export const ChannelSchemas = {
     request: PiCancelTurnRequestSchema,
     response: PiCancelTurnResponseSchema,
   },
+  startPiEvalRun: {
+    request: PiStartEvalRunRequestSchema,
+    response: PiStartEvalRunResponseSchema,
+  },
+  cancelPiEvalRun: {
+    request: PiCancelEvalRunRequestSchema,
+    response: PiCancelEvalRunResponseSchema,
+  },
   raiseThreadNotification: {
     request: RaiseThreadNotificationRequestSchema,
     response: RaiseThreadNotificationResponseSchema,
@@ -532,6 +571,16 @@ export type PiStartTurnRequest = z.infer<typeof PiStartTurnRequestSchema>;
 export type PiStartTurnResponse = z.infer<typeof PiStartTurnResponseSchema>;
 export type PiCancelTurnRequest = z.infer<typeof PiCancelTurnRequestSchema>;
 export type PiCancelTurnResponse = z.infer<typeof PiCancelTurnResponseSchema>;
+export type PiStartEvalRunRequest = z.infer<typeof PiStartEvalRunRequestSchema>;
+export type PiStartEvalRunResponse = z.infer<
+  typeof PiStartEvalRunResponseSchema
+>;
+export type PiCancelEvalRunRequest = z.infer<
+  typeof PiCancelEvalRunRequestSchema
+>;
+export type PiCancelEvalRunResponse = z.infer<
+  typeof PiCancelEvalRunResponseSchema
+>;
 export type RaiseThreadNotificationRequest = z.infer<
   typeof RaiseThreadNotificationRequestSchema
 >;

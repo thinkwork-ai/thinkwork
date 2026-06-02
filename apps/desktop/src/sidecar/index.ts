@@ -6,6 +6,7 @@ import {
   prewarmLocalWorkspace,
   runLocalDesktopTurn,
 } from "./local-turn-runner.js";
+import { runDesktopEvalRun } from "./eval-runner.js";
 import { createRedactedLogger } from "./redacted-logger.js";
 
 interface ParentPort {
@@ -23,6 +24,7 @@ if (!parentPort) {
   process.exitCode = 1;
 } else {
   const turns = new Map<string, AbortController>();
+  const evalRuns = new Map<string, AbortController>();
   const logger = createRedactedLogger();
 
   parentPort.postMessage({
@@ -62,11 +64,33 @@ if (!parentPort) {
         });
         void prewarmWorkspace(message.requestId, message.payload);
         return;
+      case "start-eval-run":
+        logger.info("local Pi sidecar received eval run", {
+          requestId: message.requestId,
+          runId: message.payload.runId,
+          totalTests: message.payload.workItems.length,
+        });
+        parentPort.postMessage({
+          type: "eval-run-accepted",
+          requestId: message.requestId,
+          runId: message.payload.runId,
+          totalTests: message.payload.workItems.length,
+        });
+        void runEvalRun(message.requestId, message.payload);
+        return;
       case "cancel-turn":
         turns.get(message.requestId)?.abort();
         turns.delete(message.requestId);
         parentPort.postMessage({
           type: "turn-cancelled",
+          requestId: message.requestId,
+        });
+        return;
+      case "cancel-eval-run":
+        evalRuns.get(message.requestId)?.abort();
+        evalRuns.delete(message.requestId);
+        parentPort.postMessage({
+          type: "eval-run-cancelled",
           requestId: message.requestId,
         });
         return;
@@ -134,6 +158,38 @@ if (!parentPort) {
             ? `workspace prewarm failed: ${error.message}`
             : `workspace prewarm failed: ${String(error)}`,
       });
+    }
+  }
+
+  async function runEvalRun(
+    requestId: string,
+    payload: Parameters<typeof runDesktopEvalRun>[0],
+  ): Promise<void> {
+    const abortController = new AbortController();
+    evalRuns.set(requestId, abortController);
+    try {
+      const result = await runDesktopEvalRun(payload, {
+        signal: abortController.signal,
+        logger,
+        turnTimeoutMs: resolveTurnTimeoutMs(),
+        debug: isLocalPiDebugEnabled(),
+      });
+      parentPort?.postMessage({
+        type: "diagnostic",
+        level: result.cancelled ? "warn" : "info",
+        message: `eval run ${requestId} completed=${result.completed}; failed=${result.failed}; cancelled=${result.cancelled}`,
+      });
+    } catch (error) {
+      parentPort?.postMessage({
+        type: "diagnostic",
+        level: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : `desktop eval run failed: ${String(error)}`,
+      });
+    } finally {
+      evalRuns.delete(requestId);
     }
   }
 }

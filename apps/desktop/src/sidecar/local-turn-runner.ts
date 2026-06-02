@@ -123,6 +123,7 @@ export interface LocalTurnRunnerResult {
   finalized: boolean;
   status: "completed" | "failed";
   fallbackEligible: boolean;
+  output: string;
   workspace?: WorkspaceSyncResult;
 }
 
@@ -388,6 +389,7 @@ export async function runLocalDesktopTurn(
       finalized,
       status: "completed",
       fallbackEligible: false,
+      output: runResult.content,
       workspace,
     };
   } catch (error) {
@@ -423,6 +425,7 @@ export async function runLocalDesktopTurn(
       finalized,
       status: "failed",
       fallbackEligible: !payload.session.invocation.thread_turn_id,
+      output: "",
       workspace,
     };
   } finally {
@@ -1005,29 +1008,31 @@ async function createDesktopSharedExtensions(
     );
   }
 
-  const managedDelegation = createManagedDelegationClient({
-    apiUrl: invocation.thinkwork_api_url,
-    parentThreadTurnId: invocation.thread_turn_id,
-    finalizeCallbackSecret: invocation.finalize_callback_secret,
-  });
-  addExtension(createDelegationExtension(), {
-    delegation: {
-      async delegate(request) {
-        logger.info("local Pi managed delegation requested", {
-          visibility: request.visibility ?? "hidden",
-          hasTask: request.task.length > 0,
-          hasReason: typeof request.reason === "string",
-          timeoutMs: request.timeoutMs ?? null,
-        });
-        const result = await managedDelegation.delegate(request);
-        logger.info("local Pi managed delegation completed", {
-          visibility: request.visibility ?? "hidden",
-          resultStatus: stringValue(readRecord(result)?.status) ?? "unknown",
-        });
-        return result;
+  if (apiUrl && finalizeToken) {
+    const managedDelegation = createManagedDelegationClient({
+      apiUrl: invocation.thinkwork_api_url,
+      parentThreadTurnId: invocation.thread_turn_id,
+      finalizeCallbackSecret: invocation.finalize_callback_secret,
+    });
+    addExtension(createDelegationExtension(), {
+      delegation: {
+        async delegate(request) {
+          logger.info("local Pi managed delegation requested", {
+            visibility: request.visibility ?? "hidden",
+            hasTask: request.task.length > 0,
+            hasReason: typeof request.reason === "string",
+            timeoutMs: request.timeoutMs ?? null,
+          });
+          const result = await managedDelegation.delegate(request);
+          logger.info("local Pi managed delegation completed", {
+            visibility: request.visibility ?? "hidden",
+            resultStatus: stringValue(readRecord(result)?.status) ?? "unknown",
+          });
+          return result;
+        },
       },
-    },
-  });
+    });
+  }
 
   const extensions = specs.map((spec) => spec.extension);
   const mcpTools = connectMcpServerOverride

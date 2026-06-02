@@ -5,11 +5,15 @@ import type {
   OAuthErrorEvent,
   PiCancelTurnRequest,
   PiCancelTurnResponse,
+  PiCancelEvalRunRequest,
+  PiCancelEvalRunResponse,
   PiDiagnosticEvent,
   PiPrewarmWorkspaceRequest,
   PiPrewarmWorkspaceResponse,
   PiSidecarState,
   PiSidecarStatus,
+  PiStartEvalRunRequest,
+  PiStartEvalRunResponse,
   PiStartTurnRequest,
   PiStartTurnResponse,
   ReadWorkspaceFileRequest,
@@ -39,6 +43,10 @@ export interface PiBridge {
   ): Promise<PiPrewarmWorkspaceResponse>;
   startTurn(request: PiStartTurnRequest): Promise<PiStartTurnResponse>;
   cancelTurn(request: PiCancelTurnRequest): Promise<PiCancelTurnResponse>;
+  startEvalRun(request: PiStartEvalRunRequest): Promise<PiStartEvalRunResponse>;
+  cancelEvalRun(
+    request: PiCancelEvalRunRequest,
+  ): Promise<PiCancelEvalRunResponse>;
   onStatusChanged(listener: (state: PiSidecarState) => void): Unsubscribe;
   onDiagnostic?(listener: (event: PiDiagnosticEvent) => void): Unsubscribe;
 }

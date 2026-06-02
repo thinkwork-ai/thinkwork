@@ -11,6 +11,7 @@ import { SafeStorageCognitoStorage } from "./cognito-storage.js";
 import { registerAuthBridgeHandlers } from "./auth-bridge.js";
 import {
   CHECK_FOR_UPDATES_CHANNEL,
+  CANCEL_PI_EVAL_RUN_CHANNEL,
   CANCEL_PI_TURN_CHANNEL,
   DOWNLOAD_UPDATE_CHANNEL,
   GET_DESKTOP_CONFIG_CHANNEL,
@@ -23,6 +24,7 @@ import {
   REPORT_INSTALL_OUTCOME_CHANNEL,
   SET_NATIVE_THEME_CHANNEL,
   START_PI_TURN_CHANNEL,
+  START_PI_EVAL_RUN_CHANNEL,
   RAISE_THREAD_NOTIFICATION_CHANNEL,
   UPDATE_STATE_EVENT_CHANNEL,
   UPDATE_TELEMETRY_EVENT_CHANNEL,
@@ -32,8 +34,10 @@ import {
   GetPiStatusRequestSchema,
   GetUpdateStateRequestSchema,
   InstallUpdateRequestSchema,
+  PiCancelEvalRunRequestSchema,
   PiCancelTurnRequestSchema,
   PiPrewarmWorkspaceRequestSchema,
+  PiStartEvalRunRequestSchema,
   PiStartTurnRequestSchema,
   ReadWorkspaceFileRequestSchema,
   ReadWorkspaceTreeRequestSchema,
@@ -65,6 +69,7 @@ import {
   disabledPiSidecarState,
 } from "./pi-sidecar-diagnostics.js";
 import {
+  createPiEvalRunPreparer,
   createPiRuntimeSessionPreparer,
   createPiWorkspacePrewarmPreparer,
 } from "./pi-runtime-session-client.js";
@@ -130,6 +135,10 @@ export async function registerDesktopIpcHandlers(
             tokenSnapshot: () => storage.snapshot(),
           }),
           prepareWorkspacePrewarm: createPiWorkspacePrewarmPreparer({
+            env: options.env,
+            tokenSnapshot: () => storage.snapshot(),
+          }),
+          prepareEvalRun: createPiEvalRunPreparer({
             env: options.env,
             tokenSnapshot: () => storage.snapshot(),
           }),
@@ -221,6 +230,19 @@ export async function registerDesktopIpcHandlers(
     assertSafeSenderFrame(event);
     const request = PiCancelTurnRequestSchema.parse(payload);
     return piSidecar?.cancelTurn(request) ?? { cancelled: false };
+  });
+  ipcMain.handle(START_PI_EVAL_RUN_CHANNEL, async (event, payload) => {
+    assertSafeSenderFrame(event);
+    const request = PiStartEvalRunRequestSchema.parse(payload);
+    if (!piSidecar) {
+      throw new Error("Desktop local Pi is disabled for this stage");
+    }
+    return piSidecar.startEvalRun(request);
+  });
+  ipcMain.handle(CANCEL_PI_EVAL_RUN_CHANNEL, (event, payload) => {
+    assertSafeSenderFrame(event);
+    const request = PiCancelEvalRunRequestSchema.parse(payload);
+    return piSidecar?.cancelEvalRun(request) ?? { cancelled: false };
   });
   ipcMain.handle(RAISE_THREAD_NOTIFICATION_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);

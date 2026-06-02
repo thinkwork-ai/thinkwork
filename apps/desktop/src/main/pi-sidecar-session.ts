@@ -30,6 +30,31 @@ export interface PiSidecarWorkspacePrewarmPayload {
   workspaceCacheRoot: string;
 }
 
+export interface PiSidecarEvalWorkItem {
+  runId: string;
+  testCaseId: string;
+  index: number;
+  name: string;
+  category: string;
+  query: string;
+  systemPrompt: string | null;
+  assertions: unknown;
+  agentcoreEvaluatorIds: string[];
+  tags: string[];
+  session: PreparedDesktopPiRuntimeSession;
+}
+
+export interface PiSidecarEvalRunPayload {
+  runId: string;
+  resultCallback: {
+    url: string;
+    token: string;
+    expiresAt: string;
+  };
+  workItems: PiSidecarEvalWorkItem[];
+  workspaceCacheRoot: string;
+}
+
 export type PiSidecarParentMessage =
   | {
       type: "ping";
@@ -45,7 +70,16 @@ export type PiSidecarParentMessage =
       payload: PiSidecarTurnPayload;
     }
   | {
+      type: "start-eval-run";
+      requestId: string;
+      payload: PiSidecarEvalRunPayload;
+    }
+  | {
       type: "cancel-turn";
+      requestId: string;
+    }
+  | {
+      type: "cancel-eval-run";
       requestId: string;
     };
 
@@ -56,8 +90,16 @@ export function isPiSidecarParentMessage(
   const candidate = message as { type?: unknown; requestId?: unknown };
   if (candidate.type === "ping") return true;
   if (typeof candidate.requestId !== "string") return false;
-  if (candidate.type === "cancel-turn") return true;
+  if (
+    candidate.type === "cancel-turn" ||
+    candidate.type === "cancel-eval-run"
+  ) {
+    return true;
+  }
   if (candidate.type === "start-turn") return isPiSidecarTurnPayload(message);
+  if (candidate.type === "start-eval-run") {
+    return isPiSidecarEvalRunPayload(message);
+  }
   if (candidate.type === "prewarm-workspace") {
     return isPiSidecarWorkspacePrewarmPayload(message);
   }
@@ -82,8 +124,19 @@ export type PiSidecarChildMessage =
       requestId: string;
     }
   | {
+      type: "eval-run-accepted";
+      requestId: string;
+      runId: string;
+      totalTests: number;
+    }
+  | {
       type: "turn-cancelled";
       requestId: string;
+    }
+  | {
+      type: "eval-run-cancelled";
+      requestId: string;
+      runId?: string;
     }
   | {
       type: "diagnostic";
@@ -164,6 +217,54 @@ function isPiSidecarWorkspacePrewarmPayload(
     typeof candidate.session.partition.agentSlug === "string" &&
     typeof candidate.session.partition.spaceId === "string" &&
     typeof candidate.session.partition.userId === "string"
+  );
+}
+
+function isPiSidecarEvalRunPayload(
+  message: unknown,
+): message is { payload: PiSidecarEvalRunPayload } {
+  const payload = (message as { payload?: unknown }).payload;
+  if (!payload || typeof payload !== "object") return false;
+  const candidate = payload as {
+    runId?: unknown;
+    workspaceCacheRoot?: unknown;
+    resultCallback?: { url?: unknown; token?: unknown; expiresAt?: unknown };
+    workItems?: unknown;
+  };
+  return (
+    typeof candidate.runId === "string" &&
+    typeof candidate.workspaceCacheRoot === "string" &&
+    typeof candidate.resultCallback?.url === "string" &&
+    typeof candidate.resultCallback.token === "string" &&
+    typeof candidate.resultCallback.expiresAt === "string" &&
+    Array.isArray(candidate.workItems) &&
+    candidate.workItems.every(isPiSidecarEvalWorkItem)
+  );
+}
+
+function isPiSidecarEvalWorkItem(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const item = value as {
+    runId?: unknown;
+    testCaseId?: unknown;
+    index?: unknown;
+    name?: unknown;
+    category?: unknown;
+    query?: unknown;
+    session?: { invocation?: { runtime_host?: unknown } };
+    agentcoreEvaluatorIds?: unknown;
+    tags?: unknown;
+  };
+  return (
+    typeof item.runId === "string" &&
+    typeof item.testCaseId === "string" &&
+    typeof item.index === "number" &&
+    typeof item.name === "string" &&
+    typeof item.category === "string" &&
+    typeof item.query === "string" &&
+    Array.isArray(item.agentcoreEvaluatorIds) &&
+    Array.isArray(item.tags) &&
+    item.session?.invocation?.runtime_host === "desktop-local"
   );
 }
 

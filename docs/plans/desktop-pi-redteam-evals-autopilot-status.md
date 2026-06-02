@@ -4,9 +4,9 @@ Plan: `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`
 
 ## Current Unit
 
-- Unit: U1 Shared eval scoring core
-- Branch: `codex/desktop-pi-evals-u1-scoring`
-- Worktree: `.Codex/worktrees/desktop-pi-evals-u1-scoring`
+- Unit: U3 Desktop IPC and sidecar eval execution
+- Branch: `codex/desktop-pi-evals-u3-sidecar`
+- Worktree: `.Codex/worktrees/desktop-pi-evals-u3-sidecar`
 - Started: 2026-06-01
 - Status: in progress
 
@@ -41,17 +41,32 @@ Plan: `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`
   `terraform fmt terraform/modules/app/lambda-api/handlers.tf`, and
   `git diff --check`.
 - 2026-06-01: Opened PR #1962 for U2.
+- 2026-06-01: PR #1962 initially failed `Migration Drift Precheck (dev)` because manual migration `0141_eval_runs_desktop_pi_provenance.sql` had not yet been applied in dev.
+- 2026-06-01: Applied the U2 manual migration to the dev database only, reran the failed CI jobs, and `Migration Drift Precheck (dev)`, `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- 2026-06-01: PR #1962 was squash-merged.
+- 2026-06-01: Removed U2 worktree/local branch and created U3 worktree from merged `origin/main`.
+- 2026-06-01: Added Desktop Pi eval IPC methods, main-process eval preparation/dispatch, sidecar eval execution/scoring/callback posting, and desktop/API focused tests.
+- 2026-06-01: Local verification passed for U3:
+  `pnpm --filter @thinkwork/desktop-ipc test`,
+  `pnpm --filter @thinkwork/desktop test -- pi-sidecar eval-runner`,
+  `pnpm --filter @thinkwork/api test -- src/handlers/desktop-eval-runs.test.ts`,
+  `pnpm --filter @thinkwork/desktop-ipc typecheck`,
+  `pnpm --filter @thinkwork/desktop typecheck`,
+  `pnpm --filter @thinkwork/api typecheck`, and `git diff --check`.
+- 2026-06-01: `pnpm install` completed and updated `pnpm-lock.yaml`; optional native packages `node-liblzma` and `canvas` again reported local Node 25/pkg-config build noise, but pnpm exited successfully.
+- 2026-06-01: Opened PR #1963 for U3.
 
 ## Pull Requests
 
-| Unit | Branch | PR | Status | Notes |
-| --- | --- | --- | --- | --- |
-| U1 | `codex/desktop-pi-evals-u1-scoring` | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | merged | Checks passed; squash-merged. |
-| U2 | `codex/desktop-pi-evals-u2-api` | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | open | Waiting for CI. |
+| Unit | Branch                              | PR                                                           | Status      | Notes                                                                               |
+| ---- | ----------------------------------- | ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------- |
+| U1   | `codex/desktop-pi-evals-u1-scoring` | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | merged      | Checks passed; squash-merged.                                                       |
+| U2   | `codex/desktop-pi-evals-u2-api`     | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | merged      | CI passed after applying the dev-only manual migration and rerunning failed checks. |
+| U3   | `codex/desktop-pi-evals-u3-sidecar` | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | open        | Waiting for CI.                                                                     |
 
 ## CI Failures
 
-None yet.
+- 2026-06-01: PR #1962 `Migration Drift Precheck (dev)` reported missing eval run provenance columns/index. Applied the manual migration to dev and reran the failed workflow; the check passed.
 
 ## Blockers
 

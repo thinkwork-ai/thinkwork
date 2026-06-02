@@ -22,6 +22,8 @@ export const GET_PI_STATUS_CHANNEL = "desktop:pi:get-status";
 export const PREWARM_PI_WORKSPACE_CHANNEL = "desktop:pi:prewarm-workspace";
 export const START_PI_TURN_CHANNEL = "desktop:pi:start-turn";
 export const CANCEL_PI_TURN_CHANNEL = "desktop:pi:cancel-turn";
+export const START_PI_EVAL_RUN_CHANNEL = "desktop:pi:start-eval-run";
+export const CANCEL_PI_EVAL_RUN_CHANNEL = "desktop:pi:cancel-eval-run";
 export const PI_STATUS_EVENT_CHANNEL = "desktop:pi:status";
 export const PI_DIAGNOSTIC_EVENT_CHANNEL = "desktop:pi:diagnostic";
 // Renderer → main (invoke): raise a native thread notification.
@@ -62,6 +64,8 @@ export const IPC_CHANNELS = {
   PREWARM_PI_WORKSPACE: PREWARM_PI_WORKSPACE_CHANNEL,
   START_PI_TURN: START_PI_TURN_CHANNEL,
   CANCEL_PI_TURN: CANCEL_PI_TURN_CHANNEL,
+  START_PI_EVAL_RUN: START_PI_EVAL_RUN_CHANNEL,
+  CANCEL_PI_EVAL_RUN: CANCEL_PI_EVAL_RUN_CHANNEL,
   PI_STATUS_EVENT: PI_STATUS_EVENT_CHANNEL,
   PI_DIAGNOSTIC_EVENT: PI_DIAGNOSTIC_EVENT_CHANNEL,
   RAISE_THREAD_NOTIFICATION: RAISE_THREAD_NOTIFICATION_CHANNEL,
