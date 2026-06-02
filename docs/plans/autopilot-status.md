@@ -25,7 +25,7 @@ status: complete
 | U6 Full-catalog proof, docs, and guardrails       | `codex/desktop-pi-evals-u6-proof`       | [#1966](https://github.com/thinkwork-ai/thinkwork/pull/1966) | Merged      | Squash merged as `e04adb7f`; focused proof passed and full-run prep cleanup deployed through Terraform. |
 | U7 Failure-by-failure workspace remediation loop  | `codex/desktop-pi-evals-u7-remediation` | [#1967](https://github.com/thinkwork-ai/thinkwork/pull/1967) | Merged      | Squash merged as `1272d460`; lazy per-case Desktop Pi session prep deployed through Terraform.          |
 | U8 Bounded Desktop Pi eval parallelism            | `codex/desktop-pi-evals-u8-parallel`    | [#1968](https://github.com/thinkwork-ai/thinkwork/pull/1968) | Merged      | Squash merged as `e60c6571`; parallel sidecar workers and local cancellation propagation.               |
-| U9 Full-catalog Desktop Pi sweep/remediation      | `codex/desktop-pi-evals-u9-full-sweep`  | TBD                                                          | In progress | Run the merged full catalog with bounded Desktop Pi parallelism, classify failures, and remediate.      |
+| U9 Full-catalog Desktop Pi sweep/remediation      | `codex/desktop-pi-evals-u9-full-sweep`  | [#1969](https://github.com/thinkwork-ai/thinkwork/pull/1969) | In progress | Run the merged full catalog with bounded Desktop Pi parallelism, classify failures, and remediate.      |
 
 ### Progress Log
 
@@ -200,6 +200,8 @@ status: complete
   the multi-persona subagent tools are not available in this Codex runtime. No
   actionable findings remained after checking the partial-output failure path,
   eval concurrency cap, workspace-default parity, and regression coverage.
+- Opened U9 PR
+  [#1969](https://github.com/thinkwork-ai/thinkwork/pull/1969).
 
 ### Verification Log
 
