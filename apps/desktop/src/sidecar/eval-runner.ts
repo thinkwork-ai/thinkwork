@@ -43,6 +43,8 @@ export interface EvalRunSummary {
 
 const DEFAULT_EVAL_MAX_ATTEMPTS = 2;
 const DEFAULT_EVAL_RETRY_DELAY_MS = 750;
+const DAILY_TOKEN_QUOTA_ERROR_MESSAGE =
+  "Desktop eval stopped starting new Pi turns because the model provider reported daily token quota exhaustion.";
 
 export async function runDesktopEvalRun(
   payload: PiSidecarEvalRunPayload,
@@ -55,6 +57,7 @@ export async function runDesktopEvalRun(
   let completed = 0;
   let failed = 0;
   let nextIndex = 0;
+  let dailyTokenQuotaErrorMessage: string | null = null;
 
   async function worker(): Promise<void> {
     while (!deps.signal?.aborted) {
@@ -73,6 +76,15 @@ export async function runDesktopEvalRun(
     item: PiSidecarEvalWorkItem,
   ): Promise<{ counted: boolean; failed: boolean }> {
     const startedAt = deps.now?.() ?? new Date();
+    const quotaErrorMessage = dailyTokenQuotaErrorMessage;
+    if (quotaErrorMessage) {
+      return postDailyQuotaExhaustedCaseResult(
+        item,
+        startedAt,
+        quotaErrorMessage,
+      );
+    }
+
     try {
       logger.info("desktop eval case starting", {
         runId: payload.runId,
@@ -103,6 +115,7 @@ export async function runDesktopEvalRun(
         result.status === "failed"
           ? (result.errorMessage ?? "Local Pi turn failed")
           : null;
+      rememberDailyTokenQuotaError(item, errorMessage);
       const outcome = scoreEvalOutcome({
         assertionResults,
         evaluatorResults,
@@ -139,6 +152,7 @@ export async function runDesktopEvalRun(
         error instanceof Error
           ? error.message
           : `Eval case failed: ${String(error)}`;
+      rememberDailyTokenQuotaError(item, message);
       logger.error("desktop eval case failed", {
         runId: payload.runId,
         testCaseId: item.testCaseId,
@@ -164,6 +178,64 @@ export async function runDesktopEvalRun(
       );
       return { counted: true, failed: true };
     }
+  }
+
+  function rememberDailyTokenQuotaError(
+    item: PiSidecarEvalWorkItem,
+    message: string | null | undefined,
+  ): void {
+    if (
+      dailyTokenQuotaErrorMessage ||
+      typeof message !== "string" ||
+      !isDailyTokenQuotaError(message)
+    ) {
+      return;
+    }
+    dailyTokenQuotaErrorMessage = message;
+    logger.warn("desktop eval provider daily token quota exhausted", {
+      runId: payload.runId,
+      testCaseId: item.testCaseId,
+      index: item.index,
+      error: message,
+    });
+  }
+
+  async function postDailyQuotaExhaustedCaseResult(
+    item: PiSidecarEvalWorkItem,
+    startedAt: Date,
+    quotaErrorMessage: string,
+  ): Promise<{ counted: boolean; failed: boolean }> {
+    if (deps.signal?.aborted) return { counted: false, failed: false };
+    const durationMs = elapsedMs(startedAt, deps.now?.() ?? new Date());
+    const errorMessage = `${DAILY_TOKEN_QUOTA_ERROR_MESSAGE} ${quotaErrorMessage}`;
+    logger.warn(
+      "desktop eval case skipped after daily token quota exhaustion",
+      {
+        runId: payload.runId,
+        testCaseId: item.testCaseId,
+        index: item.index,
+        category: item.category,
+      },
+    );
+    await postCaseResult(
+      payload,
+      {
+        testCaseId: item.testCaseId,
+        status: "error",
+        score: null,
+        durationMs,
+        agentSessionId: item.session.threadTurnId,
+        input: item.query,
+        expected: item.systemPrompt,
+        actualOutput: "",
+        systemPrompt: item.session.invocation.system_prompt ?? null,
+        evaluatorResults: skippedEvaluatorResults(item.agentcoreEvaluatorIds),
+        assertions: [],
+        errorMessage,
+      },
+      deps.fetchImpl ?? fetch,
+    );
+    return { counted: true, failed: true };
   }
 
   await Promise.all(
@@ -265,6 +337,13 @@ function isRetryableEmptyAssistantError(message: string | undefined): boolean {
     message
       .toLowerCase()
       .includes("assistant error turn with no assistant text")
+  );
+}
+
+function isDailyTokenQuotaError(message: string | null | undefined): boolean {
+  return (
+    typeof message === "string" &&
+    message.toLowerCase().includes("too many tokens per day")
   );
 }
 
