@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
 - Target branch: `main`.
-- Current unit: U7 Failure-by-failure workspace remediation loop.
-- Current branch: `codex/desktop-pi-evals-u7-remediation`.
-- Current worktree: `.Codex/worktrees/desktop-pi-evals-u7-remediation`.
+- Current unit: U8 Bounded Desktop Pi eval parallelism.
+- Current branch: `codex/desktop-pi-evals-u8-parallel`.
+- Current worktree: `.Codex/worktrees/desktop-pi-evals-u8-parallel`.
 
 | Unit                                              | Branch                                  | PR                                                           | State       | Notes                                                                                                   |
 | ------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
@@ -23,7 +23,8 @@ status: complete
 | U4 Settings Evaluations Desktop Pi target         | `codex/desktop-pi-evals-u4-settings`    | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | Merged      | Settings target selection and Desktop Pi provenance; CI passed.                                         |
 | U5 Convert and harden catalog for Desktop Pi      | `codex/desktop-pi-evals-u5-catalog`     | [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965) | Merged      | Squash merged as `81fd1fb9`; catalog metadata/prose conversion, shape gate, and testing solution doc.   |
 | U6 Full-catalog proof, docs, and guardrails       | `codex/desktop-pi-evals-u6-proof`       | [#1966](https://github.com/thinkwork-ai/thinkwork/pull/1966) | Merged      | Squash merged as `e04adb7f`; focused proof passed and full-run prep cleanup deployed through Terraform. |
-| U7 Failure-by-failure workspace remediation loop  | `codex/desktop-pi-evals-u7-remediation` | [#1967](https://github.com/thinkwork-ai/thinkwork/pull/1967) | In progress | Full-catalog rerun and failure classification/remediation.                                              |
+| U7 Failure-by-failure workspace remediation loop  | `codex/desktop-pi-evals-u7-remediation` | [#1967](https://github.com/thinkwork-ai/thinkwork/pull/1967) | Merged      | Squash merged as `1272d460`; lazy per-case Desktop Pi session prep deployed through Terraform.          |
+| U8 Bounded Desktop Pi eval parallelism            | `codex/desktop-pi-evals-u8-parallel`    | [#1968](https://github.com/thinkwork-ai/thinkwork/pull/1968) | In progress | Add bounded sidecar parallelism and cancellation-safe eval loop before the full-catalog sweep.          |
 
 ### Progress Log
 
@@ -107,6 +108,53 @@ status: complete
   the run's selected test-case ids or categories.
 - Opened U7 PR
   [#1967](https://github.com/thinkwork-ai/thinkwork/pull/1967).
+- U7 PR
+  [#1967](https://github.com/thinkwork-ai/thinkwork/pull/1967) passed
+  required PR checks (`cla`, `lint`, `verify`, `typecheck`, `test`) and was
+  squash merged as `1272d46020cc256852d0dd5affe3e069db8c4424`; the remote and
+  local branches/worktrees were removed.
+- Post-merge `main` workflows for U7 passed `Lint`, `Typecheck`, `Test`, and
+  `Supply Chain`. `Deploy` completed `Build Lambdas`, `Terraform Apply`,
+  `Build & Deploy Docs`, `Build & Deploy Admin`, and `Build & Deploy Spaces`,
+  then failed again in the known `Workspace Layout Migration` dev-data conflict.
+- Live merged-code Desktop Pi full-catalog start succeeded after Terraform
+  applied the U7 route: run `14037545-f220-4fd4-a59d-795907b55b61` was accepted
+  by the sidecar with 189 work items and started executing cases. It was
+  cancelled after the first few cases because serial execution plus 90s model
+  timeouts would make the full sweep impractically slow.
+- The cancelled proof run exposed a second issue: cancellation updates the run
+  row, but the local sidecar continues starting queued cases until the desktop
+  process is stopped. U8 addresses bounded parallelism and cancellation-aware
+  queue draining together.
+- Synced from `origin/main` and created isolated U8 worktree
+  `.Codex/worktrees/desktop-pi-evals-u8-parallel` on branch
+  `codex/desktop-pi-evals-u8-parallel`.
+- Added a bounded Desktop Pi sidecar eval worker pool. The default local eval
+  concurrency is 3, capped at 8 via `THINKWORK_DESKTOP_EVAL_CONCURRENCY`, and
+  every work item now hydrates into an isolated per-case workspace cache root
+  under `eval-runs/{runId}/{testCaseId}`.
+- Added cancellation-aware queue draining in the sidecar eval loop so a local
+  abort stops queued cases from starting and suppresses result callbacks for
+  cases cancelled before completion.
+- First U8 live smoke proved parallel start but exposed a renderer gap: the
+  Settings cancel button cancelled the server row only, so the local sidecar did
+  not receive `cancel-eval-run` and kept launching queued cases. The dev app was
+  stopped and the run was left cancelled.
+- Wired Desktop Pi eval starts to remember the local sidecar request id by
+  server run id, and wired Desktop Pi run-detail cancellation to send the local
+  sidecar cancel before the GraphQL cancel mutation. The server mutation remains
+  authoritative and still runs if the local cancel bridge is unavailable.
+- Second U8 live smoke from Electron Settings started
+  `red-team-safety-scope` run `fcd734f0-e731-45ee-8048-74a5e0417bd7`, accepted
+  41 tests, and immediately launched three cases in parallel. Cancelling the run
+  logged `desktop Pi eval run cancelled`, cancelled the three active local
+  turns, reported `completed=0; failed=0; cancelled=true`, and did not start
+  queued case index 3+.
+- Recent Runs visibility was rechecked during U8 smoke: the latest Desktop Pi
+  runs appeared at the top of the Settings -> Evaluations Recent Runs table
+  after cancellation, including category, source, and test counts.
+- Opened U8 PR
+  [#1968](https://github.com/thinkwork-ai/thinkwork/pull/1968).
 
 ### Verification Log
 
@@ -160,6 +208,20 @@ status: complete
   - passed.
 - `terraform fmt terraform/modules/app/lambda-api/handlers.tf` - passed.
 - `git diff --check` - passed.
+- `pnpm install` in the U8 worktree - passed. Optional native `node-liblzma`
+  and `canvas` postinstall builds logged local `pkg-config` warnings and exited 0.
+- `pnpm --filter @thinkwork/desktop test -- eval-runner.test.ts` - passed.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- `pnpm --filter @thinkwork/desktop test -- pi-sidecar-controller.test.ts eval-runner.test.ts`
+  - passed.
+- `pnpm --filter @thinkwork/spaces test -- desktop-pi-eval-requests.test.ts SettingsEvalRunDetail.test.ts SettingsEvaluations.test.ts`
+  - passed.
+- `pnpm dlx prettier@3.8.2 --write apps/desktop/src/sidecar/eval-runner.ts apps/desktop/src/sidecar/index.ts apps/desktop/test/sidecar/eval-runner.test.ts apps/spaces/src/lib/desktop-pi-eval-requests.ts apps/spaces/src/lib/desktop-pi-eval-requests.test.ts apps/spaces/src/components/settings/SettingsEvaluations.tsx apps/spaces/src/components/settings/SettingsEvalRunDetail.tsx docs/plans/autopilot-status.md`
+  - passed.
+- Live Electron smoke with
+  `VITE_DESKTOP_LOCAL_PI_ENABLED=true THINKWORK_DESKTOP_EVAL_CONCURRENCY=3 pnpm --filter @thinkwork/desktop dev`
+  - passed for bounded parallel start, local sidecar cancellation propagation,
+    and Recent Runs latest-row visibility.
 
 ### Blockers
 

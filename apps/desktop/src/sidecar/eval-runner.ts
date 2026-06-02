@@ -5,7 +5,9 @@ import {
   type EvalAssertionResult,
   type EvalEvaluatorResult,
 } from "@thinkwork/evals-core";
+import path from "node:path";
 import type { PiSidecarEvalRunPayload } from "../main/pi-sidecar-session.js";
+import type { PiSidecarEvalWorkItem } from "../main/pi-sidecar-session.js";
 import {
   runLocalDesktopTurn,
   type LocalDesktopTurnPayload,
@@ -27,6 +29,7 @@ export interface EvalRunnerDeps {
   now?: () => Date;
   signal?: AbortSignal;
   turnTimeoutMs?: number;
+  evalConcurrency?: number;
   debug?: boolean;
 }
 
@@ -42,14 +45,27 @@ export async function runDesktopEvalRun(
 ): Promise<EvalRunSummary> {
   const logger = deps.logger ?? createRedactedLogger();
   const runTurn = deps.runTurn ?? runLocalDesktopTurn;
+  const concurrency = normalizeEvalConcurrency(deps.evalConcurrency);
   let completed = 0;
   let failed = 0;
+  let nextIndex = 0;
 
-  for (const item of payload.workItems) {
-    if (deps.signal?.aborted) {
-      return { completed, failed, cancelled: true };
+  async function worker(): Promise<void> {
+    while (!deps.signal?.aborted) {
+      const item = payload.workItems[nextIndex];
+      nextIndex += 1;
+      if (!item) return;
+
+      const result = await runCase(item);
+      if (!result.counted) continue;
+      completed += 1;
+      if (result.failed) failed += 1;
     }
+  }
 
+  async function runCase(
+    item: PiSidecarEvalWorkItem,
+  ): Promise<{ counted: boolean; failed: boolean }> {
     const startedAt = deps.now?.() ?? new Date();
     try {
       logger.info("desktop eval case starting", {
@@ -61,7 +77,7 @@ export async function runDesktopEvalRun(
       const result = await runTurn(
         {
           session: item.session,
-          workspaceCacheRoot: payload.workspaceCacheRoot,
+          workspaceCacheRoot: evalCaseWorkspaceCacheRoot(payload, item),
         },
         {
           signal: deps.signal,
@@ -71,6 +87,7 @@ export async function runDesktopEvalRun(
           debug: deps.debug,
         },
       );
+      if (deps.signal?.aborted) return { counted: false, failed: false };
       const durationMs = elapsedMs(startedAt, deps.now?.() ?? new Date());
       const output = result.output;
       const assertionResults = await evaluateAssertions(
@@ -106,17 +123,15 @@ export async function runDesktopEvalRun(
         },
         deps.fetchImpl ?? fetch,
       );
-      completed += 1;
-      if (outcome.status !== "pass") failed += 1;
       logger.info("desktop eval case completed", {
         runId: payload.runId,
         testCaseId: item.testCaseId,
         status: outcome.status,
       });
+      return { counted: true, failed: outcome.status !== "pass" };
     } catch (error) {
+      if (deps.signal?.aborted) return { counted: false, failed: false };
       const durationMs = elapsedMs(startedAt, deps.now?.() ?? new Date());
-      failed += 1;
-      completed += 1;
       const message =
         error instanceof Error
           ? error.message
@@ -144,10 +159,18 @@ export async function runDesktopEvalRun(
         },
         deps.fetchImpl ?? fetch,
       );
+      return { counted: true, failed: true };
     }
   }
 
-  return { completed, failed, cancelled: false };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(concurrency, payload.workItems.length) },
+      () => worker(),
+    ),
+  );
+
+  return { completed, failed, cancelled: deps.signal?.aborted === true };
 }
 
 function parseAssertions(value: unknown): EvalAssertion[] {
@@ -203,4 +226,21 @@ async function postCaseResult(
 
 function elapsedMs(startedAt: Date, finishedAt: Date): number {
   return Math.max(0, finishedAt.getTime() - startedAt.getTime());
+}
+
+function normalizeEvalConcurrency(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 1;
+  return Math.max(1, Math.min(8, Math.floor(value)));
+}
+
+function evalCaseWorkspaceCacheRoot(
+  payload: PiSidecarEvalRunPayload,
+  item: PiSidecarEvalWorkItem,
+): string {
+  return path.join(
+    payload.workspaceCacheRoot,
+    "eval-runs",
+    payload.runId,
+    item.testCaseId,
+  );
 }

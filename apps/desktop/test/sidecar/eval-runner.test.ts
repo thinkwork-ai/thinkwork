@@ -169,4 +169,100 @@ describe("runDesktopEvalRun", () => {
       status: "pass",
     });
   });
+
+  it("runs eval cases with bounded parallelism and isolated workspace roots", async () => {
+    const caseIds = [
+      CASE_ID,
+      "33333333-3333-3333-3333-333333333333",
+      "44444444-4444-4444-4444-444444444444",
+      "55555555-5555-5555-5555-555555555555",
+    ];
+    const posts: unknown[] = [];
+    const roots: string[] = [];
+    let active = 0;
+    let maxActive = 0;
+    const fetchImpl = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        posts.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+    const runTurn = vi.fn(async (turnPayload) => {
+      roots.push(turnPayload.workspaceCacheRoot);
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      active -= 1;
+      return {
+        finalized: false,
+        status: "completed" as const,
+        fallbackEligible: false,
+        output: "ok",
+      };
+    });
+
+    const summary = await runDesktopEvalRun(
+      payload({
+        workItems: caseIds.map((testCaseId, index) => ({
+          ...payload().workItems[0],
+          testCaseId,
+          index,
+          query: "Say ok",
+          assertions: [{ type: "equals", value: "ok" }],
+          session: preparedSession(testCaseId, "Say ok"),
+        })),
+      }),
+      { fetchImpl, runTurn, evalConcurrency: 2 },
+    );
+
+    expect(summary).toEqual({ completed: 4, failed: 0, cancelled: false });
+    expect(maxActive).toBe(2);
+    expect(posts).toHaveLength(4);
+    expect(new Set(roots)).toEqual(
+      new Set(
+        caseIds.map(
+          (testCaseId) => `/tmp/workspaces/eval-runs/${RUN_ID}/${testCaseId}`,
+        ),
+      ),
+    );
+  });
+
+  it("stops starting queued eval cases after cancellation", async () => {
+    const abortController = new AbortController();
+    const secondCaseId = "33333333-3333-3333-3333-333333333333";
+    const fetchImpl = vi.fn();
+    const runTurn = vi.fn(async () => {
+      abortController.abort();
+      return {
+        finalized: false,
+        status: "completed" as const,
+        fallbackEligible: false,
+        output: "ok",
+      };
+    });
+
+    const summary = await runDesktopEvalRun(
+      payload({
+        workItems: [
+          payload().workItems[0],
+          {
+            ...payload().workItems[0],
+            testCaseId: secondCaseId,
+            index: 1,
+            session: preparedSession(secondCaseId, "Say ok"),
+          },
+        ],
+      }),
+      {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        runTurn,
+        signal: abortController.signal,
+        evalConcurrency: 1,
+      },
+    );
+
+    expect(summary).toEqual({ completed: 0, failed: 0, cancelled: true });
+    expect(runTurn).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

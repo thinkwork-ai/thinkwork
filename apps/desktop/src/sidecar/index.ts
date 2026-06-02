@@ -18,6 +18,7 @@ const parentPort =
   (process as NodeJS.Process & { parentPort?: ParentPort | null }).parentPort ??
   null;
 const DEFAULT_TURN_TIMEOUT_MS = 90_000;
+const DEFAULT_EVAL_CONCURRENCY = 3;
 
 if (!parentPort) {
   console.error("[pi-sidecar] missing Electron parentPort");
@@ -172,6 +173,7 @@ if (!parentPort) {
         signal: abortController.signal,
         logger,
         turnTimeoutMs: resolveTurnTimeoutMs(),
+        evalConcurrency: resolveEvalConcurrency(),
         debug: isLocalPiDebugEnabled(),
       });
       parentPort?.postMessage({
@@ -200,6 +202,14 @@ function resolveTurnTimeoutMs(): number {
   return Number.isFinite(parsed) && parsed > 0
     ? parsed
     : DEFAULT_TURN_TIMEOUT_MS;
+}
+
+function resolveEvalConcurrency(): number {
+  const raw = process.env.THINKWORK_DESKTOP_EVAL_CONCURRENCY;
+  const parsed = raw ? Number.parseInt(raw, 10) : DEFAULT_EVAL_CONCURRENCY;
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.min(8, parsed)
+    : DEFAULT_EVAL_CONCURRENCY;
 }
 
 function isLocalPiDebugEnabled(): boolean {
