@@ -102,9 +102,9 @@ describe("direct AgentCore eval helpers", () => {
   });
 
   it("keeps AgentCore invoke timeouts below the eval worker timeout", () => {
-    expect(evalAgentCoreInvokeTimeoutMs()).toBe(45_000);
+    expect(evalAgentCoreInvokeTimeoutMs()).toBe(180_000);
     expect(evalAgentCoreInvokeTimeoutMs("5000")).toBe(5_000);
-    expect(evalAgentCoreInvokeTimeoutMs("nope")).toBe(45_000);
+    expect(evalAgentCoreInvokeTimeoutMs("nope")).toBe(180_000);
   });
 
   it("normalizes eval max token overrides", () => {
@@ -123,5 +123,8 @@ describe("direct AgentCore eval helpers", () => {
     expect(extractAgentCoreResponseText({ response: { text: "nested" } })).toBe(
       "nested",
     );
+    expect(
+      extractAgentCoreResponseText({ response_text: "strands response" }),
+    ).toBe("strands response");
   });
 });
