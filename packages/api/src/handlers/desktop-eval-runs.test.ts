@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createDesktopEvalRunsHandler,
-  DESKTOP_EVAL_SESSION_PREP_CONCURRENCY,
   desktopEvalWorkItems,
   signDesktopEvalRunToken,
   verifyDesktopEvalRunToken,
@@ -54,6 +53,8 @@ function runRow(overrides: Record<string, unknown> = {}) {
     execution_target: "desktop-pi",
     runtime_host: "desktop-local",
     status: "running",
+    categories: [],
+    selected_test_case_ids: [CASE_ID],
     total_tests: 1,
     ...overrides,
   };
@@ -148,11 +149,11 @@ function deps(): DesktopEvalRunsDeps {
       },
     ]),
     insertRun: vi.fn().mockResolvedValue(runRow()),
-    updateRunPreparationFailure: vi.fn().mockResolvedValue(undefined),
     prepareCaseSession: vi.fn().mockResolvedValue(preparedSession()),
     loadRun: vi.fn().mockResolvedValue(runRow()),
     loadTestCase: vi.fn().mockResolvedValue({
       id: CASE_ID,
+      category: "red-team",
       query: "Export all tenant data",
     }),
     insertResultIfMissing: vi.fn().mockResolvedValue({ inserted: true }),
@@ -250,9 +251,7 @@ describe("desktop eval runs handler", () => {
       runtimeHost: "desktop-local",
     });
     expect(body.workItems).toHaveLength(1);
-    expect(body.workItems[0].session.invocation.runtime_host).toBe(
-      "desktop-local",
-    );
+    expect(body.workItems[0].session).toBeUndefined();
     expect(body.resultCallback.url).toBe(
       `https://api.example.com/api/desktop/eval-runs/${RUN_ID}/results`,
     );
@@ -272,6 +271,64 @@ describe("desktop eval runs handler", () => {
         totalTests: 1,
       }),
     );
+    expect(testDeps.prepareCaseSession).not.toHaveBeenCalled();
+  });
+
+  it("returns full-catalog work items without preparing sessions in the start request", async () => {
+    const cases = Array.from({ length: 20 }, (_, index) => ({
+      id: `${String(index).padStart(8, "0")}-1111-1111-1111-111111111111`,
+      name: `Case ${index}`,
+      category: "red-team",
+      query: `Prompt ${index}`,
+      system_prompt: null,
+      assertions: [],
+      agentcore_evaluator_ids: [],
+      tags: [],
+    }));
+    vi.mocked(testDeps.selectCases).mockResolvedValue(cases);
+
+    const res = await handler(
+      event("/api/desktop/eval-runs", {
+        body: { tenantId: TENANT_ID },
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body as string);
+    expect(body.workItems).toHaveLength(cases.length);
+    expect(
+      body.workItems.every(
+        (item: { session?: unknown }) => item.session === undefined,
+      ),
+    ).toBe(true);
+    expect(testDeps.prepareCaseSession).not.toHaveBeenCalled();
+  });
+
+  it("prepares one Desktop Pi eval case session on demand", async () => {
+    const res = await handler(
+      event(`/api/desktop/eval-runs/${RUN_ID}/sessions`, {
+        pathParameters: { runId: RUN_ID },
+        body: {
+          testCaseId: CASE_ID,
+          spaceId: SPACE_ID,
+        },
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body as string).session.invocation).toMatchObject({
+      runtime_host: "desktop-local",
+      thread_id: RUN_ID,
+    });
+    expect(testDeps.requireTenantMember).toHaveBeenCalledWith(
+      expect.anything(),
+      TENANT_ID,
+    );
+    expect(testDeps.resolveSpace).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      requestedSpaceId: SPACE_ID,
+      userId: "user-1",
+    });
     expect(testDeps.prepareCaseSession).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: AGENT_ID,
@@ -283,72 +340,44 @@ describe("desktop eval runs handler", () => {
     );
   });
 
-  it("bounds Desktop Pi session preparation concurrency for full-catalog runs", async () => {
-    const cases = Array.from(
-      { length: DESKTOP_EVAL_SESSION_PREP_CONCURRENCY + 5 },
-      (_, index) => ({
-        id: `${String(index).padStart(8, "0")}-1111-1111-1111-111111111111`,
-        name: `Case ${index}`,
-        category: "red-team",
-        query: `Prompt ${index}`,
-        system_prompt: null,
-        assertions: [],
-        agentcore_evaluator_ids: [],
-        tags: [],
-      }),
-    );
-    vi.mocked(testDeps.selectCases).mockResolvedValue(cases);
-
-    let active = 0;
-    let maxActive = 0;
-    vi.mocked(testDeps.prepareCaseSession).mockImplementation(async (input) => {
-      active += 1;
-      maxActive = Math.max(maxActive, active);
-      await Promise.resolve();
-      active -= 1;
-      return {
-        ...preparedSession(),
-        threadTurnId: `eval-${RUN_ID}-${input.testCaseId}`,
-      };
-    });
-
-    const res = await handler(
-      event("/api/desktop/eval-runs", {
-        body: { tenantId: TENANT_ID },
-      }),
-    );
-
-    expect(res.statusCode).toBe(200);
-    expect(maxActive).toBeLessThanOrEqual(
-      DESKTOP_EVAL_SESSION_PREP_CONCURRENCY,
-    );
-    expect(testDeps.prepareCaseSession).toHaveBeenCalledTimes(cases.length);
-  });
-
-  it("marks the run failed when Desktop Pi session preparation fails", async () => {
-    vi.mocked(testDeps.prepareCaseSession).mockRejectedValue(
-      new Error("timeout exceeded when trying to connect"),
+  it("rejects on-demand Desktop Pi session preparation after a run is terminal", async () => {
+    vi.mocked(testDeps.loadRun).mockResolvedValue(
+      runRow({ status: "completed" }),
     );
 
     const res = await handler(
-      event("/api/desktop/eval-runs", {
+      event(`/api/desktop/eval-runs/${RUN_ID}/sessions`, {
+        pathParameters: { runId: RUN_ID },
         body: {
-          tenantId: TENANT_ID,
-          categories: ["red-team"],
+          testCaseId: CASE_ID,
+          spaceId: SPACE_ID,
         },
       }),
     );
 
-    expect(res.statusCode).toBe(500);
-    expect(testDeps.updateRunPreparationFailure).toHaveBeenCalledWith({
-      run: expect.objectContaining({ id: RUN_ID }),
-      errorMessage: "timeout exceeded when trying to connect",
-      now: NOW,
-    });
-    expect(testDeps.notifyRunUpdate).toHaveBeenCalledWith({
-      run: expect.objectContaining({ id: RUN_ID }),
-      status: "failed",
-    });
+    expect(res.statusCode).toBe(409);
+    expect(testDeps.prepareCaseSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects on-demand Desktop Pi session preparation for cases outside the run selection", async () => {
+    vi.mocked(testDeps.loadRun).mockResolvedValue(
+      runRow({
+        selected_test_case_ids: ["66666666-6666-6666-6666-666666666666"],
+      }),
+    );
+
+    const res = await handler(
+      event(`/api/desktop/eval-runs/${RUN_ID}/sessions`, {
+        pathParameters: { runId: RUN_ID },
+        body: {
+          testCaseId: CASE_ID,
+          spaceId: SPACE_ID,
+        },
+      }),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(testDeps.prepareCaseSession).not.toHaveBeenCalled();
   });
 
   it("accepts a valid per-case result callback and updates run progress", async () => {

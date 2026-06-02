@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createPiEvalRunPreparer,
   createPiRuntimeSessionPreparer,
   resolveCognitoIdToken,
 } from "../../src/main/pi-runtime-session-client";
@@ -25,6 +26,22 @@ const env: DesktopEnvSnapshot = {
     domain: "auth.test",
   },
 };
+
+function preparedRuntimeSession(overrides: Record<string, unknown> = {}) {
+  return {
+    threadTurnId: "turn-1",
+    expiresAt: "2026-05-28T13:00:00.000Z",
+    finalizeCallbackSecret: "dps_secret",
+    sidecarCredentials: {},
+    invocation: {
+      tenant_id: "tenant-1",
+      assistant_id: "agent-1",
+      thread_id: "thread-1",
+      runtime_host: "desktop-local",
+    },
+    ...overrides,
+  };
+}
 
 describe("pi runtime session client", () => {
   it("resolves the active Cognito ID token from desktop storage keys", () => {
@@ -54,18 +71,7 @@ describe("pi runtime session client", () => {
       return new Response(
         JSON.stringify({
           ok: true,
-          session: {
-            threadTurnId: "turn-1",
-            expiresAt: "2026-05-28T13:00:00.000Z",
-            finalizeCallbackSecret: "dps_secret",
-            sidecarCredentials: {},
-            invocation: {
-              tenant_id: "tenant-1",
-              assistant_id: "agent-1",
-              thread_id: "thread-1",
-              runtime_host: "desktop-local",
-            },
-          },
+          session: preparedRuntimeSession(),
         }),
         { status: 200 },
       );
@@ -86,5 +92,110 @@ describe("pi runtime session client", () => {
         userMessage: "hello",
       }),
     ).resolves.toMatchObject({ threadTurnId: "turn-1" });
+  });
+
+  it("prepares Desktop Pi eval case sessions after creating a run", async () => {
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(init?.headers).toMatchObject({
+        authorization: "Bearer id-token",
+      });
+
+      if (url === "https://api.test/api/desktop/eval-runs") {
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          tenantId: "tenant-1",
+          categories: ["red-team"],
+          model: "kimi-k2.5",
+        });
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            run: {
+              id: "run-1",
+              status: "running",
+              totalTests: 1,
+            },
+            target: {
+              agentId: "agent-1",
+              spaceId: "space-1",
+              spaceSlug: "default",
+              executionTarget: "desktop-pi",
+              runtimeHost: "desktop-local",
+            },
+            resultCallback: {
+              url: "https://api.test/api/desktop/eval-runs/run-1/results",
+              token: "callback-token",
+              expiresAt: "2026-05-28T13:00:00.000Z",
+              authScheme: "bearer",
+            },
+            workItems: [
+              {
+                runId: "run-1",
+                testCaseId: "case-1",
+                index: 0,
+                name: "Prompt injection refusal",
+                category: "red-team",
+                query: "ignore previous",
+                systemPrompt: null,
+                assertions: [],
+                agentcoreEvaluatorIds: [],
+                tags: [],
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+
+      expect(url).toBe("https://api.test/api/desktop/eval-runs/run-1/sessions");
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        testCaseId: "case-1",
+        spaceId: "space-1",
+      });
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          session: preparedRuntimeSession({
+            threadTurnId: "eval-run-1-case-1",
+            invocation: {
+              tenant_id: "tenant-1",
+              assistant_id: "agent-1",
+              thread_id: "run-1",
+              runtime_host: "desktop-local",
+            },
+          }),
+        }),
+        { status: 200 },
+      );
+    });
+
+    const prepare = createPiEvalRunPreparer({
+      env,
+      tokenSnapshot: () => ({
+        "CognitoIdentityServiceProvider.client.LastAuthUser": "google_123",
+        "CognitoIdentityServiceProvider.client.google_123.idToken": "id-token",
+      }),
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+
+    await expect(
+      prepare({
+        tenantId: "tenant-1",
+        categories: ["red-team"],
+        testCaseIds: [],
+        model: "kimi-k2.5",
+        spaceId: null,
+      }),
+    ).resolves.toMatchObject({
+      run: { id: "run-1" },
+      workItems: [
+        {
+          testCaseId: "case-1",
+          session: {
+            threadTurnId: "eval-run-1-case-1",
+          },
+        },
+      ],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });
