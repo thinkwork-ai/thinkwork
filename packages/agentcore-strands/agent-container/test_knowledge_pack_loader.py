@@ -154,7 +154,11 @@ def test_build_system_prompt_injects_pack_after_system_files(monkeypatch, tmp_pa
     (workspace_dir / "CONTEXT.md").write_text("Workspace context", encoding="utf-8")
     (workspace_dir / "GUARDRAILS.md").write_text("Workspace guardrails", encoding="utf-8")
     (workspace_dir / "SPACE.md").write_text("Space context", encoding="utf-8")
-    (workspace_dir / "USER.md").write_text("Workspace user profile", encoding="utf-8")
+    (workspace_dir / "User").mkdir()
+    (workspace_dir / "User" / "USER.md").write_text(
+        "Workspace user profile", encoding="utf-8"
+    )
+    (workspace_dir / "USER.md").write_text("Retired root user profile", encoding="utf-8")
     (workspace_dir / "SOUL.md").write_text("Retired soul", encoding="utf-8")
     (workspace_dir / "IDENTITY.md").write_text("Retired identity", encoding="utf-8")
     (workspace_dir / "PLATFORM.md").write_text("Retired platform", encoding="utf-8")
@@ -188,6 +192,7 @@ def test_build_system_prompt_injects_pack_after_system_files(monkeypatch, tmp_pa
     assert prompt.index("Workspace guardrails") < prompt.index("Space context")
     assert prompt.index("Space context") < prompt.index("<user_distilled_knowledge_test")
     assert prompt.index("<user_distilled_knowledge_test") < prompt.index("Workspace user profile")
+    assert "Retired root user profile" not in prompt
     assert "Retired soul" not in prompt
     assert "Retired identity" not in prompt
     assert "Retired platform" not in prompt
@@ -216,7 +221,10 @@ def test_build_system_prompt_can_suppress_workspace_user_md(monkeypatch, tmp_pat
     _reset_server_pack_state()
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
-    (workspace_dir / "USER.md").write_text("Workspace user profile", encoding="utf-8")
+    (workspace_dir / "User").mkdir()
+    (workspace_dir / "User" / "USER.md").write_text(
+        "Workspace user profile", encoding="utf-8"
+    )
     (workspace_dir / "AGENTS.md").write_text("Workspace map", encoding="utf-8")
 
     monkeypatch.setattr(server, "WORKSPACE_DIR", str(workspace_dir))
@@ -237,14 +245,18 @@ def test_build_system_prompt_profile_skips_retired_prompt_files(monkeypatch, tmp
     (workspace_dir / "SPACE.md").write_text("Space context", encoding="utf-8")
     (workspace_dir / "SOUL.md").write_text("Retired soul", encoding="utf-8")
     (workspace_dir / "IDENTITY.md").write_text("Retired identity", encoding="utf-8")
-    (workspace_dir / "USER.md").write_text("Workspace user profile", encoding="utf-8")
+    (workspace_dir / "User").mkdir()
+    (workspace_dir / "User" / "USER.md").write_text(
+        "Workspace user profile", encoding="utf-8"
+    )
+    (workspace_dir / "USER.md").write_text("Retired root user profile", encoding="utf-8")
 
     monkeypatch.setattr(server, "WORKSPACE_DIR", str(workspace_dir))
 
     from router_parser import ContextProfile
 
     prompt = server._build_system_prompt(
-        profile=ContextProfile(load=["SOUL.md", "IDENTITY.md", "USER.md"]),
+        profile=ContextProfile(load=["SOUL.md", "IDENTITY.md", "User/USER.md"]),
         suppress_user_md=False,
     )
 
@@ -255,6 +267,7 @@ def test_build_system_prompt_profile_skips_retired_prompt_files(monkeypatch, tmp
     assert "Workspace user profile" in prompt
     assert "Retired soul" not in prompt
     assert "Retired identity" not in prompt
+    assert "Retired root user profile" not in prompt
     assert prompt.index("Workspace map") < prompt.index("Workspace context")
     assert prompt.index("Workspace context") < prompt.index("Workspace guardrails")
     assert prompt.index("Workspace guardrails") < prompt.index("Space context")

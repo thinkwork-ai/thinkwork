@@ -7,8 +7,8 @@ import {
 
 function readerFor(files: Record<string, string>): WorkspaceFileReader {
   return async (filePath) => {
-    const filename = path.basename(filePath);
-    const content = files[filename];
+    const relativePath = path.relative("/tmp/workspace", filePath);
+    const content = files[relativePath];
     if (!content) return null;
     const trimmed = content.trim();
     return trimmed || null;
@@ -26,7 +26,7 @@ describe("composeSystemPrompt", () => {
       now,
       fileReader: readerFor({
         "AGENTS.md": "I am Marco.",
-        "USER.md": "## USER\n- Name: Eric Odom",
+        "User/USER.md": "## USER\n- Name: Eric Odom",
       }),
     });
 
@@ -38,7 +38,7 @@ describe("composeSystemPrompt", () => {
 
   it("loads the canonical five prompt files in pinned order", async () => {
     // Order contract (see PROMPT_FILES in src/runtime/system-prompt.ts):
-    //   AGENTS → CONTEXT → GUARDRAILS → SPACE → USER
+    //   AGENTS → CONTEXT → GUARDRAILS → SPACE → User/USER
     const prompt = await composeSystemPrompt({
       payload: { user_id: "user-1" },
       workspaceDir: "/tmp/workspace",
@@ -48,7 +48,7 @@ describe("composeSystemPrompt", () => {
         "CONTEXT.md": "CONTEXT_BLOCK",
         "GUARDRAILS.md": "GUARDRAILS_BLOCK",
         "SPACE.md": "SPACE_BLOCK",
-        "USER.md": "USER_BLOCK",
+        "User/USER.md": "USER_BLOCK",
       }),
     });
 
@@ -98,7 +98,7 @@ describe("composeSystemPrompt", () => {
       now,
       fileReader: readerFor({
         "AGENTS.md": "AGENTS_BLOCK",
-        "USER.md": "USER_BLOCK",
+        "User/USER.md": "USER_BLOCK",
       }),
     });
 
@@ -111,13 +111,13 @@ describe("composeSystemPrompt", () => {
       payload: { user_id: "user-1" },
       workspaceDir: "/tmp/workspace",
       now,
-      fileReader: readerFor({ "USER.md": "X" }),
+      fileReader: readerFor({ "User/USER.md": "X" }),
     });
     expect(prompt.startsWith("Current date: ")).toBe(true);
     expect(prompt).toMatch(/Tuesday, May 5, 2026/);
   });
 
-  it("pins the current requester email ahead of tool policy and USER.md", async () => {
+  it("pins the current requester email ahead of tool policy and User/USER.md", async () => {
     const prompt = await composeSystemPrompt({
       payload: {
         user_id: "user-1",
@@ -126,7 +126,7 @@ describe("composeSystemPrompt", () => {
       },
       workspaceDir: "/tmp/workspace",
       now,
-      fileReader: readerFor({ "USER.md": "USER_BLOCK" }),
+      fileReader: readerFor({ "User/USER.md": "USER_BLOCK" }),
     });
 
     expect(prompt).toContain("<current_requester>");
@@ -147,7 +147,7 @@ describe("composeSystemPrompt", () => {
       workspaceDir: "/tmp/workspace",
       availableToolNames: ["send_email"],
       now,
-      fileReader: readerFor({ "USER.md": "X" }),
+      fileReader: readerFor({ "User/USER.md": "X" }),
     });
 
     expect(prompt).toContain("## Runtime Tool Policy");
@@ -165,7 +165,7 @@ describe("composeSystemPrompt", () => {
       workspaceDir: "/tmp/workspace",
       availableToolNames: ["execute_code", "send_email"],
       now,
-      fileReader: readerFor({ "USER.md": "X" }),
+      fileReader: readerFor({ "User/USER.md": "X" }),
     });
 
     expect(prompt).toContain("The `execute_code` tool is available");
@@ -181,7 +181,7 @@ describe("composeSystemPrompt", () => {
       workspaceDir: "/tmp/workspace",
       availableToolNames: ["bash", "execute_code"],
       now,
-      fileReader: readerFor({ "USER.md": "X" }),
+      fileReader: readerFor({ "User/USER.md": "X" }),
     });
 
     expect(prompt).toContain("Pi host `bash` tool is available");
@@ -196,9 +196,24 @@ describe("composeSystemPrompt", () => {
       workspaceDir: "/tmp/workspace",
       workspaceSkillsBlock: "Workspace skills are available.",
       now,
-      fileReader: readerFor({ "USER.md": "X" }),
+      fileReader: readerFor({ "User/USER.md": "X" }),
     });
     expect(prompt).toContain("Workspace skills are available.");
+  });
+
+  it("ignores retired root USER.md even when a user id is present", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: { user_id: "user-1" },
+      workspaceDir: "/tmp/workspace",
+      now,
+      fileReader: readerFor({
+        "AGENTS.md": "AGENTS_BLOCK",
+        "USER.md": "ROOT_USER_BLOCK",
+      }),
+    });
+
+    expect(prompt).toContain("AGENTS_BLOCK");
+    expect(prompt).not.toContain("ROOT_USER_BLOCK");
   });
 
   it("falls back to payload.system_prompt when workspace is empty", async () => {

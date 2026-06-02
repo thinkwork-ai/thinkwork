@@ -1064,22 +1064,11 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.queryByLabelText("Processing request")).toBeNull();
   });
 
-  it("routes follow-up sends through managed AgentCore when a desktop bridge exposes Pi", async () => {
+  it("routes follow-up sends through managed AgentCore in desktop builds", async () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
-    const startTurn = vi.fn(async () => ({
-      accepted: true,
-      requestId: "local-turn-1",
-    }));
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
-      value: {
-        pi: {
-          status: "healthy",
-          startTurn,
-          getStatus: vi.fn(async () => ({ status: "healthy" })),
-          onStatusChanged: vi.fn(() => () => {}),
-        },
-      },
+      value: {},
     });
     threadData = {
       thread: {
@@ -1097,7 +1086,7 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "Run this on the desktop sidecar" },
+      target: { value: "Run this through AgentCore" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
@@ -1106,29 +1095,17 @@ describe("SpacesThreadDetailRoute", () => {
         input: {
           threadId: "thread-1",
           role: "USER",
-          content: "Run this on the desktop sidecar",
+          content: "Run this through AgentCore",
         },
       });
     });
-    expect(startTurn).not.toHaveBeenCalled();
   });
 
-  it("does not start a desktop-local turn when the API handled an onboarding task update", async () => {
+  it("keeps onboarding task updates on the managed send path", async () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
-    const startTurn = vi.fn(async () => ({
-      accepted: true,
-      requestId: "local-turn-1",
-    }));
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
-      value: {
-        pi: {
-          status: "healthy",
-          startTurn,
-          getStatus: vi.fn(async () => ({ status: "healthy" })),
-          onStatusChanged: vi.fn(() => () => {}),
-        },
-      },
+      value: {},
     });
     threadData = {
       thread: {
@@ -1169,7 +1146,6 @@ describe("SpacesThreadDetailRoute", () => {
         },
       });
     });
-    expect(startTurn).not.toHaveBeenCalled();
     expect(reexecuteLinkedTasksQuery).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });

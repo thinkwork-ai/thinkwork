@@ -51,22 +51,13 @@ vi.mock("@/lib/use-assigned-computer-selection", () => ({
 const navigate = vi.fn();
 const createThread = vi.fn();
 const sendMessage = vi.fn();
-const prewarmWorkspace = vi.fn();
-const startTurn = vi.fn();
 
 beforeEach(() => {
   vi.stubGlobal("__DESKTOP_BUILD__", true);
   navigate.mockReset();
   createThread.mockReset();
   sendMessage.mockReset();
-  prewarmWorkspace.mockReset();
-  startTurn.mockReset();
   clearPendingThreadStart("thread-1");
-  prewarmWorkspace.mockResolvedValue({
-    accepted: true,
-    requestId: "workspace-prewarm-1",
-  });
-  startTurn.mockResolvedValue({ accepted: true, requestId: "local-turn-1" });
   createThread.mockResolvedValue({
     data: { createThread: { id: "thread-1", agentId: "agent-1" } },
   });
@@ -150,15 +141,7 @@ beforeEach(() => {
   }) as typeof useQuery);
   Object.defineProperty(window, "thinkworkBridge", {
     configurable: true,
-    value: {
-      pi: {
-        status: "healthy",
-        prewarmWorkspace,
-        startTurn,
-        getStatus: vi.fn(async () => ({ status: "healthy" })),
-        onStatusChanged: vi.fn(() => () => {}),
-      },
-    },
+    value: {},
   });
 });
 
@@ -175,7 +158,6 @@ describe("SpacesWorkbench", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("Send message")).toBeTruthy();
     });
-    expect(prewarmWorkspace).not.toHaveBeenCalled();
     expect(createThread).not.toHaveBeenCalled();
   });
 
@@ -208,8 +190,6 @@ describe("SpacesWorkbench", () => {
         },
       });
     });
-    expect(prewarmWorkspace).not.toHaveBeenCalled();
-    expect(startTurn).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "/threads/$id",
@@ -252,12 +232,10 @@ describe("SpacesWorkbench", () => {
         }),
       );
     });
-    expect(startTurn).not.toHaveBeenCalled();
 
     resolveSend?.({ data: { sendMessage: { id: "message-1" } } });
     await waitFor(() => {
       expect(sendMessage).toHaveBeenCalledTimes(1);
     });
-    expect(startTurn).not.toHaveBeenCalled();
   });
 });

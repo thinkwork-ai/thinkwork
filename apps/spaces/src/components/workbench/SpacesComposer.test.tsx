@@ -185,13 +185,7 @@ describe("SpacesComposer", () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
-      value: {
-        pi: {
-          status: "healthy",
-          getStatus: vi.fn(async () => ({ status: "healthy" })),
-          onStatusChanged: vi.fn(() => () => {}),
-        },
-      },
+      value: {},
     });
 
     render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);

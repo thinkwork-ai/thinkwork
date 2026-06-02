@@ -408,8 +408,9 @@ You have access to Company Brain, the platform context layer:
   contract.
 - **Requester profile** — \`USER.md\` is already in your current prompt when a
   requester is known. In the rendered workspace, the source file lives at
-  \`User/USER.md\`. Use it directly for profile, preference, and family facts; do
-  not call memory or Hindsight tools to re-fetch facts already present there.
+  route/path \`User/USER.md\` (\`User/\` root, \`USER.md\` file). Use it directly for
+  profile, preference, and family facts; do not call memory or Hindsight tools
+  to re-fetch facts already present there.
 - **Workspace notes** — Use workspace file tools for structured working notes,
   contact lists, and procedural knowledge. Root \`memory/\` is Agent-owned,
   \`User/memory/\` is requester-owned, and \`Thread/notes/\` is for raw findings
@@ -521,7 +522,8 @@ No skills discovered yet.
 ## Quick Navigation
 
 - Start with \`CONTEXT.md\` for the agent's top-level scope.
-- Read \`User/USER.md\` for requester personalization and user-scoped facts.
+- Read route/path \`User/USER.md\` for requester personalization and user-scoped
+  facts. \`USER.md\` at the Agent root is retired and should not be created.
 - Read \`Spaces/INDEX.md\` to see the active Space and other authorized Spaces.
 - Read \`Spaces/<active-space>/SPACE.md\` and
   \`Spaces/<active-space>/CONTEXT.md\` for the active shared Space context.
@@ -549,7 +551,8 @@ No skills discovered yet.
 
 - \`AGENTS.md\`, \`CONTEXT.md\`, \`GUARDRAILS.md\`, \`memory/\`, \`skills/\`, and
   \`workspaces/\` live at the Agent root.
-- User context lives under \`User/\`; do not create a root \`USER.md\`.
+- User context lives under \`User/\`; the requester profile route/path is
+  \`User/USER.md\`. Do not create a root \`USER.md\`.
 - Specialist workspaces live under \`workspaces/<slug>/\`.
 - The active Space is rendered under \`Spaces/<active-space>/\`; do not use the
   legacy singular \`Space/\` folder.

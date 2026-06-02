@@ -269,22 +269,7 @@ describe("DesktopApplicationHeader", () => {
     pageHeaderMock.actions = { title: "Thread" };
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
-      value: {
-        pi: {
-          status: "healthy",
-          getStatus: vi.fn(async () => ({
-            status: "healthy",
-            pid: 123,
-            version: "0.1.0",
-            restartCount: 0,
-            startedAt: "2026-05-28T12:00:00.000Z",
-            updatedAt: "2026-05-28T12:00:01.000Z",
-            lastExitCode: null,
-            lastError: null,
-          })),
-          onStatusChanged: vi.fn(() => () => {}),
-        },
-      },
+      value: {},
     });
 
     render(<DesktopApplicationHeader />);

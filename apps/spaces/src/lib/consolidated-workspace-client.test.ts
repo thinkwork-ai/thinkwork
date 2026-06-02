@@ -141,6 +141,16 @@ describe("routing", () => {
     expect(getFile).toHaveBeenCalledWith({ agentId: "agent-1" }, "AGENTS.md");
   });
 
+  it("routes an Agent/AGENTS.md save to the agent S3-backed target", async () => {
+    putFile.mockResolvedValue(undefined);
+    await client.putFile(target, "Agent/AGENTS.md", "# AGENTS.md\n");
+    expect(putFile).toHaveBeenCalledWith(
+      { agentId: "agent-1" },
+      "AGENTS.md",
+      "# AGENTS.md\n",
+    );
+  });
+
   it("resolves a Spaces path by space name to its id", async () => {
     getFile.mockResolvedValue({ content: "x", source: "space", sha256: "" });
     await client.getFile(target, "Spaces/finance/GOAL.md");

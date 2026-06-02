@@ -420,7 +420,8 @@ RETIRED_PROMPT_FILES = {
     "MEMORY_GUIDE.md",
     "TOOLS.md",
 }
-CANONICAL_PROMPT_FILES = ("AGENTS.md", "CONTEXT.md", "GUARDRAILS.md", "SPACE.md", "USER.md")
+USER_PROMPT_FILE = "User/USER.md"
+CANONICAL_PROMPT_FILES = ("AGENTS.md", "CONTEXT.md", "GUARDRAILS.md", "SPACE.md", USER_PROMPT_FILE)
 
 
 def _build_system_prompt(
@@ -453,14 +454,16 @@ def _build_system_prompt(
         for rel_path in file_paths:
             if rel_path in RETIRED_PROMPT_FILES:
                 continue
-            if suppress_user_md and os.path.basename(rel_path) == "USER.md":
+            if rel_path == "USER.md":
+                continue
+            if suppress_user_md and rel_path == USER_PROMPT_FILE:
                 continue
             filepath = os.path.join(WORKSPACE_DIR, rel_path)
             try:
                 with open(filepath) as f:
                     content = f.read().strip()
                 if content:
-                    if os.path.basename(rel_path) == "USER.md":
+                    if rel_path == USER_PROMPT_FILE:
                         user_file_position = len(parts)
                     parts.append(content)
                     prompt_file_count += 1
@@ -478,7 +481,7 @@ def _build_system_prompt(
             (filename, WORKSPACE_DIR) for filename in CANONICAL_PROMPT_FILES
         ]
         for filename, base_dir in prompt_files:
-            if suppress_user_md and filename == "USER.md":
+            if suppress_user_md and filename == USER_PROMPT_FILE:
                 continue
             filepath = os.path.join(base_dir, filename)
             if os.path.isfile(filepath):
@@ -486,7 +489,7 @@ def _build_system_prompt(
                     with open(filepath) as f:
                         content = f.read().strip()
                     if content:
-                        if filename == "USER.md":
+                        if filename == USER_PROMPT_FILE:
                             user_file_position = len(parts)
                         parts.append(content)
                         prompt_file_count += 1
