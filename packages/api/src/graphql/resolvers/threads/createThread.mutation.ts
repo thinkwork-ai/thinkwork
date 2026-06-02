@@ -26,7 +26,7 @@ import { requireTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { ensureDefaultThreadSpace } from "../../../lib/spaces/default-space.js";
 import { dispatchAgentMentions } from "../../../lib/mentions/dispatch-agent-mentions.js";
-import { dispatchDefaultAgentTurn } from "../../../lib/mentions/default-agent-routing.js";
+import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agent-routing.js";
 import { parseMessageMentions } from "../../../lib/mentions/parse-message-mentions.js";
 import {
   insertMentionParticipants,
@@ -491,7 +491,7 @@ export const createThread = async (
     parsedOpeningMentions.length === 0
   ) {
     try {
-      await dispatchDefaultAgentTurn({
+      await dispatchDefaultAgentChatTurn({
         tenantId: row.tenant_id,
         threadId: row.id,
         spaceId: row.space_id,

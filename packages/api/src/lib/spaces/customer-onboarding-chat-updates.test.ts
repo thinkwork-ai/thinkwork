@@ -444,7 +444,7 @@ describe("sendMessage customer onboarding hook", () => {
     expect(source).toContain("agentDispatchRequired");
     expect(
       source.indexOf("await applyCustomerOnboardingChatUpdate"),
-    ).toBeLessThan(source.indexOf("await dispatchDefaultAgentTurn"));
+    ).toBeLessThan(source.indexOf("await dispatchDefaultAgentChatTurn"));
     expect(source).toContain("shouldApplyCustomerOnboardingChatUpdate");
     expect(source).toContain("shouldDispatchDefaultAgentTurn");
   });

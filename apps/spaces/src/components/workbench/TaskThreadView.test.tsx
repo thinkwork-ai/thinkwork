@@ -649,6 +649,9 @@ describe("TaskThreadView", () => {
     expect(screen.getByTestId("follow-up-composer-dock").className).toContain(
       "md:pr-[336px]",
     );
+    expect(
+      screen.getByTestId("follow-up-composer-dock").className,
+    ).not.toContain("absolute");
     const panel = screen.getByTestId("thread-info-panel");
     expect(panel.className).toContain("w-[300px]");
     expect(panel.className).toContain("absolute");
@@ -2465,6 +2468,81 @@ describe("TaskThreadView", () => {
     expect(screen.queryByText("Thinking")).toBeNull();
   });
 
+  it("labels completed chat turns from user-visible elapsed time", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Done",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "m1",
+              role: "USER",
+              content: "Follow up",
+              createdAt: "2026-06-02T19:30:00Z",
+            },
+            {
+              id: "m2",
+              role: "ASSISTANT",
+              content: "Done",
+              createdAt: "2026-06-02T19:30:30Z",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-06-02T19:30:15Z",
+              finishedAt: "2026-06-02T19:30:26Z",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Worked for 30s")).toBeTruthy();
+    expect(screen.queryByText("Worked for 11s")).toBeNull();
+  });
+
+  it("counts running chat turns from the user message time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-02T19:30:20Z"));
+    try {
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-1",
+            title: "Running",
+            lifecycleStatus: "RUNNING",
+            messages: [
+              {
+                id: "m1",
+                role: "USER",
+                content: "Follow up",
+                createdAt: "2026-06-02T19:30:00Z",
+              },
+            ],
+            turns: [
+              {
+                id: "turn-1",
+                status: "running",
+                invocationSource: "chat_message",
+                startedAt: "2026-06-02T19:30:15Z",
+              },
+            ],
+          }}
+        />,
+      );
+
+      expect(screen.getByText("Working…")).toBeTruthy();
+      expect(screen.getByText("20s")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not show a console-log toggle for a cloud turn with no console data", () => {
     render(
       <TaskThreadView
@@ -2708,6 +2786,62 @@ describe("TaskThreadView", () => {
     );
     // ...and the in-flight follow-up turn still surfaces its Working row.
     expect(screen.getByText("Working…")).toBeTruthy();
+  });
+
+  it("anchors the optimistic follow-up turn to the latest user message", () => {
+    const previousResponse = "The first answer is done.";
+    const { container } = render(
+      <TaskThreadView
+        thread={{
+          id: "thread-optimistic-followup",
+          title: "Optimistic follow-up",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "u1",
+              role: "USER",
+              content: "First question",
+              createdAt: "2026-06-02T19:30:00Z",
+            },
+            {
+              id: "a1",
+              role: "ASSISTANT",
+              content: previousResponse,
+              createdAt: "2026-06-02T19:30:30Z",
+            },
+            {
+              id: "u2",
+              role: "USER",
+              content: "Follow-up question",
+              createdAt: "2026-06-02T19:31:05Z",
+            },
+          ],
+          turns: [
+            {
+              id: "optimistic-computer-turn",
+              status: "running",
+              invocationSource: "chat_message",
+              startedAt: "2026-06-02T19:31:04Z",
+            },
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-06-02T19:30:00Z",
+              finishedAt: "2026-06-02T19:30:30Z",
+            },
+          ],
+        }}
+      />,
+    );
+
+    const text = container.textContent ?? "";
+    const previousAnswerIndex = text.indexOf(previousResponse);
+    const followUpIndex = text.indexOf("Follow-up question");
+    const workingIndex = text.indexOf("Working…");
+    expect(previousAnswerIndex).toBeGreaterThan(-1);
+    expect(followUpIndex).toBeGreaterThan(previousAnswerIndex);
+    expect(workingIndex).toBeGreaterThan(followUpIndex);
   });
 
   it("renders live tool_invocation_started events with toolActionTitle formatting", () => {

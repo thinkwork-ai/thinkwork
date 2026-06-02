@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -1062,6 +1063,109 @@ describe("SpacesThreadDetailRoute", () => {
     // The optimistic running turn is the single in-flight signal (KTD2).
     expect(screen.getByText("Working…")).toBeTruthy();
     expect(screen.queryByLabelText("Processing request")).toBeNull();
+  });
+
+  it("keeps the follow-up working row after the user message persists before the agent result", async () => {
+    taskData = { computerTasks: [] };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Agent thread",
+        lifecycleStatus: "COMPLETED",
+        messages: { edges: [] },
+      },
+    };
+
+    const { rerender } = render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    fireEvent.change(screen.getByLabelText("Follow up"), {
+      target: { value: "What's my wife's name?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("What's my wife's name?")).toBeTruthy();
+    });
+    expect(screen.getByText("Working…")).toBeTruthy();
+
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Agent thread",
+        lifecycleStatus: "RUNNING",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-follow-up",
+                role: "USER",
+                content: "What's my wife's name?",
+                createdAt: "2026-06-02T19:20:00.000Z",
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    rerender(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    expect(screen.getByText("What's my wife's name?")).toBeTruthy();
+    expect(screen.getByText("Working…")).toBeTruthy();
+  });
+
+  it("continues polling while a real turn is running and the latest user has no assistant", async () => {
+    vi.useFakeTimers();
+    try {
+      taskData = {
+        computerTasks: [
+          {
+            id: "task-running",
+            status: "RUNNING",
+            input: { source: "chat_message" },
+            claimedAt: "2026-06-02T19:20:01.000Z",
+            completedAt: null,
+            createdAt: "2026-06-02T19:20:01.000Z",
+          },
+        ],
+      };
+      threadData = {
+        thread: {
+          id: "thread-1",
+          computerId: "computer-1",
+          title: "Agent thread",
+          lifecycleStatus: "RUNNING",
+          messages: {
+            edges: [
+              {
+                node: {
+                  id: "message-follow-up",
+                  role: "USER",
+                  content: "Still waiting",
+                  createdAt: "2026-06-02T19:20:00.000Z",
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      render(<SpacesThreadDetailRoute threadId="thread-1" />);
+      expect(screen.getByText("Working…")).toBeTruthy();
+
+      reexecuteThreadQuery.mockClear();
+      await act(async () => {
+        vi.advanceTimersByTime(2_000);
+      });
+
+      expect(reexecuteThreadQuery).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("routes follow-up sends through managed AgentCore in desktop builds", async () => {

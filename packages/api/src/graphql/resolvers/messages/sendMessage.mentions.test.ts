@@ -34,7 +34,7 @@ describe("sendMessage mention collaboration path", () => {
   });
 
   it("routes eligible messages to the default agent without double-dispatching agent mentions", () => {
-    expect(source).toContain("dispatchDefaultAgentTurn");
+    expect(source).toContain("dispatchDefaultAgentChatTurn");
     expect(source).toContain("shouldDispatchDefaultAgentTurn");
     expect(source).toContain("hasAgentMentions");
   });

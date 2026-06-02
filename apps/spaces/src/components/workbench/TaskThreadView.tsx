@@ -156,6 +156,8 @@ export interface TaskThreadTurn {
   runtimeType?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
+  displayStartedAt?: string | null;
+  displayFinishedAt?: string | null;
   model?: string | null;
   usageJson?: unknown;
   resultJson?: unknown;
@@ -472,7 +474,7 @@ export function TaskThreadView({
           ref={composerDockRef}
           data-testid="follow-up-composer-dock"
           className={cn(
-            "pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-6",
+            "pointer-events-none shrink-0 px-4 sm:px-6",
             infoPanelOpen && "md:pr-[336px]",
           )}
         >
@@ -1541,7 +1543,7 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
   const running = isRunningStatus(status);
   // One hook per turn surface (KTD3): live-elapsed only ticks while running,
   // freezes on terminal status, and is null for not-yet-started turns.
-  const elapsedMs = useTurnElapsed(turn?.startedAt ?? null, running);
+  const elapsedMs = useTurnElapsed(displayStartedAtForTurn(turn), running);
 
   if (!turn) return null;
 
@@ -1590,13 +1592,21 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
 }
 
 function turnDurationMs(turn: TaskThreadTurn): number | null {
-  if (!turn.startedAt || !turn.finishedAt) return null;
-  const start = Date.parse(turn.startedAt);
-  const finish = Date.parse(turn.finishedAt);
+  const startedAt = displayStartedAtForTurn(turn);
+  const finishedAt = turn.displayFinishedAt ?? turn.finishedAt;
+  if (!startedAt || !finishedAt) return null;
+  const start = Date.parse(startedAt);
+  const finish = Date.parse(finishedAt);
   if (!Number.isFinite(start) || !Number.isFinite(finish) || finish < start) {
     return null;
   }
   return finish - start;
+}
+
+function displayStartedAtForTurn(
+  turn: TaskThreadTurn | null | undefined,
+): string | null {
+  return turn?.displayStartedAt ?? turn?.startedAt ?? null;
 }
 
 // Match each USER message to its corresponding turn so multi-turn threads
@@ -1662,17 +1672,63 @@ function mapTurnsToUserMessages(
     const turnTime = parseEventTimestamp(turn.startedAt ?? null);
     // Nearest-preceding user message: the last one (in chronological/document
     // order) created at or before this turn started.
-    let targetIndex = -1;
-    for (let i = 0; i < userMessages.length; i += 1) {
-      if (userTimes[i] <= turnTime) targetIndex = i;
+    let targetIndex =
+      turn.id === "optimistic-computer-turn" ? userMessages.length - 1 : -1;
+    if (targetIndex < 0) {
+      for (let i = 0; i < userMessages.length; i += 1) {
+        if (userTimes[i] <= turnTime) targetIndex = i;
+      }
     }
     // A turn before every user message anchors to the earliest one.
     if (targetIndex < 0) targetIndex = 0;
     // Latest turn wins when several map to the same message.
-    map.set(userMessages[targetIndex].id, turn);
+    map.set(
+      userMessages[targetIndex].id,
+      withUserVisibleTurnTiming(turn, userMessages[targetIndex], messages),
+    );
   }
 
   return map;
+}
+
+function withUserVisibleTurnTiming(
+  turn: TaskThreadTurn,
+  userMessage: TaskThreadMessage,
+  messages: TaskThreadMessage[],
+): TaskThreadTurn {
+  const userIndex = messages.findIndex(
+    (message) => message.id === userMessage.id,
+  );
+  if (userIndex < 0) return turn;
+
+  const userTime = parseEventTimestamp(userMessage.createdAt ?? null);
+  const turnTime = parseEventTimestamp(turn.startedAt ?? null);
+  const displayStartedAt =
+    userTime > 0 && (turnTime === 0 || turnTime >= userTime)
+      ? userMessage.createdAt
+      : turn.startedAt;
+  const displayStartTime = parseEventTimestamp(displayStartedAt ?? null);
+  const assistantMessage = messages
+    .slice(userIndex + 1)
+    .find((message) => message.role.toUpperCase() === "ASSISTANT");
+  const assistantTime = parseEventTimestamp(assistantMessage?.createdAt ?? null);
+  const displayFinishedAt =
+    assistantMessage?.createdAt && assistantTime >= displayStartTime
+      ? assistantMessage.createdAt
+      : turn.finishedAt;
+
+  if (
+    displayStartedAt === turn.startedAt &&
+    displayFinishedAt === turn.finishedAt
+  ) {
+    return turn;
+  }
+
+  return {
+    ...turn,
+    displayStartedAt,
+    displayFinishedAt,
+  };
 }
 
 function withTurnResponseFallback(thread: TaskThread): TaskThreadMessage[] {

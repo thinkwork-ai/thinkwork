@@ -1,13 +1,13 @@
 /**
  * Wakeup Processor Lambda
  *
- * Runs on a 30-second EventBridge schedule. Polls `agent_wakeup_requests`
- * for queued work, claims it, creates a `scheduled_job_runs` record, dispatches
- * to AgentCore (or handles chat inline), and records the outcome.
+ * Runs on the EventBridge schedule declared in Terraform (currently once per
+ * minute). Polls `agent_wakeup_requests` for queued work, claims it, creates a
+ * `scheduled_job_runs` record, dispatches to AgentCore, and records the outcome.
  *
- * This is the **single execution path** for all agent invocations — chat,
- * timer heartbeats, thread assignment, comment triggers, approval decisions,
- * and on-demand wakeups all flow through here.
+ * Interactive chat should prefer `chat-agent-invoke` and use this queue only as
+ * a fallback/background path. Timer heartbeats, thread assignment, comment
+ * triggers, approval decisions, and on-demand wakeups still flow through here.
  */
 
 import { randomBytes } from "crypto";

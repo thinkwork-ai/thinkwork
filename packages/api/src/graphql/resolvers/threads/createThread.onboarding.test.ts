@@ -77,7 +77,7 @@ vi.mock("../../../lib/mentions/dispatch-agent-mentions.js", () => ({
 }));
 
 vi.mock("../../../lib/mentions/default-agent-routing.js", () => ({
-  dispatchDefaultAgentTurn: vi.fn(),
+  dispatchDefaultAgentChatTurn: vi.fn(),
 }));
 
 vi.mock("../../../lib/mentions/parse-message-mentions.js", () => ({

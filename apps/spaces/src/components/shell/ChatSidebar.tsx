@@ -231,7 +231,7 @@ export function ChatSidebar() {
   // The generic "Chats" section lists default-space threads, so its Thread list
   // scopes to that space rather than every thread in the tenant.
   const defaultSpaceId = useMemo(
-    () => spaces.find(isDefaultSpace)?.id,
+    () => selectChatsComposeSpaceId(spaces),
     [spaces],
   );
 
@@ -1014,6 +1014,21 @@ function groupSearchThreads(
   return Array.from(groups.values());
 }
 
+function selectChatsComposeSpaceId(spaces: SpaceNavSummary[]) {
+  return (
+    spaces.find((space) => hasSpaceMarker(space, "default"))?.id ??
+    spaces.find(isDefaultSpace)?.id
+  );
+}
+
+function hasSpaceMarker(space: SpaceNavSummary, marker: string) {
+  const normalizedMarker = marker.toLowerCase();
+  return (
+    space.slug?.toLowerCase() === normalizedMarker ||
+    space.name?.toLowerCase() === normalizedMarker
+  );
+}
+
 function orderPinnedThreads(
   threads: ChatThreadSummary[],
   optimisticOrder: readonly string[] | null,
@@ -1202,6 +1217,16 @@ function ThreadListSection({
           scopeSpaceName={scopeSpaceName}
           onMarkSectionRead={onMarkSectionRead}
         />
+        <Link
+          to="/new"
+          search={{ spaceId: scopeSpaceId }}
+          onClick={requestSpacesComposerFocus}
+          aria-label={`New thread in ${label}`}
+          title="New thread"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
+        >
+          <SquarePen className="size-3.5" />
+        </Link>
       </div>
       <CollapsibleContent>
         <SidebarGroupContent>

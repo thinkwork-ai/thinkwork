@@ -18,7 +18,7 @@ describe("createThread opening message mention routing", () => {
   it("routes opening messages to mentioned or default agents without double dispatch", () => {
     expect(source).toContain("hasOpeningAgentMentions");
     expect(source).toContain("dispatchAgentMentions");
-    expect(source).toContain("dispatchDefaultAgentTurn");
+    expect(source).toContain("dispatchDefaultAgentChatTurn");
     expect(source).toContain("parsedOpeningMentions.length === 0");
   });
 

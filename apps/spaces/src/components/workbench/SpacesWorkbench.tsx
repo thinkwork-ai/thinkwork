@@ -239,6 +239,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           title,
           content: trimmed,
           expectAssistantResponse: agentRequested !== false,
+          startedAt: new Date().toISOString(),
         });
       }
       navigateToCreatedThread(
