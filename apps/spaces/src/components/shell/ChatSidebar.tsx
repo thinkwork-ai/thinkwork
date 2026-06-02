@@ -1099,7 +1099,7 @@ function SectionHeaderControls({
           <button
             type="button"
             aria-label={`${label} options`}
-            className="absolute inset-0 flex size-7 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
+            className="absolute inset-0 flex size-7 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
           >
             <MoreHorizontal className="size-4" />
           </button>
@@ -1223,7 +1223,7 @@ function ThreadListSection({
           onClick={requestSpacesComposerFocus}
           aria-label={`New thread in ${label}`}
           title="New thread"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
         >
           <SquarePen className="size-3.5" />
         </Link>
@@ -1412,7 +1412,7 @@ function SpaceJumpMenu({
           type="button"
           aria-label="Open Space menu"
           className={cn(
-            "tw-new-thread-space-menu pointer-events-none absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+            "tw-new-thread-space-menu pointer-events-none absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 transition-opacity hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
           )}
         >
           <MoreHorizontal className="size-4" />
@@ -1580,7 +1580,7 @@ function SpaceThreadSection({
           onClick={requestSpacesComposerFocus}
           aria-label={`New thread in ${label}`}
           title="New thread"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
         >
           <SquarePen className="size-3.5" />
         </Link>
