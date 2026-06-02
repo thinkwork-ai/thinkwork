@@ -69,6 +69,7 @@ export interface LocalDesktopTurnPayload {
 
 export interface PiSdkSessionLike {
   prompt(text: string, options?: Record<string, unknown>): Promise<void>;
+  getLastAssistantText?: () => string | undefined;
   messages?: unknown[];
   state?: {
     messages?: unknown[];
@@ -351,8 +352,10 @@ export async function runLocalDesktopTurn(
       preparedSdkSession.session,
       preparedSdkSession.resolvedModelId,
     );
+    const assistantDetails = describeLastAssistantMessage(sessionMessages);
     logger.info("local Pi SDK prompt output captured", {
       outputChars: runResult.content.length,
+      ...(runResult.content.length === 0 ? assistantDetails : {}),
     });
     const changedFiles = await timings.measure("workspace_diff_ms", () =>
       collectDesktopWorkspaceChangedFiles({
@@ -2155,7 +2158,8 @@ function buildRunResult(
 ): RunAgentLoopResult {
   const sessionMessages = readPiSdkSessionMessages(session);
   const assistant = findLastAssistantMessage(sessionMessages);
-  const content = assistant ? assistantMessageText(assistant) : "";
+  const sdkText = session.getLastAssistantText?.()?.trim();
+  const content = sdkText || (assistant ? assistantMessageText(assistant) : "");
   const toolNames = collectToolNames(sessionMessages);
   const toolInvocations = toolNames.map((name, index) => ({
     id: `desktop-local-tool-${index + 1}`,
@@ -2459,6 +2463,23 @@ function assistantMessageText(message: unknown): string {
     })
     .filter(Boolean)
     .join("\n");
+}
+
+function describeLastAssistantMessage(
+  messages: unknown[],
+): Record<string, unknown> {
+  const assistant = readRecord(findLastAssistantMessage(messages));
+  if (!assistant) return { assistantFound: false };
+  const content = assistant.content;
+  return {
+    assistantFound: true,
+    assistantStopReason: stringValue(assistant.stopReason),
+    assistantContentTypes: Array.isArray(content)
+      ? content.map(
+          (block) => stringValue(readRecord(block)?.type) ?? typeof block,
+        )
+      : typeof content,
+  };
 }
 
 function collectToolNames(messages: unknown[]): string[] {

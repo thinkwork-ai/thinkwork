@@ -11,22 +11,23 @@ status: complete
 - Plan:
   `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
 - Target branch: `main`.
-- Current unit: U10 Post-deploy Desktop Pi full sweep.
-- Current branch: `codex/desktop-pi-evals-u10-rerun`.
-- Current worktree: `.Codex/worktrees/desktop-pi-evals-u10-rerun`.
+- Current unit: U11 Output-capture sweep and workspace remediation.
+- Current branch: `codex/desktop-pi-evals-u11-remediation`.
+- Current worktree: `.Codex/worktrees/desktop-pi-evals-u11-remediation`.
 
-| Unit                                              | Branch                                  | PR                                                           | State       | Notes                                                                                                   |
-| ------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
-| U1 Shared eval scoring core                       | `codex/desktop-pi-evals-u1-scoring`     | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | Merged      | Shared `@thinkwork/evals-core`; CI passed.                                                              |
-| U2 Desktop eval run API preparation and callbacks | `codex/desktop-pi-evals-u2-api`         | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | Merged      | Desktop provenance, preparation, callbacks; CI passed after dev migration drift was reconciled.         |
-| U3 Desktop IPC and sidecar eval execution         | `codex/desktop-pi-evals-u3-sidecar`     | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | Merged      | IPC bridge, sidecar eval runner, result callbacks; CI passed.                                           |
-| U4 Settings Evaluations Desktop Pi target         | `codex/desktop-pi-evals-u4-settings`    | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | Merged      | Settings target selection and Desktop Pi provenance; CI passed.                                         |
-| U5 Convert and harden catalog for Desktop Pi      | `codex/desktop-pi-evals-u5-catalog`     | [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965) | Merged      | Squash merged as `81fd1fb9`; catalog metadata/prose conversion, shape gate, and testing solution doc.   |
-| U6 Full-catalog proof, docs, and guardrails       | `codex/desktop-pi-evals-u6-proof`       | [#1966](https://github.com/thinkwork-ai/thinkwork/pull/1966) | Merged      | Squash merged as `e04adb7f`; focused proof passed and full-run prep cleanup deployed through Terraform. |
-| U7 Failure-by-failure workspace remediation loop  | `codex/desktop-pi-evals-u7-remediation` | [#1967](https://github.com/thinkwork-ai/thinkwork/pull/1967) | Merged      | Squash merged as `1272d460`; lazy per-case Desktop Pi session prep deployed through Terraform.          |
-| U8 Bounded Desktop Pi eval parallelism            | `codex/desktop-pi-evals-u8-parallel`    | [#1968](https://github.com/thinkwork-ai/thinkwork/pull/1968) | Merged      | Squash merged as `e60c6571`; parallel sidecar workers and local cancellation propagation.               |
-| U9 Full-catalog Desktop Pi sweep/remediation      | `codex/desktop-pi-evals-u9-full-sweep`  | [#1969](https://github.com/thinkwork-ai/thinkwork/pull/1969) | Merged      | Squash merged as `5c4df7e1`; concurrency default, partial-output capture, and workspace hardening.      |
-| U10 Post-deploy Desktop Pi full sweep             | `codex/desktop-pi-evals-u10-rerun`      | [#1970](https://github.com/thinkwork-ai/thinkwork/pull/1970) | In progress | Full sweep completed in 13m35s; patching SDK output capture before the next remediation pass.           |
+| Unit                                               | Branch                                   | PR                                                           | State       | Notes                                                                                                   |
+| -------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
+| U1 Shared eval scoring core                        | `codex/desktop-pi-evals-u1-scoring`      | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | Merged      | Shared `@thinkwork/evals-core`; CI passed.                                                              |
+| U2 Desktop eval run API preparation and callbacks  | `codex/desktop-pi-evals-u2-api`          | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | Merged      | Desktop provenance, preparation, callbacks; CI passed after dev migration drift was reconciled.         |
+| U3 Desktop IPC and sidecar eval execution          | `codex/desktop-pi-evals-u3-sidecar`      | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | Merged      | IPC bridge, sidecar eval runner, result callbacks; CI passed.                                           |
+| U4 Settings Evaluations Desktop Pi target          | `codex/desktop-pi-evals-u4-settings`     | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | Merged      | Settings target selection and Desktop Pi provenance; CI passed.                                         |
+| U5 Convert and harden catalog for Desktop Pi       | `codex/desktop-pi-evals-u5-catalog`      | [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965) | Merged      | Squash merged as `81fd1fb9`; catalog metadata/prose conversion, shape gate, and testing solution doc.   |
+| U6 Full-catalog proof, docs, and guardrails        | `codex/desktop-pi-evals-u6-proof`        | [#1966](https://github.com/thinkwork-ai/thinkwork/pull/1966) | Merged      | Squash merged as `e04adb7f`; focused proof passed and full-run prep cleanup deployed through Terraform. |
+| U7 Failure-by-failure workspace remediation loop   | `codex/desktop-pi-evals-u7-remediation`  | [#1967](https://github.com/thinkwork-ai/thinkwork/pull/1967) | Merged      | Squash merged as `1272d460`; lazy per-case Desktop Pi session prep deployed through Terraform.          |
+| U8 Bounded Desktop Pi eval parallelism             | `codex/desktop-pi-evals-u8-parallel`     | [#1968](https://github.com/thinkwork-ai/thinkwork/pull/1968) | Merged      | Squash merged as `e60c6571`; parallel sidecar workers and local cancellation propagation.               |
+| U9 Full-catalog Desktop Pi sweep/remediation       | `codex/desktop-pi-evals-u9-full-sweep`   | [#1969](https://github.com/thinkwork-ai/thinkwork/pull/1969) | Merged      | Squash merged as `5c4df7e1`; concurrency default, partial-output capture, and workspace hardening.      |
+| U10 Post-deploy Desktop Pi full sweep              | `codex/desktop-pi-evals-u10-rerun`       | [#1970](https://github.com/thinkwork-ai/thinkwork/pull/1970) | Merged      | Squash merged as `72bea28f`; full sweep completed in 13m35s and output capture was hardened.            |
+| U11 Output-capture sweep and workspace remediation | `codex/desktop-pi-evals-u11-remediation` | [#1971](https://github.com/thinkwork-ai/thinkwork/pull/1971) | In progress | Full sweep completed in 9m18s; all failures still had empty output, so runner capture is being fixed.   |
 
 ### Progress Log
 
@@ -236,6 +237,45 @@ status: complete
   counts without logging response content.
 - Opened U10 PR
   [#1970](https://github.com/thinkwork-ai/thinkwork/pull/1970).
+- U10 PR
+  [#1970](https://github.com/thinkwork-ai/thinkwork/pull/1970) passed
+  required PR checks (`cla`, `lint`, `verify`, `typecheck`, `test`) and was
+  squash merged as `72bea28fd4803578fddf4260f0b40e4f14e1f7d1`; the remote
+  branch was deleted and the local worktree/branch were removed.
+- U10 post-merge `main` workflows passed `Lint`, `Supply Chain`, `Typecheck`,
+  `Test`, and `Deploy`.
+- Synced from `origin/main` and created isolated U11 worktree
+  `.Codex/worktrees/desktop-pi-evals-u11-remediation` on branch
+  `codex/desktop-pi-evals-u11-remediation`.
+- U11 live Desktop Pi full sweep completed through the local desktop sidecar
+  runner and deployed Desktop eval APIs. Run
+  `18936f4b-dc6a-4e20-9ae6-8eb229fbba44` evaluated all 189 cases with
+  concurrency 8 in about 9m18s. Result: 118 passed, 71 failed, 62.43% pass
+  rate.
+- Category split for run `18936f4b-dc6a-4e20-9ae6-8eb229fbba44`:
+  `red-team-data-boundary` 29/48 pass with 19 fail,
+  `red-team-prompt-injection` 32/48 pass with 16 fail,
+  `red-team-safety-scope` 29/41 pass with 12 fail, and
+  `red-team-tool-misuse` 28/52 pass with 24 fail.
+- U11 failure triage found all 71 failures had empty `actualOutput`. Since
+  every non-empty result passed in this run, prompt/workspace remediation is
+  blocked on one more runner capture fix; otherwise we would tune workspace
+  policy against missing telemetry rather than real Desktop Pi behavior.
+- Patched the Desktop Pi local turn runner to prefer the Pi SDK's
+  `getLastAssistantText()` public accessor before falling back to message
+  parsing. This covers tool-heavy turns where the public SDK tracks final
+  assistant text but the message array's last assistant entry only exposes
+  tool-use blocks.
+- Added empty-output diagnostics that log only assistant block types and stop
+  reason when no output is captured. The logs remain non-content and
+  non-secret, but will identify future SDK message shapes quickly.
+- Attempted a small 8-case live subset proof for cases that failed blank in
+  run `18936f4b-dc6a-4e20-9ae6-8eb229fbba44`. Plain Node could not access
+  Electron `safeStorage`; the Electron ESM probe resolved the loader but stalled
+  before preparing a run, so it was terminated and temp scripts were removed.
+  No subset run was created.
+- Opened U11 PR
+  [#1971](https://github.com/thinkwork-ai/thinkwork/pull/1971).
 
 ### Verification Log
 
@@ -319,11 +359,20 @@ status: complete
     block output-capture regressions.
 - `pnpm --filter @thinkwork/desktop typecheck` - passed.
 - `git diff --check` - passed.
+- U11 live Desktop Pi run
+  `18936f4b-dc6a-4e20-9ae6-8eb229fbba44` - completed: 189/189 cases terminal,
+  118 pass, 71 fail, 62.43% pass rate, about 9m18s runtime. Detailed results
+  saved outside the repo at `/tmp/desktop-pi-eval-run-18936f4b.json`.
+- `pnpm --filter @thinkwork/desktop test -- local-turn-runner.test.ts eval-runner.test.ts`
+  - passed after adding the SDK `getLastAssistantText()` output-capture
+    regression for tool-only assistant message blocks.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- `git diff --check` - passed.
 
 ### Blockers
 
-None currently. U10 has completed the full live sweep and is fixing the
-assistant-output capture path before opening the PR.
+None currently. U11 is fixing the remaining Desktop Pi output-capture gap
+before the next full sweep and workspace-prompt remediation pass.
 
 ## Workspace Architecture Guidance Docs - 2026-06-01
 
