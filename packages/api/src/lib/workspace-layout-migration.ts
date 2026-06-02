@@ -19,6 +19,7 @@ import {
   normalizeWorkspaceFolderName,
   workspaceFolderName,
 } from "@thinkwork/database-pg/utils/workspace-folder-name";
+import { shouldRenderWorkspaceSourcePath } from "./workspace-renderer.js";
 import { renderWorkspaceTuple } from "./workspace-renderer/compose-tuple.js";
 
 const REGION =
@@ -660,6 +661,25 @@ function legacySpaceRelativePath(relativePath: string): string | null {
   return relativePath;
 }
 
+function runtimeSourcePath(relativePath: string): string {
+  if (relativePath.startsWith("source/")) {
+    return relativePath.slice("source/".length);
+  }
+  return relativePath.startsWith("workspace/")
+    ? relativePath.slice("workspace/".length)
+    : relativePath;
+}
+
+function isRenderableSpaceSourcePath(relativePath: string): boolean {
+  const sourcePath = runtimeSourcePath(relativePath);
+  return (
+    shouldRenderWorkspaceSourcePath(relativePath) &&
+    sourcePath !== "effective-policy.json" &&
+    sourcePath !== "TOOLS.md" &&
+    sourcePath !== "MCP.md"
+  );
+}
+
 function legacyRenderedUserRelativePath(relativePath: string): string | null {
   if (relativePath === "USER.md" || relativePath.startsWith("memory/")) {
     return relativePath;
@@ -923,6 +943,29 @@ export async function planWorkspaceLayoutTenant(input: {
     goalPrefixAssignments.length > 0 ||
     plannedCopies.length > 0 ||
     deletePrefixes.some((deletePrefix) => deletePrefix.keys.length > 0);
+  const renderableSpaceById = new Map(
+    await Promise.all(
+      spaceFolders.resolved.map(async (space) => {
+        const spacePrefix = spaceSourcePrefix(tenantSlug, space.folder);
+        if (space.folder === "default") return [space.row.id, true] as const;
+        const existingObjects = await input.objectStore.listObjects({
+          bucket: input.bucket,
+          prefix: spacePrefix,
+        });
+        const hasExistingSource = existingObjects.some((object) =>
+          isRenderableSpaceSourcePath(object.key.slice(spacePrefix.length)),
+        );
+        const hasPlannedSource = plannedCopies.some(
+          (copy) =>
+            copy.destinationPrefix === spacePrefix &&
+            isRenderableSpaceSourcePath(
+              copy.destinationKey.slice(spacePrefix.length),
+            ),
+        );
+        return [space.row.id, hasExistingSource || hasPlannedSource] as const;
+      }),
+    ),
+  );
   const threadManifestChecks = await Promise.all(
     threadFolders.resolved.map(async (thread) => {
       const threadPrefix = threadRuntimePrefix(tenantSlug, thread.folder);
@@ -942,7 +985,9 @@ export async function planWorkspaceLayoutTenant(input: {
   const plannedRenders = threadManifestChecks
     .filter(
       ({ thread, hasHydrateManifest }) =>
-        thread.row.agentId && (tenantHasLayoutChanges || !hasHydrateManifest),
+        thread.row.agentId &&
+        renderableSpaceById.get(thread.row.spaceId) &&
+        (tenantHasLayoutChanges || !hasHydrateManifest),
     )
     .map(({ thread, threadPrefix }) => ({
       tenantId: input.snapshot.tenant.id,

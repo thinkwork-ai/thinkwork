@@ -434,6 +434,7 @@ describe("migrate-workspace-layout", () => {
   it("applies copies, DB assignments, renders thread runtimes, and deletes retired prefixes", async () => {
     const store = FakeObjectStore.from([
       ["tenants/acme/agents/marco/workspace/AGENTS.md", { etag: "a", size: 1 }],
+      ["tenants/acme/spaces/sales/SPACE.md", { etag: "s", size: 1 }],
       ["tenants/acme/threads/thread-1/DECISIONS.md", { etag: "t", size: 1 }],
       [
         "tenants/acme/rendered/marco/sales/eric/AGENTS.md",
@@ -643,6 +644,40 @@ describe("migrate-workspace-layout", () => {
         }),
       ]),
     );
+  });
+
+  it("skips thread renders for non-default spaces with no renderable source files", async () => {
+    const store = FakeObjectStore.from([
+      ["tenants/acme/agents/marco/workspace/AGENTS.md", { etag: "a", size: 1 }],
+    ]);
+    const repository = new FakeRepository(SNAPSHOT);
+    const renderer = {
+      render: vi.fn(async () => {
+        throw new Error("renderer should not be called");
+      }),
+    };
+
+    const result = await runWorkspaceLayoutMigration(
+      {
+        mode: "apply",
+        bucket: "workspace-bucket",
+      },
+      {
+        objectStore: store,
+        repository,
+        renderer,
+      },
+    );
+
+    expect(result.summary.errors).toBe(0);
+    expect(result.summary.renderedThreads).toBe(0);
+    expect(renderer.render).not.toHaveBeenCalled();
+    expect(store.copied).toEqual([
+      {
+        sourceKey: "tenants/acme/agents/marco/workspace/AGENTS.md",
+        destinationKey: "tenants/acme/agents/marco/AGENTS.md",
+      },
+    ]);
   });
 
   it("returns noop once folder names, thread manifest, and new layout are present", async () => {
