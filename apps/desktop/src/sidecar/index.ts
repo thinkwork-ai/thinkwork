@@ -18,7 +18,9 @@ const parentPort =
   (process as NodeJS.Process & { parentPort?: ParentPort | null }).parentPort ??
   null;
 const DEFAULT_TURN_TIMEOUT_MS = 90_000;
-const DEFAULT_EVAL_CONCURRENCY = 8;
+const DEFAULT_EVAL_CONCURRENCY = 4;
+const DEFAULT_EVAL_MAX_ATTEMPTS = 2;
+const DEFAULT_EVAL_RETRY_DELAY_MS = 750;
 
 if (!parentPort) {
   console.error("[pi-sidecar] missing Electron parentPort");
@@ -174,6 +176,8 @@ if (!parentPort) {
         logger,
         turnTimeoutMs: resolveTurnTimeoutMs(),
         evalConcurrency: resolveEvalConcurrency(),
+        evalMaxAttempts: resolveEvalMaxAttempts(),
+        evalRetryDelayMs: resolveEvalRetryDelayMs(),
         debug: isLocalPiDebugEnabled(),
       });
       parentPort?.postMessage({
@@ -210,6 +214,22 @@ function resolveEvalConcurrency(): number {
   return Number.isFinite(parsed) && parsed > 0
     ? Math.min(8, parsed)
     : DEFAULT_EVAL_CONCURRENCY;
+}
+
+function resolveEvalMaxAttempts(): number {
+  const raw = process.env.THINKWORK_DESKTOP_EVAL_MAX_ATTEMPTS;
+  const parsed = raw ? Number.parseInt(raw, 10) : DEFAULT_EVAL_MAX_ATTEMPTS;
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.min(3, parsed)
+    : DEFAULT_EVAL_MAX_ATTEMPTS;
+}
+
+function resolveEvalRetryDelayMs(): number {
+  const raw = process.env.THINKWORK_DESKTOP_EVAL_RETRY_DELAY_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : DEFAULT_EVAL_RETRY_DELAY_MS;
+  return Number.isFinite(parsed) && parsed >= 0
+    ? parsed
+    : DEFAULT_EVAL_RETRY_DELAY_MS;
 }
 
 function isLocalPiDebugEnabled(): boolean {
