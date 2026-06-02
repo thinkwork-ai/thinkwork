@@ -37,6 +37,7 @@ const { evalRuns, evalResults, evalTestCases, spaces, spaceMembers } = schema;
 
 const TOKEN_PREFIX = "dpe_";
 const DEFAULT_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
+export const DESKTOP_EVAL_SESSION_PREP_CONCURRENCY = 8;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -141,6 +142,11 @@ export interface DesktopEvalRunsDeps {
     totalTests: number;
     now: Date;
   }): Promise<DesktopEvalRunRow>;
+  updateRunPreparationFailure(input: {
+    run: DesktopEvalRunRow;
+    errorMessage: string;
+    now: Date;
+  }): Promise<void>;
   prepareCaseSession(input: {
     auth: AuthResult;
     agentId: string;
@@ -348,11 +354,13 @@ async function handleStartRun(
     now,
   });
   const sessions = new Map<string, PreparedLocalPiRuntimeSession>();
-  await Promise.all(
-    cases.map(async (testCase) => {
-      sessions.set(
-        testCase.id,
-        await deps.prepareCaseSession({
+  try {
+    const preparedSessions = await mapWithConcurrency(
+      cases,
+      DESKTOP_EVAL_SESSION_PREP_CONCURRENCY,
+      async (testCase) => ({
+        testCaseId: testCase.id,
+        session: await deps.prepareCaseSession({
           auth,
           agentId: agent.id,
           spaceId: space.id,
@@ -360,9 +368,21 @@ async function handleStartRun(
           testCaseId: testCase.id,
           query: testCase.query,
         }),
-      );
-    }),
-  );
+      }),
+    );
+    for (const prepared of preparedSessions) {
+      sessions.set(prepared.testCaseId, prepared.session);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await deps.updateRunPreparationFailure({
+      run,
+      errorMessage: message,
+      now: deps.now(),
+    });
+    await deps.notifyRunUpdate({ run, status: "failed" });
+    throw err;
+  }
 
   await deps.notifyRunUpdate({ run, status: run.status });
 
@@ -535,6 +555,22 @@ function defaultDesktopEvalRunsDeps(): DesktopEvalRunsDeps {
         userMessage: input.query,
       });
     },
+    async updateRunPreparationFailure(input) {
+      await db
+        .update(evalRuns)
+        .set({
+          status: "failed",
+          completed_at: input.now,
+          error_message: input.errorMessage,
+          passed: 0,
+          failed: 0,
+          pass_rate: "0.0000",
+          cost_usd: "0.000000",
+        })
+        .where(
+          and(eq(evalRuns.id, input.run.id), eq(evalRuns.status, "running")),
+        );
+    },
     async loadRun(runId) {
       const [run] = await db
         .select()
@@ -603,6 +639,29 @@ function defaultDesktopEvalRunsDeps(): DesktopEvalRunsDeps {
     tokenSecret: () =>
       process.env.API_AUTH_SECRET || process.env.THINKWORK_API_SECRET || "",
   };
+}
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<U>,
+): Promise<U[]> {
+  if (items.length === 0) return [];
+  const width = Math.max(1, Math.min(concurrency, items.length));
+  const results = new Array<U>(items.length);
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: width }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await worker(items[index], index);
+      }
+    }),
+  );
+
+  return results;
 }
 
 async function resolveDesktopEvalSpace(input: {

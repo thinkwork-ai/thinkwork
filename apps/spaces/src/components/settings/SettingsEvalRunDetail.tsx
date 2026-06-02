@@ -95,6 +95,38 @@ interface EvalResultRow {
   createdAt: string;
 }
 
+type CategoryPassRateResult = Pick<EvalResultRow, "category" | "status">;
+
+function isScoredResultStatus(status: string): boolean {
+  return ["pass", "fail", "completed", "failed", "error"].includes(status);
+}
+
+function isPassingResultStatus(status: string): boolean {
+  return status === "pass" || status === "completed";
+}
+
+export function calculateCategoryPassRates(
+  results: CategoryPassRateResult[],
+): Record<string, number> {
+  const totals = new Map<string, { passed: number; completed: number }>();
+
+  for (const result of results) {
+    if (!result.category || !isScoredResultStatus(result.status)) continue;
+
+    const current = totals.get(result.category) ?? { passed: 0, completed: 0 };
+    current.completed += 1;
+    if (isPassingResultStatus(result.status)) current.passed += 1;
+    totals.set(result.category, current);
+  }
+
+  return Object.fromEntries(
+    [...totals.entries()].map(([category, total]) => [
+      category,
+      total.completed > 0 ? total.passed / total.completed : -1,
+    ]),
+  );
+}
+
 function statusBadge(status: string) {
   switch (status) {
     case "pass":
@@ -261,16 +293,8 @@ export function SettingsEvalRunDetail() {
   );
 
   const categoryPassRates = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const cat of categories) {
-      const catResults = runResults.filter(
-        (r) => r.category === cat && r.status !== "waiting",
-      );
-      const catPassed = catResults.filter((r) => r.status === "pass").length;
-      map[cat] = catResults.length > 0 ? catPassed / catResults.length : -1;
-    }
-    return map;
-  }, [categories, runResults]);
+    return calculateCategoryPassRates(runResults);
+  }, [runResults]);
 
   const filteredResults = categoryFilter
     ? runResults.filter((r) => r.category === categoryFilter)

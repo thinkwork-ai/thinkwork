@@ -59,6 +59,10 @@ export default defineConfig(async (env) => {
     main: {
       resolve: {
         alias: {
+          "@thinkwork/evals-core": resolve(
+            rootDir,
+            "../../packages/evals-core/src/index.ts",
+          ),
           "@thinkwork/pi-runtime-core": resolve(
             rootDir,
             "../../packages/pi-runtime-core/src/index.ts",
@@ -81,6 +85,7 @@ export default defineConfig(async (env) => {
         externalizeDeps: {
           exclude: [
             "@thinkwork/desktop-ipc",
+            "@thinkwork/evals-core",
             "@thinkwork/pi-extensions",
             "@thinkwork/pi-runtime-core",
           ],

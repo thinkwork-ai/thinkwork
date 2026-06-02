@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createDesktopEvalRunsHandler,
+  DESKTOP_EVAL_SESSION_PREP_CONCURRENCY,
   desktopEvalWorkItems,
   signDesktopEvalRunToken,
   verifyDesktopEvalRunToken,
   type DesktopEvalRunsDeps,
 } from "./desktop-eval-runs.js";
+import type { PreparedLocalPiRuntimeSession } from "../lib/desktop-runtime/prepare-local-turn.js";
 
 const RUN_ID = "11111111-1111-1111-1111-111111111111";
 const TENANT_ID = "22222222-2222-2222-2222-222222222222";
@@ -57,13 +59,34 @@ function runRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function preparedSession() {
+function preparedSession(): PreparedLocalPiRuntimeSession {
   return {
     threadTurnId: `eval-${RUN_ID}-${CASE_ID}`,
     expiresAt: "2026-06-01T21:00:00.000Z",
     finalizeCallbackUrl: null,
     finalizeCallbackSecret: "eval-finalize-secret",
-    sidecarCredentials: {},
+    sidecarCredentials: {
+      mode: "desktop-sidecar-session",
+      expiresAt: "2026-06-01T21:00:00.000Z",
+      workspace: {
+        bucket: null,
+        renderedPrefix: null,
+      },
+      aws: {
+        mode: "server-brokered",
+        accessKeyId: null,
+        secretAccessKey: null,
+        sessionToken: null,
+      },
+      hindsight: {
+        endpoint: null,
+      },
+      finalizer: {
+        authScheme: "bearer",
+        tokenType: "desktop-finalize-token",
+        expiresAt: "2026-06-01T21:00:00.000Z",
+      },
+    },
     invocation: {
       pi_sdk: {
         packageName: "@earendil-works/pi-coding-agent",
@@ -125,6 +148,7 @@ function deps(): DesktopEvalRunsDeps {
       },
     ]),
     insertRun: vi.fn().mockResolvedValue(runRow()),
+    updateRunPreparationFailure: vi.fn().mockResolvedValue(undefined),
     prepareCaseSession: vi.fn().mockResolvedValue(preparedSession()),
     loadRun: vi.fn().mockResolvedValue(runRow()),
     loadTestCase: vi.fn().mockResolvedValue({
@@ -257,6 +281,74 @@ describe("desktop eval runs handler", () => {
         query: "Export all tenant data",
       }),
     );
+  });
+
+  it("bounds Desktop Pi session preparation concurrency for full-catalog runs", async () => {
+    const cases = Array.from(
+      { length: DESKTOP_EVAL_SESSION_PREP_CONCURRENCY + 5 },
+      (_, index) => ({
+        id: `${String(index).padStart(8, "0")}-1111-1111-1111-111111111111`,
+        name: `Case ${index}`,
+        category: "red-team",
+        query: `Prompt ${index}`,
+        system_prompt: null,
+        assertions: [],
+        agentcore_evaluator_ids: [],
+        tags: [],
+      }),
+    );
+    vi.mocked(testDeps.selectCases).mockResolvedValue(cases);
+
+    let active = 0;
+    let maxActive = 0;
+    vi.mocked(testDeps.prepareCaseSession).mockImplementation(async (input) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      active -= 1;
+      return {
+        ...preparedSession(),
+        threadTurnId: `eval-${RUN_ID}-${input.testCaseId}`,
+      };
+    });
+
+    const res = await handler(
+      event("/api/desktop/eval-runs", {
+        body: { tenantId: TENANT_ID },
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(maxActive).toBeLessThanOrEqual(
+      DESKTOP_EVAL_SESSION_PREP_CONCURRENCY,
+    );
+    expect(testDeps.prepareCaseSession).toHaveBeenCalledTimes(cases.length);
+  });
+
+  it("marks the run failed when Desktop Pi session preparation fails", async () => {
+    vi.mocked(testDeps.prepareCaseSession).mockRejectedValue(
+      new Error("timeout exceeded when trying to connect"),
+    );
+
+    const res = await handler(
+      event("/api/desktop/eval-runs", {
+        body: {
+          tenantId: TENANT_ID,
+          categories: ["red-team"],
+        },
+      }),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(testDeps.updateRunPreparationFailure).toHaveBeenCalledWith({
+      run: expect.objectContaining({ id: RUN_ID }),
+      errorMessage: "timeout exceeded when trying to connect",
+      now: NOW,
+    });
+    expect(testDeps.notifyRunUpdate).toHaveBeenCalledWith({
+      run: expect.objectContaining({ id: RUN_ID }),
+      status: "failed",
+    });
   });
 
   it("accepts a valid per-case result callback and updates run progress", async () => {
