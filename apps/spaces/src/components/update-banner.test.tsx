@@ -220,8 +220,6 @@ function createBridge(state: UpdateState): ThinkworkBridge {
     raiseThreadNotification: vi.fn(),
     onOpenThread: vi.fn(() => () => {}),
     onWindowFocusChange: vi.fn(() => () => {}),
-    readWorkspaceTree: vi.fn(async () => ({ status: "empty" as const })),
-    readWorkspaceFile: vi.fn(async () => ({ status: "vanished" as const })),
     setNativeTheme: vi.fn(),
   };
 }

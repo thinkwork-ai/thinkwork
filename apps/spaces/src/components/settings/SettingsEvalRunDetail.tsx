@@ -12,8 +12,8 @@ import {
   Activity,
   ChevronDown,
   FileText,
+  History,
   Loader2,
-  MonitorCog,
   Pencil,
   Square,
   Trash2,
@@ -53,11 +53,6 @@ import {
   EvalTestCaseQuery,
   OnEvalRunUpdatedSubscription,
 } from "@/lib/evaluation-queries";
-import {
-  forgetDesktopPiEvalRequest,
-  getDesktopPiEvalRequestId,
-} from "@/lib/desktop-pi-eval-requests";
-import { getDesktopBridge } from "@/lib/desktop-runtime";
 import { cn, relativeTime } from "@/lib/utils";
 import {
   canEditEvalResult,
@@ -275,7 +270,7 @@ export function SettingsEvalRunDetail() {
 
   // Poll every 3s while running
   const runDetail = runResult.data?.evalRun;
-  const isDesktopPiRun = runDetail
+  const isLegacyDesktopRun = runDetail
     ? isDesktopPiEvalRunProvenance(runDetail)
     : false;
   const isRunning =
@@ -315,21 +310,10 @@ export function SettingsEvalRunDetail() {
   }, [deleteRun, navigate, runId]);
 
   const handleCancel = useCallback(async () => {
-    if (isDesktopPiRun) {
-      const requestId = getDesktopPiEvalRequestId(runId);
-      if (requestId) {
-        try {
-          await getDesktopBridge()?.pi?.cancelEvalRun({ requestId });
-        } catch (error) {
-          console.warn("[desktop-pi-evals] failed to cancel local run", error);
-        }
-        forgetDesktopPiEvalRequest(runId);
-      }
-    }
     const result = await cancelRun({ id: runId });
     if (result.error) toast.error("Failed to cancel: " + result.error.message);
     else toast.success("Evaluation cancelled");
-  }, [cancelRun, isDesktopPiRun, runId]);
+  }, [cancelRun, runId]);
 
   const completed = (runDetail?.passed ?? 0) + (runDetail?.failed ?? 0);
   const passRate =
@@ -359,13 +343,13 @@ export function SettingsEvalRunDetail() {
     action: runDetail ? (
       <div className="flex items-center gap-2">
         {statusBadge(runDetail.status)}
-        {isDesktopPiRun && (
+        {isLegacyDesktopRun && (
           <Badge
             variant="secondary"
-            className="gap-1 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            className="gap-1 bg-slate-500/15 text-slate-600 dark:text-slate-300"
           >
-            <MonitorCog className="h-3 w-3" />
-            Desktop Pi
+            <History className="h-3 w-3" />
+            Legacy run
           </Badge>
         )}
         <span className="text-sm text-muted-foreground tabular-nums">

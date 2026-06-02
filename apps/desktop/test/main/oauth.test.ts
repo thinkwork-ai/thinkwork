@@ -15,7 +15,6 @@ const env = {
   desktopChannel: "dev",
   desktopProductName: "ThinkWork Spaces",
   desktopAppId: "ai.thinkwork.spaces.desktop.dev",
-  desktopLocalPiEnabled: true,
   deepLinkScheme: null,
   rendererUrl: null,
   apiUrl: "https://api.example.test",

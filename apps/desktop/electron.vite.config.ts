@@ -9,7 +9,6 @@ const spacesDir = resolve(rootDir, "../spaces");
 const DESKTOP_BUILD_ENV_KEYS = [
   "THINKWORK_DESKTOP_APP_ID",
   "THINKWORK_DESKTOP_CHANNEL",
-  "THINKWORK_DESKTOP_LOCAL_PI_ENABLED",
   "THINKWORK_DESKTOP_PRODUCT_NAME",
   "THINKWORK_DESKTOP_SCHEME",
   "THINKWORK_DESKTOP_VERSION",
@@ -57,22 +56,6 @@ export default defineConfig(async (env) => {
 
   return {
     main: {
-      resolve: {
-        alias: {
-          "@thinkwork/evals-core": resolve(
-            rootDir,
-            "../../packages/evals-core/src/index.ts",
-          ),
-          "@thinkwork/pi-runtime-core": resolve(
-            rootDir,
-            "../../packages/pi-runtime-core/src/index.ts",
-          ),
-          "@thinkwork/pi-extensions": resolve(
-            rootDir,
-            "../../packages/pi-extensions/src/index.ts",
-          ),
-        },
-      },
       define: {
         __THINKWORK_APPLE_TEAM_ID__: JSON.stringify(
           process.env.APPLE_TEAM_ID ??
@@ -83,18 +66,12 @@ export default defineConfig(async (env) => {
       },
       build: {
         externalizeDeps: {
-          exclude: [
-            "@thinkwork/desktop-ipc",
-            "@thinkwork/evals-core",
-            "@thinkwork/pi-extensions",
-            "@thinkwork/pi-runtime-core",
-          ],
+          exclude: ["@thinkwork/desktop-ipc"],
         },
         outDir: "out/main",
         rollupOptions: {
           input: {
             index: resolve(rootDir, "src/main/index.ts"),
-            "pi-sidecar": resolve(rootDir, "src/sidecar/index.ts"),
           },
         },
       },

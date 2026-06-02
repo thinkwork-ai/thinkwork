@@ -3,8 +3,6 @@ import {
   ChannelSchemas,
   DeepLinkCallbackSchema,
   OpenThreadEventSchema,
-  PiDiagnosticEventSchema,
-  PiSidecarStatusSchema,
   RaiseThreadNotificationRequestSchema,
   UpdateStateSchema,
   UpdateStatusSchema,
@@ -136,111 +134,10 @@ describe("desktop IPC schemas", () => {
       ChannelSchemas.reportInstallOutcome.response.parse(undefined),
     ).toBeUndefined();
 
-    expect(
-      ChannelSchemas.getPiStatus.response.parse({
-        status: "healthy",
-        pid: 12345,
-        version: "0.1.0",
-        restartCount: 0,
-        startedAt: "2026-05-28T00:00:00.000Z",
-        updatedAt: "2026-05-28T00:00:01.000Z",
-        lastExitCode: null,
-        lastError: null,
-      }),
-    ).toMatchObject({
-      status: "healthy",
-      pid: 12345,
-      version: "0.1.0",
-    });
-    expect(
-      ChannelSchemas.startPiTurn.request.parse({
-        agentId: "agent-1",
-        threadId: "thread-1",
-        messageId: "message-1",
-        userMessage: "Plan the next step",
-        messageAttachments: [
-          {
-            attachmentId: "attachment-1",
-            s3Key: "tenants/t/attachments/a",
-            name: "brief.md",
-            mimeType: "text/markdown",
-            sizeBytes: 42,
-          },
-        ],
-      }),
-    ).toMatchObject({
-      agentId: "agent-1",
-      threadId: "thread-1",
-      userMessage: "Plan the next step",
-    });
-    expect(
-      ChannelSchemas.startPiTurn.response.parse({
-        accepted: true,
-        requestId: "request-1",
-      }),
-    ).toEqual({ accepted: true, requestId: "request-1" });
-    expect(
-      ChannelSchemas.cancelPiTurn.request.parse({
-        requestId: "request-1",
-      }),
-    ).toEqual({ requestId: "request-1" });
-    expect(
-      ChannelSchemas.cancelPiTurn.response.parse({
-        cancelled: true,
-      }),
-    ).toEqual({ cancelled: true });
-    expect(
-      ChannelSchemas.startPiEvalRun.request.parse({
-        tenantId: "tenant-1",
-        categories: ["red-team"],
-        testCaseIds: ["case-1"],
-        model: "desktop-local-pi",
-        spaceId: "space-1",
-        parallelThreads: 3,
-      }),
-    ).toMatchObject({
-      tenantId: "tenant-1",
-      categories: ["red-team"],
-      parallelThreads: 3,
-    });
-    expect(
-      ChannelSchemas.startPiEvalRun.response.parse({
-        accepted: true,
-        requestId: "request-1",
-        runId: "run-1",
-        totalTests: 12,
-      }),
-    ).toEqual({
-      accepted: true,
-      requestId: "request-1",
-      runId: "run-1",
-      totalTests: 12,
-    });
-    expect(
-      ChannelSchemas.cancelPiEvalRun.request.parse({
-        requestId: "request-1",
-      }),
-    ).toEqual({ requestId: "request-1" });
-    expect(
-      ChannelSchemas.cancelPiEvalRun.response.parse({
-        cancelled: true,
-      }),
-    ).toEqual({ cancelled: true });
-    expect(
-      PiDiagnosticEventSchema.parse({
-        level: "info",
-        message: "local Pi turn sent to sidecar",
-        emittedAt: "2026-05-28T20:53:00.000Z",
-        source: "sidecar",
-        requestId: "request-1",
-        threadId: "thread-1",
-        threadTurnId: "turn-1",
-      }),
-    ).toMatchObject({
-      level: "info",
-      source: "sidecar",
-      threadId: "thread-1",
-    });
+    expect(ChannelSchemas).not.toHaveProperty("getPiStatus");
+    expect(ChannelSchemas).not.toHaveProperty("startPiTurn");
+    expect(ChannelSchemas).not.toHaveProperty("prewarmPiWorkspace");
+    expect(ChannelSchemas).not.toHaveProperty("startPiEvalRun");
   });
 
   it("rejects empty objects where fields are required", () => {
@@ -251,19 +148,6 @@ describe("desktop IPC schemas", () => {
     ).toThrow();
     expect(() =>
       ChannelSchemas.reportInstallOutcome.request.parse({}),
-    ).toThrow();
-    expect(() =>
-      ChannelSchemas.startPiTurn.request.parse({
-        agentId: "agent-1",
-        threadId: "thread-1",
-        userMessage: "hello",
-        sidecarCredentials: { accessKeyId: "nope" },
-      }),
-    ).toThrow();
-    expect(() =>
-      ChannelSchemas.startPiEvalRun.request.parse({
-        categories: ["red-team"],
-      }),
     ).toThrow();
   });
 
@@ -281,23 +165,6 @@ describe("desktop IPC schemas", () => {
     for (const status of UpdateStatusSchema.options) {
       const state: UpdateState = { ...updateState, status };
       expect(UpdateStateSchema.parse(state)).toEqual(state);
-    }
-  });
-
-  it("accepts every Pi sidecar status", () => {
-    for (const status of PiSidecarStatusSchema.options) {
-      expect(
-        ChannelSchemas.getPiStatus.response.parse({
-          status,
-          pid: null,
-          version: null,
-          restartCount: 1,
-          startedAt: null,
-          updatedAt: "2026-05-28T00:00:00.000Z",
-          lastExitCode: null,
-          lastError: null,
-        }).status,
-      ).toBe(status);
     }
   });
 
@@ -424,107 +291,5 @@ describe("desktop IPC handler guards", () => {
     expect(() =>
       rateLimit({ key: "start-oauth", intervalMs: 2_000, now: () => 3_000 }),
     ).not.toThrow();
-  });
-});
-
-describe("local workspace inspector schemas", () => {
-  it("parses each tree response status variant", () => {
-    expect(
-      ChannelSchemas.readWorkspaceTree.request.parse(undefined),
-    ).toBeUndefined();
-    expect(
-      ChannelSchemas.readWorkspaceTree.response.parse({
-        status: "ok",
-        truncated: false,
-        tree: [
-          {
-            name: "dev",
-            path: "dev",
-            kind: "dir",
-            children: [
-              { name: "GOAL.md", path: "dev/GOAL.md", kind: "file" },
-              {
-                name: "skills",
-                path: "dev/skills",
-                kind: "dir",
-                truncated: true,
-              },
-            ],
-          },
-        ],
-      }),
-    ).toMatchObject({ status: "ok", truncated: false });
-    expect(
-      ChannelSchemas.readWorkspaceTree.response.parse({ status: "empty" }),
-    ).toEqual({ status: "empty" });
-    expect(
-      ChannelSchemas.readWorkspaceTree.response.parse({
-        status: "error",
-        code: "EACCES",
-      }),
-    ).toEqual({ status: "error", code: "EACCES" });
-  });
-
-  it("rejects malformed tree responses", () => {
-    expect(() =>
-      ChannelSchemas.readWorkspaceTree.response.parse({ status: "ok" }),
-    ).toThrow();
-    expect(() =>
-      ChannelSchemas.readWorkspaceTree.response.parse({ status: "nope" }),
-    ).toThrow();
-    expect(() =>
-      ChannelSchemas.readWorkspaceTree.response.parse({
-        status: "ok",
-        truncated: false,
-        tree: [{ name: "x", path: "x", kind: "symlink" }],
-      }),
-    ).toThrow();
-  });
-
-  it("parses each file response status variant", () => {
-    expect(
-      ChannelSchemas.readWorkspaceFile.request.parse({ path: "dev/GOAL.md" }),
-    ).toEqual({ path: "dev/GOAL.md" });
-    expect(
-      ChannelSchemas.readWorkspaceFile.response.parse({
-        status: "ok",
-        content: "# GOAL",
-        language: "markdown",
-      }),
-    ).toMatchObject({ status: "ok", language: "markdown" });
-    expect(
-      ChannelSchemas.readWorkspaceFile.response.parse({
-        status: "too-large",
-        size: 5_242_880,
-      }),
-    ).toEqual({ status: "too-large", size: 5_242_880 });
-    expect(
-      ChannelSchemas.readWorkspaceFile.response.parse({ status: "binary" }),
-    ).toEqual({ status: "binary" });
-    expect(
-      ChannelSchemas.readWorkspaceFile.response.parse({ status: "vanished" }),
-    ).toEqual({ status: "vanished" });
-    expect(
-      ChannelSchemas.readWorkspaceFile.response.parse({
-        status: "error",
-        code: "EIO",
-      }),
-    ).toEqual({ status: "error", code: "EIO" });
-  });
-
-  it("rejects malformed file requests and responses", () => {
-    expect(() =>
-      ChannelSchemas.readWorkspaceFile.request.parse({ path: "" }),
-    ).toThrow();
-    expect(() => ChannelSchemas.readWorkspaceFile.request.parse({})).toThrow();
-    expect(() =>
-      ChannelSchemas.readWorkspaceFile.response.parse({ status: "too-large" }),
-    ).toThrow();
-    expect(() =>
-      ChannelSchemas.readWorkspaceFile.response.parse({
-        status: "ok",
-        content: "x",
-      }),
-    ).toThrow();
   });
 });
