@@ -39,6 +39,7 @@ import {
   Settings,
   Shield,
   SlidersHorizontal,
+  SquarePen,
   Sun,
   Table2,
   Trash2,
@@ -774,7 +775,7 @@ export function ChatSidebar() {
         </SidebarGroupContent>
       </SidebarGroup>
 
-      <div className="scrollbar-auto-hide min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
         <SidebarGroup className="px-3 group-data-[collapsible=icon]:hidden">
           {recentError ? (
             <p className="rounded-md border border-destructive/40 px-2 py-2 text-xs text-destructive">
@@ -1548,6 +1549,16 @@ function SpaceThreadSection({
           scopeSpaceName={label}
           onMarkSectionRead={onMarkSectionRead}
         />
+        <Link
+          to="/new"
+          search={{ spaceId: space.id }}
+          onClick={requestSpacesComposerFocus}
+          aria-label={`New thread in ${label}`}
+          title="New thread"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
+        >
+          <SquarePen className="size-3.5" />
+        </Link>
       </div>
       <CollapsibleContent>
         <SidebarGroupContent>
