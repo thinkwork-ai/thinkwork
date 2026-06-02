@@ -7,6 +7,8 @@ import type { PreparedDesktopPiWorkspacePrewarmSession } from "./pi-sidecar-sess
 import type { PreparedDesktopPiRuntimeSession } from "@thinkwork/pi-runtime-core";
 import type { DesktopEnvSnapshot } from "./env.js";
 
+const DESKTOP_EVAL_CASE_SESSION_CONCURRENCY = 8;
+
 export interface PiRuntimeSessionClientOptions {
   env: DesktopEnvSnapshot;
   tokenSnapshot: () => Record<string, string>;
@@ -33,6 +35,20 @@ export interface PreparedDesktopEvalWorkItem {
   agentcoreEvaluatorIds: string[];
   tags: string[];
   session: PreparedDesktopPiRuntimeSession;
+}
+
+interface DesktopEvalWorkItemWithoutSession {
+  runId: string;
+  testCaseId: string;
+  index: number;
+  name: string;
+  category: string;
+  query: string;
+  systemPrompt: string | null;
+  assertions: unknown;
+  agentcoreEvaluatorIds: string[];
+  tags: string[];
+  session?: PreparedDesktopPiRuntimeSession;
 }
 
 export interface PreparedDesktopEvalRun {
@@ -140,18 +156,52 @@ export function createPiEvalRunPreparer(
       },
     );
     const json = (await response.json()) as unknown;
-    if (!response.ok || !isPreparedEvalRunResponse(json)) {
+    if (!response.ok || !isEvalRunStartResponse(json)) {
       const error = readRecord(json);
       throw new Error(
         stringValue(error?.error) ??
           `Desktop eval run preparation failed (${response.status})`,
       );
     }
+    const fetchImpl = options.fetchImpl ?? fetch;
+    const workItems = await mapWithConcurrency(
+      json.workItems,
+      DESKTOP_EVAL_CASE_SESSION_CONCURRENCY,
+      async (item) => {
+        if (isPreparedSession(item.session)) {
+          return { ...item, session: item.session };
+        }
+
+        const sessionResponse = await fetchImpl(
+          `${apiUrl}/api/desktop/eval-runs/${json.run.id}/sessions`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({
+              testCaseId: item.testCaseId,
+              spaceId: json.target.spaceId,
+            }),
+          },
+        );
+        const sessionJson = (await sessionResponse.json()) as unknown;
+        if (!sessionResponse.ok || !isPreparedSessionResponse(sessionJson)) {
+          const error = readRecord(sessionJson);
+          throw new Error(
+            stringValue(error?.error) ??
+              `Desktop eval case session preparation failed (${sessionResponse.status})`,
+          );
+        }
+        return { ...item, session: sessionJson.session };
+      },
+    );
     return {
       run: json.run,
       target: json.target,
       resultCallback: json.resultCallback,
-      workItems: json.workItems,
+      workItems,
     };
   };
 }
@@ -213,10 +263,15 @@ function isPreparedSessionResponse(
   value: unknown,
 ): value is { ok: true; session: PreparedDesktopPiRuntimeSession } {
   const obj = readRecord(value);
-  const session = readRecord(obj?.session);
+  return obj?.ok === true && isPreparedSession(obj.session);
+}
+
+function isPreparedSession(
+  value: unknown,
+): value is PreparedDesktopPiRuntimeSession {
+  const session = readRecord(value);
   const invocation = readRecord(session?.invocation);
   return (
-    obj?.ok === true &&
     typeof session?.threadTurnId === "string" &&
     typeof session.expiresAt === "string" &&
     typeof session.finalizeCallbackSecret === "string" &&
@@ -246,9 +301,13 @@ function isPreparedWorkspacePrewarmResponse(
   );
 }
 
-function isPreparedEvalRunResponse(
-  value: unknown,
-): value is { ok: true } & PreparedDesktopEvalRun {
+function isEvalRunStartResponse(value: unknown): value is {
+  ok: true;
+  run: PreparedDesktopEvalRun["run"];
+  target: PreparedDesktopEvalRun["target"];
+  resultCallback: PreparedDesktopEvalRun["resultCallback"];
+  workItems: DesktopEvalWorkItemWithoutSession[];
+} {
   const obj = readRecord(value);
   const run = readRecord(obj?.run);
   const target = readRecord(obj?.target);
@@ -268,14 +327,14 @@ function isPreparedEvalRunResponse(
     typeof resultCallback.expiresAt === "string" &&
     resultCallback.authScheme === "bearer" &&
     Array.isArray(workItems) &&
-    workItems.every(isPreparedEvalWorkItem)
+    workItems.every(isEvalWorkItem)
   );
 }
 
-function isPreparedEvalWorkItem(value: unknown): boolean {
+function isEvalWorkItem(
+  value: unknown,
+): value is DesktopEvalWorkItemWithoutSession {
   const item = readRecord(value);
-  const session = readRecord(item?.session);
-  const invocation = readRecord(session?.invocation);
   return (
     typeof item?.runId === "string" &&
     typeof item.testCaseId === "string" &&
@@ -285,11 +344,31 @@ function isPreparedEvalWorkItem(value: unknown): boolean {
     typeof item.query === "string" &&
     Array.isArray(item.agentcoreEvaluatorIds) &&
     Array.isArray(item.tags) &&
-    typeof session?.threadTurnId === "string" &&
-    typeof session.expiresAt === "string" &&
-    typeof session.finalizeCallbackSecret === "string" &&
-    invocation?.runtime_host === "desktop-local"
+    (item.session === undefined || isPreparedSession(item.session))
   );
+}
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<U>,
+): Promise<U[]> {
+  if (items.length === 0) return [];
+  const width = Math.max(1, Math.min(concurrency, items.length));
+  const results = new Array<U>(items.length);
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: width }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await worker(items[index], index);
+      }
+    }),
+  );
+
+  return results;
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {

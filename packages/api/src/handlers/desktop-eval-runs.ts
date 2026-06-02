@@ -5,6 +5,11 @@
  *   Cognito desktop clients create an eval_runs row and receive sidecar work
  *   items plus a short-lived per-run callback token.
  *
+ * POST /api/desktop/eval-runs/{runId}/sessions
+ *   Cognito desktop clients prepare one Desktop Pi runtime session for a
+ *   specific eval case. Session prep is intentionally per-case so full-catalog
+ *   runs do not spend the API Lambda timeout preparing every case upfront.
+ *
  * POST /api/desktop/eval-runs/{runId}/results
  *   The local sidecar reports one scored case result with the per-run token.
  */
@@ -37,7 +42,6 @@ const { evalRuns, evalResults, evalTestCases, spaces, spaceMembers } = schema;
 
 const TOKEN_PREFIX = "dpe_";
 const DEFAULT_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
-export const DESKTOP_EVAL_SESSION_PREP_CONCURRENCY = 8;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -62,6 +66,11 @@ export interface DesktopEvalResultBody {
   evaluatorResults?: unknown[] | null;
   assertions?: unknown[] | null;
   errorMessage?: string | null;
+}
+
+export interface PrepareDesktopEvalSessionBody {
+  testCaseId?: string | null;
+  spaceId?: string | null;
 }
 
 export interface DesktopEvalWorkItem {
@@ -96,6 +105,8 @@ interface DesktopEvalRunRow {
   execution_target: string;
   runtime_host: string;
   status: string;
+  categories: string[];
+  selected_test_case_ids: string[];
   total_tests: number;
 }
 
@@ -142,11 +153,6 @@ export interface DesktopEvalRunsDeps {
     totalTests: number;
     now: Date;
   }): Promise<DesktopEvalRunRow>;
-  updateRunPreparationFailure(input: {
-    run: DesktopEvalRunRow;
-    errorMessage: string;
-    now: Date;
-  }): Promise<void>;
   prepareCaseSession(input: {
     auth: AuthResult;
     agentId: string;
@@ -159,7 +165,7 @@ export interface DesktopEvalRunsDeps {
   loadTestCase(input: {
     tenantId: string;
     testCaseId: string;
-  }): Promise<{ id: string; query: string } | null>;
+  }): Promise<{ id: string; category: string; query: string } | null>;
   insertResultIfMissing(input: {
     run: DesktopEvalRunRow;
     testCase: { id: string; query: string };
@@ -281,8 +287,17 @@ export function createDesktopEvalRunsHandler(
       return error("Method not allowed", 405);
     }
 
+    const sessionPathMatch = desktopEvalSessionPath(event);
     const resultPathMatch = desktopEvalResultPath(event);
     try {
+      if (sessionPathMatch) {
+        return await handlePrepareCaseSession(
+          event,
+          sessionPathMatch.runId,
+          deps,
+        );
+      }
+
       if (resultPathMatch) {
         return await handleResultCallback(event, resultPathMatch.runId, deps);
       }
@@ -353,36 +368,6 @@ async function handleStartRun(
     totalTests: cases.length,
     now,
   });
-  const sessions = new Map<string, PreparedLocalPiRuntimeSession>();
-  try {
-    const preparedSessions = await mapWithConcurrency(
-      cases,
-      DESKTOP_EVAL_SESSION_PREP_CONCURRENCY,
-      async (testCase) => ({
-        testCaseId: testCase.id,
-        session: await deps.prepareCaseSession({
-          auth,
-          agentId: agent.id,
-          spaceId: space.id,
-          runId: run.id,
-          testCaseId: testCase.id,
-          query: testCase.query,
-        }),
-      }),
-    );
-    for (const prepared of preparedSessions) {
-      sessions.set(prepared.testCaseId, prepared.session);
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await deps.updateRunPreparationFailure({
-      run,
-      errorMessage: message,
-      now: deps.now(),
-    });
-    await deps.notifyRunUpdate({ run, status: "failed" });
-    throw err;
-  }
 
   await deps.notifyRunUpdate({ run, status: run.status });
 
@@ -412,8 +397,75 @@ async function handleStartRun(
       expiresAt: new Date(expiresAt).toISOString(),
       authScheme: "bearer",
     },
-    workItems: desktopEvalWorkItems(run.id, cases, sessions),
+    workItems: desktopEvalWorkItems(run.id, cases),
   });
+}
+
+async function handlePrepareCaseSession(
+  event: APIGatewayProxyEventV2,
+  runId: string,
+  deps: DesktopEvalRunsDeps,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const auth = await deps.authenticate(
+    event.headers as Record<string, string | undefined>,
+  );
+  if (!auth || auth.authType !== "cognito" || !auth.email) {
+    return unauthorized("Desktop eval sessions require user auth");
+  }
+
+  const body = parseJson<PrepareDesktopEvalSessionBody>(event);
+  const testCaseId = stringValue(body.testCaseId);
+  if (!testCaseId || !UUID_RE.test(testCaseId)) {
+    return error("testCaseId is required", 400);
+  }
+
+  const run = await deps.loadRun(runId);
+  if (!run) return error("Eval run not found", 404);
+  if (
+    run.execution_target !== "desktop-pi" ||
+    run.runtime_host !== "desktop-local"
+  ) {
+    return forbidden(
+      "Eval session preparation is only valid for Desktop Pi runs",
+    );
+  }
+  if (["completed", "failed", "cancelled"].includes(run.status)) {
+    return error("Eval run is no longer running", 409);
+  }
+  if (!run.agent_id) {
+    return error("Eval run is missing its target agent", 409);
+  }
+
+  const membership = await deps.requireTenantMember(event, run.tenant_id);
+  if (!membership.ok) {
+    if (membership.status === 401) return unauthorized(membership.reason);
+    if (membership.status === 403) return forbidden(membership.reason);
+    return error(membership.reason, membership.status);
+  }
+
+  const [space, testCase] = await Promise.all([
+    deps.resolveSpace({
+      tenantId: run.tenant_id,
+      requestedSpaceId: body.spaceId ?? null,
+      userId: membership.userId,
+    }),
+    deps.loadTestCase({ tenantId: run.tenant_id, testCaseId }),
+  ]);
+  if (!testCase) return error("Eval test case not found", 404);
+  if (!isTestCaseSelectedForRun(run, testCase)) {
+    return forbidden("Eval test case is not part of this run");
+  }
+
+  const session = await deps.prepareCaseSession({
+    auth,
+    agentId: run.agent_id,
+    spaceId: space.id,
+    runId,
+    testCaseId,
+    query: testCase.query,
+  });
+
+  return json({ ok: true, session });
 }
 
 async function handleResultCallback(
@@ -555,22 +607,6 @@ function defaultDesktopEvalRunsDeps(): DesktopEvalRunsDeps {
         userMessage: input.query,
       });
     },
-    async updateRunPreparationFailure(input) {
-      await db
-        .update(evalRuns)
-        .set({
-          status: "failed",
-          completed_at: input.now,
-          error_message: input.errorMessage,
-          passed: 0,
-          failed: 0,
-          pass_rate: "0.0000",
-          cost_usd: "0.000000",
-        })
-        .where(
-          and(eq(evalRuns.id, input.run.id), eq(evalRuns.status, "running")),
-        );
-    },
     async loadRun(runId) {
       const [run] = await db
         .select()
@@ -580,12 +616,17 @@ function defaultDesktopEvalRunsDeps(): DesktopEvalRunsDeps {
     },
     async loadTestCase(input) {
       const [testCase] = await db
-        .select({ id: evalTestCases.id, query: evalTestCases.query })
+        .select({
+          id: evalTestCases.id,
+          category: evalTestCases.category,
+          query: evalTestCases.query,
+        })
         .from(evalTestCases)
         .where(
           and(
             eq(evalTestCases.id, input.testCaseId),
             eq(evalTestCases.tenant_id, input.tenantId),
+            eq(evalTestCases.enabled, true),
           ),
         );
       return testCase ?? null;
@@ -639,29 +680,6 @@ function defaultDesktopEvalRunsDeps(): DesktopEvalRunsDeps {
     tokenSecret: () =>
       process.env.API_AUTH_SECRET || process.env.THINKWORK_API_SECRET || "",
   };
-}
-
-async function mapWithConcurrency<T, U>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<U>,
-): Promise<U[]> {
-  if (items.length === 0) return [];
-  const width = Math.max(1, Math.min(concurrency, items.length));
-  const results = new Array<U>(items.length);
-  let nextIndex = 0;
-
-  await Promise.all(
-    Array.from({ length: width }, async () => {
-      while (nextIndex < items.length) {
-        const index = nextIndex;
-        nextIndex += 1;
-        results[index] = await worker(items[index], index);
-      }
-    }),
-  );
-
-  return results;
 }
 
 async function resolveDesktopEvalSpace(input: {
@@ -760,6 +778,19 @@ async function insertDesktopEvalResultIfMissing(input: {
   });
 }
 
+function isTestCaseSelectedForRun(
+  run: DesktopEvalRunRow,
+  testCase: { id: string; category: string },
+): boolean {
+  if (run.selected_test_case_ids.length > 0) {
+    return run.selected_test_case_ids.includes(testCase.id);
+  }
+  if (run.categories.length > 0) {
+    return run.categories.includes(testCase.category);
+  }
+  return true;
+}
+
 function normalizeResultBody(
   body: DesktopEvalResultBody,
 ):
@@ -814,9 +845,22 @@ function isStartDesktopEvalRunPath(event: APIGatewayProxyEventV2): boolean {
   return event.rawPath === "/api/desktop/eval-runs";
 }
 
+function desktopEvalSessionPath(
+  event: APIGatewayProxyEventV2,
+): { runId: string } | null {
+  if (!event.rawPath.endsWith("/sessions")) return null;
+  const runId = event.pathParameters?.runId;
+  if (runId && UUID_RE.test(runId)) return { runId };
+  const match = event.rawPath.match(
+    /^\/api\/desktop\/eval-runs\/([0-9a-f-]{36})\/sessions$/i,
+  );
+  return match ? { runId: match[1]! } : null;
+}
+
 function desktopEvalResultPath(
   event: APIGatewayProxyEventV2,
 ): { runId: string } | null {
+  if (!event.rawPath.endsWith("/results")) return null;
   const runId = event.pathParameters?.runId;
   if (runId && UUID_RE.test(runId)) return { runId };
   const match = event.rawPath.match(

@@ -796,16 +796,18 @@ locals {
 
     # Desktop-local Pi runtime setup. Specific route before broad REST
     # handlers; OPTIONS is handled inside the Lambda before auth.
-    "POST /api/desktop/runtime-session"              = "desktop-runtime-session"
-    "OPTIONS /api/desktop/runtime-session"           = "desktop-runtime-session"
-    "POST /api/desktop/workspace-prewarm"            = "desktop-workspace-prewarm"
-    "OPTIONS /api/desktop/workspace-prewarm"         = "desktop-workspace-prewarm"
-    "POST /api/desktop/managed-delegation"           = "managed-delegation"
-    "OPTIONS /api/desktop/managed-delegation"        = "managed-delegation"
-    "POST /api/desktop/eval-runs"                    = "desktop-eval-runs"
-    "OPTIONS /api/desktop/eval-runs"                 = "desktop-eval-runs"
-    "POST /api/desktop/eval-runs/{runId}/results"    = "desktop-eval-runs"
-    "OPTIONS /api/desktop/eval-runs/{runId}/results" = "desktop-eval-runs"
+    "POST /api/desktop/runtime-session"               = "desktop-runtime-session"
+    "OPTIONS /api/desktop/runtime-session"            = "desktop-runtime-session"
+    "POST /api/desktop/workspace-prewarm"             = "desktop-workspace-prewarm"
+    "OPTIONS /api/desktop/workspace-prewarm"          = "desktop-workspace-prewarm"
+    "POST /api/desktop/managed-delegation"            = "managed-delegation"
+    "OPTIONS /api/desktop/managed-delegation"         = "managed-delegation"
+    "POST /api/desktop/eval-runs"                     = "desktop-eval-runs"
+    "OPTIONS /api/desktop/eval-runs"                  = "desktop-eval-runs"
+    "POST /api/desktop/eval-runs/{runId}/sessions"    = "desktop-eval-runs"
+    "OPTIONS /api/desktop/eval-runs/{runId}/sessions" = "desktop-eval-runs"
+    "POST /api/desktop/eval-runs/{runId}/results"     = "desktop-eval-runs"
+    "OPTIONS /api/desktop/eval-runs/{runId}/results"  = "desktop-eval-runs"
 
     # Mobile agent harness model proxy (cloud Bedrock Converse). OPTIONS is
     # handled inside the Lambda before auth.
