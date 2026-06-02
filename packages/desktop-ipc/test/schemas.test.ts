@@ -190,6 +190,41 @@ describe("desktop IPC schemas", () => {
       }),
     ).toEqual({ cancelled: true });
     expect(
+      ChannelSchemas.startPiEvalRun.request.parse({
+        tenantId: "tenant-1",
+        categories: ["red-team"],
+        testCaseIds: ["case-1"],
+        model: "desktop-local-pi",
+        spaceId: "space-1",
+      }),
+    ).toMatchObject({
+      tenantId: "tenant-1",
+      categories: ["red-team"],
+    });
+    expect(
+      ChannelSchemas.startPiEvalRun.response.parse({
+        accepted: true,
+        requestId: "request-1",
+        runId: "run-1",
+        totalTests: 12,
+      }),
+    ).toEqual({
+      accepted: true,
+      requestId: "request-1",
+      runId: "run-1",
+      totalTests: 12,
+    });
+    expect(
+      ChannelSchemas.cancelPiEvalRun.request.parse({
+        requestId: "request-1",
+      }),
+    ).toEqual({ requestId: "request-1" });
+    expect(
+      ChannelSchemas.cancelPiEvalRun.response.parse({
+        cancelled: true,
+      }),
+    ).toEqual({ cancelled: true });
+    expect(
       PiDiagnosticEventSchema.parse({
         level: "info",
         message: "local Pi turn sent to sidecar",
@@ -221,6 +256,11 @@ describe("desktop IPC schemas", () => {
         threadId: "thread-1",
         userMessage: "hello",
         sidecarCredentials: { accessKeyId: "nope" },
+      }),
+    ).toThrow();
+    expect(() =>
+      ChannelSchemas.startPiEvalRun.request.parse({
+        categories: ["red-team"],
       }),
     ).toThrow();
   });

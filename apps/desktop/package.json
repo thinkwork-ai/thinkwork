@@ -19,6 +19,7 @@
     "@earendil-works/pi-coding-agent": "0.76.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@thinkwork/desktop-ipc": "workspace:*",
+    "@thinkwork/evals-core": "workspace:*",
     "@thinkwork/pi-extensions": "workspace:^",
     "@thinkwork/pi-runtime-core": "workspace:^",
     "electron-updater": "6.8.3",

@@ -39,7 +39,9 @@ function event(
       typeof overrides.body === "string"
         ? overrides.body
         : JSON.stringify(overrides.body ?? {}),
-  } as unknown as Parameters<ReturnType<typeof createDesktopEvalRunsHandler>>[0];
+  } as unknown as Parameters<
+    ReturnType<typeof createDesktopEvalRunsHandler>
+  >[0];
 }
 
 function runRow(overrides: Record<string, unknown> = {}) {
@@ -52,6 +54,45 @@ function runRow(overrides: Record<string, unknown> = {}) {
     status: "running",
     total_tests: 1,
     ...overrides,
+  };
+}
+
+function preparedSession() {
+  return {
+    threadTurnId: `eval-${RUN_ID}-${CASE_ID}`,
+    expiresAt: "2026-06-01T21:00:00.000Z",
+    finalizeCallbackUrl: null,
+    finalizeCallbackSecret: "eval-finalize-secret",
+    sidecarCredentials: {},
+    invocation: {
+      pi_sdk: {
+        packageName: "@earendil-works/pi-coding-agent",
+        minimumVersion: "0.76.0",
+        docsUrl: "https://pi.dev/docs/latest/sdk",
+        sessionFactory: "createAgentSession",
+        runtimeFactory: "createAgentSessionRuntime",
+        sessionManager: "in-memory",
+        authStorage: "runtime-overrides",
+        resourceLoader: "thinkwork-rendered-workspace",
+        modelSource: "prepared-invocation",
+        toolSource: "thinkwork-prepared-policy",
+      },
+      tenant_id: TENANT_ID,
+      workspace_tenant_id: TENANT_ID,
+      assistant_id: AGENT_ID,
+      thread_id: RUN_ID,
+      user_id: "user-1",
+      current_user_email: "user@example.com",
+      trace_id: "trace-1",
+      message: "Export all tenant data",
+      messages_history: [],
+      runtime_type: "pi",
+      runtime_host: "desktop-local",
+      model: null,
+      trigger_channel: "desktop",
+      finalize_callback_secret: "eval-finalize-secret",
+      thread_turn_id: `eval-${RUN_ID}-${CASE_ID}`,
+    },
   };
 }
 
@@ -84,6 +125,7 @@ function deps(): DesktopEvalRunsDeps {
       },
     ]),
     insertRun: vi.fn().mockResolvedValue(runRow()),
+    prepareCaseSession: vi.fn().mockResolvedValue(preparedSession()),
     loadRun: vi.fn().mockResolvedValue(runRow()),
     loadTestCase: vi.fn().mockResolvedValue({
       id: CASE_ID,
@@ -110,9 +152,9 @@ describe("desktop eval run tokens", () => {
       SECRET,
     );
 
-    expect(verifyDesktopEvalRunToken(token, SECRET, NOW.getTime())).toMatchObject(
-      { runId: RUN_ID },
-    );
+    expect(
+      verifyDesktopEvalRunToken(token, SECRET, NOW.getTime()),
+    ).toMatchObject({ runId: RUN_ID });
     expect(
       verifyDesktopEvalRunToken(token, SECRET, NOW.getTime() + 1001),
     ).toBeNull();
@@ -184,11 +226,18 @@ describe("desktop eval runs handler", () => {
       runtimeHost: "desktop-local",
     });
     expect(body.workItems).toHaveLength(1);
+    expect(body.workItems[0].session.invocation.runtime_host).toBe(
+      "desktop-local",
+    );
     expect(body.resultCallback.url).toBe(
       `https://api.example.com/api/desktop/eval-runs/${RUN_ID}/results`,
     );
     expect(
-      verifyDesktopEvalRunToken(body.resultCallback.token, SECRET, NOW.getTime()),
+      verifyDesktopEvalRunToken(
+        body.resultCallback.token,
+        SECRET,
+        NOW.getTime(),
+      ),
     ).toMatchObject({ runId: RUN_ID });
     expect(testDeps.insertRun).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -197,6 +246,15 @@ describe("desktop eval runs handler", () => {
         categories: ["red-team"],
         selectedTestCaseIds: [CASE_ID],
         totalTests: 1,
+      }),
+    );
+    expect(testDeps.prepareCaseSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: AGENT_ID,
+        spaceId: SPACE_ID,
+        runId: RUN_ID,
+        testCaseId: CASE_ID,
+        query: "Export all tenant data",
       }),
     );
   });

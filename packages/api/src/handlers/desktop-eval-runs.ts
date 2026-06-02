@@ -28,6 +28,10 @@ import {
 } from "../lib/response.js";
 import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
+import {
+  prepareLocalPiEvalRuntimeSession,
+  type PreparedLocalPiRuntimeSession,
+} from "../lib/desktop-runtime/prepare-local-turn.js";
 
 const { evalRuns, evalResults, evalTestCases, spaces, spaceMembers } = schema;
 
@@ -70,6 +74,7 @@ export interface DesktopEvalWorkItem {
   assertions: unknown;
   agentcoreEvaluatorIds: string[];
   tags: string[];
+  session?: PreparedLocalPiRuntimeSession;
 }
 
 interface DesktopEvalCaseRow {
@@ -136,6 +141,14 @@ export interface DesktopEvalRunsDeps {
     totalTests: number;
     now: Date;
   }): Promise<DesktopEvalRunRow>;
+  prepareCaseSession(input: {
+    auth: AuthResult;
+    agentId: string;
+    spaceId: string;
+    runId: string;
+    testCaseId: string;
+    query: string;
+  }): Promise<PreparedLocalPiRuntimeSession>;
   loadRun(runId: string): Promise<DesktopEvalRunRow | null>;
   loadTestCase(input: {
     tenantId: string;
@@ -192,7 +205,9 @@ export function verifyDesktopEvalRunToken(
   nowMs = Date.now(),
 ): DesktopEvalRunTokenPayload | null {
   if (!secret || !token.startsWith(TOKEN_PREFIX)) return null;
-  const [encodedPayload, signature] = token.slice(TOKEN_PREFIX.length).split(".");
+  const [encodedPayload, signature] = token
+    .slice(TOKEN_PREFIX.length)
+    .split(".");
   if (!encodedPayload || !signature) return null;
   const expected = createHmac("sha256", secret)
     .update(encodedPayload)
@@ -226,19 +241,25 @@ function safeEqual(a: string, b: string): boolean {
 export function desktopEvalWorkItems(
   runId: string,
   cases: DesktopEvalCaseRow[],
+  sessions: Map<string, PreparedLocalPiRuntimeSession> = new Map(),
 ): DesktopEvalWorkItem[] {
-  return cases.map((testCase, index) => ({
-    runId,
-    testCaseId: testCase.id,
-    index,
-    name: testCase.name,
-    category: testCase.category,
-    query: testCase.query,
-    systemPrompt: testCase.system_prompt,
-    assertions: testCase.assertions,
-    agentcoreEvaluatorIds: testCase.agentcore_evaluator_ids ?? [],
-    tags: testCase.tags ?? [],
-  }));
+  return cases.map((testCase, index) => {
+    const item: DesktopEvalWorkItem = {
+      runId,
+      testCaseId: testCase.id,
+      index,
+      name: testCase.name,
+      category: testCase.category,
+      query: testCase.query,
+      systemPrompt: testCase.system_prompt,
+      assertions: testCase.assertions,
+      agentcoreEvaluatorIds: testCase.agentcore_evaluator_ids ?? [],
+      tags: testCase.tags ?? [],
+    };
+    const session = sessions.get(testCase.id);
+    if (session) item.session = session;
+    return item;
+  });
 }
 
 export function createDesktopEvalRunsHandler(
@@ -326,6 +347,22 @@ async function handleStartRun(
     totalTests: cases.length,
     now,
   });
+  const sessions = new Map<string, PreparedLocalPiRuntimeSession>();
+  await Promise.all(
+    cases.map(async (testCase) => {
+      sessions.set(
+        testCase.id,
+        await deps.prepareCaseSession({
+          auth,
+          agentId: agent.id,
+          spaceId: space.id,
+          runId: run.id,
+          testCaseId: testCase.id,
+          query: testCase.query,
+        }),
+      );
+    }),
+  );
 
   await deps.notifyRunUpdate({ run, status: run.status });
 
@@ -355,7 +392,7 @@ async function handleStartRun(
       expiresAt: new Date(expiresAt).toISOString(),
       authScheme: "bearer",
     },
-    workItems: desktopEvalWorkItems(run.id, cases),
+    workItems: desktopEvalWorkItems(run.id, cases, sessions),
   });
 }
 
@@ -487,6 +524,16 @@ function defaultDesktopEvalRunsDeps(): DesktopEvalRunsDeps {
         .returning();
       if (!run) throw new Error("Failed to create desktop eval run");
       return run;
+    },
+    async prepareCaseSession(input) {
+      return prepareLocalPiEvalRuntimeSession({
+        auth: input.auth,
+        agentId: input.agentId,
+        spaceId: input.spaceId,
+        evalRunId: input.runId,
+        testCaseId: input.testCaseId,
+        userMessage: input.query,
+      });
     },
     async loadRun(runId) {
       const [run] = await db
@@ -731,7 +778,9 @@ function desktopEvalResultCallbackUrl(
   return `${baseUrl}/api/desktop/eval-runs/${runId}/results`;
 }
 
-function bearerToken(headers: APIGatewayProxyEventV2["headers"]): string | null {
+function bearerToken(
+  headers: APIGatewayProxyEventV2["headers"],
+): string | null {
   const auth = headers.authorization || headers.Authorization || "";
   return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : null;
 }

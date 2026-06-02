@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 import {
   CHECK_FOR_UPDATES_CHANNEL,
+  CANCEL_PI_EVAL_RUN_CHANNEL,
   CANCEL_PI_TURN_CHANNEL,
   CLEAR_TOKEN_STORAGE_CHANNEL,
   CONSUME_PENDING_OAUTH_CHANNEL,
@@ -23,6 +24,7 @@ import {
   SET_NATIVE_THEME_CHANNEL,
   SIGN_OUT_CHANNEL,
   SIGNED_OUT_EVENT_CHANNEL,
+  START_PI_EVAL_RUN_CHANNEL,
   START_PI_TURN_CHANNEL,
   START_OAUTH_CHANNEL,
   SET_TOKEN_STORAGE_ITEM_CHANNEL,
@@ -40,11 +42,15 @@ import {
   ConsumePendingOAuthResponseSchema,
   RemoveTokenStorageItemRequestSchema,
   OAuthErrorEventSchema,
+  PiCancelEvalRunRequestSchema,
+  PiCancelEvalRunResponseSchema,
   PiCancelTurnRequestSchema,
   PiCancelTurnResponseSchema,
   PiDiagnosticEventSchema,
   PiPrewarmWorkspaceRequestSchema,
   PiPrewarmWorkspaceResponseSchema,
+  PiStartEvalRunRequestSchema,
+  PiStartEvalRunResponseSchema,
   PiStartTurnRequestSchema,
   PiStartTurnResponseSchema,
   PiStatusEventSchema,
@@ -120,6 +126,22 @@ const piBridge: NonNullable<ThinkworkBridge["pi"]> = {
       await ipcRenderer.invoke(
         CANCEL_PI_TURN_CHANNEL,
         PiCancelTurnRequestSchema.parse(request),
+      ),
+    );
+  },
+  async startEvalRun(request) {
+    return PiStartEvalRunResponseSchema.parse(
+      await ipcRenderer.invoke(
+        START_PI_EVAL_RUN_CHANNEL,
+        PiStartEvalRunRequestSchema.parse(request),
+      ),
+    );
+  },
+  async cancelEvalRun(request) {
+    return PiCancelEvalRunResponseSchema.parse(
+      await ipcRenderer.invoke(
+        CANCEL_PI_EVAL_RUN_CHANNEL,
+        PiCancelEvalRunRequestSchema.parse(request),
       ),
     );
   },

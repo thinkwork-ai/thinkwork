@@ -6,9 +6,13 @@ import {
   type PiPrewarmWorkspaceRequest,
   type PiPrewarmWorkspaceResponse,
   type PiDiagnosticEvent,
+  type PiCancelEvalRunRequest,
+  type PiCancelEvalRunResponse,
   type PiCancelTurnRequest,
   type PiCancelTurnResponse,
   type PiSidecarState,
+  type PiStartEvalRunRequest,
+  type PiStartEvalRunResponse,
   type PiStartTurnRequest,
   type PiStartTurnResponse,
 } from "@thinkwork/desktop-ipc";
@@ -21,6 +25,7 @@ import {
   type PiSidecarChildMessage,
   type PiSidecarParentMessage,
 } from "./pi-sidecar-session.js";
+import type { PreparePiEvalRun } from "./pi-runtime-session-client.js";
 import type { PreparePiRuntimeSession } from "./pi-runtime-session-client.js";
 import type { PreparePiWorkspacePrewarmSession } from "./pi-runtime-session-client.js";
 
@@ -61,6 +66,7 @@ export interface PiSidecarControllerOptions {
   maxRestarts?: number;
   prepareTurn?: PreparePiRuntimeSession;
   prepareWorkspacePrewarm?: PreparePiWorkspacePrewarmSession;
+  prepareEvalRun?: PreparePiEvalRun;
   workspaceCacheRoot?: string;
   logger?: Pick<Console, "info" | "warn" | "error">;
 }
@@ -76,6 +82,7 @@ export class PiSidecarController {
   private readonly maxRestarts: number;
   private readonly prepareTurn: PreparePiRuntimeSession;
   private readonly prepareWorkspacePrewarm: PreparePiWorkspacePrewarmSession;
+  private readonly prepareEvalRun: PreparePiEvalRun;
   private readonly workspaceCacheRoot: string;
   private readonly logger: Pick<Console, "info" | "warn" | "error">;
   private readonly activeTurns = new Map<
@@ -85,6 +92,7 @@ export class PiSidecarController {
       threadTurnId: string | null;
     }
   >();
+  private readonly activeEvalRuns = new Map<string, { runId: string | null }>();
   private process: UtilityProcessLike | null = null;
   private restartTimer: unknown = null;
   private stopping = false;
@@ -111,6 +119,11 @@ export class PiSidecarController {
       options.prepareWorkspacePrewarm ??
       (async () => {
         throw new Error("Pi workspace prewarm preparation is not configured");
+      });
+    this.prepareEvalRun =
+      options.prepareEvalRun ??
+      (async () => {
+        throw new Error("Desktop Pi eval preparation is not configured");
       });
     this.workspaceCacheRoot = options.workspaceCacheRoot ?? "";
     this.logger = options.logger ?? console;
@@ -290,6 +303,82 @@ export class PiSidecarController {
     return { cancelled: true };
   }
 
+  async startEvalRun(
+    request: PiStartEvalRunRequest,
+  ): Promise<PiStartEvalRunResponse> {
+    if (!this.process || this.state.status !== "healthy") {
+      throw new Error("Pi sidecar is not healthy");
+    }
+    const requestId = randomUUID();
+    this.activeEvalRuns.set(requestId, { runId: null });
+    this.logger.info("[pi-sidecar] preparing desktop Pi eval run", {
+      requestId,
+      tenantId: request.tenantId,
+      categories: request.categories?.length ?? 0,
+      testCaseIds: request.testCaseIds?.length ?? 0,
+    });
+    this.emitDiagnostic({
+      level: "info",
+      message: formatDiagnosticMessage("preparing desktop Pi eval run", {
+        requestId,
+        tenantId: request.tenantId,
+        categories: request.categories?.length ?? 0,
+        testCaseIds: request.testCaseIds?.length ?? 0,
+      }),
+      source: "main",
+      requestId,
+      threadId: null,
+      threadTurnId: null,
+    });
+    let prepared: Awaited<ReturnType<PreparePiEvalRun>>;
+    try {
+      prepared = await this.prepareEvalRun(request);
+    } catch (error) {
+      this.activeEvalRuns.delete(requestId);
+      throw error;
+    }
+    this.activeEvalRuns.set(requestId, { runId: prepared.run.id });
+    this.post({
+      type: "start-eval-run",
+      requestId,
+      payload: {
+        runId: prepared.run.id,
+        resultCallback: prepared.resultCallback,
+        workItems: prepared.workItems,
+        workspaceCacheRoot: this.workspaceCacheRoot,
+      },
+    });
+    this.logger.info("[pi-sidecar] desktop Pi eval run sent to sidecar", {
+      requestId,
+      runId: prepared.run.id,
+      totalTests: prepared.workItems.length,
+    });
+    this.emitDiagnostic({
+      level: "info",
+      message: formatDiagnosticMessage("desktop Pi eval run sent to sidecar", {
+        requestId,
+        runId: prepared.run.id,
+        totalTests: prepared.workItems.length,
+      }),
+      source: "main",
+      requestId,
+      threadId: null,
+      threadTurnId: null,
+    });
+    return {
+      accepted: true,
+      requestId,
+      runId: prepared.run.id,
+      totalTests: prepared.workItems.length,
+    };
+  }
+
+  cancelEvalRun(request: PiCancelEvalRunRequest): PiCancelEvalRunResponse {
+    if (!this.process) return { cancelled: false };
+    this.post({ type: "cancel-eval-run", requestId: request.requestId });
+    return { cancelled: true };
+  }
+
   private attachProcess(child: UtilityProcessLike): void {
     child.on("spawn", () => {
       this.updateState({
@@ -348,6 +437,25 @@ export class PiSidecarController {
           requestId: message.requestId,
         });
         return;
+      case "eval-run-accepted":
+        this.logger.info("[pi-sidecar] desktop Pi eval run accepted", {
+          requestId: message.requestId,
+          runId: message.runId,
+          totalTests: message.totalTests,
+        });
+        this.emitDiagnostic({
+          level: "info",
+          message: formatDiagnosticMessage("desktop Pi eval run accepted", {
+            requestId: message.requestId,
+            runId: message.runId,
+            totalTests: message.totalTests,
+          }),
+          source: "main",
+          requestId: message.requestId,
+          threadId: null,
+          threadTurnId: null,
+        });
+        return;
       case "turn-cancelled":
         this.logger.warn("[pi-sidecar] local Pi turn cancelled", {
           requestId: message.requestId,
@@ -362,6 +470,24 @@ export class PiSidecarController {
           ...this.contextForRequest(message.requestId),
         });
         this.activeTurns.delete(message.requestId);
+        return;
+      case "eval-run-cancelled":
+        this.logger.warn("[pi-sidecar] desktop Pi eval run cancelled", {
+          requestId: message.requestId,
+          runId: message.runId ?? null,
+        });
+        this.emitDiagnostic({
+          level: "warn",
+          message: formatDiagnosticMessage("desktop Pi eval run cancelled", {
+            requestId: message.requestId,
+            runId: message.runId ?? null,
+          }),
+          source: "main",
+          requestId: message.requestId,
+          threadId: null,
+          threadTurnId: null,
+        });
+        this.activeEvalRuns.delete(message.requestId);
         return;
     }
   }
@@ -424,6 +550,9 @@ export class PiSidecarController {
     });
     if (requestId && /^turn [^\s]+ /.test(text)) {
       this.activeTurns.delete(requestId);
+    }
+    if (requestId && /^eval run [^\s]+ /.test(text)) {
+      this.activeEvalRuns.delete(requestId);
     }
   }
 
@@ -488,7 +617,11 @@ function extractRequestId(text: string): string | null {
   const turnMatch = text.match(
     /\bturn\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s+/i,
   );
-  return turnMatch?.[1] ?? null;
+  if (turnMatch) return turnMatch[1];
+  const evalRunMatch = text.match(
+    /\beval run\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s+/i,
+  );
+  return evalRunMatch?.[1] ?? null;
 }
 
 function isSidecarChildMessage(
@@ -505,6 +638,25 @@ function isSidecarChildMessage(
     type === "workspace-prewarm-accepted"
   ) {
     return typeof (message as { requestId?: unknown }).requestId === "string";
+  }
+  if (type === "eval-run-accepted") {
+    const candidate = message as {
+      requestId?: unknown;
+      runId?: unknown;
+      totalTests?: unknown;
+    };
+    return (
+      typeof candidate.requestId === "string" &&
+      typeof candidate.runId === "string" &&
+      typeof candidate.totalTests === "number"
+    );
+  }
+  if (type === "eval-run-cancelled") {
+    const candidate = message as { requestId?: unknown; runId?: unknown };
+    return (
+      typeof candidate.requestId === "string" &&
+      (candidate.runId === undefined || typeof candidate.runId === "string")
+    );
   }
   if (type !== "diagnostic") return false;
   const diagnostic = message as { level?: unknown; message?: unknown };
