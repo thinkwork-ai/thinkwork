@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
 - Target branch: `main`.
-- Current unit: U18 Desktop Pi eval workspace hydration speed.
-- Current branch: `codex/desktop-pi-evals-u18-workspace-hydration`.
-- Current worktree: `.Codex/worktrees/desktop-pi-evals-u18-workspace-hydration`.
+- Current unit: U19 Post-speed Desktop Pi full rerun.
+- Current branch: `codex/desktop-pi-evals-u19-post-speed-rerun`.
+- Current worktree: `.Codex/worktrees/desktop-pi-evals-u19-post-speed-rerun`.
 
 | Unit                                                | Branch                                           | PR                                                           | State       | Notes                                                                                                   |
 | --------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
@@ -34,7 +34,8 @@ status: complete
 | U15 Desktop Pi eval fail-fast sweep                 | `codex/desktop-pi-evals-u15-remediation`         | [#1975](https://github.com/thinkwork-ai/thinkwork/pull/1975) | Merged      | Squash merged as `1ac2629f`; full sweep completed and blank SDK assistant-error retries now fail fast.  |
 | U16 Desktop Pi SDK assistant-error diagnostics      | `codex/desktop-pi-evals-u16-sdk-diagnostics`     | [#1976](https://github.com/thinkwork-ai/thinkwork/pull/1976) | Merged      | Squash merged as `18d10bff`; provider/SDK details now surface on blank SDK assistant-error turns.       |
 | U17 Desktop Pi quota-aware diagnostic sweep         | `codex/desktop-pi-evals-u17-diagnostic-sweep`    | [#1977](https://github.com/thinkwork-ai/thinkwork/pull/1977) | Merged      | Squash merged as `e9718e4f`; full sweep completed and queued cases now fast-finish after daily quota.   |
-| U18 Desktop Pi eval workspace hydration speed       | `codex/desktop-pi-evals-u18-workspace-hydration` | [#1978](https://github.com/thinkwork-ai/thinkwork/pull/1978) | In progress | Sharing a memoized S3 workspace object store across isolated eval cases to reduce repeated hydration.   |
+| U18 Desktop Pi eval workspace hydration speed       | `codex/desktop-pi-evals-u18-workspace-hydration` | [#1978](https://github.com/thinkwork-ai/thinkwork/pull/1978) | Merged      | Squash merged as `71377d64`; shared memoized S3 workspace object store across isolated eval cases.      |
+| U19 Post-speed Desktop Pi full rerun                | `codex/desktop-pi-evals-u19-post-speed-rerun`    | TBD                                                          | In progress | Full desktop catalog rerun after U17/U18; daily provider quota now fast-finishes queued cases.          |
 
 ### Progress Log
 
@@ -462,6 +463,27 @@ status: complete
   Desktop Pi sweeps. The change keeps per-case isolated workspace roots, but
   shares a memoized S3 object store across the eval run so identical workspace
   list/object downloads are de-duplicated in memory.
+- U18 PR
+  [#1978](https://github.com/thinkwork-ai/thinkwork/pull/1978) passed required
+  PR checks (`cla`, `lint`, `verify`, `typecheck`, `test`) and was squash
+  merged as `71377d646759a54a080f6f2ada0fba6a84298bca`; post-merge `main`
+  workflows passed `Lint`, `Supply Chain`, `Typecheck`, `Test`, and `Deploy`.
+  The remote branch was deleted and the local worktree/branch were removed.
+- Created isolated U19 worktree
+  `.Codex/worktrees/desktop-pi-evals-u19-post-speed-rerun` from `origin/main`
+  on branch `codex/desktop-pi-evals-u19-post-speed-rerun`.
+- U19 live Desktop Pi full rerun completed all 189 catalog cases through the
+  local desktop sidecar runner after U17/U18 were merged. Run
+  `bab15fd8-0125-46ca-8719-87d46fe4d9e9` reached terminal status for 189/189
+  cases in about 1m01s after the provider daily token quota was detected. The
+  result was 5 pass and 184 error rows, with 3 active cases reporting
+  `Too many tokens per day` and 181 queued cases fast-finished with the
+  quota-exhausted diagnostic instead of launching additional Pi turns.
+- U19 proves the current desktop eval runner can complete the full catalog
+  quickly under provider quota exhaustion. Workspace prompt remediation is still
+  intentionally deferred because the current non-passing rows are quota errors,
+  not text-bearing model behavior that can be improved by editing
+  `AGENTS.md`, `GUARDRAILS.md`, or related workspace defaults.
 
 ### Verification Log
 
@@ -652,13 +674,32 @@ status: complete
     workspace-store injection coverage.
 - `pnpm --filter @thinkwork/desktop typecheck` - passed.
 - `git diff --check` - passed.
+- U18 post-merge `main` workflows passed `Lint`, `Supply Chain`, `Typecheck`,
+  `Test`, and `Deploy`.
+- `pnpm install` in the U19 worktree - passed. Optional `node-liblzma` and
+  `canvas` native postinstall builds logged local `pkg-config` warnings and
+  exited 0.
+- `pnpm --filter @thinkwork/pi-runtime-core build` - passed in U19 before the
+  live sweep.
+- `pnpm --filter @thinkwork/evals-core build` - passed in U19 before the live
+  sweep.
+- `pnpm --filter @thinkwork/pi-extensions build` - passed in U19 before the
+  live sweep.
+- U19 live Desktop Pi run
+  `bab15fd8-0125-46ca-8719-87d46fe4d9e9` - completed: 189/189 cases terminal,
+  5 pass, 184 error, 2.65% pass rate, about 1m01s local runtime after the daily
+  token quota was detected. Detailed results saved outside the repo at
+  `/tmp/desktop-pi-eval-run-bab15fd8.json`.
+- `test -f /tmp/thinkwork-u19-token-snapshot.json && echo present || echo absent`
+  - returned `absent`.
 
 ### Blockers
 
-None currently. The next post-merge sweep should rerun with the U17
-quota-fast-finish behavior; workspace prompt remediation should resume after a
-run has enough non-quota assistant outputs to distinguish true eval failures
-from provider quota exhaustion.
+Provider daily token quota is currently exhausted for Desktop Pi eval turns.
+The full desktop catalog can complete quickly and cleanly as an eval run, but
+workspace prompt remediation should resume only after a run has enough non-quota
+assistant outputs to distinguish true eval failures from provider quota
+exhaustion.
 
 ## Workspace Architecture Guidance Docs - 2026-06-01
 
