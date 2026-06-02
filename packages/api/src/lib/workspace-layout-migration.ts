@@ -785,7 +785,7 @@ export async function planWorkspaceLayoutTenant(input: {
           reason: "legacy-source",
           mapRelativePath: legacySpaceRelativePath,
           destinationConflict:
-            spaceFolder === space.folder
+            input.deleteLegacySources || spaceFolder === space.folder
               ? "prefer-destination-delete-source"
               : "conflict",
         }),

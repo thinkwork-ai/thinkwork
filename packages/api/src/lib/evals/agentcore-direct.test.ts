@@ -3,6 +3,7 @@ import {
   buildEvalAgentCorePayload,
   DEFAULT_EVAL_MAX_TOKENS,
   DEFAULT_EVAL_MODEL_ID,
+  evalAgentCoreAttemptSessionId,
   evalAgentCoreInvokeTimeoutMs,
   evalMaxTokens,
   evalModelId,
@@ -108,10 +109,22 @@ describe("direct AgentCore eval helpers", () => {
   });
 
   it("normalizes eval max token overrides", () => {
-    expect(evalMaxTokens()).toBe(2_048);
+    expect(evalMaxTokens()).toBe(1_024);
     expect(evalMaxTokens("4096")).toBe(4_096);
-    expect(evalMaxTokens("0")).toBe(2_048);
-    expect(evalMaxTokens("nope")).toBe(2_048);
+    expect(evalMaxTokens("0")).toBe(1_024);
+    expect(evalMaxTokens("nope")).toBe(1_024);
+  });
+
+  it("uses fresh AgentCore sessions for empty-response retry attempts", () => {
+    expect(evalAgentCoreAttemptSessionId("eval-run-1-case-1", 1)).toBe(
+      "eval-run-1-case-1",
+    );
+    expect(evalAgentCoreAttemptSessionId("eval-run-1-case-1", 2)).toBe(
+      "eval-run-1-case-1-retry-2",
+    );
+    expect(evalAgentCoreAttemptSessionId("eval-run-1-case-1", 3)).toBe(
+      "eval-run-1-case-1-retry-3",
+    );
   });
 
   it("extracts OpenAI-style AgentCore response text", () => {

@@ -7,8 +7,8 @@ import { resolveRuntimeFunctionName } from "../resolve-runtime-function-name.js"
 
 export const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 export const DEFAULT_EVAL_AGENTCORE_INVOKE_TIMEOUT_MS = 180_000;
-export const DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS = 2;
-export const DEFAULT_EVAL_MAX_TOKENS = 2_048;
+export const DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS = 3;
+export const DEFAULT_EVAL_MAX_TOKENS = 1_024;
 
 const lambdaClient = new LambdaClient({});
 
@@ -40,6 +40,13 @@ export function evalMaxTokens(value = process.env.EVAL_MAX_TOKENS): number {
     return DEFAULT_EVAL_MAX_TOKENS;
   }
   return Math.floor(parsed);
+}
+
+export function evalAgentCoreAttemptSessionId(
+  sessionId: string,
+  attempt: number,
+): string {
+  return attempt <= 1 ? sessionId : `${sessionId}-retry-${attempt}`;
 }
 
 export class AgentCoreEvalInvocationTimeoutError extends Error {
@@ -161,7 +168,10 @@ export async function invokeAgentCoreForEval(input: {
     attempt += 1
   ) {
     try {
-      return await invokeAgentCoreForEvalOnce(input);
+      return await invokeAgentCoreForEvalOnce({
+        ...input,
+        sessionId: evalAgentCoreAttemptSessionId(input.sessionId, attempt),
+      });
     } catch (error) {
       lastError = error;
       if (
