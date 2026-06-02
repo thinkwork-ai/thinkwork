@@ -733,6 +733,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     };
     let renderedWorkspacePrefix: string | undefined;
     if (spaceId) {
+      const workspaceRenderStart = Date.now();
       try {
         renderedWorkspace = await renderWorkspaceTupleForInvoke({
           tenantId,
@@ -749,11 +750,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             renderedWorkspace.effectivePolicy?.blockedTools ??
             runtimeConfig.blockedTools;
           console.log(
-            `[chat-agent-invoke] rendered workspace tuple space=${renderedWorkspace.activeSpace?.slug ?? spaceId} prefix=${renderedWorkspacePrefix} cache=${renderedWorkspace.cacheStatus ?? "unknown"}`,
+            `[chat-agent-invoke] rendered workspace tuple space=${renderedWorkspace.activeSpace?.slug ?? spaceId} prefix=${renderedWorkspacePrefix} cache=${renderedWorkspace.cacheStatus ?? "unknown"} duration_ms=${Date.now() - workspaceRenderStart}`,
           );
         } else {
           console.log(
-            `[chat-agent-invoke] rendered workspace tuple skipped: ${renderedWorkspace.reason}`,
+            `[chat-agent-invoke] rendered workspace tuple skipped: ${renderedWorkspace.reason} duration_ms=${Date.now() - workspaceRenderStart}`,
           );
           if (renderedWorkspace.errorCode === "SpaceAccessDenied") {
             throw new Error(
@@ -798,7 +799,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           return;
         }
         console.error(
-          `[chat-agent-invoke] rendered workspace tuple failed; falling back to legacy workspace sync:`,
+          `[chat-agent-invoke] rendered workspace tuple failed after ${Date.now() - workspaceRenderStart}ms; falling back to legacy workspace sync:`,
           err,
         );
       }

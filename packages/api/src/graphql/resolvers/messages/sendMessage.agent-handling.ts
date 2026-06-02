@@ -11,12 +11,18 @@ export interface DefaultAgentDispatchInput extends SendMessageAgentHandlingInput
   customerOnboardingHandled: boolean;
 }
 
+export function normalizeMessageSenderType(senderType: unknown) {
+  const normalized =
+    typeof senderType === "string" ? senderType.trim().toLowerCase() : "";
+  if (!normalized || normalized === "human") return "user";
+  return normalized;
+}
+
 function canRequestAgentHandling(input: SendMessageAgentHandlingInput) {
   return (
     input.isUserMessage &&
     input.senderType === "user" &&
-    input.agentRequested !== false &&
-    input.dispatchMode !== "DESKTOP_LOCAL"
+    input.agentRequested !== false
   );
 }
 

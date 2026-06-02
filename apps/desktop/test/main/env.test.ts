@@ -22,7 +22,7 @@ describe("snapshotDesktopEnv", () => {
       desktopChannel: "canary",
       desktopProductName: "ThinkWork Spaces (Canary)",
       desktopAppId: "ai.thinkwork.spaces.desktop.canary",
-      desktopLocalPiEnabled: true,
+      desktopLocalPiEnabled: false,
       deepLinkScheme: "thinkwork-canary",
       rendererUrl: "http://localhost:5174",
       apiUrl: null,
@@ -53,10 +53,10 @@ describe("snapshotDesktopEnv", () => {
     expect(snapshot.desktopProductName).toBe("ThinkWork Spaces");
     expect(snapshot.desktopAppId).toBe("ai.thinkwork.spaces.desktop.dev");
     expect(snapshot.deepLinkScheme).toBeNull();
-    expect(snapshot.desktopLocalPiEnabled).toBe(true);
+    expect(snapshot.desktopLocalPiEnabled).toBe(false);
   });
 
-  it("stage-gates desktop local Pi with explicit env overrides", () => {
+  it("keeps desktop local Pi opt-in through explicit env overrides", () => {
     expect(
       snapshotDesktopEnv({
         VITE_THINKWORK_STAGE: "prod",
@@ -66,6 +66,17 @@ describe("snapshotDesktopEnv", () => {
       snapshotDesktopEnv({
         VITE_THINKWORK_STAGE: "prod",
         VITE_DESKTOP_LOCAL_PI_ENABLED: "true",
+      }).desktopLocalPiEnabled,
+    ).toBe(true);
+    expect(
+      snapshotDesktopEnv({
+        VITE_THINKWORK_STAGE: "dev",
+      }).desktopLocalPiEnabled,
+    ).toBe(false);
+    expect(
+      snapshotDesktopEnv({
+        VITE_THINKWORK_STAGE: "dev",
+        THINKWORK_DESKTOP_LOCAL_PI_ENABLED: "true",
       }).desktopLocalPiEnabled,
     ).toBe(true);
     expect(

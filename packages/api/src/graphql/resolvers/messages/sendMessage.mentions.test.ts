@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  normalizeMessageSenderType,
   shouldApplyCustomerOnboardingChatUpdate,
   shouldDispatchDefaultAgentTurn,
 } from "./sendMessage.agent-handling.js";
@@ -52,7 +53,9 @@ describe("sendMessage mention collaboration path", () => {
   });
 
   it("preserves sender defaults while allowing agent-authenticated senders", () => {
-    expect(source).toContain('const senderType = i.senderType ?? "user"');
+    expect(source).toContain(
+      "const senderType = normalizeMessageSenderType(i.senderType)",
+    );
     expect(source).toContain('senderType === "agent"');
     expect(source).toContain("ctx.auth.agentId");
     expect(source).toContain("Agent sender is not available in this tenant");
@@ -68,6 +71,14 @@ describe("sendMessage mention collaboration path", () => {
 });
 
 describe("sendMessage agent handling", () => {
+  it("normalizes legacy mobile human senders into user dispatch", () => {
+    expect(normalizeMessageSenderType(undefined)).toBe("user");
+    expect(normalizeMessageSenderType("")).toBe("user");
+    expect(normalizeMessageSenderType(" human ")).toBe("user");
+    expect(normalizeMessageSenderType("USER")).toBe("user");
+    expect(normalizeMessageSenderType("agent")).toBe("agent");
+  });
+
   it("defaults user follow-ups into agent handling", () => {
     expect(
       shouldApplyCustomerOnboardingChatUpdate({
@@ -108,7 +119,7 @@ describe("sendMessage agent handling", () => {
     ).toBe(false);
   });
 
-  it("still applies onboarding chat updates when desktop local owns agent dispatch", () => {
+  it("does not let desktop-local hints suppress managed agent dispatch", () => {
     expect(
       shouldApplyCustomerOnboardingChatUpdate({
         isUserMessage: true,
@@ -126,7 +137,7 @@ describe("sendMessage agent handling", () => {
         hasComputerThread: false,
         customerOnboardingHandled: false,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("keeps managed dispatch as the default dispatch mode", () => {

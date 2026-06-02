@@ -35,17 +35,16 @@ validated through packaged builds.
 
 ## Desktop Local Pi
 
-The desktop local Pi sidecar is gated by stage/channel before broad release.
-It is enabled by default for `dev` and canary builds, disabled by default for
-stable/prod builds, and can be overridden with:
+The desktop local Pi sidecar is disabled by default. It can still be enabled
+explicitly for investigation with:
 
 ```bash
 VITE_DESKTOP_LOCAL_PI_ENABLED=true
 ```
 
 When the gate is off, the Electron bridge reports Pi as unavailable and Spaces
-continues to use the managed AgentCore dispatch path. When the gate is on,
-main starts the supervised sidecar and writes redacted diagnostics under the
+continues to use the managed AgentCore dispatch path. When the gate is on, main
+starts the supervised sidecar and writes redacted diagnostics under the
 app-owned user data directory at `pi-diagnostics/pi-sidecar.log`.
 
 Diagnostics must not contain raw AWS credentials, Hindsight or OAuth tokens,

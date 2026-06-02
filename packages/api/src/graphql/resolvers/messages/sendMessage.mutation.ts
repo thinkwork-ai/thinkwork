@@ -30,6 +30,7 @@ import {
   MessageAttachmentRefsError,
 } from "../../../lib/thread-attachments/message-attachment-refs.js";
 import {
+  normalizeMessageSenderType,
   shouldApplyCustomerOnboardingChatUpdate,
   shouldDispatchDefaultAgentTurn,
 } from "./sendMessage.agent-handling.js";
@@ -41,7 +42,7 @@ export const sendMessage = async (
 ) => {
   const i = args.input;
   const role = i.role.toLowerCase();
-  const senderType = i.senderType ?? "user";
+  const senderType = normalizeMessageSenderType(i.senderType);
   const senderId =
     senderType === "user"
       ? ((await resolveCallerFromAuth(ctx.auth)).userId ?? i.senderId)

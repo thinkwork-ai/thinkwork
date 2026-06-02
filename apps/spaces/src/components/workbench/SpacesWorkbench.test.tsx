@@ -169,19 +169,17 @@ afterEach(() => {
 });
 
 describe("SpacesWorkbench", () => {
-  it("prewarms the desktop local Pi workspace when New Thread loads", async () => {
+  it("does not prewarm the desktop local Pi workspace when New Thread loads", async () => {
     render(<SpacesWorkbench />);
 
     await waitFor(() => {
-      expect(prewarmWorkspace).toHaveBeenCalledWith({
-        agentId: "agent-1",
-        spaceId: "space-1",
-      });
+      expect(screen.getByLabelText("Send message")).toBeTruthy();
     });
+    expect(prewarmWorkspace).not.toHaveBeenCalled();
     expect(createThread).not.toHaveBeenCalled();
   });
 
-  it("starts the desktop local Pi sidecar for the first message of a new thread", async () => {
+  it("sends the first message of a new thread through managed AgentCore", async () => {
     render(<SpacesWorkbench />);
 
     fireEvent.change(screen.getByLabelText("Send message"), {
@@ -207,18 +205,11 @@ describe("SpacesWorkbench", () => {
           role: "USER",
           content: "Use local tools",
           mentions: [],
-          dispatchMode: "DESKTOP_LOCAL",
         },
       });
     });
-    await waitFor(() => {
-      expect(startTurn).toHaveBeenCalledWith({
-        agentId: "agent-1",
-        threadId: "thread-1",
-        messageId: "message-1",
-        userMessage: "Use local tools",
-      });
-    });
+    expect(prewarmWorkspace).not.toHaveBeenCalled();
+    expect(startTurn).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "/threads/$id",
@@ -233,7 +224,7 @@ describe("SpacesWorkbench", () => {
     });
   });
 
-  it("routes to the created thread before the first message send finishes", async () => {
+  it("routes to the created thread before the first managed send finishes", async () => {
     let resolveSend:
       | ((value: { data: { sendMessage: { id: string } } }) => void)
       | undefined;
@@ -265,7 +256,8 @@ describe("SpacesWorkbench", () => {
 
     resolveSend?.({ data: { sendMessage: { id: "message-1" } } });
     await waitFor(() => {
-      expect(startTurn).toHaveBeenCalled();
+      expect(sendMessage).toHaveBeenCalledTimes(1);
     });
+    expect(startTurn).not.toHaveBeenCalled();
   });
 });

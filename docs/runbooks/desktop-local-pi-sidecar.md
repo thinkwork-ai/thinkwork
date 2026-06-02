@@ -6,14 +6,14 @@ rendered workspace, finalizer, and managed-delegation contracts.
 
 ## Rollout Gate
 
-Local Pi is enabled by default for `dev` and canary desktop builds and disabled
-by default for stable/prod builds. Override the gate with:
+Local Pi is disabled by default for every desktop build. Enable it explicitly
+for focused investigation with:
 
 ```bash
 VITE_DESKTOP_LOCAL_PI_ENABLED=true
 ```
 
-or disable it explicitly with:
+You can also pin the disabled state explicitly with:
 
 ```bash
 VITE_DESKTOP_LOCAL_PI_ENABLED=false

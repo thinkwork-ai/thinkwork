@@ -1064,7 +1064,7 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.queryByLabelText("Processing request")).toBeNull();
   });
 
-  it("marks follow-up sends for desktop-local dispatch when local Pi is ready", async () => {
+  it("routes follow-up sends through managed AgentCore when local Pi is ready", async () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
     const startTurn = vi.fn(async () => ({
       accepted: true,
@@ -1107,18 +1107,10 @@ describe("SpacesThreadDetailRoute", () => {
           threadId: "thread-1",
           role: "USER",
           content: "Run this on the desktop sidecar",
-          dispatchMode: "DESKTOP_LOCAL",
         },
       });
     });
-    await waitFor(() => {
-      expect(startTurn).toHaveBeenCalledWith({
-        agentId: "agent-1",
-        threadId: "thread-1",
-        messageId: "message-local-1",
-        userMessage: "Run this on the desktop sidecar",
-      });
-    });
+    expect(startTurn).not.toHaveBeenCalled();
   });
 
   it("does not start desktop-local Pi when the API handled an onboarding task update", async () => {
@@ -1174,7 +1166,6 @@ describe("SpacesThreadDetailRoute", () => {
           threadId: "thread-1",
           role: "USER",
           content: "DocuSign is complete",
-          dispatchMode: "DESKTOP_LOCAL",
         },
       });
     });

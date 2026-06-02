@@ -76,6 +76,7 @@ import {
   type InvocationResponse,
   type PiRetainStatus,
   type RunAgentLoopResult,
+  type SessionStore,
   type ToolCostRecord,
   type ToolInvocationRecord,
   type WorkspaceBaseline,
@@ -213,6 +214,52 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
       } as McpServerConfig,
     ];
   });
+}
+
+function instrumentSessionStore(
+  store: SessionStore,
+  context: {
+    tenantId: string;
+    agentId: string;
+    agentSlug: string;
+    threadId: string;
+  },
+): SessionStore {
+  return {
+    async read(key) {
+      const start = Date.now();
+      const result = await store.read(key);
+      logStructured({
+        level: "info",
+        event: "session_store_read",
+        tenantId: context.tenantId,
+        agentId: context.agentId,
+        agentSlug: context.agentSlug,
+        threadId: context.threadId,
+        key,
+        status: result ? "hit" : "miss",
+        durationMs: Date.now() - start,
+      });
+      return result;
+    },
+
+    async write(key, body, expectedVersion) {
+      const start = Date.now();
+      const version = await store.write(key, body, expectedVersion);
+      logStructured({
+        level: "info",
+        event: "session_store_write",
+        tenantId: context.tenantId,
+        agentId: context.agentId,
+        agentSlug: context.agentSlug,
+        threadId: context.threadId,
+        key,
+        mode: expectedVersion === null ? "create" : "update",
+        durationMs: Date.now() - start,
+      });
+      return version;
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1061,24 +1108,43 @@ export async function handleInvocation(
         },
       };
     }
+    const workspaceBootstrapStart = Date.now();
     try {
+      const renderedWorkspacePrefix = asString(
+        args.payload.rendered_workspace_prefix,
+      );
       const s3 = deps.s3ClientFactory(env.awsRegion);
-      await bootstrap(
+      const bootstrapResult = await bootstrap(
         identity.tenantSlug,
         identity.agentSlug,
         env.workspaceDir,
         s3,
         workspaceBucket,
         {
-          workspacePrefix: asString(args.payload.rendered_workspace_prefix),
+          workspacePrefix: renderedWorkspacePrefix,
         },
       );
+      logStructured({
+        level: "info",
+        event: "workspace_bootstrap_completed",
+        tenantId: identity.tenantId,
+        agentId: identity.agentId,
+        agentSlug: identity.agentSlug,
+        threadId: identity.threadId,
+        prefix: bootstrapResult.prefix,
+        renderedWorkspacePrefix: renderedWorkspacePrefix || undefined,
+        synced: bootstrapResult.synced,
+        deleted: bootstrapResult.deleted,
+        total: bootstrapResult.total,
+        durationMs: Date.now() - workspaceBootstrapStart,
+      });
     } catch (err) {
       logStructured({
         level: "warn",
         event: "workspace_bootstrap_failed",
         tenantId: identity.tenantId,
         agentSlug: identity.agentSlug,
+        durationMs: Date.now() - workspaceBootstrapStart,
         error: err instanceof Error ? err.message : String(err),
       });
       return {
@@ -1250,6 +1316,7 @@ export async function handleInvocation(
   // even if the LLM throws or a tool raises.
   let runResult: RunAgentLoopResult | undefined;
   let runError: unknown;
+  let runLoopStart = 0;
   const stageAttachments =
     deps.stageMessageAttachmentsImpl ?? stageMessageAttachments;
   const stagedAttachments = await stageAttachments({
@@ -1314,7 +1381,7 @@ export async function handleInvocation(
     // from S3 instead of replaying full history as prompt text. Requires the
     // workspace bucket + a tenant slug for isolation; otherwise the loop falls
     // back to the transitional history-prepend path.
-    const sessionStore =
+    const rawSessionStore =
       workspaceBucket && identity.tenantSlug
         ? createS3SessionStore({
             s3: deps.s3ClientFactory(env.awsRegion),
@@ -1322,6 +1389,39 @@ export async function handleInvocation(
             keyPrefix: `pi-sessions/${identity.tenantSlug}/`,
           })
         : undefined;
+    const sessionStore = rawSessionStore
+      ? instrumentSessionStore(rawSessionStore, {
+          tenantId: identity.tenantId,
+          agentId: identity.agentId,
+          agentSlug: identity.agentSlug,
+          threadId: identity.threadId,
+        })
+      : undefined;
+    logStructured({
+      level: "info",
+      event: "session_store_configured",
+      tenantId: identity.tenantId,
+      agentId: identity.agentId,
+      agentSlug: identity.agentSlug,
+      threadId: identity.threadId,
+      backing: sessionStore ? "s3" : "history_prompt",
+      workspaceBucketConfigured: Boolean(workspaceBucket),
+      hasTenantSlug: Boolean(identity.tenantSlug),
+    });
+    logStructured({
+      level: "info",
+      event: "agent_loop_starting",
+      tenantId: identity.tenantId,
+      userId: identity.userId,
+      agentId: identity.agentId,
+      agentSlug: identity.agentSlug,
+      threadId: identity.threadId,
+      traceId: identity.traceId,
+      tools: bundle.tools.length,
+      extensionTools: bundle.extensionToolNames.length,
+      workspaceSkills: workspaceSkills.length,
+    });
+    runLoopStart = Date.now();
     runResult = await runLoop(
       {
         message: userMessage,
@@ -1353,8 +1453,33 @@ export async function handleInvocation(
       },
       { log: (entry) => logStructured(entry) },
     );
+    logStructured({
+      level: "info",
+      event: "agent_loop_completed",
+      tenantId: identity.tenantId,
+      userId: identity.userId,
+      agentId: identity.agentId,
+      agentSlug: identity.agentSlug,
+      threadId: identity.threadId,
+      traceId: identity.traceId,
+      durationMs: Date.now() - runLoopStart,
+      toolsCalled: runResult.toolsCalled,
+      toolInvocations: runResult.toolInvocations.length,
+    });
   } catch (err) {
     runError = err;
+    logStructured({
+      level: "error",
+      event: "agent_loop_failed",
+      tenantId: identity.tenantId,
+      userId: identity.userId,
+      agentId: identity.agentId,
+      agentSlug: identity.agentSlug,
+      threadId: identity.threadId,
+      traceId: identity.traceId,
+      durationMs: runLoopStart ? Date.now() - runLoopStart : undefined,
+      error: err instanceof Error ? err.message : String(err),
+    });
   } finally {
     bundle.handleStore.clear();
     for (const fn of bundle.cleanup.reverse()) {

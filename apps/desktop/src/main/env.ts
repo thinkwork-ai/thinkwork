@@ -113,7 +113,7 @@ function resolveDesktopLocalPiEnabled(
     optionalEnv(env.THINKWORK_DESKTOP_LOCAL_PI_ENABLED) ??
     optionalEnv(env.VITE_DESKTOP_LOCAL_PI_ENABLED);
   if (explicit) return parseBooleanEnv(explicit);
-  return stage === "dev" || stage === "canary";
+  return false;
 }
 
 function parseBooleanEnv(value: string): boolean {
