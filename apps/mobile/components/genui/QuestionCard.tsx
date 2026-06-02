@@ -142,7 +142,7 @@ export function QuestionCard({ data, context }: GenUIProps) {
           threadId: context.threadId,
           role: "USER" as any,
           content: buildFormResponseContent(schema.id, cleanValues),
-          senderType: "human",
+          senderType: "user",
           senderId: context.currentUserId,
         },
       });

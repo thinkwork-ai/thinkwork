@@ -12,11 +12,7 @@
     "css:watch": "tailwindcss -i ./global.css -o ./public/styles.css --watch",
     "build:web": "npm run css && expo export --platform web",
     "codegen": "graphql-codegen --config codegen.ts",
-    "test": "vitest run --config vitest.config.ts",
-    "smoke:pi-harness": "tsx scripts/pi-harness-smoke.ts",
-    "smoke:pi-harness:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities all --json",
-    "smoke:pi-harness:full:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities full --json",
-    "smoke:pi-harness:handoff:dry-run": "tsx scripts/pi-harness-smoke.ts --dry-run --capabilities handoff_local,handoff_managed,handoff_late_finalize,handoff_unsafe_checkpoint --json"
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -62,7 +58,6 @@
     "expo-web-browser": "~15.0.10",
     "graphql": "^16.10.0",
     "graphql-ws": "^5.16.2",
-    "just-bash": "3.0.1",
     "lucide-react-native": "^0.563.0",
     "nativewind": "^4.2.1",
     "react": "19.1.0",

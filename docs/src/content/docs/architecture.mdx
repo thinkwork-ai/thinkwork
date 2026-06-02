@@ -112,7 +112,11 @@ See [Memory](/concepts/knowledge/).
 
 Agents are the execution layer. The tenant platform agent receives a thread plus assembled context, decides what to do, calls tools, and produces a response. Per-Space configuration (CONTEXT.md, skills, MCP) is rendered into the workspace the agent runs against.
 
-In managed mode, this execution happens in AgentCore. Strands is the default runtime; Pi is a parallel runtime substrate that individual agents or templates can opt into. The surrounding harness remains ThinkWork's either way. That distinction is important: managed does not mean vendor-hosted.
+ThinkWork agent execution runs in AWS-managed AgentCore isolation; desktop and
+mobile are clients. Strands is the default runtime; Pi is a parallel runtime
+substrate that individual agents or templates can opt into. The surrounding
+harness remains ThinkWork's either way. That distinction is important: managed
+does not mean vendor-hosted.
 
 See [Agents](/concepts/agents/).
 

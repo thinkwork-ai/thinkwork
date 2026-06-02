@@ -55,8 +55,6 @@ import {
   type ThreadFilters,
 } from "@/components/threads/ThreadFilterBar";
 import { ThreadRow } from "@/components/threads/ThreadRow";
-import { runThreadHarnessTurn } from "@/lib/agent/thread-turn";
-import { createClientTurnId } from "@/lib/agent/turn-lease";
 import { prewarmWorkspaceCache } from "@/lib/agent/workspace-cache";
 import {
   clearPendingThreadStart,
@@ -152,17 +150,6 @@ function resolveApiUrl(): string {
 
 function hasDefaultAgentMentionAlias(content: string) {
   return /(?:^|\s)@(agent|think)\b/iu.test(content);
-}
-
-function imageAttachmentRefs(image: ImagePart | null) {
-  if (!image) return [];
-  return [
-    {
-      name: `image-1.${image.format}`,
-      mimeType: `image/${image.format}`,
-      sizeBytes: Math.ceil((image.data.length * 3) / 4),
-    },
-  ];
 }
 
 type HomeComputer = {
@@ -883,14 +870,6 @@ export default function ThreadsScreen() {
       try {
         const threadTitle =
           (text.length > 60 ? text.slice(0, 60) + "..." : text) || "Image";
-        const clientTurnId = effectiveNewThreadAgentEnabled
-          ? createClientTurnId()
-          : null;
-
-        // Agent-enabled mobile starts seed a durable mobile turn as part of
-        // createThread itself. That makes the thread, visible user message,
-        // checkpoint 0, and handoff-capable running turn survive even if iOS
-        // backgrounds the app before the detail screen/local harness mounts.
         const newThread = await createThread({
           tenantId,
           agentId: selectedComputer.id,
@@ -902,23 +881,6 @@ export default function ThreadsScreen() {
           createdByType: "user",
           createdById: currentUser?.id || user?.sub,
           ...(metadata ? ({ metadata } as any) : {}),
-          ...(clientTurnId
-            ? ({
-                mobileTurnClientId: clientTurnId,
-                mobileTurnUserText: messageContent || "Image",
-                mobileTurnAttachments: JSON.stringify(
-                  imageAttachmentRefs(image),
-                ),
-                mobileTurnMetadata: JSON.stringify({
-                  agent_name: selectedComputer?.name ?? null,
-                  user_id: currentUser?.id ?? null,
-                  user_name: currentUser?.name ?? null,
-                  user_email: currentUser?.email ?? null,
-                  tenant_id: currentUser?.tenantId ?? tenantId,
-                  space_id: effectiveSpaceId ?? null,
-                }),
-              } as any)
-            : {}),
         } as any);
 
         console.log("[Threads] Thread created:", newThread.id);
@@ -930,7 +892,6 @@ export default function ThreadsScreen() {
           persistedContent: messageContent,
           expectAssistantResponse: effectiveNewThreadAgentEnabled,
           userId: currentUser?.id || user?.sub,
-          clientTurnId,
           createdAt: new Date().toISOString(),
         });
         setTimeout(() => {
@@ -947,7 +908,7 @@ export default function ThreadsScreen() {
               threadId: newThread.id,
               role: "USER" as any,
               content: messageContent || "Image",
-              senderType: "human",
+              senderType: "user",
               senderId: currentUser?.id || user?.sub,
               agentRequested: false,
               mentions: sendMessageMentionsForInput(mentions) as any,
@@ -958,37 +919,24 @@ export default function ThreadsScreen() {
         }
 
         markThreadActive(newThread.id);
-
-        // First message runs through the on-device harness (loop in Hermes → Bedrock via
-        // /api/model/converse), persisted into the new thread via record-turn.
-        void (async () => {
-          try {
-            await runThreadHarnessTurn({
+        try {
+          await executeSendMessage({
+            input: {
               threadId: newThread.id,
-              userText: messageContent,
-              priorMessages: [],
-              agentName: selectedComputer?.name ?? undefined,
-              userId: currentUser?.id,
-              userName: currentUser?.name,
-              userEmail: currentUser?.email,
-              tenantId: currentUser?.tenantId ?? tenantId,
-              spaceId: effectiveSpaceId ?? undefined,
-              spaceFolderName: selectedSpace.slug,
-              // Selects which tenant MCP tools the on-device agent can call
-              // (mcp-tools extension + proxy).
-              agentId: selectedComputer.id,
-              clientTurnId: clientTurnId ?? undefined,
-              // Attached image is model-vision input on the first turn.
-              images: image ? [image] : undefined,
-            });
-            reexecute({ requestPolicy: "network-only" });
-          } catch (err) {
-            console.error("[harness] new-thread first turn failed:", err);
-            clearPendingThreadStart(newThread.id);
-          } finally {
-            clearThreadActive(newThread.id);
-          }
-        })();
+              role: "USER" as any,
+              content: messageContent || "Image",
+              senderType: "user",
+              senderId: currentUser?.id || user?.sub,
+              agentRequested: true,
+              mentions: sendMessageMentionsForInput(mentions) as any,
+            },
+          });
+          reexecute({ requestPolicy: "network-only" });
+        } catch (err) {
+          console.error("[mobile-agentcore] new-thread first turn failed:", err);
+          clearPendingThreadStart(newThread.id);
+          clearThreadActive(newThread.id);
+        }
       } catch (e: any) {
         console.error("[Threads] Failed to create thread:", e);
         Alert.alert(
@@ -1003,9 +951,6 @@ export default function ThreadsScreen() {
       selectedComputer?.id,
       tenantId,
       currentUser?.id,
-      currentUser?.name,
-      currentUser?.email,
-      currentUser?.tenantId,
       createThread,
       executeSendMessage,
       reexecute,
@@ -1014,7 +959,6 @@ export default function ThreadsScreen() {
       markThreadActive,
       clearThreadActive,
       user?.sub,
-      selectedComputer?.name,
       effectiveSpaceId,
       newThreadImage,
       newThreadMentions,

@@ -504,3 +504,55 @@ export function logStructured(
   sanitised.ts = new Date().toISOString();
   out.write(`${JSON.stringify(sanitised)}\n`);
 }
+
+export type AgentCorePhaseStatus =
+  | "started"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export interface AgentCorePhaseLogFields {
+  phase: string;
+  status: AgentCorePhaseStatus;
+  tenantId?: string;
+  userId?: string;
+  agentId?: string;
+  agentSlug?: string;
+  threadId?: string;
+  threadTurnId?: string;
+  traceId?: string;
+  runtimeType?: string;
+  durationMs?: number;
+  count?: number;
+  detail?: string;
+  errorType?: string;
+}
+
+export function logAgentCorePhase(
+  fields: AgentCorePhaseLogFields,
+  out: NodeJS.WritableStream = process.stdout,
+): void {
+  const sessionId = fields.threadTurnId || fields.threadId || "unknown";
+  logStructured(
+    {
+      level: fields.status === "failed" ? "error" : "info",
+      event: "agentcore_phase",
+      name: "thinkwork.agentcore.phase",
+      scope: { name: "thinkwork.pi.runtime" },
+      spanId: phaseSpanId(fields.phase, sessionId),
+      sessionId,
+      source: "agentcore-pi",
+      runtimeType: fields.runtimeType ?? "pi",
+      ...fields,
+    },
+    out,
+  );
+}
+
+function phaseSpanId(phase: string, sessionId: string): string {
+  const safe = `agentcore-pi-${phase}-${sessionId}`
+    .replace(/[^A-Za-z0-9_.:-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  return `tw-${safe || "agentcore-phase"}`;
+}

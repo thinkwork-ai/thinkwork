@@ -37,7 +37,13 @@ export function shouldShowTurnInTimeline(
   turn: TimelineTurnLike,
   isAdmin?: boolean,
 ): boolean {
-  return Boolean(isAdmin) || isMobilePiTurn(turn);
+  const status = (turn.status || "").toLowerCase();
+  return (
+    Boolean(isAdmin) ||
+    isMobilePiTurn(turn) ||
+    status === "running" ||
+    status === "queued"
+  );
 }
 
 export function shouldShowThreadWorkingIndicator(input: {

@@ -22,7 +22,11 @@ import {
 } from "./durable-session-manager.js";
 import { textFromAssistant } from "./history.js";
 import { collectToolCosts } from "./tool-costs.js";
-import type { RunAgentLoopArgs, RunAgentLoopResult } from "./types.js";
+import type {
+  PiInvocationIdentity,
+  RunAgentLoopArgs,
+  RunAgentLoopResult,
+} from "./types.js";
 
 /**
  * Full Pi built-in tool set. We pass an explicit allowlist so all seven are
@@ -378,6 +382,8 @@ export async function runAgentLoop(
 
   const toolsCalled = new Set<string>();
   const toolInvocations: RunAgentLoopResult["toolInvocations"] = [];
+  const toolStarts = new Map<string, number>();
+  const identity = isInvocationIdentity(args.identity) ? args.identity : null;
 
   const customTools = args.tools.map(toToolDefinition);
   const toolAllowlist = buildToolAllowlist(
@@ -405,7 +411,26 @@ export async function runAgentLoop(
   try {
     session.subscribe((event) => {
       if (event.type === "tool_execution_start") {
+        toolStarts.set(event.toolCallId, Date.now());
         toolsCalled.add(event.toolName);
+        deps.log?.({
+          level: "info",
+          event: "agentcore_phase",
+          name: "thinkwork.agentcore.phase",
+          scope: { name: "thinkwork.pi.runtime" },
+          spanId: phaseSpanId("runtime.tool_execution", event.toolCallId),
+          sessionId: args.threadId,
+          source: "agentcore-pi",
+          phase: "runtime.tool_execution",
+          status: "started",
+          tenantId: identity?.tenantId,
+          userId: identity?.userId,
+          agentId: identity?.agentId,
+          threadId: args.threadId,
+          traceId: identity?.traceId,
+          runtimeType: "pi",
+          detail: event.toolName,
+        });
         toolInvocations.push({
           id: event.toolCallId,
           name: event.toolName,
@@ -420,6 +445,26 @@ export async function runAgentLoop(
       }
       if (event.type === "tool_execution_end") {
         const finished = new Date().toISOString();
+        const started = toolStarts.get(event.toolCallId);
+        deps.log?.({
+          level: event.isError ? "error" : "info",
+          event: "agentcore_phase",
+          name: "thinkwork.agentcore.phase",
+          scope: { name: "thinkwork.pi.runtime" },
+          spanId: phaseSpanId("runtime.tool_execution", event.toolCallId),
+          sessionId: args.threadId,
+          source: "agentcore-pi",
+          phase: "runtime.tool_execution",
+          status: event.isError ? "failed" : "completed",
+          tenantId: identity?.tenantId,
+          userId: identity?.userId,
+          agentId: identity?.agentId,
+          threadId: args.threadId,
+          traceId: identity?.traceId,
+          runtimeType: "pi",
+          durationMs: started ? Date.now() - started : undefined,
+          detail: event.toolName,
+        });
         const existing = toolInvocations.find(
           (item) => item.id === event.toolCallId,
         );
@@ -502,6 +547,24 @@ export async function runAgentLoop(
   } finally {
     session.dispose();
   }
+}
+
+function isInvocationIdentity(value: unknown): value is PiInvocationIdentity {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.tenantId === "string" &&
+    typeof record.agentId === "string" &&
+    typeof record.threadId === "string"
+  );
+}
+
+function phaseSpanId(phase: string, id: string): string {
+  const safe = `${phase}-${id}`
+    .replace(/[^A-Za-z0-9_.:-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  return `tw-${safe || "agentcore-phase"}`;
 }
 
 // Re-export so consumers (and the inert U2 package later) can reference the

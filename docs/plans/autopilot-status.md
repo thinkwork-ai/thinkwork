@@ -5204,6 +5204,510 @@ Target branch: `main`
 
 None.
 
+# AgentCore-First Pi Execution Autopilot - 2026-06-02
+
+## Status
+
+- Plan: `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
+- Branch: `codex/agentcore-final-status`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-final-status`
+- Started: `2026-06-02T13:42:51Z`
+- Current unit: Complete.
+- Target branch: `main`
+
+## Unit Ledger
+
+| Unit | Scope                                             | Branch               | PR                                                           | State  | Notes                                                                   |
+| ---- | ------------------------------------------------- | -------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------- |
+| U0   | Spike: Route desktop and mobile to AgentCore now  | `codex/agentcore-u0` | [#1988](https://github.com/thinkwork-ai/thinkwork/pull/1988) | Merged | CI passed; squash merged as `f0c378623a6a2a68168901a9147595c6fb09b656`. |
+| U1   | Remove Spaces desktop-local dispatch and surfaces | `codex/agentcore-u1` | [#1989](https://github.com/thinkwork-ai/thinkwork/pull/1989) | Merged | CI passed; squash merged as `116665de0113d1855a4d1e570998067e8aa29c6f`. |
+| U2   | Remove Electron Pi sidecar and IPC bridge         | `codex/agentcore-u2` | [#1990](https://github.com/thinkwork-ai/thinkwork/pull/1990) | Merged | CI passed; squash merged as `66011fc16c39684d5193ba4bf42e9f1049b8ab0c`. |
+| U3   | Retire desktop-local backend contracts            | `codex/agentcore-u3` | [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991) | Merged | CI passed; squash merged as `39395b16afe539891aae8c4b50db9e19dd2db7b2`. |
+| U4   | Remove mobile on-device harness execution         | `codex/agentcore-u4` | [#1992](https://github.com/thinkwork-ai/thinkwork/pull/1992) | Merged | CI passed; squash merged as `7acf3185ebb6e3a2f5e2349c3e34d704543b5ac1`. |
+| U5   | Instrument AgentCore turn latency by phase        | `codex/agentcore-u5` | [#1993](https://github.com/thinkwork-ai/thinkwork/pull/1993) | Merged | CI passed; squash merged as `e78fd569be173524be89d6923f4138fda86d3acd`. |
+| U6   | Improve managed-path perceived responsiveness     | `codex/agentcore-u6` | [#1994](https://github.com/thinkwork-ai/thinkwork/pull/1994) | Merged | CI passed; squash merged as `52c472e595a1dde5834154b117d93a7e8d5f534b`. |
+| U7   | Update docs, tests, and operational language      | `codex/agentcore-u7` | [#1995](https://github.com/thinkwork-ai/thinkwork/pull/1995) | Merged | CI passed; squash merged as `2b83cfbc61a10af7063b3320461e9128504b3c94`. |
+
+## U0 Implementation Notes
+
+- Desktop Spaces sends no longer force `dispatchMode: DESKTOP_LOCAL`.
+- Mobile new-thread, follow-up, and question-card sends now use the managed AgentCore path instead of invoking the on-device harness loop.
+- API message dispatch normalizes legacy `human` sender values to `user`, so mobile clients cannot accidentally suppress managed agent dispatch.
+- API dispatch no longer treats a client-supplied desktop-local hint as a reason to skip managed AgentCore handling.
+- AgentCore Pi and `chat-agent-invoke` now emit lightweight phase logs around workspace render/bootstrap, session-store setup, and runtime loop activity.
+- The plan document is included in this unit because it had been restored from an earlier checkpoint and was not present on `origin/main`.
+
+## U0 Verification Log
+
+- Desktop Electron local E2E passed against AgentCore: thread `db33fd9b-ec38-4eea-938a-7328df4467c5` returned `U0_DESKTOP_E2E_OK`; no local `pi-sidecar` process was running.
+- iOS simulator first managed turn passed after mobile/API sender normalization: thread `c5b81919-a954-4bfc-acdb-11f258d4c9a4`, turn `5500af30-18d5-4b72-b6bf-a74b22df2138`, `runtimeType: pi`, `invocationSource: chat_message`, `status: succeeded`, response `U0_MOBILE_SIM_PATCHED_OK`, duration `15550ms`.
+- iOS simulator warm follow-up passed in the same thread: turn `87ad6693-aae0-4709-9fbd-9a3f37d24fc7`, `runtimeType: pi`, `invocationSource: chat_message`, `status: succeeded`, response `U0_MOBILE_SIM_FOLLOWUP_OK`, duration `14025ms`.
+- `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/messages/sendMessage.mentions.test.ts` passed.
+- `pnpm --filter @thinkwork/mobile test -- lib/thread-agent-mode.test.ts` passed.
+- `pnpm --filter @thinkwork/react-native-sdk build` passed.
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/messages/sendMessage.mentions.test.ts` (15 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/mobile test -- lib/thread-agent-mode.test.ts` (8 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/spaces test -- src/lib/use-chat-appsync-transport.test.ts src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx` (43 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/desktop test -- test/main/env.test.ts` (5 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts` (51 tests).
+- `2026-06-02T13:43Z` focused rerun passed: `git diff --check`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/api typecheck`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/spaces typecheck`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/desktop typecheck`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/agentcore-pi typecheck`.
+- `2026-06-02T13:45Z` touched package check passed: `pnpm --filter @thinkwork/react-native-sdk build`.
+- Rebased cleanly onto `origin/main` at `2026-06-02T13:44Z`.
+- Post-rebase focused rerun passed: API mentions test + typecheck, mobile thread-agent-mode test + React Native SDK build, Spaces routing tests + typecheck, desktop env test + typecheck, AgentCore Pi server test + typecheck, and `git diff --check`.
+- Root gate passed: `pnpm lint`.
+- Root gate passed: `pnpm typecheck`.
+- Root gate passed: `pnpm test`, including `test:release`.
+
+## U0 Known Local Verification Notes
+
+- `pnpm --filter @thinkwork/mobile exec tsc --noEmit` fails on existing unrelated mobile type errors in fleet/routines/navigation areas; this is recorded as non-gating for U0 because the focused mobile regression passed and the failures are outside the touched AgentCore routing paths.
+- `pnpm format:check` is blocked locally because the root script calls `prettier`, but this checkout does not have a `prettier` binary installed (`sh: prettier: command not found`). CI should still run its configured formatter gate.
+
+## U0 CI / PR
+
+- Opened [#1988](https://github.com/thinkwork-ai/thinkwork/pull/1988).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `f0c378623a6a2a68168901a9147595c6fb09b656`.
+- Remote branch `codex/agentcore-u0` deleted; local U0 worktree and branch removed.
+
+## U1 Implementation Notes
+
+- Started: `2026-06-02T14:06:32Z`.
+- Removed Spaces desktop-local Pi readiness helpers from `desktop-runtime`, leaving desktop shell detection and callback route normalization only.
+- Deleted the renderer hooks that subscribed to desktop-local Pi status and console diagnostics.
+- Removed local diagnostic folding from thread activity; old `desktop-local` provenance is shown as legacy when historical turn summaries need a label.
+- Removed remaining renderer-side `DESKTOP_LOCAL` send-input types from Spaces managed send paths.
+- Removed the Settings evaluation target that called `bridge.pi.startEvalRun`; evaluation launches now use the managed GraphQL `startEvalRun` mutation.
+- Relabeled historical desktop-local evaluation rows as legacy in the Settings run list so the UI no longer presents Desktop Pi as a current execution target.
+
+## U1 Verification Log
+
+- `pnpm install` completed in the U1 worktree; optional native rebuilds for `node-liblzma` and `canvas` logged missing `pkg-config` under Node 25 but install exited successfully.
+- `pnpm --filter @thinkwork/spaces typecheck` passed.
+- Focused U1 suite passed: `pnpm --filter @thinkwork/spaces test -- src/lib/desktop-runtime.test.ts src/lib/use-chat-appsync-transport.test.ts src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/components/workbench/SpacesComposer.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/settings/SettingsEvaluations.test.ts src/components/DesktopApplicationHeader.test.tsx` (8 files, 164 tests).
+- `pnpm --filter @thinkwork/spaces test` passed (105 files, 753 tests).
+- `pnpm --filter @thinkwork/spaces build` passed; emitted existing sourcemap and large chunk warnings.
+- `git diff --check` passed.
+- Root `pnpm lint` passed.
+- Root `pnpm typecheck` passed.
+- Root `pnpm format:check` is blocked locally because the root script calls
+  `prettier`, but this checkout does not have a `prettier` binary installed
+  (`sh: prettier: command not found`).
+- First root `pnpm test` attempt hit an Electron install/extraction race; a
+  focused retry of `pnpm --filter @thinkwork/desktop test` passed (20 files,
+  172 tests).
+- Second root `pnpm test` attempt progressed through the broad suite but failed
+  on unrelated applet/plugin zip/Spaces memory timing assertions under local
+  Node 25. The suspicious API files passed in a clean `origin/main` comparison
+  worktree and passed again in the U1 worktree with:
+  `pnpm --filter @thinkwork/api test -- src/__tests__/applets-resolvers.test.ts src/lib/__tests__/plugin-zip-safety.test.ts`.
+- Touched-file Prettier check passed with
+  `pnpm dlx prettier@3.8.2 --check ...` after formatting two touched files.
+- Post-format rerun passed: `pnpm --filter @thinkwork/spaces typecheck`.
+- Post-format focused U1 suite rerun passed: `pnpm --filter @thinkwork/spaces test -- src/lib/desktop-runtime.test.ts src/lib/use-chat-appsync-transport.test.ts src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/components/workbench/SpacesComposer.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/settings/SettingsEvaluations.test.ts src/components/DesktopApplicationHeader.test.tsx`
+  (8 files, 164 tests).
+
+## U1 CI / PR
+
+- Opened [#1989](https://github.com/thinkwork-ai/thinkwork/pull/1989).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `116665de0113d1855a4d1e570998067e8aa29c6f`.
+- Remote branch `codex/agentcore-u1` deleted; local U1 worktree and branch removed.
+
+## U2 Implementation Notes
+
+- Started: `2026-06-02T14:27:40Z`.
+- Synced from `origin/main` after U1 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u2` on branch
+  `codex/agentcore-u2`.
+- Removed the Electron Pi sidecar entrypoint, sidecar runtime modules, local
+  workspace-cache reader, local turn/eval runners, and the associated desktop
+  tests.
+- Removed all Pi sidecar IPC channels, schemas, bridge typings, preload bridge
+  methods, and main-process handlers.
+- Removed desktop-local Pi environment toggles, sidecar build inputs, runtime
+  aliases, and desktop-only sidecar dependencies from `apps/desktop`.
+- Updated Spaces bridge mocks and evaluation run detail behavior so current
+  cancellation uses the managed GraphQL path while old `desktop-pi` and
+  `desktop-local` provenance remains visible as legacy history.
+- Regenerated `pnpm-lock.yaml` with pnpm after removing the desktop-only
+  runtime dependencies. The lockfile is intentionally treated as pnpm-owned, not
+  Prettier-formatted.
+
+## U2 Verification Log
+
+- `pnpm install` completed in the U2 worktree; optional native rebuild warnings
+  for `node-liblzma`/`canvas` were non-fatal.
+- `pnpm --filter @thinkwork/desktop-ipc typecheck` passed.
+- `pnpm --filter @thinkwork/desktop typecheck` passed.
+- `pnpm --filter @thinkwork/spaces typecheck` passed after removing the
+  remaining eval-detail `bridge.pi` cancellation path.
+- `pnpm --filter @thinkwork/desktop-ipc test` passed (11 tests).
+- `pnpm --filter @thinkwork/desktop test` passed (12 files, 87 tests).
+- Impacted Spaces tests passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsEvalRunDetail.test.tsx src/components/settings/SettingsEvaluations.test.ts src/components/workbench/TaskThreadView.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/context/AuthContext.test.tsx src/components/update-banner.test.tsx src/lib/token-storage/desktop-bridge.test.ts`.
+- `pnpm --filter @thinkwork/desktop build` passed and no longer emits a
+  `pi-sidecar` entry.
+- Root `pnpm lint` passed.
+- Root `pnpm typecheck` passed.
+- `bash scripts/verify-supply-chain.sh` passed after restoring pnpm-native
+  lockfile formatting.
+- `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/verify-supply-chain.test.ts`
+  passed (12 tests).
+- Source sweep for retired desktop-local bridge terms found only intentional
+  negative/regression text: README non-support wording, env retirement tests,
+  and a Spaces assertion that no `just-bash` text is shown.
+- `git diff --check` passed.
+- Touched-file Prettier check passed with
+  `pnpm dlx prettier@3.8.2 --check ...` excluding `pnpm-lock.yaml`.
+- Broad `pnpm test` completed with one unrelated local broad-suite timeout in
+  `packages/api/src/lib/__tests__/plugin-zip-safety.test.ts`. The same file
+  passed immediately in isolation with
+  `pnpm --filter @thinkwork/api test -- src/lib/__tests__/plugin-zip-safety.test.ts`
+  (10 tests), so this is recorded as local contention/noise rather than a U2
+  regression.
+
+## U2 CI / PR
+
+- Opened [#1990](https://github.com/thinkwork-ai/thinkwork/pull/1990).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `66011fc16c39684d5193ba4bf42e9f1049b8ab0c`.
+- Remote branch `codex/agentcore-u2` deleted; local U2 worktree and branch
+  removed.
+
+## U3 Implementation Notes
+
+- Started: `2026-06-02T14:54:00Z`.
+- Synced from `origin/main` after U2 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u3` on branch
+  `codex/agentcore-u3`.
+- Replaced desktop-local runtime session, workspace prewarm, managed
+  delegation, and desktop-local eval HTTP handlers with stable 410 tombstones.
+- Removed the dead desktop-runtime preparation/auth/delegation library and its
+  tests from `packages/api/src/lib/desktop-runtime`.
+- Removed desktop finalize-token acceptance from `chat-agent-finalize`,
+  `mcp-context-engine`, `email-send`, and `task-status-tool`; managed
+  AgentCore service-secret and normal first-party/OAuth paths remain.
+- Removed `DESKTOP_LOCAL` from the canonical GraphQL `MessageDispatchMode`
+  enum and regenerated Admin, CLI, Spaces, and Mobile GraphQL clients.
+- Updated Terraform handler comments and timeout routing so the temporary
+  desktop-local routes deploy as cheap tombstone endpoints.
+
+## U3 Verification Log
+
+- Test-first focused U3 tests failed against the old behavior, proving the
+  tombstone/schema/finalize expectations were active before implementation.
+- `pnpm install` completed in the U3 worktree; optional native rebuild warnings
+  for `node-liblzma`/`canvas` were non-fatal.
+- `pnpm schema:build` passed.
+- GraphQL codegen passed for `thinkwork-cli`, `@thinkwork/admin`,
+  `@thinkwork/spaces`, and `@thinkwork/mobile`. `@thinkwork/api` has no
+  codegen script.
+- Focused U3 suite passed:
+  `pnpm --filter @thinkwork/api test -- src/handlers/desktop-runtime-session.test.ts src/handlers/desktop-workspace-prewarm.test.ts src/handlers/managed-delegation.test.ts src/handlers/desktop-eval-runs.test.ts src/handlers/chat-agent-finalize.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts`
+  (48 tests).
+- Auth-adjacent handler tests passed:
+  `pnpm --filter @thinkwork/api test -- src/handlers/email-send.test.ts src/handlers/task-status-tool.test.ts src/handlers/mcp-context-engine.requester-context.test.ts`
+  (15 tests).
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/database-pg test -- __tests__/message-mentions-schema.test.ts`
+  passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm --filter @thinkwork/spaces typecheck` passed.
+- `@thinkwork/admin` has no `typecheck` script.
+- Full API test passed: `pnpm --filter @thinkwork/api test` (378 files
+  passed, 3 skipped; 3383 tests passed, 9 skipped).
+- Root gates passed: `pnpm lint`, `pnpm typecheck`, and
+  `bash scripts/verify-supply-chain.sh`.
+- `git diff --check` passed.
+- Touched-file Prettier check passed with `pnpm dlx prettier@3.8.2 --check`
+  over changed TypeScript, GraphQL, Terraform, and status files.
+- `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf` passed.
+- Root `pnpm test` completed all broad packages but failed locally in
+  `packages/api/src/__tests__/applets-resolvers.test.ts`: the first applet
+  resolver test timed out at 30s and left mock state that made the next test
+  observe two S3 puts. This file is unrelated to U3 and immediately passed in
+  isolation with
+  `pnpm --filter @thinkwork/api test -- src/__tests__/applets-resolvers.test.ts`
+  (15 tests, 2.13s), so the failure is recorded as local broad-suite
+  contention rather than a U3 regression.
+- Root `pnpm format:check` remains blocked locally because the root script
+  calls `prettier`, but this checkout does not have a `prettier` binary
+  installed (`sh: prettier: command not found`).
+- Source sweep for retired desktop-local backend terms found only intentional
+  tombstone helpers/tests, the schema negative assertion, and historical
+  provenance wording; no active backend preparation/auth helper remains.
+
+## U3 CI / PR
+
+- Opened [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `39395b16afe539891aae8c4b50db9e19dd2db7b2`.
+- Remote branch `codex/agentcore-u3` deleted; local U3 worktree and branch
+  removed.
+
+## U4 Implementation Notes
+
+- Started: `2026-06-02T15:18:30Z`.
+- Synced from `origin/main` after U3 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u4` on branch
+  `codex/agentcore-u4`.
+- Removed the mobile `ChatScreen` on-device harness branch so chat cannot route
+  through `useHarnessChat`.
+- Deleted the mobile harness turn runner, harness chat hook/core, Bedrock
+  harness provider, local bash extension, just-bash browser type shim, and Pi
+  harness smoke scripts/tests.
+- Removed `just-bash` from the mobile package, Metro resolver, Vitest alias,
+  and `pnpm-lock.yaml`.
+- Updated the mobile Pi compatibility contract so it no longer claims local
+  bash durability or local changed-file diff capture as implemented mobile
+  capabilities.
+- Added an AgentCore-first mobile guard test that asserts the deleted harness
+  entrypoints, `just-bash` aliases, and smoke scripts stay removed.
+
+## U4 Verification Log
+
+- `pnpm install` completed in the U4 worktree and refreshed `pnpm-lock.yaml`;
+  optional `canvas` native rebuild failed under local Node 25/missing
+  `pkg-config`, but install exited successfully.
+- Source sweep for mobile harness terms found only the new negative guard test;
+  no active mobile source or lockfile reference to `runThreadHarnessTurn`,
+  `useHarnessChat`, `local-bash-extension`, `just-bash`, or `pi-harness`
+  remains.
+- Focused U4 mobile tests passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agentcore-first-mobile.test.ts lib/agent/compat/pi-contract.test.ts lib/thread-agent-mode.test.ts`
+  (17 tests).
+- Full mobile Vitest passed: `pnpm --filter @thinkwork/mobile test` (31 files,
+  176 tests).
+- `pnpm --filter @thinkwork/react-native-sdk build` passed.
+- `git diff --check` passed.
+- `pnpm --filter @thinkwork/mobile exec tsc --noEmit` still fails on existing
+  unrelated mobile type debt in fleet/routines/navigation/ui/hook files. The
+  failure list contains no references to the deleted harness files or exports,
+  so this is recorded as non-gating for U4.
+- Root `pnpm lint` passed.
+- Root `pnpm typecheck` passed.
+- `bash scripts/verify-supply-chain.sh` passed.
+- Root `pnpm test` passed, including API, Spaces, Admin, Mobile, AgentCore Pi,
+  and release tests.
+- Touched-file Prettier check passed with
+  `pnpm dlx prettier@3.8.2 --check ...`.
+
+## U4 CI / PR
+
+- Opened [#1992](https://github.com/thinkwork-ai/thinkwork/pull/1992).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `7acf3185ebb6e3a2f5e2349c3e34d704543b5ac1`.
+- Remote branch `codex/agentcore-u4` deleted; local U4 worktree and branch
+  removed.
+
+## U5 Implementation Notes
+
+- Started: `2026-06-02T15:33:30Z`.
+- Synced from `origin/main` after U4 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u5` on branch
+  `codex/agentcore-u5`.
+- Added a normalized `thinkwork.agentcore.phase` record shape for API-side
+  dispatch/finalize logs and CloudWatch drill-in merging.
+- Instrumented `chat-agent-invoke` phases for invoke receipt, identity/runtime
+  resolution, thread-turn readiness, history loading, workspace rendering,
+  sandbox preflight, and AgentCore Event-mode dispatch.
+- Instrumented `chat-agent-finalize` phases for callback receipt, finalize
+  processing, response completion, and internal failures.
+- Added AgentCore Pi runtime phase logs around invocation receipt, workspace
+  bootstrap, tool/resource assembly, session-store selection, agent loop
+  lifecycle, and finalize callback.
+- Added pi-runtime-core tool execution phase logs from SDK
+  `tool_execution_start`/`tool_execution_end` events.
+- Added client-side phase markers for Spaces and mobile submit/render
+  lifecycle events without logging prompt text, attachments, or secrets.
+
+## U5 Verification Log
+
+- `pnpm install` completed in the U5 worktree; optional `canvas` native rebuild
+  failed under local Node 25/missing `pkg-config`, but install exited
+  successfully.
+- Focused API tests passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/agentcore-phase-log.test.ts src/lib/agentcore-spans.test.ts src/handlers/chat-agent-finalize.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts`
+  (4 files, 28 tests).
+- Focused AgentCore Pi tests passed:
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/handler-context.test.ts agent-container/tests/server.test.ts`
+  (2 files, 117 tests).
+- Focused pi-runtime-core test passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test -- test/agent-loop.test.ts`
+  (32 tests).
+- Focused client tests passed:
+  `pnpm --filter @thinkwork/spaces test -- src/lib/use-chat-appsync-transport.test.ts`
+  (15 tests) and
+  `pnpm --filter @thinkwork/mobile test -- lib/thread-agent-mode.test.ts`
+  (8 tests).
+- Touched package checks passed: `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/spaces typecheck`, and
+  `pnpm --filter @thinkwork/react-native-sdk build`.
+- `git diff --check` passed.
+- Touched-file Prettier check passed with
+  `pnpm dlx prettier@3.8.2 --check ...`.
+- Root `pnpm lint` passed.
+- Root `pnpm typecheck` passed.
+- `bash scripts/verify-supply-chain.sh` passed.
+- Broad root `pnpm test` completed most packages but failed locally in two
+  unrelated API timing/mock-isolation hotspots:
+  `packages/api/src/lib/__tests__/plugin-zip-safety.test.ts` timed out during
+  the decompressed-size guard, and
+  `packages/api/src/__tests__/applets-resolvers.test.ts` timed out on the
+  first applet resolver test before the next test observed stale mock S3
+  calls. Both files passed immediately in isolation with
+  `pnpm --filter @thinkwork/api test -- src/lib/__tests__/plugin-zip-safety.test.ts src/__tests__/applets-resolvers.test.ts`
+  (25 tests), so this is recorded as local broad-suite contention rather than
+  a U5 telemetry regression.
+
+## U5 CI / PR
+
+- Opened [#1993](https://github.com/thinkwork-ai/thinkwork/pull/1993).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `e78fd569be173524be89d6923f4138fda86d3acd`.
+- Remote branch `codex/agentcore-u5` deleted; local U5 worktree and branch
+  removed.
+
+## U6 Implementation Notes
+
+- Started: `2026-06-02T15:52:45Z`.
+- Synced from `origin/main` after U5 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u6` on branch
+  `codex/agentcore-u6`.
+- Began by reading the U6 plan section and the copied-workspace skill loading
+  solution doc, because U6 touches the S3-to-runtime workspace hydration path.
+- Added a local hydrate cache for rendered workspace bootstrap. The cache lives
+  beside the runtime workspace directory, skips unchanged source downloads when
+  tenant, agent, rendered prefix, runtime path, source key, and source ETag
+  match, and still deletes files removed from the current manifest.
+- Extended runtime workspace bootstrap logs to include skipped hydrate counts
+  so U5 phase telemetry can distinguish cold sync from warm reuse.
+- Added session-store fallback reasons and `runtime.session_resume` phase
+  records for S3 session hit/miss timing.
+- Relabeled managed turn-start subscription events as `AgentCore` and updated
+  mobile timeline filtering so active managed turns are visible to regular
+  users before the assistant response arrives.
+- Left prewarm out of U6 because no deployed U5 phase evidence yet proves a
+  safe/cost-effective prewarm trigger.
+
+## U6 Verification Log
+
+- `pnpm install` completed in the U6 worktree; optional `canvas` native rebuild
+  failed under local Node 25/missing `pkg-config`, but install exited
+  successfully.
+- Focused AgentCore Pi tests passed:
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts`
+  (2 files, 67 tests).
+- Focused mobile timeline test passed:
+  `pnpm --filter @thinkwork/mobile test -- components/threads/ActivityTimeline.test.ts`
+  (4 tests).
+- Focused API routing test passed:
+  `pnpm --filter @thinkwork/api test -- src/handlers/chat-agent-invoke.runtime-routing.test.ts`
+  (4 tests).
+- Touched package checks passed: `pnpm --filter @thinkwork/api typecheck` and
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`.
+- Root gates passed: `pnpm lint`, `pnpm typecheck`, and
+  `bash scripts/verify-supply-chain.sh`.
+- `git diff --check` passed.
+- Touched-file Prettier check passed with
+  `pnpm dlx prettier@3.8.2 --check ...`.
+- Broad root `pnpm test` completed most packages but failed locally in
+  `packages/api/src/__tests__/applets-resolvers.test.ts`: the first applet
+  resolver test timed out at 30s and stale mock S3 calls affected the next
+  assertion. The file passed immediately in isolation with
+  `pnpm --filter @thinkwork/api test -- src/__tests__/applets-resolvers.test.ts`
+  (15 tests), so this is recorded as local broad-suite contention rather than
+  a U6 responsiveness regression.
+
+## U6 CI / PR
+
+- Opened [#1994](https://github.com/thinkwork-ai/thinkwork/pull/1994).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `52c472e595a1dde5834154b117d93a7e8d5f534b`.
+- Remote branch `codex/agentcore-u6` deleted; local U6 worktree and branch
+  removed.
+
+## U7 Implementation Notes
+
+- Started: `2026-06-02T16:12:30Z`.
+- Synced from `origin/main` after U6 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u7` on branch
+  `codex/agentcore-u7`.
+- Updated active desktop, mobile, architecture, evaluation, and workspace
+  lifecycle docs to say agent execution runs in AWS-managed AgentCore isolation
+  and desktop/mobile are clients.
+- Marked old local Pi/mobile harness solution docs and sidecar runbooks as
+  superseded or retired rather than active operational guidance.
+- Updated seed/eval documentation and compatibility comments so historical
+  Desktop Pi metadata remains explainable without presenting Desktop Pi as a
+  current target.
+
+## U7 Verification Log
+
+- `pnpm install` completed in the U7 worktree; optional `canvas` native rebuild
+  failed under local Node 25/missing `pkg-config`, but install exited
+  successfully.
+- Touched-file Prettier check passed after formatting the status doc and edited
+  markdown/MDX files.
+- `git diff --check` passed.
+- Docs build passed: `pnpm --filter @thinkwork/docs build`.
+- Focused mobile retirement guard passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agentcore-first-mobile.test.ts`
+  (3 tests).
+- Focused eval/tombstone tests passed:
+  `pnpm --filter @thinkwork/api test -- src/handlers/desktop-eval-runs.test.ts src/handlers/eval-runner.test.ts`
+  (11 tests).
+- Root `pnpm lint` passed.
+- Root `pnpm typecheck` passed.
+- `bash scripts/verify-supply-chain.sh` passed.
+- Broad root `pnpm test` passed, including `test:release`.
+
+## U7 CI / PR
+
+- Opened [#1995](https://github.com/thinkwork-ai/thinkwork/pull/1995).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `2b83cfbc61a10af7063b3320461e9128504b3c94`.
+- Remote branch `codex/agentcore-u7` deleted; local U7 worktree and branch
+  removed.
+- All implementation units in
+  `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
+  are complete.
+
+## Final Desktop + Mobile E2E Regression
+
+- `2026-06-02T16:55Z` verification branch:
+  `codex/agentcore-regression-check`, based on `origin/main` at
+  `b6e5d5cc`.
+- Local verification passed before live UI testing:
+  `pnpm --filter @thinkwork/desktop test`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agentcore-first-mobile.test.ts lib/thread-agent-mode.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts agent-container/tests/handler-context.test.ts`,
+  `pnpm --filter @thinkwork/react-native-sdk build`, `pnpm lint`,
+  `bash scripts/verify-supply-chain.sh`, `pnpm typecheck`, and `pnpm test`.
+- Desktop dev Electron E2E passed from the local desktop app: thread
+  `f4c13c1e-d5ff-4681-a4b1-5e0e440dc99b` was created from
+  `http://localhost:5174`, showed live managed progress, and returned
+  `DESKTOP_AGENTCORE_FULL_E2E_OK`.
+- iOS simulator E2E passed from a freshly built Expo development client on
+  iPhone 17 Pro iOS 26.2. Metro restored an authenticated session, connected
+  AppSync, created thread `d7969cc3-9d27-4704-8f61-9037ab3b7cf2`, registered
+  turn run `8e08eafb-7a12-4086-8e1f-b7cf7d43b0e9`, received assistant message
+  `02baf7de-4b25-4a65-a0b1-bfc97ac2b89a`, and the simulator UI rendered
+  `MOBILE_AGENTCORE_FULL_E2E_OK`.
+- The plan frontmatter was marked `completed` after all U0-U7 units were merged
+  and the desktop/mobile live regression passed.
+
+## Blockers
+
+None.
+
 # Workspace Migration Legacy User Conflict Hotfix - 2026-06-01
 
 ## Status

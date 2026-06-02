@@ -384,6 +384,65 @@ describe("runAgentLoop", () => {
     expect(invocation.finished_at).toBeTruthy();
   });
 
+  it("logs span-shaped phase records for tool execution", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_start",
+          toolCallId: "c1",
+          toolName: "web_search",
+          args: { query: "weather" },
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "c1",
+          toolName: "web_search",
+          result: { content: [{ type: "text", text: "sunny" }] },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+    const logs: Array<Record<string, unknown>> = [];
+    await runAgentLoop(
+      baseArgs({
+        identity: {
+          tenantId: "tenant-1",
+          userId: "user-1",
+          agentId: "agent-1",
+          threadId: "thread-1",
+          traceId: "trace-1",
+        },
+      }),
+      {
+        openSession: async () => ({ session, modelId: "m" }),
+        log: (entry) => logs.push(entry),
+      },
+    );
+
+    expect(logs).toEqual([
+      expect.objectContaining({
+        event: "agentcore_phase",
+        name: "thinkwork.agentcore.phase",
+        spanId: "tw-runtime.tool_execution-c1",
+        phase: "runtime.tool_execution",
+        status: "started",
+        source: "agentcore-pi",
+        tenantId: "tenant-1",
+        traceId: "trace-1",
+        detail: "web_search",
+      }),
+      expect.objectContaining({
+        event: "agentcore_phase",
+        name: "thinkwork.agentcore.phase",
+        spanId: "tw-runtime.tool_execution-c1",
+        phase: "runtime.tool_execution",
+        status: "completed",
+        durationMs: expect.any(Number),
+      }),
+    ]);
+  });
+
   it("marks errored tool executions as error status", async () => {
     const session = makeFakeSession({
       messages: [assistantMessage("done")],

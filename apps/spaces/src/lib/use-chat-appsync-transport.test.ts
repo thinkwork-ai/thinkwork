@@ -164,12 +164,11 @@ describe("createAppSyncChatTransport", () => {
       await readAll(stream);
     });
 
-    it("marks the send for desktop-local dispatch when the local Pi bridge is ready", async () => {
+    it("keeps sends on managed dispatch", async () => {
       const { mutation, subscription, source } = buildFakeUrqlClient({});
       const transport = createAppSyncChatTransport({
         urqlClient: { mutation, subscription },
         threadId: "thread-1",
-        shouldUseDesktopLocalDispatch: () => true,
       });
 
       const stream = await transport.sendMessages({
@@ -180,14 +179,10 @@ describe("createAppSyncChatTransport", () => {
         abortSignal: undefined,
       });
 
-      expect(mutation).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          input: expect.objectContaining({
-            dispatchMode: "DESKTOP_LOCAL",
-          }),
-        }),
-      );
+      const variables = mutation.mock.calls[0][1] as {
+        input: Record<string, unknown>;
+      };
+      expect(variables.input).not.toHaveProperty("dispatchMode");
 
       source.emit(JSON.stringify({ type: "finish" }));
       await readAll(stream);

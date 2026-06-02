@@ -1,30 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const mocks = vi.hoisted(() => ({
-  authenticate: vi.fn(),
-  prepareLocalPiWorkspacePrewarm: vi.fn(),
-}));
-
-vi.mock("../lib/cognito-auth.js", () => ({
-  authenticate: mocks.authenticate,
-}));
-
-vi.mock("../lib/desktop-runtime/prepare-local-turn.js", () => {
-  class DesktopRuntimeSessionError extends Error {
-    constructor(
-      message: string,
-      public readonly statusCode: number,
-      public readonly code: string,
-    ) {
-      super(message);
-      this.name = "DesktopRuntimeSessionError";
-    }
-  }
-  return {
-    DesktopRuntimeSessionError,
-    prepareLocalPiWorkspacePrewarm: mocks.prepareLocalPiWorkspacePrewarm,
-  };
-});
+import { describe, expect, it } from "vitest";
 
 import { handler } from "./desktop-workspace-prewarm.js";
 
@@ -54,65 +28,25 @@ function event(
 }
 
 describe("desktop-workspace-prewarm handler", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.authenticate.mockResolvedValue({
-      authType: "cognito",
-      email: "user@example.com",
-      principalId: "cognito-sub",
-      tenantId: null,
-      agentId: null,
-    });
-    mocks.prepareLocalPiWorkspacePrewarm.mockResolvedValue({
-      expiresAt: "2026-05-28T13:00:00.000Z",
-      sidecarCredentials: {
-        mode: "desktop-sidecar-session",
-        expiresAt: "2026-05-28T13:00:00.000Z",
-      },
-      workspace: {
-        bucket: "workspace-bucket",
-        renderedPrefix: "tenants/acme/threads/thread-1/",
-      },
-      partition: {
-        tenantSlug: "acme",
-        agentSlug: "marco",
-        spaceId: SPACE_ID,
-        userId: "user-1",
-      },
-    });
-  });
-
-  it("requires a Cognito user caller", async () => {
-    mocks.authenticate.mockResolvedValue({
-      authType: "service",
-      email: null,
-      principalId: null,
-      tenantId: null,
-      agentId: null,
-    });
-
+  it("tombstones desktop-local workspace prewarm", async () => {
     const res = await handler(event());
-    expect(res.statusCode).toBe(401);
-    expect(mocks.prepareLocalPiWorkspacePrewarm).not.toHaveBeenCalled();
-  });
-
-  it("returns a workspace prewarm session without creating a turn", async () => {
-    const res = await handler(event());
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(410);
     const body = JSON.parse(res.body as string);
-    expect(body.ok).toBe(true);
-    expect(body.session.workspace.bucket).toBe("workspace-bucket");
-    expect(body.session.partition.agentSlug).toBe("marco");
-    expect(mocks.prepareLocalPiWorkspacePrewarm).toHaveBeenCalledWith({
-      auth: expect.objectContaining({ authType: "cognito" }),
-      agentId: AGENT_ID,
-      spaceId: SPACE_ID,
-    });
+    expect(body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        code: "DESKTOP_LOCAL_EXECUTION_RETIRED",
+      }),
+    );
   });
 
-  it("rejects invalid JSON before preparing a prewarm session", async () => {
+  it("does not parse request bodies before returning the tombstone", async () => {
     const res = await handler(event({ body: "{ nope" }));
-    expect(res.statusCode).toBe(400);
-    expect(mocks.prepareLocalPiWorkspacePrewarm).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(410);
+  });
+
+  it("keeps method gating for non-POST calls", async () => {
+    const res = await handler(event({ method: "GET" }));
+    expect(res.statusCode).toBe(405);
   });
 });

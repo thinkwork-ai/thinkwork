@@ -166,23 +166,6 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
         "Mobile maintains a durable rendered workspace cache and exposes read, grep, find, and ls tools over that cache.",
     },
     {
-      id: "workspace-backed-bash-durability",
-      status: "implemented",
-      upstreamSurface: "cwd-backed bash",
-      mobileSurface: "apps/mobile/lib/agent/extensions/local-bash-extension.ts",
-      notes:
-        "Mobile bash runs through just-bash in a durable per-thread /workspace sandbox, hydrated from the rendered workspace cache and snapshotted after commands.",
-    },
-    {
-      id: "workspace-finalize-diff-capture",
-      status: "implemented",
-      upstreamSurface: "runtime changed_files finalize payload",
-      mobileSurface: "apps/mobile/lib/agent/extensions/local-bash-extension.ts",
-      ownerUnit: "U6",
-      notes:
-        "Mobile captures local bash /workspace before/after snapshots, computes create/modify/delete changed_files for the durable thread_turn_id, and sends them with mobile turn finalization.",
-    },
-    {
       id: "task-status-tool",
       status: "implemented",
       upstreamSurface: "set_task_status platform extension",

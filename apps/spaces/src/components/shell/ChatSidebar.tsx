@@ -775,7 +775,7 @@ export function ChatSidebar() {
         </SidebarGroupContent>
       </SidebarGroup>
 
-      <div className="scrollbar-auto-hide min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
         <SidebarGroup className="px-3 group-data-[collapsible=icon]:hidden">
           {recentError ? (
             <p className="rounded-md border border-destructive/40 px-2 py-2 text-xs text-destructive">

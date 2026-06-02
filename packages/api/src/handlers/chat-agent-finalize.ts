@@ -36,10 +36,7 @@ import {
 } from "../lib/chat-finalize/process-finalize.js";
 import { validateChangedFiles } from "../lib/chat-finalize/reconcile.js";
 import type { FinalizePayload } from "../lib/chat-finalize/types.js";
-import {
-  DESKTOP_FINALIZE_TOKEN_PREFIX,
-  verifyDesktopFinalizeToken,
-} from "../lib/desktop-runtime/sidecar-credentials.js";
+import { logAgentCorePhase } from "../lib/agentcore-phase-log.js";
 
 const db = getDb();
 
@@ -64,6 +61,7 @@ function badRequest(reason: string): APIGatewayProxyStructuredResultV2 {
 export async function handler(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+  const handlerStart = Date.now();
   // ---- Auth -----------------------------------------------------------
   const token = extractBearerToken(event);
   if (!token) {
@@ -73,10 +71,7 @@ export async function handler(
       code: "UNAUTHORIZED",
     });
   }
-  if (
-    !validateApiSecret(token) &&
-    !token.startsWith(DESKTOP_FINALIZE_TOKEN_PREFIX)
-  ) {
+  if (!validateApiSecret(token)) {
     return json(401, {
       ok: false,
       error: "Missing or invalid Bearer token",
@@ -137,6 +132,19 @@ export async function handler(
     });
   }
   payload.changed_files = changedFiles.changedFiles;
+  logAgentCorePhase({
+    source: "chat-agent-finalize",
+    phase: "api.finalize.received",
+    status: "started",
+    traceId: payload.trace_id,
+    tenantId: payload.tenant_id,
+    agentId: payload.agent_id,
+    threadId: payload.thread_id,
+    threadTurnId: payload.thread_turn_id,
+    runtimeType: payload.runtime_type,
+    durationMs: payload.duration_ms,
+    detail: payload.status,
+  });
 
   // ---- Turn lookup ----------------------------------------------------
   const [turn] = await db
@@ -144,7 +152,6 @@ export async function handler(
       id: threadTurns.id,
       tenant_id: threadTurns.tenant_id,
       thread_id: threadTurns.thread_id,
-      context_snapshot: threadTurns.context_snapshot,
     })
     .from(threadTurns)
     .where(eq(threadTurns.id, payload.thread_turn_id))
@@ -168,7 +175,7 @@ export async function handler(
     );
   }
 
-  if (!token || !isAuthorizedFinalizeToken(token, turn.context_snapshot)) {
+  if (!token || !validateApiSecret(token)) {
     return json(401, {
       ok: false,
       error: "Missing or invalid Bearer token",
@@ -178,45 +185,53 @@ export async function handler(
 
   // ---- Run the finalize chain ----------------------------------------
   try {
+    const finalizeStart = Date.now();
     const result = await processFinalize(payload);
+    logAgentCorePhase({
+      source: "chat-agent-finalize",
+      phase: "api.finalize.process",
+      status: "completed",
+      traceId: payload.trace_id,
+      tenantId: payload.tenant_id,
+      agentId: payload.agent_id,
+      threadId: payload.thread_id,
+      threadTurnId: payload.thread_turn_id,
+      runtimeType: payload.runtime_type,
+      durationMs: Date.now() - finalizeStart,
+      detail: result.finalized ? "finalized" : "idempotent",
+    });
+    logAgentCorePhase({
+      source: "chat-agent-finalize",
+      phase: "api.finalize.response",
+      status: "completed",
+      traceId: payload.trace_id,
+      tenantId: payload.tenant_id,
+      agentId: payload.agent_id,
+      threadId: payload.thread_id,
+      threadTurnId: payload.thread_turn_id,
+      runtimeType: payload.runtime_type,
+      durationMs: Date.now() - handlerStart,
+    });
     return json(200, toFinalizeResponse(result));
   } catch (err) {
     console.error(`[chat-agent-finalize] Internal error:`, err);
+    logAgentCorePhase({
+      source: "chat-agent-finalize",
+      phase: "api.finalize.process",
+      status: "failed",
+      traceId: payload.trace_id,
+      tenantId: payload.tenant_id,
+      agentId: payload.agent_id,
+      threadId: payload.thread_id,
+      threadTurnId: payload.thread_turn_id,
+      runtimeType: payload.runtime_type,
+      durationMs: Date.now() - handlerStart,
+      errorType: err instanceof Error ? err.name : "Error",
+    });
     return json(500, {
       ok: false,
       error: err instanceof Error ? err.message : String(err),
       code: "INTERNAL",
     });
   }
-}
-
-function isAuthorizedFinalizeToken(
-  token: string,
-  contextSnapshot: unknown,
-): boolean {
-  if (validateApiSecret(token)) return true;
-  if (!token.startsWith(DESKTOP_FINALIZE_TOKEN_PREFIX)) return false;
-
-  const session = readDesktopRuntimeSession(contextSnapshot);
-  if (!session) return false;
-  if (Date.parse(session.expires_at) <= Date.now()) return false;
-  return verifyDesktopFinalizeToken(token, session.finalize_token_sha256);
-}
-
-function readDesktopRuntimeSession(
-  contextSnapshot: unknown,
-): { finalize_token_sha256: string; expires_at: string } | null {
-  if (!contextSnapshot || typeof contextSnapshot !== "object") return null;
-  const session = (contextSnapshot as Record<string, unknown>)[
-    "desktop_runtime_session"
-  ];
-  if (!session || typeof session !== "object") return null;
-  const finalizeHash = (session as Record<string, unknown>)[
-    "finalize_token_sha256"
-  ];
-  const expiresAt = (session as Record<string, unknown>)["expires_at"];
-  if (typeof finalizeHash !== "string" || typeof expiresAt !== "string") {
-    return null;
-  }
-  return { finalize_token_sha256: finalizeHash, expires_at: expiresAt };
 }

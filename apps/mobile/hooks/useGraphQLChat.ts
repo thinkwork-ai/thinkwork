@@ -154,6 +154,13 @@ export function useGraphQLChat(
     // Stop waiting if we got an assistant message
     if (newMsg.role === "assistant") {
       setWaitingForResponse(false);
+      logClientPhase({
+        source: "mobile-client",
+        phase: "client.render",
+        status: "completed",
+        threadId: activeThreadId,
+        detail: "assistant_message",
+      });
     }
   }, [subResult.data]);
 
@@ -276,6 +283,7 @@ export function useGraphQLChat(
       );
 
       // Optimistic: show message + typing indicator immediately
+      const submitStart = Date.now();
       const optimisticMsg: ChatMessage = {
         id: `optimistic-${Date.now()}`,
         role: "user",
@@ -285,6 +293,12 @@ export function useGraphQLChat(
       };
       setOptimisticMessages((prev) => [...prev, optimisticMsg]);
       setWaitingForResponse(true);
+      logClientPhase({
+        source: "mobile-client",
+        phase: "client.submit",
+        status: "started",
+        threadId: activeThreadId,
+      });
 
       // Atomic path: no thread yet → create thread + send first message in
       // a single round-trip via the SDK's `firstMessage` passthrough. Saves
@@ -302,12 +316,28 @@ export function useGraphQLChat(
           if (agentId) input.agentId = agentId;
           const thread = await createThread(input);
           setLocalThreadId(thread.id);
+          logClientPhase({
+            source: "mobile-client",
+            phase: "client.submit",
+            status: "completed",
+            threadId: thread.id,
+            durationMs: Date.now() - submitStart,
+            detail: "create_thread_first_message",
+          });
           console.log(
             "[GraphQLChat] Auto-created thread with firstMessage:",
             thread.id,
           );
         } catch (e) {
           console.error("[GraphQLChat] Thread creation failed:", e);
+          logClientPhase({
+            source: "mobile-client",
+            phase: "client.submit",
+            status: "failed",
+            threadId: activeThreadId,
+            durationMs: Date.now() - submitStart,
+            detail: "create_thread_failed",
+          });
           setOptimisticMessages((prev) =>
             prev.filter((m) => m.id !== optimisticMsg.id),
           );
@@ -322,6 +352,13 @@ export function useGraphQLChat(
         console.error(
           "[GraphQLChat] No threadId available, cannot send message",
         );
+        logClientPhase({
+          source: "mobile-client",
+          phase: "client.submit",
+          status: "failed",
+          durationMs: Date.now() - submitStart,
+          detail: "missing_thread",
+        });
         setOptimisticMessages((prev) =>
           prev.filter((m) => m.id !== optimisticMsg.id),
         );
@@ -332,9 +369,25 @@ export function useGraphQLChat(
       // Thread already exists — just send.
       try {
         await sdkSendMessage(activeThreadId, content);
+        logClientPhase({
+          source: "mobile-client",
+          phase: "client.submit",
+          status: "completed",
+          threadId: activeThreadId,
+          durationMs: Date.now() - submitStart,
+          detail: "send_message",
+        });
         console.log("[GraphQLChat] sendMessage succeeded");
       } catch (e) {
         console.error("[GraphQLChat] sendMessage FAILED:", e);
+        logClientPhase({
+          source: "mobile-client",
+          phase: "client.submit",
+          status: "failed",
+          threadId: activeThreadId,
+          durationMs: Date.now() - submitStart,
+          detail: "send_message_failed",
+        });
         setOptimisticMessages((prev) =>
           prev.filter((m) => m.id !== optimisticMsg.id),
         );
@@ -353,4 +406,30 @@ export function useGraphQLChat(
       !fetching || optimisticMessages.length > 0 || waitingForResponse,
     threadId: activeThreadId,
   };
+}
+
+function logClientPhase(input: {
+  source: "mobile-client";
+  phase: string;
+  status: "started" | "completed" | "failed" | "skipped";
+  threadId?: string;
+  durationMs?: number;
+  detail?: string;
+}): void {
+  console.info(
+    JSON.stringify({
+      name: "thinkwork.agentcore.phase",
+      scope: { name: "thinkwork.client" },
+      event: "agentcore_phase",
+      spanId: `tw-${input.source}-${input.phase}-${input.threadId ?? "new-thread"}`,
+      sessionId: input.threadId ?? "new-thread",
+      source: input.source,
+      phase: input.phase,
+      status: input.status,
+      threadId: input.threadId,
+      durationMs: input.durationMs,
+      detail: input.detail,
+      ts: new Date().toISOString(),
+    }),
+  );
 }

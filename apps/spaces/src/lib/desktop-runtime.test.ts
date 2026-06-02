@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 import {
-  canStartDesktopPiEval,
-  desktopLocalPiDisplayStatus,
-  desktopPiEvalTargetStatus,
+  getDesktopBridge,
   isDesktopBuild,
-  shouldUseDesktopLocalPiDispatch,
-  shouldUseDesktopLocalPiDispatchNow,
+  normalizeDesktopNext,
 } from "./desktop-runtime";
 
 afterEach(() => {
@@ -14,76 +10,29 @@ afterEach(() => {
 });
 
 describe("desktop runtime detection", () => {
-  it("does not enable desktop-local dispatch outside the desktop shell", () => {
+  it("detects non-desktop builds without exposing local Pi dispatch", () => {
     expect(isDesktopBuild()).toBe(false);
-    expect(shouldUseDesktopLocalPiDispatch(null)).toBe(false);
+    expect(getDesktopBridge()).toBeNull();
   });
 
-  it("enables desktop-local dispatch only for ready local Pi statuses", () => {
+  it("returns the desktop bridge for shell-only features", () => {
     const bridge = {
-      pi: { status: "healthy" },
-    } as unknown as ThinkworkBridge;
-    expect(shouldUseDesktopLocalPiDispatch(bridge)).toBe(true);
+      app: { platform: "darwin" },
+    };
+    vi.stubGlobal("__DESKTOP_BUILD__", true);
+    Object.defineProperty(window, "thinkworkBridge", {
+      configurable: true,
+      value: bridge,
+    });
 
-    const unavailableBridge = {
-      pi: { status: "unavailable" },
-    } as unknown as ThinkworkBridge;
-    expect(shouldUseDesktopLocalPiDispatch(unavailableBridge)).toBe(false);
+    expect(isDesktopBuild()).toBe(true);
+    expect(getDesktopBridge()).toBe(bridge);
   });
 
-  it("hydrates desktop-local dispatch readiness from the bridge before sending", async () => {
-    const bridge = {
-      pi: {
-        status: "unavailable",
-        getStatus: vi.fn(async () => ({ status: "healthy" })),
-      },
-    } as unknown as ThinkworkBridge;
-
-    await expect(shouldUseDesktopLocalPiDispatchNow(bridge)).resolves.toBe(
-      true,
-    );
-    expect(bridge.pi?.getStatus).toHaveBeenCalled();
-  });
-
-  it("summarizes local Pi display states for compact desktop chrome", () => {
-    const bridge = {
-      pi: { status: "healthy" },
-    } as unknown as ThinkworkBridge;
-
-    expect(desktopLocalPiDisplayStatus({ bridge })).toBe("healthy");
-    expect(
-      desktopLocalPiDisplayStatus({ bridge, localTurnRunning: true }),
-    ).toBe("running");
-    expect(desktopLocalPiDisplayStatus({ bridge, fallbackActive: true })).toBe(
-      "fallback",
-    );
-    expect(
-      desktopLocalPiDisplayStatus({
-        bridge,
-        state: {
-          status: "unavailable",
-          pid: null,
-          version: null,
-          restartCount: 0,
-          startedAt: null,
-          updatedAt: "2026-05-28T12:00:00.000Z",
-          lastExitCode: null,
-          lastError: null,
-        },
-      }),
-    ).toBe("unavailable");
-    expect(desktopLocalPiDisplayStatus({ bridge: null })).toBe("hidden");
-  });
-
-  it("maps local Pi display state to eval target availability", () => {
-    expect(desktopPiEvalTargetStatus("healthy")).toBe("available");
-    expect(desktopPiEvalTargetStatus("starting")).toBe("starting");
-    expect(desktopPiEvalTargetStatus("running")).toBe("busy");
-    expect(desktopPiEvalTargetStatus("fallback")).toBe("unavailable");
-    expect(desktopPiEvalTargetStatus("hidden")).toBe("hidden");
-
-    expect(canStartDesktopPiEval("available")).toBe(true);
-    expect(canStartDesktopPiEval("starting")).toBe(true);
-    expect(canStartDesktopPiEval("busy")).toBe(false);
+  it("normalizes desktop callback next routes", () => {
+    expect(normalizeDesktopNext("/settings")).toBe("/settings");
+    expect(normalizeDesktopNext("//example.com")).toBeUndefined();
+    expect(normalizeDesktopNext("https://example.com")).toBeUndefined();
+    expect(normalizeDesktopNext(null)).toBeUndefined();
   });
 });

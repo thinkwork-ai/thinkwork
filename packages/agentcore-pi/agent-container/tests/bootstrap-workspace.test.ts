@@ -28,7 +28,10 @@ const s3Mock = mockClient(S3Client as any) as any;
 
 function stubRemote(files: Record<string, string>, prefix = PREFIX) {
   s3Mock.on(ListObjectsV2Command).resolves({
-    Contents: Object.keys(files).map((rel) => ({ Key: prefix + rel })),
+    Contents: Object.keys(files).map((rel) => ({
+      Key: prefix + rel,
+      ETag: `"${prefix}${rel}"`,
+    })),
     IsTruncated: false,
   } as never);
   for (const [rel, body] of Object.entries(files)) {
@@ -48,6 +51,38 @@ function stubObject(key: string, body: string) {
       transformToByteArray: async () => bytes,
     } as unknown as never,
   });
+}
+
+function stubRenderedManifest(input: {
+  prefix?: string;
+  manifest: Record<string, { sourceKey: string; etag: string }>;
+  manifestEtag?: string;
+}) {
+  const prefix = input.prefix ?? THREAD_PREFIX;
+  const manifest = {
+    version: 1,
+    renderedPrefix: prefix,
+    files: Object.entries(input.manifest).map(([path, file]) => ({
+      path,
+      owner: "agent",
+      sourceKey: file.sourceKey,
+      sourcePrefix: SOURCE_PREFIX,
+      sourcePath: path,
+      readOnly: false,
+      etag: file.etag,
+    })),
+  };
+  s3Mock.on(ListObjectsV2Command).resolves({
+    Contents: [
+      {
+        Key: `${prefix}.hydrate_manifest.json`,
+        ETag: input.manifestEtag ?? '"manifest-1"',
+      },
+      { Key: `${prefix}.rendered_at`, ETag: '"rendered"' },
+    ],
+    IsTruncated: false,
+  } as never);
+  stubObject(`${prefix}.hydrate_manifest.json`, JSON.stringify(manifest));
 }
 
 let tmp: string;
@@ -386,6 +421,113 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(files["Spaces/default/source/CONTEXT.md"]).toBeUndefined();
     expect(files["workspace-archives/old/AGENTS.md"]).toBeUndefined();
     expectNoForbiddenRuntimeRoots(files);
+  });
+
+  it("skips unchanged hydrate-manifest source downloads on warm invocations", async () => {
+    stubRenderedManifest({
+      manifest: {
+        "AGENTS.md": {
+          sourceKey: `${SOURCE_PREFIX}AGENTS.md`,
+          etag: '"agent-v1"',
+        },
+      },
+    });
+    stubObject(`${SOURCE_PREFIX}AGENTS.md`, "# Agent");
+
+    const first = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: THREAD_PREFIX,
+    });
+    expect(first).toMatchObject({ synced: 1, total: 1 });
+
+    s3Mock.reset();
+    stubRenderedManifest({
+      manifest: {
+        "AGENTS.md": {
+          sourceKey: `${SOURCE_PREFIX}AGENTS.md`,
+          etag: '"agent-v1"',
+        },
+      },
+    });
+
+    const second = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: THREAD_PREFIX,
+    });
+
+    expect(second).toMatchObject({ synced: 0, skipped: 1, total: 1 });
+    const sourceReads = s3Mock
+      .commandCalls(GetObjectCommand)
+      .filter(
+        (call: { args: [{ input: { Key?: string } }] }) =>
+          call.args[0].input.Key === `${SOURCE_PREFIX}AGENTS.md`,
+      );
+    expect(sourceReads).toHaveLength(0);
+    const files = await readFiles(tmp);
+    expect(files["AGENTS.md"]).toBe("# Agent");
+  });
+
+  it("deletes files removed from the hydrate manifest even when other files are skipped", async () => {
+    stubRenderedManifest({
+      manifest: {
+        "AGENTS.md": {
+          sourceKey: `${SOURCE_PREFIX}AGENTS.md`,
+          etag: '"agent-v1"',
+        },
+        "notes.md": {
+          sourceKey: `${SOURCE_PREFIX}notes.md`,
+          etag: '"notes-v1"',
+        },
+      },
+    });
+    stubObject(`${SOURCE_PREFIX}AGENTS.md`, "# Agent");
+    stubObject(`${SOURCE_PREFIX}notes.md`, "# Notes");
+    await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: THREAD_PREFIX,
+    });
+
+    s3Mock.reset();
+    stubRenderedManifest({
+      manifest: {
+        "AGENTS.md": {
+          sourceKey: `${SOURCE_PREFIX}AGENTS.md`,
+          etag: '"agent-v1"',
+        },
+      },
+    });
+
+    const second = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: THREAD_PREFIX,
+    });
+
+    expect(second).toMatchObject({
+      synced: 0,
+      skipped: 1,
+      deleted: 1,
+      total: 1,
+    });
+    const files = await readFiles(tmp);
+    expect(files).toEqual({ "AGENTS.md": "# Agent" });
+  });
+
+  it("invalidates the hydrate cache when tenant identity changes", async () => {
+    stubRemote({ "AGENTS.md": "# Acme" }, "tenants/acme/agents/marco/");
+    await bootstrapWorkspace("acme", "marco", tmp, s3, "test");
+
+    s3Mock.reset();
+    stubRemote(
+      { "AGENTS.md": "# Other tenant" },
+      "tenants/other/agents/marco/",
+    );
+
+    const result = await bootstrapWorkspace("other", "marco", tmp, s3, "test");
+
+    expect(result).toMatchObject({
+      synced: 1,
+      deleted: 0,
+      total: 1,
+      prefix: "tenants/other/agents/marco/",
+    });
+    const files = await readFiles(tmp);
+    expect(files["AGENTS.md"]).toBe("# Other tenant");
   });
 
   it("rejects workspace prefixes outside the tenant/agent scope", async () => {

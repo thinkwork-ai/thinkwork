@@ -26,10 +26,6 @@ import {
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
-import {
-  getDesktopBridge,
-  shouldUseDesktopLocalPiDispatchNow,
-} from "@/lib/desktop-runtime";
 import { setPendingThreadStart } from "@/lib/pending-thread-starts";
 
 interface CreateThreadResult {
@@ -59,7 +55,6 @@ interface SendMessageVars {
     metadata?: string;
     mentions?: SpacesComposerMention[];
     agentRequested?: boolean;
-    dispatchMode?: "MANAGED_DEFAULT" | "DESKTOP_LOCAL";
   };
 }
 
@@ -171,15 +166,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     () => buildNewThreadMentionTargets(mentionTargetData),
     [mentionTargetData],
   );
-  const defaultAgentId = useMemo(
-    () =>
-      mentionTargets.find(
-        (target) =>
-          target.targetType === "AGENT" && target.isDefaultAgent === true,
-      )?.targetId ?? null,
-    [mentionTargets],
-  );
-
   useEffect(() => {
     if (spaceId && spaces.some((space) => space.id === spaceId)) {
       setSelectedSpaceId(spaceId);
@@ -195,24 +181,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       setSelectedSpaceId(defaultSpaceId);
     }
   }, [defaultSpaceId, selectedSpaceId, spaceId, spaces]);
-
-  useEffect(() => {
-    const targetSpaceId = selectedSpace?.id ?? defaultSpaceId ?? null;
-    if (!defaultAgentId || !targetSpaceId) return;
-    let cancelled = false;
-    void (async () => {
-      if (!(await shouldUseDesktopLocalPiDispatchNow()) || cancelled) return;
-      await getDesktopBridge()?.pi?.prewarmWorkspace?.({
-        agentId: defaultAgentId,
-        spaceId: targetSpaceId,
-      });
-    })().catch((err) => {
-      console.warn("[desktop-local-pi] workspace prewarm failed:", err);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [defaultAgentId, defaultSpaceId, selectedSpace?.id]);
 
   async function handleSubmit(
     files: File[],
@@ -242,12 +210,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       setError(message);
     };
     try {
-      // Host-derived runtime: desktop with a ready local sidecar runs locally;
-      // otherwise the server dispatches the turn on managed cloud.
-      const shouldAttemptDesktopLocalPi =
-        agentRequested !== false &&
-        (await shouldUseDesktopLocalPiDispatchNow());
-
       // Create the thread first, route immediately, then finish message send
       // and runtime dispatch in the background. The detail route receives an
       // optimistic user-message scaffold so a new thread feels instant while
@@ -271,13 +233,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         setError("Thread created but no id returned");
         return;
       }
-      const desktopLocalAgentId =
-        created.data?.createThread?.agentId ?? defaultAgentId;
-      if (shouldAttemptDesktopLocalPi && !desktopLocalAgentId) {
-        setError("Local Pi could not start because the thread has no agent.");
-        return;
-      }
-
       if (trimmed) {
         setPendingThreadStart({
           threadId,
@@ -336,8 +291,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       }
       if (agentRequested === false) {
         sendInput.agentRequested = false;
-      } else if (shouldAttemptDesktopLocalPi && desktopLocalAgentId) {
-        sendInput.dispatchMode = "DESKTOP_LOCAL";
       }
       const sent = await sendMessage({
         input: sendInput,
@@ -349,42 +302,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
             : (sent.error.message ?? "Failed to send the first message"),
         );
         return;
-      }
-
-      if (sendInput.dispatchMode === "DESKTOP_LOCAL" && desktopLocalAgentId) {
-        dispatchDesktopLocalPiEvent("running");
-        const startLocalTurn = () =>
-          getDesktopBridge()?.pi?.startTurn({
-            agentId: desktopLocalAgentId,
-            threadId,
-            messageId: sent.data?.sendMessage?.id,
-            userMessage: trimmed,
-          });
-        // Retry once (the sidecar may be mid-restart) before surfacing an
-        // error. No silent managed-cloud fallback — local and managed run
-        // against different filesystems.
-        try {
-          await startLocalTurn();
-        } catch (firstErr) {
-          console.warn(
-            "[desktop-local-pi] startTurn failed; retrying once:",
-            firstErr,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 400));
-          try {
-            await startLocalTurn();
-          } catch (retryErr) {
-            dispatchDesktopLocalPiEvent("idle");
-            surfaceError(
-              "Local agent is unavailable. Your message was saved — try again once Local Pi is running.",
-            );
-            console.warn(
-              "[desktop-local-pi] startTurn retry failed:",
-              retryErr,
-            );
-            return;
-          }
-        }
       }
     } catch (err) {
       surfaceError(err instanceof Error ? err.message : "Failed to start work");
@@ -507,12 +424,4 @@ function buildNewThreadMentionTargets(
     if (typeOrder !== 0) return typeOrder;
     return a.displayName.localeCompare(b.displayName);
   });
-}
-
-function dispatchDesktopLocalPiEvent(status: "running" | "idle" | "fallback") {
-  window.dispatchEvent(
-    new CustomEvent("thinkwork:desktop-local-pi-turn", {
-      detail: { status },
-    }),
-  );
 }

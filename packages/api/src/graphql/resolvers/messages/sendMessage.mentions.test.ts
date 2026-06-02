@@ -1,12 +1,20 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  normalizeMessageSenderType,
   shouldApplyCustomerOnboardingChatUpdate,
   shouldDispatchDefaultAgentTurn,
 } from "./sendMessage.agent-handling.js";
 
 const source = readFileSync(
   new URL("./sendMessage.mutation.ts", import.meta.url),
+  "utf8",
+);
+const messagesGraphql = readFileSync(
+  new URL(
+    "../../../../../database-pg/graphql/types/messages.graphql",
+    import.meta.url,
+  ),
   "utf8",
 );
 
@@ -52,7 +60,9 @@ describe("sendMessage mention collaboration path", () => {
   });
 
   it("preserves sender defaults while allowing agent-authenticated senders", () => {
-    expect(source).toContain('const senderType = i.senderType ?? "user"');
+    expect(source).toContain(
+      "const senderType = normalizeMessageSenderType(i.senderType)",
+    );
     expect(source).toContain('senderType === "agent"');
     expect(source).toContain("ctx.auth.agentId");
     expect(source).toContain("Agent sender is not available in this tenant");
@@ -68,6 +78,14 @@ describe("sendMessage mention collaboration path", () => {
 });
 
 describe("sendMessage agent handling", () => {
+  it("normalizes legacy mobile human senders into user dispatch", () => {
+    expect(normalizeMessageSenderType(undefined)).toBe("user");
+    expect(normalizeMessageSenderType("")).toBe("user");
+    expect(normalizeMessageSenderType(" human ")).toBe("user");
+    expect(normalizeMessageSenderType("USER")).toBe("user");
+    expect(normalizeMessageSenderType("agent")).toBe("agent");
+  });
+
   it("defaults user follow-ups into agent handling", () => {
     expect(
       shouldApplyCustomerOnboardingChatUpdate({
@@ -108,27 +126,6 @@ describe("sendMessage agent handling", () => {
     ).toBe(false);
   });
 
-  it("still applies onboarding chat updates when desktop local owns agent dispatch", () => {
-    expect(
-      shouldApplyCustomerOnboardingChatUpdate({
-        isUserMessage: true,
-        senderType: "user",
-        dispatchMode: "DESKTOP_LOCAL",
-        hasAgentMentions: false,
-      }),
-    ).toBe(true);
-    expect(
-      shouldDispatchDefaultAgentTurn({
-        isUserMessage: true,
-        senderType: "user",
-        dispatchMode: "DESKTOP_LOCAL",
-        hasAgentMentions: false,
-        hasComputerThread: false,
-        customerOnboardingHandled: false,
-      }),
-    ).toBe(false);
-  });
-
   it("keeps managed dispatch as the default dispatch mode", () => {
     expect(
       shouldDispatchDefaultAgentTurn({
@@ -140,6 +137,12 @@ describe("sendMessage agent handling", () => {
         customerOnboardingHandled: false,
       }),
     ).toBe(true);
+  });
+
+  it("does not expose desktop-local dispatch in the canonical GraphQL schema", () => {
+    expect(messagesGraphql).toContain("enum MessageDispatchMode");
+    expect(messagesGraphql).toContain("MANAGED_DEFAULT");
+    expect(messagesGraphql).not.toContain("DESKTOP_LOCAL");
   });
 
   it("lets explicit agent mentions own dispatch even when default handling is suppressed", () => {

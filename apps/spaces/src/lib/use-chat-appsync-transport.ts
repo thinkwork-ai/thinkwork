@@ -25,7 +25,6 @@ import {
   parseChunkPayload,
   __PROTOCOL_TYPE_SETS,
 } from "./ui-message-chunk-parser";
-import { shouldUseDesktopLocalPiDispatch } from "./desktop-runtime";
 import type {
   ParsedChunk,
   UIMessage,
@@ -56,7 +55,6 @@ export interface CreateAppSyncChatTransportOptions {
    * exposed here so tests can simulate without hitting urql.
    */
   now?: () => number;
-  shouldUseDesktopLocalDispatch?: () => boolean;
 }
 
 export interface AppSyncChatTransport extends ChatTransport<UIMessage> {
@@ -83,7 +81,6 @@ interface SendMessageVariables {
     toolCalls?: unknown;
     toolResults?: unknown;
     metadata?: unknown;
-    dispatchMode?: "MANAGED_DEFAULT" | "DESKTOP_LOCAL";
   };
 }
 
@@ -100,12 +97,7 @@ interface SendMessageVariables {
 export function createAppSyncChatTransport(
   options: CreateAppSyncChatTransportOptions,
 ): AppSyncChatTransport {
-  const {
-    urqlClient,
-    onLegacyChunk,
-    onChunkDrop,
-    shouldUseDesktopLocalDispatch = shouldUseDesktopLocalPiDispatch,
-  } = options;
+  const { urqlClient, onLegacyChunk, onChunkDrop } = options;
   let status: TransportStatus = "idle";
   let mutationCallCount = 0;
 
@@ -142,6 +134,14 @@ export function createAppSyncChatTransport(
         );
       }
 
+      const submitStart = options.now?.() ?? Date.now();
+      logClientPhase({
+        source: "spaces-client",
+        phase: "client.submit",
+        status: "started",
+        threadId: chatId,
+      });
+
       // Single-submit invariant: exactly one mutation call per
       // sendMessages invocation. Counted before the await so the
       // post-test assertion sees the call even if the network errors.
@@ -157,9 +157,6 @@ export function createAppSyncChatTransport(
               regenerateOf: input.messageId ?? null,
             },
           }),
-          ...(shouldUseDesktopLocalDispatch() && {
-            dispatchMode: "DESKTOP_LOCAL" as const,
-          }),
         },
       };
 
@@ -170,6 +167,14 @@ export function createAppSyncChatTransport(
           .toPromise();
       } catch (cause) {
         setStatus("errored");
+        logClientPhase({
+          source: "spaces-client",
+          phase: "client.submit",
+          status: "failed",
+          threadId: chatId,
+          durationMs: (options.now?.() ?? Date.now()) - submitStart,
+          detail: "mutation_rejected",
+        });
         throw new TransportMutationError("sendMessage mutation rejected", {
           cause,
         });
@@ -177,10 +182,25 @@ export function createAppSyncChatTransport(
 
       if (mutationResult?.error) {
         setStatus("errored");
+        logClientPhase({
+          source: "spaces-client",
+          phase: "client.submit",
+          status: "failed",
+          threadId: chatId,
+          durationMs: (options.now?.() ?? Date.now()) - submitStart,
+          detail: "mutation_error",
+        });
         throw new TransportMutationError(mutationResult.error.message, {
           cause: mutationResult.error,
         });
       }
+      logClientPhase({
+        source: "spaces-client",
+        phase: "client.submit",
+        status: "completed",
+        threadId: chatId,
+        durationMs: (options.now?.() ?? Date.now()) - submitStart,
+      });
 
       // Construct a ReadableStream<UIMessageChunk> backed by the AppSync
       // subscription. urql's subscription API hands us a Source we can
@@ -205,14 +225,35 @@ export function createAppSyncChatTransport(
                 controller.enqueue(parsed.chunk);
                 if (parsed.chunk.type === "finish") {
                   setStatus("closed");
+                  logClientPhase({
+                    source: "spaces-client",
+                    phase: "client.render",
+                    status: "completed",
+                    threadId: chatId,
+                    detail: "finish",
+                  });
                   unsubscribe?.();
                   controller.close();
                 } else if (parsed.chunk.type === "abort") {
                   setStatus("closed");
+                  logClientPhase({
+                    source: "spaces-client",
+                    phase: "client.render",
+                    status: "skipped",
+                    threadId: chatId,
+                    detail: "abort",
+                  });
                   unsubscribe?.();
                   controller.close();
                 } else if (parsed.chunk.type === "error") {
                   setStatus("errored");
+                  logClientPhase({
+                    source: "spaces-client",
+                    phase: "client.render",
+                    status: "failed",
+                    threadId: chatId,
+                    detail: "error_chunk",
+                  });
                   // Error chunk does NOT close the stream — useChat
                   // surfaces it via status: "error" and the consumer
                   // can decide whether to abort. Leave teardown to
@@ -267,6 +308,32 @@ export function createAppSyncChatTransport(
   };
 
   return transport;
+}
+
+function logClientPhase(input: {
+  source: "spaces-client";
+  phase: string;
+  status: "started" | "completed" | "failed" | "skipped";
+  threadId: string;
+  durationMs?: number;
+  detail?: string;
+}): void {
+  console.info(
+    JSON.stringify({
+      name: "thinkwork.agentcore.phase",
+      scope: { name: "thinkwork.client" },
+      event: "agentcore_phase",
+      spanId: `tw-${input.source}-${input.phase}-${input.threadId}`,
+      sessionId: input.threadId,
+      source: input.source,
+      phase: input.phase,
+      status: input.status,
+      threadId: input.threadId,
+      durationMs: input.durationMs,
+      detail: input.detail,
+      ts: new Date().toISOString(),
+    }),
+  );
 }
 
 export class TransportMutationError extends Error {

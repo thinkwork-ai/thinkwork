@@ -41,6 +41,17 @@ describe("fetchSpansForSession", () => {
             },
             {
               message: JSON.stringify({
+                name: "thinkwork.agentcore.phase",
+                event: "agentcore_phase",
+                scope: { name: "thinkwork.pi.runtime" },
+                spanId: "span-phase-1",
+                phase: "runtime.workspace_bootstrap",
+                status: "completed",
+              }),
+              timestamp: 1_700_000_000_025,
+            },
+            {
+              message: JSON.stringify({
                 name: "ordinary log",
                 scope: { name: "app" },
               }),
@@ -71,6 +82,15 @@ describe("fetchSpansForSession", () => {
         scope: { name: "thinkwork.pi.runtime" },
         spanId: "span-2",
         cloudWatchTimestamp: 1_700_000_000_020,
+      },
+      {
+        name: "thinkwork.agentcore.phase",
+        event: "agentcore_phase",
+        scope: { name: "thinkwork.pi.runtime" },
+        spanId: "span-phase-1",
+        phase: "runtime.workspace_bootstrap",
+        status: "completed",
+        cloudWatchTimestamp: 1_700_000_000_025,
       },
     ]);
   });

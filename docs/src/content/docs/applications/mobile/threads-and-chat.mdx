@@ -60,13 +60,15 @@ The timeline renders markdown through a custom message renderer for code blocks,
 
 Three visual states communicate activity:
 
-| State     | Meaning                                                 |
-| --------- | ------------------------------------------------------- |
-| Idle      | No current agent activity                               |
-| Thinking  | The agent is working but has not started streaming text |
-| Streaming | Response tokens are arriving                            |
+| State     | Meaning                                              |
+| --------- | ---------------------------------------------------- |
+| Idle      | No current agent activity                            |
+| Thinking  | AgentCore accepted the turn and the agent is working |
+| Streaming | Response tokens are arriving                         |
 
-Subscriptions drive these states. Thread-level updates and new-message events arrive through AppSync.
+Subscriptions drive these states. Thread-level updates, managed turn progress,
+and new-message events arrive through AppSync; the mobile app does not infer
+agent progress from an on-device runtime.
 
 ### Tool-call inline render
 

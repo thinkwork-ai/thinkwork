@@ -1,4 +1,4 @@
-// Pi-style extension surface for the mobile harness (Hermes-pure).
+// Pi-style extension surface retained for compatibility tests (Hermes-pure).
 //
 // Mirrors the real Pi `ExtensionAPI` (@earendil-works/pi-coding-agent
 // dist/core/extensions/types.d.ts): an event bus (`on(event, handler) => off`) plus

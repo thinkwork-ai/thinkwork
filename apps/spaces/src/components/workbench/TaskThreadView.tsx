@@ -17,7 +17,6 @@ import {
   RotateCcw,
   Search,
   Sparkles,
-  SquareTerminal,
   Zap,
 } from "lucide-react";
 import {
@@ -108,10 +107,6 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
-import {
-  useDesktopLocalPiConsole,
-  type DesktopLocalPiConsoleEntry,
-} from "@/lib/use-desktop-local-pi-console";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
@@ -358,8 +353,6 @@ export function TaskThreadView({
     };
   }, []);
 
-  const localPiConsoleEntries = useDesktopLocalPiConsole(thread?.id ?? null);
-
   if (isLoading) {
     return <TaskThreadState label="Loading..." />;
   }
@@ -384,14 +377,6 @@ export function TaskThreadView({
   );
   const turnByUserMessageId = mapTurnsToUserMessages(
     transcriptMessages,
-    thread.turns ?? [],
-  );
-  // Local-Pi diagnostic events fold into the per-turn activity surface
-  // (KTD2/R5): grouped by their originating turn, with turn-less main-process
-  // lines attached to the latest turn so they remain discoverable. The old
-  // bordered LocalPiConsole is gone.
-  const consoleEntriesByTurn = groupConsoleEntriesByTurn(
-    localPiConsoleEntries,
     thread.turns ?? [],
   );
   const selectedArtifact =
@@ -446,9 +431,6 @@ export function TaskThreadView({
                       key={message.id}
                       message={message}
                       turn={turn}
-                      consoleEntries={
-                        turn ? (consoleEntriesByTurn.get(turn.id) ?? []) : []
-                      }
                       isLatestUser={index === latestUserIndex}
                       streamingChunks={
                         index === latestUserIndex && showStreamingBuffer
@@ -1476,7 +1458,6 @@ function TranscriptSegment({
   threadAttachments,
   onDownloadAttachment,
   currentUser,
-  consoleEntries = [],
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
@@ -1493,7 +1474,6 @@ function TranscriptSegment({
   threadAttachments: ThreadInfoAttachment[];
   onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
   currentUser?: CurrentUserIdentity | null;
-  consoleEntries?: DesktopLocalPiConsoleEntry[];
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
   // render via renderTypedParts (Reasoning + Tool + Response per part).
@@ -1512,9 +1492,7 @@ function TranscriptSegment({
         onDownloadAttachment={onDownloadAttachment}
         currentUser={currentUser}
       />
-      {turn ? (
-        <ThreadTurnActivity turn={turn} consoleEntries={consoleEntries} />
-      ) : null}
+      {turn ? <ThreadTurnActivity turn={turn} /> : null}
       {isLatestUser ? (
         <>
           {hasTypedParts ? (
@@ -1558,13 +1536,7 @@ function normalizeStatus(status: unknown) {
     .trim();
 }
 
-function ThreadTurnActivity({
-  turn,
-  consoleEntries = [],
-}: {
-  turn?: TaskThreadTurn;
-  consoleEntries?: DesktopLocalPiConsoleEntry[];
-}) {
+function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
   const status = normalizeStatus(turn?.status);
   const running = isRunningStatus(status);
   // One hook per turn surface (KTD3): live-elapsed only ticks while running,
@@ -1574,11 +1546,7 @@ function ThreadTurnActivity({
   if (!turn) return null;
 
   const usage = parseRecord(turn.usageJson);
-  const cloudRows = actionRowsForTurn(turn, usage);
-  const rows = mergeActionRows(
-    cloudRows,
-    consoleRowsFromEntries(consoleEntries),
-  );
+  const rows = actionRowsForTurn(turn, usage);
 
   // Single source of truth for the header label (KTD2): derived from
   // turn.status, never from "assistant message present". skipped → null.
@@ -1616,9 +1584,6 @@ function ThreadTurnActivity({
       ))}
       {turn.error ? (
         <ActionRow title="Run failed" detail={turn.error} kind="tool" />
-      ) : null}
-      {consoleEntries.length > 0 ? (
-        <ConsoleLogToggle entries={consoleEntries} />
       ) : null}
     </ThinkingRow>
   );
@@ -2880,160 +2845,6 @@ function ThinkingRow({
   );
 }
 
-/**
- * Quiet "view console log" affordance for the raw local-Pi sidecar lines,
- * rendered inside the expanded turn surface and only when console data exists
- * (R5). Collapsed by default; expanded output is bounded like an embedded
- * terminal so very long JSON lines scroll horizontally instead of widening the
- * thread.
- */
-function ConsoleLogToggle({
-  entries,
-}: {
-  entries: DesktopLocalPiConsoleEntry[];
-}) {
-  const [open, setOpen] = useState(false);
-  const outputRef = useRef<HTMLPreElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const output = outputRef.current;
-    if (!output) return;
-    output.scrollTop = output.scrollHeight;
-  }, [entries, open]);
-
-  if (entries.length === 0) return null;
-
-  return (
-    <div className="min-w-0 max-w-full text-muted-foreground">
-      <button
-        type="button"
-        className="flex w-fit cursor-pointer items-center gap-2 text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <SquareTerminal className="size-3.5 shrink-0" />
-        view console log
-        <ChevronRight
-          className={cn("size-3.5 transition-transform", open && "rotate-90")}
-        />
-      </button>
-      {open ? (
-        <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-lg border border-white/10 bg-zinc-950/80 shadow-inner">
-          <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
-            <span className="size-2 rounded-full bg-red-400/70" />
-            <span className="size-2 rounded-full bg-yellow-400/70" />
-            <span className="size-2 rounded-full bg-emerald-400/70" />
-            <span className="ml-2 text-[10px] uppercase tracking-wide text-zinc-500">
-              Local Pi Console
-            </span>
-          </div>
-          <pre
-            ref={outputRef}
-            role="log"
-            aria-label="Local Pi console output"
-            aria-live="polite"
-            className="max-h-56 max-w-full overflow-x-auto overflow-y-auto whitespace-pre p-3 font-mono text-xs leading-5 text-zinc-300"
-          >
-            {entries
-              .map((entry) => formatLocalPiConsoleEntry(entry))
-              .join("\n")}
-          </pre>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** Build chronological, human-readable step rows from local-Pi console events. */
-function consoleRowsFromEntries(
-  entries: DesktopLocalPiConsoleEntry[],
-): ActionRowData[] {
-  return [...entries]
-    .sort(
-      (a, b) =>
-        parseEventTimestamp(a.emittedAt) - parseEventTimestamp(b.emittedAt),
-    )
-    .map((entry) => ({
-      title: truncateRowTitle(entry.message),
-      detail: formatLocalPiConsoleEntry(entry),
-      kind: "thinking" as const,
-    }));
-}
-
-/** Concatenate cloud tool rows with console-derived rows, de-duplicated. */
-function mergeActionRows(
-  cloudRows: ActionRowData[],
-  consoleRows: ActionRowData[],
-): ActionRowData[] {
-  const seen = new Set<string>();
-  const merged: ActionRowData[] = [];
-  for (const row of [...cloudRows, ...consoleRows]) {
-    const key = `${row.title} ${row.detail ?? ""}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(row);
-  }
-  return merged;
-}
-
-function truncateRowTitle(message: string): string {
-  const trimmed = message.trim();
-  return trimmed.length > 100 ? `${trimmed.slice(0, 99)}…` : trimmed;
-}
-
-/**
- * Group local-Pi console entries by their originating turn. Entries without a
- * `threadTurnId` (main-process diagnostics) attach to the latest turn so they
- * stay discoverable now that the standalone console box is gone.
- */
-function groupConsoleEntriesByTurn(
-  entries: DesktopLocalPiConsoleEntry[],
-  turns: TaskThreadTurn[],
-): Map<string, DesktopLocalPiConsoleEntry[]> {
-  const grouped = new Map<string, DesktopLocalPiConsoleEntry[]>();
-  if (entries.length === 0) return grouped;
-
-  const turnIds = new Set(turns.map((turn) => turn.id));
-  const latestTurnId = [...turns]
-    .sort(
-      (a, b) =>
-        parseEventTimestamp(a.startedAt ?? null) -
-        parseEventTimestamp(b.startedAt ?? null),
-    )
-    .at(-1)?.id;
-
-  for (const entry of entries) {
-    const targetId =
-      entry.threadTurnId && turnIds.has(entry.threadTurnId)
-        ? entry.threadTurnId
-        : latestTurnId;
-    if (!targetId) continue;
-    const bucket = grouped.get(targetId) ?? [];
-    bucket.push(entry);
-    grouped.set(targetId, bucket);
-  }
-  return grouped;
-}
-
-function formatLocalPiConsoleEntry(entry: DesktopLocalPiConsoleEntry): string {
-  const timestamp = shortTime(entry.emittedAt);
-  const prefix = [timestamp, entry.level, entry.source]
-    .filter(Boolean)
-    .join(" ");
-  return `${prefix} ${entry.message}`;
-}
-
-function shortTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
 function ActionRow({
   title,
   detail,
@@ -3725,8 +3536,8 @@ function formatInvocationSource(source: unknown) {
     chat: "Manual chat",
     chat_message: "Manual chat",
     desktop_managed_delegation: "Managed delegation",
-    "desktop-local": "Local Pi",
-    desktop_local: "Local Pi",
+    "desktop-local": "Legacy agent",
+    desktop_local: "Legacy agent",
     manual: "Manual chat",
     schedule: "Schedule",
     webhook: "Webhook",

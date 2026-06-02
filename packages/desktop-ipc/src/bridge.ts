@@ -3,22 +3,6 @@ import type {
   DesktopConfig,
   PendingOAuthCallback,
   OAuthErrorEvent,
-  PiCancelTurnRequest,
-  PiCancelTurnResponse,
-  PiCancelEvalRunRequest,
-  PiCancelEvalRunResponse,
-  PiDiagnosticEvent,
-  PiPrewarmWorkspaceRequest,
-  PiPrewarmWorkspaceResponse,
-  PiSidecarState,
-  PiSidecarStatus,
-  PiStartEvalRunRequest,
-  PiStartEvalRunResponse,
-  PiStartTurnRequest,
-  PiStartTurnResponse,
-  ReadWorkspaceFileRequest,
-  ReadWorkspaceFileResponse,
-  ReadWorkspaceTreeResponse,
   RemoveTokenStorageItemRequest,
   ReportInstallOutcomeRequest,
   RaiseThreadNotificationRequest,
@@ -34,22 +18,6 @@ import type {
 } from "./schemas.js";
 
 export type Unsubscribe = () => void;
-
-export interface PiBridge {
-  status: PiSidecarStatus;
-  getStatus(): Promise<PiSidecarState>;
-  prewarmWorkspace(
-    request: PiPrewarmWorkspaceRequest,
-  ): Promise<PiPrewarmWorkspaceResponse>;
-  startTurn(request: PiStartTurnRequest): Promise<PiStartTurnResponse>;
-  cancelTurn(request: PiCancelTurnRequest): Promise<PiCancelTurnResponse>;
-  startEvalRun(request: PiStartEvalRunRequest): Promise<PiStartEvalRunResponse>;
-  cancelEvalRun(
-    request: PiCancelEvalRunRequest,
-  ): Promise<PiCancelEvalRunResponse>;
-  onStatusChanged(listener: (state: PiSidecarState) => void): Unsubscribe;
-  onDiagnostic?(listener: (event: PiDiagnosticEvent) => void): Unsubscribe;
-}
 
 export interface ThinkworkBridge {
   getSessionTokens(): Promise<SessionTokens | null>;
@@ -81,14 +49,7 @@ export interface ThinkworkBridge {
   onOpenThread(listener: (event: OpenThreadEvent) => void): Unsubscribe;
   /** Subscribe to app window focus/blur transitions (main → renderer). */
   onWindowFocusChange(listener: (event: WindowFocusEvent) => void): Unsubscribe;
-  /** Read the local Pi workspace cache as a tree (read-only inspector). */
-  readWorkspaceTree(): Promise<ReadWorkspaceTreeResponse>;
-  /** Read one file from the local Pi workspace cache (read-only inspector). */
-  readWorkspaceFile(
-    request: ReadWorkspaceFileRequest,
-  ): Promise<ReadWorkspaceFileResponse>;
   /** Sync the native window appearance to the app theme (renderer → main) so
    *  macOS vibrancy materials render light/dark to match. */
   setNativeTheme(theme: "light" | "dark"): void;
-  pi?: PiBridge;
 }

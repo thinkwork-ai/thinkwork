@@ -22,6 +22,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import {
   GetObjectCommand,
@@ -35,6 +36,7 @@ const RENDERED_MARKER_PATH = ".rendered_at";
 
 export interface BootstrapResult {
   synced: number;
+  skipped?: number;
   deleted: number;
   total: number;
   prefix: string;
@@ -47,22 +49,41 @@ export interface BootstrapWorkspaceOptions {
 interface RemoteEntry {
   key: string;
   rel: string;
+  etag?: string;
+  manifestEtag?: string;
+  manifestFingerprint?: string;
 }
 
 interface HydrateManifestFile {
   path?: unknown;
   sourceKey?: unknown;
+  etag?: unknown;
 }
 
 interface HydrateManifestStatusMount {
   path?: unknown;
   available?: unknown;
   sourceKey?: unknown;
+  etag?: unknown;
 }
 
 interface HydrateManifest {
   files?: unknown;
   statusMounts?: unknown;
+}
+
+interface HydrateCacheEntry {
+  sourceKey: string;
+  etag: string;
+  manifestEtag?: string;
+  manifestFingerprint?: string;
+}
+
+interface HydrateCache {
+  tenantSlug: string;
+  agentSlug: string;
+  prefix: string;
+  entries: Record<string, HydrateCacheEntry>;
 }
 
 function agentPrefix(tenantSlug: string, agentSlug: string): string {
@@ -132,15 +153,18 @@ async function listAgentKeys(
     const manifestText = (
       await readRemoteBytes(s3, bucket, manifestObject.key)
     ).toString("utf8");
-    return remoteEntriesFromManifest(manifestText);
+    return remoteEntriesFromManifest(manifestText, {
+      manifestEtag: manifestObject.etag,
+      manifestFingerprint: sha256(manifestText),
+    });
   }
 
-  return listed
-    .map((object) => {
-      const rel = runtimeWorkspacePath(object.rel);
-      return rel && !SKIP_FILES.has(rel) ? { key: object.key, rel } : null;
-    })
-    .filter((entry): entry is RemoteEntry => entry !== null);
+  return listed.flatMap((object): RemoteEntry[] => {
+    const rel = runtimeWorkspacePath(object.rel);
+    return rel && !SKIP_FILES.has(rel)
+      ? [{ key: object.key, rel, etag: object.etag }]
+      : [];
+  });
 }
 
 async function listObjects(
@@ -160,7 +184,11 @@ async function listObjects(
     );
     for (const obj of resp.Contents ?? []) {
       if (!obj.Key) continue;
-      out.push({ key: obj.Key, rel: obj.Key.slice(prefix.length) });
+      out.push({
+        key: obj.Key,
+        rel: obj.Key.slice(prefix.length),
+        etag: obj.ETag,
+      });
     }
     continuationToken = resp.IsTruncated
       ? resp.NextContinuationToken
@@ -169,20 +197,28 @@ async function listObjects(
   return out;
 }
 
-function remoteEntriesFromManifest(manifestText: string): RemoteEntry[] {
+function remoteEntriesFromManifest(
+  manifestText: string,
+  manifestIdentity: {
+    manifestEtag?: string;
+    manifestFingerprint: string;
+  },
+): RemoteEntry[] {
   const parsed = JSON.parse(manifestText) as HydrateManifest;
   const entries = new Map<string, RemoteEntry>();
   const files = Array.isArray(parsed.files)
     ? (parsed.files as HydrateManifestFile[])
     : [];
   for (const file of files) {
-    addManifestEntry(entries, file);
+    addManifestEntry(entries, file, manifestIdentity);
   }
   const statusMounts = Array.isArray(parsed.statusMounts)
     ? (parsed.statusMounts as HydrateManifestStatusMount[])
     : [];
   for (const mount of statusMounts) {
-    if (mount.available === true) addManifestEntry(entries, mount);
+    if (mount.available === true) {
+      addManifestEntry(entries, mount, manifestIdentity);
+    }
   }
   return [...entries.values()];
 }
@@ -190,13 +226,23 @@ function remoteEntriesFromManifest(manifestText: string): RemoteEntry[] {
 function addManifestEntry(
   entries: Map<string, RemoteEntry>,
   file: HydrateManifestFile | HydrateManifestStatusMount,
+  manifestIdentity: {
+    manifestEtag?: string;
+    manifestFingerprint: string;
+  },
 ): void {
   if (typeof file.path !== "string" || typeof file.sourceKey !== "string") {
     return;
   }
   const rel = runtimeWorkspacePath(file.path);
   if (!rel || SKIP_FILES.has(rel)) return;
-  entries.set(rel, { key: file.sourceKey, rel });
+  entries.set(rel, {
+    key: file.sourceKey,
+    rel,
+    etag: typeof file.etag === "string" ? file.etag : undefined,
+    manifestEtag: manifestIdentity.manifestEtag,
+    manifestFingerprint: manifestIdentity.manifestFingerprint,
+  });
 }
 
 function runtimeWorkspacePath(relPath: string): string | null {
@@ -287,10 +333,26 @@ export async function bootstrapWorkspace(
 
   await mkdir(localDir, { recursive: true });
   const local = await listLocalPaths(localDir);
+  const cachePath = hydrateCachePath(localDir);
+  const cache = await readHydrateCache(cachePath);
 
   let synced = 0;
-  for (const { key, rel } of remote) {
+  let skipped = 0;
+  for (const entry of remote) {
+    const { key, rel } = entry;
     const localPath = path.join(localDir, rel);
+    if (
+      local.has(rel) &&
+      hydrateCacheEntryMatches(cache, {
+        tenantSlug,
+        agentSlug,
+        prefix,
+        entry,
+      })
+    ) {
+      skipped++;
+      continue;
+    }
     const parent = path.dirname(localPath);
     if (parent) await mkdir(parent, { recursive: true });
     await writeFile(localPath, await readRemoteBytes(s3, bucket, key));
@@ -311,7 +373,104 @@ export async function bootstrapWorkspace(
   // Best-effort orphan-dir cleanup so deletions don't leave empty trees.
   await pruneEmptyDirs(localDir, localDir);
 
-  return { synced, deleted, total: remote.length, prefix };
+  await writeHydrateCache(cachePath, {
+    tenantSlug,
+    agentSlug,
+    prefix,
+    entries: cacheEntriesFor(remote),
+  });
+
+  return {
+    synced,
+    ...(skipped > 0 ? { skipped } : {}),
+    deleted,
+    total: remote.length,
+    prefix,
+  };
+}
+
+function hydrateCachePath(localDir: string): string {
+  return `${localDir}.hydrate-cache.json`;
+}
+
+async function readHydrateCache(
+  filePath: string,
+): Promise<HydrateCache | null> {
+  try {
+    const parsed = JSON.parse(await readFile(filePath, "utf8"));
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.tenantSlug === "string" &&
+      typeof parsed.agentSlug === "string" &&
+      typeof parsed.prefix === "string" &&
+      parsed.entries &&
+      typeof parsed.entries === "object"
+    ) {
+      return parsed as HydrateCache;
+    }
+  } catch {
+    // Missing or malformed cache metadata should never block a turn.
+  }
+  return null;
+}
+
+async function writeHydrateCache(
+  filePath: string,
+  cache: HydrateCache,
+): Promise<void> {
+  try {
+    await writeFile(filePath, JSON.stringify(cache));
+  } catch {
+    // Best-effort optimization only.
+  }
+}
+
+function hydrateCacheEntryMatches(
+  cache: HydrateCache | null,
+  input: {
+    tenantSlug: string;
+    agentSlug: string;
+    prefix: string;
+    entry: RemoteEntry;
+  },
+): boolean {
+  if (
+    !cache ||
+    cache.tenantSlug !== input.tenantSlug ||
+    cache.agentSlug !== input.agentSlug ||
+    cache.prefix !== input.prefix
+  ) {
+    return false;
+  }
+  const entryFingerprint = input.entry.etag;
+  if (!entryFingerprint) return false;
+  const cached = cache.entries[input.entry.rel];
+  return Boolean(
+    cached &&
+    cached.sourceKey === input.entry.key &&
+    cached.etag === entryFingerprint,
+  );
+}
+
+function cacheEntriesFor(
+  remote: RemoteEntry[],
+): Record<string, HydrateCacheEntry> {
+  const entries: Record<string, HydrateCacheEntry> = {};
+  for (const entry of remote) {
+    if (!entry.etag) continue;
+    entries[entry.rel] = {
+      sourceKey: entry.key,
+      etag: entry.etag,
+      manifestEtag: entry.manifestEtag,
+      manifestFingerprint: entry.manifestFingerprint,
+    };
+  }
+  return entries;
+}
+
+function sha256(input: string): string {
+  return createHash("sha256").update(input).digest("hex");
 }
 
 async function pruneEmptyDirs(root: string, dir: string): Promise<void> {
