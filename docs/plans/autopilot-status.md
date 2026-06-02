@@ -5209,24 +5209,24 @@ None.
 ## Status
 
 - Plan: `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
-- Branch: `codex/agentcore-u7`
-- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u7`
+- Branch: `codex/agentcore-final-status`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-final-status`
 - Started: `2026-06-02T13:42:51Z`
-- Current unit: U7 Update docs, tests, and operational language.
+- Current unit: Complete.
 - Target branch: `main`
 
 ## Unit Ledger
 
-| Unit | Scope                                             | Branch               | PR                                                           | State   | Notes                                                                   |
-| ---- | ------------------------------------------------- | -------------------- | ------------------------------------------------------------ | ------- | ----------------------------------------------------------------------- |
-| U0   | Spike: Route desktop and mobile to AgentCore now  | `codex/agentcore-u0` | [#1988](https://github.com/thinkwork-ai/thinkwork/pull/1988) | Merged  | CI passed; squash merged as `f0c378623a6a2a68168901a9147595c6fb09b656`. |
-| U1   | Remove Spaces desktop-local dispatch and surfaces | `codex/agentcore-u1` | [#1989](https://github.com/thinkwork-ai/thinkwork/pull/1989) | Merged  | CI passed; squash merged as `116665de0113d1855a4d1e570998067e8aa29c6f`. |
-| U2   | Remove Electron Pi sidecar and IPC bridge         | `codex/agentcore-u2` | [#1990](https://github.com/thinkwork-ai/thinkwork/pull/1990) | Merged  | CI passed; squash merged as `66011fc16c39684d5193ba4bf42e9f1049b8ab0c`. |
-| U3   | Retire desktop-local backend contracts            | `codex/agentcore-u3` | [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991) | Merged  | CI passed; squash merged as `39395b16afe539891aae8c4b50db9e19dd2db7b2`. |
-| U4   | Remove mobile on-device harness execution         | `codex/agentcore-u4` | [#1992](https://github.com/thinkwork-ai/thinkwork/pull/1992) | Merged  | CI passed; squash merged as `7acf3185ebb6e3a2f5e2349c3e34d704543b5ac1`. |
-| U5   | Instrument AgentCore turn latency by phase        | `codex/agentcore-u5` | [#1993](https://github.com/thinkwork-ai/thinkwork/pull/1993) | Merged  | CI passed; squash merged as `e78fd569be173524be89d6923f4138fda86d3acd`. |
-| U6   | Improve managed-path perceived responsiveness     | `codex/agentcore-u6` | [#1994](https://github.com/thinkwork-ai/thinkwork/pull/1994) | Merged  | CI passed; squash merged as `52c472e595a1dde5834154b117d93a7e8d5f534b`. |
-| U7   | Update docs, tests, and operational language      | `codex/agentcore-u7` | [#1995](https://github.com/thinkwork-ai/thinkwork/pull/1995) | PR open | Local verification complete; CI pending.                                |
+| Unit | Scope                                             | Branch               | PR                                                           | State  | Notes                                                                   |
+| ---- | ------------------------------------------------- | -------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------- |
+| U0   | Spike: Route desktop and mobile to AgentCore now  | `codex/agentcore-u0` | [#1988](https://github.com/thinkwork-ai/thinkwork/pull/1988) | Merged | CI passed; squash merged as `f0c378623a6a2a68168901a9147595c6fb09b656`. |
+| U1   | Remove Spaces desktop-local dispatch and surfaces | `codex/agentcore-u1` | [#1989](https://github.com/thinkwork-ai/thinkwork/pull/1989) | Merged | CI passed; squash merged as `116665de0113d1855a4d1e570998067e8aa29c6f`. |
+| U2   | Remove Electron Pi sidecar and IPC bridge         | `codex/agentcore-u2` | [#1990](https://github.com/thinkwork-ai/thinkwork/pull/1990) | Merged | CI passed; squash merged as `66011fc16c39684d5193ba4bf42e9f1049b8ab0c`. |
+| U3   | Retire desktop-local backend contracts            | `codex/agentcore-u3` | [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991) | Merged | CI passed; squash merged as `39395b16afe539891aae8c4b50db9e19dd2db7b2`. |
+| U4   | Remove mobile on-device harness execution         | `codex/agentcore-u4` | [#1992](https://github.com/thinkwork-ai/thinkwork/pull/1992) | Merged | CI passed; squash merged as `7acf3185ebb6e3a2f5e2349c3e34d704543b5ac1`. |
+| U5   | Instrument AgentCore turn latency by phase        | `codex/agentcore-u5` | [#1993](https://github.com/thinkwork-ai/thinkwork/pull/1993) | Merged | CI passed; squash merged as `e78fd569be173524be89d6923f4138fda86d3acd`. |
+| U6   | Improve managed-path perceived responsiveness     | `codex/agentcore-u6` | [#1994](https://github.com/thinkwork-ai/thinkwork/pull/1994) | Merged | CI passed; squash merged as `52c472e595a1dde5834154b117d93a7e8d5f534b`. |
+| U7   | Update docs, tests, and operational language      | `codex/agentcore-u7` | [#1995](https://github.com/thinkwork-ai/thinkwork/pull/1995) | Merged | CI passed; squash merged as `2b83cfbc61a10af7063b3320461e9128504b3c94`. |
 
 ## U0 Implementation Notes
 
@@ -5672,8 +5672,13 @@ None.
 ## U7 CI / PR
 
 - Opened [#1995](https://github.com/thinkwork-ai/thinkwork/pull/1995).
-- Local verification complete; CI monitoring, squash merge, and branch cleanup
-  pending.
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `2b83cfbc61a10af7063b3320461e9128504b3c94`.
+- Remote branch `codex/agentcore-u7` deleted; local U7 worktree and branch
+  removed.
+- All implementation units in
+  `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
+  are complete.
 
 ## Blockers
 
