@@ -261,7 +261,7 @@ export function ChatSidebar() {
       tenantId: tenantId ?? "",
       limit: PINNED_LIMIT,
     },
-    pause: !tenantId,
+    pause: !tenantId || !userId,
     requestPolicy: "cache-and-network",
   });
 
@@ -629,7 +629,7 @@ export function ChatSidebar() {
 
   const pinThread = useCallback(
     (threadId: string) => {
-      if (!tenantId) return;
+      if (!tenantId || !userId) return;
       void executePinThread({ tenantId, threadId }).then((result) => {
         if (result.error) {
           toast.error(result.error.message);
@@ -638,12 +638,12 @@ export function ChatSidebar() {
         refreshThreadPins();
       });
     },
-    [executePinThread, refreshThreadPins, tenantId],
+    [executePinThread, refreshThreadPins, tenantId, userId],
   );
 
   const unpinThread = useCallback(
     (threadId: string) => {
-      if (!tenantId) return;
+      if (!tenantId || !userId) return;
       void executeUnpinThread({ tenantId, threadId }).then((result) => {
         if (result.error) {
           toast.error(result.error.message);
@@ -652,12 +652,12 @@ export function ChatSidebar() {
         refreshThreadPins();
       });
     },
-    [executeUnpinThread, refreshThreadPins, tenantId],
+    [executeUnpinThread, refreshThreadPins, tenantId, userId],
   );
 
   const reorderPinnedThreads = useCallback(
     (orderedVisibleIds: string[]) => {
-      if (!tenantId) return;
+      if (!tenantId || !userId) return;
       setOptimisticPinnedOrder(orderedVisibleIds);
       void executeReorderPinnedThreads({
         tenantId,
@@ -672,11 +672,11 @@ export function ChatSidebar() {
         refreshThreadPins();
       });
     },
-    [executeReorderPinnedThreads, refreshThreadPins, tenantId],
+    [executeReorderPinnedThreads, refreshThreadPins, tenantId, userId],
   );
 
   useEffect(() => {
-    if (!tenantId || !pinnedData || pinnedFetching) return;
+    if (!tenantId || !userId || !pinnedData || pinnedFetching) return;
     if (readPinMigrationCompleted(pinMigrationStorageKey)) return;
     if (pinMigrationInFlightRef.current === pinMigrationStorageKey) return;
 
