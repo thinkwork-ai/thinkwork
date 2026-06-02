@@ -34,7 +34,7 @@ status: complete
 | U15 Desktop Pi eval fail-fast sweep                 | `codex/desktop-pi-evals-u15-remediation`         | [#1975](https://github.com/thinkwork-ai/thinkwork/pull/1975) | Merged      | Squash merged as `1ac2629f`; full sweep completed and blank SDK assistant-error retries now fail fast.  |
 | U16 Desktop Pi SDK assistant-error diagnostics      | `codex/desktop-pi-evals-u16-sdk-diagnostics`     | [#1976](https://github.com/thinkwork-ai/thinkwork/pull/1976) | Merged      | Squash merged as `18d10bff`; provider/SDK details now surface on blank SDK assistant-error turns.       |
 | U17 Desktop Pi quota-aware diagnostic sweep         | `codex/desktop-pi-evals-u17-diagnostic-sweep`    | [#1977](https://github.com/thinkwork-ai/thinkwork/pull/1977) | Merged      | Squash merged as `e9718e4f`; full sweep completed and queued cases now fast-finish after daily quota.   |
-| U18 Desktop Pi eval workspace hydration speed       | `codex/desktop-pi-evals-u18-workspace-hydration` | pending                                                      | In progress | Sharing a memoized S3 workspace object store across isolated eval cases to reduce repeated hydration.   |
+| U18 Desktop Pi eval workspace hydration speed       | `codex/desktop-pi-evals-u18-workspace-hydration` | [#1978](https://github.com/thinkwork-ai/thinkwork/pull/1978) | In progress | Sharing a memoized S3 workspace object store across isolated eval cases to reduce repeated hydration.   |
 
 ### Progress Log
 
@@ -640,6 +640,8 @@ status: complete
   this workspace (`prettier: command not found`).
 - U18 in progress: adding a memoized workspace object store and wiring the
   desktop eval runner to pass one shared store into all cases in a run.
+- Opened U18 PR
+  [#1978](https://github.com/thinkwork-ai/thinkwork/pull/1978).
 - `pnpm install` in the U18 worktree - passed. Optional `node-liblzma` and
   `canvas` native postinstall builds logged local `pkg-config` warnings and
   exited 0.
