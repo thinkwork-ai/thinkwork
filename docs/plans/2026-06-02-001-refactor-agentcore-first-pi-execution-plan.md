@@ -1,7 +1,7 @@
 ---
 title: "refactor: AgentCore-first Pi execution"
 type: refactor
-status: active
+status: completed
 date: 2026-06-02
 origin: docs/brainstorms/2026-06-01-agentcore-first-pi-execution-requirements.md
 ---
@@ -141,7 +141,7 @@ AgentCore Pi already has the right center of gravity: `packages/agentcore-pi/age
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ```mermaid
 sequenceDiagram
@@ -180,6 +180,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Dependencies:** None. This is intentionally first.
 
 **Files:**
+
 - Modify: `apps/spaces/src/lib/use-chat-appsync-transport.ts`
 - Modify: `apps/spaces/src/components/workbench/SpacesWorkbench.tsx`
 - Modify: `apps/spaces/src/components/workbench/SpacesThreadDetailRoute.tsx`
@@ -199,6 +200,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Test: `packages/agentcore-pi/agent-container/tests/server.test.ts`
 
 **Approach:**
+
 - Keep the change deliberately small: bypass or disable desktop-local dispatch and mobile harness execution at the call sites, but do not delete sidecar/harness code in this unit.
 - Route desktop and mobile sends through the managed `sendMessage`/AgentCore path with enough tests to prove the clients are no longer choosing local execution.
 - Add lightweight temporary or structured logging around rendered workspace render, S3 upload/check, AgentCore hydration, session-store hit/miss, and first runtime activity so deployed runs produce actionable evidence.
@@ -209,11 +211,13 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Execution note:** This is a spike, not the cleanup. Prefer reversible, narrow routing changes and concrete deployed evidence over deleting large local-runtime code in the same unit.
 
 **Patterns to follow:**
+
 - Use existing managed send-message dispatch instead of inventing a new transport.
 - Use existing AgentCore trace/log conventions in `packages/api/src/lib/agentcore-spans.ts` and `packages/agentcore-pi/agent-container/src/handler-context.ts`.
 - Preserve the rendered workspace cache/checking behavior long enough to measure whether it helps AgentCore.
 
 **Test scenarios:**
+
 - Covers AE1. Happy path: desktop send with local Pi available still routes to managed AgentCore.
 - Covers AE1. Happy path: mobile follow-up and new-thread first message route to managed AgentCore instead of `runThreadHarnessTurn`.
 - Covers AE2. Deployed evidence: a slow managed turn records enough phase data to identify whether delay is workspace render, S3/cache, AgentCore hydration, model, tool startup, or finalize.
@@ -223,6 +227,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Warm-container scenario: two follow-up questions inside the warm window show whether `/workspace` persists and whether unchanged rendered files are still downloaded/written every turn.
 
 **Verification:**
+
 - Desktop and mobile can both complete real deployed AgentCore turns.
 - The team has concrete timing and functionality evidence before deleting local runtime code.
 - Any required course correction is recorded before U1-U7 proceed.
@@ -238,6 +243,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Dependencies:** None.
 
 **Files:**
+
 - Modify: `apps/spaces/src/lib/desktop-runtime.ts`
 - Modify: `apps/spaces/src/lib/use-chat-appsync-transport.ts`
 - Modify: `apps/spaces/src/components/workbench/SpacesWorkbench.tsx`
@@ -254,6 +260,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Test: `apps/spaces/src/components/workbench/TaskThreadView.test.tsx`
 
 **Approach:**
+
 - Replace desktop-local readiness helpers with desktop-shell detection only where the renderer still needs shell features such as update banners, settings chrome, or file/dialog behavior.
 - Remove `dispatchMode: "DESKTOP_LOCAL"` assignment from new-thread and follow-up sends.
 - Remove `getDesktopBridge()?.pi?.prewarmWorkspace`, `startTurn`, retry, cancel, and custom local Pi event dispatch calls from workbench flows.
@@ -263,10 +270,12 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Execution note:** Add characterization tests around send payloads before deleting the local branch, because these components currently mix thread creation, onboarding handling, and runtime routing.
 
 **Patterns to follow:**
+
 - Keep existing GraphQL send mutation patterns in `apps/spaces/src/lib/use-chat-appsync-transport.ts`.
 - Preserve desktop shell feature detection from `apps/spaces/src/lib/desktop-detection.ts` where it is unrelated to Pi execution.
 
 **Test scenarios:**
+
 - Happy path: desktop build with a mocked healthy Pi bridge sends a user message and the GraphQL payload has no `dispatchMode`.
 - Happy path: new-thread composer in desktop build creates the thread and dispatches managed agent handling without calling `prewarmWorkspace` or `startTurn`.
 - Covers AE1. Integration: follow-up send in `SpacesThreadDetailRoute` no longer calls the Electron Pi bridge and still triggers managed backend dispatch.
@@ -274,6 +283,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Covers AE4. UI: the composer/header/thread activity no longer presents local Pi or `just-bash` labels.
 
 **Verification:**
+
 - Spaces desktop and web share the same agent send payload shape.
 - No renderer code path can request desktop-local Pi execution.
 - Local Pi status/diagnostic UI is absent from normal thread surfaces.
@@ -289,6 +299,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Dependencies:** U1 should remove renderer calls first or land in the same coordinated PR.
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/ipc-handlers.ts`
 - Modify: `apps/desktop/src/main/env.ts`
 - Modify: `apps/desktop/src/preload/index.ts`
@@ -307,6 +318,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Test: `apps/desktop/test/sidecar/local-turn-runner.test.ts`
 
 **Approach:**
+
 - Remove `desktopLocalPiEnabled` from the runtime environment snapshot and build-time env allowlist.
 - Do not create or start `createPiSidecarController` in `registerIpcHandlers`.
 - Remove Pi-specific IPC channels from the preload bridge and shared IPC package, or leave explicit unsupported stubs only if an old renderer contract needs one release of compatibility.
@@ -316,16 +328,19 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Execution note:** Characterize the preload bridge shape before editing, then update tests to assert `window.thinkworkBridge.pi` is absent.
 
 **Patterns to follow:**
+
 - Follow existing bridge optionality in `packages/desktop-ipc/src/bridge.ts`; prefer removing Pi from the exported bridge over returning a fake "healthy" or "disabled" runtime.
 - Preserve CORS/auth/update IPC patterns already in `apps/desktop/src/main/ipc-handlers.ts`.
 
 **Test scenarios:**
+
 - Happy path: desktop startup registers normal IPC handlers but never constructs or starts a Pi sidecar, even if old local Pi env vars are present.
 - Covers AE1. Integration: preload exposes no callable `pi.startTurn`, `pi.prewarmWorkspace`, or `pi.cancelTurn`.
 - Error path: old local Pi env vars are ignored and do not throw during desktop startup.
 - UI contract: renderer code that checks for a desktop bridge still works for non-Pi shell capabilities.
 
 **Verification:**
+
 - Desktop packaged runtime has no local Pi process, no sidecar diagnostics, and no `just-bash` tool dependency path.
 - Removing local Pi does not remove the desktop app's non-agent shell capabilities.
 
@@ -340,6 +355,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Dependencies:** U1, U2.
 
 **Files:**
+
 - Modify: `packages/database-pg/graphql/types/messages.graphql`
 - Modify: `packages/api/src/graphql/resolvers/messages/sendMessage.agent-handling.ts`
 - Modify: `packages/api/src/graphql/resolvers/messages/sendMessage.mutation.ts`
@@ -367,6 +383,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Test: `packages/api/src/handlers/chat-agent-finalize.test.ts`
 
 **Approach:**
+
 - Remove `DESKTOP_LOCAL` from the canonical GraphQL input enum after renderer clients stop sending it, then regenerate consumer codegen.
 - Update send-message agent handling so managed dispatch is the only agent execution path for user messages that request agent handling.
 - Replace desktop runtime session and workspace prewarm handlers with 410 Gone tombstone responses for one release cycle; remove the expensive preparation code and any sidecar credentials from the active path.
@@ -377,10 +394,12 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Execution note:** Start with tests that prove `DESKTOP_LOCAL` no longer suppresses managed dispatch and old desktop-local endpoints return 410.
 
 **Patterns to follow:**
+
 - Use existing API error response helpers in `packages/api/src/lib/response.js`.
 - Preserve the service-endpoint auth and idempotent finalize contract documented in `packages/api/src/handlers/chat-agent-finalize.ts`.
 
 **Test scenarios:**
+
 - Covers AE1. Happy path: a user `sendMessage` with agent handling requested dispatches managed AgentCore; there is no desktop-local exemption.
 - Edge case: an old generated client attempting to send `DESKTOP_LOCAL` receives schema/input rejection or normalization to managed behavior, depending on the final schema transition.
 - Error path: `POST /api/desktop/runtime-session` returns 410 with a stable code explaining desktop-local execution is retired.
@@ -388,6 +407,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Integration: `chat-agent-finalize` still accepts AgentCore service-secret finalization and rejects removed desktop sidecar finalize tokens.
 
 **Verification:**
+
 - Backend cannot prepare a desktop-local turn.
 - Client-controlled dispatch cannot disable AgentCore execution.
 - Terraform no longer deploys local-preparation behavior except temporary tombstone routes.
@@ -403,6 +423,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Dependencies:** U3 should preserve or strengthen managed send-message dispatch; U5/U6 can land after this but should inform progress UI polish.
 
 **Files:**
+
 - Modify: `apps/mobile/app/thread/[threadId]/index.tsx`
 - Modify: `apps/mobile/app/(tabs)/index.tsx`
 - Modify: `apps/mobile/components/chat/ChatScreen.tsx`
@@ -429,6 +450,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Create test: `apps/mobile/hooks/useGraphQLChat.test.ts`
 
 **Approach:**
+
 - Replace `runThreadHarnessTurn` calls in thread detail and new-thread first-message flows with managed `SendMessageMutation` or the existing GraphQL chat hook.
 - Preserve `agentRequested: false` behavior for plain human messages.
 - Keep mobile-native attachment capture and mention serialization, but send them through the managed API route rather than local harness-specific `nativeAttachments`.
@@ -438,10 +460,12 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Execution note:** Add managed-send coverage around current first-message and follow-up mobile flows before deleting harness tests, because mobile thread creation has several attachment/mention/agent-enabled branches.
 
 **Patterns to follow:**
+
 - Prefer `apps/mobile/hooks/useGraphQLChat.ts` and existing `SendMessageMutation` usage over creating a new mobile-specific agent transport.
 - Keep `@thinkwork/react-native-sdk` subscription patterns for thread/message updates.
 
 **Test scenarios:**
+
 - Covers AE1. Happy path: mobile follow-up send with agent enabled calls the GraphQL/API send path and does not call `runThreadHarnessTurn`.
 - Covers AE1. Happy path: mobile new-thread first message routes through managed AgentCore dispatch rather than the on-device harness.
 - Edge case: `agentRequested: false` still persists a plain user message and does not dispatch an agent turn.
@@ -449,6 +473,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Covers AE4. Dependency check: mobile no longer imports `just-bash` or maps `just-bash/browser`.
 
 **Verification:**
+
 - Mobile has no on-device Pi loop, no local bash sandbox, and no smoke scripts that imply local execution remains supported.
 - Mobile and desktop use the same managed AgentCore execution boundary.
 
@@ -463,6 +488,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Dependencies:** Can begin independently, but U1-U4 reduce noisy local-runtime branches.
 
 **Files:**
+
 - Modify: `packages/api/src/handlers/chat-agent-invoke.ts`
 - Modify: `packages/api/src/handlers/chat-agent-finalize.ts`
 - Modify: `packages/api/src/lib/agentcore-spans.ts`
@@ -480,6 +506,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Test: `packages/agentcore-pi/agent-container/tests/sandbox-factory.test.ts`
 
 **Approach:**
+
 - Propagate the existing trace id through API invocation, runtime payload, runtime logs, and finalize.
 - Emit structured phase events for client submit, API request validation, thread-turn creation, workspace render/preflight, AgentCore invoke, runtime receive, session-store hit/miss, session resume, workspace hydration, first model/assistant event when available, tool startup, tool execution, finalize callback, finalize persistence, and client render/completion.
 - Keep payloads redacted; record ids, phase names, durations, status, and coarse tool type rather than user content or secrets.
@@ -487,11 +514,13 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - If direct OTel span creation is available in the current runtime, align names with AWS AgentCore Observability. If not, use structured runtime logs that `agentcore-spans.ts` can merge into drill-in views.
 
 **Patterns to follow:**
+
 - Follow redaction and structured logging conventions in `packages/agentcore-pi/agent-container/src/handler-context.ts`.
 - Follow existing CloudWatch span fetching in `packages/api/src/lib/agentcore-spans.ts`.
 - Prefer raw AWS SDK/client interactions for AgentCore built-in tool telemetry where wrapper APIs drift.
 
 **Test scenarios:**
+
 - Covers AE2. Happy path: a managed turn emits trace-correlated phase records from API invoke through runtime completion.
 - Covers AE2. Error path: runtime failure still emits a terminal phase record with error type and trace id.
 - Covers AE3. Lazy tool path: simple conversational turn has no Browser or Code Interpreter startup phase.
@@ -499,6 +528,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Privacy: structured phase records do not include raw message text, attachment content, bearer tokens, or tool secrets.
 
 **Verification:**
+
 - An operator can inspect a slow turn and identify whether delay came from API dispatch, runtime cold start, session resume, workspace hydration, model time, tool startup/execution, finalize, or client rendering.
 
 ---
@@ -512,6 +542,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Dependencies:** U5 for measurement-driven prioritization. U1 and U4 should ensure clients render managed progress rather than local harness progress.
 
 **Files:**
+
 - Modify: `packages/api/src/handlers/chat-agent-invoke.ts`
 - Modify: `packages/agentcore-pi/agent-container/src/server.ts`
 - Modify: `packages/agentcore-pi/agent-container/src/runtime/bootstrap-workspace.ts`
@@ -527,6 +558,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Test: `apps/mobile/components/threads/ActivityTimeline.test.tsx`
 
 **Approach:**
+
 - Emit an immediate managed "accepted/starting" progress event after the API creates a turn and before AgentCore completion.
 - Ensure AgentCore Pi uses durable sessions when `workspaceBucket` and tenant identity are available, and logs why it falls back when unavailable.
 - Avoid full history/workspace replay when a resumable session exists; keep fallback behavior for missing session stores explicit and observable.
@@ -536,10 +568,12 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Do not introduce faster-model/two-stage routing unless U5 shows model time dominates.
 
 **Patterns to follow:**
+
 - Follow existing thread-turn event rendering rather than adding a separate local status channel.
 - Follow existing AgentCore session-store setup in `packages/agentcore-pi/agent-container/src/server.ts`.
 
 **Test scenarios:**
+
 - Covers AE3. Happy path: a simple desktop managed turn shows an early progress state before final assistant completion.
 - Covers AE3. Happy path: a simple mobile managed turn shows a working/progress state sourced from managed events, not local harness lifecycle.
 - Edge case: when durable session store is unavailable, the runtime logs fallback reason and still completes through managed execution.
@@ -550,6 +584,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Error path: AgentCore dispatch failure clears client working state and surfaces a managed-path error.
 
 **Verification:**
+
 - Managed AgentCore turns feel present on desktop/mobile without a local runtime.
 - Prewarm and session reuse decisions are tied to phase metrics, not guesses.
 
@@ -564,6 +599,7 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 **Dependencies:** U1-U6.
 
 **Files:**
+
 - Modify: `docs/src/content/docs/applications/desktop/index.mdx`
 - Modify: `docs/src/content/docs/applications/mobile/index.mdx`
 - Modify: `docs/src/content/docs/applications/mobile/threads-and-chat.mdx`
@@ -576,20 +612,24 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 - Test: docs build/lint coverage where this repo already runs it
 
 **Approach:**
+
 - Mark local Pi/mobile harness docs as superseded by AgentCore-first execution rather than leaving them as active architecture guidance.
 - Replace local sandbox language with the one-sentence enterprise answer from AE4.
 - Update smoke/test documentation to remove mobile harness and desktop-local Pi commands.
 - Keep historical plan documents unchanged except where a current status/autopilot doc could mislead active work.
 
 **Patterns to follow:**
+
 - Preserve the repo's `docs/solutions/` format with frontmatter and explicit "superseded by" links.
 - Keep docs concrete and operational; avoid re-opening the OpenShell/NemoClaw product debate.
 
 **Test scenarios:**
+
 - Test expectation: none for pure documentation text, beyond existing docs build/lint.
 - Review scenario: searching docs for `desktop-local`, `local Pi`, `just-bash`, and `pi-harness` should find only historical/superseded references or no active product guidance.
 
 **Verification:**
+
 - Enterprise-facing docs say ThinkWork agent execution runs in AWS-managed AgentCore isolation, with local clients as clients.
 - Current docs no longer instruct operators or users to run local Pi, mobile harness smoke, or `just-bash` flows.
 
@@ -665,17 +705,17 @@ There is no desktop-local branch in this flow. Desktop and mobile differ in clie
 
 ## Risk Analysis & Mitigation
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Hidden desktop/mobile branch still suppresses managed dispatch | Medium | High | Remove `DESKTOP_LOCAL` schema behavior, add payload tests, and search import graph during implementation. |
-| Old packaged desktop clients call removed endpoints | Medium | Medium | Keep 410 tombstone endpoints for one release cycle with stable error code. |
-| Mobile loses first-message agent handling during harness removal | Medium | High | Add focused mobile new-thread and follow-up managed-send tests before deleting harness tests. |
-| Spike proves AgentCore routing works but workspace hydration is too slow | Medium | High | Use U0/U5 phase data to decide whether to add a focused S3-to-AgentCore hydration optimization before broad deletion. |
-| Warm-container workspace cache leaks stale or cross-tenant files | Low | High | Scope cache validity to tenant, agent, rendered prefix, manifest fingerprint, and per-file ETags; always delete files missing from the current manifest; reset on scope change. |
-| AgentCore latency remains slow after local removal | Medium | High | Instrument phases first, add early progress, then optimize based on measured dominant phases. |
-| Tool startup cost affects simple turns | Low | Medium | Keep Browser/Code Interpreter lazy and add tests proving simple turns do not initialize them. |
-| Stale docs keep local Pi alive socially | High | Medium | Mark local Pi docs superseded and update active desktop/mobile docs. |
-| AgentCore runtime code changes do not deploy | Medium | High | Preserve explicit `UpdateAgentRuntime` deploy checks from existing institutional learning. |
+| Risk                                                                     | Likelihood | Impact | Mitigation                                                                                                                                                                      |
+| ------------------------------------------------------------------------ | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hidden desktop/mobile branch still suppresses managed dispatch           | Medium     | High   | Remove `DESKTOP_LOCAL` schema behavior, add payload tests, and search import graph during implementation.                                                                       |
+| Old packaged desktop clients call removed endpoints                      | Medium     | Medium | Keep 410 tombstone endpoints for one release cycle with stable error code.                                                                                                      |
+| Mobile loses first-message agent handling during harness removal         | Medium     | High   | Add focused mobile new-thread and follow-up managed-send tests before deleting harness tests.                                                                                   |
+| Spike proves AgentCore routing works but workspace hydration is too slow | Medium     | High   | Use U0/U5 phase data to decide whether to add a focused S3-to-AgentCore hydration optimization before broad deletion.                                                           |
+| Warm-container workspace cache leaks stale or cross-tenant files         | Low        | High   | Scope cache validity to tenant, agent, rendered prefix, manifest fingerprint, and per-file ETags; always delete files missing from the current manifest; reset on scope change. |
+| AgentCore latency remains slow after local removal                       | Medium     | High   | Instrument phases first, add early progress, then optimize based on measured dominant phases.                                                                                   |
+| Tool startup cost affects simple turns                                   | Low        | Medium | Keep Browser/Code Interpreter lazy and add tests proving simple turns do not initialize them.                                                                                   |
+| Stale docs keep local Pi alive socially                                  | High       | Medium | Mark local Pi docs superseded and update active desktop/mobile docs.                                                                                                            |
+| AgentCore runtime code changes do not deploy                             | Medium     | High   | Preserve explicit `UpdateAgentRuntime` deploy checks from existing institutional learning.                                                                                      |
 
 ---
 
