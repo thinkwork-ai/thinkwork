@@ -357,7 +357,7 @@ describe("chat-agent-finalize — happy paths", () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it("accepts a short-lived desktop finalize token from turn context", async () => {
+  it("rejects retired desktop finalize tokens from turn context", async () => {
     const token = "dps_test-token";
     mocks.selectResult = [
       {
@@ -376,6 +376,7 @@ describe("chat-agent-finalize — happy paths", () => {
     ];
 
     const res = await handler(mockEvent({ authorization: `Bearer ${token}` }));
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(401);
+    expect(mocks.processFinalize).not.toHaveBeenCalled();
   });
 });

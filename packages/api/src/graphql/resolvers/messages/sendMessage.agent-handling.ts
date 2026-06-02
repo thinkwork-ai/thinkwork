@@ -2,7 +2,7 @@ export interface SendMessageAgentHandlingInput {
   isUserMessage: boolean;
   senderType: string;
   agentRequested?: boolean | null;
-  dispatchMode?: "MANAGED_DEFAULT" | "DESKTOP_LOCAL" | null;
+  dispatchMode?: "MANAGED_DEFAULT" | null;
   hasAgentMentions: boolean;
 }
 

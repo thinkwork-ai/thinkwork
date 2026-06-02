@@ -17,8 +17,6 @@ import { upsertTenantContextProviderSetting } from "../lib/context-engine/admin-
 import { sourceFamilyForProvider } from "../lib/context-engine/source-families.js";
 import { resolveAgentRuntimeConfig } from "../lib/resolve-agent-runtime-config.js";
 import { verifyMcpAccessToken } from "./mcp-oauth.js";
-import { DESKTOP_FINALIZE_TOKEN_PREFIX } from "../lib/desktop-runtime/sidecar-credentials.js";
-import { authenticateDesktopFinalizeToken } from "../lib/desktop-runtime/finalize-auth.js";
 
 const MAX_LIMIT = 50;
 
@@ -259,23 +257,6 @@ export async function handler(
       "custom:user_id":
         event.headers["x-user-id"] || event.headers["x-principal-id"],
       "custom:agent_id": event.headers["x-agent-id"],
-    };
-  } else if (bearer.startsWith(DESKTOP_FINALIZE_TOKEN_PREFIX)) {
-    // Desktop local-Pi path: a per-turn scoped finalize token, validated
-    // against the turn it was minted for. Identity is derived from the turn
-    // (never client headers) so the desktop can't act outside its turn scope.
-    const identity = await authenticateDesktopFinalizeToken({
-      token: bearer,
-      threadTurnId: event.headers["x-thread-turn-id"] ?? "",
-    });
-    if (!identity) return unauthorized(metadataUrl);
-    claims = {
-      "tw:auth_kind": "desktop-finalize",
-      scope: "context:read",
-      "custom:tenant_id": identity.tenantId,
-      "custom:user_id": identity.userId,
-      "custom:agent_id": identity.agentId,
-      email: identity.email ?? undefined,
     };
   } else {
     try {

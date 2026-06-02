@@ -251,25 +251,19 @@ resource "aws_lambda_function" "handler" {
     # Mobile local Pi built-in tools. These are ThinkWork platform tools, not
     # MCP connector tools.
     "mobile-tools",
-    # Agent-visible task status mutation tool. Service/desktop/mobile callers
-    # all land here so linked_tasks remains database-authoritative.
+    # Agent-visible task status mutation tool. Service and first-party callers
+    # land here so linked_tasks remains database-authoritative.
     "task-status-tool",
     # Mobile agent harness MCP proxy. tools/list + tools/call routes live in
     # local.api_routes; the function name must also be listed here (this set
     # is the for_each source for aws_lambda_function.handler).
     "mcp-proxy",
-    # Desktop-local Pi sidecar setup endpoint. Cognito-authenticated
-    # Electron shell callers receive a prepared invocation envelope and a
-    # per-turn finalizer token, not the backend service secret.
+    # Desktop-local Pi tombstone endpoints. Kept temporarily so old packaged
+    # desktop clients receive a stable 410 while all supported Pi execution
+    # routes through managed AgentCore.
     "desktop-runtime-session",
     "desktop-workspace-prewarm",
-    # Desktop-local Pi managed delegation endpoint. The Electron sidecar
-    # authenticates with its per-turn finalizer token, and the handler
-    # reuses chat-agent-invoke to start managed AgentCore worker turns.
     "managed-delegation",
-    # Desktop-local Pi eval preparation + result callback endpoint.
-    # Cognito-authenticated desktop callers create runs; the sidecar writes
-    # per-case results with a short-lived per-run callback token.
     "desktop-eval-runs",
     # chat-agent-finalize — POST /api/threads/{threadId}/finalize. The
     # Strands runtime POSTs here at end-of-turn so the post-AgentCore
@@ -490,7 +484,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "desktop-runtime-session" ? 60 : each.key == "desktop-workspace-prewarm" ? 60 : each.key == "managed-delegation" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
@@ -794,8 +788,8 @@ locals {
     # Agent actions (start/stop/heartbeat/budget)
     "ANY /api/agent-actions/{proxy+}" = "agent-actions"
 
-    # Desktop-local Pi runtime setup. Specific route before broad REST
-    # handlers; OPTIONS is handled inside the Lambda before auth.
+    # Desktop-local Pi tombstones. Specific routes before broad REST handlers;
+    # OPTIONS is handled inside the Lambda before auth.
     "POST /api/desktop/runtime-session"               = "desktop-runtime-session"
     "OPTIONS /api/desktop/runtime-session"            = "desktop-runtime-session"
     "POST /api/desktop/workspace-prewarm"             = "desktop-workspace-prewarm"

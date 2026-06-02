@@ -21,8 +21,6 @@ import { generateReplyToken } from "../lib/email-tokens.js";
 import { deriveSpaceAddress } from "../lib/email/space-address.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 import { renderForEmail } from "../lib/channel-rendering/email-renderer.js";
-import { DESKTOP_FINALIZE_TOKEN_PREFIX } from "../lib/desktop-runtime/sidecar-credentials.js";
-import { authenticateDesktopFinalizeToken } from "../lib/desktop-runtime/finalize-auth.js";
 
 const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 
@@ -96,25 +94,11 @@ export async function handler(
     return sendDirectRoutineEmail(event);
   }
 
-  // Auth — service secret (cloud runtime) OR a desktop per-turn scoped
-  // finalize token (local Pi, which never holds the platform secret).
+  // Auth — service secret from the managed cloud runtime.
   const authHeader = event.headers?.authorization || "";
   const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  let desktopAgentId: string | null = null;
   if (bearer && bearer === THINKWORK_API_SECRET) {
     // service-authed: trust the request body's agentId (existing behavior).
-  } else if (bearer.startsWith(DESKTOP_FINALIZE_TOKEN_PREFIX)) {
-    const identity = await authenticateDesktopFinalizeToken({
-      token: bearer,
-      threadTurnId: event.headers["x-thread-turn-id"] ?? "",
-    });
-    if (!identity) {
-      return {
-        statusCode: 401,
-        body: JSON.stringify({ error: "Unauthorized" }),
-      };
-    }
-    desktopAgentId = identity.agentId;
   } else {
     return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
   }
@@ -150,16 +134,6 @@ export async function handler(
       statusCode: 400,
       body: JSON.stringify({
         error: `Invalid agentId: "${req.agentId}" is not a valid UUID. Use the $AGENT_ID environment variable.`,
-      }),
-    };
-  }
-
-  // A desktop token may only send as its own turn's agent — never another's.
-  if (desktopAgentId && req.agentId !== desktopAgentId) {
-    return {
-      statusCode: 403,
-      body: JSON.stringify({
-        error: "Desktop token is not authorized for this agentId.",
       }),
     };
   }

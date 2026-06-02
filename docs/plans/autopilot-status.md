@@ -5209,10 +5209,10 @@ None.
 ## Status
 
 - Plan: `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
-- Branch: `codex/agentcore-u2`
-- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u2`
+- Branch: `codex/agentcore-u3`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u3`
 - Started: `2026-06-02T13:42:51Z`
-- Current unit: U2 Remove Electron Pi sidecar and IPC bridge.
+- Current unit: U3 Retire desktop-local backend contracts.
 - Target branch: `main`
 
 ## U0 Implementation Notes
@@ -5361,6 +5361,77 @@ None.
 ## U2 CI / PR
 
 - Opened [#1990](https://github.com/thinkwork-ai/thinkwork/pull/1990).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `66011fc16c39684d5193ba4bf42e9f1049b8ab0c`.
+- Remote branch `codex/agentcore-u2` deleted; local U2 worktree and branch
+  removed.
+
+## U3 Implementation Notes
+
+- Started: `2026-06-02T14:54:00Z`.
+- Synced from `origin/main` after U2 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u3` on branch
+  `codex/agentcore-u3`.
+- Replaced desktop-local runtime session, workspace prewarm, managed
+  delegation, and desktop-local eval HTTP handlers with stable 410 tombstones.
+- Removed the dead desktop-runtime preparation/auth/delegation library and its
+  tests from `packages/api/src/lib/desktop-runtime`.
+- Removed desktop finalize-token acceptance from `chat-agent-finalize`,
+  `mcp-context-engine`, `email-send`, and `task-status-tool`; managed
+  AgentCore service-secret and normal first-party/OAuth paths remain.
+- Removed `DESKTOP_LOCAL` from the canonical GraphQL `MessageDispatchMode`
+  enum and regenerated Admin, CLI, Spaces, and Mobile GraphQL clients.
+- Updated Terraform handler comments and timeout routing so the temporary
+  desktop-local routes deploy as cheap tombstone endpoints.
+
+## U3 Verification Log
+
+- Test-first focused U3 tests failed against the old behavior, proving the
+  tombstone/schema/finalize expectations were active before implementation.
+- `pnpm install` completed in the U3 worktree; optional native rebuild warnings
+  for `node-liblzma`/`canvas` were non-fatal.
+- `pnpm schema:build` passed.
+- GraphQL codegen passed for `thinkwork-cli`, `@thinkwork/admin`,
+  `@thinkwork/spaces`, and `@thinkwork/mobile`. `@thinkwork/api` has no
+  codegen script.
+- Focused U3 suite passed:
+  `pnpm --filter @thinkwork/api test -- src/handlers/desktop-runtime-session.test.ts src/handlers/desktop-workspace-prewarm.test.ts src/handlers/managed-delegation.test.ts src/handlers/desktop-eval-runs.test.ts src/handlers/chat-agent-finalize.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts`
+  (48 tests).
+- Auth-adjacent handler tests passed:
+  `pnpm --filter @thinkwork/api test -- src/handlers/email-send.test.ts src/handlers/task-status-tool.test.ts src/handlers/mcp-context-engine.requester-context.test.ts`
+  (15 tests).
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/database-pg test -- __tests__/message-mentions-schema.test.ts`
+  passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm --filter @thinkwork/spaces typecheck` passed.
+- `@thinkwork/admin` has no `typecheck` script.
+- Full API test passed: `pnpm --filter @thinkwork/api test` (378 files
+  passed, 3 skipped; 3383 tests passed, 9 skipped).
+- Root gates passed: `pnpm lint`, `pnpm typecheck`, and
+  `bash scripts/verify-supply-chain.sh`.
+- `git diff --check` passed.
+- Touched-file Prettier check passed with `pnpm dlx prettier@3.8.2 --check`
+  over changed TypeScript, GraphQL, Terraform, and status files.
+- `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf` passed.
+- Root `pnpm test` completed all broad packages but failed locally in
+  `packages/api/src/__tests__/applets-resolvers.test.ts`: the first applet
+  resolver test timed out at 30s and left mock state that made the next test
+  observe two S3 puts. This file is unrelated to U3 and immediately passed in
+  isolation with
+  `pnpm --filter @thinkwork/api test -- src/__tests__/applets-resolvers.test.ts`
+  (15 tests, 2.13s), so the failure is recorded as local broad-suite
+  contention rather than a U3 regression.
+- Root `pnpm format:check` remains blocked locally because the root script
+  calls `prettier`, but this checkout does not have a `prettier` binary
+  installed (`sh: prettier: command not found`).
+- Source sweep for retired desktop-local backend terms found only intentional
+  tombstone helpers/tests, the schema negative assertion, and historical
+  provenance wording; no active backend preparation/auth helper remains.
+
+## U3 CI / PR
+
+- Opened [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991).
 - Pending: CI monitoring, squash merge, branch cleanup.
 
 ## Blockers
