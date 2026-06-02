@@ -1,7 +1,7 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-30
-status: complete
+status: in_progress
 ---
 
 # Autopilot Status Ledger
@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
 - Target branch: `main`.
-- Current unit: U19 Post-speed Desktop Pi full rerun.
-- Current branch: `codex/desktop-pi-evals-u19-post-speed-rerun`.
-- Current worktree: `.Codex/worktrees/desktop-pi-evals-u19-post-speed-rerun`.
+- Current unit: U20 Desktop Pi Kimi model fail-closed routing.
+- Current branch: `codex/desktop-pi-evals-u20-kimi-fail-closed`.
+- Current worktree: `.Codex/worktrees/desktop-pi-evals-u20-kimi-fail-closed`.
 
 | Unit                                                | Branch                                           | PR                                                           | State       | Notes                                                                                                   |
 | --------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
@@ -35,7 +35,8 @@ status: complete
 | U16 Desktop Pi SDK assistant-error diagnostics      | `codex/desktop-pi-evals-u16-sdk-diagnostics`     | [#1976](https://github.com/thinkwork-ai/thinkwork/pull/1976) | Merged      | Squash merged as `18d10bff`; provider/SDK details now surface on blank SDK assistant-error turns.       |
 | U17 Desktop Pi quota-aware diagnostic sweep         | `codex/desktop-pi-evals-u17-diagnostic-sweep`    | [#1977](https://github.com/thinkwork-ai/thinkwork/pull/1977) | Merged      | Squash merged as `e9718e4f`; full sweep completed and queued cases now fast-finish after daily quota.   |
 | U18 Desktop Pi eval workspace hydration speed       | `codex/desktop-pi-evals-u18-workspace-hydration` | [#1978](https://github.com/thinkwork-ai/thinkwork/pull/1978) | Merged      | Squash merged as `71377d64`; shared memoized S3 workspace object store across isolated eval cases.      |
-| U19 Post-speed Desktop Pi full rerun                | `codex/desktop-pi-evals-u19-post-speed-rerun`    | TBD                                                          | In progress | Full desktop catalog rerun after U17/U18; daily provider quota now fast-finishes queued cases.          |
+| U19 Post-speed Desktop Pi full rerun                | `codex/desktop-pi-evals-u19-post-speed-rerun`    | [#1979](https://github.com/thinkwork-ai/thinkwork/pull/1979) | Merged      | Squash merged as `2e997f75`; full desktop catalog completed quickly under daily quota exhaustion.       |
+| U20 Desktop Pi Kimi model fail-closed routing       | `codex/desktop-pi-evals-u20-kimi-fail-closed`    | TBD                                                          | In progress | Stop Desktop Pi evals from silently routing requested Kimi runs to Bedrock Sonnet fallback.             |
 
 ### Progress Log
 
@@ -484,6 +485,25 @@ status: complete
   intentionally deferred because the current non-passing rows are quota errors,
   not text-bearing model behavior that can be improved by editing
   `AGENTS.md`, `GUARDRAILS.md`, or related workspace defaults.
+- U19 PR
+  [#1979](https://github.com/thinkwork-ai/thinkwork/pull/1979) passed
+  required PR checks (`cla`, `lint`, `verify`, `typecheck`, `test`) and was
+  squash merged as `2e997f75b3fc604fccfdfc116ae00860bbc16f20`; post-merge
+  `main` workflows passed `Lint`, `Supply Chain`, `Typecheck`, `Test`, and
+  `Deploy`.
+- Local Electron validation after U19 confirmed the local Desktop app Recent
+  Runs table shows latest Desktop Pi runs. A follow-up single-thread local run
+  then exposed a model routing bug: the UI requested `moonshotai.kimi-k2.5`,
+  but the local Pi model resolver routed execution to the default Bedrock
+  Sonnet model instead.
+- Created isolated U20 worktree
+  `.Codex/worktrees/desktop-pi-evals-u20-kimi-fail-closed` from `origin/main`
+  on branch `codex/desktop-pi-evals-u20-kimi-fail-closed`.
+- U20 changes Desktop Pi model resolution to honor explicit Kimi requests:
+  `moonshotai.*` is treated as an Amazon Bedrock model id, short `kimi-k*`
+  labels normalize to `moonshotai.kimi-k*`, and requested models now fail
+  closed if unavailable in the Pi SDK registry instead of silently falling back
+  to Sonnet.
 
 ### Verification Log
 
@@ -692,14 +712,29 @@ status: complete
   `/tmp/desktop-pi-eval-run-bab15fd8.json`.
 - `test -f /tmp/thinkwork-u19-token-snapshot.json && echo present || echo absent`
   - returned `absent`.
+- U19 PR
+  [#1979](https://github.com/thinkwork-ai/thinkwork/pull/1979) passed
+  required checks and post-merge `main` workflows.
+- `pnpm install` in the U20 worktree - passed. Optional `node-liblzma` and
+  `canvas` native postinstall builds logged local `pkg-config` warnings and
+  exited 0.
+- `pnpm dlx prettier@3.8.2 --write apps/desktop/src/sidecar/local-turn-runner.ts apps/desktop/test/sidecar/local-turn-runner.test.ts`
+  - passed.
+- `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts`
+  - passed with 27 tests after adding requested-Kimi, short-Kimi, and
+    fail-closed model-resolution regressions.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- Pi SDK registry probe in the U20 worktree confirmed
+  `moonshotai.kimi-k2.5 -> amazon-bedrock/moonshotai.kimi-k2.5` and
+  `kimi-k2.5 -> amazon-bedrock/moonshotai.kimi-k2.5`.
+- `git diff --check` - passed.
 
 ### Blockers
 
-Provider daily token quota is currently exhausted for Desktop Pi eval turns.
-The full desktop catalog can complete quickly and cleanly as an eval run, but
-workspace prompt remediation should resume only after a run has enough non-quota
-assistant outputs to distinguish true eval failures from provider quota
-exhaustion.
+The U19 live reruns are not valid Kimi behavior signal because Desktop Pi was
+silently routing explicit Kimi requests through the Bedrock Sonnet fallback.
+U20 fixes that resolver path and should be followed by a single-thread local
+Kimi verification run before another full-catalog remediation sweep.
 
 ## Workspace Architecture Guidance Docs - 2026-06-01
 

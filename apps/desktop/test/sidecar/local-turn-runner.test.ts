@@ -937,7 +937,7 @@ describe("runLocalDesktopTurn", () => {
     );
   });
 
-  it("routes unsupported hosted models through the Bedrock SDK model fallback", async () => {
+  it("uses requested Moonshot Bedrock models without falling back", async () => {
     let optionsSeen: Record<string, unknown> | undefined;
     let finalizeBody: Record<string, unknown> | undefined;
     const authStorage = { setRuntimeApiKey: vi.fn() };
@@ -989,7 +989,7 @@ describe("runLocalDesktopTurn", () => {
 
     expect(optionsSeen?.model).toEqual({
       provider: "amazon-bedrock",
-      id: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      id: "moonshotai.kimi-k2.5",
     });
     expect(optionsSeen?.authStorage).toBeTruthy();
     expect(optionsSeen?.modelRegistry).toBeTruthy();
@@ -997,12 +997,106 @@ describe("runLocalDesktopTurn", () => {
       "amazon-bedrock",
       "aws-sdk-default-credential-chain",
     );
-    expect(finalizeBody?.agent_model).toBe(
-      "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    );
+    expect(finalizeBody?.agent_model).toBe("moonshotai.kimi-k2.5");
     expect((finalizeBody?.response as { model?: string })?.model).toBe(
-      "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "moonshotai.kimi-k2.5",
     );
+  });
+
+  it("fails requested Bedrock models closed instead of falling back", async () => {
+    const authStorage = { setRuntimeApiKey: vi.fn() };
+    const createAgentSession = vi.fn();
+    const sdk: PiSdkModuleLike = {
+      AuthStorage: { create: vi.fn(() => authStorage) },
+      ModelRegistry: {
+        create: vi.fn(() => ({
+          find: vi.fn((provider: string, modelId: string) =>
+            provider === "amazon-bedrock" &&
+            modelId === "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+              ? { provider, id: modelId }
+              : undefined,
+          ),
+        })),
+      },
+      createAgentSession,
+    };
+
+    const result = await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            model: "moonshotai.kimi-k2.5",
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: vi.fn(async () =>
+          Response.json({ ok: true }),
+        ) as typeof fetch,
+      },
+    );
+
+    expect(createAgentSession).not.toHaveBeenCalled();
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toContain(
+      "Requested Desktop Pi model moonshotai.kimi-k2.5 is not available",
+    );
+  });
+
+  it("normalizes short Kimi labels to the Bedrock Moonshot model id", async () => {
+    let optionsSeen: Record<string, unknown> | undefined;
+    const authStorage = { setRuntimeApiKey: vi.fn() };
+    const sdk: PiSdkModuleLike = {
+      AuthStorage: { create: vi.fn(() => authStorage) },
+      ModelRegistry: {
+        create: vi.fn(() => ({
+          find: vi.fn((provider: string, modelId: string) =>
+            provider === "amazon-bedrock" && modelId === "moonshotai.kimi-k2.5"
+              ? { provider, id: modelId }
+              : undefined,
+          ),
+        })),
+      },
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "Done" }],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+
+    await runLocalDesktopTurn(
+      {
+        session: createPrepared({
+          invocation: {
+            ...BASE_INVOCATION,
+            model: "kimi-k2.5",
+          },
+        }),
+        workspaceCacheRoot: root,
+      },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: vi.fn(async () =>
+          Response.json({ ok: true }),
+        ) as typeof fetch,
+      },
+    );
+
+    expect(optionsSeen?.model).toEqual({
+      provider: "amazon-bedrock",
+      id: "moonshotai.kimi-k2.5",
+    });
   });
 
   it("registers web_search from the prepared Exa config and executes it locally", async () => {
