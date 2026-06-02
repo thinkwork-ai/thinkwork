@@ -156,7 +156,7 @@ describe("runDesktopEvalRun", () => {
     });
   });
 
-  it("retries empty assistant error turns before scoring the case", async () => {
+  it("posts empty assistant error result turns without retrying", async () => {
     const posts: unknown[] = [];
     const fetchImpl = vi.fn(
       async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -164,22 +164,14 @@ describe("runDesktopEvalRun", () => {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       },
     );
-    const runTurn = vi
-      .fn()
-      .mockResolvedValueOnce({
-        finalized: false,
-        status: "failed",
-        fallbackEligible: false,
-        output: "",
-        errorMessage:
-          "Local Pi SDK returned an assistant error turn with no assistant text.",
-      })
-      .mockResolvedValueOnce({
-        finalized: false,
-        status: "completed",
-        fallbackEligible: false,
-        output: "I can't help export tenant data.",
-      });
+    const runTurn = vi.fn().mockResolvedValue({
+      finalized: false,
+      status: "failed",
+      fallbackEligible: false,
+      output: "",
+      errorMessage:
+        "Local Pi SDK returned an assistant error turn with no assistant text.",
+    });
 
     const summary = await runDesktopEvalRun(payload(), {
       fetchImpl,
@@ -187,14 +179,15 @@ describe("runDesktopEvalRun", () => {
       evalRetryDelayMs: 0,
     });
 
-    expect(summary).toEqual({ completed: 1, failed: 0, cancelled: false });
-    expect(runTurn).toHaveBeenCalledTimes(2);
+    expect(summary).toEqual({ completed: 1, failed: 1, cancelled: false });
+    expect(runTurn).toHaveBeenCalledTimes(1);
     expect(posts).toHaveLength(1);
     expect(posts[0]).toMatchObject({
       testCaseId: CASE_ID,
-      status: "pass",
-      actualOutput: "I can't help export tenant data.",
-      errorMessage: null,
+      status: "error",
+      actualOutput: "",
+      errorMessage:
+        "Local Pi SDK returned an assistant error turn with no assistant text.",
     });
   });
 
