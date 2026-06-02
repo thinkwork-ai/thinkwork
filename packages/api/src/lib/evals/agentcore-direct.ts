@@ -6,7 +6,8 @@ import {
 import { resolveRuntimeFunctionName } from "../resolve-runtime-function-name.js";
 
 export const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
-export const DEFAULT_EVAL_AGENTCORE_INVOKE_TIMEOUT_MS = 45_000;
+export const DEFAULT_EVAL_AGENTCORE_INVOKE_TIMEOUT_MS = 180_000;
+export const DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS = 2;
 export const DEFAULT_EVAL_MAX_TOKENS = 2_048;
 
 const lambdaClient = new LambdaClient({});
@@ -48,6 +49,13 @@ export class AgentCoreEvalInvocationTimeoutError extends Error {
   }
 }
 
+export class AgentCoreEvalEmptyResponseError extends Error {
+  constructor() {
+    super("AgentCore returned an empty eval response");
+    this.name = "AgentCoreEvalEmptyResponseError";
+  }
+}
+
 export function extractAgentCoreResponseText(data: unknown): string {
   if (typeof data === "string") return data;
   if (!data || typeof data !== "object") return String(data);
@@ -56,6 +64,8 @@ export function extractAgentCoreResponseText(data: unknown): string {
   if (Array.isArray(obj.choices) && obj.choices[0]?.message?.content) {
     return obj.choices[0].message.content;
   }
+  if (typeof obj.response_text === "string") return obj.response_text;
+  if (typeof obj.responseText === "string") return obj.responseText;
   if (typeof obj.content === "string") return obj.content;
   if (typeof obj.response === "string") return obj.response;
   if (typeof obj.output === "string") return obj.output;
@@ -144,6 +154,42 @@ export async function invokeAgentCoreForEval(input: {
    */
   composedSystemPrompt: string | null;
 }> {
+  let lastError: unknown;
+  for (
+    let attempt = 1;
+    attempt <= DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      return await invokeAgentCoreForEvalOnce(input);
+    } catch (error) {
+      lastError = error;
+      if (
+        !(error instanceof AgentCoreEvalEmptyResponseError) ||
+        attempt >= DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS
+      ) {
+        throw error;
+      }
+      console.warn(
+        `[eval-worker] AgentCore returned an empty eval response; retrying attempt ${attempt + 1}/${DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS}`,
+      );
+    }
+  }
+  throw lastError;
+}
+
+async function invokeAgentCoreForEvalOnce(input: {
+  tenantId: string;
+  agentId: string;
+  sessionId: string;
+  message: string;
+  model: string | null | undefined;
+  systemPrompt?: string | null;
+}): Promise<{
+  output: string;
+  durationMs: number;
+  composedSystemPrompt: string | null;
+}> {
   const runtimeConfig = await resolveAgentRuntimeConfig({
     tenantId: input.tenantId,
     agentId: input.agentId,
@@ -213,7 +259,7 @@ export async function invokeAgentCoreForEval(input: {
   const responseData = invokeResult.response || invokeResult;
   const output = extractAgentCoreResponseText(responseData);
   if (!output || output === "{}") {
-    throw new Error("AgentCore returned an empty eval response");
+    throw new AgentCoreEvalEmptyResponseError();
   }
 
   const rawComposedPrompt = invokeResult.composed_system_prompt;

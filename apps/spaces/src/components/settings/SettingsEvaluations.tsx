@@ -9,6 +9,7 @@ import {
   Loader2,
   MonitorCog,
   Play,
+  RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
@@ -175,6 +176,36 @@ export function isDesktopPiEvalParallelThreadsValid(value: string): boolean {
   );
 }
 
+export function isEvaluationDashboardRefreshActive(input: {
+  manualRefreshing: boolean;
+  summaryFetching: boolean;
+  runsFetching: boolean;
+  seriesFetching: boolean;
+}): boolean {
+  return (
+    input.manualRefreshing ||
+    input.summaryFetching ||
+    input.runsFetching ||
+    input.seriesFetching
+  );
+}
+
+export function evalRunCategoryLabel(categories: string[]): string {
+  if (categories.length === 0 || categories.length === CATEGORIES.length) {
+    return "All Categories";
+  }
+  if (categories.length === 1) return categories[0] ?? "All Categories";
+  return `${categories.length} Categories`;
+}
+
+export function evalRunSourceKind(
+  run: Pick<RunRow, "executionTarget" | "runtimeHost" | "scheduledJobId">,
+): "desktop-pi" | "agentcore-pi" | "schedule" {
+  if (isDesktopPiEvalRunProvenance(run)) return "desktop-pi";
+  if (run.scheduledJobId) return "schedule";
+  return "agentcore-pi";
+}
+
 const runsColumns: ColumnDef<RunRow>[] = [
   {
     accessorKey: "status",
@@ -188,17 +219,9 @@ const runsColumns: ColumnDef<RunRow>[] = [
       const names = Array.isArray(row.original.categories)
         ? row.original.categories
         : [];
-      if (names.length === 0)
-        return <span className="text-xs text-muted-foreground">—</span>;
-      if (names.length === CATEGORIES.length)
-        return (
-          <span className="text-sm whitespace-nowrap">All Categories</span>
-        );
-      if (names.length === 1)
-        return <span className="text-sm whitespace-nowrap">{names[0]}</span>;
       return (
         <span className="text-sm whitespace-nowrap">
-          {names.length} Categories
+          {evalRunCategoryLabel(names)}
         </span>
       );
     },
@@ -208,7 +231,8 @@ const runsColumns: ColumnDef<RunRow>[] = [
     header: "Source",
     cell: ({ row }) => {
       const scheduledJobId = row.original.scheduledJobId;
-      if (isDesktopPiEvalRunProvenance(row.original)) {
+      const sourceKind = evalRunSourceKind(row.original);
+      if (sourceKind === "desktop-pi") {
         return (
           <Badge
             variant="secondary"
@@ -219,12 +243,21 @@ const runsColumns: ColumnDef<RunRow>[] = [
           </Badge>
         );
       }
-      if (!scheduledJobId)
-        return <span className="text-xs text-muted-foreground">Manual</span>;
+      if (sourceKind === "agentcore-pi") {
+        return (
+          <Badge
+            variant="secondary"
+            className="gap-1 bg-sky-500/15 text-sky-600 dark:text-sky-400"
+          >
+            <Cloud className="h-3 w-3" />
+            AgentCore Pi
+          </Badge>
+        );
+      }
       return (
         <Link
           to="/settings/automations/$scheduledJobId"
-          params={{ scheduledJobId }}
+          params={{ scheduledJobId: scheduledJobId ?? "" }}
           onClick={(event) => event.stopPropagation()}
         >
           <Badge
@@ -345,6 +378,7 @@ function buildLast30Days(
 export function SettingsEvaluations() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
+  const [manualRefreshing, setManualRefreshing] = useState(false);
 
   const [summary, refetchSummary] = useQuery({
     query: EvalSummaryQuery,
@@ -356,13 +390,34 @@ export function SettingsEvaluations() {
     variables: { tenantId: tenantId ?? "", limit: 25, offset: 0 },
     pause: !tenantId,
   });
-  const [series] = useQuery({
+  const [series, refetchSeries] = useQuery({
     query: EvalTimeSeriesQuery,
     variables: { tenantId: tenantId ?? "", days: 30 },
     pause: !tenantId,
   });
 
-  // Refetch summary + runs on subscription pings.
+  const refreshEvaluationDashboard = () => {
+    setManualRefreshing(true);
+    refetchSummary({ requestPolicy: "network-only" });
+    refetchRuns({ requestPolicy: "network-only" });
+    refetchSeries({ requestPolicy: "network-only" });
+  };
+
+  const dashboardRefreshing = isEvaluationDashboardRefreshActive({
+    manualRefreshing,
+    summaryFetching: summary.fetching,
+    runsFetching: runs.fetching,
+    seriesFetching: series.fetching,
+  });
+
+  useEffect(() => {
+    if (!manualRefreshing) return;
+    if (summary.fetching || runs.fetching || series.fetching) return;
+    const timeout = window.setTimeout(() => setManualRefreshing(false), 250);
+    return () => window.clearTimeout(timeout);
+  }, [manualRefreshing, runs.fetching, series.fetching, summary.fetching]);
+
+  // Refetch summary, runs, and trend data on subscription pings.
   useSubscription(
     {
       query: OnEvalRunUpdatedSubscription,
@@ -372,6 +427,7 @@ export function SettingsEvaluations() {
     () => {
       refetchSummary({ requestPolicy: "network-only" });
       refetchRuns({ requestPolicy: "network-only" });
+      refetchSeries({ requestPolicy: "network-only" });
       return null;
     },
   );
@@ -388,15 +444,30 @@ export function SettingsEvaluations() {
     const interval = window.setInterval(() => {
       refetchSummary({ requestPolicy: "network-only" });
       refetchRuns({ requestPolicy: "network-only" });
+      refetchSeries({ requestPolicy: "network-only" });
     }, 3000);
     return () => window.clearInterval(interval);
-  }, [hasActiveRun, refetchRuns, refetchSummary]);
+  }, [hasActiveRun, refetchRuns, refetchSeries, refetchSummary]);
 
   usePageHeaderActions({
     title: "Evaluations",
     breadcrumbs: [{ label: "Evaluations" }],
     action: tenantId ? (
       <div className={cn("flex items-center", desktopToolbarGapClassName)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          title="Refresh evaluations"
+          aria-label="Refresh evaluations"
+          className={desktopToolbarButtonClassName}
+          disabled={dashboardRefreshing}
+          onClick={refreshEvaluationDashboard}
+        >
+          <RefreshCw
+            className={cn("size-4", dashboardRefreshing && "animate-spin")}
+          />
+        </Button>
         <Button
           asChild
           variant="ghost"
@@ -414,11 +485,12 @@ export function SettingsEvaluations() {
           onStarted={() => {
             refetchSummary({ requestPolicy: "network-only" });
             refetchRuns({ requestPolicy: "network-only" });
+            refetchSeries({ requestPolicy: "network-only" });
           }}
         />
       </div>
     ) : undefined,
-    actionKey: `evals:${tenantId ?? ""}`,
+    actionKey: `evals:${tenantId ?? ""}:${dashboardRefreshing ? "refreshing" : "idle"}`,
   });
 
   if (!tenantId) {

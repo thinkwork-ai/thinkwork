@@ -96,7 +96,9 @@ describe("eval-worker infrastructure retry classification", () => {
     ).toBe(false);
     expect(
       isRetryableEvalInfrastructureError(
-        new Error("AgentCore eval invocation exceeded 45000ms response budget"),
+        new Error(
+          "AgentCore eval invocation exceeded 180000ms response budget",
+        ),
       ),
     ).toBe(false);
     expect(
@@ -105,12 +107,12 @@ describe("eval-worker infrastructure retry classification", () => {
   });
 
   it("represents stalled AgentCore responses as failed eval assertions", () => {
-    expect(agentCoreBudgetExceededAssertion(45_000)).toEqual({
+    expect(agentCoreBudgetExceededAssertion(180_000)).toEqual({
       type: "agentcore-response-budget",
       passed: false,
       score: 0,
       reason:
-        "AgentCore did not return a response within the 45000ms eval response budget.",
+        "AgentCore did not return a response within the 180000ms eval response budget.",
     });
   });
 });
