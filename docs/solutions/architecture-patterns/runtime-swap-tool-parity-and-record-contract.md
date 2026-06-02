@@ -10,7 +10,16 @@ applies_when:
   - "Migrating the active agent runtime (e.g., Strands -> Pi) or standing up a second runtime that must reach parity"
   - "An agent reports it lacks a tool that the product inventory says is enabled"
   - "Thread activity / tool rows render but expand to nothing on one runtime"
-tags: [agent-runtime, agentcore-pi, pi-runtime-core, tool-parity, web-search, context-engine, runtime-contract]
+tags:
+  [
+    agent-runtime,
+    agentcore-pi,
+    pi-runtime-core,
+    tool-parity,
+    web-search,
+    context-engine,
+    runtime-contract,
+  ]
 ---
 
 # Swapping agent runtimes requires a tool-parity audit and a shared tool-record contract
@@ -22,9 +31,9 @@ Dev moved its active agent runtime from the Python **Strands** container
 `pi-runtime-core`). Two classes of regression followed, both invisible until a
 user exercised the agent:
 
-1. **Missing tools.** Asking "what's the weather in Austin?" returned *"I don't
+1. **Missing tools.** Asking "what's the weather in Austin?" returned _"I don't
    have a web search tool… the MCP proxy is registered but not yet wired in this
-   runtime version."* That was **not a hallucination** — it was a literal string
+   runtime version."_ That was **not a hallucination** — it was a literal string
    from `agentcore-pi/src/mcp-proxy.ts` (an intentional inert seam), and the
    real cause was that the Pi runtime simply **never registered `web_search` or
    the Company Brain (`query_context`) tools at all**, even though the tenant
@@ -45,7 +54,7 @@ free:
    prior runtime registered (`agentcore-strands/container-sources/*_tool.py`)
    and diff against the new runtime's tool assembly (`agentcore-pi`'s
    `assembleTools` in `server.ts`). The product's tenant tool inventory (admin
-   Tools tab) is the source of truth for what *should* be available. On the
+   Tools tab) is the source of truth for what _should_ be available. On the
    Strands→Pi swap, `web_search` (Exa) and Company Brain (`query_context` /
    `query_memory_context` / `query_wiki_context`) were the gaps; browser
    automation, code sandbox, send-email, and memory were already present.
@@ -55,7 +64,7 @@ free:
    excuses (it blamed the MCP proxy when the real gap was an unregistered
    first-class tool). The payload fields were already being sent by
    `chat-agent-invoke` / `wakeup-processor` (`web_search_config`,
-   `context_engine_enabled`); only the runtime's *consumption* was missing.
+   `context_engine_enabled`); only the runtime's _consumption_ was missing.
 3. **Pin a single tool-invocation record shape across all runtimes.** The thread
    UI's `toolInvocationDetail` (TaskThreadView) reads `input_preview`,
    `output_preview`, `status`. Any runtime that records tool calls must emit
@@ -64,23 +73,23 @@ free:
    ```ts
    // pi-runtime-core/src/agent-loop.ts — on tool_execution_start / _end
    toolInvocations.push({
-     id, name, tool_name,
+     id,
+     name,
+     tool_name,
      args: event.args,
-     input_preview: toolPreview(event.args),   // <- UI reads this
+     input_preview: toolPreview(event.args), // <- UI reads this
      status: "running",
      runtime: "pi",
    });
    // ...on end:
-   existing.output_preview = toolPreview(event.result);  // <- and this
-   existing.status = event.isError ? "error" : "ok";      // <- and this
+   existing.output_preview = toolPreview(event.result); // <- and this
+   existing.status = event.isError ? "error" : "ok"; // <- and this
    ```
 
-4. **Mind that "local" runtimes are a third path.** The desktop sidecar
-   (`apps/desktop/.../local-turn-runner.ts`) is neither Strands nor cloud-Pi —
-   it uses the `@earendil-works/pi-coding-agent` SDK and records tool calls
-   *yet again differently* (it only had tool **names** from `session.messages`,
-   no args/results). Parity work must cover all three: Strands (legacy),
-   managed Pi (`pi-runtime-core`), and local-Pi sidecar.
+4. **Keep legacy local provenance out of the active runtime contract.** Older
+   desktop-local rows may still exist, but the current supported parity surface
+   is Strands (legacy managed) and managed Pi (`pi-runtime-core`) on AgentCore.
+   Do not add a new local runtime path to close a tool-parity gap.
 
 ## Why This Matters
 
@@ -105,8 +114,13 @@ contract turns a multi-round debugging session into a checklist.
 was registering the tools in `assembleTools`:
 
 ```ts
-if (typeof args.payload.web_search_config === "object" && args.payload.web_search_config) {
-  const t = buildWebSearchTool({ webSearchConfig: args.payload.web_search_config as Record<string, unknown> });
+if (
+  typeof args.payload.web_search_config === "object" &&
+  args.payload.web_search_config
+) {
+  const t = buildWebSearchTool({
+    webSearchConfig: args.payload.web_search_config as Record<string, unknown>,
+  });
   if (t) tools.push(t);
 }
 ```
@@ -118,13 +132,6 @@ fields → rows render "Input / Output / Status".
 
 ## Related
 
-- Desktop **scoped per-turn token** pattern: the desktop holds no platform
-  secret, so local-Pi API-backed tools (Company Brain, Send Email) authenticate
-  via the per-turn `finalize_callback_secret`, deriving tenant/user/agent from
-  the turn (never client headers) — see `lib/desktop-runtime/finalize-auth.ts`.
-  Worth its own write-up.
-- Local-Pi sidecar tool-detail (surfacing args/results from `session.messages`)
-  is an open follow-up — it currently emits tool names only.
-- The browser dev app (localhost:5180) always runs **managed cloud**, not local
-  Pi (local exists only in the Electron desktop app) — relevant when triaging
-  "why is my local agent slow / has no local output".
+- Historical desktop-local per-turn token and sidecar tool-detail notes are
+  superseded by the AgentCore-first plan. Current desktop and browser clients
+  run managed AgentCore turns.

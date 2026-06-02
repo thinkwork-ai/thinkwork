@@ -1,9 +1,9 @@
-// web-search — mobile-safe built-in Pi capability.
+// web-search — mobile-safe built-in Pi capability retained for compatibility tests.
 //
-// The phone should expose a direct `web_search` tool like the desktop/local Pi host,
-// but provider API keys must stay server-side. This extension registers the direct
-// model-visible tool and dispatches through the authenticated platform proxy, where
-// ThinkWork resolves tenant config + secrets for the caller's agent.
+// Provider API keys must stay server-side. This extension registers the direct
+// model-visible tool used by compatibility coverage and dispatches through the
+// authenticated platform proxy, where ThinkWork resolves tenant config + secrets
+// for the caller's agent.
 
 import {
   PlatformToolClientError,

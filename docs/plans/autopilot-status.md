@@ -5209,10 +5209,10 @@ None.
 ## Status
 
 - Plan: `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
-- Branch: `codex/agentcore-u6`
-- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u6`
+- Branch: `codex/agentcore-u7`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u7`
 - Started: `2026-06-02T13:42:51Z`
-- Current unit: U6 Improve managed-path perceived responsiveness.
+- Current unit: U7 Update docs, tests, and operational language.
 - Target branch: `main`
 
 ## Unit Ledger
@@ -5225,8 +5225,8 @@ None.
 | U3   | Retire desktop-local backend contracts            | `codex/agentcore-u3` | [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991) | Merged  | CI passed; squash merged as `39395b16afe539891aae8c4b50db9e19dd2db7b2`. |
 | U4   | Remove mobile on-device harness execution         | `codex/agentcore-u4` | [#1992](https://github.com/thinkwork-ai/thinkwork/pull/1992) | Merged  | CI passed; squash merged as `7acf3185ebb6e3a2f5e2349c3e34d704543b5ac1`. |
 | U5   | Instrument AgentCore turn latency by phase        | `codex/agentcore-u5` | [#1993](https://github.com/thinkwork-ai/thinkwork/pull/1993) | Merged  | CI passed; squash merged as `e78fd569be173524be89d6923f4138fda86d3acd`. |
-| U6   | Improve managed-path perceived responsiveness     | `codex/agentcore-u6` | [#1994](https://github.com/thinkwork-ai/thinkwork/pull/1994) | PR open | Local verification complete; CI pending.                                |
-| U7   | Update docs, tests, and operational language      | Pending              | Pending                                                      | Pending | Final cleanup and docs alignment.                                       |
+| U6   | Improve managed-path perceived responsiveness     | `codex/agentcore-u6` | [#1994](https://github.com/thinkwork-ai/thinkwork/pull/1994) | Merged  | CI passed; squash merged as `52c472e595a1dde5834154b117d93a7e8d5f534b`. |
+| U7   | Update docs, tests, and operational language      | `codex/agentcore-u7` | [#1995](https://github.com/thinkwork-ai/thinkwork/pull/1995) | PR open | Local verification complete; CI pending.                                |
 
 ## U0 Implementation Notes
 
@@ -5629,6 +5629,49 @@ None.
 ## U6 CI / PR
 
 - Opened [#1994](https://github.com/thinkwork-ai/thinkwork/pull/1994).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `52c472e595a1dde5834154b117d93a7e8d5f534b`.
+- Remote branch `codex/agentcore-u6` deleted; local U6 worktree and branch
+  removed.
+
+## U7 Implementation Notes
+
+- Started: `2026-06-02T16:12:30Z`.
+- Synced from `origin/main` after U6 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u7` on branch
+  `codex/agentcore-u7`.
+- Updated active desktop, mobile, architecture, evaluation, and workspace
+  lifecycle docs to say agent execution runs in AWS-managed AgentCore isolation
+  and desktop/mobile are clients.
+- Marked old local Pi/mobile harness solution docs and sidecar runbooks as
+  superseded or retired rather than active operational guidance.
+- Updated seed/eval documentation and compatibility comments so historical
+  Desktop Pi metadata remains explainable without presenting Desktop Pi as a
+  current target.
+
+## U7 Verification Log
+
+- `pnpm install` completed in the U7 worktree; optional `canvas` native rebuild
+  failed under local Node 25/missing `pkg-config`, but install exited
+  successfully.
+- Touched-file Prettier check passed after formatting the status doc and edited
+  markdown/MDX files.
+- `git diff --check` passed.
+- Docs build passed: `pnpm --filter @thinkwork/docs build`.
+- Focused mobile retirement guard passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agentcore-first-mobile.test.ts`
+  (3 tests).
+- Focused eval/tombstone tests passed:
+  `pnpm --filter @thinkwork/api test -- src/handlers/desktop-eval-runs.test.ts src/handlers/eval-runner.test.ts`
+  (11 tests).
+- Root `pnpm lint` passed.
+- Root `pnpm typecheck` passed.
+- `bash scripts/verify-supply-chain.sh` passed.
+- Broad root `pnpm test` passed, including `test:release`.
+
+## U7 CI / PR
+
+- Opened [#1995](https://github.com/thinkwork-ai/thinkwork/pull/1995).
 - Local verification complete; CI monitoring, squash merge, and branch cleanup
   pending.
 

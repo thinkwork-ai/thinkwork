@@ -1,35 +1,43 @@
+---
+title: "Pi host-contained bash"
+date: 2026-05-30
+category: docs/solutions/architecture-patterns/
+module: pi-runtime
+problem_type: superseded_architecture_pattern
+component: agent-runtime
+severity: historical
+tags:
+  - pi
+  - desktop
+  - mobile
+  - superseded
+superseded_by: docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md
+---
+
 # Pi Host-Contained Bash
 
-Date: 2026-05-30
+## Superseded Status
 
-ThinkWork Pi hosts should expose `bash` as a powerful local workspace tool, not
-as unbounded native OS access. Mobile already uses `just-bash` inside Hermes.
-Desktop Local Pi now follows the same philosophy by providing a host-owned
-`just-bash` custom tool named `bash` and removing the upstream SDK native bash
-from the desktop built-in allowlist.
+This pattern is superseded by the AgentCore-first Pi execution plan. It is kept
+as historical context for the short-lived local desktop/mobile sandbox design.
 
-## Contract
+Current product guidance is simpler: ThinkWork agent execution runs in
+AWS-managed AgentCore isolation; desktop and mobile are clients. Do not add new
+desktop-local, mobile harness, or `just-bash` execution paths from this note.
 
-- The model still sees a familiar `bash` tool.
-- The tool runs in `/workspace`, preloaded from the rendered ThinkWork workspace.
-- Public internet is enabled for useful commands such as `curl`.
-- Private and loopback network ranges are denied.
-- The tool cannot read arbitrary device or desktop host files.
-- The system prompt must describe this honestly as a contained host workspace
-  sandbox.
+## Historical Context
 
-## Host Notes
+The original pattern tried to expose a model-visible `bash` tool while keeping
+native host access bounded. Mobile used a Hermes-compatible `just-bash` path and
+Desktop Local Pi used a host-owned custom `bash` tool inside `/workspace`.
 
-Mobile keeps its existing `localBashExtension`, backed by `just-bash`, per-thread
-snapshots, and workspace-cache hydration.
-On React Native/Hermes, import `just-bash/browser`; the package root can pull in
-Node-oriented bundle code that Hermes cannot parse.
+That reduced accidental native shell exposure, but it still left ThinkWork with
+two execution substrates to explain, test, and support. The June 2026
+AgentCore-first refactor removed those local execution paths.
 
-Desktop Local Pi now registers `apps/desktop/src/sidecar/just-bash-tool.ts` as a
-custom `bash` tool and allowlists the remaining upstream Pi built-ins:
-`read`, `edit`, `write`, `grep`, `find`, and `ls`. This preserves Pi's small
-tool surface while preventing accidental native macOS shell exposure.
+## Current Operational Guidance
 
-AgentCore Pi can continue using upstream Pi built-ins inside the AWS runtime
-container. That host already has a cloud sandbox boundary; if its bash policy
-needs to converge further, do it as a separate runtime-container unit.
+- Use managed AgentCore Pi for agent execution and tool isolation.
+- Treat old Desktop Pi/local sidecar rows as legacy provenance only.
+- If local execution is reconsidered, start a new requirements document; do not
+  revive this pattern behind a hidden flag.
