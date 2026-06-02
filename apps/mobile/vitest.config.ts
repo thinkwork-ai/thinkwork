@@ -12,7 +12,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": new URL(".", import.meta.url).pathname,
-      "just-bash/browser": "just-bash",
     },
   },
 });

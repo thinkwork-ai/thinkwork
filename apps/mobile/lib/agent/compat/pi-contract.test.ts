@@ -72,8 +72,6 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
         "shared-thinkwork-extension-adapter",
         "shared-system-prompt-composition",
         "workspace-backed-built-ins",
-        "workspace-backed-bash-durability",
-        "workspace-finalize-diff-capture",
         "task-status-tool",
         "bounded-mcp-proxy-tool",
         "extension-lifecycle-loop-dispatch",
