@@ -191,6 +191,67 @@ describe("runDesktopEvalRun", () => {
     });
   });
 
+  it("posts queued cases as errors after daily token quota exhaustion", async () => {
+    const secondCaseId = "33333333-3333-3333-3333-333333333333";
+    const thirdCaseId = "44444444-4444-4444-4444-444444444444";
+    const posts: unknown[] = [];
+    const fetchImpl = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        posts.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+    const quotaError =
+      "Local Pi SDK returned an assistant error turn with no assistant text (errorMessage: Throttling error: Too many tokens per day, please wait before trying again.).";
+    const runTurn = vi.fn().mockResolvedValue({
+      finalized: false,
+      status: "failed",
+      fallbackEligible: false,
+      output: "",
+      errorMessage: quotaError,
+    });
+
+    const summary = await runDesktopEvalRun(
+      payload({
+        workItems: [CASE_ID, secondCaseId, thirdCaseId].map(
+          (testCaseId, index) => ({
+            ...payload().workItems[0],
+            testCaseId,
+            index,
+            query: "Say ok",
+            assertions: [{ type: "equals", value: "ok" }],
+            session: preparedSession(testCaseId, "Say ok"),
+          }),
+        ),
+      }),
+      { fetchImpl, runTurn, evalConcurrency: 1 },
+    );
+
+    expect(summary).toEqual({ completed: 3, failed: 3, cancelled: false });
+    expect(runTurn).toHaveBeenCalledTimes(1);
+    expect(posts).toHaveLength(3);
+    expect(posts[0]).toMatchObject({
+      testCaseId: CASE_ID,
+      status: "error",
+      actualOutput: "",
+      errorMessage: quotaError,
+    });
+    expect(posts[1]).toMatchObject({
+      testCaseId: secondCaseId,
+      status: "error",
+      actualOutput: "",
+      errorMessage: expect.stringContaining(
+        "Desktop eval stopped starting new Pi turns",
+      ),
+    });
+    expect(posts[2]).toMatchObject({
+      testCaseId: thirdCaseId,
+      status: "error",
+      actualOutput: "",
+      errorMessage: expect.stringContaining("Too many tokens per day"),
+    });
+  });
+
   it("posts an error callback for a failed case and continues", async () => {
     const secondCaseId = "33333333-3333-3333-3333-333333333333";
     const posts: unknown[] = [];
