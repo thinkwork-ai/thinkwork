@@ -15,15 +15,15 @@ status: in_progress
 - Current branch: `codex/remove-strands-u1`.
 - Current worktree: `.Codex/worktrees/remove-strands-u1`.
 
-| Unit                                                               | Branch                    | PR      | State       | Notes                                                                                                                                                                           |
-| ------------------------------------------------------------------ | ------------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Characterize Strands usage and data safety                      | `codex/remove-strands-u1` | Pending | In progress | Add the plan to source control, record autopilot status, lock runtime contract tests so legacy/null/unknown runtime values resolve to Pi, and classify Strands cleanup targets. |
-| U2 Make API, GraphQL, and Database runtime defaults Pi-only        | Pending                   | Pending | Pending     | Not started.                                                                                                                                                                    |
-| U3 Make deploy and release workflows Pi-only                       | Pending                   | Pending | Pending     | Not started.                                                                                                                                                                    |
-| U4 Move shared Terraform resources out of the Strands module       | Pending                   | Pending | Pending     | Not started.                                                                                                                                                                    |
-| U5 Delete Strands container source and retire Strands-only scripts | Pending                   | Pending | Pending     | Not started.                                                                                                                                                                    |
-| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | Pending                   | Pending | Pending     | Not started.                                                                                                                                                                    |
-| U7 End-to-end verification and deployment proof                    | Pending                   | Pending | Pending     | Not started.                                                                                                                                                                    |
+| Unit                                                               | Branch                    | PR                                                           | State       | Notes                                                                                                                                                                           |
+| ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Characterize Strands usage and data safety                      | `codex/remove-strands-u1` | [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004) | In progress | Add the plan to source control, record autopilot status, lock runtime contract tests so legacy/null/unknown runtime values resolve to Pi, and classify Strands cleanup targets. |
+| U2 Make API, GraphQL, and Database runtime defaults Pi-only        | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U3 Make deploy and release workflows Pi-only                       | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U4 Move shared Terraform resources out of the Strands module       | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U5 Delete Strands container source and retire Strands-only scripts | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U7 End-to-end verification and deployment proof                    | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
 
 ### Progress Log
 
@@ -43,6 +43,7 @@ status: in_progress
   `pnpm dlx prettier --check <changed U1 files>`. The repo-local
   `pnpm format:check -- <files>` script could not run because this worktree
   does not currently have a local `prettier` binary on PATH.
+- Opened U1 PR [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004).
 
 ### U1 Strands Reference Classification
 
