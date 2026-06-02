@@ -595,7 +595,7 @@ describe("ChatSidebar", () => {
     expect(screen.queryByText("Inbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /switch space/i })).toBeNull();
     expect(screen.queryByRole("option", { name: /all spaces/i })).toBeNull();
-    expect(screen.getByRole("link", { name: /new thread/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "New thread" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /open space menu/i }),
     ).toBeTruthy();
@@ -615,7 +615,7 @@ describe("ChatSidebar", () => {
     expect(screen.getByRole("link", { name: /automations/i })).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: /new thread/i })
+        .getByRole("link", { name: "New thread" })
         .compareDocumentPosition(
           screen.getByRole("button", { name: /^search/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
