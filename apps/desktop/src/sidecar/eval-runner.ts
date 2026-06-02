@@ -41,8 +41,6 @@ export interface EvalRunSummary {
   cancelled: boolean;
 }
 
-const RETRYABLE_EMPTY_ASSISTANT_ERROR =
-  "assistant error turn with no assistant text";
 const DEFAULT_EVAL_MAX_ATTEMPTS = 2;
 const DEFAULT_EVAL_RETRY_DELAY_MS = 750;
 
@@ -209,14 +207,7 @@ async function runEvalCaseTurn({
   for (let attempt = 1; ; attempt += 1) {
     try {
       const result = await runTurn(turnPayload, turnDeps);
-      if (
-        !shouldRetryLocalTurnFailure(result) ||
-        deps.signal?.aborted ||
-        attempt >= maxAttempts
-      ) {
-        return result;
-      }
-      await waitBeforeRetry({ payload, item, attempt, deps, logger, result });
+      return result;
     } catch (error) {
       if (
         deps.signal?.aborted ||
@@ -236,7 +227,6 @@ async function waitBeforeRetry({
   attempt,
   deps,
   logger,
-  result,
   error,
 }: {
   payload: PiSidecarEvalRunPayload;
@@ -244,7 +234,6 @@ async function waitBeforeRetry({
   attempt: number;
   deps: EvalRunnerDeps;
   logger: RedactedLogger;
-  result?: LocalTurnRunnerResult;
   error?: unknown;
 }): Promise<void> {
   const delayMs =
@@ -258,20 +247,10 @@ async function waitBeforeRetry({
     attempt,
     nextAttempt: attempt + 1,
     delayMs,
-    error:
-      result?.errorMessage ??
-      (error instanceof Error ? error.message : String(error)),
+    error: error instanceof Error ? error.message : String(error),
   });
   if (delayMs <= 0) return;
   await new Promise((resolve) => setTimeout(resolve, delayMs));
-}
-
-function shouldRetryLocalTurnFailure(result: LocalTurnRunnerResult): boolean {
-  return (
-    result.status === "failed" &&
-    result.output.trim().length === 0 &&
-    isRetryableEmptyAssistantError(result.errorMessage)
-  );
 }
 
 function shouldRetryLocalTurnError(error: unknown): boolean {
@@ -283,7 +262,9 @@ function shouldRetryLocalTurnError(error: unknown): boolean {
 function isRetryableEmptyAssistantError(message: string | undefined): boolean {
   return (
     typeof message === "string" &&
-    message.toLowerCase().includes(RETRYABLE_EMPTY_ASSISTANT_ERROR)
+    message
+      .toLowerCase()
+      .includes("assistant error turn with no assistant text")
   );
 }
 
