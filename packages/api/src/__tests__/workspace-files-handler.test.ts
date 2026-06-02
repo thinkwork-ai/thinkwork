@@ -2201,6 +2201,45 @@ describe("pinned-file write guard", () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it("PUT on AGENTS.md writes the agent S3 workspace object and audits governance edit", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const content = "# AGENTS.md\n\nRead route/path `User/USER.md`.\n";
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "AGENTS.md",
+          content,
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Bucket: "test-bucket",
+      Key: "tenants/acme/agents/marco/AGENTS.md",
+      Body: content,
+      ContentType: "text/plain; charset=utf-8",
+    });
+    expect(emitMockImpl).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tenantId: TENANT_A,
+        eventType: "workspace.governance_file_edited",
+        resourceId: "acme/marco/AGENTS.md",
+        action: "edit",
+        outcome: "success",
+      }),
+    );
+    expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+  });
+
   it("rejects writes to built-in tool workspace skill paths", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);

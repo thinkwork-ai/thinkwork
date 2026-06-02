@@ -17,8 +17,8 @@ export interface PiInvocationPayload {
 //   2. CONTEXT.md — current per-thread / per-space context.
 //   3. GUARDRAILS.md — safety floor; must apply everywhere.
 //   4. SPACE.md — active Space context when a tuple renderer supplied one.
-//   5. USER.md — who I'm talking to right now (materialized per-user at
-//      assignment time by user-md-writer.ts).
+//   5. User/USER.md — who I'm talking to right now (materialized per-user in
+//      the rendered workspace User root).
 //
 // SOUL.md, IDENTITY.md, PLATFORM.md, CAPABILITIES.md, MEMORY_GUIDE.md, and
 // TOOLS.md may still exist during the migration window; their content has
@@ -29,7 +29,7 @@ export const PROMPT_FILES = [
   "CONTEXT.md",
   "GUARDRAILS.md",
   "SPACE.md",
-  "USER.md",
+  "User/USER.md",
 ] as const;
 
 export type PromptFileName = (typeof PROMPT_FILES)[number];
@@ -166,7 +166,7 @@ export async function composeSystemPromptFromFiles(
     typeof args.payload.user_id === "string" &&
     args.payload.user_id.trim().length > 0;
   for (const filename of PROMPT_FILES) {
-    if (filename === "USER.md" && !includeUserMd) continue;
+    if (filename === "User/USER.md" && !includeUserMd) continue;
     const content = await args.readPromptFile(filename);
     if (content) {
       parts.push(content);

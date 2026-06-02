@@ -19,7 +19,7 @@ describe("workspaceContextExtension", () => {
     clearWorkspaceContextCache();
   });
 
-  it("composes USER.md through the shared ThinkWork system-prompt order", async () => {
+  it("composes User/USER.md through the shared ThinkWork system-prompt order", async () => {
     const getWorkspaceFile = vi.fn().mockImplementation((target, path) => {
       if ("agentId" in target && path === "AGENTS.md") {
         return Promise.resolve({
@@ -45,6 +45,13 @@ describe("workspaceContextExtension", () => {
       if ("userId" in target && path === "USER.md") {
         return Promise.resolve({
           content: "The human's name is Eric Odom.",
+          source: "user",
+          sha256: "",
+        });
+      }
+      if (path === "User/USER.md") {
+        return Promise.resolve({
+          content: "WRONG RENDERED USER PATH",
           source: "user",
           sha256: "",
         });
@@ -81,10 +88,15 @@ describe("workspaceContextExtension", () => {
     expect(composed.systemPrompt).toContain("GUARDRAILS BODY");
     expect(composed.systemPrompt).toContain("SPACE BODY");
     expect(composed.systemPrompt).toContain("The human's name is Eric Odom.");
+    expect(composed.systemPrompt).not.toContain("WRONG RENDERED USER PATH");
     expect(composed.systemPrompt.indexOf("AGENTS BODY")).toBeLessThan(
       composed.systemPrompt.indexOf("The human's name is Eric Odom."),
     );
     expect(composed.systemPrompt).toContain("## Mobile Host");
+    expect(getWorkspaceFile).toHaveBeenCalledWith(
+      { userId: "user-1" },
+      "USER.md",
+    );
   });
 
   it("uses cached workspace files on a warm context load", async () => {

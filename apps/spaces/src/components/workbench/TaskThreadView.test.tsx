@@ -3175,13 +3175,7 @@ describe("TaskThreadView", () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
-      value: {
-        pi: {
-          status: "healthy",
-          getStatus: vi.fn(async () => ({ status: "healthy" })),
-          onStatusChanged: vi.fn(() => () => {}),
-        },
-      },
+      value: {},
     });
     render(
       <TaskThreadView
@@ -3204,17 +3198,9 @@ describe("TaskThreadView", () => {
 
   it("does not subscribe to desktop-local diagnostics for turn activity", () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
-    const onDiagnostic = vi.fn(() => () => {});
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
-      value: {
-        pi: {
-          status: "healthy",
-          getStatus: vi.fn(async () => ({ status: "healthy" })),
-          onStatusChanged: vi.fn(() => () => {}),
-          onDiagnostic,
-        },
-      },
+      value: {},
     });
 
     render(
@@ -3237,7 +3223,6 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    expect(onDiagnostic).not.toHaveBeenCalled();
     expect(screen.queryByText(/local pi/i)).toBeNull();
     expect(screen.queryByText(/just-bash/i)).toBeNull();
     expect(screen.queryByRole("log", { name: /console output/i })).toBeNull();

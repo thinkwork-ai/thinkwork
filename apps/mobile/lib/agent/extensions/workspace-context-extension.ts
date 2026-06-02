@@ -56,7 +56,7 @@ function targetForPromptFile(
   filename: PromptFileName,
   options: WorkspaceContextExtensionOptions,
 ): WorkspaceTarget | null {
-  if (filename === "USER.md") {
+  if (filename === "User/USER.md") {
     const userId = normalized(options.userId);
     return userId ? { userId } : null;
   }
@@ -69,6 +69,10 @@ function targetForPromptFile(
   return agentId ? { agentId } : null;
 }
 
+function sourcePathForPromptFile(filename: PromptFileName): string {
+  return filename === "User/USER.md" ? "USER.md" : filename;
+}
+
 async function readPromptFile(
   filename: PromptFileName,
   options: WorkspaceContextExtensionOptions,
@@ -77,7 +81,7 @@ async function readPromptFile(
   const target = targetForPromptFile(filename, options);
   if (!target) return null;
   try {
-    const file = await getFile(target, filename);
+    const file = await getFile(target, sourcePathForPromptFile(filename));
     const content = file.content?.trim();
     return content || null;
   } catch {

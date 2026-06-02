@@ -9,7 +9,6 @@
 #   AWS_REGION            AWS region (default: us-east-1)
 #   GITHUB_REF_NAME       Release tag such as desktop-v1.2.3-canary.1
 #   BUILD_CHANNEL         stable, canary, or dev
-#   DESKTOP_LOCAL_PI_ENABLED true/false override for the local Pi rollout gate
 #   DESKTOP_MAC_ARCHES    comma-separated macOS arches to package (default: arm64,x64)
 #   DESKTOP_SKIP_TERRAFORM=1 to use existing VITE_* env vars instead of terraform outputs
 
@@ -117,7 +116,6 @@ EOF
   cd "$REPO_ROOT"
   cat > apps/spaces/.env.production <<EOF
 VITE_THINKWORK_STAGE=${STAGE}
-VITE_DESKTOP_LOCAL_PI_ENABLED=${DESKTOP_LOCAL_PI_ENABLED:-$([[ "$STAGE" == "dev" || "$DESKTOP_CHANNEL" == "canary" ]] && echo true || echo false)}
 VITE_GRAPHQL_HTTP_URL=${API_ENDPOINT}/graphql
 VITE_GRAPHQL_URL=${APPSYNC_API_URL}
 VITE_GRAPHQL_WS_URL=${APPSYNC_REALTIME_URL}
@@ -139,7 +137,6 @@ cd "$REPO_ROOT"
 
 export THINKWORK_STAGE="$STAGE"
 export VITE_THINKWORK_STAGE="$STAGE"
-export VITE_DESKTOP_LOCAL_PI_ENABLED="${DESKTOP_LOCAL_PI_ENABLED:-${VITE_DESKTOP_LOCAL_PI_ENABLED:-$([[ "$STAGE" == "dev" || "$DESKTOP_CHANNEL" == "canary" ]] && echo true || echo false)}}"
 export THINKWORK_DESKTOP_VERSION="$DESKTOP_VERSION"
 export THINKWORK_DESKTOP_CHANNEL="$DESKTOP_CHANNEL"
 export THINKWORK_DESKTOP_PRODUCT_NAME="$DESKTOP_PRODUCT_NAME"

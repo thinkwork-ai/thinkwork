@@ -27,8 +27,8 @@ function makeFakeApi() {
 /** Virtual workspace reader so composition is deterministic without disk I/O. */
 function readerFor(files: Record<string, string>): WorkspaceFileReader {
   return async (filePath) => {
-    const name = filePath.split("/").pop() ?? filePath;
-    return files[name] ?? null;
+    const relativePath = filePath.replace(/^\/ws\//, "");
+    return files[relativePath] ?? null;
   };
 }
 
@@ -49,7 +49,7 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
       fileReader: readerFor({
         "AGENTS.md": "AGENTS BODY",
         "GUARDRAILS.md": "GUARDRAILS BODY",
-        "USER.md": "USER BODY",
+        "User/USER.md": "USER BODY",
       }),
     });
 
@@ -73,9 +73,28 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
       payload: {},
       workspaceDir: "/ws",
       now: FIXED_NOW,
-      fileReader: readerFor({ AGENTS_unused: "x", "USER.md": "USER BODY" }),
+      fileReader: readerFor({
+        "AGENTS.md": "AGENTS BODY",
+        "User/USER.md": "USER BODY",
+      }),
     });
+    expect(prompt).toContain("AGENTS BODY");
     expect(prompt).not.toContain("USER BODY");
+  });
+
+  it("does not treat a retired root USER.md as requester context", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: { user_id: "u1" },
+      workspaceDir: "/ws",
+      now: FIXED_NOW,
+      fileReader: readerFor({
+        "AGENTS.md": "AGENTS BODY",
+        "USER.md": "ROOT USER BODY",
+      }),
+    });
+
+    expect(prompt).toContain("AGENTS BODY");
+    expect(prompt).not.toContain("ROOT USER BODY");
   });
 
   it("distinguishes host-contained bash from execute_code when both are available", async () => {
