@@ -3,6 +3,7 @@ import { Writable } from "node:stream";
 
 import {
   InvocationValidationError,
+  logAgentCorePhase,
   logStructured,
   snapshotIdentity,
   snapshotRuntimeEnv,
@@ -403,5 +404,37 @@ describe("logStructured", () => {
     );
     const parsed = JSON.parse(out.lines()[0]!.trim());
     expect(parsed.items).toEqual(["a", "b"]);
+  });
+
+  it("emits span-shaped AgentCore phase records without leaking details", () => {
+    const out = captureStdout();
+    logAgentCorePhase(
+      {
+        phase: "runtime.workspace_bootstrap",
+        status: "completed",
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        threadTurnId: "turn-1",
+        traceId: "trace-1",
+        durationMs: 42,
+        detail: "Authorization=Bearer should-not-leak",
+      },
+      out.stream,
+    );
+
+    const parsed = JSON.parse(out.lines()[0]!.trim());
+    expect(parsed).toMatchObject({
+      event: "agentcore_phase",
+      name: "thinkwork.agentcore.phase",
+      scope: { name: "thinkwork.pi.runtime" },
+      source: "agentcore-pi",
+      phase: "runtime.workspace_bootstrap",
+      status: "completed",
+      sessionId: "turn-1",
+      spanId: "tw-agentcore-pi-runtime.workspace_bootstrap-turn-1",
+      durationMs: 42,
+    });
+    expect(parsed.detail).not.toContain("should-not-leak");
   });
 });

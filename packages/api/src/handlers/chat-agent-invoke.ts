@@ -57,6 +57,7 @@ import {
   notifyNewMessage,
   notifyThreadTurnUpdate,
 } from "../lib/chat-finalize/notify.js";
+import { logAgentCorePhase } from "../lib/agentcore-phase-log.js";
 
 /**
  * Extract or generate a trace ID for correlating CloudWatch/X-Ray traces.
@@ -464,9 +465,20 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
   const { threadId, tenantId, agentId, userMessage } = event;
   const existingThreadTurnId = event.existingThreadTurnId?.trim();
   const traceId = getTraceId();
+  const setupStart = Date.now();
   console.log(
     `[chat-agent-invoke] threadId=${threadId} agentId=${agentId} traceId=${traceId}`,
   );
+  logAgentCorePhase({
+    source: "chat-agent-invoke",
+    phase: "api.invoke.received",
+    status: "started",
+    traceId,
+    tenantId,
+    agentId,
+    threadId,
+    threadTurnId: existingThreadTurnId || undefined,
+  });
 
   let turnId: string | undefined = existingThreadTurnId || undefined;
   try {
@@ -490,6 +502,16 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         `[chat-agent-invoke] resolved current user via ${identity.source}`,
       );
     }
+    logAgentCorePhase({
+      source: "chat-agent-invoke",
+      phase: "api.identity.resolved",
+      status: identity.source === "none" ? "skipped" : "completed",
+      traceId,
+      tenantId,
+      agentId,
+      threadId,
+      detail: identity.source,
+    });
 
     const spaceContext = await resolveThreadSpaceContext({
       tenantId,
@@ -551,6 +573,18 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       slug: runtimeConfig.agentSlug,
       human_pair_id: runtimeConfig.humanPairId,
     };
+    logAgentCorePhase({
+      source: "chat-agent-invoke",
+      phase: "api.runtime_config.resolved",
+      status: "completed",
+      traceId,
+      tenantId,
+      agentId,
+      threadId,
+      runtimeType,
+      count: skillsConfig.length,
+      detail: `mcp=${runtimeConfig.mcpConfigs.length}`,
+    });
 
     if (guardrailPayload) {
       console.log(
@@ -605,6 +639,18 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           agentId,
           status: "running",
           triggerName: "Mobile Pi",
+        });
+        logAgentCorePhase({
+          source: "chat-agent-invoke",
+          phase: "api.thread_turn.ready",
+          status: "completed",
+          traceId,
+          tenantId,
+          agentId,
+          threadId,
+          threadTurnId: turnId,
+          runtimeType,
+          detail: "reused",
         });
       } catch (turnErr) {
         console.error(
@@ -674,6 +720,18 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           status: "running",
           triggerName: "Chat",
         });
+        logAgentCorePhase({
+          source: "chat-agent-invoke",
+          phase: "api.thread_turn.ready",
+          status: "completed",
+          traceId,
+          tenantId,
+          agentId,
+          threadId,
+          threadTurnId: turnId,
+          runtimeType,
+          detail: "created",
+        });
       } catch (turnErr) {
         console.error(
           `[chat-agent-invoke] Failed to create thread_turn:`,
@@ -723,6 +781,18 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     console.log(
       `[chat-agent-invoke] Loaded ${messagesHistory.length} prior messages for thread=${threadId}`,
     );
+    logAgentCorePhase({
+      source: "chat-agent-invoke",
+      phase: "api.history.loaded",
+      status: "completed",
+      traceId,
+      tenantId,
+      agentId,
+      threadId,
+      threadTurnId: turnId,
+      runtimeType,
+      count: messagesHistory.length,
+    });
 
     // MCP configs already resolved by runtimeConfig.
     const mcpConfigs = runtimeConfig.mcpConfigs;
@@ -752,10 +822,36 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           console.log(
             `[chat-agent-invoke] rendered workspace tuple space=${renderedWorkspace.activeSpace?.slug ?? spaceId} prefix=${renderedWorkspacePrefix} cache=${renderedWorkspace.cacheStatus ?? "unknown"} duration_ms=${Date.now() - workspaceRenderStart}`,
           );
+          logAgentCorePhase({
+            source: "chat-agent-invoke",
+            phase: "api.workspace_render",
+            status: "completed",
+            traceId,
+            tenantId,
+            agentId,
+            threadId,
+            threadTurnId: turnId,
+            runtimeType,
+            durationMs: Date.now() - workspaceRenderStart,
+            detail: renderedWorkspace.cacheStatus ?? "unknown",
+          });
         } else {
           console.log(
             `[chat-agent-invoke] rendered workspace tuple skipped: ${renderedWorkspace.reason} duration_ms=${Date.now() - workspaceRenderStart}`,
           );
+          logAgentCorePhase({
+            source: "chat-agent-invoke",
+            phase: "api.workspace_render",
+            status: "skipped",
+            traceId,
+            tenantId,
+            agentId,
+            threadId,
+            threadTurnId: turnId,
+            runtimeType,
+            durationMs: Date.now() - workspaceRenderStart,
+            detail: renderedWorkspace.reason ?? "not_rendered",
+          });
           if (renderedWorkspace.errorCode === "SpaceAccessDenied") {
             throw new Error(
               `workspace_renderer_access_denied:${renderedWorkspace.reason ?? "SpaceAccessDenied"}`,
@@ -802,6 +898,19 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           `[chat-agent-invoke] rendered workspace tuple failed after ${Date.now() - workspaceRenderStart}ms; falling back to legacy workspace sync:`,
           err,
         );
+        logAgentCorePhase({
+          source: "chat-agent-invoke",
+          phase: "api.workspace_render",
+          status: "failed",
+          traceId,
+          tenantId,
+          agentId,
+          threadId,
+          threadTurnId: turnId,
+          runtimeType,
+          durationMs: Date.now() - workspaceRenderStart,
+          errorType: err instanceof Error ? err.name : "Error",
+        });
       }
     }
 
@@ -861,9 +970,33 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         console.log(
           `[chat-agent-invoke] sandbox pre-flight: ${sandboxPreflight.status}`,
         );
+        logAgentCorePhase({
+          source: "chat-agent-invoke",
+          phase: "api.sandbox_preflight",
+          status: "completed",
+          traceId,
+          tenantId,
+          agentId,
+          threadId,
+          threadTurnId: turnId,
+          runtimeType,
+          detail: sandboxPreflight.status,
+        });
       } catch (err) {
         console.error(`[chat-agent-invoke] sandbox pre-flight failed:`, err);
         sandboxPreflight = null;
+        logAgentCorePhase({
+          source: "chat-agent-invoke",
+          phase: "api.sandbox_preflight",
+          status: "failed",
+          traceId,
+          tenantId,
+          agentId,
+          threadId,
+          threadTurnId: turnId,
+          runtimeType,
+          errorType: err instanceof Error ? err.name : "Error",
+        });
       }
     }
 
@@ -1031,10 +1164,36 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       console.log(
         `[chat-agent-invoke] AgentCore Event-mode dispatch accepted in ${Date.now() - invokeStart}ms`,
       );
+      logAgentCorePhase({
+        source: "chat-agent-invoke",
+        phase: "api.agentcore.dispatch",
+        status: "completed",
+        traceId,
+        tenantId,
+        agentId,
+        threadId,
+        threadTurnId: turnId,
+        runtimeType,
+        durationMs: Date.now() - invokeStart,
+        detail: `setup=${Date.now() - setupStart}ms`,
+      });
       return { ok: true, threadTurnId: turnId };
     } catch (dispatchErr) {
       const errMsgText = `AgentCore dispatch failed: ${dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);
+      logAgentCorePhase({
+        source: "chat-agent-invoke",
+        phase: "api.agentcore.dispatch",
+        status: "failed",
+        traceId,
+        tenantId,
+        agentId,
+        threadId,
+        threadTurnId: turnId,
+        runtimeType,
+        durationMs: Date.now() - invokeStart,
+        errorType: dispatchErr instanceof Error ? dispatchErr.name : "Error",
+      });
       await markComputerTaskFailedFromFinalize({
         tenantId,
         computerId: event.computerId,
