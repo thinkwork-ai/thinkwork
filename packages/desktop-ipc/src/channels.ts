@@ -18,24 +18,12 @@ export const INSTALL_UPDATE_CHANNEL = "desktop:install-update";
 export const UPDATE_STATE_EVENT_CHANNEL = "desktop:update-state";
 export const UPDATE_TELEMETRY_EVENT_CHANNEL = "desktop:update-telemetry";
 export const REPORT_INSTALL_OUTCOME_CHANNEL = "desktop:report-install-outcome";
-export const GET_PI_STATUS_CHANNEL = "desktop:pi:get-status";
-export const PREWARM_PI_WORKSPACE_CHANNEL = "desktop:pi:prewarm-workspace";
-export const START_PI_TURN_CHANNEL = "desktop:pi:start-turn";
-export const CANCEL_PI_TURN_CHANNEL = "desktop:pi:cancel-turn";
-export const START_PI_EVAL_RUN_CHANNEL = "desktop:pi:start-eval-run";
-export const CANCEL_PI_EVAL_RUN_CHANNEL = "desktop:pi:cancel-eval-run";
-export const PI_STATUS_EVENT_CHANNEL = "desktop:pi:status";
-export const PI_DIAGNOSTIC_EVENT_CHANNEL = "desktop:pi:diagnostic";
 // Renderer → main (invoke): raise a native thread notification.
 export const RAISE_THREAD_NOTIFICATION_CHANNEL = "desktop:notification:raise";
 // Main → renderer (send): a notification was clicked — open this thread.
 export const OPEN_THREAD_EVENT_CHANNEL = "desktop:open-thread";
 // Main → renderer (send): app window focus/blur transitions.
 export const WINDOW_FOCUS_EVENT_CHANNEL = "desktop:window-focus";
-// Renderer → main (invoke): read the local Pi workspace cache as a tree.
-export const READ_WORKSPACE_TREE_CHANNEL = "desktop:workspace:read-tree";
-// Renderer → main (invoke): read one file from the local Pi workspace cache.
-export const READ_WORKSPACE_FILE_CHANNEL = "desktop:workspace:read-file";
 // Renderer → main (send): sync the native window appearance to the app theme
 // so macOS vibrancy materials render light/dark to match.
 export const SET_NATIVE_THEME_CHANNEL = "desktop:set-native-theme";
@@ -60,17 +48,7 @@ export const IPC_CHANNELS = {
   UPDATE_STATE_EVENT: UPDATE_STATE_EVENT_CHANNEL,
   UPDATE_TELEMETRY_EVENT: UPDATE_TELEMETRY_EVENT_CHANNEL,
   REPORT_INSTALL_OUTCOME: REPORT_INSTALL_OUTCOME_CHANNEL,
-  GET_PI_STATUS: GET_PI_STATUS_CHANNEL,
-  PREWARM_PI_WORKSPACE: PREWARM_PI_WORKSPACE_CHANNEL,
-  START_PI_TURN: START_PI_TURN_CHANNEL,
-  CANCEL_PI_TURN: CANCEL_PI_TURN_CHANNEL,
-  START_PI_EVAL_RUN: START_PI_EVAL_RUN_CHANNEL,
-  CANCEL_PI_EVAL_RUN: CANCEL_PI_EVAL_RUN_CHANNEL,
-  PI_STATUS_EVENT: PI_STATUS_EVENT_CHANNEL,
-  PI_DIAGNOSTIC_EVENT: PI_DIAGNOSTIC_EVENT_CHANNEL,
   RAISE_THREAD_NOTIFICATION: RAISE_THREAD_NOTIFICATION_CHANNEL,
   OPEN_THREAD_EVENT: OPEN_THREAD_EVENT_CHANNEL,
   WINDOW_FOCUS_EVENT: WINDOW_FOCUS_EVENT_CHANNEL,
-  READ_WORKSPACE_TREE: READ_WORKSPACE_TREE_CHANNEL,
-  READ_WORKSPACE_FILE: READ_WORKSPACE_FILE_CHANNEL,
 } as const;

@@ -2,30 +2,20 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 import {
   CHECK_FOR_UPDATES_CHANNEL,
-  CANCEL_PI_EVAL_RUN_CHANNEL,
-  CANCEL_PI_TURN_CHANNEL,
   CLEAR_TOKEN_STORAGE_CHANNEL,
   CONSUME_PENDING_OAUTH_CHANNEL,
   DEEP_LINK_EVENT_CHANNEL,
   DOWNLOAD_UPDATE_CHANNEL,
   GET_DESKTOP_CONFIG_CHANNEL,
-  GET_PI_STATUS_CHANNEL,
   GET_SESSION_TOKENS_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
   OAUTH_ERROR_EVENT_CHANNEL,
-  PI_DIAGNOSTIC_EVENT_CHANNEL,
-  PI_STATUS_EVENT_CHANNEL,
-  PREWARM_PI_WORKSPACE_CHANNEL,
-  READ_WORKSPACE_FILE_CHANNEL,
-  READ_WORKSPACE_TREE_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   SET_NATIVE_THEME_CHANNEL,
   SIGN_OUT_CHANNEL,
   SIGNED_OUT_EVENT_CHANNEL,
-  START_PI_EVAL_RUN_CHANNEL,
-  START_PI_TURN_CHANNEL,
   START_OAUTH_CHANNEL,
   SET_TOKEN_STORAGE_ITEM_CHANNEL,
   TOKENS_CHANGED_EVENT_CHANNEL,
@@ -36,27 +26,11 @@ import {
   WINDOW_FOCUS_EVENT_CHANNEL,
   DeepLinkEventSchema,
   GetDesktopConfigResponseSchema,
-  GetPiStatusResponseSchema,
   GetSessionTokensResponseSchema,
   GetUpdateStateResponseSchema,
   ConsumePendingOAuthResponseSchema,
   RemoveTokenStorageItemRequestSchema,
   OAuthErrorEventSchema,
-  PiCancelEvalRunRequestSchema,
-  PiCancelEvalRunResponseSchema,
-  PiCancelTurnRequestSchema,
-  PiCancelTurnResponseSchema,
-  PiDiagnosticEventSchema,
-  PiPrewarmWorkspaceRequestSchema,
-  PiPrewarmWorkspaceResponseSchema,
-  PiStartEvalRunRequestSchema,
-  PiStartEvalRunResponseSchema,
-  PiStartTurnRequestSchema,
-  PiStartTurnResponseSchema,
-  PiStatusEventSchema,
-  ReadWorkspaceFileRequestSchema,
-  ReadWorkspaceFileResponseSchema,
-  ReadWorkspaceTreeResponseSchema,
   ReportInstallOutcomeRequestSchema,
   RaiseThreadNotificationRequestSchema,
   OpenThreadEventSchema,
@@ -70,104 +44,6 @@ import {
   UpdateStateEventSchema,
   UpdateTelemetryEventSchema,
 } from "@thinkwork/desktop-ipc";
-
-type PiDiagnosticListener =
-  NonNullable<NonNullable<ThinkworkBridge["pi"]>["onDiagnostic"]> extends (
-    listener: infer Listener,
-  ) => unknown
-    ? Listener
-    : never;
-
-const MAX_BUFFERED_PI_DIAGNOSTICS = 200;
-const piDiagnosticBuffer: Parameters<PiDiagnosticListener>[0][] = [];
-const piDiagnosticListeners = new Set<PiDiagnosticListener>();
-
-ipcRenderer.on(PI_DIAGNOSTIC_EVENT_CHANNEL, (_event, payload: unknown) => {
-  const diagnostic = PiDiagnosticEventSchema.parse(payload);
-  piDiagnosticBuffer.push(diagnostic);
-  if (piDiagnosticBuffer.length > MAX_BUFFERED_PI_DIAGNOSTICS) {
-    piDiagnosticBuffer.splice(
-      0,
-      piDiagnosticBuffer.length - MAX_BUFFERED_PI_DIAGNOSTICS,
-    );
-  }
-  for (const listener of piDiagnosticListeners) {
-    listener(diagnostic);
-  }
-});
-
-const piBridge: NonNullable<ThinkworkBridge["pi"]> = {
-  status: "unavailable",
-  async getStatus() {
-    const state = GetPiStatusResponseSchema.parse(
-      await ipcRenderer.invoke(GET_PI_STATUS_CHANNEL),
-    );
-    piBridge.status = state.status;
-    return state;
-  },
-  async prewarmWorkspace(request) {
-    return PiPrewarmWorkspaceResponseSchema.parse(
-      await ipcRenderer.invoke(
-        PREWARM_PI_WORKSPACE_CHANNEL,
-        PiPrewarmWorkspaceRequestSchema.parse(request),
-      ),
-    );
-  },
-  async startTurn(request) {
-    return PiStartTurnResponseSchema.parse(
-      await ipcRenderer.invoke(
-        START_PI_TURN_CHANNEL,
-        PiStartTurnRequestSchema.parse(request),
-      ),
-    );
-  },
-  async cancelTurn(request) {
-    return PiCancelTurnResponseSchema.parse(
-      await ipcRenderer.invoke(
-        CANCEL_PI_TURN_CHANNEL,
-        PiCancelTurnRequestSchema.parse(request),
-      ),
-    );
-  },
-  async startEvalRun(request) {
-    return PiStartEvalRunResponseSchema.parse(
-      await ipcRenderer.invoke(
-        START_PI_EVAL_RUN_CHANNEL,
-        PiStartEvalRunRequestSchema.parse(request),
-      ),
-    );
-  },
-  async cancelEvalRun(request) {
-    return PiCancelEvalRunResponseSchema.parse(
-      await ipcRenderer.invoke(
-        CANCEL_PI_EVAL_RUN_CHANNEL,
-        PiCancelEvalRunRequestSchema.parse(request),
-      ),
-    );
-  },
-  onStatusChanged(listener) {
-    const wrappedListener = (
-      _event: Electron.IpcRendererEvent,
-      payload: unknown,
-    ) => {
-      const state = PiStatusEventSchema.parse(payload);
-      piBridge.status = state.status;
-      listener(state);
-    };
-    ipcRenderer.on(PI_STATUS_EVENT_CHANNEL, wrappedListener);
-    return () =>
-      ipcRenderer.removeListener(PI_STATUS_EVENT_CHANNEL, wrappedListener);
-  },
-  onDiagnostic(listener) {
-    piDiagnosticListeners.add(listener);
-    for (const diagnostic of piDiagnosticBuffer) {
-      listener(diagnostic);
-    }
-    return () => {
-      piDiagnosticListeners.delete(listener);
-    };
-  },
-};
 
 const bridge = {
   async getSessionTokens() {
@@ -330,27 +206,9 @@ const bridge = {
     return () =>
       ipcRenderer.removeListener(WINDOW_FOCUS_EVENT_CHANNEL, wrappedListener);
   },
-  async readWorkspaceTree() {
-    return ReadWorkspaceTreeResponseSchema.parse(
-      await ipcRenderer.invoke(READ_WORKSPACE_TREE_CHANNEL),
-    );
-  },
-  async readWorkspaceFile(request) {
-    return ReadWorkspaceFileResponseSchema.parse(
-      await ipcRenderer.invoke(
-        READ_WORKSPACE_FILE_CHANNEL,
-        ReadWorkspaceFileRequestSchema.parse(request),
-      ),
-    );
-  },
   setNativeTheme(theme) {
     ipcRenderer.send(SET_NATIVE_THEME_CHANNEL, theme);
   },
-  pi: piBridge,
 } satisfies ThinkworkBridge;
-
-void piBridge.getStatus().catch(() => {
-  piBridge.status = "unavailable";
-});
 
 contextBridge.exposeInMainWorld("thinkworkBridge", bridge);

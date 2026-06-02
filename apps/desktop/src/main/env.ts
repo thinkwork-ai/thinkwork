@@ -10,7 +10,6 @@ export interface DesktopEnvSnapshot {
   desktopChannel: string;
   desktopProductName: string;
   desktopAppId: string;
-  desktopLocalPiEnabled: boolean;
   deepLinkScheme: string | null;
   rendererUrl: string | null;
   apiUrl: string | null;
@@ -51,7 +50,6 @@ export function snapshotDesktopEnv(
     desktopAppId:
       optionalEnv(mergedEnv.THINKWORK_DESKTOP_APP_ID) ??
       "ai.thinkwork.spaces.desktop.dev",
-    desktopLocalPiEnabled: resolveDesktopLocalPiEnabled(mergedEnv, stage),
     deepLinkScheme: optionalEnv(mergedEnv.THINKWORK_DESKTOP_SCHEME),
     rendererUrl: optionalEnv(mergedEnv.ELECTRON_RENDERER_URL),
     apiUrl: optionalEnv(mergedEnv.VITE_API_URL),
@@ -103,19 +101,4 @@ function optionalEnv(value: string | undefined): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function resolveDesktopLocalPiEnabled(
-  env: NodeJS.ProcessEnv,
-  stage: string,
-): boolean {
-  const explicit =
-    optionalEnv(env.THINKWORK_DESKTOP_LOCAL_PI_ENABLED) ??
-    optionalEnv(env.VITE_DESKTOP_LOCAL_PI_ENABLED);
-  if (explicit) return parseBooleanEnv(explicit);
-  return false;
-}
-
-function parseBooleanEnv(value: string): boolean {
-  return /^(1|true|yes|on|enabled)$/i.test(value.trim());
 }

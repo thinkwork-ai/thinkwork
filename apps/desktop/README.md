@@ -33,24 +33,12 @@ Dev mode launches Electron directly. Packaged-app behavior such as default
 protocol ownership, app identity, signing, notarization, and update metadata is
 validated through packaged builds.
 
-## Desktop Local Pi
+## Agent Execution
 
-The desktop local Pi sidecar is disabled by default. It can still be enabled
-explicitly for investigation with:
-
-```bash
-VITE_DESKTOP_LOCAL_PI_ENABLED=true
-```
-
-When the gate is off, the Electron bridge reports Pi as unavailable and Spaces
-continues to use the managed AgentCore dispatch path. When the gate is on, main
-starts the supervised sidecar and writes redacted diagnostics under the
-app-owned user data directory at `pi-diagnostics/pi-sidecar.log`.
-
-Diagnostics must not contain raw AWS credentials, Hindsight or OAuth tokens,
-finalizer secrets, signed S3 query material, tenant/user/agent identifiers, or
-user message bodies. Use `docs/runbooks/desktop-local-pi-sidecar.md` for the
-dogfood smoke checklist and log inspection guidance.
+The desktop app is a client for deployed ThinkWork services. Pi agent execution
+runs through AWS-managed AgentCore isolation; the Electron shell does not start
+or expose a local Pi sidecar, local `just-bash` sandbox, or desktop-local agent
+IPC bridge.
 
 ## Stage And Channel Identity
 
@@ -191,6 +179,5 @@ current process lifetime but must sign in again after quitting.
 
 ## Related Runbooks
 
-- `docs/runbooks/desktop-local-pi-sidecar.md`
 - `docs/solutions/runbooks/update-cognito-callback-urls-2026-05-22.md`
 - `docs/solutions/runbooks/rotate-apple-developer-credentials-2026-05-22.md`

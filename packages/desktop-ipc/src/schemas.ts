@@ -214,138 +214,6 @@ export const ReportInstallOutcomeRequestSchema = z
   .strict();
 export const ReportInstallOutcomeResponseSchema = VoidResponseSchema;
 
-export const PiSidecarStatusSchema = z.enum([
-  "unavailable",
-  "starting",
-  "healthy",
-  "restarting",
-  "stopping",
-  "stopped",
-  "crashed",
-  "error",
-]);
-
-export const PiSidecarErrorSchema = z
-  .object({
-    message: z.string().min(1),
-    code: z.string().min(1).optional(),
-  })
-  .strict();
-
-export const PiSidecarStateSchema = z
-  .object({
-    status: PiSidecarStatusSchema,
-    pid: z.number().int().positive().nullable(),
-    version: z.string().min(1).nullable(),
-    restartCount: z.number().int().nonnegative(),
-    startedAt: z.string().min(1).nullable(),
-    updatedAt: z.string().min(1),
-    lastExitCode: z.number().int().nullable(),
-    lastError: PiSidecarErrorSchema.nullable(),
-  })
-  .strict();
-
-export const PiTurnAttachmentSchema = z
-  .object({
-    attachmentId: z.string().min(1),
-    s3Key: z.string().min(1),
-    name: z.string().min(1),
-    mimeType: z.string().min(1),
-    sizeBytes: z.number().int().nonnegative(),
-  })
-  .strict();
-
-export const PiStartTurnRequestSchema = z
-  .object({
-    agentId: z.string().min(1),
-    threadId: z.string().min(1),
-    messageId: z.string().min(1).optional(),
-    userMessage: z.string().min(1),
-    messageAttachments: z.array(PiTurnAttachmentSchema).optional(),
-  })
-  .strict();
-
-export const PiPrewarmWorkspaceRequestSchema = z
-  .object({
-    agentId: z.string().min(1),
-    spaceId: z.string().min(1),
-  })
-  .strict();
-
-export const PiPrewarmWorkspaceResponseSchema = z
-  .object({
-    accepted: z.boolean(),
-    requestId: z.string().min(1),
-    skippedReason: z.string().min(1).optional(),
-  })
-  .strict();
-
-export const PiStartTurnResponseSchema = z
-  .object({
-    accepted: z.literal(true),
-    requestId: z.string().min(1),
-  })
-  .strict();
-
-export const PiCancelTurnRequestSchema = z
-  .object({
-    requestId: z.string().min(1),
-  })
-  .strict();
-
-export const PiCancelTurnResponseSchema = z
-  .object({
-    cancelled: z.boolean(),
-  })
-  .strict();
-
-export const PiStartEvalRunRequestSchema = z
-  .object({
-    tenantId: z.string().min(1),
-    categories: z.array(z.string().min(1)).optional(),
-    testCaseIds: z.array(z.string().min(1)).optional(),
-    model: z.string().min(1).nullable().optional(),
-    spaceId: z.string().min(1).nullable().optional(),
-    parallelThreads: z.number().int().min(1).max(8).optional(),
-  })
-  .strict();
-
-export const PiStartEvalRunResponseSchema = z
-  .object({
-    accepted: z.literal(true),
-    requestId: z.string().min(1),
-    runId: z.string().min(1),
-    totalTests: z.number().int().nonnegative(),
-  })
-  .strict();
-
-export const PiCancelEvalRunRequestSchema = z
-  .object({
-    requestId: z.string().min(1),
-  })
-  .strict();
-
-export const PiCancelEvalRunResponseSchema = z
-  .object({
-    cancelled: z.boolean(),
-  })
-  .strict();
-
-export const GetPiStatusRequestSchema = EmptyRequestSchema;
-export const GetPiStatusResponseSchema = PiSidecarStateSchema;
-export const PiStatusEventSchema = PiSidecarStateSchema;
-export const PiDiagnosticEventSchema = z
-  .object({
-    level: z.enum(["info", "warn", "error"]),
-    message: z.string().min(1),
-    emittedAt: z.string().min(1),
-    source: z.enum(["main", "sidecar"]),
-    requestId: z.string().min(1).nullable(),
-    threadId: z.string().min(1).nullable(),
-    threadTurnId: z.string().min(1).nullable(),
-  })
-  .strict();
-
 // ---- Thread notifications ----
 
 // Renderer → main: raise a native notification for a thread. The main process
@@ -375,74 +243,6 @@ export const WindowFocusEventSchema = z
     focused: z.boolean(),
   })
   .strict();
-
-// ---- Local Pi workspace inspector (read-only) ----
-
-// A node in the rendered cache tree. Recursive: directories carry children.
-// `path` is the POSIX-style path relative to the cache root; `truncated` marks
-// a directory whose contents were cut off by the walk's depth/node caps. The
-// model keeps `name`/`path` separate so later human-friendly labeling can
-// derive display text without losing the raw segment.
-export interface WorkspaceTreeNode {
-  name: string;
-  path: string;
-  kind: "file" | "dir";
-  children?: WorkspaceTreeNode[];
-  truncated?: boolean;
-}
-
-export const WorkspaceTreeNodeSchema: z.ZodType<WorkspaceTreeNode> = z.lazy(
-  () =>
-    z
-      .object({
-        name: z.string(),
-        path: z.string(),
-        kind: z.enum(["file", "dir"]),
-        children: z.array(WorkspaceTreeNodeSchema).optional(),
-        truncated: z.boolean().optional(),
-      })
-      .strict(),
-);
-
-export const ReadWorkspaceTreeRequestSchema = EmptyRequestSchema;
-// Discriminated on `status` so the renderer never collapses "nothing synced
-// yet" (empty) into a real read failure (error).
-export const ReadWorkspaceTreeResponseSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      status: z.literal("ok"),
-      tree: z.array(WorkspaceTreeNodeSchema),
-      truncated: z.boolean(),
-    })
-    .strict(),
-  z.object({ status: z.literal("empty") }).strict(),
-  z.object({ status: z.literal("error"), code: z.string() }).strict(),
-]);
-
-export const ReadWorkspaceFileRequestSchema = z
-  .object({ path: z.string().min(1) })
-  .strict();
-// `ok.language` is a Shiki bundled-language id (or "text"); the main process
-// maps it from the file extension with a plaintext fallback so the renderer
-// never feeds Shiki an unmapped language.
-export const ReadWorkspaceFileResponseSchema = z.discriminatedUnion("status", [
-  z
-    .object({
-      status: z.literal("ok"),
-      content: z.string(),
-      language: z.string(),
-    })
-    .strict(),
-  z
-    .object({
-      status: z.literal("too-large"),
-      size: z.number().int().nonnegative(),
-    })
-    .strict(),
-  z.object({ status: z.literal("binary") }).strict(),
-  z.object({ status: z.literal("vanished") }).strict(),
-  z.object({ status: z.literal("error"), code: z.string() }).strict(),
-]);
 
 export const ChannelSchemas = {
   getSessionTokens: {
@@ -497,41 +297,9 @@ export const ChannelSchemas = {
     request: ReportInstallOutcomeRequestSchema,
     response: ReportInstallOutcomeResponseSchema,
   },
-  getPiStatus: {
-    request: GetPiStatusRequestSchema,
-    response: GetPiStatusResponseSchema,
-  },
-  prewarmPiWorkspace: {
-    request: PiPrewarmWorkspaceRequestSchema,
-    response: PiPrewarmWorkspaceResponseSchema,
-  },
-  startPiTurn: {
-    request: PiStartTurnRequestSchema,
-    response: PiStartTurnResponseSchema,
-  },
-  cancelPiTurn: {
-    request: PiCancelTurnRequestSchema,
-    response: PiCancelTurnResponseSchema,
-  },
-  startPiEvalRun: {
-    request: PiStartEvalRunRequestSchema,
-    response: PiStartEvalRunResponseSchema,
-  },
-  cancelPiEvalRun: {
-    request: PiCancelEvalRunRequestSchema,
-    response: PiCancelEvalRunResponseSchema,
-  },
   raiseThreadNotification: {
     request: RaiseThreadNotificationRequestSchema,
     response: RaiseThreadNotificationResponseSchema,
-  },
-  readWorkspaceTree: {
-    request: ReadWorkspaceTreeRequestSchema,
-    response: ReadWorkspaceTreeResponseSchema,
-  },
-  readWorkspaceFile: {
-    request: ReadWorkspaceFileRequestSchema,
-    response: ReadWorkspaceFileResponseSchema,
   },
 } as const;
 
@@ -559,40 +327,8 @@ export type UpdateTelemetryEvent = z.infer<typeof UpdateTelemetryEventSchema>;
 export type ReportInstallOutcomeRequest = z.infer<
   typeof ReportInstallOutcomeRequestSchema
 >;
-export type PiSidecarStatus = z.infer<typeof PiSidecarStatusSchema>;
-export type PiSidecarState = z.infer<typeof PiSidecarStateSchema>;
-export type PiDiagnosticEvent = z.infer<typeof PiDiagnosticEventSchema>;
-export type PiPrewarmWorkspaceRequest = z.infer<
-  typeof PiPrewarmWorkspaceRequestSchema
->;
-export type PiPrewarmWorkspaceResponse = z.infer<
-  typeof PiPrewarmWorkspaceResponseSchema
->;
-export type PiStartTurnRequest = z.infer<typeof PiStartTurnRequestSchema>;
-export type PiStartTurnResponse = z.infer<typeof PiStartTurnResponseSchema>;
-export type PiCancelTurnRequest = z.infer<typeof PiCancelTurnRequestSchema>;
-export type PiCancelTurnResponse = z.infer<typeof PiCancelTurnResponseSchema>;
-export type PiStartEvalRunRequest = z.infer<typeof PiStartEvalRunRequestSchema>;
-export type PiStartEvalRunResponse = z.infer<
-  typeof PiStartEvalRunResponseSchema
->;
-export type PiCancelEvalRunRequest = z.infer<
-  typeof PiCancelEvalRunRequestSchema
->;
-export type PiCancelEvalRunResponse = z.infer<
-  typeof PiCancelEvalRunResponseSchema
->;
 export type RaiseThreadNotificationRequest = z.infer<
   typeof RaiseThreadNotificationRequestSchema
 >;
 export type OpenThreadEvent = z.infer<typeof OpenThreadEventSchema>;
 export type WindowFocusEvent = z.infer<typeof WindowFocusEventSchema>;
-export type ReadWorkspaceFileRequest = z.infer<
-  typeof ReadWorkspaceFileRequestSchema
->;
-export type ReadWorkspaceTreeResponse = z.infer<
-  typeof ReadWorkspaceTreeResponseSchema
->;
-export type ReadWorkspaceFileResponse = z.infer<
-  typeof ReadWorkspaceFileResponseSchema
->;

@@ -5209,10 +5209,10 @@ None.
 ## Status
 
 - Plan: `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
-- Branch: `codex/agentcore-u1`
-- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u1`
+- Branch: `codex/agentcore-u2`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u2`
 - Started: `2026-06-02T13:42:51Z`
-- Current unit: U1 Remove Spaces desktop-local dispatch and surfaces.
+- Current unit: U2 Remove Electron Pi sidecar and IPC bridge.
 - Target branch: `main`
 
 ## U0 Implementation Notes
@@ -5301,6 +5301,66 @@ None.
 ## U1 CI / PR
 
 - Opened [#1989](https://github.com/thinkwork-ai/thinkwork/pull/1989).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `116665de0113d1855a4d1e570998067e8aa29c6f`.
+- Remote branch `codex/agentcore-u1` deleted; local U1 worktree and branch removed.
+
+## U2 Implementation Notes
+
+- Started: `2026-06-02T14:27:40Z`.
+- Synced from `origin/main` after U1 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u2` on branch
+  `codex/agentcore-u2`.
+- Removed the Electron Pi sidecar entrypoint, sidecar runtime modules, local
+  workspace-cache reader, local turn/eval runners, and the associated desktop
+  tests.
+- Removed all Pi sidecar IPC channels, schemas, bridge typings, preload bridge
+  methods, and main-process handlers.
+- Removed desktop-local Pi environment toggles, sidecar build inputs, runtime
+  aliases, and desktop-only sidecar dependencies from `apps/desktop`.
+- Updated Spaces bridge mocks and evaluation run detail behavior so current
+  cancellation uses the managed GraphQL path while old `desktop-pi` and
+  `desktop-local` provenance remains visible as legacy history.
+- Regenerated `pnpm-lock.yaml` with pnpm after removing the desktop-only
+  runtime dependencies. The lockfile is intentionally treated as pnpm-owned, not
+  Prettier-formatted.
+
+## U2 Verification Log
+
+- `pnpm install` completed in the U2 worktree; optional native rebuild warnings
+  for `node-liblzma`/`canvas` were non-fatal.
+- `pnpm --filter @thinkwork/desktop-ipc typecheck` passed.
+- `pnpm --filter @thinkwork/desktop typecheck` passed.
+- `pnpm --filter @thinkwork/spaces typecheck` passed after removing the
+  remaining eval-detail `bridge.pi` cancellation path.
+- `pnpm --filter @thinkwork/desktop-ipc test` passed (11 tests).
+- `pnpm --filter @thinkwork/desktop test` passed (12 files, 87 tests).
+- Impacted Spaces tests passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsEvalRunDetail.test.tsx src/components/settings/SettingsEvaluations.test.ts src/components/workbench/TaskThreadView.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/context/AuthContext.test.tsx src/components/update-banner.test.tsx src/lib/token-storage/desktop-bridge.test.ts`.
+- `pnpm --filter @thinkwork/desktop build` passed and no longer emits a
+  `pi-sidecar` entry.
+- Root `pnpm lint` passed.
+- Root `pnpm typecheck` passed.
+- `bash scripts/verify-supply-chain.sh` passed after restoring pnpm-native
+  lockfile formatting.
+- `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/verify-supply-chain.test.ts`
+  passed (12 tests).
+- Source sweep for retired desktop-local bridge terms found only intentional
+  negative/regression text: README non-support wording, env retirement tests,
+  and a Spaces assertion that no `just-bash` text is shown.
+- `git diff --check` passed.
+- Touched-file Prettier check passed with
+  `pnpm dlx prettier@3.8.2 --check ...` excluding `pnpm-lock.yaml`.
+- Broad `pnpm test` completed with one unrelated local broad-suite timeout in
+  `packages/api/src/lib/__tests__/plugin-zip-safety.test.ts`. The same file
+  passed immediately in isolation with
+  `pnpm --filter @thinkwork/api test -- src/lib/__tests__/plugin-zip-safety.test.ts`
+  (10 tests), so this is recorded as local contention/noise rather than a U2
+  regression.
+
+## U2 CI / PR
+
+- Opened [#1990](https://github.com/thinkwork-ai/thinkwork/pull/1990).
 - Pending: CI monitoring, squash merge, branch cleanup.
 
 ## Blockers
