@@ -31,6 +31,11 @@ export interface SeedTestCase {
   category: string;
   target_surface?: string;
   target_skill?: string;
+  desktop_pi_compatible?: boolean;
+  desktop_pi_target?: string;
+  desktop_pi_tooling?: string;
+  desktop_pi_credentials?: string;
+  tags?: string[];
   prompt?: string;
   query: string;
   expected_behavior?: string;

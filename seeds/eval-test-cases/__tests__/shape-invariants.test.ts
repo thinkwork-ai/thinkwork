@@ -42,6 +42,23 @@ const TARGET_SKILL_BY_FILE: Record<string, string> = {
   "red-team-skill-workspace.json": "workspace",
 };
 
+const DESKTOP_PI_TARGET_BY_SURFACE: Record<string, string> = {
+  agent: "local-agent",
+  computer: "workspace-artifact",
+};
+
+const DESKTOP_PI_TARGET_BY_SKILL: Record<string, string> = {
+  filesystem: "local-workspace-filesystem",
+  github: "github-skill-unavailable",
+  workspace: "hydrated-workspace-context",
+};
+
+const DESKTOP_PI_CREDENTIALS_BY_SKILL: Record<string, string> = {
+  filesystem: "none-required",
+  github: "github-credentials-not-present",
+  workspace: "none-required",
+};
+
 const ALLOWED_RED_TEAM_CATEGORIES = new Set([
   "red-team-prompt-injection",
   "red-team-tool-misuse",
@@ -101,6 +118,11 @@ interface SeedCase {
   category?: unknown;
   target_surface?: unknown;
   target_skill?: unknown;
+  desktop_pi_compatible?: unknown;
+  desktop_pi_target?: unknown;
+  desktop_pi_tooling?: unknown;
+  desktop_pi_credentials?: unknown;
+  tags?: unknown;
   prompt?: unknown;
   query?: unknown;
   expected_behavior?: unknown;
@@ -115,6 +137,70 @@ function readSeedFile(fileName: string): SeedCase[] {
     true,
   );
   return parsed as SeedCase[];
+}
+
+function expectDesktopPiMetadata(
+  fileName: string,
+  testCase: SeedCase,
+  targetSurface: "agent" | "computer" | "skill",
+) {
+  const targetSkill = testCase.target_skill as string | undefined;
+  const expectedDesktopTarget =
+    targetSurface === "skill" && targetSkill
+      ? DESKTOP_PI_TARGET_BY_SKILL[targetSkill]
+      : DESKTOP_PI_TARGET_BY_SURFACE[targetSurface];
+  const expectedCredentials =
+    targetSurface === "skill" && targetSkill
+      ? DESKTOP_PI_CREDENTIALS_BY_SKILL[targetSkill]
+      : "none-required";
+
+  expect(testCase.desktop_pi_compatible, `${fileName}:${testCase.name}`).toBe(
+    true,
+  );
+  expect(testCase.desktop_pi_target, `${fileName}:${testCase.name}`).toBe(
+    expectedDesktopTarget,
+  );
+  expect(typeof testCase.desktop_pi_tooling).toBe("string");
+  expect(
+    (testCase.desktop_pi_tooling as string).length,
+    `${fileName}:${testCase.name}`,
+  ).toBeGreaterThan(40);
+  expect(testCase.desktop_pi_credentials, `${fileName}:${testCase.name}`).toBe(
+    expectedCredentials,
+  );
+  expect(Array.isArray(testCase.tags), `${fileName}:${testCase.name}`).toBe(
+    true,
+  );
+  expect(testCase.tags).toContain("desktop-pi");
+  expect(testCase.tags).toContain(`surface:${targetSurface}`);
+  expect(testCase.tags).toContain(`category:${testCase.category}`);
+  expect(testCase.tags).toContain(`desktop-target:${expectedDesktopTarget}`);
+  if (targetSkill) {
+    expect(testCase.tags).toContain(`skill:${targetSkill}`);
+  }
+}
+
+function expectDesktopPiProse(fileName: string, testCase: SeedCase) {
+  const authoredText = [
+    testCase.prompt,
+    testCase.query,
+    testCase.expected_behavior,
+    ...((testCase.assertions as SeedAssertion[] | undefined) ?? []).map(
+      (assertion) => assertion.value,
+    ),
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n");
+
+  expect(authoredText, `${fileName}:${testCase.name}`).not.toMatch(
+    /\bComputer\b/,
+  );
+  expect(authoredText, `${fileName}:${testCase.name}`).not.toMatch(
+    /\bAgentCore\b|\bagentcore\b/,
+  );
+  expect(authoredText, `${fileName}:${testCase.name}`).not.toMatch(
+    /native macOS shell|host shell|\/Users\//i,
+  );
 }
 
 function expectNewRedTeamShape(
@@ -147,6 +233,8 @@ function expectNewRedTeamShape(
     expect(typeof testCase.threshold).toBe("number");
     expect(testCase.threshold as number).toBeGreaterThan(0);
     expect(testCase.threshold as number).toBeLessThanOrEqual(1);
+    expectDesktopPiMetadata(fileName, testCase, targetSurface);
+    expectDesktopPiProse(fileName, testCase);
 
     expect(Array.isArray(testCase.agentcore_evaluator_ids)).toBe(true);
     expect(
