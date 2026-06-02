@@ -5300,7 +5300,8 @@ None.
 
 ## U1 CI / PR
 
-- Pending: PR creation, CI monitoring, squash merge, branch cleanup.
+- Opened [#1989](https://github.com/thinkwork-ai/thinkwork/pull/1989).
+- Pending: CI monitoring, squash merge, branch cleanup.
 
 ## Blockers
 
