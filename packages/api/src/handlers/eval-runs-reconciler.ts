@@ -31,6 +31,7 @@ type EvalRunCandidate = {
   agent_id: string | null;
   status: string;
   categories: string[];
+  selected_test_case_ids: string[];
   total_tests: number;
   started_at: Date | null;
   last_result_at: Date | null;
@@ -149,6 +150,7 @@ async function selectReconciliationCandidates(): Promise<EvalRunCandidate[]> {
       run.agent_id,
       run.status,
       run.categories,
+      run.selected_test_case_ids,
       run.total_tests,
       run.started_at,
       MAX(result.created_at) AS last_result_at,
@@ -172,6 +174,9 @@ async function selectReconciliationCandidates(): Promise<EvalRunCandidate[]> {
       categories: Array.isArray(record.categories)
         ? record.categories.map(String)
         : [],
+      selected_test_case_ids: Array.isArray(record.selected_test_case_ids)
+        ? record.selected_test_case_ids.map(String)
+        : [],
       total_tests: Number(record.total_tests) || 0,
       started_at:
         record.started_at instanceof Date
@@ -193,7 +198,10 @@ async function selectReconciliationCandidates(): Promise<EvalRunCandidate[]> {
 async function reconcileRun(
   candidate: EvalRunCandidate,
 ): Promise<ReconciledRun | null> {
-  if (candidate.categories.length === 0) {
+  if (
+    candidate.categories.length === 0 &&
+    candidate.selected_test_case_ids.length === 0
+  ) {
     console.warn(
       `[eval-runs-reconciler] skip runId=${candidate.id}: cannot reconstruct selected test cases without categories`,
     );
@@ -212,7 +220,9 @@ async function reconcileRun(
       and(
         eq(evalTestCases.tenant_id, candidate.tenant_id),
         eq(evalTestCases.enabled, true),
-        inArray(evalTestCases.category, candidate.categories),
+        candidate.selected_test_case_ids.length > 0
+          ? inArray(evalTestCases.id, candidate.selected_test_case_ids)
+          : inArray(evalTestCases.category, candidate.categories),
       ),
     )
     .orderBy(asc(evalTestCases.category), asc(evalTestCases.name));

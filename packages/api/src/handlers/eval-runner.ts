@@ -83,10 +83,14 @@ export function evalWorkerMessageGroupIdForMessage(
 }
 
 export function excludesComputerSurfaceByDefault(
-  run: Pick<typeof evalRuns.$inferSelect, "computer_id">,
+  run: Pick<typeof evalRuns.$inferSelect, "computer_id" | "execution_target">,
   selectedTestCaseIds: string[],
 ): boolean {
-  return !run.computer_id && selectedTestCaseIds.length === 0;
+  return (
+    run.execution_target !== "desktop-pi" &&
+    !run.computer_id &&
+    selectedTestCaseIds.length === 0
+  );
 }
 
 /** Test seam: dispatcher tests inject a fake SQS client. */
@@ -141,7 +145,11 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       throw new Error("EVAL_FANOUT_QUEUE_URL is not configured");
     }
 
-    const selectedTestCaseIds = selectedTestCaseIdsFromEvent(event);
+    const eventSelectedTestCaseIds = selectedTestCaseIdsFromEvent(event);
+    const selectedTestCaseIds =
+      eventSelectedTestCaseIds.length > 0
+        ? eventSelectedTestCaseIds
+        : run.selected_test_case_ids;
     const caseConditions = [
       eq(evalTestCases.tenant_id, run.tenant_id),
       eq(evalTestCases.enabled, true),

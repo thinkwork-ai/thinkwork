@@ -24,12 +24,30 @@ Plan: `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`
   `pnpm --filter @thinkwork/api build`, and `git diff --check`.
 - 2026-06-01: `pnpm install` completed and updated `pnpm-lock.yaml`; optional native packages `node-liblzma` and `canvas` reported local Node 25/pkg-config build noise, but pnpm completed successfully.
 - 2026-06-01: Opened PR #1961 for U1.
+- 2026-06-01: PR #1961 checks passed (`cla`, `lint`, `test`, `typecheck`, `verify`) and was squash-merged.
+- 2026-06-01: Created U2 worktree from merged `origin/main`.
+- 2026-06-01: Added Desktop Pi eval run REST preparation/callback handler, run provenance fields, selected test-case persistence, GraphQL/schema updates, and Lambda/API Gateway wiring.
+- 2026-06-01: Local verification passed for U2:
+  `pnpm --filter @thinkwork/api test -- src/handlers/desktop-eval-runs.test.ts src/handlers/eval-runner.test.ts src/graphql/resolvers/evaluations/index.test.ts src/handlers/eval-runs-reconciler.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm schema:build`,
+  `pnpm --filter @thinkwork/spaces codegen`,
+  `pnpm --filter @thinkwork/mobile codegen`,
+  `pnpm --filter thinkwork-cli codegen`,
+  `bash scripts/build-lambdas.sh desktop-eval-runs`,
+  `pnpm --filter thinkwork-cli typecheck`,
+  `pnpm --filter @thinkwork/spaces typecheck`,
+  `pnpm --filter @thinkwork/database-pg typecheck`,
+  `terraform fmt terraform/modules/app/lambda-api/handlers.tf`, and
+  `git diff --check`.
+- 2026-06-01: Opened PR #1962 for U2.
 
 ## Pull Requests
 
 | Unit | Branch | PR | Status | Notes |
 | --- | --- | --- | --- | --- |
-| U1 | `codex/desktop-pi-evals-u1-scoring` | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | open | Waiting for CI. |
+| U1 | `codex/desktop-pi-evals-u1-scoring` | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | merged | Checks passed; squash-merged. |
+| U2 | `codex/desktop-pi-evals-u2-api` | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | open | Waiting for CI. |
 
 ## CI Failures
 

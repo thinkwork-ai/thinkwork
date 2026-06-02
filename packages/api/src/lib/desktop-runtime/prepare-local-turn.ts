@@ -90,6 +90,7 @@ export interface PrepareLocalPiWorkspacePrewarmInput {
   auth: DesktopRuntimeAuth;
   agentId: string;
   spaceId: string;
+  purpose?: "chat" | "eval";
 }
 
 export type PreparedLocalPiRuntimeSession =
@@ -1134,12 +1135,14 @@ export async function prepareLocalPiWorkspacePrewarm(
     throw err;
   }
 
+  const prewarmPurpose = input.purpose === "eval" ? "eval" : "prewarm";
+  const prewarmThreadSlug = `${prewarmPurpose}-${input.spaceId}-${caller.id}`;
   const renderedWorkspace = await deps.renderWorkspace({
     tenantId: caller.tenantId,
     agentId: input.agentId,
     spaceId: input.spaceId,
-    threadId: `prewarm-${input.spaceId}-${caller.id}`,
-    threadSlug: `prewarm-${input.spaceId}-${caller.id}`,
+    threadId: prewarmThreadSlug,
+    threadSlug: prewarmThreadSlug,
     userId: caller.id,
     agentBlockedTools: runtimeConfig.blockedTools,
   });
