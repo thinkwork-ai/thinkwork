@@ -5209,11 +5209,24 @@ None.
 ## Status
 
 - Plan: `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
-- Branch: `codex/agentcore-u3`
-- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u3`
+- Branch: `codex/agentcore-u4`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u4`
 - Started: `2026-06-02T13:42:51Z`
-- Current unit: U3 Retire desktop-local backend contracts.
+- Current unit: U4 Remove mobile on-device harness execution.
 - Target branch: `main`
+
+## Unit Ledger
+
+| Unit | Scope                                             | Branch               | PR                                                           | State       | Notes                                                                   |
+| ---- | ------------------------------------------------- | -------------------- | ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------- |
+| U0   | Spike: Route desktop and mobile to AgentCore now  | `codex/agentcore-u0` | [#1988](https://github.com/thinkwork-ai/thinkwork/pull/1988) | Merged      | CI passed; squash merged as `f0c378623a6a2a68168901a9147595c6fb09b656`. |
+| U1   | Remove Spaces desktop-local dispatch and surfaces | `codex/agentcore-u1` | [#1989](https://github.com/thinkwork-ai/thinkwork/pull/1989) | Merged      | CI passed; squash merged as `116665de0113d1855a4d1e570998067e8aa29c6f`. |
+| U2   | Remove Electron Pi sidecar and IPC bridge         | `codex/agentcore-u2` | [#1990](https://github.com/thinkwork-ai/thinkwork/pull/1990) | Merged      | CI passed; squash merged as `66011fc16c39684d5193ba4bf42e9f1049b8ab0c`. |
+| U3   | Retire desktop-local backend contracts            | `codex/agentcore-u3` | [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991) | Merged      | CI passed; squash merged as `39395b16afe539891aae8c4b50db9e19dd2db7b2`. |
+| U4   | Remove mobile on-device harness execution         | `codex/agentcore-u4` | [#1992](https://github.com/thinkwork-ai/thinkwork/pull/1992) | In progress | Local verification is complete; watching required CI.                   |
+| U5   | Instrument AgentCore turn latency by phase        | Pending              | Pending                                                      | Pending     | Starts after U4 merges.                                                 |
+| U6   | Improve managed-path perceived responsiveness     | Pending              | Pending                                                      | Pending     | Starts after U5 merges.                                                 |
+| U7   | Update docs, tests, and operational language      | Pending              | Pending                                                      | Pending     | Final cleanup and docs alignment.                                       |
 
 ## U0 Implementation Notes
 
@@ -5432,6 +5445,61 @@ None.
 ## U3 CI / PR
 
 - Opened [#1991](https://github.com/thinkwork-ai/thinkwork/pull/1991).
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `39395b16afe539891aae8c4b50db9e19dd2db7b2`.
+- Remote branch `codex/agentcore-u3` deleted; local U3 worktree and branch
+  removed.
+
+## U4 Implementation Notes
+
+- Started: `2026-06-02T15:18:30Z`.
+- Synced from `origin/main` after U3 and created isolated worktree
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u4` on branch
+  `codex/agentcore-u4`.
+- Removed the mobile `ChatScreen` on-device harness branch so chat cannot route
+  through `useHarnessChat`.
+- Deleted the mobile harness turn runner, harness chat hook/core, Bedrock
+  harness provider, local bash extension, just-bash browser type shim, and Pi
+  harness smoke scripts/tests.
+- Removed `just-bash` from the mobile package, Metro resolver, Vitest alias,
+  and `pnpm-lock.yaml`.
+- Updated the mobile Pi compatibility contract so it no longer claims local
+  bash durability or local changed-file diff capture as implemented mobile
+  capabilities.
+- Added an AgentCore-first mobile guard test that asserts the deleted harness
+  entrypoints, `just-bash` aliases, and smoke scripts stay removed.
+
+## U4 Verification Log
+
+- `pnpm install` completed in the U4 worktree and refreshed `pnpm-lock.yaml`;
+  optional `canvas` native rebuild failed under local Node 25/missing
+  `pkg-config`, but install exited successfully.
+- Source sweep for mobile harness terms found only the new negative guard test;
+  no active mobile source or lockfile reference to `runThreadHarnessTurn`,
+  `useHarnessChat`, `local-bash-extension`, `just-bash`, or `pi-harness`
+  remains.
+- Focused U4 mobile tests passed:
+  `pnpm --filter @thinkwork/mobile test -- lib/agentcore-first-mobile.test.ts lib/agent/compat/pi-contract.test.ts lib/thread-agent-mode.test.ts`
+  (17 tests).
+- Full mobile Vitest passed: `pnpm --filter @thinkwork/mobile test` (31 files,
+  176 tests).
+- `pnpm --filter @thinkwork/react-native-sdk build` passed.
+- `git diff --check` passed.
+- `pnpm --filter @thinkwork/mobile exec tsc --noEmit` still fails on existing
+  unrelated mobile type debt in fleet/routines/navigation/ui/hook files. The
+  failure list contains no references to the deleted harness files or exports,
+  so this is recorded as non-gating for U4.
+- Root `pnpm lint` passed.
+- Root `pnpm typecheck` passed.
+- `bash scripts/verify-supply-chain.sh` passed.
+- Root `pnpm test` passed, including API, Spaces, Admin, Mobile, AgentCore Pi,
+  and release tests.
+- Touched-file Prettier check passed with
+  `pnpm dlx prettier@3.8.2 --check ...`.
+
+## U4 CI / PR
+
+- Opened [#1992](https://github.com/thinkwork-ai/thinkwork/pull/1992).
 - Pending: CI monitoring, squash merge, branch cleanup.
 
 ## Blockers

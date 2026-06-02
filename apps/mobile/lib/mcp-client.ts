@@ -4,11 +4,11 @@
  * 1. `callMcpTool` (legacy): calls the shared ThinkWork Builder MCP server with a
  *    static bearer (EXPO_PUBLIC_MCP_BUILDER_URL / EXPO_PUBLIC_MCP_AUTH_TOKEN). Kept
  *    for existing callers; not tenant-scoped, no tools/list.
- * 2. `listTenantTools` + `callTenantTool` (the on-device agent path): hit the
+ * 2. `listTenantTools` + `callTenantTool`: hit the
  *    platform MCP proxy (`/api/mcp/tools/{list,call}`) authenticated as the signed-in
  *    user (Cognito idToken). The proxy resolves the agent's tenant MCP servers + auth
  *    server-side, so no long-lived secret lives on the device. These back the
- *    `mcpToolsExtension` (the harness's first Pi-style extension).
+ *    mobile MCP helper extension in tests and mobile-safe client capability code.
  */
 
 const MCP_URL =
@@ -17,8 +17,8 @@ const MCP_URL =
 
 const MCP_TOKEN = process.env.EXPO_PUBLIC_MCP_AUTH_TOKEN || "";
 
-// apiBase = EXPO_PUBLIC_GRAPHQL_URL minus /graphql — same derivation the harness's
-// BedrockModelProvider and persist-turn use, so all device→platform calls share one host.
+// apiBase = EXPO_PUBLIC_GRAPHQL_URL minus /graphql, matching the other
+// device-to-platform helper clients.
 const DEFAULT_API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
   /\/graphql$/,
   "",

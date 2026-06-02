@@ -1,12 +1,10 @@
-// A React Native version of Pi.
+// A React Native Pi-shaped test/runtime library.
 //
 // The primary surface mirrors Pi: `createAgentSession({ model, systemPrompt, tools,
 // modelProvider })` → a stateful session with `messages`, `tools`, `prompt()`, and
 // `subscribe()`, plus flat `defineTool` tools. Runs in Hermes (no Node runtime, no native
-// addons); cloud Bedrock inference today via the ModelProvider seam, with a local on-device
-// model (llama.rn / ExecuTorch / MLC / Apple Foundation Models) dropping into the same seam
-// when phones can run agent-capable models. Tools are mobile-safe capabilities + network
-// actions, never shell/filesystem mutation.
+// addons). Product Pi execution runs through managed AgentCore; this package keeps pure
+// helpers for tests and mobile-safe client capabilities, never shell/filesystem mutation.
 
 export * from "./types";
 
@@ -78,8 +76,6 @@ export {
   toolResponse,
 } from "./providers/mock";
 export type { MockScript } from "./providers/mock";
-export { BedrockModelProvider } from "./providers/bedrock";
-export type { BedrockModelProviderOptions } from "./providers/bedrock";
 
 // Tools.
 export { createMcpTool } from "./tools/mcp-tool";
@@ -137,12 +133,6 @@ export type {
   SessionRecord,
   SessionStore,
 } from "./session-store";
-export { runThreadHarnessTurn } from "./thread-turn";
-export type {
-  RunThreadHarnessTurnInput,
-  RunThreadHarnessTurnDeps,
-  ThreadHarnessTurnResult,
-} from "./thread-turn";
 export { recordTurn } from "./persist-turn";
 export type {
   MobileSessionTurnEvidence,

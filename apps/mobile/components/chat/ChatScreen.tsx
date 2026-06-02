@@ -13,7 +13,6 @@ import { Plus } from "lucide-react-native";
 import { Text } from "@/components/ui/typography";
 import { useGatewayChat, type ChatMessage } from "@/hooks/useGatewayChat";
 import { useGraphQLChat } from "@/hooks/useGraphQLChat";
-import { useHarnessChat } from "@/hooks/useHarnessChat";
 import { ChatBubble } from "./ChatBubble";
 import { ChatInput, type SelectedMention } from "./ChatInput";
 import type { MentionCandidate } from "./MentionAutocomplete";
@@ -129,35 +128,7 @@ function GatewayChatScreen(props: ChatScreenProps) {
   );
 }
 
-function OnDeviceChatScreen(props: ChatScreenProps) {
-  // The agent loop runs on the device (Hermes) against the cloud Bedrock provider.
-  const { messages, send, connectionStatus, isStreaming, historyLoaded } =
-    useHarnessChat({ agentName: props.agentName });
-  return (
-    <ChatView
-      messages={messages}
-      send={send}
-      connectionStatus={connectionStatus}
-      isStreaming={isStreaming}
-      historyLoaded={historyLoaded}
-      agentName={props.agentName}
-      agents={props.agents}
-      selectedAgentId={props.selectedAgentId}
-      onSelectAgent={props.onSelectAgent}
-      title={props.title}
-      onNewChat={props.onNewChat}
-      mentionCandidates={props.mentionCandidates}
-      hideHeader={props.hideHeader}
-    />
-  );
-}
-
 export function ChatScreen(props: ChatScreenProps) {
-  // On-device harness mode: the loop runs locally on the device.
-  if (props.agentType === "on-device") {
-    return <OnDeviceChatScreen {...props} />;
-  }
-
   // GraphQL path for default Team chat unless an explicit
   // session key is provided (thread-bound gateway session mode).
   if (!props.sessionKey) {
