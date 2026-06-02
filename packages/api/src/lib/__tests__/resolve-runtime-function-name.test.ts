@@ -6,26 +6,26 @@ import {
 } from "../resolve-runtime-function-name.js";
 
 describe("normalizeAgentRuntimeType", () => {
-  it("keeps pi and defaults everything else to strands", () => {
+  it("keeps pi and coerces legacy runtime selectors to pi", () => {
     expect(normalizeAgentRuntimeType("pi")).toBe("pi");
-    expect(normalizeAgentRuntimeType("strands")).toBe("strands");
-    expect(normalizeAgentRuntimeType(null)).toBe("strands");
-    expect(normalizeAgentRuntimeType("unknown")).toBe("strands");
+    expect(normalizeAgentRuntimeType("flue")).toBe("pi");
+    expect(normalizeAgentRuntimeType("strands")).toBe("pi");
   });
 
-  it("treats stale flue payloads as pi during the rename window", () => {
-    expect(normalizeAgentRuntimeType("flue")).toBe("pi");
+  it("defaults null and unknown runtime values to pi", () => {
+    expect(normalizeAgentRuntimeType(null)).toBe("pi");
+    expect(normalizeAgentRuntimeType("unknown")).toBe("pi");
   });
 });
 
 describe("resolveRuntimeFunctionName", () => {
-  it("uses the Strands function for strands runtime", () => {
+  it("uses the Pi function for legacy strands runtime selections", () => {
     expect(
       resolveRuntimeFunctionName("strands", {
         AGENTCORE_FUNCTION_NAME: "thinkwork-dev-agentcore",
         AGENTCORE_PI_FUNCTION_NAME: "thinkwork-dev-agentcore-pi",
       }),
-    ).toBe("thinkwork-dev-agentcore");
+    ).toBe("thinkwork-dev-agentcore-pi");
   });
 
   it("uses the Pi function for pi runtime", () => {
@@ -39,7 +39,7 @@ describe("resolveRuntimeFunctionName", () => {
 
   it("fails loudly when the selected runtime is not provisioned", () => {
     expect(() =>
-      resolveRuntimeFunctionName("pi", {
+      resolveRuntimeFunctionName("strands", {
         AGENTCORE_FUNCTION_NAME: "thinkwork-dev-agentcore",
         AGENTCORE_PI_FUNCTION_NAME: "",
       }),

@@ -6,6 +6,82 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Remove Legacy Strands AgentCore Runtime - 2026-06-02
+
+- Plan:
+  `docs/plans/2026-06-02-003-refactor-remove-strands-runtime-plan.md`.
+- Target branch: `main`.
+- Current unit: U1 Characterize Strands usage and data safety.
+- Current branch: `codex/remove-strands-u1`.
+- Current worktree: `.Codex/worktrees/remove-strands-u1`.
+
+| Unit                                                               | Branch                    | PR                                                           | State       | Notes                                                                                                                                                                           |
+| ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Characterize Strands usage and data safety                      | `codex/remove-strands-u1` | [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004) | In progress | Add the plan to source control, record autopilot status, lock runtime contract tests so legacy/null/unknown runtime values resolve to Pi, and classify Strands cleanup targets. |
+| U2 Make API, GraphQL, and Database runtime defaults Pi-only        | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U3 Make deploy and release workflows Pi-only                       | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U4 Move shared Terraform resources out of the Strands module       | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U5 Delete Strands container source and retire Strands-only scripts | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| U7 End-to-end verification and deployment proof                    | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+
+### Progress Log
+
+- Synced from `origin/main` and created isolated U1 worktree
+  `.Codex/worktrees/remove-strands-u1` on branch
+  `codex/remove-strands-u1`.
+- Began U1 by reading `AGENTS.md`, the Strands retirement plan, runtime
+  normalization tests, GraphQL runtime parser tests, and current Strands
+  workflow/runtime references.
+- Added characterization coverage for runtime normalization, GraphQL runtime
+  parsing, chat dispatch, and wakeup dispatch. Legacy `strands`, `flue`, null,
+  and unknown runtime selectors now resolve toward Pi at the dispatch boundary.
+- Verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/__tests__/resolve-runtime-function-name.test.ts src/graphql/resolvers/tenant-agent/runtime.test.ts src/graphql/resolvers/tenant-agent/updateTenantAgent.mutation.test.ts src/lib/__tests__/resolve-agent-runtime-config.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts src/handlers/wakeup-processor.system-prompt.test.ts src/lib/evals/agentcore-direct.test.ts`
+  (7 files, 52 tests);
+  `pnpm --filter @thinkwork/api typecheck`; `git diff --check`;
+  `pnpm dlx prettier --check <changed U1 files>`. The repo-local
+  `pnpm format:check -- <files>` script could not run because this worktree
+  does not currently have a local `prettier` binary on PATH.
+- Opened U1 PR [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004).
+
+### U1 Strands Reference Classification
+
+Delete or retire in later units:
+
+- `packages/agentcore-strands/**`, after relocating the Code Interpreter
+  sandbox `sitecustomize.py` helper that still feeds the sandbox base image.
+- Strands build, update, release, and verification paths in
+  `.github/workflows/deploy.yml`, `.github/workflows/release.yml`,
+  `.github/workflows/verify.yml`, `scripts/post-deploy.sh`,
+  `scripts/update-agentcore-runtime-image.sh`,
+  `scripts/release/**`, and `scripts/supply-chain-baseline.txt`.
+- Strands defaults, constraints, and active runtime labels in
+  `packages/database-pg/src/schema/agents.ts`,
+  `packages/database-pg/src/schema/agent-templates.ts`,
+  `packages/database-pg/graphql/types/agents.graphql`,
+  `packages/api/src/graphql/utils.ts`, and generated GraphQL clients.
+- Strands Lambda/runtime resources, Strands SSM runtime wiring, and
+  Strands-only IAM checks currently under
+  `terraform/modules/app/agentcore-runtime`, `terraform/modules/thinkwork`,
+  and `terraform/modules/app/lambda-api`.
+- Active docs/runbooks/AGENTS guidance that describe Strands as the current
+  runtime or deploy target.
+
+Preserve or migrate carefully:
+
+- `packages/agentcore/**` is not the same package as
+  `packages/agentcore-strands/**`; it contains auth-agent, tenant-router, and
+  shared container helpers/tests. Delete only files later proven Strands-only.
+- Shared AgentCore ECR repository and async DLQ currently owned by the Strands
+  module must move to a neutral/Pi-owned Terraform home before the Strands
+  module is retired.
+- AgentCore Pi, Browser, Code Interpreter, Memory, observability, workspace
+  rendering, S3 workspace sync, and Pi deploy freshness checks remain active.
+- Historical `docs/brainstorms/**`, `docs/plans/**`, and `docs/solutions/**`
+  references can remain when clearly historical; active operational guidance
+  should be updated or marked superseded.
+
 ## Desktop Pi RedTeam Evals - 2026-06-01
 
 - Plan:
