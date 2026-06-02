@@ -2502,6 +2502,7 @@ function describeLastAssistantMessage(
   const assistant = readRecord(findLastAssistantMessage(messages));
   if (!assistant) return { assistantFound: false };
   const content = assistant.content;
+  const assistantErrorDetails = extractAssistantErrorDetails(assistant);
   return {
     assistantFound: true,
     assistantStopReason: stringValue(assistant.stopReason),
@@ -2510,6 +2511,7 @@ function describeLastAssistantMessage(
           (block) => stringValue(readRecord(block)?.type) ?? typeof block,
         )
       : typeof content,
+    ...(assistantErrorDetails ? { assistantErrorDetails } : {}),
   };
 }
 
@@ -2522,7 +2524,112 @@ function localPiAssistantErrorMessage(
   const stopReason =
     stringValue(assistant?.stopReason) ?? stringValue(assistant?.stop_reason);
   if (stopReason !== "error") return null;
-  return "Local Pi SDK returned an assistant error turn with no assistant text.";
+  const details = assistant ? extractAssistantErrorDetails(assistant) : null;
+  const detailText = details ? formatAssistantErrorDetails(details) : null;
+  return detailText
+    ? `Local Pi SDK returned an assistant error turn with no assistant text (${detailText}).`
+    : "Local Pi SDK returned an assistant error turn with no assistant text.";
+}
+
+function extractAssistantErrorDetails(
+  assistant: Record<string, unknown>,
+): Record<string, string> | null {
+  const details = new Map<string, string>();
+  collectAssistantErrorDetails(assistant, [], false, details);
+  if (details.size === 0) return null;
+  return Object.fromEntries([...details.entries()].slice(0, 8));
+}
+
+function collectAssistantErrorDetails(
+  value: unknown,
+  pathSegments: string[],
+  inErrorContext: boolean,
+  details: Map<string, string>,
+): void {
+  if (details.size >= 8 || pathSegments.length > 6) return;
+  if (!value || typeof value !== "object") {
+    if (!inErrorContext || pathSegments.length === 0) return;
+    const key = pathSegments[pathSegments.length - 1] ?? "value";
+    if (!isAssistantErrorFieldKey(key)) return;
+    const serialized = serializeAssistantErrorDetail(value);
+    if (serialized) details.set(pathSegments.join("."), serialized);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    if (!inErrorContext) return;
+    for (const [index, entry] of value.entries()) {
+      collectAssistantErrorDetails(
+        entry,
+        [...pathSegments, String(index)],
+        inErrorContext,
+        details,
+      );
+    }
+    return;
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (details.size >= 8) return;
+    if (isAssistantErrorDetailSkippedKey(key)) continue;
+    const childPath = [...pathSegments, key];
+    const childInErrorContext =
+      inErrorContext || isAssistantErrorContainerKey(key);
+    if (
+      childInErrorContext &&
+      isAssistantErrorFieldKey(key) &&
+      (entry === null || typeof entry !== "object")
+    ) {
+      const serialized = serializeAssistantErrorDetail(entry);
+      if (serialized) details.set(childPath.join("."), serialized);
+      continue;
+    }
+    collectAssistantErrorDetails(
+      entry,
+      childPath,
+      childInErrorContext,
+      details,
+    );
+  }
+}
+
+function isAssistantErrorContainerKey(key: string): boolean {
+  return /error|exception|failure|fault|cause|metadata|diagnostic|provider|response/i.test(
+    key,
+  );
+}
+
+function isAssistantErrorFieldKey(key: string): boolean {
+  return /^(error|errorMessage|error_message|message|code|status|statusCode|status_code|name|type|reason)$/i.test(
+    key,
+  );
+}
+
+function isAssistantErrorDetailSkippedKey(key: string): boolean {
+  return /^(content|messages|prompt|input|output|text)$/i.test(key);
+}
+
+function serializeAssistantErrorDetail(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (
+    typeof value !== "string" &&
+    typeof value !== "number" &&
+    typeof value !== "boolean"
+  ) {
+    return null;
+  }
+  const serialized = String(value).trim();
+  if (!serialized) return null;
+  return serialized.length > 240
+    ? `${serialized.slice(0, 237)}...`
+    : serialized;
+}
+
+function formatAssistantErrorDetails(details: Record<string, string>): string {
+  return Object.entries(details)
+    .slice(0, 4)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join("; ");
 }
 
 function collectToolNames(messages: unknown[]): string[] {

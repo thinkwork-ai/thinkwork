@@ -383,13 +383,11 @@ describe("runLocalDesktopTurn", () => {
         },
       })),
     };
+    const finalizeBodies: Array<Record<string, unknown>> = [];
     const fetchImpl = vi.fn(async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      expect(body).toMatchObject({
-        thread_turn_id: "turn-1",
-        runtime_type: "pi",
-        status: "error",
-      });
+      finalizeBodies.push(
+        JSON.parse(String(init?.body)) as Record<string, unknown>,
+      );
       return Response.json({ ok: true }, { status: 200 });
     });
 
@@ -409,6 +407,69 @@ describe("runLocalDesktopTurn", () => {
       errorMessage:
         "Local Pi SDK returned an assistant error turn with no assistant text.",
     });
+    expect(finalizeBodies).toHaveLength(1);
+    expect(finalizeBodies[0]).toMatchObject({
+      thread_turn_id: "turn-1",
+      runtime_type: "pi",
+      status: "failed",
+      error_message:
+        "Local Pi SDK returned an assistant error turn with no assistant text.",
+    });
+  });
+
+  it("includes provider details for SDK assistant error turns when available", async () => {
+    const sdk: PiSdkModuleLike = {
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [
+            {
+              role: "assistant",
+              stopReason: "error",
+              content: [],
+              metadata: {
+                providerError: {
+                  name: "ThrottlingException",
+                  message: "Rate exceeded for model invocation.",
+                  statusCode: 429,
+                },
+              },
+            },
+          ],
+          prompt: vi.fn(async () => {}),
+          dispose: vi.fn(),
+        },
+      })),
+    };
+    const finalizeBodies: Array<Record<string, unknown>> = [];
+    const fetchImpl = vi.fn(async (_url, init) => {
+      finalizeBodies.push(
+        JSON.parse(String(init?.body)) as Record<string, unknown>,
+      );
+      return Response.json({ ok: true }, { status: 200 });
+    });
+
+    const result = await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "failed",
+      output: "",
+    });
+    expect(result.errorMessage).toContain(
+      "Local Pi SDK returned an assistant error turn with no assistant text",
+    );
+    expect(result.errorMessage).toContain("ThrottlingException");
+    expect(result.errorMessage).toContain("statusCode: 429");
+    expect(finalizeBodies).toHaveLength(1);
+    expect(finalizeBodies[0]?.error_message).toContain("ThrottlingException");
+    expect(finalizeBodies[0]?.error_message).toContain("statusCode: 429");
   });
 
   it("captures assistant output from wrapped SDK message entries and provider text blocks", async () => {
