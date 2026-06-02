@@ -18,6 +18,7 @@ import {
   mkdir,
   readdir,
   readFile,
+  realpath,
   rm,
   stat,
   writeFile,
@@ -333,7 +334,7 @@ export async function bootstrapWorkspace(
 
   await mkdir(localDir, { recursive: true });
   const local = await listLocalPaths(localDir);
-  const cachePath = hydrateCachePath(localDir);
+  const cachePath = await hydrateCachePath(localDir);
   const cache = await readHydrateCache(cachePath);
 
   let synced = 0;
@@ -389,8 +390,12 @@ export async function bootstrapWorkspace(
   };
 }
 
-function hydrateCachePath(localDir: string): string {
-  return `${localDir}.hydrate-cache.json`;
+async function hydrateCachePath(localDir: string): Promise<string> {
+  try {
+    return `${await realpath(localDir)}.hydrate-cache.json`;
+  } catch {
+    return `${localDir}.hydrate-cache.json`;
+  }
 }
 
 async function readHydrateCache(

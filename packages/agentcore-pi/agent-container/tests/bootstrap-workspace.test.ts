@@ -5,7 +5,15 @@
  * GETs.
  */
 
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
@@ -463,6 +471,71 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(sourceReads).toHaveLength(0);
     const files = await readFiles(tmp);
     expect(files["AGENTS.md"]).toBe("# Agent");
+  });
+
+  it("stores warm hydrate cache on the symlink target backing WORKSPACE_DIR", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "pi-bootstrap-link-"));
+    const target = path.join(root, "tmp-workspace");
+    const workspaceLink = path.join(root, "workspace");
+    await mkdir(target, { recursive: true });
+    await symlink(target, workspaceLink);
+
+    stubRenderedManifest({
+      manifest: {
+        "AGENTS.md": {
+          sourceKey: `${SOURCE_PREFIX}AGENTS.md`,
+          etag: '"agent-v1"',
+        },
+      },
+    });
+    stubObject(`${SOURCE_PREFIX}AGENTS.md`, "# Agent");
+
+    const first = await bootstrapWorkspace(
+      "acme",
+      "marco",
+      workspaceLink,
+      s3,
+      "test",
+      {
+        workspacePrefix: THREAD_PREFIX,
+      },
+    );
+    expect(first).toMatchObject({ synced: 1, total: 1 });
+    const cache = JSON.parse(
+      await readFile(`${target}.hydrate-cache.json`, "utf8"),
+    );
+    expect(cache.entries["AGENTS.md"].etag).toBe('"agent-v1"');
+
+    await rm(`${workspaceLink}.hydrate-cache.json`, { force: true });
+    s3Mock.reset();
+    stubRenderedManifest({
+      manifest: {
+        "AGENTS.md": {
+          sourceKey: `${SOURCE_PREFIX}AGENTS.md`,
+          etag: '"agent-v1"',
+        },
+      },
+    });
+
+    const second = await bootstrapWorkspace(
+      "acme",
+      "marco",
+      workspaceLink,
+      s3,
+      "test",
+      {
+        workspacePrefix: THREAD_PREFIX,
+      },
+    );
+
+    expect(second).toMatchObject({ synced: 0, skipped: 1, total: 1 });
+    const sourceReads = s3Mock
+      .commandCalls(GetObjectCommand)
+      .filter(
+        (call: { args: [{ input: { Key?: string } }] }) =>
+          call.args[0].input.Key === `${SOURCE_PREFIX}AGENTS.md`,
+      );
+    expect(sourceReads).toHaveLength(0);
   });
 
   it("deletes files removed from the hydrate manifest even when other files are skipped", async () => {
