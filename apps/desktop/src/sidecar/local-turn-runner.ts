@@ -1810,33 +1810,50 @@ function createPiSdkModelConfig(
   primeBedrockRuntimeAuth(authStorage, logger);
   const modelRegistry = sdk.ModelRegistry.create(authStorage);
   const requestedModelId = stringValue(invocation.model);
+  const requestedBedrockModelId = requestedModelId
+    ? normalizeBedrockModelId(requestedModelId)
+    : undefined;
   const requestedBedrockModel =
-    requestedModelId && isLikelyBedrockModelId(requestedModelId)
-      ? modelRegistry.find("amazon-bedrock", requestedModelId)
+    requestedBedrockModelId && isLikelyBedrockModelId(requestedBedrockModelId)
+      ? modelRegistry.find("amazon-bedrock", requestedBedrockModelId)
       : undefined;
-  const model =
-    requestedBedrockModel ??
-    modelRegistry.find("amazon-bedrock", DEFAULT_BEDROCK_MODEL_ID);
+  if (requestedModelId) {
+    if (!requestedBedrockModel) {
+      logger.warn("local Pi requested Bedrock model unavailable", {
+        requestedModelId,
+        requestedBedrockModelId: requestedBedrockModelId ?? null,
+      });
+      throw new Error(
+        `Requested Desktop Pi model ${requestedModelId} is not available in the Pi SDK Bedrock registry.`,
+      );
+    }
+    return {
+      options: { authStorage, modelRegistry, model: requestedBedrockModel },
+      resolvedModelId: stringValue(readRecord(requestedBedrockModel)?.id),
+    };
+  }
+
+  const model = modelRegistry.find("amazon-bedrock", DEFAULT_BEDROCK_MODEL_ID);
 
   if (!model) {
     logger.warn("local Pi Bedrock model unavailable in SDK registry", {
-      requestedModelId: requestedModelId ?? null,
-      fallbackModelId: DEFAULT_BEDROCK_MODEL_ID,
+      defaultModelId: DEFAULT_BEDROCK_MODEL_ID,
     });
     return { options: { authStorage, modelRegistry } };
-  }
-
-  if (!requestedBedrockModel && requestedModelId) {
-    logger.info("local Pi model routed to Bedrock fallback", {
-      requestedModelId,
-      fallbackModelId: DEFAULT_BEDROCK_MODEL_ID,
-    });
   }
 
   return {
     options: { authStorage, modelRegistry, model },
     resolvedModelId: stringValue(readRecord(model)?.id),
   };
+}
+
+function normalizeBedrockModelId(modelId: string): string {
+  const normalized = modelId.trim();
+  if (/^kimi-k/i.test(normalized)) {
+    return `moonshotai.${normalized}`;
+  }
+  return normalized;
 }
 
 function primeBedrockRuntimeAuth(
@@ -1866,6 +1883,7 @@ function isLikelyBedrockModelId(modelId: string): boolean {
     normalized.startsWith("deepseek.") ||
     normalized.startsWith("meta.") ||
     normalized.startsWith("mistral.") ||
+    normalized.startsWith("moonshotai.") ||
     normalized.startsWith("us.") ||
     normalized.startsWith("eu.") ||
     normalized.startsWith("apac.") ||
