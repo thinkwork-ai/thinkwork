@@ -152,6 +152,18 @@ function buildCurrentRequesterContext(payload: PiInvocationPayload): string {
     .join("\n");
 }
 
+function buildRequesterProfilePolicy(includeUserMd: boolean): string {
+  if (!includeUserMd) return "";
+  return [
+    "## Requester Profile Policy",
+    "",
+    "The rendered workspace includes `User/USER.md` for the signed-in user who triggered this turn.",
+    "For profile, preference, family, identity, contact, timezone, and personal facts, use `User/USER.md` as the first source of truth.",
+    "When `User/USER.md` contains the needed fact, answer directly from it. Do not call `recall`, `reflect`, or other memory tools to re-fetch facts already present in `User/USER.md`.",
+    "Use memory tools only when `User/USER.md` does not contain the needed fact, the user explicitly asks to search memory, or the task requires broader prior-context synthesis.",
+  ].join("\n");
+}
+
 export async function composeSystemPromptFromFiles(
   args: ComposeSystemPromptFromFilesArgs,
 ): Promise<string> {
@@ -159,12 +171,14 @@ export async function composeSystemPromptFromFiles(
   const parts: string[] = [`Current date: ${formatDate(now)}`];
   const requesterContext = buildCurrentRequesterContext(args.payload);
   if (requesterContext) parts.push(requesterContext);
-  parts.push(buildRuntimeToolPolicy(args.availableToolNames));
-
-  let filesLoaded = 0;
   const includeUserMd =
     typeof args.payload.user_id === "string" &&
     args.payload.user_id.trim().length > 0;
+  const requesterProfilePolicy = buildRequesterProfilePolicy(includeUserMd);
+  if (requesterProfilePolicy) parts.push(requesterProfilePolicy);
+  parts.push(buildRuntimeToolPolicy(args.availableToolNames));
+
+  let filesLoaded = 0;
   for (const filename of PROMPT_FILES) {
     if (filename === "User/USER.md" && !includeUserMd) continue;
     const content = await args.readPromptFile(filename);

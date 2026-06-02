@@ -175,6 +175,26 @@ old`,
       content: "# User\n",
       lastModified: "2026-05-22T09:03:00.000Z",
     },
+    "tenants/acme/users/eric/knowledge-pack.md": {
+      content: "# Distilled User Knowledge\n",
+      lastModified: "2026-05-22T09:03:10.000Z",
+    },
+    "tenants/acme/users/eric/memory/preferences.md": {
+      content: "# Preferences\n",
+      lastModified: "2026-05-22T09:03:20.000Z",
+    },
+    "tenants/acme/users/eric/memory/.snapshots/run-1/memory.md": {
+      content: "# Internal snapshot\n",
+      lastModified: "2026-05-22T09:03:30.000Z",
+    },
+    "tenants/acme/users/eric/memory/working/2026-05-22.md": {
+      content: "# Working notes\n",
+      lastModified: "2026-05-22T09:03:40.000Z",
+    },
+    "tenants/acme/users/eric/memory/reports/thread-idle/run-1.md": {
+      content: "# Idle report\n",
+      lastModified: "2026-05-22T09:03:50.000Z",
+    },
     "tenants/acme/spaces/board-pack/TOOLS.md": {
       content:
         "---\nadds: [warehouse]\nrestricts:\n  - send_email\n---\n# Space Tools\n",
@@ -297,6 +317,22 @@ function compatibleHydrateManifest(
           sourceKey: "tenants/acme/users/eric/USER.md",
           sourcePrefix: "tenants/acme/users/eric/",
           sourcePath: "USER.md",
+          readOnly: false,
+        },
+        {
+          path: "User/knowledge-pack.md",
+          owner: "user",
+          sourceKey: "tenants/acme/users/eric/knowledge-pack.md",
+          sourcePrefix: "tenants/acme/users/eric/",
+          sourcePath: "knowledge-pack.md",
+          readOnly: false,
+        },
+        {
+          path: "User/memory/preferences.md",
+          owner: "user",
+          sourceKey: "tenants/acme/users/eric/memory/preferences.md",
+          sourcePrefix: "tenants/acme/users/eric/",
+          sourcePath: "memory/preferences.md",
           readOnly: false,
         },
         {
@@ -428,6 +464,16 @@ describe("renderWorkspaceTuple", () => {
           sourceKey: "tenants/acme/users/eric/USER.md",
         }),
         expect.objectContaining({
+          owner: "user",
+          path: "User/knowledge-pack.md",
+          sourceKey: "tenants/acme/users/eric/knowledge-pack.md",
+        }),
+        expect.objectContaining({
+          owner: "user",
+          path: "User/memory/preferences.md",
+          sourceKey: "tenants/acme/users/eric/memory/preferences.md",
+        }),
+        expect.objectContaining({
           owner: "thread_notes",
           path: "Thread/notes/findings.md",
           sourceKey: "tenants/acme/threads/thread-1/notes/findings.md",
@@ -444,6 +490,13 @@ describe("renderWorkspaceTuple", () => {
         expect.objectContaining({ path: "Agent/AGENTS.md" }),
         expect.objectContaining({ path: "Agent/workspace/LEGACY.md" }),
         expect.objectContaining({ path: "Spaces/board-pack/TOOLS.md" }),
+        expect.objectContaining({
+          path: "User/memory/.snapshots/run-1/memory.md",
+        }),
+        expect.objectContaining({ path: "User/memory/working/2026-05-22.md" }),
+        expect.objectContaining({
+          path: "User/memory/reports/thread-idle/run-1.md",
+        }),
       ]),
     );
     expect(result.hydrateManifest.statusMounts).toEqual([

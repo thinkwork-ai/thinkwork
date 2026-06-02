@@ -146,7 +146,9 @@ describe("createMemoryExtension", () => {
     );
     expect(getTool(tools, "recall").description).toMatch(/REQUIRED FOLLOW-UP/);
     expect(getTool(tools, "recall").description).toMatch(/reflect/);
+    expect(getTool(tools, "recall").description).toMatch(/User\/USER\.md/);
     expect(getTool(tools, "reflect").description).toMatch(/AFTER `recall`/);
+    expect(getTool(tools, "reflect").description).toMatch(/User\/USER\.md/);
   });
 
   it("reflect tool synthesizes through the provider and returns the answer text", async () => {

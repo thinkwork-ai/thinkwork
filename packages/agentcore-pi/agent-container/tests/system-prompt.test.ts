@@ -133,7 +133,13 @@ describe("composeSystemPrompt", () => {
     expect(prompt).toContain("Name: Eric Odom");
     expect(prompt).toContain("Email: eric@thinkwork.ai");
     expect(prompt).toContain('email "me"');
+    expect(prompt).toContain("## Requester Profile Policy");
+    expect(prompt).toContain("first source of truth");
+    expect(prompt).toContain("Do not call `recall`, `reflect`");
     expect(prompt.indexOf("<current_requester>")).toBeLessThan(
+      prompt.indexOf("## Requester Profile Policy"),
+    );
+    expect(prompt.indexOf("## Requester Profile Policy")).toBeLessThan(
       prompt.indexOf("## Runtime Tool Policy"),
     );
     expect(prompt.indexOf("## Runtime Tool Policy")).toBeLessThan(
