@@ -5,7 +5,9 @@ import { type ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
   CalendarClock,
+  Cloud,
   Loader2,
+  MonitorCog,
   Play,
   ShieldCheck,
   SlidersHorizontal,
@@ -55,6 +57,13 @@ import {
   StartEvalRunMutation,
 } from "@/lib/evaluation-queries";
 import { cn, relativeTime } from "@/lib/utils";
+import {
+  canStartDesktopPiEval,
+  desktopPiEvalTargetStatus,
+  getDesktopBridge,
+} from "@/lib/desktop-runtime";
+import { useDesktopLocalPiStatus } from "@/lib/use-desktop-local-pi-status";
+import { isDesktopPiEvalRunProvenance } from "@/components/settings/eval-result-detail";
 import {
   desktopToolbarButtonClassName,
   desktopToolbarGapClassName,
@@ -112,7 +121,30 @@ type RunRow = {
   completedAt: string | null;
   startedAt: string | null;
   createdAt: string;
+  executionTarget?: string | null;
+  runtimeHost?: string | null;
 };
+
+type EvalExecutionTarget = "cloud" | "desktop-pi";
+
+export function shouldShowDesktopPiEvalTarget(
+  status: ReturnType<typeof desktopPiEvalTargetStatus>,
+): boolean {
+  return status !== "hidden";
+}
+
+export function isStartEvaluationDisabled(input: {
+  submitting: boolean;
+  selectedModel: string;
+  target: EvalExecutionTarget;
+  desktopPiEnabled: boolean;
+}): boolean {
+  return (
+    input.submitting ||
+    !input.selectedModel ||
+    (input.target === "desktop-pi" && !input.desktopPiEnabled)
+  );
+}
 
 const runsColumns: ColumnDef<RunRow>[] = [
   {
@@ -147,6 +179,17 @@ const runsColumns: ColumnDef<RunRow>[] = [
     header: "Source",
     cell: ({ row }) => {
       const scheduledJobId = row.original.scheduledJobId;
+      if (isDesktopPiEvalRunProvenance(row.original)) {
+        return (
+          <Badge
+            variant="secondary"
+            className="gap-1 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+          >
+            <MonitorCog className="h-3 w-3" />
+            Desktop Pi
+          </Badge>
+        );
+      }
       if (!scheduledJobId)
         return <span className="text-xs text-muted-foreground">Manual</span>;
       return (
@@ -455,8 +498,18 @@ function RunEvaluationButton({
   const [open, setOpen] = useState(false);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_EVAL_MODEL_ID);
+  const [target, setTarget] = useState<EvalExecutionTarget>("cloud");
   const [submitting, setSubmitting] = useState(false);
   const [, startEvalRun] = useMutation(StartEvalRunMutation);
+  const navigate = useNavigate();
+  const localPiDisplayStatus = useDesktopLocalPiStatus();
+  const desktopPiStatus = desktopPiEvalTargetStatus(localPiDisplayStatus);
+  const desktopPiVisible = shouldShowDesktopPiEvalTarget(desktopPiStatus);
+  const desktopPiEnabled = canStartDesktopPiEval(desktopPiStatus);
+
+  useEffect(() => {
+    if (!desktopPiVisible && target === "desktop-pi") setTarget("cloud");
+  }, [desktopPiVisible, target]);
 
   function toggleCat(id: string) {
     setSelectedCats((cur) =>
@@ -467,6 +520,32 @@ function RunEvaluationButton({
   async function handleStart() {
     setSubmitting(true);
     try {
+      if (target === "desktop-pi") {
+        const bridge = getDesktopBridge();
+        if (!bridge?.pi || !desktopPiEnabled) {
+          alert("Desktop Pi is not available for evaluation runs.");
+          return;
+        }
+        try {
+          const result = await bridge.pi.startEvalRun({
+            tenantId,
+            model: selectedModel,
+            categories: selectedCats.length > 0 ? selectedCats : undefined,
+          });
+          onStarted();
+          setOpen(false);
+          navigate({
+            to: "/settings/evaluations/$runId",
+            params: { runId: result.runId },
+          });
+        } catch (error) {
+          alert(
+            `Run failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        return;
+      }
+
       const res = await startEvalRun({
         tenantId,
         input: {
@@ -516,6 +595,40 @@ function RunEvaluationButton({
             />
           </div>
 
+          {desktopPiVisible && (
+            <div className="flex flex-col gap-2">
+              <Label>Target</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={target === "cloud" ? "default" : "outline"}
+                  className="justify-start gap-2"
+                  onClick={() => setTarget("cloud")}
+                >
+                  <Cloud className="h-4 w-4" />
+                  Cloud
+                </Button>
+                <Button
+                  type="button"
+                  variant={target === "desktop-pi" ? "default" : "outline"}
+                  className="justify-start gap-2"
+                  disabled={!desktopPiEnabled}
+                  title={
+                    desktopPiEnabled
+                      ? "Desktop Pi"
+                      : desktopPiStatus === "busy"
+                        ? "Desktop Pi is running another local turn"
+                        : "Desktop Pi is unavailable"
+                  }
+                  onClick={() => setTarget("desktop-pi")}
+                >
+                  <MonitorCog className="h-4 w-4" />
+                  Desktop Pi
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             <Label>Categories</Label>
             <div className="flex flex-wrap gap-2">
@@ -545,7 +658,15 @@ function RunEvaluationButton({
           >
             Cancel
           </Button>
-          <Button onClick={handleStart} disabled={submitting || !selectedModel}>
+          <Button
+            onClick={handleStart}
+            disabled={isStartEvaluationDisabled({
+              submitting,
+              selectedModel,
+              target,
+              desktopPiEnabled,
+            })}
+          >
             {submitting ? "Starting…" : "Start Evaluation"}
           </Button>
         </DialogFooter>

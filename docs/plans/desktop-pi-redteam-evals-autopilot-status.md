@@ -4,9 +4,9 @@ Plan: `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`
 
 ## Current Unit
 
-- Unit: U3 Desktop IPC and sidecar eval execution
-- Branch: `codex/desktop-pi-evals-u3-sidecar`
-- Worktree: `.Codex/worktrees/desktop-pi-evals-u3-sidecar`
+- Unit: U4 Settings Evaluations Desktop Pi target
+- Branch: `codex/desktop-pi-evals-u4-settings`
+- Worktree: `.Codex/worktrees/desktop-pi-evals-u4-settings`
 - Started: 2026-06-01
 - Status: in progress
 
@@ -55,14 +55,24 @@ Plan: `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`
   `pnpm --filter @thinkwork/api typecheck`, and `git diff --check`.
 - 2026-06-01: `pnpm install` completed and updated `pnpm-lock.yaml`; optional native packages `node-liblzma` and `canvas` again reported local Node 25/pkg-config build noise, but pnpm exited successfully.
 - 2026-06-01: Opened PR #1963 for U3.
+- 2026-06-01: PR #1963 checks passed (`cla`, `lint`, `test`, `typecheck`, `verify`) and was squash-merged.
+- 2026-06-01: Removed U3 worktree/local branch and created U4 worktree from merged `origin/main`.
+- 2026-06-01: Added Settings Evaluations Desktop Pi target selection, bridge-backed run start, run-detail navigation, and Desktop Pi provenance badges in run list/detail.
+- 2026-06-01: Local verification passed for U4:
+  `pnpm --filter @thinkwork/spaces codegen`,
+  `pnpm --filter @thinkwork/spaces test -- SettingsEvaluations desktop-runtime eval-result-detail`,
+  `pnpm --filter @thinkwork/spaces typecheck`, and `git diff --check`.
+- 2026-06-01: `pnpm install` completed in the U4 worktree; optional native packages `node-liblzma` and `canvas` again reported local Node 25/pkg-config build noise, but pnpm exited successfully.
+- 2026-06-01: Opened PR #1964 for U4.
 
 ## Pull Requests
 
-| Unit | Branch                              | PR                                                           | Status      | Notes                                                                               |
-| ---- | ----------------------------------- | ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------- |
-| U1   | `codex/desktop-pi-evals-u1-scoring` | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | merged      | Checks passed; squash-merged.                                                       |
-| U2   | `codex/desktop-pi-evals-u2-api`     | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | merged      | CI passed after applying the dev-only manual migration and rerunning failed checks. |
-| U3   | `codex/desktop-pi-evals-u3-sidecar` | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | open        | Waiting for CI.                                                                     |
+| Unit | Branch                               | PR                                                           | Status      | Notes                                                                               |
+| ---- | ------------------------------------ | ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------- |
+| U1   | `codex/desktop-pi-evals-u1-scoring`  | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | merged      | Checks passed; squash-merged.                                                       |
+| U2   | `codex/desktop-pi-evals-u2-api`      | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | merged      | CI passed after applying the dev-only manual migration and rerunning failed checks. |
+| U3   | `codex/desktop-pi-evals-u3-sidecar`  | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | merged      | Checks passed; squash-merged.                                                       |
+| U4   | `codex/desktop-pi-evals-u4-settings` | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | open        | Waiting for CI.                                                                     |
 
 ## CI Failures
 

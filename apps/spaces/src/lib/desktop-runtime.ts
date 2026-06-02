@@ -45,6 +45,13 @@ export function isDesktopLocalPiReady(
   return status === "starting" || status === "healthy";
 }
 
+export type DesktopPiEvalTargetStatus =
+  | "hidden"
+  | "available"
+  | "starting"
+  | "busy"
+  | "unavailable";
+
 export type DesktopLocalPiDisplayStatus =
   | "hidden"
   | "starting"
@@ -66,6 +73,29 @@ export function desktopLocalPiDisplayStatus(input: {
   if (status === "healthy") return "healthy";
   if (status === "starting" || status === "restarting") return "starting";
   return status === "unavailable" ? "unavailable" : "fallback";
+}
+
+export function desktopPiEvalTargetStatus(
+  displayStatus: DesktopLocalPiDisplayStatus,
+): DesktopPiEvalTargetStatus {
+  switch (displayStatus) {
+    case "healthy":
+      return "available";
+    case "starting":
+      return "starting";
+    case "running":
+      return "busy";
+    case "hidden":
+      return "hidden";
+    default:
+      return "unavailable";
+  }
+}
+
+export function canStartDesktopPiEval(
+  status: DesktopPiEvalTargetStatus,
+): boolean {
+  return status === "available" || status === "starting";
 }
 
 export function normalizeDesktopNext(value: unknown): string | undefined {

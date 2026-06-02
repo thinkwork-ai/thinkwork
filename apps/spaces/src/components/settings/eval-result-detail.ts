@@ -47,6 +47,15 @@ const PASS_THRESHOLD = 0.7;
 
 export type EvaluatorDisplayStatus = "pass" | "fail" | "skipped" | "error";
 
+export function isDesktopPiEvalRunProvenance(run: {
+  executionTarget?: string | null;
+  runtimeHost?: string | null;
+}): boolean {
+  return (
+    run.executionTarget === "desktop-pi" || run.runtimeHost === "desktop-local"
+  );
+}
+
 export function parseAssertions(raw: unknown): AssertionResult[] {
   return parseArray(raw).filter(isAssertionResult);
 }

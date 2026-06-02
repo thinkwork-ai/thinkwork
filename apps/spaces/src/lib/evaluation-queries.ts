@@ -33,6 +33,8 @@ export const EvalRunsQuery = graphql(`
         agentId
         agentName
         scheduledJobId
+        executionTarget
+        runtimeHost
         startedAt
         completedAt
         createdAt
@@ -59,6 +61,8 @@ export const EvalRunQuery = graphql(`
       agentId
       agentName
       scheduledJobId
+      executionTarget
+      runtimeHost
       startedAt
       completedAt
       createdAt
@@ -181,7 +185,10 @@ export const StartEvalRunMutation = graphql(`
 `);
 
 export const CreateEvalTestCaseMutation = graphql(`
-  mutation CreateEvalTestCase($tenantId: ID!, $input: CreateEvalTestCaseInput!) {
+  mutation CreateEvalTestCase(
+    $tenantId: ID!
+    $input: CreateEvalTestCaseInput!
+  ) {
     createEvalTestCase(tenantId: $tenantId, input: $input) {
       id
       name
