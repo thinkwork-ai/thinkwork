@@ -70,6 +70,9 @@ export interface LocalDesktopTurnPayload {
 export interface PiSdkSessionLike {
   prompt(text: string, options?: Record<string, unknown>): Promise<void>;
   messages?: unknown[];
+  state?: {
+    messages?: unknown[];
+  };
   dispose?: () => void;
   abort?: () => Promise<void>;
   bindExtensions?: (bindings: Record<string, unknown>) => Promise<void>;
@@ -334,11 +337,12 @@ export async function runLocalDesktopTurn(
       }),
     );
     throwIfAborted(deps.signal);
-    const toolNames = collectToolNames(
-      preparedSdkSession.session.messages ?? [],
+    const sessionMessages = readPiSdkSessionMessages(
+      preparedSdkSession.session,
     );
+    const toolNames = collectToolNames(sessionMessages);
     logger.info("local Pi SDK prompt completed", {
-      messageCount: preparedSdkSession.session.messages?.length ?? 0,
+      messageCount: sessionMessages.length,
       toolCount: toolNames.length,
       tools: toolNames,
     });
@@ -347,6 +351,9 @@ export async function runLocalDesktopTurn(
       preparedSdkSession.session,
       preparedSdkSession.resolvedModelId,
     );
+    logger.info("local Pi SDK prompt output captured", {
+      outputChars: runResult.content.length,
+    });
     const changedFiles = await timings.measure("workspace_diff_ms", () =>
       collectDesktopWorkspaceChangedFiles({
         localDir: preparedWorkspace.localDir,
@@ -404,6 +411,7 @@ export async function runLocalDesktopTurn(
       error: error instanceof Error ? error.message : String(error),
       threadTurnId: payload.session.threadTurnId,
       partialOutput: partialRunResult?.content ? true : false,
+      partialOutputChars: partialRunResult?.content.length ?? 0,
     });
     const changedFiles = await collectDesktopWorkspaceChangedFiles({
       localDir: workspace?.localDir,
@@ -2145,9 +2153,10 @@ function buildRunResult(
   resolvedModelId?: string,
   diagnostics?: Record<string, unknown>,
 ): RunAgentLoopResult {
-  const assistant = findLastAssistantMessage(session.messages ?? []);
+  const sessionMessages = readPiSdkSessionMessages(session);
+  const assistant = findLastAssistantMessage(sessionMessages);
   const content = assistant ? assistantMessageText(assistant) : "";
-  const toolNames = collectToolNames(session.messages ?? []);
+  const toolNames = collectToolNames(sessionMessages);
   const toolInvocations = toolNames.map((name, index) => ({
     id: `desktop-local-tool-${index + 1}`,
     name,
@@ -2398,12 +2407,33 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   throw error;
 }
 
+function readPiSdkSessionMessages(session: PiSdkSessionLike): unknown[] {
+  if (Array.isArray(session.messages) && session.messages.length > 0) {
+    return session.messages;
+  }
+  if (Array.isArray(session.state?.messages)) return session.state.messages;
+  if (Array.isArray(session.messages)) return session.messages;
+  return [];
+}
+
 function findLastAssistantMessage(messages: unknown[]): unknown | null {
   for (let index = messages.length - 1; index >= 0; index--) {
-    const candidate = readRecord(messages[index]);
+    const candidate = unwrapPiSdkMessage(readRecord(messages[index]));
     if (candidate?.role === "assistant") return candidate;
   }
   return null;
+}
+
+function unwrapPiSdkMessage(
+  candidate: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!candidate) return null;
+  if (candidate.role === "assistant") return candidate;
+  if (candidate.type === "message") {
+    const message = readRecord(candidate.message);
+    if (message?.role === "assistant") return message;
+  }
+  return candidate;
 }
 
 function assistantMessageText(message: unknown): string {
@@ -2414,7 +2444,15 @@ function assistantMessageText(message: unknown): string {
     .map((block) => {
       if (typeof block === "string") return block;
       const record = readRecord(block);
-      if (record?.type === "text" && typeof record.text === "string") {
+      if (!record) return "";
+      const type = stringValue(record.type);
+      if (
+        (type === undefined || type === "text") &&
+        typeof record.text === "string"
+      ) {
+        return record.text;
+      }
+      if (type === "output_text" && typeof record.text === "string") {
         return record.text;
       }
       return "";

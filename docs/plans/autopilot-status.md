@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
 - Target branch: `main`.
-- Current unit: U9 Full-catalog Desktop Pi sweep and failure remediation.
-- Current branch: `codex/desktop-pi-evals-u9-full-sweep`.
-- Current worktree: `.Codex/worktrees/desktop-pi-evals-u9-full-sweep`.
+- Current unit: U10 Post-deploy Desktop Pi full sweep.
+- Current branch: `codex/desktop-pi-evals-u10-rerun`.
+- Current worktree: `.Codex/worktrees/desktop-pi-evals-u10-rerun`.
 
 | Unit                                              | Branch                                  | PR                                                           | State       | Notes                                                                                                   |
 | ------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
@@ -25,7 +25,8 @@ status: complete
 | U6 Full-catalog proof, docs, and guardrails       | `codex/desktop-pi-evals-u6-proof`       | [#1966](https://github.com/thinkwork-ai/thinkwork/pull/1966) | Merged      | Squash merged as `e04adb7f`; focused proof passed and full-run prep cleanup deployed through Terraform. |
 | U7 Failure-by-failure workspace remediation loop  | `codex/desktop-pi-evals-u7-remediation` | [#1967](https://github.com/thinkwork-ai/thinkwork/pull/1967) | Merged      | Squash merged as `1272d460`; lazy per-case Desktop Pi session prep deployed through Terraform.          |
 | U8 Bounded Desktop Pi eval parallelism            | `codex/desktop-pi-evals-u8-parallel`    | [#1968](https://github.com/thinkwork-ai/thinkwork/pull/1968) | Merged      | Squash merged as `e60c6571`; parallel sidecar workers and local cancellation propagation.               |
-| U9 Full-catalog Desktop Pi sweep/remediation      | `codex/desktop-pi-evals-u9-full-sweep`  | [#1969](https://github.com/thinkwork-ai/thinkwork/pull/1969) | In progress | Run the merged full catalog with bounded Desktop Pi parallelism, classify failures, and remediate.      |
+| U9 Full-catalog Desktop Pi sweep/remediation      | `codex/desktop-pi-evals-u9-full-sweep`  | [#1969](https://github.com/thinkwork-ai/thinkwork/pull/1969) | Merged      | Squash merged as `5c4df7e1`; concurrency default, partial-output capture, and workspace hardening.      |
+| U10 Post-deploy Desktop Pi full sweep             | `codex/desktop-pi-evals-u10-rerun`      | [#1970](https://github.com/thinkwork-ai/thinkwork/pull/1970) | In progress | Full sweep completed in 13m35s; patching SDK output capture before the next remediation pass.           |
 
 ### Progress Log
 
@@ -202,6 +203,39 @@ status: complete
   eval concurrency cap, workspace-default parity, and regression coverage.
 - Opened U9 PR
   [#1969](https://github.com/thinkwork-ai/thinkwork/pull/1969).
+- U9 PR
+  [#1969](https://github.com/thinkwork-ai/thinkwork/pull/1969) passed
+  required PR checks (`cla`, `lint`, `verify`, `typecheck`, `test`) and was
+  squash merged as `5c4df7e10b32639858af3087812163ddcf080364`; the remote
+  branch was deleted and the local worktree/branch were removed.
+- U9 post-merge `main` workflows passed `Lint`, `Supply Chain`, `Typecheck`,
+  `Test`, and `Deploy`. The deploy pipeline completed Bootstrap's
+  `Reseed workspace-defaults to existing tenants (version-aware)` step, so the
+  hardened defaults are available for the next live Desktop Pi run.
+- Synced from `origin/main` and created isolated U10 worktree
+  `.Codex/worktrees/desktop-pi-evals-u10-rerun` on branch
+  `codex/desktop-pi-evals-u10-rerun`.
+- U10 live Desktop Pi full sweep completed through the local desktop sidecar
+  runner and deployed Desktop eval APIs. Run
+  `d1320aa0-9f40-4352-b577-3dcf273176a6` evaluated all 189 cases with
+  concurrency 8 in about 13m35s, a roughly 2.4x improvement over the first
+  32m54s baseline. Result: 108 passed, 81 failed, 57.14% pass rate.
+- Category split for run `d1320aa0-9f40-4352-b577-3dcf273176a6`:
+  `red-team-data-boundary` 29/48 pass with 17 fail and 2 error,
+  `red-team-prompt-injection` 32/48 pass with 16 fail,
+  `red-team-safety-scope` 22/41 pass with 19 fail, and
+  `red-team-tool-misuse` 25/52 pass with 27 fail.
+- Failure triage found 78 of 81 failures had empty `actualOutput`, while only
+  three failures persisted visible assistant text. Before changing workspace
+  prompts again, U10 is hardening the Desktop Pi local runner's assistant-output
+  extraction so subsequent sweeps classify real model behavior instead of blank
+  telemetry.
+- Patched the Desktop Pi local turn runner to read SDK messages from either
+  `session.messages` or `session.state.messages`, unwrap SDK message entries,
+  capture provider text blocks without a `type` field, and log output character
+  counts without logging response content.
+- Opened U10 PR
+  [#1970](https://github.com/thinkwork-ai/thinkwork/pull/1970).
 
 ### Verification Log
 
@@ -277,12 +311,19 @@ status: complete
 - `pnpm --filter @thinkwork/desktop test -- local-turn-runner.test.ts eval-runner.test.ts`
   - passed.
 - `git diff --check` - passed.
+- U10 live Desktop Pi run
+  `d1320aa0-9f40-4352-b577-3dcf273176a6` - completed: 189/189 cases terminal,
+  108 pass, 81 fail, 57.14% pass rate, about 13m35s runtime.
+- `pnpm --filter @thinkwork/desktop test -- local-turn-runner.test.ts eval-runner.test.ts`
+  - passed after adding SDK message-state, wrapped-message, and provider text
+    block output-capture regressions.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- `git diff --check` - passed.
 
 ### Blockers
 
-None currently. The completed full run gives the first desktop baseline; the
-next live pass-rate check depends on merging and deploying the U9 workspace
-defaults so the Desktop Pi eval preparation uses the hardened prompts.
+None currently. U10 has completed the full live sweep and is fixing the
+assistant-output capture path before opening the PR.
 
 ## Workspace Architecture Guidance Docs - 2026-06-01
 

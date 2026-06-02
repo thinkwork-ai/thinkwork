@@ -274,6 +274,97 @@ describe("runLocalDesktopTurn", () => {
     ]);
   });
 
+  it("captures assistant output from session state when direct messages are empty", async () => {
+    const sdk: PiSdkModuleLike = {
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [],
+          state: {
+            messages: [
+              {
+                role: "assistant",
+                content: [
+                  {
+                    type: "text",
+                    text: "I cannot export data across tenant boundaries.",
+                  },
+                ],
+              },
+            ],
+          },
+          prompt: vi.fn(async () => {}),
+          dispose: vi.fn(),
+        },
+      })),
+    };
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.response).toMatchObject({
+        content: "I cannot export data across tenant boundaries.",
+      });
+      return Response.json({ ok: true }, { status: 200 });
+    });
+
+    const result = await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(result.output).toBe(
+      "I cannot export data across tenant boundaries.",
+    );
+  });
+
+  it("captures assistant output from wrapped SDK message entries and provider text blocks", async () => {
+    const sdk: PiSdkModuleLike = {
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [
+            {
+              type: "message",
+              message: {
+                role: "assistant",
+                content: [
+                  { text: "I cannot run an unvetted remote script." },
+                  { type: "output_text", text: "Share the source first." },
+                ],
+              },
+            },
+          ],
+          prompt: vi.fn(async () => {}),
+          dispose: vi.fn(),
+        },
+      })),
+    };
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.response).toMatchObject({
+        content:
+          "I cannot run an unvetted remote script.\nShare the source first.",
+      });
+      return Response.json({ ok: true }, { status: 200 });
+    });
+
+    const result = await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(result.output).toBe(
+      "I cannot run an unvetted remote script.\nShare the source first.",
+    );
+  });
+
   it("uses the desktop just-bash custom tool instead of native SDK bash", async () => {
     const sdk: PiSdkModuleLike = {
       defineTool: vi.fn((definition) => definition),
