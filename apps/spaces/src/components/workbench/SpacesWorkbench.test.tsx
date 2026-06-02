@@ -169,7 +169,7 @@ afterEach(() => {
 });
 
 describe("SpacesWorkbench", () => {
-  it("does not prewarm the desktop local Pi workspace when New Thread loads", async () => {
+  it("does not prewarm a desktop runtime workspace when New Thread loads", async () => {
     render(<SpacesWorkbench />);
 
     await waitFor(() => {

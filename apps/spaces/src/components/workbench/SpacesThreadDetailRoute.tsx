@@ -586,9 +586,9 @@ export function SpacesThreadDetailRoute({
     : false;
   const hasPendingStartRealActivity = Boolean(
     optimisticThreadStart &&
-      (optimisticThreadStart.expectAssistantResponse === false ||
-        threadTurns.length > 0 ||
-        hasDurableAssistantAfterLatestUser(thread)),
+    (optimisticThreadStart.expectAssistantResponse === false ||
+      threadTurns.length > 0 ||
+      hasDurableAssistantAfterLatestUser(thread)),
   );
   const shouldKeepPendingStartSignal = Boolean(
     optimisticThreadStart && !hasPendingStartRealActivity,
@@ -1268,7 +1268,6 @@ export function SpacesThreadDetailRoute({
             rawText: string;
           }>;
           agentRequested?: boolean;
-          dispatchMode?: "MANAGED_DEFAULT" | "DESKTOP_LOCAL";
         } = {
           threadId,
           role: "USER",
@@ -1966,9 +1965,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-      !["completed", "failed", "error", "cancelled", "rejected"].includes(
-        normalized,
-      ),
+    !["completed", "failed", "error", "cancelled", "rejected"].includes(
+      normalized,
+    ),
   );
 }
 

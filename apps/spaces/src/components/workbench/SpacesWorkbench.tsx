@@ -55,7 +55,6 @@ interface SendMessageVars {
     metadata?: string;
     mentions?: SpacesComposerMention[];
     agentRequested?: boolean;
-    dispatchMode?: "MANAGED_DEFAULT" | "DESKTOP_LOCAL";
   };
 }
 

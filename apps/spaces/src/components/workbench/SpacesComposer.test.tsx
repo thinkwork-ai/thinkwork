@@ -196,11 +196,7 @@ describe("SpacesComposer", () => {
 
     render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
 
-    expect(
-      screen.queryByLabelText(
-        "Run this turn on local Pi (click for managed cloud)",
-      ),
-    ).toBeNull();
+    expect(screen.queryByLabelText(/local pi/i)).toBeNull();
   });
 
   it("submits a non-empty prompt", async () => {
