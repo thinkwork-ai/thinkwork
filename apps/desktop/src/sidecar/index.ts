@@ -18,7 +18,7 @@ const parentPort =
   (process as NodeJS.Process & { parentPort?: ParentPort | null }).parentPort ??
   null;
 const DEFAULT_TURN_TIMEOUT_MS = 90_000;
-const DEFAULT_EVAL_CONCURRENCY = 3;
+const DEFAULT_EVAL_CONCURRENCY = 8;
 
 if (!parentPort) {
   console.error("[pi-sidecar] missing Electron parentPort");
