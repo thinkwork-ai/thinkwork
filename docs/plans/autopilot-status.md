@@ -5209,10 +5209,10 @@ None.
 ## Status
 
 - Plan: `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
-- Branch: `codex/agentcore-u0`
-- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u0`
+- Branch: `codex/agentcore-u1`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/agentcore-u1`
 - Started: `2026-06-02T13:42:51Z`
-- Current unit: U0 Spike, route desktop and mobile Pi turns through AgentCore.
+- Current unit: U1 Remove Spaces desktop-local dispatch and surfaces.
 - Target branch: `main`
 
 ## U0 Implementation Notes
@@ -5257,7 +5257,50 @@ None.
 ## U0 CI / PR
 
 - Opened [#1988](https://github.com/thinkwork-ai/thinkwork/pull/1988).
-- Pending: monitor required checks, fix failures, squash merge, delete branch.
+- CI passed: `cla`, `lint`, `test`, `typecheck`, `verify`.
+- Squash merged as `f0c378623a6a2a68168901a9147595c6fb09b656`.
+- Remote branch `codex/agentcore-u0` deleted; local U0 worktree and branch removed.
+
+## U1 Implementation Notes
+
+- Started: `2026-06-02T14:06:32Z`.
+- Removed Spaces desktop-local Pi readiness helpers from `desktop-runtime`, leaving desktop shell detection and callback route normalization only.
+- Deleted the renderer hooks that subscribed to desktop-local Pi status and console diagnostics.
+- Removed local diagnostic folding from thread activity; old `desktop-local` provenance is shown as legacy when historical turn summaries need a label.
+- Removed remaining renderer-side `DESKTOP_LOCAL` send-input types from Spaces managed send paths.
+- Removed the Settings evaluation target that called `bridge.pi.startEvalRun`; evaluation launches now use the managed GraphQL `startEvalRun` mutation.
+- Relabeled historical desktop-local evaluation rows as legacy in the Settings run list so the UI no longer presents Desktop Pi as a current execution target.
+
+## U1 Verification Log
+
+- `pnpm install` completed in the U1 worktree; optional native rebuilds for `node-liblzma` and `canvas` logged missing `pkg-config` under Node 25 but install exited successfully.
+- `pnpm --filter @thinkwork/spaces typecheck` passed.
+- Focused U1 suite passed: `pnpm --filter @thinkwork/spaces test -- src/lib/desktop-runtime.test.ts src/lib/use-chat-appsync-transport.test.ts src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/components/workbench/SpacesComposer.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/settings/SettingsEvaluations.test.ts src/components/DesktopApplicationHeader.test.tsx` (8 files, 164 tests).
+- `pnpm --filter @thinkwork/spaces test` passed (105 files, 753 tests).
+- `pnpm --filter @thinkwork/spaces build` passed; emitted existing sourcemap and large chunk warnings.
+- `git diff --check` passed.
+- Root `pnpm lint` passed.
+- Root `pnpm typecheck` passed.
+- Root `pnpm format:check` is blocked locally because the root script calls
+  `prettier`, but this checkout does not have a `prettier` binary installed
+  (`sh: prettier: command not found`).
+- First root `pnpm test` attempt hit an Electron install/extraction race; a
+  focused retry of `pnpm --filter @thinkwork/desktop test` passed (20 files,
+  172 tests).
+- Second root `pnpm test` attempt progressed through the broad suite but failed
+  on unrelated applet/plugin zip/Spaces memory timing assertions under local
+  Node 25. The suspicious API files passed in a clean `origin/main` comparison
+  worktree and passed again in the U1 worktree with:
+  `pnpm --filter @thinkwork/api test -- src/__tests__/applets-resolvers.test.ts src/lib/__tests__/plugin-zip-safety.test.ts`.
+- Touched-file Prettier check passed with
+  `pnpm dlx prettier@3.8.2 --check ...` after formatting two touched files.
+- Post-format rerun passed: `pnpm --filter @thinkwork/spaces typecheck`.
+- Post-format focused U1 suite rerun passed: `pnpm --filter @thinkwork/spaces test -- src/lib/desktop-runtime.test.ts src/lib/use-chat-appsync-transport.test.ts src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/components/workbench/SpacesComposer.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/settings/SettingsEvaluations.test.ts src/components/DesktopApplicationHeader.test.tsx`
+  (8 files, 164 tests).
+
+## U1 CI / PR
+
+- Pending: PR creation, CI monitoring, squash merge, branch cleanup.
 
 ## Blockers
 

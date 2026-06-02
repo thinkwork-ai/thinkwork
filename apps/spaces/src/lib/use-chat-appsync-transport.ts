@@ -81,7 +81,6 @@ interface SendMessageVariables {
     toolCalls?: unknown;
     toolResults?: unknown;
     metadata?: unknown;
-    dispatchMode?: "MANAGED_DEFAULT" | "DESKTOP_LOCAL";
   };
 }
 
@@ -98,11 +97,7 @@ interface SendMessageVariables {
 export function createAppSyncChatTransport(
   options: CreateAppSyncChatTransportOptions,
 ): AppSyncChatTransport {
-  const {
-    urqlClient,
-    onLegacyChunk,
-    onChunkDrop,
-  } = options;
+  const { urqlClient, onLegacyChunk, onChunkDrop } = options;
   let status: TransportStatus = "idle";
   let mutationCallCount = 0;
 

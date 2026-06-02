@@ -1,5 +1,4 @@
 import {
-  act,
   cleanup,
   fireEvent,
   render,
@@ -3174,24 +3173,14 @@ describe("TaskThreadView", () => {
 
     expect(
       screen.queryByRole("button", {
-        name: "Run this turn on local Pi (click for managed cloud)",
+        name: /local pi/i,
       }),
     ).toBeNull();
   });
 
-  it("folds local Pi diagnostic events into the turn activity with a gated console log", async () => {
+  it("does not subscribe to desktop-local diagnostics for turn activity", () => {
     vi.stubGlobal("__DESKTOP_BUILD__", true);
-    let diagnosticListener:
-      | ((event: {
-          level: "info" | "warn" | "error";
-          message: string;
-          emittedAt: string;
-          source: "main" | "sidecar";
-          requestId: string | null;
-          threadId: string | null;
-          threadTurnId: string | null;
-        }) => void)
-      | null = null;
+    const onDiagnostic = vi.fn(() => () => {});
     Object.defineProperty(window, "thinkworkBridge", {
       configurable: true,
       value: {
@@ -3199,10 +3188,7 @@ describe("TaskThreadView", () => {
           status: "healthy",
           getStatus: vi.fn(async () => ({ status: "healthy" })),
           onStatusChanged: vi.fn(() => () => {}),
-          onDiagnostic: vi.fn((listener) => {
-            diagnosticListener = listener;
-            return () => {};
-          }),
+          onDiagnostic,
         },
       },
     });
@@ -3211,7 +3197,7 @@ describe("TaskThreadView", () => {
       <TaskThreadView
         thread={{
           id: "thread-1",
-          title: "Local Pi console thread",
+          title: "Legacy runtime thread",
           lifecycleStatus: "RUNNING",
           messages: [{ id: "message-1", role: "USER", content: "Start" }],
           turns: [
@@ -3227,69 +3213,13 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    // No bordered "Local Pi console" box exists anymore (R5).
-    expect(screen.queryByLabelText("Local Pi console")).toBeNull();
-    await waitFor(() => expect(diagnosticListener).not.toBeNull());
+    expect(onDiagnostic).not.toHaveBeenCalled();
+    expect(screen.queryByText(/local pi/i)).toBeNull();
+    expect(screen.queryByText(/just-bash/i)).toBeNull();
+    expect(screen.queryByRole("log", { name: /console output/i })).toBeNull();
 
-    act(() => {
-      diagnosticListener?.({
-        level: "info",
-        message:
-          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1","longPayload":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}',
-        emittedAt: "2026-05-28T20:53:00.000Z",
-        source: "sidecar",
-        requestId: "request-1",
-        threadId: "thread-1",
-        threadTurnId: "turn-1",
-      });
-      diagnosticListener?.({
-        level: "info",
-        message:
-          'local Pi sidecar received turn {"requestId":"request-1","threadTurnId":"turn-1","longPayload":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}',
-        emittedAt: "2026-05-28T20:53:00.000Z",
-        source: "sidecar",
-        requestId: "request-1",
-        threadId: "thread-1",
-        threadTurnId: "turn-1",
-      });
-      diagnosticListener?.({
-        level: "warn",
-        message: "other thread event",
-        emittedAt: "2026-05-28T20:53:01.000Z",
-        source: "main",
-        requestId: "request-2",
-        threadId: "thread-2",
-        threadTurnId: "turn-2",
-      });
-    });
-
-    // The events fold into the turn surface as merged step rows. Expand it.
     openThinkingDisclosure();
-
-    // The de-duplicated local-Pi event renders as a step row; the cross-thread
-    // event is filtered out and never reaches this thread.
-    expect(
-      screen.getAllByText(/local Pi sidecar received turn/).length,
-    ).toBeGreaterThan(0);
-    expect(screen.queryByText(/other thread event/)).toBeNull();
-
-    // Raw lines live behind a quiet, collapsed-by-default "view console log"
-    // toggle — not a bordered box.
-    expect(
-      screen.queryByRole("log", { name: "Local Pi console output" }),
-    ).toBeNull();
-    fireEvent.click(screen.getByText("view console log"));
-    const output = screen.getByRole("log", {
-      name: "Local Pi console output",
-    });
-    expect(output.textContent).toContain("local Pi sidecar received turn");
-    expect(output.textContent).not.toContain("other thread event");
-    expect(output.className).toContain("max-w-full");
-    expect(output.className).toContain("overflow-x-auto");
-    expect(output.className).toContain("whitespace-pre");
-    expect(
-      output.textContent?.match(/local Pi sidecar received turn/g),
-    ).toHaveLength(1);
+    expect(screen.queryByText(/local pi/i)).toBeNull();
   });
 
   it("renders voice input next to the send button", () => {
