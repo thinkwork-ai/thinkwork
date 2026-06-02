@@ -320,6 +320,53 @@ describe("runLocalDesktopTurn", () => {
     );
   });
 
+  it("prefers the Pi SDK last assistant text when message blocks are tool-only", async () => {
+    const sdk: PiSdkModuleLike = {
+      createAgentSession: vi.fn(async () => ({
+        session: {
+          messages: [
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "toolu_1",
+                  name: "ls",
+                  input: { path: "." },
+                },
+              ],
+            },
+          ],
+          getLastAssistantText: () =>
+            "I cannot inspect private files for this request.",
+          prompt: vi.fn(async () => {}),
+          dispose: vi.fn(),
+        },
+      })),
+    };
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.response).toMatchObject({
+        content: "I cannot inspect private files for this request.",
+      });
+      return Response.json({ ok: true }, { status: 200 });
+    });
+
+    const result = await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+      },
+    );
+
+    expect(result.output).toBe(
+      "I cannot inspect private files for this request.",
+    );
+  });
+
   it("captures assistant output from wrapped SDK message entries and provider text blocks", async () => {
     const sdk: PiSdkModuleLike = {
       createAgentSession: vi.fn(async () => ({
