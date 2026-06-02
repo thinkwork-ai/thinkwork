@@ -33,7 +33,7 @@ status: complete
 | U14 Desktop Pi eval-mode reliability and speed      | `codex/desktop-pi-evals-u14-sdk-errors`       | [#1974](https://github.com/thinkwork-ai/thinkwork/pull/1974) | Merged      | Squash merged as `6d8568bd`; eval-mode guidance, explicit SDK agent dir, and faster bounded defaults.   |
 | U15 Desktop Pi eval fail-fast sweep                 | `codex/desktop-pi-evals-u15-remediation`      | [#1975](https://github.com/thinkwork-ai/thinkwork/pull/1975) | Merged      | Squash merged as `1ac2629f`; full sweep completed and blank SDK assistant-error retries now fail fast.  |
 | U16 Desktop Pi SDK assistant-error diagnostics      | `codex/desktop-pi-evals-u16-sdk-diagnostics`  | [#1976](https://github.com/thinkwork-ai/thinkwork/pull/1976) | Merged      | Squash merged as `18d10bff`; provider/SDK details now surface on blank SDK assistant-error turns.       |
-| U17 Desktop Pi quota-aware diagnostic sweep         | `codex/desktop-pi-evals-u17-diagnostic-sweep` | pending                                                      | In progress | Full desktop sweep completed; queued cases now fast-finish after provider daily token quota exhaustion. |
+| U17 Desktop Pi quota-aware diagnostic sweep         | `codex/desktop-pi-evals-u17-diagnostic-sweep` | [#1977](https://github.com/thinkwork-ai/thinkwork/pull/1977) | In progress | Full desktop sweep completed; queued cases now fast-finish after provider daily token quota exhaustion. |
 
 ### Progress Log
 
@@ -445,6 +445,8 @@ status: complete
   immediately as eval errors with a clear quota diagnostic instead of hydrating
   workspaces and launching doomed Pi turns. Active in-flight cases still finish
   normally.
+- Opened U17 PR
+  [#1977](https://github.com/thinkwork-ai/thinkwork/pull/1977).
 
 ### Verification Log
 
