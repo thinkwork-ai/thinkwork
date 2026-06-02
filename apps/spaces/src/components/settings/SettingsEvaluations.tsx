@@ -62,6 +62,7 @@ import {
   desktopPiEvalTargetStatus,
   getDesktopBridge,
 } from "@/lib/desktop-runtime";
+import { rememberDesktopPiEvalRequest } from "@/lib/desktop-pi-eval-requests";
 import { useDesktopLocalPiStatus } from "@/lib/use-desktop-local-pi-status";
 import { isDesktopPiEvalRunProvenance } from "@/components/settings/eval-result-detail";
 import {
@@ -532,6 +533,7 @@ function RunEvaluationButton({
             model: selectedModel,
             categories: selectedCats.length > 0 ? selectedCats : undefined,
           });
+          rememberDesktopPiEvalRequest(result.runId, result.requestId);
           onStarted();
           setOpen(false);
           navigate({
