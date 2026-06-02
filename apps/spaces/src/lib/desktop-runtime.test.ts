@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 import {
+  canStartDesktopPiEval,
   desktopLocalPiDisplayStatus,
+  desktopPiEvalTargetStatus,
   isDesktopBuild,
   shouldUseDesktopLocalPiDispatch,
   shouldUseDesktopLocalPiDispatchNow,
@@ -71,5 +73,17 @@ describe("desktop runtime detection", () => {
       }),
     ).toBe("unavailable");
     expect(desktopLocalPiDisplayStatus({ bridge: null })).toBe("hidden");
+  });
+
+  it("maps local Pi display state to eval target availability", () => {
+    expect(desktopPiEvalTargetStatus("healthy")).toBe("available");
+    expect(desktopPiEvalTargetStatus("starting")).toBe("starting");
+    expect(desktopPiEvalTargetStatus("running")).toBe("busy");
+    expect(desktopPiEvalTargetStatus("fallback")).toBe("unavailable");
+    expect(desktopPiEvalTargetStatus("hidden")).toBe("hidden");
+
+    expect(canStartDesktopPiEval("available")).toBe(true);
+    expect(canStartDesktopPiEval("starting")).toBe(true);
+    expect(canStartDesktopPiEval("busy")).toBe(false);
   });
 });

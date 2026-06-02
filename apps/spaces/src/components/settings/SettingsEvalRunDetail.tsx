@@ -13,6 +13,7 @@ import {
   ChevronDown,
   FileText,
   Loader2,
+  MonitorCog,
   Pencil,
   Square,
   Trash2,
@@ -61,6 +62,7 @@ import {
   evaluatorDisplayStatus,
   expectedSummary,
   openEvalResultEditor,
+  isDesktopPiEvalRunProvenance,
   parseAssertions,
   parseEvaluatorResults,
   parseSpanAttributes,
@@ -236,6 +238,9 @@ export function SettingsEvalRunDetail() {
 
   // Poll every 3s while running
   const runDetail = runResult.data?.evalRun;
+  const isDesktopPiRun = runDetail
+    ? isDesktopPiEvalRunProvenance(runDetail)
+    : false;
   const isRunning =
     runDetail?.status === "pending" || runDetail?.status === "running";
   useEffect(() => {
@@ -314,6 +319,15 @@ export function SettingsEvalRunDetail() {
     action: runDetail ? (
       <div className="flex items-center gap-2">
         {statusBadge(runDetail.status)}
+        {isDesktopPiRun && (
+          <Badge
+            variant="secondary"
+            className="gap-1 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+          >
+            <MonitorCog className="h-3 w-3" />
+            Desktop Pi
+          </Badge>
+        )}
         <span className="text-sm text-muted-foreground tabular-nums">
           {passRate} pass rate
         </span>
@@ -641,7 +655,9 @@ function ResultDetailSheet({
               <div className="space-y-2">
                 {evaluatorResults.map((evaluator, index) => {
                   const score =
-                    typeof evaluator.value === "number" ? evaluator.value : null;
+                    typeof evaluator.value === "number"
+                      ? evaluator.value
+                      : null;
                   const displayStatus = evaluatorDisplayStatus(evaluator);
                   const badgeLabel =
                     score !== null ? score.toFixed(2) : displayStatus;
@@ -831,7 +847,11 @@ function EditEvalTestCaseSheet({
             </div>
           ) : (
             <EvalTestCaseForm
-              initial={initial as unknown as Parameters<typeof EvalTestCaseForm>[0]["initial"]}
+              initial={
+                initial as unknown as Parameters<
+                  typeof EvalTestCaseForm
+                >[0]["initial"]
+              }
               isEdit
               onActions={setActions}
               onCancel={handleCancel}

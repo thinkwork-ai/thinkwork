@@ -6,6 +6,7 @@ import {
   evalFailureModeLabel,
   evaluatorDisplayStatus,
   expectedSummary,
+  isDesktopPiEvalRunProvenance,
   isHeuristicRubricFailure,
   openEvalResultEditor,
   parseEvaluatorResults,
@@ -109,6 +110,27 @@ describe("evaluation result detail helpers", () => {
         status: "pass",
       }),
     ).toBeNull();
+  });
+
+  it("detects Desktop Pi eval run provenance from target or host", () => {
+    expect(
+      isDesktopPiEvalRunProvenance({
+        executionTarget: "desktop-pi",
+        runtimeHost: "desktop-local",
+      }),
+    ).toBe(true);
+    expect(
+      isDesktopPiEvalRunProvenance({
+        executionTarget: "agentcore",
+        runtimeHost: "desktop-local",
+      }),
+    ).toBe(true);
+    expect(
+      isDesktopPiEvalRunProvenance({
+        executionTarget: "agentcore",
+        runtimeHost: "aws-agentcore",
+      }),
+    ).toBe(false);
   });
 
   it("classifies real evaluator errors distinctly", () => {
