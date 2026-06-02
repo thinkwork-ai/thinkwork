@@ -6,7 +6,7 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, threadTurns } from "../../utils.js";
+import { and, db, eq, threadTurns } from "../../utils.js";
 import {
   CloudWatchLogsClient,
   FilterLogEventsCommand,
@@ -39,6 +39,33 @@ function shortenModelId(modelId: string): string {
   const parts = modelId.split("/");
   const name = parts[parts.length - 1] || modelId;
   return name.replace(/^us\.anthropic\./, "").replace(/-v\d+:\d+$/, "");
+}
+
+export function normalizeInvocationTimestamp(
+  value: unknown,
+  fallbackMs: number | undefined,
+): string {
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    const epochMs = value < 10_000_000_000 ? value * 1000 : value;
+    return new Date(epochMs).toISOString();
+  }
+
+  if (fallbackMs && Number.isFinite(fallbackMs) && fallbackMs > 0) {
+    return new Date(fallbackMs).toISOString();
+  }
+
+  return new Date(0).toISOString();
+}
+
+function nonNegativeInt(value: unknown): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return 0;
+  return Math.min(Math.trunc(numeric), 2_147_483_647);
 }
 
 function extractInputPreview(inputBodyJson: any): string {
@@ -159,7 +186,12 @@ export const turnInvocationLogs = async (
       createdAt: threadTurns.created_at,
     })
     .from(threadTurns)
-    .where(eq(threadTurns.id, args.turnId))
+    .where(
+      and(
+        eq(threadTurns.id, args.turnId),
+        eq(threadTurns.tenant_id, args.tenantId),
+      ),
+    )
     .limit(1);
 
   if (!turn) return [];
@@ -195,9 +227,11 @@ export const turnInvocationLogs = async (
           const modelId = log.modelId || "";
           const pricing = lookupPricing(modelId);
 
-          const inputTokens = input.inputTokenCount || 0;
-          const outputTokens = output.outputTokenCount || 0;
-          const cacheReadTokens = input.cacheReadInputTokenCount || 0;
+          const inputTokens = nonNegativeInt(input.inputTokenCount);
+          const outputTokens = nonNegativeInt(output.outputTokenCount);
+          const cacheReadTokens = nonNegativeInt(
+            input.cacheReadInputTokenCount,
+          );
 
           const costUsd =
             (inputTokens * pricing.input + outputTokens * pricing.output) /
@@ -251,14 +285,18 @@ export const turnInvocationLogs = async (
           return {
             requestId: log.requestId || "",
             modelId: shortenModelId(modelId),
-            timestamp:
-              log.timestamp || new Date(event.timestamp || 0).toISOString(),
+            timestamp: normalizeInvocationTimestamp(
+              log.timestamp,
+              event.timestamp,
+            ),
             inputTokenCount: inputTokens,
             outputTokenCount: outputTokens,
             cacheReadTokenCount: cacheReadTokens,
             inputPreview: extractInputPreview(input.inputBodyJson),
             outputPreview: extractOutputPreview(output.outputBodyJson),
-            toolCount: input.inputBodyJson?.tools?.length || 0,
+            toolCount: Array.isArray(input.inputBodyJson?.toolConfig?.tools)
+              ? input.inputBodyJson.toolConfig.tools.length
+              : 0,
             costUsd: Math.round(costUsd * 1_000_000) / 1_000_000,
             toolUses,
             hasToolResult,

@@ -57,6 +57,10 @@ async function runTraceThread(
     printJson({ items });
     return;
   }
+  if (items.length === 0) {
+    console.log("No trace events found for this thread.");
+    return;
+  }
   printTable(
     items.map((t) => ({
       traceId: t.traceId.slice(0, 16),
@@ -91,6 +95,10 @@ async function runTraceTurn(
   const items = data.turnInvocationLogs ?? [];
   if (isJsonMode()) {
     printJson({ items });
+    return;
+  }
+  if (items.length === 0) {
+    console.log("No model invocation logs found for this turn.");
     return;
   }
   printTable(
