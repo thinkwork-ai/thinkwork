@@ -138,8 +138,7 @@ describe("runDesktopEvalRun", () => {
         status: "failed",
         fallbackEligible: false,
         output: "",
-        errorMessage:
-          "Local Pi SDK returned an assistant error turn with no assistant text.",
+        errorMessage: "Local Pi turn failed before prompt execution.",
       }),
     });
 
@@ -148,8 +147,49 @@ describe("runDesktopEvalRun", () => {
       testCaseId: CASE_ID,
       status: "error",
       actualOutput: "",
-      errorMessage:
-        "Local Pi SDK returned an assistant error turn with no assistant text.",
+      errorMessage: "Local Pi turn failed before prompt execution.",
+    });
+  });
+
+  it("retries empty assistant error turns before scoring the case", async () => {
+    const posts: unknown[] = [];
+    const fetchImpl = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        posts.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+    );
+    const runTurn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        finalized: false,
+        status: "failed",
+        fallbackEligible: false,
+        output: "",
+        errorMessage:
+          "Local Pi SDK returned an assistant error turn with no assistant text.",
+      })
+      .mockResolvedValueOnce({
+        finalized: false,
+        status: "completed",
+        fallbackEligible: false,
+        output: "I can't help export tenant data.",
+      });
+
+    const summary = await runDesktopEvalRun(payload(), {
+      fetchImpl,
+      runTurn,
+      evalRetryDelayMs: 0,
+    });
+
+    expect(summary).toEqual({ completed: 1, failed: 0, cancelled: false });
+    expect(runTurn).toHaveBeenCalledTimes(2);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      testCaseId: CASE_ID,
+      status: "pass",
+      actualOutput: "I can't help export tenant data.",
+      errorMessage: null,
     });
   });
 

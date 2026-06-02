@@ -30,6 +30,8 @@ export interface EvalRunnerDeps {
   signal?: AbortSignal;
   turnTimeoutMs?: number;
   evalConcurrency?: number;
+  evalMaxAttempts?: number;
+  evalRetryDelayMs?: number;
   debug?: boolean;
 }
 
@@ -39,6 +41,11 @@ export interface EvalRunSummary {
   cancelled: boolean;
 }
 
+const RETRYABLE_EMPTY_ASSISTANT_ERROR =
+  "assistant error turn with no assistant text";
+const DEFAULT_EVAL_MAX_ATTEMPTS = 2;
+const DEFAULT_EVAL_RETRY_DELAY_MS = 750;
+
 export async function runDesktopEvalRun(
   payload: PiSidecarEvalRunPayload,
   deps: EvalRunnerDeps = {},
@@ -46,6 +53,7 @@ export async function runDesktopEvalRun(
   const logger = deps.logger ?? createRedactedLogger();
   const runTurn = deps.runTurn ?? runLocalDesktopTurn;
   const concurrency = normalizeEvalConcurrency(deps.evalConcurrency);
+  const maxAttempts = normalizeEvalMaxAttempts(deps.evalMaxAttempts);
   let completed = 0;
   let failed = 0;
   let nextIndex = 0;
@@ -74,19 +82,14 @@ export async function runDesktopEvalRun(
         index: item.index,
         category: item.category,
       });
-      const result = await runTurn(
-        {
-          session: item.session,
-          workspaceCacheRoot: evalCaseWorkspaceCacheRoot(payload, item),
-        },
-        {
-          signal: deps.signal,
-          logger,
-          fetchImpl: deps.fetchImpl,
-          turnTimeoutMs: deps.turnTimeoutMs,
-          debug: deps.debug,
-        },
-      );
+      const result = await runEvalCaseTurn({
+        payload,
+        item,
+        runTurn,
+        deps,
+        logger,
+        maxAttempts,
+      });
       if (deps.signal?.aborted) return { counted: false, failed: false };
       const durationMs = elapsedMs(startedAt, deps.now?.() ?? new Date());
       const output = result.output;
@@ -175,6 +178,114 @@ export async function runDesktopEvalRun(
   return { completed, failed, cancelled: deps.signal?.aborted === true };
 }
 
+async function runEvalCaseTurn({
+  payload,
+  item,
+  runTurn,
+  deps,
+  logger,
+  maxAttempts,
+}: {
+  payload: PiSidecarEvalRunPayload;
+  item: PiSidecarEvalWorkItem;
+  runTurn: NonNullable<EvalRunnerDeps["runTurn"]>;
+  deps: EvalRunnerDeps;
+  logger: RedactedLogger;
+  maxAttempts: number;
+}): Promise<LocalTurnRunnerResult> {
+  const turnPayload = {
+    session: item.session,
+    workspaceCacheRoot: evalCaseWorkspaceCacheRoot(payload, item),
+  };
+  const turnDeps = {
+    signal: deps.signal,
+    logger,
+    fetchImpl: deps.fetchImpl,
+    turnTimeoutMs: deps.turnTimeoutMs,
+    debug: deps.debug,
+  };
+
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const result = await runTurn(turnPayload, turnDeps);
+      if (
+        !shouldRetryLocalTurnFailure(result) ||
+        deps.signal?.aborted ||
+        attempt >= maxAttempts
+      ) {
+        return result;
+      }
+      await waitBeforeRetry({ payload, item, attempt, deps, logger, result });
+    } catch (error) {
+      if (
+        deps.signal?.aborted ||
+        !shouldRetryLocalTurnError(error) ||
+        attempt >= maxAttempts
+      ) {
+        throw error;
+      }
+      await waitBeforeRetry({ payload, item, attempt, deps, logger, error });
+    }
+  }
+}
+
+async function waitBeforeRetry({
+  payload,
+  item,
+  attempt,
+  deps,
+  logger,
+  result,
+  error,
+}: {
+  payload: PiSidecarEvalRunPayload;
+  item: PiSidecarEvalWorkItem;
+  attempt: number;
+  deps: EvalRunnerDeps;
+  logger: RedactedLogger;
+  result?: LocalTurnRunnerResult;
+  error?: unknown;
+}): Promise<void> {
+  const delayMs =
+    typeof deps.evalRetryDelayMs === "number" &&
+    Number.isFinite(deps.evalRetryDelayMs)
+      ? Math.max(0, deps.evalRetryDelayMs)
+      : DEFAULT_EVAL_RETRY_DELAY_MS * attempt;
+  logger.warn("desktop eval case retrying local Pi turn", {
+    runId: payload.runId,
+    testCaseId: item.testCaseId,
+    attempt,
+    nextAttempt: attempt + 1,
+    delayMs,
+    error:
+      result?.errorMessage ??
+      (error instanceof Error ? error.message : String(error)),
+  });
+  if (delayMs <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function shouldRetryLocalTurnFailure(result: LocalTurnRunnerResult): boolean {
+  return (
+    result.status === "failed" &&
+    result.output.trim().length === 0 &&
+    isRetryableEmptyAssistantError(result.errorMessage)
+  );
+}
+
+function shouldRetryLocalTurnError(error: unknown): boolean {
+  return isRetryableEmptyAssistantError(
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
+function isRetryableEmptyAssistantError(message: string | undefined): boolean {
+  return (
+    typeof message === "string" &&
+    message.toLowerCase().includes(RETRYABLE_EMPTY_ASSISTANT_ERROR)
+  );
+}
+
 function parseAssertions(value: unknown): EvalAssertion[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is EvalAssertion => {
@@ -233,6 +344,13 @@ function elapsedMs(startedAt: Date, finishedAt: Date): number {
 function normalizeEvalConcurrency(value: number | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 1;
   return Math.max(1, Math.min(8, Math.floor(value)));
+}
+
+function normalizeEvalMaxAttempts(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_EVAL_MAX_ATTEMPTS;
+  }
+  return Math.max(1, Math.min(3, Math.floor(value)));
 }
 
 function evalCaseWorkspaceCacheRoot(
