@@ -306,6 +306,7 @@ export const PiStartEvalRunRequestSchema = z
     testCaseIds: z.array(z.string().min(1)).optional(),
     model: z.string().min(1).nullable().optional(),
     spaceId: z.string().min(1).nullable().optional(),
+    parallelThreads: z.number().int().min(1).max(8).optional(),
   })
   .strict();
 

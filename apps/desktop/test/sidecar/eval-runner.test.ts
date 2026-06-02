@@ -335,6 +335,7 @@ describe("runDesktopEvalRun", () => {
 
     const summary = await runDesktopEvalRun(
       payload({
+        parallelThreads: 2,
         workItems: caseIds.map((testCaseId, index) => ({
           ...payload().workItems[0],
           testCaseId,
@@ -344,7 +345,7 @@ describe("runDesktopEvalRun", () => {
           session: preparedSession(testCaseId, "Say ok"),
         })),
       }),
-      { fetchImpl, runTurn, evalConcurrency: 2 },
+      { fetchImpl, runTurn },
     );
 
     expect(summary).toEqual({ completed: 4, failed: 0, cancelled: false });

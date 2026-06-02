@@ -196,10 +196,12 @@ describe("desktop IPC schemas", () => {
         testCaseIds: ["case-1"],
         model: "desktop-local-pi",
         spaceId: "space-1",
+        parallelThreads: 3,
       }),
     ).toMatchObject({
       tenantId: "tenant-1",
       categories: ["red-team"],
+      parallelThreads: 3,
     });
     expect(
       ChannelSchemas.startPiEvalRun.response.parse({

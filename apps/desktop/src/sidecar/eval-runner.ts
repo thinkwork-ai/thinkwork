@@ -59,7 +59,9 @@ export async function runDesktopEvalRun(
 ): Promise<EvalRunSummary> {
   const logger = deps.logger ?? createRedactedLogger();
   const runTurn = deps.runTurn ?? runLocalDesktopTurn;
-  const concurrency = normalizeEvalConcurrency(deps.evalConcurrency);
+  const concurrency = normalizeEvalConcurrency(
+    deps.evalConcurrency ?? payload.parallelThreads,
+  );
   const maxAttempts = normalizeEvalMaxAttempts(deps.evalMaxAttempts);
   const workspaceStore = createEvalWorkspaceStore(payload, deps);
   let completed = 0;
