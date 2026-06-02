@@ -316,6 +316,7 @@ export class PiSidecarController {
       tenantId: request.tenantId,
       categories: request.categories?.length ?? 0,
       testCaseIds: request.testCaseIds?.length ?? 0,
+      parallelThreads: request.parallelThreads ?? null,
     });
     this.emitDiagnostic({
       level: "info",
@@ -324,6 +325,7 @@ export class PiSidecarController {
         tenantId: request.tenantId,
         categories: request.categories?.length ?? 0,
         testCaseIds: request.testCaseIds?.length ?? 0,
+        parallelThreads: request.parallelThreads ?? null,
       }),
       source: "main",
       requestId,
@@ -346,12 +348,14 @@ export class PiSidecarController {
         resultCallback: prepared.resultCallback,
         workItems: prepared.workItems,
         workspaceCacheRoot: this.workspaceCacheRoot,
+        parallelThreads: request.parallelThreads,
       },
     });
     this.logger.info("[pi-sidecar] desktop Pi eval run sent to sidecar", {
       requestId,
       runId: prepared.run.id,
       totalTests: prepared.workItems.length,
+      parallelThreads: request.parallelThreads ?? null,
     });
     this.emitDiagnostic({
       level: "info",

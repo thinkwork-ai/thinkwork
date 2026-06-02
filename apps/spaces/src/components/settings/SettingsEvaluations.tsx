@@ -37,6 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  Input,
   Label,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -127,6 +128,9 @@ type RunRow = {
 };
 
 type EvalExecutionTarget = "cloud" | "desktop-pi";
+const DESKTOP_PI_EVAL_PARALLEL_THREADS_DEFAULT = 1;
+const DESKTOP_PI_EVAL_PARALLEL_THREADS_MIN = 1;
+const DESKTOP_PI_EVAL_PARALLEL_THREADS_MAX = 8;
 
 export function shouldShowDesktopPiEvalTarget(
   status: ReturnType<typeof desktopPiEvalTargetStatus>,
@@ -139,11 +143,35 @@ export function isStartEvaluationDisabled(input: {
   selectedModel: string;
   target: EvalExecutionTarget;
   desktopPiEnabled: boolean;
+  desktopPiParallelThreads?: string;
 }): boolean {
   return (
     input.submitting ||
     !input.selectedModel ||
-    (input.target === "desktop-pi" && !input.desktopPiEnabled)
+    (input.target === "desktop-pi" &&
+      (!input.desktopPiEnabled ||
+        !isDesktopPiEvalParallelThreadsValid(
+          input.desktopPiParallelThreads ??
+            String(DESKTOP_PI_EVAL_PARALLEL_THREADS_DEFAULT),
+        )))
+  );
+}
+
+export function normalizeDesktopPiEvalParallelThreads(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DESKTOP_PI_EVAL_PARALLEL_THREADS_DEFAULT;
+  return Math.max(
+    DESKTOP_PI_EVAL_PARALLEL_THREADS_MIN,
+    Math.min(DESKTOP_PI_EVAL_PARALLEL_THREADS_MAX, parsed),
+  );
+}
+
+export function isDesktopPiEvalParallelThreadsValid(value: string): boolean {
+  if (!/^\d+$/.test(value.trim())) return false;
+  const parsed = Number.parseInt(value, 10);
+  return (
+    parsed >= DESKTOP_PI_EVAL_PARALLEL_THREADS_MIN &&
+    parsed <= DESKTOP_PI_EVAL_PARALLEL_THREADS_MAX
   );
 }
 
@@ -500,6 +528,9 @@ function RunEvaluationButton({
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_EVAL_MODEL_ID);
   const [target, setTarget] = useState<EvalExecutionTarget>("cloud");
+  const [desktopPiParallelThreads, setDesktopPiParallelThreads] = useState(
+    String(DESKTOP_PI_EVAL_PARALLEL_THREADS_DEFAULT),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [, startEvalRun] = useMutation(StartEvalRunMutation);
   const navigate = useNavigate();
@@ -532,6 +563,9 @@ function RunEvaluationButton({
             tenantId,
             model: selectedModel,
             categories: selectedCats.length > 0 ? selectedCats : undefined,
+            parallelThreads: normalizeDesktopPiEvalParallelThreads(
+              desktopPiParallelThreads,
+            ),
           });
           rememberDesktopPiEvalRequest(result.runId, result.requestId);
           onStarted();
@@ -588,13 +622,53 @@ function RunEvaluationButton({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label>Model</Label>
-            <ModelSelect
-              value={selectedModel}
-              onValueChange={setSelectedModel}
-              className="w-full"
-            />
+          <div
+            className={cn(
+              "grid gap-3",
+              desktopPiVisible
+                ? "grid-cols-[minmax(0,1fr)_8rem]"
+                : "grid-cols-1",
+            )}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label>Model</Label>
+              <ModelSelect
+                value={selectedModel}
+                onValueChange={setSelectedModel}
+                className="w-full"
+              />
+            </div>
+            {desktopPiVisible && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="desktop-pi-eval-parallel-threads">
+                  Parallel threads
+                </Label>
+                <Input
+                  id="desktop-pi-eval-parallel-threads"
+                  type="number"
+                  inputMode="numeric"
+                  min={DESKTOP_PI_EVAL_PARALLEL_THREADS_MIN}
+                  max={DESKTOP_PI_EVAL_PARALLEL_THREADS_MAX}
+                  step={1}
+                  value={desktopPiParallelThreads}
+                  disabled={target !== "desktop-pi"}
+                  onChange={(event) =>
+                    setDesktopPiParallelThreads(event.currentTarget.value)
+                  }
+                  onBlur={() =>
+                    setDesktopPiParallelThreads((value) =>
+                      String(normalizeDesktopPiEvalParallelThreads(value)),
+                    )
+                  }
+                  aria-invalid={
+                    target === "desktop-pi" &&
+                    !isDesktopPiEvalParallelThreadsValid(
+                      desktopPiParallelThreads,
+                    )
+                  }
+                />
+              </div>
+            )}
           </div>
 
           {desktopPiVisible && (
@@ -667,6 +741,7 @@ function RunEvaluationButton({
               selectedModel,
               target,
               desktopPiEnabled,
+              desktopPiParallelThreads,
             })}
           >
             {submitting ? "Starting…" : "Start Evaluation"}

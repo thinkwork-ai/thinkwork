@@ -274,6 +274,7 @@ describe("PiSidecarController", () => {
     const response = await controller.startEvalRun({
       tenantId: "tenant-1",
       categories: ["red-team"],
+      parallelThreads: 3,
     });
 
     expect(response).toMatchObject({
@@ -286,6 +287,7 @@ describe("PiSidecarController", () => {
       requestId: response.requestId,
       payload: {
         runId: "55555555-5555-5555-5555-555555555555",
+        parallelThreads: 3,
         workspaceCacheRoot: "/user-data/pi-workspaces",
         workItems: [
           expect.objectContaining({

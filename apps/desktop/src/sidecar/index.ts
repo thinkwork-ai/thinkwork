@@ -72,6 +72,7 @@ if (!parentPort) {
           requestId: message.requestId,
           runId: message.payload.runId,
           totalTests: message.payload.workItems.length,
+          parallelThreads: message.payload.parallelThreads ?? null,
         });
         parentPort.postMessage({
           type: "eval-run-accepted",
@@ -175,7 +176,7 @@ if (!parentPort) {
         signal: abortController.signal,
         logger,
         turnTimeoutMs: resolveTurnTimeoutMs(),
-        evalConcurrency: resolveEvalConcurrency(),
+        evalConcurrency: payload.parallelThreads ?? resolveEvalConcurrency(),
         evalMaxAttempts: resolveEvalMaxAttempts(),
         evalRetryDelayMs: resolveEvalRetryDelayMs(),
         debug: isLocalPiDebugEnabled(),

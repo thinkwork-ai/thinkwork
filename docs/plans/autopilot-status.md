@@ -11,9 +11,9 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
 - Target branch: `main`.
-- Current unit: U20 Desktop Pi Kimi model fail-closed routing.
-- Current branch: `codex/desktop-pi-evals-u20-kimi-fail-closed`.
-- Current worktree: `.Codex/worktrees/desktop-pi-evals-u20-kimi-fail-closed`.
+- Current unit: U21 Desktop Pi per-run parallel threads control.
+- Current branch: `codex/desktop-pi-evals-u21-concurrency`.
+- Current worktree: `.Codex/worktrees/desktop-pi-evals-u21-concurrency`.
 
 | Unit                                                | Branch                                           | PR                                                           | State       | Notes                                                                                                   |
 | --------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------- |
@@ -36,7 +36,8 @@ status: in_progress
 | U17 Desktop Pi quota-aware diagnostic sweep         | `codex/desktop-pi-evals-u17-diagnostic-sweep`    | [#1977](https://github.com/thinkwork-ai/thinkwork/pull/1977) | Merged      | Squash merged as `e9718e4f`; full sweep completed and queued cases now fast-finish after daily quota.   |
 | U18 Desktop Pi eval workspace hydration speed       | `codex/desktop-pi-evals-u18-workspace-hydration` | [#1978](https://github.com/thinkwork-ai/thinkwork/pull/1978) | Merged      | Squash merged as `71377d64`; shared memoized S3 workspace object store across isolated eval cases.      |
 | U19 Post-speed Desktop Pi full rerun                | `codex/desktop-pi-evals-u19-post-speed-rerun`    | [#1979](https://github.com/thinkwork-ai/thinkwork/pull/1979) | Merged      | Squash merged as `2e997f75`; full desktop catalog completed quickly under daily quota exhaustion.       |
-| U20 Desktop Pi Kimi model fail-closed routing       | `codex/desktop-pi-evals-u20-kimi-fail-closed`    | TBD                                                          | In progress | Stop Desktop Pi evals from silently routing requested Kimi runs to Bedrock Sonnet fallback.             |
+| U20 Desktop Pi Kimi model fail-closed routing       | `codex/desktop-pi-evals-u20-kimi-fail-closed`    | [#1980](https://github.com/thinkwork-ai/thinkwork/pull/1980) | Merged      | Squash merged as `84f354eb`; explicit Kimi requests now resolve through Bedrock or fail closed.         |
+| U21 Desktop Pi per-run parallel threads control     | `codex/desktop-pi-evals-u21-concurrency`         | TBD                                                          | In progress | Add a Settings input so each Desktop Pi eval run can choose 1-8 local parallel worker threads.          |
 
 ### Progress Log
 
@@ -504,6 +505,19 @@ status: in_progress
   labels normalize to `moonshotai.kimi-k*`, and requested models now fail
   closed if unavailable in the Pi SDK registry instead of silently falling back
   to Sonnet.
+- U20 PR
+  [#1980](https://github.com/thinkwork-ai/thinkwork/pull/1980) passed
+  required PR checks (`cla`, `lint`, `verify`, `typecheck`, `test`) and was
+  squash merged as `84f354eba24d177099c8300f87e2268f836c13ef`; post-merge
+  `main` workflows passed `Lint`, `Supply Chain`, `Typecheck`, `Test`, and
+  `Deploy`. The remote branch was deleted.
+- Created isolated U21 worktree
+  `.Codex/worktrees/desktop-pi-evals-u21-concurrency` from `origin/main` on
+  branch `codex/desktop-pi-evals-u21-concurrency`.
+- U21 adds a per-run Desktop Pi parallelism parameter in Settings. The Run
+  Evaluation dialog now shows a `Parallel threads` numeric input next to Model
+  when Desktop Pi is available, and the value flows through renderer IPC,
+  Electron main, sidecar payload validation, and the eval runner worker pool.
 
 ### Verification Log
 
@@ -728,13 +742,31 @@ status: in_progress
   `moonshotai.kimi-k2.5 -> amazon-bedrock/moonshotai.kimi-k2.5` and
   `kimi-k2.5 -> amazon-bedrock/moonshotai.kimi-k2.5`.
 - `git diff --check` - passed.
+- U20 PR
+  [#1980](https://github.com/thinkwork-ai/thinkwork/pull/1980) passed
+  required checks and post-merge `main` workflows.
+- `pnpm install` in the U21 worktree - passed. Optional `node-liblzma` and
+  `canvas` native postinstall builds logged local `pkg-config` warnings and
+  exited 0.
+- `pnpm dlx prettier@3.8.2 --write apps/spaces/src/components/settings/SettingsEvaluations.tsx apps/spaces/src/components/settings/SettingsEvaluations.test.ts packages/desktop-ipc/src/schemas.ts packages/desktop-ipc/test/schemas.test.ts apps/desktop/src/main/pi-sidecar-controller.ts apps/desktop/src/main/pi-sidecar-session.ts apps/desktop/src/sidecar/index.ts apps/desktop/src/sidecar/eval-runner.ts apps/desktop/test/main/pi-sidecar-controller.test.ts apps/desktop/test/sidecar/eval-runner.test.ts`
+  - passed.
+- `pnpm --filter @thinkwork/desktop-ipc test -- schemas.test.ts` - passed.
+- `pnpm --filter @thinkwork/desktop test -- test/main/pi-sidecar-controller.test.ts test/sidecar/eval-runner.test.ts`
+  - passed.
+- `pnpm --filter @thinkwork/spaces test -- SettingsEvaluations.test.ts` -
+  passed.
+- `pnpm --filter @thinkwork/desktop-ipc typecheck` - passed.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- `pnpm --filter @thinkwork/spaces typecheck` - passed.
+- `git diff --check` - passed.
 
 ### Blockers
 
 The U19 live reruns are not valid Kimi behavior signal because Desktop Pi was
 silently routing explicit Kimi requests through the Bedrock Sonnet fallback.
-U20 fixes that resolver path and should be followed by a single-thread local
-Kimi verification run before another full-catalog remediation sweep.
+U20 fixes that resolver path. U21 is adding a per-run parallel-thread control
+so the next local Kimi verification can choose 1, 2, 3, or another bounded
+worker count from Settings instead of relying on process environment.
 
 ## Workspace Architecture Guidance Docs - 2026-06-01
 

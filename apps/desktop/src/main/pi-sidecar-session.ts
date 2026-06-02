@@ -53,6 +53,7 @@ export interface PiSidecarEvalRunPayload {
   };
   workItems: PiSidecarEvalWorkItem[];
   workspaceCacheRoot: string;
+  parallelThreads?: number;
 }
 
 export type PiSidecarParentMessage =
@@ -230,10 +231,16 @@ function isPiSidecarEvalRunPayload(
     workspaceCacheRoot?: unknown;
     resultCallback?: { url?: unknown; token?: unknown; expiresAt?: unknown };
     workItems?: unknown;
+    parallelThreads?: unknown;
   };
   return (
     typeof candidate.runId === "string" &&
     typeof candidate.workspaceCacheRoot === "string" &&
+    (candidate.parallelThreads === undefined ||
+      (typeof candidate.parallelThreads === "number" &&
+        Number.isInteger(candidate.parallelThreads) &&
+        candidate.parallelThreads >= 1 &&
+        candidate.parallelThreads <= 8)) &&
     typeof candidate.resultCallback?.url === "string" &&
     typeof candidate.resultCallback.token === "string" &&
     typeof candidate.resultCallback.expiresAt === "string" &&

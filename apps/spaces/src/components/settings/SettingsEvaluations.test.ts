@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  isDesktopPiEvalParallelThreadsValid,
   isStartEvaluationDisabled,
+  normalizeDesktopPiEvalParallelThreads,
   shouldShowDesktopPiEvalTarget,
 } from "./SettingsEvaluations";
 
@@ -36,6 +38,16 @@ describe("SettingsEvaluations target selection", () => {
         selectedModel: "moonshotai.kimi-k2.5",
         target: "desktop-pi",
         desktopPiEnabled: true,
+        desktopPiParallelThreads: "0",
+      }),
+    ).toBe(true);
+    expect(
+      isStartEvaluationDisabled({
+        submitting: false,
+        selectedModel: "moonshotai.kimi-k2.5",
+        target: "desktop-pi",
+        desktopPiEnabled: true,
+        desktopPiParallelThreads: "3",
       }),
     ).toBe(false);
     expect(
@@ -54,5 +66,19 @@ describe("SettingsEvaluations target selection", () => {
         desktopPiEnabled: true,
       }),
     ).toBe(true);
+  });
+
+  it("validates and normalizes Desktop Pi parallel threads", () => {
+    expect(isDesktopPiEvalParallelThreadsValid("1")).toBe(true);
+    expect(isDesktopPiEvalParallelThreadsValid("3")).toBe(true);
+    expect(isDesktopPiEvalParallelThreadsValid("8")).toBe(true);
+    expect(isDesktopPiEvalParallelThreadsValid("0")).toBe(false);
+    expect(isDesktopPiEvalParallelThreadsValid("9")).toBe(false);
+    expect(isDesktopPiEvalParallelThreadsValid("two")).toBe(false);
+
+    expect(normalizeDesktopPiEvalParallelThreads("")).toBe(1);
+    expect(normalizeDesktopPiEvalParallelThreads("0")).toBe(1);
+    expect(normalizeDesktopPiEvalParallelThreads("3")).toBe(3);
+    expect(normalizeDesktopPiEvalParallelThreads("12")).toBe(8);
   });
 });
