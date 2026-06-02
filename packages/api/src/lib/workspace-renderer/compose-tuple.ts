@@ -123,6 +123,19 @@ function shouldRenderSpaceSourcePath(relPath: string): boolean {
   );
 }
 
+function shouldRenderUserSourcePath(relPath: string): boolean {
+  const sourcePath = runtimeSourcePath(relPath);
+  if (sourcePath === "USER.md" || sourcePath === "knowledge-pack.md") {
+    return true;
+  }
+  return (
+    sourcePath === "memory/MEMORY.md" ||
+    sourcePath === "memory/preferences.md" ||
+    sourcePath === "memory/contacts.md" ||
+    sourcePath === "memory/lessons.md"
+  );
+}
+
 const THREAD_GOAL_STATUS_FILES = [
   "THREAD.md",
   "GOAL.md",
@@ -471,7 +484,13 @@ export async function renderWorkspaceTuple(
       shouldRenderSpaceSourcePath,
     ),
     userPrefix
-      ? listRenderableSource(objectStore, bucket, userPrefix, "user")
+      ? listRenderableSource(
+          objectStore,
+          bucket,
+          userPrefix,
+          "user",
+          shouldRenderUserSourcePath,
+        )
       : Promise.resolve({ owner: "user" as const, prefix: "", objects: [] }),
     listRenderableSource(
       objectStore,

@@ -87,7 +87,9 @@ export function createMemoryExtension(
         label: "Recall",
         description:
           "Recall raw memory units relevant to a query from the user's long-term memory. " +
-          "Use to check what is already known about the user or to surface prior context.\n\n" +
+          "Use only when the current prompt and workspace files, especially `User/USER.md`, " +
+          "do not already contain the needed fact, or when the user explicitly asks to search memory " +
+          "or prior context.\n\n" +
           "REQUIRED FOLLOW-UP: after recall you MUST call `reflect` on the same query to " +
           "synthesize the raw units into a coherent answer. Returning recall output without " +
           "reflect produces fragmented, low-quality responses.",
@@ -125,8 +127,8 @@ export function createMemoryExtension(
         label: "Reflect",
         description:
           "Synthesize the memory units recalled for a query into a coherent answer. " +
-          "Call this AFTER `recall` on the same query — reflect performs the actual reasoning " +
-          "over the recalled units and returns the answer to act on.",
+          "Call this AFTER `recall` on the same query. Do not call it for facts that are " +
+          "already available in `User/USER.md` or the current workspace.",
         parameters: Type.Object({
           query: Type.String({
             description:

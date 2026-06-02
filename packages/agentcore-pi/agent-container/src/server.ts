@@ -659,11 +659,12 @@ export async function buildInvocationResources(
       tenantId: args.identity.tenantId,
       userId: args.identity.userId,
     });
-    // The turn's user message grounds the proactive session_start recall.
+    // Keep long-term memory available as an explicit tool, but do not
+    // proactively recall on every turn. Requester profile facts are already
+    // mounted as `/workspace/User/USER.md` and injected into the system prompt;
+    // proactive grounding made those simple turns take the expensive
+    // recall/reflect path anyway.
     const memoryExtension = createMemoryExtension({
-      groundingQuery: asString(args.payload.message),
-      // Grounding is best-effort — surface a failed/timed-out recall to
-      // CloudWatch instead of letting it vanish silently.
       onError: (error, { phase }) =>
         logStructured({
           level: "warn",
