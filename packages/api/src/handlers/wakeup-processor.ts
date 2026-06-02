@@ -88,7 +88,6 @@ import {
 } from "../lib/thread-goals/storage.js";
 
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
-const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
 const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
@@ -120,26 +119,25 @@ const BROWSER_AUTOMATION_CAPABILITY = "browser_automation";
 
 /**
  * Invoke AgentCore via Lambda SDK (direct invoke) or HTTP fetch (Function URL).
- * Uses AGENTCORE_FUNCTION_NAME for Lambda SDK, falls back to AGENTCORE_INVOKE_URL for HTTP.
+ * Pi is the only active runtime; legacy runtime selectors are normalized before
+ * this path.
  */
-async function invokeAgentCore(
+export async function invokeAgentCore(
   payload: Record<string, unknown>,
-  runtimeType: AgentRuntimeType = "strands",
+  runtimeType: AgentRuntimeType = "pi",
 ): Promise<{ ok: boolean; status: number; result: Record<string, unknown> }> {
-  let functionName = AGENTCORE_FUNCTION_NAME;
-  if (runtimeType === "pi") {
-    try {
-      functionName = resolveRuntimeFunctionName(runtimeType);
-    } catch (err) {
-      return {
-        ok: false,
-        status: 503,
-        result: {
-          error: err instanceof Error ? err.message : String(err),
-          runtime_type: runtimeType,
-        },
-      };
-    }
+  let functionName = "";
+  try {
+    functionName = resolveRuntimeFunctionName(runtimeType);
+  } catch (err) {
+    return {
+      ok: false,
+      status: 503,
+      result: {
+        error: err instanceof Error ? err.message : String(err),
+        runtime_type: normalizeAgentRuntimeType(runtimeType),
+      },
+    };
   }
 
   if (functionName) {
