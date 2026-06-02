@@ -145,6 +145,7 @@
 }
 .desktop-vibrancy .desktop-app-header {
   border-color: transparent !important;
+  border-bottom-color: var(--border) !important;
 }
 
 /* New thread is an action, not a destination — never show it selected. */
