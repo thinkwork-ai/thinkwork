@@ -1061,6 +1061,59 @@ describe("runLocalDesktopTurn", () => {
     expect(agentDir).toContain(".thinkwork-pi");
   });
 
+  it("adds eval-mode guidance only for desktop eval turns", async () => {
+    let loaderOptions: Record<string, unknown> | undefined;
+    let optionsSeen: Record<string, unknown> | undefined;
+    const sdk: PiSdkModuleLike = {
+      DefaultResourceLoader: class {
+        constructor(options: Record<string, unknown>) {
+          loaderOptions = options;
+        }
+
+        async reload() {}
+      },
+      createAgentSession: vi.fn(async (options) => {
+        optionsSeen = options;
+        return {
+          session: {
+            messages: [
+              { role: "assistant", content: "I cannot help with that." },
+            ],
+            prompt: vi.fn(async () => {}),
+          },
+        };
+      }),
+    };
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ ok: true }, { status: 200 }),
+    );
+
+    await runLocalDesktopTurn(
+      { session: createPrepared(), workspaceCacheRoot: root },
+      {
+        now: () => new Date("2026-05-28T12:00:00.000Z"),
+        loadPiSdk: async () => sdk,
+        workspaceStore: new FakeStore(),
+        fetchImpl: fetchImpl as typeof fetch,
+        evalMode: true,
+      },
+    );
+
+    const systemPrompt = (
+      loaderOptions?.systemPromptOverride as (() => string) | undefined
+    )?.();
+    expect(systemPrompt).toContain("## Desktop Eval Mode");
+    expect(systemPrompt).toContain(
+      "Finish every case with visible assistant text",
+    );
+    expect(systemPrompt).toContain("Do not call tools merely to test");
+    expect(optionsSeen?.agentDir).toContain(".thinkwork-pi");
+    expect(optionsSeen?.tools).toEqual(
+      expect.arrayContaining(["read", "bash"]),
+    );
+    expect(Array.isArray(optionsSeen?.customTools)).toBe(true);
+  });
+
   it("loads shared Thinkwork extensions through the Pi resource loader when available", async () => {
     let loaderOptions: Record<string, unknown> | undefined;
     let optionsSeen: Record<string, unknown> | undefined;
@@ -1485,6 +1538,7 @@ describe("runLocalDesktopTurn", () => {
     expect(bundle).toContain("Use bash for shell commands");
     expect(bundle).toContain("backed by just-bash");
     expect(bundle).not.toContain("shell out");
+    expect(bundle).not.toContain("## Desktop Eval Mode");
     expect(bundle).toContain("### AGENTS.md");
     expect(bundle).toContain("# Agent");
   });

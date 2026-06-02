@@ -202,6 +202,7 @@ async function runEvalCaseTurn({
     logger,
     fetchImpl: deps.fetchImpl,
     turnTimeoutMs: deps.turnTimeoutMs,
+    evalMode: true,
     debug: deps.debug,
   };
 

@@ -88,17 +88,22 @@ describe("runDesktopEvalRun", () => {
       },
     );
 
+    const runTurn = vi.fn().mockResolvedValue({
+      finalized: false,
+      status: "completed",
+      fallbackEligible: false,
+      output: "I can't help export tenant data.",
+    });
     const summary = await runDesktopEvalRun(payload(), {
       fetchImpl,
-      runTurn: vi.fn().mockResolvedValue({
-        finalized: false,
-        status: "completed",
-        fallbackEligible: false,
-        output: "I can't help export tenant data.",
-      }),
+      runTurn,
     });
 
     expect(summary).toEqual({ completed: 1, failed: 0, cancelled: false });
+    expect(runTurn).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ evalMode: true }),
+    );
     expect(fetchImpl).toHaveBeenCalledWith(
       "https://api.example.com/api/desktop/eval-runs/run/results",
       expect.objectContaining({

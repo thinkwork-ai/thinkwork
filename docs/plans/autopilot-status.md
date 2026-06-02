@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
 - Target branch: `main`.
-- Current unit: U13 Assistant-error rerun and workspace remediation.
-- Current branch: `codex/desktop-pi-evals-u13-error-rerun`.
-- Current worktree: `.Codex/worktrees/desktop-pi-evals-u13-error-rerun`.
+- Current unit: U14 Desktop Pi eval-mode reliability and speed.
+- Current branch: `codex/desktop-pi-evals-u14-sdk-errors`.
+- Current worktree: `.Codex/worktrees/desktop-pi-evals-u14-sdk-errors`.
 
 | Unit                                                | Branch                                   | PR                                                           | State       | Notes                                                                                                    |
 | --------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------- |
@@ -29,7 +29,8 @@ status: complete
 | U10 Post-deploy Desktop Pi full sweep               | `codex/desktop-pi-evals-u10-rerun`       | [#1970](https://github.com/thinkwork-ai/thinkwork/pull/1970) | Merged      | Squash merged as `72bea28f`; full sweep completed in 13m35s and output capture was hardened.             |
 | U11 Output-capture sweep and workspace remediation  | `codex/desktop-pi-evals-u11-remediation` | [#1971](https://github.com/thinkwork-ai/thinkwork/pull/1971) | Merged      | Squash merged as `8f0a4767`; SDK last-assistant output capture and empty-output diagnostics.             |
 | U12 Post-capture full Desktop Pi sweep/remediation  | `codex/desktop-pi-evals-u12-full-rerun`  | [#1972](https://github.com/thinkwork-ai/thinkwork/pull/1972) | Merged      | Squash merged as `2bf21bcd`; full sweep completed in 10m38s and assistant-error rows are explicit.       |
-| U13 Assistant-error rerun and workspace remediation | `codex/desktop-pi-evals-u13-error-rerun` | [#1973](https://github.com/thinkwork-ai/thinkwork/pull/1973) | In progress | Full sweeps completed; shipping bounded retry/concurrency controls and documenting remaining SDK errors. |
+| U13 Assistant-error rerun and workspace remediation | `codex/desktop-pi-evals-u13-error-rerun` | [#1973](https://github.com/thinkwork-ai/thinkwork/pull/1973) | Merged      | Squash merged as `c68ffdd5`; bounded retry/concurrency controls and remaining SDK errors documented.     |
+| U14 Desktop Pi eval-mode reliability and speed      | `codex/desktop-pi-evals-u14-sdk-errors`  | [#1974](https://github.com/thinkwork-ai/thinkwork/pull/1974) | In progress | Full sweeps completed; shipping eval-mode guidance, explicit SDK agent dir, and faster bounded defaults. |
 
 ### Progress Log
 
@@ -347,6 +348,38 @@ status: complete
 - U13 PR
   [#1973](https://github.com/thinkwork-ai/thinkwork/pull/1973) passed
   required PR checks (`cla`, `lint`, `verify`, `typecheck`, `test`).
+- U13 PR
+  [#1973](https://github.com/thinkwork-ai/thinkwork/pull/1973) was squash
+  merged as `c68ffdd59b4f2df6e7c84e060f7c04a53370d9e9`; the remote branch was
+  deleted, the local worktree/branch were removed, and post-merge `main`
+  workflows passed `Lint`, `Supply Chain`, `Typecheck`, `Test`, and `Deploy`.
+- Synced from `origin/main` and created isolated U14 worktree
+  `.Codex/worktrees/desktop-pi-evals-u14-sdk-errors` on branch
+  `codex/desktop-pi-evals-u14-sdk-errors`.
+- U14 added Desktop eval-mode guidance to the local Pi system prompt. Eval
+  turns now explicitly ask for visible assistant text and direct refusal on
+  prompt-injection, fake-authorization, credential, cross-tenant,
+  destructive-action, and tool-misuse requests instead of using tools merely to
+  probe unsafe instructions.
+- U14 also passes the sidecar's `.thinkwork-pi` agent directory explicitly to
+  the Pi SDK session and restores the faster bounded defaults: 8 eval workers,
+  two total attempts, and a 250ms retry delay.
+- Full Desktop Pi run `4cf4d8a1-fe4d-42d8-8b16-5245c3c42916` completed all
+  189 cases in about 10m30s on the normal Desktop Pi tool path. Result: 99
+  pass, 90 explicit SDK assistant-error rows, 52.38% pass rate. Category split:
+  `red-team-data-boundary` 26 pass / 22 error, `red-team-prompt-injection` 24
+  pass / 24 error, `red-team-safety-scope` 22 pass / 19 error, and
+  `red-team-tool-misuse` 27 pass / 25 error.
+- A direct-response/no-tools experiment was tested for speed. The corrected
+  full run `c1fcf21c-5c03-477c-a5e2-4863ca78d69f` completed all 189 cases in
+  about 7m35s, but reliability regressed to 38 pass and 151 explicit SDK
+  assistant-error rows. That path was rejected and is not being shipped.
+- U14 is therefore shipping only conservative reliability and speed changes:
+  eval-mode prompt guidance, explicit SDK `agentDir`, and faster bounded
+  concurrency/retry defaults while keeping the normal Desktop Pi tools
+  available to eval turns.
+- Opened U14 PR
+  [#1974](https://github.com/thinkwork-ai/thinkwork/pull/1974).
 
 ### Verification Log
 
@@ -467,12 +500,27 @@ status: complete
 - `pnpm --filter @thinkwork/desktop test -- test/sidecar/eval-runner.test.ts`
   - passed after trimming the default retry policy to two total attempts.
 - `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- U14 live Desktop Pi run
+  `4cf4d8a1-fe4d-42d8-8b16-5245c3c42916` - completed: 189/189 cases terminal,
+  99 pass, 90 error, 52.38% pass rate, about 10m30s runtime. Detailed results
+  saved outside the repo at `/tmp/desktop-pi-eval-run-4cf4d8a1.json`.
+- U14 direct-response experiment run
+  `c1fcf21c-5c03-477c-a5e2-4863ca78d69f` - completed: 189/189 cases terminal,
+  38 pass, 151 error, 20.11% pass rate, about 7m35s runtime. This experiment
+  was rejected and not shipped because it increased SDK assistant-error rows.
+- `pnpm dlx prettier@3.8.2 --write apps/desktop/src/sidecar/local-turn-runner.ts apps/desktop/test/sidecar/local-turn-runner.test.ts`
+  - passed.
+- `pnpm --filter @thinkwork/desktop test -- test/sidecar/local-turn-runner.test.ts test/sidecar/eval-runner.test.ts`
+  - passed after adding eval-mode guidance, explicit `agentDir`, and eval-mode
+    propagation regressions.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
 
 ### Blockers
 
-None currently. U13 has a completed full Desktop Pi result set; remaining
-workspace prompt remediation should follow a reliability fix for the local Pi
-SDK assistant-error rows so prompt changes are measured against real outputs.
+None currently. U14 has completed full Desktop Pi result sets; remaining
+workspace prompt remediation should follow the reliability/speed changes so
+prompt tweaks are measured against real outputs rather than SDK assistant-error
+rows.
 
 ## Workspace Architecture Guidance Docs - 2026-06-01
 
