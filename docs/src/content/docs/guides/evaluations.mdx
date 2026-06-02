@@ -9,7 +9,18 @@ Evaluations measure how well your agents behave on a known set of prompts. You w
 
 Runs are first-class objects stored in Postgres. Every run has per-test results with the input, the agent's output, each assertion's pass/fail + reason, per-evaluator scores with explanations, duration, and cost. You can re-open a run weeks later and see exactly what happened.
 
+<Aside type="note" title="Desktop Pi target">
+  In the Desktop app, Settings -> Evaluations can also run the RedTeam catalog
+  against local Desktop Pi. Desktop Pi runs use the same run list, result detail,
+  deterministic assertions, and persisted `eval_runs` / `eval_results` rows, but
+  execution happens inside the local Electron sidecar instead of the cloud
+  eval-worker. See the repo runbook
+  `docs/runbooks/desktop-pi-redteam-evals.md` for the operator checklist.
+</Aside>
+
 ## How a run works
+
+Cloud/backend runs follow the eval-runner path:
 
 ```
 User clicks "Run Evaluation" in Studio      ← or `thinkwork eval run`
@@ -32,6 +43,21 @@ eval-runner (concurrency=5 per run):
   3. Update eval_runs aggregates (passed / failed / pass_rate / cost_usd)
   4. Record System Workflow step events + score-summary evidence
   5. Notify AppSync so subscribed UI tabs live-update
+```
+
+Desktop Pi runs follow the local sidecar path:
+
+```
+User clicks "Run Evaluation" in Desktop Settings
+  ↓ Selects target: Desktop Pi
+  ↓ Electron bridge: pi.startEvalRun(...)
+  ↓ API: POST /api/desktop/eval-runs
+  ↓ eval_runs row + planned result rows are created
+  ↓ Electron main starts a local sidecar eval run
+  ↓ sidecar runs each case through Desktop-local Pi
+  ↓ sidecar scores output with @thinkwork/evals-core
+  ↓ API callback writes each eval_results row
+  ↓ normal run detail UI updates and finalizes
 ```
 
 Every run executes against the tenant's [platform agent](/applications/admin/evaluations/#agent-target) — the single `agents` row with `is_platform_default = true`. The workspace, tools, and baseline model that AgentCore loads come from that agent's configuration. Tests that turn on tool-surface assumptions (for example, "the agent should refuse to web-search") depend on what's enabled on the platform agent.
@@ -118,12 +144,26 @@ Manual trigger:
 
 ### From the UI
 
+Web and Admin use the cloud/backend eval target:
+
 1. Open `/evaluations`, click **Run Evaluation**.
 2. Optional: override **Model**. Blank = platform agent's default (Kimi K2.5).
 3. Pick a **scope**: All Categories, a subset (multi-select), or specific test cases.
 4. Click **Start Evaluation**. The run appears in Recent Runs with `status=pending` and transitions to `running → completed` as the Lambda works through the pack. The run targets the tenant's [platform agent](/applications/admin/evaluations/#agent-target).
 
 Live updates come via the `onEvalRunUpdated` AppSync subscription plus a 3s poll fallback — the dashboard and Run Results page stay in sync without a manual refresh.
+
+Desktop adds a local target option:
+
+1. Open Desktop -> **Settings** -> **Evaluations**.
+2. Click **Run Evaluation**.
+3. Choose **Desktop Pi** when the target is available.
+4. Pick one case, a category, or the full catalog.
+5. Start the run and open the normal run detail page.
+
+Desktop Pi is disabled when the local sidecar is unavailable or already busy.
+The run still appears in the standard Recent Runs list and detail page, with
+Desktop Pi provenance so operators can distinguish local runs from cloud runs.
 
 ### From the CLI
 
@@ -207,6 +247,8 @@ Recurring evals use the shared `scheduled_jobs` infrastructure — the same Even
 | Resolvers               | `packages/api/src/graphql/resolvers/evaluations/index.ts`               |
 | System Workflow runtime | `packages/api/src/lib/system-workflows/*`                               |
 | Lambda                  | `packages/api/src/handlers/eval-runner.ts`                              |
+| Desktop eval API        | `packages/api/src/handlers/desktop-eval-runs.ts`                        |
+| Desktop local runner    | `apps/desktop/src/sidecar/eval-runner.ts`                               |
 | AppSync notify          | `packages/api/src/lib/eval-notify.ts`                                   |
 | Seeds                   | `seeds/eval-test-cases/*.json` (11 files, 189 cases)                    |
 | Studio UI               | `apps/admin/src/routes/_authed/_tenant/evaluations/`                    |

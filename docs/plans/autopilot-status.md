@@ -11,18 +11,18 @@ status: complete
 - Plan:
   `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
 - Target branch: `main`.
-- Current unit: U5 Convert and harden catalog for Desktop Pi.
-- Current branch: `codex/desktop-pi-evals-u5-catalog`.
-- Current worktree:
-  `.Codex/worktrees/desktop-pi-evals-u5-catalog`.
+- Current unit: U6 Full-catalog proof, docs, and guardrails.
+- Current branch: `codex/desktop-pi-evals-u6-proof`.
+- Current worktree: `.Codex/worktrees/desktop-pi-evals-u6-proof`.
 
-| Unit                                              | Branch                               | PR                                                           | State       | Notes                                                                                           |
-| ------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------- |
-| U1 Shared eval scoring core                       | `codex/desktop-pi-evals-u1-scoring`  | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | Merged      | Shared `@thinkwork/evals-core`; CI passed.                                                      |
-| U2 Desktop eval run API preparation and callbacks | `codex/desktop-pi-evals-u2-api`      | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | Merged      | Desktop provenance, preparation, callbacks; CI passed after dev migration drift was reconciled. |
-| U3 Desktop IPC and sidecar eval execution         | `codex/desktop-pi-evals-u3-sidecar`  | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | Merged      | IPC bridge, sidecar eval runner, result callbacks; CI passed.                                   |
-| U4 Settings Evaluations Desktop Pi target         | `codex/desktop-pi-evals-u4-settings` | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | Merged      | Settings target selection and Desktop Pi provenance; CI passed.                                 |
-| U5 Convert and harden catalog for Desktop Pi      | `codex/desktop-pi-evals-u5-catalog`  | [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965) | In progress | Catalog metadata/prose conversion, shape gate, and testing solution doc.                        |
+| Unit                                              | Branch                               | PR                                                           | State       | Notes                                                                                                 |
+| ------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------- |
+| U1 Shared eval scoring core                       | `codex/desktop-pi-evals-u1-scoring`  | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | Merged      | Shared `@thinkwork/evals-core`; CI passed.                                                            |
+| U2 Desktop eval run API preparation and callbacks | `codex/desktop-pi-evals-u2-api`      | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | Merged      | Desktop provenance, preparation, callbacks; CI passed after dev migration drift was reconciled.       |
+| U3 Desktop IPC and sidecar eval execution         | `codex/desktop-pi-evals-u3-sidecar`  | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | Merged      | IPC bridge, sidecar eval runner, result callbacks; CI passed.                                         |
+| U4 Settings Evaluations Desktop Pi target         | `codex/desktop-pi-evals-u4-settings` | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | Merged      | Settings target selection and Desktop Pi provenance; CI passed.                                       |
+| U5 Convert and harden catalog for Desktop Pi      | `codex/desktop-pi-evals-u5-catalog`  | [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965) | Merged      | Squash merged as `81fd1fb9`; catalog metadata/prose conversion, shape gate, and testing solution doc. |
+| U6 Full-catalog proof, docs, and guardrails       | `codex/desktop-pi-evals-u6-proof`    | TBD                                                          | In progress | Operator runbook, docs updates, focused Desktop Pi proof, and full-run prep hardening.                |
 
 ### Progress Log
 
@@ -44,6 +44,34 @@ status: complete
   legacy AgentCore/Computer prose in authored cases.
 - Opened U5 PR
   [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965).
+- U5 PR
+  [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965) passed
+  required checks (`cla`, `lint`, `verify`, `typecheck`, `test`) and was squash
+  merged as `81fd1fb9fd70749227639dd78e3a777cbfeb35bf`; the remote branch was
+  deleted and the local worktree/branch were removed.
+- Synced from `origin/main` and created isolated U6 worktree
+  `.Codex/worktrees/desktop-pi-evals-u6-proof` on branch
+  `codex/desktop-pi-evals-u6-proof`.
+- Added the Desktop Pi RedTeam operator runbook and refreshed evaluation docs so
+  Settings -> Evaluations names Desktop Pi as the desktop-local execution path.
+- Fixed the Desktop run detail category pass-rate pill so it only counts
+  completed terminal outcomes. Running, waiting, and pending rows no longer drag
+  a still-running category down to a progress-like percentage.
+- Focused live Desktop Pi proof from Electron Settings completed:
+  run `759dbb53-5a26-4ade-b01a-dace7c8aaf30`, category
+  `red-team-prompt-injection`, 48 planned rows, 41 passed, 7 failed, 85.4% pass
+  rate, terminal status `completed`, provenance `Desktop Pi`.
+- Full-catalog live start against the currently deployed API created run
+  `51bddcdc-6cf5-4a57-be09-f187fb46c6be` with 189 planned rows but timed out
+  during remote Desktop Pi session preparation before returning work to
+  Electron. The stale run was cancelled from the Desktop run detail UI.
+- Hardened Desktop eval run preparation so full-catalog session prep uses a
+  bounded worker pool and marks a created run `failed` if preparation fails
+  after inserting the run row. This prevents future `running 0 / N` orphans once
+  the PR deploys through the normal pipeline.
+- Parallel Desktop Pi execution remains a follow-up: safe parallelism should use
+  a bounded sidecar worker pool with per-case isolated workspace/session state,
+  not shared in-flight mutation of one `/workspace`.
 
 ### Verification Log
 
@@ -62,10 +90,34 @@ status: complete
   to U6, whose explicit scope is focused/full-catalog proof from the Desktop
   app. U5 completed the catalog conversion and local data/runner verification
   without requiring a live authenticated Electron session.
+- `pnpm --filter @thinkwork/docs build` - passed for the initial U6 docs set.
+- `pnpm --filter @thinkwork/database-pg build` - passed before the live Desktop
+  proof run.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed after bundling the
+  shared eval core into the Electron dev build.
+- `pnpm --filter @thinkwork/desktop test -- eval-runner.test.ts` - passed.
+- `pnpm --filter @thinkwork/spaces test -- SettingsEvalRunDetail.test.ts` -
+  passed.
+- `pnpm --filter @thinkwork/api test -- desktop-eval-runs.test.ts` - passed,
+  including bounded session-prep concurrency and prep-failure cleanup coverage.
+- `pnpm dlx prettier@3.8.2 --write apps/desktop/electron.vite.config.ts apps/spaces/src/components/settings/SettingsEvalRunDetail.tsx apps/spaces/src/components/settings/SettingsEvalRunDetail.test.ts docs/plans/autopilot-status.md docs/runbooks/desktop-pi-redteam-evals.md docs/src/content/docs/applications/desktop/index.mdx docs/src/content/docs/guides/evaluations.mdx packages/api/src/handlers/desktop-eval-runs.ts packages/api/src/handlers/desktop-eval-runs.test.ts`
+  - passed.
+- `pnpm --filter @thinkwork/api test -- desktop-eval-runs.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm --filter @thinkwork/spaces test -- SettingsEvalRunDetail.test.ts` -
+  passed.
+- `pnpm --filter @thinkwork/spaces typecheck` - passed.
+- `pnpm --filter @thinkwork/desktop test -- eval-runner.test.ts` - passed.
+- `pnpm --filter @thinkwork/desktop typecheck` - passed.
+- `pnpm --filter @thinkwork/docs build` - passed with existing Astro/Pagefind
+  warnings about missing i18n directory, `workspace-overlay` lacking an outer
+  `<html>` element, and missing sitemap `site` config.
 
 ### Blockers
 
-None.
+Full 189-case live proof is waiting for this API cleanup to merge and deploy
+through the normal pipeline. Retrying against the old deployed API repeatedly
+creates stale full-catalog rows instead of exercising the local fix.
 
 ## Workspace Architecture Guidance Docs - 2026-06-01
 

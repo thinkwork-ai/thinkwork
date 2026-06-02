@@ -67,10 +67,27 @@ Desktop raises a native macOS notification when a new message lands in a thread 
 
 <Aside type="note">
   Notifications ride the live connection, so one can be missed during sleep or a
-  network blip, and a fully quit app receives nothing until reopened. Your unread
-  markers always reconcile when the app regains focus, so you won't lose track of
-  a thread even if its notification didn't fire.
+  network blip, and a fully quit app receives nothing until reopened. Your
+  unread markers always reconcile when the app regains focus, so you won't lose
+  track of a thread even if its notification didn't fire.
 </Aside>
+
+## Desktop Pi evaluations
+
+Desktop can run the RedTeam evaluation catalog against local Desktop Pi from
+**Settings -> Evaluations**. When local Pi is healthy, the Run Evaluation dialog
+offers **Desktop Pi** as a target alongside the normal cloud/backend path.
+
+Desktop Pi evals use the same run list and run detail pages as cloud evals, but
+execution happens inside the Electron sidecar. The backend creates the run and
+planned rows, then the sidecar runs selected cases through local Pi and reports
+results back through the API. Run rows are labeled with Desktop Pi provenance so
+operators can tell local desktop runs apart from AgentCore/backend runs.
+
+Use Desktop Pi evals when you need to validate local workspace hydration,
+host-contained `just-bash`, connector availability assumptions, and desktop
+sidecar behavior. For the focused/category/full-catalog checklist, use the
+repo-local runbook at `docs/runbooks/desktop-pi-redteam-evals.md`.
 
 ## Install
 
