@@ -5680,6 +5680,30 @@ None.
   `docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md`
   are complete.
 
+## Final Desktop + Mobile E2E Regression
+
+- `2026-06-02T16:55Z` verification branch:
+  `codex/agentcore-regression-check`, based on `origin/main` at
+  `b6e5d5cc`.
+- Local verification passed before live UI testing:
+  `pnpm --filter @thinkwork/desktop test`,
+  `pnpm --filter @thinkwork/mobile test -- lib/agentcore-first-mobile.test.ts lib/thread-agent-mode.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/bootstrap-workspace.test.ts agent-container/tests/server.test.ts agent-container/tests/handler-context.test.ts`,
+  `pnpm --filter @thinkwork/react-native-sdk build`, `pnpm lint`,
+  `bash scripts/verify-supply-chain.sh`, `pnpm typecheck`, and `pnpm test`.
+- Desktop dev Electron E2E passed from the local desktop app: thread
+  `f4c13c1e-d5ff-4681-a4b1-5e0e440dc99b` was created from
+  `http://localhost:5174`, showed live managed progress, and returned
+  `DESKTOP_AGENTCORE_FULL_E2E_OK`.
+- iOS simulator E2E passed from a freshly built Expo development client on
+  iPhone 17 Pro iOS 26.2. Metro restored an authenticated session, connected
+  AppSync, created thread `d7969cc3-9d27-4704-8f61-9037ab3b7cf2`, registered
+  turn run `8e08eafb-7a12-4086-8e1f-b7cf7d43b0e9`, received assistant message
+  `02baf7de-4b25-4a65-a0b1-bfc97ac2b89a`, and the simulator UI rendered
+  `MOBILE_AGENTCORE_FULL_E2E_OK`.
+- The plan frontmatter was marked `completed` after all U0-U7 units were merged
+  and the desktop/mobile live regression passed.
+
 ## Blockers
 
 None.
