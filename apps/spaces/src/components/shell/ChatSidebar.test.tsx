@@ -23,6 +23,7 @@ const {
   recentThreadItemsMock,
   searchThreadItemsMock,
   pinnedThreadItemsMock,
+  pinnedQueryPauseValuesMock,
   recentReexecuteMock,
   searchReexecuteMock,
   pinnedReexecuteMock,
@@ -61,6 +62,7 @@ const {
     lastActivityAt?: string;
     lastReadAt?: string | null;
   }>,
+  pinnedQueryPauseValuesMock: [] as boolean[],
   recentReexecuteMock: vi.fn(),
   searchReexecuteMock: vi.fn(),
   pinnedReexecuteMock: vi.fn(),
@@ -157,9 +159,11 @@ vi.mock("urql", () => ({
   useQuery: ({
     query,
     variables,
+    pause,
   }: {
     query: unknown;
     variables?: Record<string, unknown>;
+    pause?: boolean;
   }) => {
     if (query === queryDocs.SpacesQuery) {
       return [
@@ -255,6 +259,16 @@ vi.mock("urql", () => ({
       ];
     }
     if (query === queryDocs.PinnedThreadsQuery) {
+      pinnedQueryPauseValuesMock.push(Boolean(pause));
+      if (pause) {
+        return [
+          {
+            fetching: false,
+            data: null,
+          },
+          pinnedReexecuteMock,
+        ];
+      }
       return [
         {
           fetching: false,
@@ -493,6 +507,7 @@ afterEach(() => {
   recentThreadItemsMock.length = 0;
   searchThreadItemsMock.length = 0;
   pinnedThreadItemsMock.length = 0;
+  pinnedQueryPauseValuesMock.length = 0;
   window.localStorage.clear();
   if (ORIGINAL_LOCAL_STORAGE) {
     Object.defineProperty(window, "localStorage", ORIGINAL_LOCAL_STORAGE);
@@ -695,6 +710,18 @@ describe("ChatSidebar", () => {
         .getByRole("link", { name: /older pinned opportunity/i })
         .getAttribute("href"),
     ).toBe("/threads/thread-pinned-old");
+  });
+
+  it("waits for caller user identity before loading server pinned threads", () => {
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: null });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    expect(pinnedQueryPauseValuesMock).toContain(true);
+    expect(
+      screen.queryByText("[GraphQL] Requester user identity required"),
+    ).toBeNull();
   });
 
   it("pins a thread through the server and refreshes thread lists", async () => {
