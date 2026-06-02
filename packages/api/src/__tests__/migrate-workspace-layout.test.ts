@@ -273,12 +273,59 @@ describe("migrate-workspace-layout", () => {
       bucket: "workspace-bucket",
       snapshot: SNAPSHOT,
       objectStore: store,
-      deleteLegacySources: true,
+      deleteLegacySources: false,
     });
 
     expect(plan.status).toBe("conflict");
     expect(plan.conflicts).toContain(
       "tenants/acme/spaces/sales/SPACE.md -> tenants/acme/spaces/board-pack/SPACE.md already exists with different metadata",
+    );
+  });
+
+  it("deletes legacy space copies when canonical space objects already exist", async () => {
+    const store = FakeObjectStore.from([
+      ["tenants/acme/spaces/sales/SPACE.md", { etag: "old", size: 10 }],
+      [
+        "tenants/acme/spaces/sales/docs/customer-onboarding-intake.md",
+        { etag: "old-doc", size: 20 },
+      ],
+      ["tenants/acme/spaces/board-pack/SPACE.md", { etag: "new", size: 10 }],
+      [
+        "tenants/acme/spaces/board-pack/docs/customer-onboarding-intake.md",
+        { etag: "new-doc", size: 20 },
+      ],
+    ]);
+
+    const plan = await planWorkspaceLayoutTenant({
+      bucket: "workspace-bucket",
+      snapshot: SNAPSHOT,
+      objectStore: store,
+      deleteLegacySources: true,
+    });
+
+    expect(plan.status).toBe("dry-run");
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.plannedCopies).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceKey: "tenants/acme/spaces/sales/SPACE.md",
+        }),
+        expect.objectContaining({
+          sourceKey:
+            "tenants/acme/spaces/sales/docs/customer-onboarding-intake.md",
+        }),
+      ]),
+    );
+    expect(plan.deletePrefixes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          prefix: "tenants/acme/spaces/sales/",
+          keys: [
+            "tenants/acme/spaces/sales/SPACE.md",
+            "tenants/acme/spaces/sales/docs/customer-onboarding-intake.md",
+          ],
+        }),
+      ]),
     );
   });
 
