@@ -3147,6 +3147,8 @@ function actionRowsForTurn(
   const seen = new Set<string>();
   const workspaceDiagnosticsRow = actionRowForWorkspaceDiagnostics(usage);
   if (workspaceDiagnosticsRow) rows.push(workspaceDiagnosticsRow);
+  const agentCorePhasesRow = actionRowForAgentCorePhases(usage);
+  if (agentCorePhasesRow) rows.push(agentCorePhasesRow);
 
   for (const invocation of toolInvocations) {
     const record = parseRecord(invocation);
@@ -3228,6 +3230,40 @@ function actionRowForWorkspaceDiagnostics(usage: Record<string, unknown>) {
   };
 }
 
+function actionRowForAgentCorePhases(usage: Record<string, unknown>) {
+  const diagnostics = parseRecord(usage.diagnostics);
+  const phases = parseArray(diagnostics.agentcore_phases)
+    .map((phase) => parseRecord(phase))
+    .filter((phase) => stringValue(phase.phase));
+  if (phases.length === 0) return null;
+
+  const lines = phases.map((phase) => {
+    const name = stringValue(phase.phase) ?? "runtime";
+    const status = stringValue(phase.status);
+    const duration = Number(phase.duration_ms);
+    const count = Number(phase.count);
+    const parts = [
+      status,
+      Number.isFinite(duration) && duration >= 0
+        ? formatTimingMs(duration)
+        : null,
+      Number.isFinite(count) && count >= 0
+        ? `count ${Math.round(count)}`
+        : null,
+      stringValue(phase.detail),
+    ].filter(Boolean);
+    return `${name.replace(/^runtime\./, "").replace(/_/g, " ")}${
+      parts.length ? `: ${parts.join(" · ")}` : ""
+    }`;
+  });
+
+  return {
+    title: "AgentCore phases",
+    detail: lines.join("\n"),
+    kind: "thinking" as const,
+  };
+}
+
 function formatWorkspaceDiagnostics(
   workspaceDiagnostics: Record<string, unknown>,
   timings: Record<string, unknown>,
@@ -3248,7 +3284,10 @@ function formatWorkspaceDiagnostics(
   ];
   const countKeys = [
     "file_count",
+    "total_files",
     "hydrated_files",
+    "synced_files",
+    "skipped_files",
     "deleted_files",
     "changed_files",
     "persisted_files",
@@ -3288,6 +3327,9 @@ function formatWorkspaceDiagnostics(
     ),
     stringValue(normalized.reconcile_status)
       ? `reconcile status: ${stringValue(normalized.reconcile_status)}`
+      : null,
+    stringValue(normalized.prefix)
+      ? `prefix: ${stringValue(normalized.prefix)}`
       : null,
   ].filter(Boolean);
 

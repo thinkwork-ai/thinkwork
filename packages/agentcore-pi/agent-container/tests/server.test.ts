@@ -1092,6 +1092,82 @@ describe("postFinalizeCallback", () => {
     expect(fetchCalls).toHaveLength(1);
   });
 
+  it("includes AgentCore phase and workspace hydration diagnostics in finalize payloads", async () => {
+    process.env.WORKSPACE_BUCKET = "workspace-bucket";
+    const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
+    const fetchImpl: typeof fetch = (async (
+      url: unknown,
+      init?: RequestInit,
+    ) => {
+      fetchCalls.push([url, init]);
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        finalize_callback_url:
+          "https://api.example.com/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+        rendered_workspace_prefix:
+          "tenants/tenant-1/threads/thread-1/agent-slug/rendered/",
+      }),
+      deps: makeDeps({
+        fetchImpl,
+        bootstrapWorkspaceImpl: async () => ({
+          synced: 0,
+          skipped: 3,
+          deleted: 0,
+          total: 3,
+          prefix: "tenants/tenant-1/threads/thread-1/agent-slug/rendered/",
+        }),
+        runAgentLoop: async () => ({
+          content: "stub response",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+          diagnostics: {
+            workspace_diagnostics: {
+              source_freshness_ms: 4,
+            },
+          },
+        }),
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(fetchCalls).toHaveLength(1);
+    const [, init] = fetchCalls[0]!;
+    const body = JSON.parse(String(init?.body));
+    expect(body.usage.diagnostics).toMatchObject({
+      workspace_diagnostics: {
+        source_freshness_ms: 4,
+        total_files: 3,
+        hydrated_files: 0,
+        skipped_files: 3,
+        deleted_files: 0,
+        cache_hit: true,
+        prefix: "tenants/tenant-1/threads/thread-1/agent-slug/rendered/",
+      },
+      agentcore_timings_ms: {
+        workspace_bootstrap_ms: expect.any(Number),
+        tool_assembly_ms: expect.any(Number),
+        agent_loop_ms: expect.any(Number),
+      },
+      agentcore_phases: expect.arrayContaining([
+        expect.objectContaining({
+          phase: "runtime.workspace_bootstrap",
+          status: "completed",
+          count: 3,
+        }),
+        expect.objectContaining({
+          phase: "runtime.agent_loop",
+          status: "completed",
+        }),
+      ]),
+    });
+  });
+
   it("rejects origin-mismatched finalize URLs before sending the bearer", async () => {
     let fetchCalled = 0;
     const fetchImpl: typeof fetch = (async () => {

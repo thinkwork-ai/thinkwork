@@ -164,6 +164,49 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+interface RuntimePhaseDiagnostic {
+  phase: string;
+  status: "started" | "completed" | "failed" | "skipped";
+  duration_ms?: number;
+  detail?: string;
+  count?: number;
+}
+
+interface RuntimeDiagnostics {
+  agentcore_phases: RuntimePhaseDiagnostic[];
+  agentcore_timings_ms: Record<string, number>;
+  workspace_diagnostics?: Record<string, unknown>;
+}
+
+function mergeRuntimeDiagnostics(
+  runResult: RunAgentLoopResult,
+  diagnostics: RuntimeDiagnostics,
+): RunAgentLoopResult {
+  const existingDiagnostics = runResult.diagnostics ?? {};
+  const existingWorkspaceDiagnostics =
+    existingDiagnostics.workspace_diagnostics &&
+    typeof existingDiagnostics.workspace_diagnostics === "object" &&
+    !Array.isArray(existingDiagnostics.workspace_diagnostics)
+      ? (existingDiagnostics.workspace_diagnostics as Record<string, unknown>)
+      : {};
+  return {
+    ...runResult,
+    diagnostics: {
+      ...existingDiagnostics,
+      agentcore_phases: diagnostics.agentcore_phases,
+      agentcore_timings_ms: diagnostics.agentcore_timings_ms,
+      ...(diagnostics.workspace_diagnostics
+        ? {
+            workspace_diagnostics: {
+              ...existingWorkspaceDiagnostics,
+              ...diagnostics.workspace_diagnostics,
+            },
+          }
+        : {}),
+    },
+  };
+}
+
 async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
   try {
     await mkdir(workspaceDir, { recursive: true });
@@ -1034,6 +1077,18 @@ export async function handleInvocation(
     deps.sessionStoreFactory ?? ((opts) => new AuroraSessionStore(opts));
 
   const start = Date.now();
+  const runtimeDiagnostics: RuntimeDiagnostics = {
+    agentcore_phases: [],
+    agentcore_timings_ms: {},
+  };
+  const recordRuntimePhase = (phase: RuntimePhaseDiagnostic) => {
+    runtimeDiagnostics.agentcore_phases.push(phase);
+    if (typeof phase.duration_ms === "number") {
+      runtimeDiagnostics.agentcore_timings_ms[
+        `${phase.phase.replace(/^runtime\./, "").replace(/\./g, "_")}_ms`
+      ] = phase.duration_ms;
+    }
+  };
 
   // Snapshot identity + secrets + env BEFORE constructing tools so
   // anything downstream sees a frozen view.
@@ -1154,6 +1209,21 @@ export async function handleInvocation(
           workspacePrefix: renderedWorkspacePrefix,
         },
       );
+      const workspaceBootstrapDurationMs = Date.now() - workspaceBootstrapStart;
+      runtimeDiagnostics.workspace_diagnostics = {
+        workspace_sync_ms: workspaceBootstrapDurationMs,
+        hydration_copy_ms: workspaceBootstrapDurationMs,
+        file_count: bootstrapResult.total,
+        total_files: bootstrapResult.total,
+        hydrated_files: bootstrapResult.synced,
+        synced_files: bootstrapResult.synced,
+        skipped_files: bootstrapResult.skipped ?? 0,
+        deleted_files: bootstrapResult.deleted,
+        cache_hit:
+          (bootstrapResult.skipped ?? 0) > 0 && bootstrapResult.synced === 0,
+        prefix: bootstrapResult.prefix,
+        rendered_workspace_prefix: renderedWorkspacePrefix || undefined,
+      };
       logStructured({
         level: "info",
         event: "workspace_bootstrap_completed",
@@ -1166,8 +1236,15 @@ export async function handleInvocation(
         synced: bootstrapResult.synced,
         deleted: bootstrapResult.deleted,
         total: bootstrapResult.total,
-        durationMs: Date.now() - workspaceBootstrapStart,
+        durationMs: workspaceBootstrapDurationMs,
         skipped: bootstrapResult.skipped ?? 0,
+      });
+      recordRuntimePhase({
+        phase: "runtime.workspace_bootstrap",
+        status: "completed",
+        duration_ms: workspaceBootstrapDurationMs,
+        count: bootstrapResult.total,
+        detail: `synced=${bootstrapResult.synced};skipped=${bootstrapResult.skipped ?? 0};deleted=${bootstrapResult.deleted}`,
       });
       logAgentCorePhase({
         phase: "runtime.workspace_bootstrap",
@@ -1179,18 +1256,25 @@ export async function handleInvocation(
         threadTurnId,
         traceId: identity.traceId,
         runtimeType: "pi",
-        durationMs: Date.now() - workspaceBootstrapStart,
+        durationMs: workspaceBootstrapDurationMs,
         count: bootstrapResult.total,
         detail: `synced=${bootstrapResult.synced};skipped=${bootstrapResult.skipped ?? 0};deleted=${bootstrapResult.deleted}`,
       });
     } catch (err) {
+      const workspaceBootstrapDurationMs = Date.now() - workspaceBootstrapStart;
       logStructured({
         level: "warn",
         event: "workspace_bootstrap_failed",
         tenantId: identity.tenantId,
         agentSlug: identity.agentSlug,
-        durationMs: Date.now() - workspaceBootstrapStart,
+        durationMs: workspaceBootstrapDurationMs,
         error: err instanceof Error ? err.message : String(err),
+      });
+      recordRuntimePhase({
+        phase: "runtime.workspace_bootstrap",
+        status: "failed",
+        duration_ms: workspaceBootstrapDurationMs,
+        detail: err instanceof Error ? err.message : String(err),
       });
       logAgentCorePhase({
         phase: "runtime.workspace_bootstrap",
@@ -1202,7 +1286,7 @@ export async function handleInvocation(
         threadTurnId,
         traceId: identity.traceId,
         runtimeType: "pi",
-        durationMs: Date.now() - workspaceBootstrapStart,
+        durationMs: workspaceBootstrapDurationMs,
         errorType: err instanceof Error ? err.name : "Error",
       });
       return {
@@ -1347,6 +1431,13 @@ export async function handleInvocation(
       count: bundle.tools.length,
       detail: `extensionTools=${bundle.extensionToolNames.length}`,
     });
+    recordRuntimePhase({
+      phase: "runtime.tool_assembly",
+      status: "completed",
+      duration_ms: Date.now() - toolAssemblyStart,
+      count: bundle.tools.length,
+      detail: `extensionTools=${bundle.extensionToolNames.length}`,
+    });
   } catch (err) {
     // U16 — the resource builder may have minted handles into `handleStore`
     // before failing (e.g., MCP transport opened then listTools timed
@@ -1388,6 +1479,12 @@ export async function handleInvocation(
       runtimeType: "pi",
       durationMs: Date.now() - toolAssemblyStart,
       errorType: err instanceof Error ? err.name : "Error",
+    });
+    recordRuntimePhase({
+      phase: "runtime.tool_assembly",
+      status: "failed",
+      duration_ms: Date.now() - toolAssemblyStart,
+      detail: err instanceof Error ? err.message : String(err),
     });
     return {
       statusCode: 500,
@@ -1516,6 +1613,11 @@ export async function handleInvocation(
       runtimeType: "pi",
       detail: sessionStore ? "s3" : sessionStoreFallbackReason,
     });
+    recordRuntimePhase({
+      phase: "runtime.session_store",
+      status: sessionStore ? "completed" : "skipped",
+      detail: sessionStore ? "s3" : sessionStoreFallbackReason,
+    });
     logStructured({
       level: "info",
       event: "agent_loop_starting",
@@ -1602,6 +1704,14 @@ export async function handleInvocation(
       count: runResult.toolInvocations.length,
       detail: `toolsCalled=${runResult.toolsCalled.length}`,
     });
+    recordRuntimePhase({
+      phase: "runtime.agent_loop",
+      status: "completed",
+      duration_ms: Date.now() - runLoopStart,
+      count: runResult.toolInvocations.length,
+      detail: `toolsCalled=${runResult.toolsCalled.length}`,
+    });
+    runResult = mergeRuntimeDiagnostics(runResult, runtimeDiagnostics);
   } catch (err) {
     runError = err;
     logStructured({
@@ -1629,6 +1739,12 @@ export async function handleInvocation(
       runtimeType: "pi",
       durationMs: runLoopStart ? Date.now() - runLoopStart : undefined,
       errorType: err instanceof Error ? err.name : "Error",
+    });
+    recordRuntimePhase({
+      phase: "runtime.agent_loop",
+      status: "failed",
+      duration_ms: runLoopStart ? Date.now() - runLoopStart : undefined,
+      detail: err instanceof Error ? err.message : String(err),
     });
   } finally {
     bundle.handleStore.clear();
