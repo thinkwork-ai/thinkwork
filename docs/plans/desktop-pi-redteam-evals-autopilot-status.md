@@ -4,11 +4,11 @@ Plan: `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`
 
 ## Current Unit
 
-- Unit: U4 Settings Evaluations Desktop Pi target
-- Branch: `codex/desktop-pi-evals-u4-settings`
-- Worktree: `.Codex/worktrees/desktop-pi-evals-u4-settings`
+- Unit: Desktop Pi eval rollout and AgentCore follow-up
+- Branch: multiple merged PR branches
+- Worktree: cleaned up after merge
 - Started: 2026-06-01
-- Status: in progress
+- Status: paused for eval cleanup/remediation story
 
 ## Progress Log
 
@@ -64,6 +64,14 @@ Plan: `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`
   `pnpm --filter @thinkwork/spaces typecheck`, and `git diff --check`.
 - 2026-06-01: `pnpm install` completed in the U4 worktree; optional native packages `node-liblzma` and `canvas` again reported local Node 25/pkg-config build noise, but pnpm exited successfully.
 - 2026-06-01: Opened PR #1964 for U4.
+- 2026-06-01: PR #1964 checks passed and was squash-merged.
+- 2026-06-01: Follow-up Desktop Pi eval remediation work landed through PRs #1966 and #1970, hardening Desktop Pi proof runs and assistant output capture.
+- 2026-06-02: PR #1981 added configurable Desktop Pi eval parallelism.
+- 2026-06-02: PR #1982 added dashboard/run-data refresh support, All Categories labels, source badges, AgentCore response extraction, and longer AgentCore eval timeouts.
+- 2026-06-02: PR #1983 stabilized AgentCore eval retries for Kimi-only runs with fresh retry session IDs and no Sonnet fallback.
+- 2026-06-02: PR #1984 fixed workspace layout migration deploy failures by skipping non-renderable non-default space renders.
+- 2026-06-02: Verified deploy run 26817813191 completed successfully, including Workspace Layout Migration.
+- 2026-06-02: Started fresh AgentCore Pi all-categories eval run `aafeb955-c6c8-4dba-98bf-24425888b5da` from the desktop dev app surface. The run appeared in Recent Runs and progressed in the local Electron UI; observed it at 96/135 completed with a 73.8% completed-case pass rate before pausing cleanup.
 
 ## Pull Requests
 
@@ -72,12 +80,18 @@ Plan: `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`
 | U1   | `codex/desktop-pi-evals-u1-scoring`  | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | merged      | Checks passed; squash-merged.                                                       |
 | U2   | `codex/desktop-pi-evals-u2-api`      | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | merged      | CI passed after applying the dev-only manual migration and rerunning failed checks. |
 | U3   | `codex/desktop-pi-evals-u3-sidecar`  | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | merged      | Checks passed; squash-merged.                                                       |
-| U4   | `codex/desktop-pi-evals-u4-settings` | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | open        | Waiting for CI.                                                                     |
+| U4   | `codex/desktop-pi-evals-u4-settings` | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | merged      | Settings target and Desktop Pi provenance merged.                                   |
+| U21  | `codex/desktop-pi-evals-u21-concurrency` | [#1981](https://github.com/thinkwork-ai/thinkwork/pull/1981) | merged | Desktop Pi parallelism control merged. |
+| Follow-up | `codex/eval-dashboard-refresh` | [#1982](https://github.com/thinkwork-ai/thinkwork/pull/1982) | merged | Dashboard refresh, labels, badges, and AgentCore timeout/extraction fixes merged. |
+| Follow-up | `codex/eval-agentcore-followup` | [#1983](https://github.com/thinkwork-ai/thinkwork/pull/1983) | merged | Kimi-only AgentCore retry/session stabilization merged. |
+| Follow-up | `codex/workspace-migration-empty-space` | [#1984](https://github.com/thinkwork-ai/thinkwork/pull/1984) | merged | Deploy migration failure fixed; deploy run 26817813191 passed. |
 
 ## CI Failures
 
 - 2026-06-01: PR #1962 `Migration Drift Precheck (dev)` reported missing eval run provenance columns/index. Applied the manual migration to dev and reran the failed workflow; the check passed.
+- 2026-06-02: Deploy run 26815257481 failed in Workspace Layout Migration due a legacy/canonical space conflict. PR #1983 fixed the conflict cleanup behavior.
+- 2026-06-02: The next deploy exposed a non-renderable `finance` space render failure. PR #1984 skipped thread renders for non-default spaces with no renderable source files.
 
 ## Blockers
 
-None.
+None for the merged eval/dashboard/deploy units. Cleanup/remediation of failing eval cases is intentionally paused as a separate story.
