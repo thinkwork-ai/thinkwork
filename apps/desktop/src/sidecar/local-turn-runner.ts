@@ -686,7 +686,7 @@ async function readLocalWorkspaceSnapshot(
   return files;
 }
 
-function resolveAwsRegion(
+export function resolveAwsRegion(
   invocation: PreparedDesktopPiRuntimeSession["invocation"],
   sidecarCredentials: unknown,
 ): string {

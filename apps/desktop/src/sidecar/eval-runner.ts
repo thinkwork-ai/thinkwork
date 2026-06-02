@@ -9,6 +9,7 @@ import path from "node:path";
 import type { PiSidecarEvalRunPayload } from "../main/pi-sidecar-session.js";
 import type { PiSidecarEvalWorkItem } from "../main/pi-sidecar-session.js";
 import {
+  resolveAwsRegion,
   runLocalDesktopTurn,
   type LocalDesktopTurnPayload,
   type LocalTurnRunnerDeps,
@@ -18,6 +19,11 @@ import {
   createRedactedLogger,
   type RedactedLogger,
 } from "./redacted-logger.js";
+import {
+  createMemoizedWorkspaceObjectStore,
+  createS3WorkspaceObjectStore,
+  type WorkspaceObjectStore,
+} from "./workspace-cache.js";
 
 export interface EvalRunnerDeps {
   runTurn?: (
@@ -32,6 +38,7 @@ export interface EvalRunnerDeps {
   evalConcurrency?: number;
   evalMaxAttempts?: number;
   evalRetryDelayMs?: number;
+  workspaceStore?: WorkspaceObjectStore;
   debug?: boolean;
 }
 
@@ -54,6 +61,7 @@ export async function runDesktopEvalRun(
   const runTurn = deps.runTurn ?? runLocalDesktopTurn;
   const concurrency = normalizeEvalConcurrency(deps.evalConcurrency);
   const maxAttempts = normalizeEvalMaxAttempts(deps.evalMaxAttempts);
+  const workspaceStore = createEvalWorkspaceStore(payload, deps);
   let completed = 0;
   let failed = 0;
   let nextIndex = 0;
@@ -99,6 +107,7 @@ export async function runDesktopEvalRun(
         deps,
         logger,
         maxAttempts,
+        workspaceStore,
       });
       if (deps.signal?.aborted) return { counted: false, failed: false };
       const durationMs = elapsedMs(startedAt, deps.now?.() ?? new Date());
@@ -255,6 +264,7 @@ async function runEvalCaseTurn({
   deps,
   logger,
   maxAttempts,
+  workspaceStore,
 }: {
   payload: PiSidecarEvalRunPayload;
   item: PiSidecarEvalWorkItem;
@@ -262,6 +272,7 @@ async function runEvalCaseTurn({
   deps: EvalRunnerDeps;
   logger: RedactedLogger;
   maxAttempts: number;
+  workspaceStore?: WorkspaceObjectStore;
 }): Promise<LocalTurnRunnerResult> {
   const turnPayload = {
     session: item.session,
@@ -271,6 +282,7 @@ async function runEvalCaseTurn({
     signal: deps.signal,
     logger,
     fetchImpl: deps.fetchImpl,
+    workspaceStore,
     turnTimeoutMs: deps.turnTimeoutMs,
     evalMode: true,
     debug: deps.debug,
@@ -323,6 +335,25 @@ async function waitBeforeRetry({
   });
   if (delayMs <= 0) return;
   await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function createEvalWorkspaceStore(
+  payload: PiSidecarEvalRunPayload,
+  deps: EvalRunnerDeps,
+): WorkspaceObjectStore | undefined {
+  if (deps.workspaceStore) {
+    return createMemoizedWorkspaceObjectStore(deps.workspaceStore);
+  }
+  const firstItem = payload.workItems[0];
+  if (!firstItem) return undefined;
+  return createMemoizedWorkspaceObjectStore(
+    createS3WorkspaceObjectStore({
+      region: resolveAwsRegion(
+        firstItem.session.invocation,
+        firstItem.session.sidecarCredentials,
+      ),
+    }),
+  );
 }
 
 function shouldRetryLocalTurnError(error: unknown): boolean {

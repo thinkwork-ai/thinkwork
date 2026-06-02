@@ -642,6 +642,43 @@ export function createS3WorkspaceObjectStore(
   };
 }
 
+export function createMemoizedWorkspaceObjectStore(
+  store: WorkspaceObjectStore,
+): WorkspaceObjectStore {
+  const listCache = new Map<string, Promise<WorkspaceRemoteObject[]>>();
+  const objectCache = new Map<string, Promise<Uint8Array>>();
+
+  return {
+    async listObjects(input) {
+      const key = `${input.bucket}\0${input.prefix}`;
+      let cached = listCache.get(key);
+      if (!cached) {
+        cached = store
+          .listObjects(input)
+          .then((objects) => objects.map((object) => ({ ...object })))
+          .catch((error: unknown) => {
+            listCache.delete(key);
+            throw error;
+          });
+        listCache.set(key, cached);
+      }
+      return (await cached).map((object) => ({ ...object }));
+    },
+    async getObjectBytes(input) {
+      const key = `${input.bucket}\0${input.key}`;
+      let cached = objectCache.get(key);
+      if (!cached) {
+        cached = store.getObjectBytes(input).catch((error: unknown) => {
+          objectCache.delete(key);
+          throw error;
+        });
+        objectCache.set(key, cached);
+      }
+      return new Uint8Array(await cached);
+    },
+  };
+}
+
 async function listLocalFiles(localDir: string): Promise<Set<string>> {
   const out = new Set<string>();
   async function walk(dir: string): Promise<void> {

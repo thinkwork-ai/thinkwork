@@ -309,6 +309,7 @@ describe("runDesktopEvalRun", () => {
     ];
     const posts: unknown[] = [];
     const roots: string[] = [];
+    const workspaceStores: unknown[] = [];
     let active = 0;
     let maxActive = 0;
     const fetchImpl = vi.fn(
@@ -317,8 +318,9 @@ describe("runDesktopEvalRun", () => {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       },
     );
-    const runTurn = vi.fn(async (turnPayload) => {
+    const runTurn = vi.fn(async (turnPayload, turnDeps) => {
       roots.push(turnPayload.workspaceCacheRoot);
+      workspaceStores.push(turnDeps.workspaceStore);
       active += 1;
       maxActive = Math.max(maxActive, active);
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -355,6 +357,8 @@ describe("runDesktopEvalRun", () => {
         ),
       ),
     );
+    expect(new Set(workspaceStores).size).toBe(1);
+    expect(workspaceStores[0]).toBeDefined();
   });
 
   it("stops starting queued eval cases after cancellation", async () => {
