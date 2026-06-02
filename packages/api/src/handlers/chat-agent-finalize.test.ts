@@ -332,6 +332,44 @@ describe("chat-agent-finalize — happy paths", () => {
     expect(body).toEqual({ ok: true, idempotent: true });
   });
 
+  it("emits phase records around finalize processing", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const res = await handler(
+        mockEvent({
+          body: {
+            thread_turn_id: TURN_ID,
+            tenant_id: TENANT_ID,
+            agent_id: AGENT_ID,
+            thread_id: THREAD_ID,
+            trace_id: "trace-1",
+            runtime_type: "pi",
+            duration_ms: 123,
+            status: "completed",
+            response: { content: "hi" },
+          },
+        }),
+      );
+      expect(res.statusCode).toBe(200);
+      const phases = spy.mock.calls.map((call) =>
+        JSON.parse(call[0] as string),
+      );
+      expect(phases.map((phase) => phase.phase)).toEqual([
+        "api.finalize.received",
+        "api.finalize.process",
+        "api.finalize.response",
+      ]);
+      expect(phases[0]).toMatchObject({
+        event: "agentcore_phase",
+        sessionId: TURN_ID,
+        traceId: "trace-1",
+        runtimeType: "pi",
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("returns 500 when processFinalize throws", async () => {
     mocks.processFinalize.mockRejectedValue(new Error("boom"));
     const res = await handler(mockEvent());

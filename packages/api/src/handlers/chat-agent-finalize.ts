@@ -36,6 +36,7 @@ import {
 } from "../lib/chat-finalize/process-finalize.js";
 import { validateChangedFiles } from "../lib/chat-finalize/reconcile.js";
 import type { FinalizePayload } from "../lib/chat-finalize/types.js";
+import { logAgentCorePhase } from "../lib/agentcore-phase-log.js";
 
 const db = getDb();
 
@@ -60,6 +61,7 @@ function badRequest(reason: string): APIGatewayProxyStructuredResultV2 {
 export async function handler(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+  const handlerStart = Date.now();
   // ---- Auth -----------------------------------------------------------
   const token = extractBearerToken(event);
   if (!token) {
@@ -130,6 +132,19 @@ export async function handler(
     });
   }
   payload.changed_files = changedFiles.changedFiles;
+  logAgentCorePhase({
+    source: "chat-agent-finalize",
+    phase: "api.finalize.received",
+    status: "started",
+    traceId: payload.trace_id,
+    tenantId: payload.tenant_id,
+    agentId: payload.agent_id,
+    threadId: payload.thread_id,
+    threadTurnId: payload.thread_turn_id,
+    runtimeType: payload.runtime_type,
+    durationMs: payload.duration_ms,
+    detail: payload.status,
+  });
 
   // ---- Turn lookup ----------------------------------------------------
   const [turn] = await db
@@ -170,10 +185,49 @@ export async function handler(
 
   // ---- Run the finalize chain ----------------------------------------
   try {
+    const finalizeStart = Date.now();
     const result = await processFinalize(payload);
+    logAgentCorePhase({
+      source: "chat-agent-finalize",
+      phase: "api.finalize.process",
+      status: "completed",
+      traceId: payload.trace_id,
+      tenantId: payload.tenant_id,
+      agentId: payload.agent_id,
+      threadId: payload.thread_id,
+      threadTurnId: payload.thread_turn_id,
+      runtimeType: payload.runtime_type,
+      durationMs: Date.now() - finalizeStart,
+      detail: result.finalized ? "finalized" : "idempotent",
+    });
+    logAgentCorePhase({
+      source: "chat-agent-finalize",
+      phase: "api.finalize.response",
+      status: "completed",
+      traceId: payload.trace_id,
+      tenantId: payload.tenant_id,
+      agentId: payload.agent_id,
+      threadId: payload.thread_id,
+      threadTurnId: payload.thread_turn_id,
+      runtimeType: payload.runtime_type,
+      durationMs: Date.now() - handlerStart,
+    });
     return json(200, toFinalizeResponse(result));
   } catch (err) {
     console.error(`[chat-agent-finalize] Internal error:`, err);
+    logAgentCorePhase({
+      source: "chat-agent-finalize",
+      phase: "api.finalize.process",
+      status: "failed",
+      traceId: payload.trace_id,
+      tenantId: payload.tenant_id,
+      agentId: payload.agent_id,
+      threadId: payload.thread_id,
+      threadTurnId: payload.thread_turn_id,
+      runtimeType: payload.runtime_type,
+      durationMs: Date.now() - handlerStart,
+      errorType: err instanceof Error ? err.name : "Error",
+    });
     return json(500, {
       ok: false,
       error: err instanceof Error ? err.message : String(err),
