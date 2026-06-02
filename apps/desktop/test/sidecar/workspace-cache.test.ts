@@ -13,6 +13,7 @@ import {
   WorkspaceAccessRevalidationError,
   WorkspaceBoundaryError,
   WorkspaceCache,
+  createMemoizedWorkspaceObjectStore,
   type WorkspaceObjectStore,
 } from "../../src/sidecar/workspace-cache";
 
@@ -381,6 +382,41 @@ describe("WorkspaceCache", () => {
       cacheHit: true,
     });
     expect(store.listCalls).toBe(1);
+    expect(store.getCalls).toBe(1);
+  });
+
+  it("memoizes object-store lists and object bytes for repeated eval hydrations", async () => {
+    const prefix = "tenants/acme/threads/customer-kickoff/";
+    const store = new FakeStore({
+      [`${prefix}AGENTS.md`]: "# Agent",
+    });
+    const memoized = createMemoizedWorkspaceObjectStore(store);
+
+    const [firstList, secondList] = await Promise.all([
+      memoized.listObjects({ bucket: "workspace-bucket", prefix }),
+      memoized.listObjects({ bucket: "workspace-bucket", prefix }),
+    ]);
+    firstList[0].key = "mutated";
+    const thirdList = await memoized.listObjects({
+      bucket: "workspace-bucket",
+      prefix,
+    });
+
+    expect(secondList[0].key).toBe(`${prefix}AGENTS.md`);
+    expect(thirdList[0].key).toBe(`${prefix}AGENTS.md`);
+    expect(store.listCalls).toBe(1);
+
+    const firstBytes = await memoized.getObjectBytes({
+      bucket: "workspace-bucket",
+      key: `${prefix}AGENTS.md`,
+    });
+    firstBytes[0] = 0;
+    const secondBytes = await memoized.getObjectBytes({
+      bucket: "workspace-bucket",
+      key: `${prefix}AGENTS.md`,
+    });
+
+    expect(new TextDecoder().decode(secondBytes)).toBe("# Agent");
     expect(store.getCalls).toBe(1);
   });
 
