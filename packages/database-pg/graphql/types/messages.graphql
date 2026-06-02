@@ -15,7 +15,6 @@ enum MessageMentionTargetType {
 
 enum MessageDispatchMode {
   MANAGED_DEFAULT
-  DESKTOP_LOCAL
 }
 
 type Message {

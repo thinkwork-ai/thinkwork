@@ -10,6 +10,13 @@ const source = readFileSync(
   new URL("./sendMessage.mutation.ts", import.meta.url),
   "utf8",
 );
+const messagesGraphql = readFileSync(
+  new URL(
+    "../../../../../database-pg/graphql/types/messages.graphql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("sendMessage mention collaboration path", () => {
   it("validates and persists structured mentions before dispatching agent wakeups", () => {
@@ -119,27 +126,6 @@ describe("sendMessage agent handling", () => {
     ).toBe(false);
   });
 
-  it("does not let desktop-local hints suppress managed agent dispatch", () => {
-    expect(
-      shouldApplyCustomerOnboardingChatUpdate({
-        isUserMessage: true,
-        senderType: "user",
-        dispatchMode: "DESKTOP_LOCAL",
-        hasAgentMentions: false,
-      }),
-    ).toBe(true);
-    expect(
-      shouldDispatchDefaultAgentTurn({
-        isUserMessage: true,
-        senderType: "user",
-        dispatchMode: "DESKTOP_LOCAL",
-        hasAgentMentions: false,
-        hasComputerThread: false,
-        customerOnboardingHandled: false,
-      }),
-    ).toBe(true);
-  });
-
   it("keeps managed dispatch as the default dispatch mode", () => {
     expect(
       shouldDispatchDefaultAgentTurn({
@@ -151,6 +137,12 @@ describe("sendMessage agent handling", () => {
         customerOnboardingHandled: false,
       }),
     ).toBe(true);
+  });
+
+  it("does not expose desktop-local dispatch in the canonical GraphQL schema", () => {
+    expect(messagesGraphql).toContain("enum MessageDispatchMode");
+    expect(messagesGraphql).toContain("MANAGED_DEFAULT");
+    expect(messagesGraphql).not.toContain("DESKTOP_LOCAL");
   });
 
   it("lets explicit agent mentions own dispatch even when default handling is suppressed", () => {

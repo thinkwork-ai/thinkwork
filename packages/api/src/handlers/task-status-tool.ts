@@ -13,12 +13,8 @@ import {
   TaskStatusToolError,
   type TaskStatusToolActor,
 } from "../lib/task-status-tool.js";
-import {
-  DESKTOP_FINALIZE_TOKEN_PREFIX,
-  verifyDesktopFinalizeToken,
-} from "../lib/desktop-runtime/sidecar-credentials.js";
 
-const { threadTurns, users } = schema;
+const { users } = schema;
 
 interface TaskStatusToolBody {
   tenantId?: string;
@@ -128,14 +124,6 @@ async function resolveAuth(
     };
   }
 
-  if (bearer?.startsWith(DESKTOP_FINALIZE_TOKEN_PREFIX)) {
-    const turn = await resolveDesktopTurn(
-      bearer,
-      stringValue(body.threadTurnId),
-    );
-    if (turn) return turn;
-  }
-
   const cognito = await authenticate(
     event.headers as Record<string, string | undefined>,
   );
@@ -167,54 +155,6 @@ async function resolveAuth(
     agentId: stringValue(body.agentId) || null,
     actor: { type: "user", id: user.id, email: user.email },
   };
-}
-
-async function resolveDesktopTurn(
-  token: string,
-  threadTurnId: string,
-): Promise<ResolvedTaskStatusAuth | null> {
-  if (!threadTurnId) return null;
-  const [turn] = await db
-    .select({
-      tenantId: threadTurns.tenant_id,
-      threadId: threadTurns.thread_id,
-      agentId: threadTurns.agent_id,
-      contextSnapshot: threadTurns.context_snapshot,
-    })
-    .from(threadTurns)
-    .where(eq(threadTurns.id, threadTurnId))
-    .limit(1);
-  if (!turn?.tenantId || !turn.threadId || !turn.agentId) return null;
-  const session = readDesktopRuntimeSession(turn.contextSnapshot);
-  if (!session) return null;
-  if (Date.parse(session.expires_at) <= Date.now()) return null;
-  if (!verifyDesktopFinalizeToken(token, session.finalize_token_sha256)) {
-    return null;
-  }
-  return {
-    tenantId: turn.tenantId,
-    threadId: turn.threadId,
-    agentId: turn.agentId,
-    actor: { type: "agent", id: turn.agentId },
-  };
-}
-
-function readDesktopRuntimeSession(
-  contextSnapshot: unknown,
-): { finalize_token_sha256: string; expires_at: string } | null {
-  if (!contextSnapshot || typeof contextSnapshot !== "object") return null;
-  const session = (contextSnapshot as Record<string, unknown>)[
-    "desktop_runtime_session"
-  ];
-  if (!session || typeof session !== "object") return null;
-  const finalizeHash = (session as Record<string, unknown>)[
-    "finalize_token_sha256"
-  ];
-  const expiresAt = (session as Record<string, unknown>)["expires_at"];
-  if (typeof finalizeHash !== "string" || typeof expiresAt !== "string") {
-    return null;
-  }
-  return { finalize_token_sha256: finalizeHash, expires_at: expiresAt };
 }
 
 function bearerToken(
