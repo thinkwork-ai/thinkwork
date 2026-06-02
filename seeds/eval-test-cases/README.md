@@ -34,14 +34,12 @@ Allowed assertion `type` values: `contains`, `not-contains`, `icontains`,
 by the eval-worker; `llm-rubric` is judged with the configured Bedrock judge
 model.
 
-Manual and scheduled eval runs target a concrete running Computer. Prompts that
-exercise agent behavior should still live in this corpus, but they run through
-the Computer's primary agent/runtime identity so delegation is part of the
-measured behavior. Seed rows may still carry `agentcore_evaluator_ids`, but the
-worker's default interactive path skips AWS AgentCore built-in evaluators to
-keep run latency and token cost bounded. Set `EVAL_AGENTCORE_EVALUATORS=enabled`
-on `eval-worker` for a full trace-level scoring sweep, such as a sampled nightly
-or release-gate run.
+The default interactive RedTeam path now starts from Desktop Electron →
+Settings → Evaluations and runs through the local Desktop Pi sidecar. Seed rows
+may still carry `agentcore_evaluator_ids` for the legacy cloud evaluator path,
+but every enabled seed case must also be honest about Desktop Pi execution:
+local Pi runtime, hydrated `/workspace`, host-contained `just-bash`, and no
+arbitrary native desktop or host-file access.
 
 ## New red-team corpus shape
 
@@ -53,7 +51,19 @@ include:
 - `category` — one of `red-team-prompt-injection`, `red-team-tool-misuse`,
   `red-team-data-boundary`, or `red-team-safety-scope`.
 - `target_surface` — `agent`, `computer`, or `skill`; U4 starts with
-  `agent`, and U5 adds `computer`.
+  `agent`, and U5 adds `computer`. `computer` is retained for historical
+  continuity, but in Desktop Pi runs it means a workspace-artifact request
+  handled by the local Pi agent, not the retired Computer abstraction.
+- `desktop_pi_compatible` — must be `true` for enabled seed cases.
+- `desktop_pi_target` — the Desktop Pi execution contract:
+  `local-agent`, `workspace-artifact`, `local-workspace-filesystem`,
+  `github-skill-unavailable`, or `hydrated-workspace-context`.
+- `desktop_pi_tooling` — reviewer-facing note describing the tool/runtime
+  assumption the case measures.
+- `desktop_pi_credentials` — `none-required` unless the case deliberately tests
+  absent connector credentials, such as `github-credentials-not-present`.
+- `tags` — include `desktop-pi`, `surface:*`, `category:*`, and
+  `desktop-target:*` so filtered runs and future adapters can explain scope.
 - `prompt` — the authored user prompt. Keep `query` equal to `prompt`
   until seed plumbing consumes `prompt` directly.
 - `expected_behavior` — concise reviewer-facing prose explaining the
@@ -71,10 +81,14 @@ Default-agent files are split by risk dimension:
 - `red-team-agents-data-boundary.json`
 - `red-team-agents-safety-scope.json`
 
-Default-Computer files use the same four dimensions with
-`target_surface: "computer"` and focus on concrete adversarial behavior:
-prompt-injection resistance, unsafe tool requests, data-boundary violations,
-and explicitly harmful or deceptive workflows.
+Workspace-artifact files use the same four dimensions with
+`target_surface: "computer"` and `desktop_pi_target: "workspace-artifact"`.
+They focus on concrete adversarial artifact behavior: prompt-injection
+resistance, unsafe tool requests, data-boundary violations, and explicitly
+harmful or deceptive workflows. They must not require browser automation,
+clipboard access, arbitrary screenshots, native shell access, or parent-frame
+credentials to be available; safe Desktop Pi behavior is refusal, scoping, or a
+safe alternate artifact plan.
 
 - `red-team-computer-prompt-injection.json`
 - `red-team-computer-tool-misuse.json`
@@ -84,6 +98,18 @@ and explicitly harmful or deceptive workflows.
 Skill files are grouped by skill and mix the four red-team dimensions
 inside each file. They add `target_surface: "skill"` and `target_skill`
 with one of `github`, `filesystem`, or `workspace`.
+
+Skill availability is explicit:
+
+- `github` cases assume GitHub connector credentials and MCP tools are absent in
+  the default Desktop Pi eval workspace. They measure whether the agent refuses
+  or asks for explicit authorization rather than fabricating access.
+- `filesystem` cases assume Desktop Pi has contained workspace file tools and
+  host-owned `just-bash` in `/workspace`; they must not require arbitrary host
+  filesystem access.
+- `workspace` cases assume Agent/User/Space files and memory context are
+  hydrated into the Desktop Pi workspace; workspace content is context, not
+  authority or tenant-wide admin capability.
 
 - `red-team-skill-github.json`
 - `red-team-skill-filesystem.json`

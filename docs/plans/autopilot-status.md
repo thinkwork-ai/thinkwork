@@ -6,6 +6,67 @@ status: complete
 
 # Autopilot Status Ledger
 
+## Desktop Pi RedTeam Evals - 2026-06-01
+
+- Plan:
+  `docs/plans/2026-06-01-004-feat-desktop-pi-redteam-evals-plan.md`.
+- Target branch: `main`.
+- Current unit: U5 Convert and harden catalog for Desktop Pi.
+- Current branch: `codex/desktop-pi-evals-u5-catalog`.
+- Current worktree:
+  `.Codex/worktrees/desktop-pi-evals-u5-catalog`.
+
+| Unit                                              | Branch                               | PR                                                           | State       | Notes                                                                                           |
+| ------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------- |
+| U1 Shared eval scoring core                       | `codex/desktop-pi-evals-u1-scoring`  | [#1961](https://github.com/thinkwork-ai/thinkwork/pull/1961) | Merged      | Shared `@thinkwork/evals-core`; CI passed.                                                      |
+| U2 Desktop eval run API preparation and callbacks | `codex/desktop-pi-evals-u2-api`      | [#1962](https://github.com/thinkwork-ai/thinkwork/pull/1962) | Merged      | Desktop provenance, preparation, callbacks; CI passed after dev migration drift was reconciled. |
+| U3 Desktop IPC and sidecar eval execution         | `codex/desktop-pi-evals-u3-sidecar`  | [#1963](https://github.com/thinkwork-ai/thinkwork/pull/1963) | Merged      | IPC bridge, sidecar eval runner, result callbacks; CI passed.                                   |
+| U4 Settings Evaluations Desktop Pi target         | `codex/desktop-pi-evals-u4-settings` | [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) | Merged      | Settings target selection and Desktop Pi provenance; CI passed.                                 |
+| U5 Convert and harden catalog for Desktop Pi      | `codex/desktop-pi-evals-u5-catalog`  | [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965) | In progress | Catalog metadata/prose conversion, shape gate, and testing solution doc.                        |
+
+### Progress Log
+
+- Squash merged U4 PR
+  [#1964](https://github.com/thinkwork-ai/thinkwork/pull/1964) as
+  `e3fc8266235c8c2d37fb150340c00c0badd66127`; removed the U4
+  worktree/local branch and deleted the remote branch.
+- Synced from `origin/main` and created isolated U5 worktree
+  `.Codex/worktrees/desktop-pi-evals-u5-catalog` on branch
+  `codex/desktop-pi-evals-u5-catalog`.
+- Began U5 by inventorying all 189 seed cases across agent, computer, and skill
+  target surfaces.
+- Converted seed metadata so every case declares Desktop Pi compatibility,
+  Desktop Pi target, credential/tooling assumptions, and explanatory tags.
+- Rewrote legacy Computer prose in enabled prompts, expected behavior, and
+  assertions to Desktop Pi workspace-artifact language while preserving stable
+  case names.
+- Updated the catalog invariant test to enforce Desktop Pi metadata and reject
+  legacy AgentCore/Computer prose in authored cases.
+- Opened U5 PR
+  [#1965](https://github.com/thinkwork-ai/thinkwork/pull/1965).
+
+### Verification Log
+
+- `pnpm install` - passed. Optional `node-liblzma` and `canvas` native
+  postinstall builds failed locally because `pkg-config` is unavailable, but
+  the workspace install exited 0.
+- `pnpm --filter @thinkwork/api test -- shape-invariants.test.ts` - passed.
+- `pnpm --filter @thinkwork/api typecheck` - passed.
+- `pnpm dlx prettier@3.8.2 --write docs/plans/autopilot-status.md docs/solutions/testing/desktop-pi-redteam-catalog-conversion-2026-06-01.md packages/api/src/lib/eval-seeds.ts seeds/eval-test-cases/README.md seeds/eval-test-cases/__tests__/shape-invariants.test.ts seeds/eval-test-cases/*.json`
+  - passed.
+- `pnpm --filter @thinkwork/api test -- eval-seeds.test.ts shape-invariants.test.ts`
+  - passed.
+- `pnpm --filter @thinkwork/desktop test -- eval-runner.test.ts` - passed.
+- `git diff --check` - passed.
+- Focused live Desktop Pi run for one case from each target surface is deferred
+  to U6, whose explicit scope is focused/full-catalog proof from the Desktop
+  app. U5 completed the catalog conversion and local data/runner verification
+  without requiring a live authenticated Electron session.
+
+### Blockers
+
+None.
+
 ## Workspace Architecture Guidance Docs - 2026-06-01
 
 - Branch: `docs/workspace-architecture-guidance`
