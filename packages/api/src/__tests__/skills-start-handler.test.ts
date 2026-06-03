@@ -178,7 +178,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   process.env.API_AUTH_SECRET = "api-secret";
   process.env.THINKWORK_API_URL = "https://api.example.test";
-  process.env.AGENTCORE_FUNCTION_NAME = "thinkwork-dev-api-agentcore-invoke";
+  process.env.AGENTCORE_PI_FUNCTION_NAME = "thinkwork-dev-api-agentcore-pi";
   process.env.WORKSPACE_BUCKET = "test-bucket";
   mockLambdaSend.mockResolvedValue({ FunctionError: undefined });
 });

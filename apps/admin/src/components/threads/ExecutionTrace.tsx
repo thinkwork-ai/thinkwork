@@ -121,8 +121,11 @@ function formatInvocationSource(source: unknown): string | null {
 
 function formatRuntimeType(runtimeType: unknown): string | null {
   if (typeof runtimeType !== "string") return null;
-  const trimmed = runtimeType.trim();
-  return trimmed ? trimmed.toUpperCase() : null;
+  const normalized = runtimeType.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "pi" || normalized === "flue" || normalized === "strands")
+    return "Pi";
+  return runtimeType.trim().toUpperCase();
 }
 
 // ─── Turn Events ────────────────────────────────────────────────────────────

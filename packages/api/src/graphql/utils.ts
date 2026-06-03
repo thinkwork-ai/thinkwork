@@ -245,9 +245,8 @@ export async function getChatAgentInvokeFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -279,9 +278,8 @@ export async function getKbManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -333,9 +331,8 @@ export async function invokeChatAgent(payload: {
       );
       return false;
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     await lambda.send(
       new InvokeCommand({
@@ -369,9 +366,8 @@ export async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -400,9 +396,8 @@ export async function invokeJobScheduleManager(
       console.error("[graphql]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -484,52 +479,19 @@ const _skillRunInvokeFnName: Partial<Record<AgentRuntimeType, string | null>> =
 async function getSkillRunInvokeFnName(
   runtimeType: AgentRuntimeType,
 ): Promise<string | null> {
-  if (_skillRunInvokeFnName[runtimeType] !== undefined) {
-    return _skillRunInvokeFnName[runtimeType] ?? null;
+  const normalizedRuntimeType = normalizeAgentRuntimeType(runtimeType);
+  if (_skillRunInvokeFnName[normalizedRuntimeType] !== undefined) {
+    return _skillRunInvokeFnName[normalizedRuntimeType] ?? null;
   }
-  if (runtimeType === "pi") {
-    _skillRunInvokeFnName.pi = process.env.AGENTCORE_PI_FUNCTION_NAME || null;
-    return _skillRunInvokeFnName.pi;
-  }
-  // Reuse the same Lambda as chat invocation — there's exactly one
-  // agentcore-invoke Lambda, it just handles multiple envelope kinds.
-  const envName = process.env.AGENTCORE_FUNCTION_NAME;
-  if (envName) {
-    _skillRunInvokeFnName.strands = envName;
-    return _skillRunInvokeFnName.strands;
-  }
-  try {
-    let stage = process.env.STAGE || "";
-    if (!stage && process.env.SST_RESOURCE_App) {
-      try {
-        stage = JSON.parse(process.env.SST_RESOURCE_App).stage;
-      } catch {}
-    }
-    if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
-    const ssm = new SSMClient({});
-    const res = await ssm.send(
-      new GetParameterCommand({
-        Name: `/thinkwork/${stage}/agentcore-invoke-fn-name`,
-      }),
-    );
-    _skillRunInvokeFnName.strands = res.Parameter?.Value || null;
-  } catch (err) {
-    console.warn(
-      `[graphql] skill-run invoke SSM lookup failed: ${(err as Error)?.name}: ${(err as Error)?.message}`,
-    );
-    _skillRunInvokeFnName.strands = null;
-  }
-  return _skillRunInvokeFnName.strands ?? null;
+  _skillRunInvokeFnName.pi = process.env.AGENTCORE_PI_FUNCTION_NAME || null;
+  return _skillRunInvokeFnName.pi;
 }
 
 async function resolveSkillRunRuntimeType(
   tenantId: string,
   agentId: string | null,
 ): Promise<AgentRuntimeType> {
-  if (!agentId) return "strands";
+  if (!agentId) return "pi";
   const db = getDb();
   const [row] = await db
     .select({
@@ -604,9 +566,8 @@ export async function invokeSkillRun(
         error: `${runtimeType} agentcore-invoke Lambda name not configured`,
       };
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const body = JSON.stringify(payload);
     const lambdaPayload = JSON.stringify({

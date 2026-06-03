@@ -180,7 +180,7 @@ const EVENT = (
 beforeEach(() => {
   vi.resetAllMocks();
   process.env.API_AUTH_SECRET = "api-secret";
-  process.env.AGENTCORE_FUNCTION_NAME = "thinkwork-dev-api-agentcore-invoke";
+  process.env.AGENTCORE_PI_FUNCTION_NAME = "thinkwork-dev-api-agentcore-pi";
   process.env.WORKSPACE_BUCKET = "test-bucket";
 });
 

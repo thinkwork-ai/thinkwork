@@ -11,19 +11,19 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-02-003-refactor-remove-strands-runtime-plan.md`.
 - Target branch: `main`.
-- Current unit: U1 Characterize Strands usage and data safety.
-- Current branch: `codex/remove-strands-u1`.
-- Current worktree: `.Codex/worktrees/remove-strands-u1`.
+- Current unit: U2 Make API, GraphQL, and Database runtime defaults Pi-only.
+- Current branch: `codex/remove-strands-u2`.
+- Current worktree: `.Codex/worktrees/remove-strands-u2`.
 
-| Unit                                                               | Branch                    | PR                                                           | State       | Notes                                                                                                                                                                           |
-| ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Characterize Strands usage and data safety                      | `codex/remove-strands-u1` | [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004) | In progress | Add the plan to source control, record autopilot status, lock runtime contract tests so legacy/null/unknown runtime values resolve to Pi, and classify Strands cleanup targets. |
-| U2 Make API, GraphQL, and Database runtime defaults Pi-only        | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
-| U3 Make deploy and release workflows Pi-only                       | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
-| U4 Move shared Terraform resources out of the Strands module       | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
-| U5 Delete Strands container source and retire Strands-only scripts | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
-| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
-| U7 End-to-end verification and deployment proof                    | Pending                   | Pending                                                      | Pending     | Not started.                                                                                                                                                                    |
+| Unit                                                               | Branch                    | PR                                                           | State    | Notes                                                                                                                    |
+| ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| U1 Characterize Strands usage and data safety                      | `codex/remove-strands-u1` | [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004) | Merged   | Squash merged as `3fdfd62f`; runtime contract tests and Strands cleanup classification landed.                           |
+| U2 Make API, GraphQL, and Database runtime defaults Pi-only        | `codex/remove-strands-u2` | Pending                                                      | Verified | Stored/public runtime defaults are Pi-only; focused tests, typechecks, formatting, and whitespace checks passed locally. |
+| U3 Make deploy and release workflows Pi-only                       | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
+| U4 Move shared Terraform resources out of the Strands module       | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
+| U5 Delete Strands container source and retire Strands-only scripts | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
+| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
+| U7 End-to-end verification and deployment proof                    | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
 
 ### Progress Log
 
@@ -44,6 +44,28 @@ status: in_progress
   `pnpm format:check -- <files>` script could not run because this worktree
   does not currently have a local `prettier` binary on PATH.
 - Opened U1 PR [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004).
+- Squash merged U1 PR
+  [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004) as
+  `3fdfd62f`; removed the U1 worktree/local branch and pruned the remote branch.
+- Synced `main` from `origin/main` at `397849f6` and created isolated U2
+  worktree `.Codex/worktrees/remove-strands-u2` on branch
+  `codex/remove-strands-u2`.
+- Began U2 by updating database defaults, adding
+  `0142_pi_only_agent_runtime.sql`, removing `STRANDS` from the public
+  `AgentRuntime` enum, regenerating GraphQL clients for CLI/Admin/Mobile/Spaces,
+  and moving remaining skill/eval dispatch helpers to Pi runtime defaults.
+- U2 verification passed:
+  `pnpm --filter @thinkwork/database-pg typecheck`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter thinkwork-cli typecheck`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/database-pg test -- __tests__/schema-agent-runtime.test.ts`;
+  `pnpm --filter @thinkwork/api test -- src/lib/__tests__/resolve-runtime-function-name.test.ts src/lib/__tests__/resolve-agent-runtime-config.test.ts src/graphql/resolvers/tenant-agent/runtime.test.ts src/graphql/resolvers/tenant-agent/updateTenantAgent.mutation.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts src/handlers/wakeup-processor.system-prompt.test.ts src/__tests__/skills-start-handler.test.ts src/__tests__/skills-complete-handler.test.ts`;
+  `pnpm --filter @thinkwork/admin test -- src/routes/_authed/_tenant/agent/__tests__/-AgentToolsTabs.target.test.ts`;
+  `pnpm --filter @thinkwork/mobile test -- lib/agentcore-first-mobile.test.ts`;
+  `pnpm dlx prettier --check <changed supported U2 files>`; and
+  `git diff --check`. The repo-local `prettier` binary is still not available
+  on PATH in this worktree, so the formatting check used `pnpm dlx prettier`.
 
 ### U1 Strands Reference Classification
 

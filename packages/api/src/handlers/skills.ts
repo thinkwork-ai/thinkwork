@@ -2101,9 +2101,8 @@ async function mcpClearUserToken(
   // Delete the secret from Secrets Manager if it exists
   if (tokenRow.secret_ref) {
     try {
-      const { SecretsManagerClient, DeleteSecretCommand } = await import(
-        "@aws-sdk/client-secrets-manager"
-      );
+      const { SecretsManagerClient, DeleteSecretCommand } =
+        await import("@aws-sdk/client-secrets-manager");
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-east-1",
       });
@@ -2131,9 +2130,8 @@ async function mcpListUserServers(
   tenantId: string,
   userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const { agents, userMcpTokens } = await import(
-    "@thinkwork/database-pg/schema"
-  );
+  const { agents, userMcpTokens } =
+    await import("@thinkwork/database-pg/schema");
 
   // Find all agents paired with this user
   const userAgents = await db
@@ -2847,13 +2845,12 @@ async function invokeAgentcoreRunSkill(payload: {
   invocationSource: string;
   completionHmacSecret: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const fnName = process.env.AGENTCORE_FUNCTION_NAME;
+  const fnName = process.env.AGENTCORE_PI_FUNCTION_NAME;
   if (!fnName)
-    return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
+    return { ok: false, error: "AGENTCORE_PI_FUNCTION_NAME env var not set" };
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget rather than the
     // 28s socket cap RequestResponse required. Execution result comes

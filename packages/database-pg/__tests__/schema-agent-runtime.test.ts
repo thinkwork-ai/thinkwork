@@ -16,9 +16,17 @@ const migration0123 = readFileSync(
   join(HERE, "..", "drizzle", "0123_single_platform_agent_and_overrides.sql"),
   "utf-8",
 );
+const migration0142 = readFileSync(
+  join(HERE, "..", "drizzle", "0142_pi_only_agent_runtime.sql"),
+  "utf-8",
+);
+const rollback0142 = readFileSync(
+  join(HERE, "..", "drizzle", "0142_pi_only_agent_runtime_rollback.sql"),
+  "utf-8",
+);
 
 describe("agent runtime selector schema", () => {
-  it("defaults agents to the Strands runtime", () => {
+  it("defaults agents to the Pi runtime", () => {
     const columns = getTableColumns(agents);
     expect(columns.runtime.notNull).toBe(true);
     expect(columns.runtime.hasDefault).toBe(true);
@@ -84,9 +92,22 @@ describe("agent runtime selector schema", () => {
     expect(migration0123).toContain("WHERE is_platform_default IS TRUE");
   });
 
-  it("defaults agent templates to the Strands runtime", () => {
+  it("defaults agent templates to the Pi runtime", () => {
     const columns = getTableColumns(agentTemplates);
     expect(columns.runtime.notNull).toBe(true);
     expect(columns.runtime.hasDefault).toBe(true);
+  });
+
+  it("backfills legacy runtime values and tightens constraints to Pi-only", () => {
+    expect(migration0142).toMatch(
+      /--\s*creates-constraint:\s*public\.agents\.agents_runtime_check\b/,
+    );
+    expect(migration0142).toMatch(
+      /--\s*creates-constraint:\s*public\.agent_templates\.agent_templates_runtime_check\b/,
+    );
+    expect(migration0142).toContain("WHERE runtime IN ('strands', 'flue')");
+    expect(migration0142).toContain("ALTER COLUMN runtime SET DEFAULT 'pi'");
+    expect(migration0142).toContain("CHECK (runtime = 'pi')");
+    expect(rollback0142).toContain("CHECK (runtime IN ('strands', 'pi'))");
   });
 });

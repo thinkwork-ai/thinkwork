@@ -51,7 +51,7 @@ describe("agent detail tools tabs", () => {
     expect(headerControlsSource).toContain("ModelCatalogQuery");
     expect(headerControlsSource).toContain("UpdateTenantAgentMutation");
     expect(headerControlsSource).toContain('label: "Pi"');
-    expect(headerControlsSource).toContain('label: "Strands"');
+    expect(headerControlsSource).not.toContain('label: "Strands"');
   });
 
   it("orders runtime before model in the agent header controls", () => {

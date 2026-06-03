@@ -120,7 +120,6 @@ export function SettingsGeneral() {
 const RUNTIME_OPTIONS: { value: AgentRuntime; label: string }[] = [
   // FLUE is the Pi runtime; surfaced as "Pi" per product naming.
   { value: AgentRuntime.Flue, label: "Pi" },
-  { value: AgentRuntime.Strands, label: "Strands" },
 ];
 
 /**
