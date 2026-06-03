@@ -57,6 +57,35 @@ export const SettingsRenameTenantSlugMutation = graphql(`
   }
 `);
 
+// ─── App Style (operator-only applet theme, ported from admin) ───────────
+
+// Reads the tenant `features` JSON; the App Style section parses
+// `features.artifactStyle.appletTheme.css` out of it client-side.
+export const SettingsTenantFeaturesQuery = graphql(`
+  query SettingsTenantFeatures($id: ID!) {
+    tenant(id: $id) {
+      id
+      settings {
+        id
+        features
+      }
+    }
+  }
+`);
+
+export const SettingsUpdateTenantArtifactStyleMutation = graphql(`
+  mutation SettingsUpdateTenantArtifactStyle(
+    $tenantId: ID!
+    $input: UpdateTenantSettingsInput!
+  ) {
+    updateTenantSettings(tenantId: $tenantId, input: $input) {
+      id
+      features
+      updatedAt
+    }
+  }
+`);
+
 // ─── Spaces (operator-only section) ──────────────────────────────────────
 
 export const SettingsSpacesListQuery = graphql(`
