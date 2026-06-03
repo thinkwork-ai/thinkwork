@@ -61,6 +61,9 @@ vi.mock("../../utils.js", () => {
       agent_id: col("agent_knowledge_bases.agent_id"),
       knowledge_base_id: col("agent_knowledge_bases.knowledge_base_id"),
     },
+    spaceKnowledgeBases: {
+      knowledge_base_id: col("space_knowledge_bases.knowledge_base_id"),
+    },
     db: {
       select: () => selectChain,
       update: () => ({
@@ -118,6 +121,12 @@ vi.mock("../core/authz.js", () => ({
       ? Promise.reject(new Error("forbidden"))
       : Promise.resolve();
   },
+}));
+
+// Dispatch is exercised in knowledge-dispatch.test.ts; here it is a no-op so
+// the authz behaviour under test isn't masked by provisioning failures.
+vi.mock("./kb-manager-dispatch.js", () => ({
+  dispatchKbManager: () => Promise.resolve(),
 }));
 
 const cognitoCtx = { auth: { authType: "cognito" } } as any;

@@ -1,16 +1,23 @@
 import { knowledgeBases_ as knowledgeBases } from "./knowledgeBases.query.js";
 import { knowledgeBase } from "./knowledgeBase.query.js";
+import { testKnowledgeBaseRetrieval } from "./testKnowledgeBaseRetrieval.query.js";
 import { createKnowledgeBase } from "./createKnowledgeBase.mutation.js";
 import { updateKnowledgeBase } from "./updateKnowledgeBase.mutation.js";
 import { deleteKnowledgeBase } from "./deleteKnowledgeBase.mutation.js";
 import { syncKnowledgeBase } from "./syncKnowledgeBase.mutation.js";
+import { retryKnowledgeBase } from "./retryKnowledgeBase.mutation.js";
 import { setAgentKnowledgeBases } from "./setAgentKnowledgeBases.mutation.js";
 
-export const knowledgeQueries = { knowledgeBases, knowledgeBase };
+export const knowledgeQueries = {
+  knowledgeBases,
+  knowledgeBase,
+  testKnowledgeBaseRetrieval,
+};
 export const knowledgeMutations = {
   createKnowledgeBase,
   updateKnowledgeBase,
   deleteKnowledgeBase,
   syncKnowledgeBase,
+  retryKnowledgeBase,
   setAgentKnowledgeBases,
 };
