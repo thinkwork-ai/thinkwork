@@ -11,6 +11,7 @@ import {
   Textarea,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
+import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
 import {
   SettingsTenantFeaturesQuery,
   SettingsUpdateTenantArtifactStyleMutation,
@@ -33,14 +34,15 @@ export function SetAppStyleButton() {
     <>
       <Button
         type="button"
-        variant="outline"
-        size="icon"
+        variant="ghost"
+        size="icon-sm"
+        className={desktopToolbarButtonClassName}
         onClick={() => setOpen(true)}
         aria-label="Set app style"
         title="Set app style"
         data-testid="set-app-style-trigger"
       >
-        <Palette className="h-4 w-4" />
+        <Palette className="size-4" />
       </Button>
       <SetAppStyleDialog open={open} onOpenChange={setOpen} />
     </>
