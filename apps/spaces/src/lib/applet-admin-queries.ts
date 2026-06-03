@@ -14,7 +14,12 @@ import { graphql } from "@/gql";
 // renderer is field-shape-agnostic once the documents agree.
 
 export const AdminAppletsQuery = graphql(`
-  query AdminApplets($tenantId: ID!, $userId: ID, $cursor: String, $limit: Int) {
+  query AdminApplets(
+    $tenantId: ID!
+    $userId: ID
+    $cursor: String
+    $limit: Int
+  ) {
     adminApplets(
       tenantId: $tenantId
       userId: $userId

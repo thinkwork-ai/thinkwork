@@ -7,7 +7,10 @@ import {
   SettingsTenantFeaturesQuery,
   SettingsUpdateTenantArtifactStyleMutation,
 } from "@/lib/settings-queries";
-import { SettingsHeader, SettingsPane } from "@/components/settings/SettingsContent";
+import {
+  SettingsHeader,
+  SettingsPane,
+} from "@/components/settings/SettingsContent";
 
 const MAX_CSS_LENGTH = 20_000;
 
@@ -168,8 +171,7 @@ export function SettingsAppStyle() {
             {tooLong ? (
               <span className="text-destructive" data-testid="app-style-error">
                 CSS exceeds {MAX_CSS_LENGTH.toLocaleString()} characters (
-                {css.length.toLocaleString()}/
-                {MAX_CSS_LENGTH.toLocaleString()})
+                {css.length.toLocaleString()}/{MAX_CSS_LENGTH.toLocaleString()})
               </span>
             ) : error ? (
               <span className="text-destructive" data-testid="app-style-error">

@@ -181,54 +181,54 @@ export function AppletRouteContent({ appId }: { appId: string }) {
   const appPanel = (
     <div className="grid h-full min-h-0 min-w-0 p-4">
       {hasNewerVersion ? (
-          <div className="m-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-primary">
-              A newer version of this artifact is available.
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="justify-self-start"
-              onClick={() => {
-                if (source) {
-                  setMountedSnapshot({
-                    appId,
-                    instanceId,
-                    source,
-                    version: latestVersion ?? 1,
-                    themeCss,
-                  });
-                }
-                setReloadNonce((value) => value + 1);
-              }}
-            >
-              <RefreshCw className="mr-2 size-4" />
-              Reload
-            </Button>
-          </div>
-        ) : null}
-        {mountedSnapshot ? (
-          <AppletMount
-            key={`${mountedSnapshot.appId}:${mountedSnapshot.version}:${reloadNonce}`}
-            appId={mountedSnapshot.appId}
-            instanceId={mountedSnapshot.instanceId}
-            source={mountedSnapshot.source}
-            version={mountedSnapshot.version}
-            onHeaderActionChange={handleHeaderActionChange}
-            themeCss={mountedSnapshot.themeCss}
-            // Size the iframe to its reported content height so the only
-            // scrollbar lives on the surrounding AppCanvasPanel (which has
-            // `overflow-y-auto`). With the default `fitContentHeight=false`
-            // the iframe sizes to 100% of its parent and renders its own
-            // inner scrollbar, stacking against the panel's scrollbar.
-            // DraftAppletPreview and InlineAppletEmbed already use this mode;
-            // saved-app side panels were missed before.
-            fitContentHeight={true}
-          />
-        ) : (
-          <AppletLoading />
-        )}
+        <div className="m-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-primary">
+            A newer version of this artifact is available.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="justify-self-start"
+            onClick={() => {
+              if (source) {
+                setMountedSnapshot({
+                  appId,
+                  instanceId,
+                  source,
+                  version: latestVersion ?? 1,
+                  themeCss,
+                });
+              }
+              setReloadNonce((value) => value + 1);
+            }}
+          >
+            <RefreshCw className="mr-2 size-4" />
+            Reload
+          </Button>
+        </div>
+      ) : null}
+      {mountedSnapshot ? (
+        <AppletMount
+          key={`${mountedSnapshot.appId}:${mountedSnapshot.version}:${reloadNonce}`}
+          appId={mountedSnapshot.appId}
+          instanceId={mountedSnapshot.instanceId}
+          source={mountedSnapshot.source}
+          version={mountedSnapshot.version}
+          onHeaderActionChange={handleHeaderActionChange}
+          themeCss={mountedSnapshot.themeCss}
+          // Size the iframe to its reported content height so the only
+          // scrollbar lives on the surrounding AppCanvasPanel (which has
+          // `overflow-y-auto`). With the default `fitContentHeight=false`
+          // the iframe sizes to 100% of its parent and renders its own
+          // inner scrollbar, stacking against the panel's scrollbar.
+          // DraftAppletPreview and InlineAppletEmbed already use this mode;
+          // saved-app side panels were missed before.
+          fitContentHeight={true}
+        />
+      ) : (
+        <AppletLoading />
+      )}
     </div>
   );
 
@@ -284,7 +284,9 @@ function OperatorAppletTabs({
   const dirty = draft !== persistedSource;
 
   const handleSave = useCallback(async () => {
-    const result = await updateAppletSource({ input: { appId, source: draft } });
+    const result = await updateAppletSource({
+      input: { appId, source: draft },
+    });
     const payload = result.data?.adminUpdateAppletSource;
     if (result.error || !payload?.ok) {
       const firstError = payload?.errors?.[0];
@@ -373,9 +375,7 @@ function OperatorAppletTabs({
               <ProvenanceRow
                 label="Generated"
                 value={
-                  preview?.generatedAt
-                    ? relativeTime(preview.generatedAt)
-                    : "—"
+                  preview?.generatedAt ? relativeTime(preview.generatedAt) : "—"
                 }
               />
               <ProvenanceRow

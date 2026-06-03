@@ -20,7 +20,8 @@ vi.mock("@/context/PageHeaderContext", () => ({
 const mutateMock = vi.fn();
 const refetchMock = vi.fn();
 
-const VALID_CSS = ":root { --background: oklch(1 0 0); --chart-1: oklch(0.6 0.2 30); }";
+const VALID_CSS =
+  ":root { --background: oklch(1 0 0); --chart-1: oklch(0.6 0.2 30); }";
 
 function setFeatures(features: unknown) {
   vi.mocked(useQuery).mockReturnValue([
@@ -36,7 +37,9 @@ function setFeatures(features: unknown) {
 beforeEach(() => {
   mutateMock.mockReset();
   refetchMock.mockReset();
-  mutateMock.mockResolvedValue({ data: { updateTenantSettings: { id: "s1" } } });
+  mutateMock.mockResolvedValue({
+    data: { updateTenantSettings: { id: "s1" } },
+  });
   vi.mocked(useTenant).mockReturnValue({
     tenantId: "t1",
     isOperator: true,
@@ -54,7 +57,9 @@ afterEach(cleanup);
 describe("SettingsAppStyle", () => {
   it("renders an empty first-use state with Save and Clear disabled", () => {
     render(<SettingsAppStyle />);
-    const textarea = screen.getByTestId("app-style-textarea") as HTMLTextAreaElement;
+    const textarea = screen.getByTestId(
+      "app-style-textarea",
+    ) as HTMLTextAreaElement;
     expect(textarea.value).toBe("");
     expect(
       (screen.getByTestId("app-style-save") as HTMLButtonElement).disabled,
@@ -79,7 +84,9 @@ describe("SettingsAppStyle", () => {
     const features = JSON.parse(call.input.features);
     expect(features.artifactStyle.appletTheme.css).toContain("--background");
     await vi.waitFor(() =>
-      expect(refetchMock).toHaveBeenCalledWith({ requestPolicy: "network-only" }),
+      expect(refetchMock).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      }),
     );
   });
 
@@ -128,7 +135,9 @@ describe("SettingsAppStyle", () => {
     const features = JSON.parse(mutateMock.mock.calls[0][0].input.features);
     expect(features.artifactStyle.appletTheme).toBeUndefined();
     await vi.waitFor(() =>
-      expect(refetchMock).toHaveBeenCalledWith({ requestPolicy: "network-only" }),
+      expect(refetchMock).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      }),
     );
   });
 });

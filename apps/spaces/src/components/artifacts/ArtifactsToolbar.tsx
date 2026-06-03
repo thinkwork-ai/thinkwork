@@ -133,7 +133,10 @@ export function ArtifactsToolbar({
       </Select>
 
       {showUserFilter ? (
-        <div className="relative w-fit min-w-52" data-testid="artifacts-user-filter">
+        <div
+          className="relative w-fit min-w-52"
+          data-testid="artifacts-user-filter"
+        >
           <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"

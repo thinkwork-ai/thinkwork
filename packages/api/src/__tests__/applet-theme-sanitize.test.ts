@@ -3,7 +3,8 @@ import { sanitizeAppletThemeCss } from "../lib/applets/theme-sanitize.js";
 
 describe("sanitizeAppletThemeCss (OQ1 server-side strip)", () => {
   it("leaves safe token declarations untouched", () => {
-    const css = ":root { --background: oklch(1 0 0); --chart-1: oklch(0.6 0.2 30); }";
+    const css =
+      ":root { --background: oklch(1 0 0); --chart-1: oklch(0.6 0.2 30); }";
     expect(sanitizeAppletThemeCss(css)).toBe(css);
   });
 
