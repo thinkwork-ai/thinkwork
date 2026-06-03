@@ -111,6 +111,13 @@ export async function resolveRendererFile(
 export function buildDesktopCsp(options: DesktopCspOptions = {}): string {
   const connectSrc = uniqueSources([
     "'self'",
+    // `data:` + `blob:` are required so the renderer can `fetch()` the
+    // data/blob URLs the composer produces when reifying an attached file
+    // (fileUiPartsToFiles). `connect-src` governs fetch(), and without these
+    // the packaged build silently fails every attachment upload — the dev
+    // server's looser CSP masked it. img-src/font-src already allow data:.
+    "data:",
+    "blob:",
     DESKTOP_APP_ORIGIN,
     originFromUrl(options.graphqlHttpUrl),
     originFromUrl(options.apiUrl),

@@ -461,20 +461,36 @@ function PromptInputAttachButton() {
  * us `{ type: 'file', url: blob://..., mediaType, filename }`.
  */
 async function fileUiPartsToFiles(
-  parts: Array<{ url?: string; mediaType?: string; filename?: string }>,
+  parts: Array<{
+    url?: string;
+    mediaType?: string;
+    filename?: string;
+    file?: File;
+  }>,
 ): Promise<File[]> {
   if (!parts || parts.length === 0) return [];
   const files: File[] = [];
   for (const part of parts) {
+    // Prefer the original File captured at selection time — reifying via
+    // fetch(blob:/data:) is blocked by connect-src CSP in packaged desktop and
+    // deployed web builds (only the dev server's loose CSP allowed it), which
+    // silently dropped every attachment.
+    if (part?.file instanceof File) {
+      files.push(part.file);
+      continue;
+    }
     if (!part?.url) continue;
     try {
-      const response = await fetch(part.url);
-      const blob = await response.blob();
-      files.push(
-        new File([blob], part.filename ?? "attachment", {
-          type: part.mediaType ?? blob.type ?? "application/octet-stream",
-        }),
-      );
+      const file = part.url.startsWith("data:")
+        ? dataUrlToFile(part.url, part.filename, part.mediaType)
+        : await (async () => {
+            const response = await fetch(part.url!);
+            const blob = await response.blob();
+            return new File([blob], part.filename ?? "attachment", {
+              type: part.mediaType ?? blob.type ?? "application/octet-stream",
+            });
+          })();
+      if (file) files.push(file);
     } catch (err) {
       console.warn(
         `[SpacesComposer] failed to reify attached file ${part.filename}:`,
@@ -483,6 +499,34 @@ async function fileUiPartsToFiles(
     }
   }
   return files;
+}
+
+/**
+ * Decode a `data:` URL into a File without `fetch()` (which connect-src CSP
+ * blocks in packaged/deployed builds). Used only as a fallback when the
+ * original File object isn't carried on the part.
+ */
+function dataUrlToFile(
+  url: string,
+  filename?: string,
+  mediaType?: string,
+): File | null {
+  const comma = url.indexOf(",");
+  if (comma < 0) return null;
+  const header = url.slice(5, comma); // strip leading "data:"
+  const isBase64 = /;base64/i.test(header);
+  const mime = mediaType ?? header.split(";")[0] ?? "application/octet-stream";
+  const payload = url.slice(comma + 1);
+  if (!isBase64) {
+    return new File([decodeURIComponent(payload)], filename ?? "attachment", {
+      type: mime,
+    });
+  }
+  const binary = atob(payload);
+  const buffer = new ArrayBuffer(binary.length);
+  const view = new Uint8Array(buffer);
+  for (let i = 0; i < binary.length; i += 1) view[i] = binary.charCodeAt(i);
+  return new File([buffer], filename ?? "attachment", { type: mime });
 }
 
 function currentMentionQuery(content: string) {

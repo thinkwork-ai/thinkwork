@@ -48,6 +48,19 @@ describe("thinkwork protocol handler", () => {
     expect(await response.text()).toBe("<main>app</main>");
   });
 
+  it("allows data: and blob: in connect-src so the composer can reify attachments", () => {
+    const connectSrc = csp
+      .split(";")
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith("connect-src "));
+    expect(connectSrc).toBeDefined();
+    // fetch() of the blob/data URLs the composer produces is governed by
+    // connect-src; without these the packaged build silently drops every
+    // attachment upload.
+    expect(connectSrc).toContain("data:");
+    expect(connectSrc).toContain("blob:");
+  });
+
   it("serves JavaScript assets with the expected content type", async () => {
     const response = await handleThinkworkProtocolUrl(
       `${DESKTOP_APP_URL}assets/index-abc123.js`,
