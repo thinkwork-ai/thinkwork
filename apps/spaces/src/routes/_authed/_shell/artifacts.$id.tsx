@@ -12,13 +12,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { Braces, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
-import {
-  Button,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@thinkwork/ui";
+import { Button, cn, Tabs, TabsList, TabsTrigger } from "@thinkwork/ui";
 import {
   AppletFailure,
   AppletLoading,
@@ -54,18 +48,7 @@ function AppArtifactPage() {
   return <AppletRouteContent appId={id} />;
 }
 
-export function AppletRouteContent({
-  appId,
-  backHref = "/artifacts",
-  fill = false,
-}: {
-  appId: string;
-  /** Where the header back button points (and history fallback). Settings
-   *  embeds pass "/settings/artifacts" to stay inside the Settings shell. */
-  backHref?: string;
-  /** Fill the parent container instead of the viewport — for Settings embed. */
-  fill?: boolean;
-}) {
+export function AppletRouteContent({ appId }: { appId: string }) {
   const [{ data, fetching, error }, reexecuteAppletQuery] =
     useQuery<AppletResult>({
       query: AppletQuery,
@@ -129,7 +112,7 @@ export function AppletRouteContent({
 
   usePageHeaderActions({
     title,
-    backHref,
+    backHref: "/artifacts",
     backBehavior: "history",
     action: composedHeaderAction,
     titleTrailing,
@@ -176,11 +159,7 @@ export function AppletRouteContent({
 
   if (!source) {
     return (
-      <AppArtifactSplitShell
-        title={title}
-        runtimeMode={runtimeMode}
-        fill={fill}
-      >
+      <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
         <AppletFailure>
           This artifact does not include a source file that can be mounted.
         </AppletFailure>
@@ -248,7 +227,7 @@ export function AppletRouteContent({
   );
 
   return (
-    <AppArtifactSplitShell title={title} runtimeMode={runtimeMode} fill={fill}>
+    <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
       {operator ? (
         <OperatorAppletTabs
           appId={appId}
@@ -324,23 +303,21 @@ function OperatorAppletTabs({
   }, [appId, draft, reexecuteAppletQuery, updateAppletSource]);
 
   return (
-    <Tabs
-      value={tab}
-      onValueChange={setTab}
-      className="flex h-full min-h-0 flex-col gap-3 p-4"
-    >
+    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
       <div className="relative flex min-h-9 shrink-0 items-center justify-center gap-3">
-        <TabsList>
-          <TabsTrigger value="app" className="px-6">
-            App
-          </TabsTrigger>
-          <TabsTrigger value="source" className="px-6">
-            Source
-          </TabsTrigger>
-          <TabsTrigger value="config" className="px-6">
-            Config
-          </TabsTrigger>
-        </TabsList>
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="app" className="px-6">
+              App
+            </TabsTrigger>
+            <TabsTrigger value="source" className="px-6">
+              Source
+            </TabsTrigger>
+            <TabsTrigger value="config" className="px-6">
+              Config
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         {tab === "source" ? (
           <div className="absolute right-0">
             <Button
@@ -359,86 +336,95 @@ function OperatorAppletTabs({
         ) : null}
       </div>
 
-      <TabsContent
-        value="app"
-        className="min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col"
-      >
-        {children}
-      </TabsContent>
-
-      <TabsContent
-        value="source"
-        className="min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col"
-      >
-        <div className="h-full min-h-0 overflow-hidden rounded-md border bg-black [&>div]:h-full [&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto">
-          <CodeMirror
-            value={draft}
-            onChange={setDraft}
-            height="100%"
-            theme={vscodeDark}
-            extensions={[javascript({ jsx: true, typescript: true })]}
-            style={{ fontSize: "13px", backgroundColor: "black" }}
-            className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: true,
-              highlightActiveLine: false,
-              bracketMatching: true,
-            }}
-            data-testid="applet-source-editor"
-          />
+      {/* Absolute-fill panels so each tab gets a real, full-height box (the
+          applet preview iframe needs a sized container). All three stay
+          mounted and toggle via `hidden` so switching tabs doesn't reload the
+          running applet. */}
+      <div className="relative min-h-0 flex-1">
+        <div className={cn("absolute inset-0", tab === "app" ? "" : "hidden")}>
+          {children}
         </div>
-      </TabsContent>
 
-      <TabsContent value="config" className="min-h-0 flex-1 overflow-auto">
-        <div className="grid gap-4 [grid-template-columns:minmax(280px,360px)_minmax(0,1fr)]">
-          <section className="space-y-2 rounded-md border p-4">
-            <h2 className="text-sm font-semibold">Provenance</h2>
-            <dl className="grid gap-2 text-sm">
-              <ProvenanceRow label="App ID" value={preview?.appId ?? appId} />
-              <ProvenanceRow
-                label="Version"
-                value={preview?.version != null ? `v${preview.version}` : "—"}
-              />
-              <ProvenanceRow
-                label="Generated"
-                value={
-                  preview?.generatedAt ? relativeTime(preview.generatedAt) : "—"
-                }
-              />
-              <ProvenanceRow
-                label="Thread"
-                value={preview?.threadId ?? "None"}
-              />
-              <ProvenanceRow
-                label="Model"
-                value={preview?.modelId ?? "Unknown"}
-              />
-              <ProvenanceRow
-                label="Agent version"
-                value={preview?.agentVersion ?? "Unknown"}
-              />
-              <ProvenanceRow
-                label="Stdlib"
-                value={preview?.stdlibVersionAtGeneration ?? "—"}
-              />
-            </dl>
-          </section>
-
-          <section className="min-w-0 space-y-2 rounded-md border p-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Braces className="h-4 w-4 text-primary" />
-              Metadata
-            </div>
-            <pre className="max-h-[calc(100vh-20rem)] overflow-auto rounded-md bg-muted/30 p-3 text-xs leading-relaxed">
-              <code className="whitespace-pre-wrap break-words">
-                {formatJson(metadata)}
-              </code>
-            </pre>
-          </section>
+        <div
+          className={cn("absolute inset-0", tab === "source" ? "" : "hidden")}
+        >
+          <div className="h-full min-h-0 overflow-hidden rounded-md border bg-black [&>div]:h-full [&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto">
+            <CodeMirror
+              value={draft}
+              onChange={setDraft}
+              height="100%"
+              theme={vscodeDark}
+              extensions={[javascript({ jsx: true, typescript: true })]}
+              style={{ fontSize: "13px", backgroundColor: "black" }}
+              className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
+              basicSetup={{
+                lineNumbers: true,
+                foldGutter: true,
+                highlightActiveLine: false,
+                bracketMatching: true,
+              }}
+              data-testid="applet-source-editor"
+            />
+          </div>
         </div>
-      </TabsContent>
-    </Tabs>
+
+        <div
+          className={cn(
+            "absolute inset-0 overflow-auto",
+            tab === "config" ? "" : "hidden",
+          )}
+        >
+          <div className="grid gap-4 [grid-template-columns:minmax(280px,360px)_minmax(0,1fr)]">
+            <section className="space-y-2 rounded-md border p-4">
+              <h2 className="text-sm font-semibold">Provenance</h2>
+              <dl className="grid gap-2 text-sm">
+                <ProvenanceRow label="App ID" value={preview?.appId ?? appId} />
+                <ProvenanceRow
+                  label="Version"
+                  value={preview?.version != null ? `v${preview.version}` : "—"}
+                />
+                <ProvenanceRow
+                  label="Generated"
+                  value={
+                    preview?.generatedAt
+                      ? relativeTime(preview.generatedAt)
+                      : "—"
+                  }
+                />
+                <ProvenanceRow
+                  label="Thread"
+                  value={preview?.threadId ?? "None"}
+                />
+                <ProvenanceRow
+                  label="Model"
+                  value={preview?.modelId ?? "Unknown"}
+                />
+                <ProvenanceRow
+                  label="Agent version"
+                  value={preview?.agentVersion ?? "Unknown"}
+                />
+                <ProvenanceRow
+                  label="Stdlib"
+                  value={preview?.stdlibVersionAtGeneration ?? "—"}
+                />
+              </dl>
+            </section>
+
+            <section className="min-w-0 space-y-2 rounded-md border p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Braces className="h-4 w-4 text-primary" />
+                Metadata
+              </div>
+              <pre className="max-h-[calc(100vh-20rem)] overflow-auto rounded-md bg-muted/30 p-3 text-xs leading-relaxed">
+                <code className="whitespace-pre-wrap break-words">
+                  {formatJson(metadata)}
+                </code>
+              </pre>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

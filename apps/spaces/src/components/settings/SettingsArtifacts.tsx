@@ -19,7 +19,7 @@ export function SettingsArtifacts() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ArtifactsListBody detailPathFor={(id) => `/settings/artifacts/${id}`} />
+      <ArtifactsListBody />
     </div>
   );
 }
