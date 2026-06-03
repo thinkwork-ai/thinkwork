@@ -54,7 +54,18 @@ function AppArtifactPage() {
   return <AppletRouteContent appId={id} />;
 }
 
-export function AppletRouteContent({ appId }: { appId: string }) {
+export function AppletRouteContent({
+  appId,
+  backHref = "/artifacts",
+  fill = false,
+}: {
+  appId: string;
+  /** Where the header back button points (and history fallback). Settings
+   *  embeds pass "/settings/artifacts" to stay inside the Settings shell. */
+  backHref?: string;
+  /** Fill the parent container instead of the viewport — for Settings embed. */
+  fill?: boolean;
+}) {
   const [{ data, fetching, error }, reexecuteAppletQuery] =
     useQuery<AppletResult>({
       query: AppletQuery,
@@ -118,7 +129,7 @@ export function AppletRouteContent({ appId }: { appId: string }) {
 
   usePageHeaderActions({
     title,
-    backHref: "/artifacts",
+    backHref,
     backBehavior: "history",
     action: composedHeaderAction,
     titleTrailing,
@@ -165,7 +176,11 @@ export function AppletRouteContent({ appId }: { appId: string }) {
 
   if (!source) {
     return (
-      <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
+      <AppArtifactSplitShell
+        title={title}
+        runtimeMode={runtimeMode}
+        fill={fill}
+      >
         <AppletFailure>
           This artifact does not include a source file that can be mounted.
         </AppletFailure>
@@ -233,7 +248,7 @@ export function AppletRouteContent({ appId }: { appId: string }) {
   );
 
   return (
-    <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
+    <AppArtifactSplitShell title={title} runtimeMode={runtimeMode} fill={fill}>
       {operator ? (
         <OperatorAppletTabs
           appId={appId}

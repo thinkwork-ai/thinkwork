@@ -38,6 +38,12 @@ export interface ArtifactsListBodyProps {
    */
   isOperator?: boolean;
   roleResolved?: boolean;
+  /**
+   * Builds the route a clicked row navigates to. Defaults to the main-shell
+   * artifact viewer; the Settings embed passes a `/settings/artifacts/$id`
+   * builder so the detail stays inside the Settings shell.
+   */
+  detailPathFor?: (id: string) => string;
 }
 
 export function ArtifactsListBody({
@@ -46,6 +52,7 @@ export function ArtifactsListBody({
   errorMessage: errorMessageProp,
   isOperator: isOperatorProp,
   roleResolved: roleResolvedProp,
+  detailPathFor = computerArtifactRoute,
 }: ArtifactsListBodyProps = {}) {
   if (itemsProp) {
     return (
@@ -54,10 +61,11 @@ export function ArtifactsListBody({
         fetching={fetchingProp ?? false}
         errorMessage={errorMessageProp}
         showUserFilter={(roleResolvedProp ?? true) && !!isOperatorProp}
+        detailPathFor={detailPathFor}
       />
     );
   }
-  return <LiveArtifactsListBody />;
+  return <LiveArtifactsListBody detailPathFor={detailPathFor} />;
 }
 
 // Test-seam path: holds the filter input state locally so the affordance is
@@ -67,11 +75,13 @@ function StaticArtifactsListBody({
   fetching,
   errorMessage,
   showUserFilter,
+  detailPathFor,
 }: {
   items: ArtifactItem[];
   fetching: boolean;
   errorMessage?: string;
   showUserFilter: boolean;
+  detailPathFor: (id: string) => string;
 }) {
   const [userIdFilter, setUserIdFilter] = useState("");
   return (
@@ -83,11 +93,16 @@ function StaticArtifactsListBody({
       userIdFilter={userIdFilter}
       onUserIdFilterChange={setUserIdFilter}
       filterActive={false}
+      detailPathFor={detailPathFor}
     />
   );
 }
 
-function LiveArtifactsListBody() {
+function LiveArtifactsListBody({
+  detailPathFor,
+}: {
+  detailPathFor: (id: string) => string;
+}) {
   // Operator state lives in the live-data layer (not the presentational
   // toolbar) because the user-ID filter switches which query runs. Gate on
   // `roleResolved` so the affordance never flashes before the role is known.
@@ -139,6 +154,7 @@ function LiveArtifactsListBody() {
       userIdFilter={userIdFilter}
       onUserIdFilterChange={setUserIdFilter}
       filterActive={filterActive}
+      detailPathFor={detailPathFor}
     />
   );
 }
@@ -151,6 +167,7 @@ function ArtifactsListBodyView({
   userIdFilter,
   onUserIdFilterChange,
   filterActive,
+  detailPathFor,
 }: {
   items: ArtifactItem[];
   fetching: boolean;
@@ -159,6 +176,7 @@ function ArtifactsListBodyView({
   userIdFilter: string;
   onUserIdFilterChange: (value: string) => void;
   filterActive: boolean;
+  detailPathFor: (id: string) => string;
 }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -178,9 +196,9 @@ function ArtifactsListBodyView({
 
   const handleRowClick = useCallback(
     (item: ArtifactItem) => {
-      navigate({ to: computerArtifactRoute(item.id) });
+      navigate({ to: detailPathFor(item.id) });
     },
-    [navigate],
+    [navigate, detailPathFor],
   );
 
   const showLoadingShell = fetching && items.length === 0 && !errorMessage;
