@@ -71,6 +71,26 @@ export interface OpenedSession {
   durable?: boolean;
 }
 
+/**
+ * A live mid-turn activity event the host can stream to the client (plan
+ * 2026-06-03-001). Emitted per tool/skill/phase boundary (Phase 1) and per
+ * coalesced text chunk (Phase 2). The host wires this to an HTTP POST against
+ * the activity callback; emission is best-effort and MUST NOT throw or block
+ * the turn — turn correctness rides on the finalize callback, not on these.
+ */
+export interface ActivityEmitEvent {
+  /** Dedup-contract event type, e.g. "tool_invocation_started". */
+  eventType: string;
+  /** Human label for the step (e.g. the tool name). */
+  message: string;
+  /** Step detail; carried verbatim into the client event payload. */
+  payload?: Record<string, unknown>;
+  /** thread_turn_events stream bucket — "step" for activity. */
+  stream?: string;
+  level?: string;
+  color?: string;
+}
+
 export interface RunAgentLoopDeps {
   /**
    * Opens the agent session for a turn. Defaults to the real
@@ -83,6 +103,13 @@ export interface RunAgentLoopDeps {
   /** Optional structured logger for durable-session lifecycle + persist
    *  failures. No-op by default. */
   log?: SessionLog;
+  /**
+   * Optional live-activity emitter. When present, the loop fires it on each
+   * tool boundary (and Phase 2 text chunk) so the host can stream steps to the
+   * client mid-turn. Best-effort: the loop guards every call so a throwing or
+   * slow emitter can never fail or delay the turn.
+   */
+  emitActivity?: (event: ActivityEmitEvent) => void;
 }
 
 export interface OpenSessionInputs {
@@ -168,6 +195,23 @@ function toolPreview(value: unknown, max = 600): string {
     return JSON.stringify(value).slice(0, max);
   } catch {
     return String(value).slice(0, max);
+  }
+}
+
+/**
+ * Fire the host's live-activity emitter, swallowing any throw. Best-effort by
+ * contract: a faulty or slow emitter must never break or delay the turn (the
+ * finalize callback remains the authoritative, complete record).
+ */
+function emitActivitySafely(
+  deps: RunAgentLoopDeps,
+  event: ActivityEmitEvent,
+): void {
+  if (!deps.emitActivity) return;
+  try {
+    deps.emitActivity(event);
+  } catch {
+    // swallow — activity streaming is never allowed to affect the turn
   }
 }
 
@@ -441,6 +485,20 @@ export async function runAgentLoop(
           started_at: new Date().toISOString(),
           runtime: "pi",
         });
+        // Live emit — shape matches the client dedup contract (it dedups live
+        // events against usage.tool_invocations by tool_name). Guarded so a
+        // throwing emitter can never break the turn.
+        emitActivitySafely(deps, {
+          eventType: "tool_invocation_started",
+          message: event.toolName,
+          stream: "step",
+          payload: {
+            id: event.toolCallId,
+            tool_name: event.toolName,
+            input_preview: toolPreview(event.args),
+            status: "running",
+          },
+        });
         return;
       }
       if (event.type === "tool_execution_end") {
@@ -488,6 +546,19 @@ export async function runAgentLoop(
             runtime: "pi",
           });
         }
+        emitActivitySafely(deps, {
+          eventType: "tool_invocation_completed",
+          message: event.toolName,
+          stream: "step",
+          level: event.isError ? "error" : undefined,
+          payload: {
+            id: event.toolCallId,
+            tool_name: event.toolName,
+            output_preview: toolPreview(event.result),
+            status: event.isError ? "error" : "ok",
+            is_error: event.isError,
+          },
+        });
       }
     });
 

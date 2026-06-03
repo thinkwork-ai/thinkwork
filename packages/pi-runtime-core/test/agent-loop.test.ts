@@ -384,6 +384,67 @@ describe("runAgentLoop", () => {
     expect(invocation.finished_at).toBeTruthy();
   });
 
+  it("fires emitActivity on tool start + end with the dedup-contract shape (U5)", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_start",
+          toolCallId: "c1",
+          toolName: "web_search",
+          args: { query: "weather" },
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "c1",
+          toolName: "web_search",
+          result: { content: [{ type: "text", text: "sunny" }] },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+    const emitted: Array<{ eventType: string; message: string }> = [];
+    await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+      emitActivity: (e) =>
+        emitted.push({ eventType: e.eventType, message: e.message }),
+    });
+    expect(emitted).toEqual([
+      { eventType: "tool_invocation_started", message: "web_search" },
+      { eventType: "tool_invocation_completed", message: "web_search" },
+    ]);
+  });
+
+  it("never lets a throwing emitActivity break the turn (best-effort, D1)", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_start",
+          toolCallId: "c1",
+          toolName: "web_search",
+          args: { query: "weather" },
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "c1",
+          toolName: "web_search",
+          result: { content: [{ type: "text", text: "sunny" }] },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+      emitActivity: () => {
+        throw new Error("emitter boom");
+      },
+    });
+    // The turn still completes and collects its invocations normally.
+    expect(result.toolInvocations).toHaveLength(1);
+    expect(result.toolInvocations[0].status).toBe("ok");
+  });
+
   it("logs span-shaped phase records for tool execution", async () => {
     const session = makeFakeSession({
       messages: [assistantMessage("done")],
