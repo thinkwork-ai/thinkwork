@@ -1,33 +1,49 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
 import { Badge, DataTable, Input } from "@thinkwork/ui";
-import { ComputerKnowledgeBasesQuery } from "@/lib/graphql-queries";
+import { KnowledgeBasesListQuery } from "@/lib/kb-queries";
 import { useTenant } from "@/context/TenantContext";
-import { SettingsTablePane } from "@/components/settings/SettingsContent";
+import {
+  SettingsTablePane,
+  settingsLinkActionClassName,
+} from "@/components/settings/SettingsContent";
+import { KnowledgeBaseFormDialog } from "@/components/settings/KnowledgeBaseFormDialog";
 
 type KbRow = {
   id: string;
   name: string;
-  description: string | null;
+  description?: string | null;
   status: string;
-  documentCount: number;
-  lastSyncAt: string | null;
+  documentCount?: number | null;
+  lastSyncAt?: string | null;
 };
 
-function relativeTime(iso: string | null): string {
+function relativeTime(iso?: string | null): string {
   if (!iso) return "Never";
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "Never" : d.toLocaleDateString();
 }
 
+function statusVariant(
+  status: string,
+): "secondary" | "destructive" | "outline" {
+  if (status === "active") return "secondary";
+  if (status === "failed") return "destructive";
+  return "outline";
+}
+
 export function SettingsKnowledgeBases() {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [result] = useQuery<{ knowledgeBases?: KbRow[] | null }>({
-    query: ComputerKnowledgeBasesQuery,
+  const [createOpen, setCreateOpen] = useState(false);
+  const [result, refetch] = useQuery({
+    query: KnowledgeBasesListQuery,
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
+    requestPolicy: "cache-and-network",
   });
 
   const rows = useMemo<KbRow[]>(
@@ -37,7 +53,13 @@ export function SettingsKnowledgeBases() {
 
   const columns = useMemo<ColumnDef<KbRow>[]>(
     () => [
-      { accessorKey: "name", header: "Name" },
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: ({ row }) => (
+          <span className="font-medium">{row.original.name}</span>
+        ),
+      },
       {
         accessorKey: "description",
         header: "Description",
@@ -52,7 +74,9 @@ export function SettingsKnowledgeBases() {
         header: "Status",
         size: 110,
         cell: ({ row }) => (
-          <Badge variant="outline">{row.original.status}</Badge>
+          <Badge variant={statusVariant(row.original.status)}>
+            {row.original.status}
+          </Badge>
         ),
       },
       {
@@ -80,33 +104,55 @@ export function SettingsKnowledgeBases() {
   );
 
   return (
-    <SettingsTablePane
-      title="Knowledge Bases"
-      loading={result.fetching && !result.data}
-      toolbar={
-        <Input
-          placeholder="Search knowledge bases…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
-        />
-      }
-    >
-      <DataTable
-        columns={columns}
-        data={rows}
-        filterValue={search}
-        filterColumn="name"
-        scrollable
-        allowHorizontalScroll={false}
-        pageSize={25}
-        tableClassName="table-fixed"
-        emptyState={
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            No knowledge bases yet.
-          </div>
+    <>
+      <SettingsTablePane
+        title="Knowledge Bases"
+        loading={result.fetching && !result.data}
+        toolbar={
+          <Input
+            placeholder="Search knowledge bases…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
         }
+        actions={
+          <button
+            type="button"
+            className={settingsLinkActionClassName}
+            onClick={() => setCreateOpen(true)}
+          >
+            + New knowledge base
+          </button>
+        }
+      >
+        <DataTable
+          columns={columns}
+          data={rows}
+          filterValue={search}
+          filterColumn="name"
+          scrollable
+          allowHorizontalScroll={false}
+          pageSize={25}
+          tableClassName="table-fixed"
+          onRowClick={(row) =>
+            navigate({
+              to: "/settings/knowledge-bases/$kbId",
+              params: { kbId: row.id },
+            })
+          }
+          emptyState={
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No knowledge bases yet.
+            </div>
+          }
+        />
+      </SettingsTablePane>
+      <KnowledgeBaseFormDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSaved={() => refetch({ requestPolicy: "network-only" })}
       />
-    </SettingsTablePane>
+    </>
   );
 }
