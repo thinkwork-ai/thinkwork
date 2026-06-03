@@ -268,6 +268,49 @@ resource "aws_iam_role_policy" "lambda_bedrock" {
   })
 }
 
+# The knowledge-base-manager Lambda provisions and manages Bedrock Knowledge
+# Bases (control plane: create/sync/rechunk/delete), and graphql-http's
+# testKnowledgeBaseRetrieval query calls Retrieve. Without these the manager
+# fails with "not authorized to perform: bedrock:CreateKnowledgeBase" and every
+# KB is stuck in `failed`. CreateKnowledgeBase / CreateDataSource also take a
+# roleArn that Bedrock assumes, so the caller needs iam:PassRole on the KB
+# service role.
+resource "aws_iam_role_policy" "lambda_bedrock_knowledge_base" {
+  name = "bedrock-knowledge-base"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:CreateKnowledgeBase",
+          "bedrock:GetKnowledgeBase",
+          "bedrock:UpdateKnowledgeBase",
+          "bedrock:DeleteKnowledgeBase",
+          "bedrock:ListKnowledgeBases",
+          "bedrock:CreateDataSource",
+          "bedrock:GetDataSource",
+          "bedrock:UpdateDataSource",
+          "bedrock:DeleteDataSource",
+          "bedrock:ListDataSources",
+          "bedrock:StartIngestionJob",
+          "bedrock:GetIngestionJob",
+          "bedrock:ListIngestionJobs",
+          "bedrock:Retrieve",
+        ]
+        Resource = "arn:aws:bedrock:${var.region}:${var.account_id}:knowledge-base/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
+        Resource = var.kb_service_role_arn != "" ? var.kb_service_role_arn : "*"
+      },
+    ]
+  })
+}
+
 # SES send permissions for the email-send handler. Scoped to any
 # verified identity in this account+region so the email-send Lambda
 # can SendRawEmail from agents.thinkwork.ai (and any other domain
