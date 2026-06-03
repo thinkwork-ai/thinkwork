@@ -109,7 +109,7 @@ output "mapbox_public_token" {
 }
 
 output "ecr_repository_url" {
-  value = module.agentcore.ecr_repository_url
+  value = module.agentcore_platform.ecr_repository_url
 }
 
 output "agentcore_memory_id" {

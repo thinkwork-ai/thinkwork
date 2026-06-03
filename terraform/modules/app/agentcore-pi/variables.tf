@@ -1,16 +1,10 @@
 ################################################################################
 # AgentCore Pi — App Module (variables)
 #
-# Plan §005 U2 — provisions the Pi agent runtime as a Lambda+LWA function
-# (the same shape as the Strands runtime in `../agentcore-runtime`, NOT the
-# Bedrock AgentCore Runtime ECR-substrate pattern in `../agentcore-code-
-# interpreter`).
-#
-# ECR repo + async DLQ are shared with the Strands runtime — they're injected
-# from `module.agentcore` outputs at the parent composition layer rather than
-# being created here. This avoids a duplicate ECR repository and a parallel DLQ
-# while still letting Pi carry its own IAM role, log group, Lambda function,
-# and event-invoke config.
+# Provisions the Pi agent runtime as a Lambda+LWA function. Shared AgentCore
+# platform substrate (ECR repo + async DLQ) is injected from the parent
+# composition so Pi can carry its own IAM role, log group, Lambda function, and
+# event-invoke config without duplicating shared resources.
 ################################################################################
 
 variable "stage" {
@@ -34,12 +28,12 @@ variable "bucket_name" {
 }
 
 variable "ecr_repository_url" {
-  description = "ECR repository URL for the AgentCore container image. Shared with the Strands runtime (thinkwork-<stage>-agentcore); the Pi runtime pulls the pi-latest / <sha>-pi image tags from this repo."
+  description = "ECR repository URL for AgentCore container images. Pi pulls the pi-latest / <sha>-pi image tags from this repo."
   type        = string
 }
 
 variable "async_dlq_arn" {
-  description = "SQS DLQ ARN for failed `kind=run_skill` async invokes. Shared with the Strands runtime so operator inspection has a single queue to watch."
+  description = "SQS DLQ ARN for failed `kind=run_skill` async invokes. Shared AgentCore queue for operator inspection."
   type        = string
 }
 

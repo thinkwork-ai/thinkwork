@@ -2,7 +2,7 @@
 
 Provisions the **Pi** agent runtime as a Lambda+LWA function (Plan §005 U2).
 
-This module owns the dedicated Pi Lambda + log group + IAM role + event-invoke config so Pi can carry its own permissions surface independently from the Strands `agentcore-runtime` module.
+This module owns the dedicated Pi Lambda + log group + IAM role + event-invoke config. Shared AgentCore platform resources live in `../agentcore-platform`.
 
 ## Resources owned
 
@@ -15,12 +15,12 @@ This module owns the dedicated Pi Lambda + log group + IAM role + event-invoke c
 
 ## Resources NOT owned (injected via inputs)
 
-- **ECR repository** — shared with the Strands runtime (`thinkwork-${stage}-agentcore`). The Pi runtime pulls the `pi-latest` / `${sha}-pi` image tags from this repo. Owned by `../agentcore-runtime`; URL injected via `var.ecr_repository_url`.
-- **Async DLQ** — shared with the Strands runtime so operator inspection has a single queue. Owned by `../agentcore-runtime`; ARN injected via `var.async_dlq_arn`.
+- **ECR repository** — shared AgentCore image repository (`thinkwork-${stage}-agentcore`). Pi pulls the `pi-latest` / `${sha}-pi` image tags from this repo. Owned by `../agentcore-platform`; URL injected via `var.ecr_repository_url`.
+- **Async DLQ** — shared AgentCore async failure queue. Owned by `../agentcore-platform`; ARN injected via `var.async_dlq_arn`.
 
 ## State migration
 
-The dedicated non-Strands runtime previously shipped as Flue. The current migration renames that module and runtime identity back to Pi via `moved {}` blocks declared in the parent composition (`terraform/modules/thinkwork/main.tf`):
+The dedicated runtime previously shipped as Flue. The migration renamed that module and runtime identity back to Pi via `moved {}` blocks declared in the parent composition (`terraform/modules/thinkwork/main.tf`):
 
 ```hcl
 moved {
@@ -34,25 +34,25 @@ The Lambda function name changes from `thinkwork-${stage}-agentcore-flue` to `th
 
 ## Inputs
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `stage` | yes | Deployment stage (e.g., `dev`, `prod`). |
-| `account_id` | yes | AWS account ID (used in IAM resource ARNs). |
-| `region` | yes | AWS region. |
-| `bucket_name` | yes | Primary S3 bucket for skills + workspace files. |
-| `ecr_repository_url` | yes | Shared ECR repo URL from `module.agentcore.ecr_repository_url`. |
-| `async_dlq_arn` | yes | Shared async DLQ ARN from `module.agentcore.agentcore_async_dlq_arn`. |
-| `hindsight_endpoint` | no | Hindsight API endpoint when enabled; empty disables Hindsight tools. |
-| `agentcore_memory_id` | no | AgentCore Memory resource ID for auto-retention. |
-| `api_endpoint` | no | API Gateway base URL for the `/api/skills/complete` callback. |
-| `api_auth_secret` | no | Service-auth bearer for the same callback. |
-| `memory_engine` | no | `hindsight` or `agentcore`; surfaced as `MEMORY_ENGINE` env var. |
+| Variable              | Required | Purpose                                                                        |
+| --------------------- | -------- | ------------------------------------------------------------------------------ |
+| `stage`               | yes      | Deployment stage (e.g., `dev`, `prod`).                                        |
+| `account_id`          | yes      | AWS account ID (used in IAM resource ARNs).                                    |
+| `region`              | yes      | AWS region.                                                                    |
+| `bucket_name`         | yes      | Primary S3 bucket for skills + workspace files.                                |
+| `ecr_repository_url`  | yes      | Shared ECR repo URL from `module.agentcore_platform.ecr_repository_url`.       |
+| `async_dlq_arn`       | yes      | Shared async DLQ ARN from `module.agentcore_platform.agentcore_async_dlq_arn`. |
+| `hindsight_endpoint`  | no       | Hindsight API endpoint when enabled; empty disables Hindsight tools.           |
+| `agentcore_memory_id` | no       | AgentCore Memory resource ID for auto-retention.                               |
+| `api_endpoint`        | no       | API Gateway base URL for the `/api/skills/complete` callback.                  |
+| `api_auth_secret`     | no       | Service-auth bearer for the same callback.                                     |
+| `memory_engine`       | no       | `hindsight` or `agentcore`; surfaced as `MEMORY_ENGINE` env var.               |
 
 ## Outputs
 
-| Output | Purpose |
-|---|---|
-| `pi_function_name` | Direct SDK invoke target (passed to `chat-agent-invoke` as `AGENTCORE_PI_FUNCTION_NAME`). |
-| `pi_function_arn` | Granted to `chat-agent-invoke`'s `lambda:InvokeFunction` policy. |
+| Output                | Purpose                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `pi_function_name`    | Direct SDK invoke target (passed to `chat-agent-invoke` as `AGENTCORE_PI_FUNCTION_NAME`).  |
+| `pi_function_arn`     | Granted to `chat-agent-invoke`'s `lambda:InvokeFunction` policy.                           |
 | `pi_runtime_role_arn` | Assumed by the Bedrock AgentCore Runtime when Pi is invoked via the Bedrock control plane. |
-| `pi_log_group_name` | Scrubber + operator inspection target. |
+| `pi_log_group_name`   | Scrubber + operator inspection target.                                                     |

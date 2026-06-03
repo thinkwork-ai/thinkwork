@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Lints that every bedrock-agentcore boto3 method the Strands agent
-// container calls is explicitly granted by the AgentCore runtime IAM
-// role in terraform/modules/app/agentcore-runtime/main.tf.
+// Lints that every Bedrock AgentCore AWS SDK command the Pi runtime calls is
+// explicitly granted by the Pi runtime IAM role in
+// terraform/modules/app/agentcore-pi/main.tf.
 //
 // Motivating incident: PR #493 had to add StartCodeInterpreterSession /
 // InvokeCodeInterpreter / StopCodeInterpreterSession to the runtime role
@@ -10,10 +10,9 @@
 // user-triggered sandbox turn — a week after the code landed.
 //
 // Approach:
-//   1. Walk the Strands agent-container source dirs (non-test files).
-//   2. For each file that imports boto3 AND constructs a bedrock-agentcore
-//      client, collect snake_case method calls that match a known
-//      bedrock-agentcore operation.
+//   1. Walk Pi runtime source dirs (non-test files).
+//   2. For each file that imports @aws-sdk/client-bedrock-agentcore, collect
+//      known `*Command` class usages that map to IAM actions.
 //   3. Parse the terraform policy file for bedrock-agentcore:* actions
 //      in Allow statements.
 //   4. Fail the lint if any used operation maps to an action that isn't
@@ -21,8 +20,8 @@
 //      (prompts the developer to extend this script).
 //
 // Scope is deliberately narrow — one role, one service — because that's
-// where we've been burned. Extending to lambda-api / eval-runner is a
-// future copy-paste-and-edit job.
+// where we've been burned. Extending to lambda-api / eval-runner is a future
+// copy-paste-and-edit job.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -33,117 +32,118 @@ const repoRoot = path.resolve(
   "..",
 );
 
-// Known bedrock-agentcore operation name map: boto3 snake_case → IAM
-// CamelCase action. If a container calls a method not in this registry,
-// the lint warns rather than failing — so an operation doesn't get
-// silently skipped when boto3 adds a new one.
+// Known bedrock-agentcore operation name map: AWS SDK command class → IAM
+// CamelCase action. If a runtime imports a Command not in this registry, the
+// lint warns rather than failing so a newly introduced operation is visible.
 const OPERATION_MAP = {
   // Code Interpreter
-  start_code_interpreter_session: "StartCodeInterpreterSession",
-  invoke_code_interpreter: "InvokeCodeInterpreter",
-  stop_code_interpreter_session: "StopCodeInterpreterSession",
-  get_code_interpreter_session: "GetCodeInterpreterSession",
-  list_code_interpreter_sessions: "ListCodeInterpreterSessions",
-  get_code_interpreter: "GetCodeInterpreter",
+  StartCodeInterpreterSessionCommand: "StartCodeInterpreterSession",
+  InvokeCodeInterpreterCommand: "InvokeCodeInterpreter",
+  StopCodeInterpreterSessionCommand: "StopCodeInterpreterSession",
+  GetCodeInterpreterSessionCommand: "GetCodeInterpreterSession",
+  ListCodeInterpreterSessionsCommand: "ListCodeInterpreterSessions",
+  GetCodeInterpreterCommand: "GetCodeInterpreter",
+  // Browser
+  StartBrowserSessionCommand: "StartBrowserSession",
+  StopBrowserSessionCommand: "StopBrowserSession",
+  GetBrowserSessionCommand: "GetBrowserSession",
+  ListBrowserSessionsCommand: "ListBrowserSessions",
+  InvokeBrowserCommand: "InvokeBrowser",
+  UpdateBrowserStreamCommand: "UpdateBrowserStream",
   // Memory / Events
-  create_event: "CreateEvent",
-  list_events: "ListEvents",
-  get_event: "GetEvent",
-  retrieve_memory_records: "RetrieveMemoryRecords",
-  list_memory_records: "ListMemoryRecords",
-  get_memory_record: "GetMemoryRecord",
-  batch_create_memory_records: "BatchCreateMemoryRecords",
-  batch_update_memory_records: "BatchUpdateMemoryRecords",
-  batch_delete_memory_records: "BatchDeleteMemoryRecords",
-  delete_memory_record: "DeleteMemoryRecord",
+  CreateEventCommand: "CreateEvent",
+  ListEventsCommand: "ListEvents",
+  GetEventCommand: "GetEvent",
+  RetrieveMemoryRecordsCommand: "RetrieveMemoryRecords",
+  ListMemoryRecordsCommand: "ListMemoryRecords",
+  GetMemoryRecordCommand: "GetMemoryRecord",
+  BatchCreateMemoryRecordsCommand: "BatchCreateMemoryRecords",
+  BatchUpdateMemoryRecordsCommand: "BatchUpdateMemoryRecords",
+  BatchDeleteMemoryRecordsCommand: "BatchDeleteMemoryRecords",
+  DeleteMemoryRecordCommand: "DeleteMemoryRecord",
   // Runtime invocation (only relevant to callers, not the container itself)
-  invoke_agent_runtime: "InvokeAgentRuntime",
+  InvokeAgentRuntimeCommand: "InvokeAgentRuntime",
   // Evaluations
-  evaluate: "Evaluate",
-  get_evaluator: "GetEvaluator",
-  list_evaluators: "ListEvaluators",
+  EvaluateCommand: "Evaluate",
+  GetEvaluatorCommand: "GetEvaluator",
+  ListEvaluatorsCommand: "ListEvaluators",
 };
 
 const SOURCE_DIRS = [
-  "packages/agentcore-strands/agent-container",
-  "packages/agentcore/agent-container",
+  "packages/agentcore-pi/agent-container/src",
+  "packages/pi-aws",
 ];
 
-const TERRAFORM_FILE = "terraform/modules/app/agentcore-runtime/main.tf";
+const TERRAFORM_FILE = "terraform/modules/app/agentcore-pi/main.tf";
 
 const REQUIRED_ACTIONS = [
   {
     action: "StartBrowserSession",
     reason:
-      "browser_automation_tool.py uses the bedrock_agentcore BrowserSession helper, whose boto3 calls live in the dependency package.",
+      "Pi browser automation starts managed Browser sessions through the Bedrock AgentCore client.",
   },
   {
     action: "StopBrowserSession",
     reason:
-      "browser_automation_tool.py closes the managed browser session through the dependency helper context manager.",
+      "Keep the Pi runtime role complete for AgentCore Browser session lifecycle helpers.",
   },
   {
     action: "GetBrowserSession",
     reason:
-      "AgentCore Browser helpers may inspect the managed browser session while generating CDP headers.",
+      "Keep the Pi runtime role complete for AgentCore Browser session lifecycle helpers.",
   },
   {
     action: "ListBrowserSessions",
     reason:
-      "Keep the runtime role complete for AgentCore Browser session lifecycle helpers.",
+      "Keep the Pi runtime role complete for AgentCore Browser session lifecycle helpers.",
   },
 ];
 
-function listPythonFiles(dir) {
+function listSourceFiles(dir) {
   const abs = path.join(repoRoot, dir);
   if (!fs.existsSync(abs)) return [];
   const out = [];
   for (const name of fs.readdirSync(abs)) {
     const full = path.join(abs, name);
     const stat = fs.statSync(full);
-    if (stat.isDirectory()) continue;
-    if (!name.endsWith(".py")) continue;
-    if (name.startsWith("test_") || name === "conftest.py") continue;
+    if (stat.isDirectory()) {
+      if (
+        name === "node_modules" ||
+        name === "dist" ||
+        name === "build" ||
+        name.startsWith(".")
+      ) {
+        continue;
+      }
+      out.push(...listSourceFiles(path.relative(repoRoot, full)));
+      continue;
+    }
+    if (!/\.(ts|tsx|js|mjs)$/.test(name)) continue;
+    if (name.includes(".test.") || name.includes(".spec.")) continue;
     out.push(full);
   }
   return out;
 }
 
 function findUsedOperations() {
-  const uses = new Map(); // op snake_case -> [{file, line}]
-  const unknown = new Map(); // method name -> [{file, line}]
+  const uses = new Map(); // Command class -> [{file, line}]
+  const unknown = new Map(); // Command class -> [{file, line}]
   for (const dir of SOURCE_DIRS) {
-    for (const file of listPythonFiles(dir)) {
+    for (const file of listSourceFiles(dir)) {
       const text = fs.readFileSync(file, "utf8");
-      // Does this file touch the bedrock-agentcore client at all? If not,
-      // skip — we don't want false positives from methods that happen to
-      // share names with other AWS services (e.g. list_events exists on
-      // multiple clients).
-      if (!/\.client\(\s*["']bedrock-agentcore["']/.test(text)) continue;
+      if (!/@aws-sdk\/client-bedrock-agentcore/.test(text)) continue;
       const lines = text.split("\n");
       for (let i = 0; i < lines.length; i++) {
-        // Match any `.some_snake_case_name(` that could be a boto3 call.
-        // We only care about the operation registry, plus an unknown-warn
-        // list for operations we've never seen.
-        const methodCalls = [...lines[i].matchAll(/\.([a-z][a-z0-9_]+)\s*\(/g)];
-        for (const m of methodCalls) {
+        const commandRefs = [
+          ...lines[i].matchAll(/\b([A-Z][A-Za-z0-9]+Command)\b/g),
+        ];
+        for (const m of commandRefs) {
           const name = m[1];
           if (Object.prototype.hasOwnProperty.call(OPERATION_MAP, name)) {
             const arr = uses.get(name) || [];
             arr.push({ file: path.relative(repoRoot, file), line: i + 1 });
             uses.set(name, arr);
-          } else if (
-            // Flag potential bedrock-agentcore-shaped calls we don't know.
-            // Heuristic: caller variable contains "agentcore" / "sb" /
-            // "interpreter" / "memory" AND the method name looks like a
-            // boto3 snake_case op (3+ components). This is intentionally
-            // conservative — false positives here just prompt the author
-            // to extend OPERATION_MAP.
-            /\b(agentcore|interpreter|memory|_sb_client|event)\b/.test(
-              lines[i],
-            ) &&
-            /^(?:[a-z]+_){2,}[a-z]+$/.test(name)
-          ) {
+          } else {
             const arr = unknown.get(name) || [];
             arr.push({ file: path.relative(repoRoot, file), line: i + 1 });
             unknown.set(name, arr);
@@ -190,7 +190,7 @@ function main() {
         action: required.action,
         citations: [
           {
-            file: "packages/agentcore-strands/agent-container/container-sources/browser_automation_tool.py",
+            file: "packages/agentcore-pi/agent-container/src/runtime/browser-automation-runner.ts",
             line: 0,
             reason: required.reason,
           },
@@ -203,7 +203,7 @@ function main() {
   if (unknown.size > 0) {
     hadWarn = true;
     console.warn(
-      "[lint-agentcore-iam] Unknown bedrock-agentcore-shaped methods (extend OPERATION_MAP if these are real boto3 ops):",
+      "[lint-agentcore-iam] Unknown bedrock-agentcore Command classes (extend OPERATION_MAP if these are real AWS SDK commands):",
     );
     for (const [name, cites] of unknown) {
       for (const c of cites) {
@@ -215,7 +215,7 @@ function main() {
   if (missing.length === 0) {
     const count = uses.size;
     console.log(
-      `[lint-agentcore-iam] OK — ${count} bedrock-agentcore op(s) used, all granted by ${TERRAFORM_FILE}`,
+      `[lint-agentcore-iam] OK — ${count} bedrock-agentcore command(s) used, all granted by ${TERRAFORM_FILE}`,
     );
     process.exit(hadWarn ? 0 : 0);
   }
@@ -225,7 +225,7 @@ function main() {
   );
   for (const { op, action, citations } of missing) {
     console.error(`\n  Missing IAM action: bedrock-agentcore:${action}`);
-    console.error(`    (called as client.${op}(...) in:)`);
+    console.error(`    (used as ${op} in:)`);
     for (const c of citations) {
       const suffix = c.line > 0 ? `:${c.line}` : "";
       const reason = c.reason ? ` — ${c.reason}` : "";

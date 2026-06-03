@@ -212,20 +212,8 @@ variable "memory_engine" {
   }
 }
 
-variable "agentcore_function_name" {
-  description = "AgentCore Lambda function name (for direct SDK invoke)"
-  type        = string
-  default     = ""
-}
-
 variable "agentcore_pi_function_name" {
   description = "Pi AgentCore Lambda function name (for direct SDK invoke); empty until the Pi runtime is provisioned for the stage."
-  type        = string
-  default     = ""
-}
-
-variable "agentcore_function_arn" {
-  description = "AgentCore Lambda function ARN (used to grant lambda:InvokeFunction)"
   type        = string
   default     = ""
 }

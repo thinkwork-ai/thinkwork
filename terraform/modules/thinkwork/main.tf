@@ -362,9 +362,7 @@ module "api" {
   lambda_zips_dir                               = var.lambda_zips_dir
   api_auth_secret                               = var.api_auth_secret
   db_password                                   = var.db_password
-  agentcore_function_name                       = module.agentcore.agentcore_function_name
   agentcore_pi_function_name                    = module.agentcore_pi.agentcore_pi_function_name
-  agentcore_function_arn                        = module.agentcore.agentcore_function_arn
   agentcore_pi_function_arn                     = module.agentcore_pi.agentcore_pi_function_arn
   hindsight_endpoint                            = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                           = module.agentcore_memory.memory_id
@@ -374,7 +372,7 @@ module "api" {
   www_url                                       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
   stripe_price_ids_json                         = var.stripe_price_ids_json
   appsync_realtime_url                          = module.appsync.graphql_realtime_url
-  ecr_repository_url                            = module.agentcore.ecr_repository_url
+  ecr_repository_url                            = module.agentcore_platform.ecr_repository_url
   job_scheduler_role_arn                        = module.job_triggers.job_scheduler_role_arn
   routines_execution_role_arn                   = module.routines_stepfunctions.execution_role_arn
   routines_log_group_arn                        = module.routines_stepfunctions.log_group_arn
@@ -419,35 +417,15 @@ module "agentcore_memory" {
   existing_memory_id = var.agentcore_memory_id
 }
 
-module "agentcore" {
-  source = "../app/agentcore-runtime"
+module "agentcore_platform" {
+  source = "../app/agentcore-platform"
 
-  stage       = var.stage
-  account_id  = var.account_id
-  region      = var.region
-  bucket_name = module.s3.bucket_name
-
-  hindsight_endpoint                     = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
-  agentcore_memory_id                    = module.agentcore_memory.memory_id
-  memory_engine                          = local.resolved_memory_engine
-  requester_idle_memory_learning_enabled = var.requester_idle_memory_learning_enabled
-
-  # Threaded through so the container's run_skill_dispatch can POST
-  # terminal state back to /api/skills/complete. The lambda-api module
-  # is declared above at line 156 as `module "api"`, so the reference
-  # is `module.api` — not `module.lambda_api` (which doesn't exist and
-  # broke terraform apply on every merge since #389).
-  api_endpoint     = module.api.api_endpoint
-  api_auth_secret  = var.api_auth_secret
-  nova_act_api_key = var.nova_act_api_key
+  stage = var.stage
 }
 
 ################################################################################
-# AgentCore Pi — Plan §005 U2 splits the Pi Lambda + log group + IAM role
-# + event-invoke config out of the Strands `agentcore-runtime` module into a
-# dedicated module so Pi can carry its own permissions surface independently.
-# The shared ECR repo and async DLQ stay with `module.agentcore` and are
-# injected here.
+# AgentCore Pi — dedicated Lambda + log group + IAM role + event-invoke config.
+# Shared AgentCore substrate lives in `module.agentcore_platform`.
 ################################################################################
 
 module "agentcore_pi" {
@@ -458,8 +436,8 @@ module "agentcore_pi" {
   region      = var.region
   bucket_name = module.s3.bucket_name
 
-  ecr_repository_url = module.agentcore.ecr_repository_url
-  async_dlq_arn      = module.agentcore.agentcore_async_dlq_arn
+  ecr_repository_url = module.agentcore_platform.ecr_repository_url
+  async_dlq_arn      = module.agentcore_platform.agentcore_async_dlq_arn
 
   hindsight_endpoint                     = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                    = module.agentcore_memory.memory_id
@@ -507,6 +485,24 @@ moved {
 moved {
   from = module.agentcore_flue.aws_iam_role_policy.agentcore_flue_dlq_send
   to   = module.agentcore_pi.aws_iam_role_policy.agentcore_pi_dlq_send
+}
+
+# Shared AgentCore platform resources moved out of the retired legacy runtime
+# module so deleting that runtime does not destroy Pi's ECR repository or async
+# invoke DLQ.
+moved {
+  from = module.agentcore.aws_ecr_repository.agentcore
+  to   = module.agentcore_platform.aws_ecr_repository.agentcore
+}
+
+moved {
+  from = module.agentcore.aws_ecr_lifecycle_policy.agentcore
+  to   = module.agentcore_platform.aws_ecr_lifecycle_policy.agentcore
+}
+
+moved {
+  from = module.agentcore.aws_sqs_queue.agentcore_async_dlq
+  to   = module.agentcore_platform.aws_sqs_queue.agentcore_async_dlq
 }
 
 module "crons" {

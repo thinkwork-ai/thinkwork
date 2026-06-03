@@ -34,12 +34,12 @@ output "lambda_artifact_mode" {
 }
 
 output "memory_retain_fn_name" {
-  description = "Memory-retain Lambda function name. Strands runtime invokes this directly to push conversational turns into the active memory engine."
+  description = "Memory-retain Lambda function name. Pi invokes this directly to push conversational turns into the active memory engine."
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["memory-retain"].function_name : ""
 }
 
 output "memory_retain_fn_arn" {
-  description = "Memory-retain Lambda ARN. Used to grant lambda:InvokeFunction to the agentcore-runtime role."
+  description = "Memory-retain Lambda ARN. Used to grant lambda:InvokeFunction to the Pi runtime role."
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["memory-retain"].arn : ""
 }
 
