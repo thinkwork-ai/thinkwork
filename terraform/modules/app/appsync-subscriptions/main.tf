@@ -74,11 +74,15 @@ locals {
     "notifyAgentStatus",
     "notifyNewMessage",
     "notifyHeartbeatActivity",
+    "notifyThreadActivity",
     "notifyThreadUpdate",
     "notifyInboxItemUpdate",
     "notifyThreadTurnUpdate",
+    "notifyThreadTurnStep",
     "publishComputerThreadChunk",
     "notifyOrgUpdate",
+    "notifyCostRecorded",
+    "notifyEvalRunUpdate",
     "notifyWorkspaceAccessRevoked",
   ]
 }
