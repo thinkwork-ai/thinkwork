@@ -39,7 +39,7 @@ async function getBedrockKbSecretArn(): Promise<string> {
 const db = getDb();
 
 interface KbManagerEvent {
-  action: "create" | "sync" | "delete";
+  action: "create" | "sync" | "delete" | "rechunk";
   knowledgeBaseId: string;
 }
 
@@ -406,6 +406,103 @@ async function handleDelete(kbId: string): Promise<void> {
   }
 }
 
+async function handleRechunk(kbId: string): Promise<void> {
+  const { kb, tenantSlug } = await resolveKbInfo(kbId);
+  if (!kb.aws_kb_id) {
+    await db
+      .update(knowledgeBases)
+      .set({
+        status: "failed",
+        error_message: "Cannot re-chunk a knowledge base that is not provisioned",
+        updated_at: new Date(),
+      })
+      .where(eq(knowledgeBases.id, kbId));
+    return;
+  }
+
+  const client = await getBedrockAgentClient();
+  const { DeleteDataSourceCommand, CreateDataSourceCommand } = await import(
+    "@aws-sdk/client-bedrock-agent"
+  );
+
+  try {
+    // Guarded state machine (U8/KTD5): Bedrock fixes chunking at the data
+    // source, so changing it means recreating the data source. Drop the old
+    // one, mark `rechunking` with a null data-source id, then recreate with the
+    // new chunking config. A crash between delete and recreate leaves a
+    // recoverable rechunking/failed state instead of a dangling
+    // aws_data_source_id the provider would query blind.
+    if (kb.aws_data_source_id) {
+      await client.send(
+        new DeleteDataSourceCommand({
+          knowledgeBaseId: kb.aws_kb_id,
+          dataSourceId: kb.aws_data_source_id,
+        }),
+      );
+    }
+    await db
+      .update(knowledgeBases)
+      .set({
+        aws_data_source_id: null,
+        status: "rechunking",
+        updated_at: new Date(),
+      })
+      .where(eq(knowledgeBases.id, kbId));
+
+    const s3Prefix = `tenants/${tenantSlug}/knowledge-bases/${kb.slug}/documents/`;
+    const createDsResp = await client.send(
+      new CreateDataSourceCommand({
+        knowledgeBaseId: kb.aws_kb_id,
+        name: `${kb.slug}-s3`,
+        dataSourceConfiguration: {
+          type: "S3",
+          s3Configuration: {
+            bucketArn: `arn:aws:s3:::${WORKSPACE_BUCKET}`,
+            inclusionPrefixes: [s3Prefix],
+          },
+        },
+        vectorIngestionConfiguration: {
+          chunkingConfiguration: {
+            chunkingStrategy:
+              kb.chunking_strategy === "FIXED_SIZE" ? "FIXED_SIZE" : "NONE",
+            fixedSizeChunkingConfiguration:
+              kb.chunking_strategy === "FIXED_SIZE"
+                ? {
+                    maxTokens: kb.chunk_size_tokens ?? 300,
+                    overlapPercentage: kb.chunk_overlap_percent ?? 20,
+                  }
+                : undefined,
+          },
+        },
+      }),
+    );
+
+    const newDsId = createDsResp.dataSource?.dataSourceId;
+    if (!newDsId)
+      throw new Error("Failed to recreate Bedrock data source — no ID returned");
+    await db
+      .update(knowledgeBases)
+      .set({ aws_data_source_id: newDsId, updated_at: new Date() })
+      .where(eq(knowledgeBases.id, kbId));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[kb-manager] Rechunk failed for ${kbId}:`, message);
+    await db
+      .update(knowledgeBases)
+      .set({
+        status: "failed",
+        error_message: message.slice(0, 1000),
+        updated_at: new Date(),
+      })
+      .where(eq(knowledgeBases.id, kbId));
+    return;
+  }
+
+  // Re-ingest every document under the new chunking via the existing sync path
+  // (starts an ingestion job against the new data source and polls to active).
+  await handleSync(kbId);
+}
+
 export async function handler(event: KbManagerEvent): Promise<void> {
   console.log(
     `[kb-manager] action=${event.action} kbId=${event.knowledgeBaseId}`,
@@ -420,6 +517,9 @@ export async function handler(event: KbManagerEvent): Promise<void> {
       break;
     case "delete":
       await handleDelete(event.knowledgeBaseId);
+      break;
+    case "rechunk":
+      await handleRechunk(event.knowledgeBaseId);
       break;
     default:
       console.error(`[kb-manager] Unknown action: ${event.action}`);

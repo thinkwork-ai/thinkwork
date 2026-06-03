@@ -603,6 +603,9 @@ export async function buildInvocationResources(
         tenantId: args.identity.tenantId,
         userId: args.identity.userId,
         agentId: args.identity.agentId,
+        // Forward the thread so query_context can scope Space-bound KBs to the
+        // thread's Space (U7).
+        threadId: args.identity.threadId,
         contextEngineConfig:
           typeof args.payload.context_engine_config === "object" &&
           args.payload.context_engine_config

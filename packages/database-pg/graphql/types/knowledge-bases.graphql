@@ -54,6 +54,11 @@ input CreateKnowledgeBaseInput {
 input UpdateKnowledgeBaseInput {
   name: String
   description: String
+  # Changing any chunking field triggers a full re-ingest of all documents
+  # (U8) — Bedrock fixes chunking at the data source.
+  chunkingStrategy: String
+  chunkSizeTokens: Int
+  chunkOverlapPercent: Int
 }
 
 input AgentKnowledgeBaseInput {

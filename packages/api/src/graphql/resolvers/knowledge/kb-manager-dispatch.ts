@@ -1,6 +1,6 @@
 import { getKbManagerFnArn } from "../../utils.js";
 
-export type KbManagerAction = "create" | "sync" | "delete";
+export type KbManagerAction = "create" | "sync" | "delete" | "rechunk";
 
 /**
  * Invoke the knowledge-base manager Lambda for a provisioning action.
