@@ -275,9 +275,13 @@ resource "aws_iam_role_policy" "lambda_bedrock" {
 # KB is stuck in `failed`. CreateKnowledgeBase / CreateDataSource also take a
 # roleArn that Bedrock assumes, so the caller needs iam:PassRole on the KB
 # service role.
-resource "aws_iam_role_policy" "lambda_bedrock_knowledge_base" {
-  name = "bedrock-knowledge-base"
-  role = aws_iam_role.lambda.id
+# Attached as a managed policy rather than inline: the shared api Lambda role is
+# already near AWS's 10,240-byte aggregate limit for *inline* role policies, and
+# an inline addition here tips it over (LimitExceeded on PutRolePolicy). Managed
+# policies have their own size budget and don't count against that limit.
+resource "aws_iam_policy" "lambda_bedrock_knowledge_base" {
+  name        = "thinkwork-${var.stage}-api-bedrock-knowledge-base"
+  description = "Bedrock Knowledge Base control plane for the knowledge-base-manager Lambda"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -309,6 +313,11 @@ resource "aws_iam_role_policy" "lambda_bedrock_knowledge_base" {
       },
     ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_bedrock_knowledge_base" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.lambda_bedrock_knowledge_base.arn
 }
 
 # SES send permissions for the email-send handler. Scoped to any
