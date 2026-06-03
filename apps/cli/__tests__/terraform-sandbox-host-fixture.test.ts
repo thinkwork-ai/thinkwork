@@ -379,7 +379,7 @@ describe("U11.5 — computer deploy script sandbox enforcement", () => {
   it("build-spaces requires sandbox outputs and does not emit a legacy loader flag", () => {
     const source = read(BUILD_COMPUTER);
     expect(source).toMatch(
-      /COMPUTER_SANDBOX_URL="\$\(tf_output_raw computer_sandbox_url/,
+      /COMPUTER_SANDBOX_URL="\$\(tf_output_cached_raw computer_sandbox_url/,
     );
     expect(source).toMatch(/Sandbox infrastructure is required/);
     expect(source).toMatch(/exit 1/);
@@ -402,7 +402,7 @@ describe("Computer Mapbox production wiring", () => {
   it("build-spaces allows CI to override the Terraform output token and passes it to the iframe shell", () => {
     const source = read(BUILD_COMPUTER);
     expect(source).toContain(
-      'MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN:-$(tf_output_raw mapbox_public_token)}"',
+      "MAPBOX_PUBLIC_TOKEN=\"${MAPBOX_PUBLIC_TOKEN:-$(tf_output_cached_raw mapbox_public_token 2>/dev/null || echo '')}\"",
     );
     expect(source).toMatch(
       /VITE_MAPBOX_PUBLIC_TOKEN="\$\{MAPBOX_PUBLIC_TOKEN\}"/,

@@ -300,6 +300,12 @@ variable "agentcore_code_interpreter_id" {
   default     = ""
 }
 
+variable "agentcore_memory_id" {
+  description = "Optional pre-existing AgentCore Memory resource ID. When set, skips memory auto-provisioning and reuses this ID."
+  type        = string
+  default     = ""
+}
+
 variable "mcp_custom_domain" {
   description = <<-EOT
     MCP custom domain (e.g. "mcp.thinkwork.ai"). Empty disables the
@@ -451,6 +457,7 @@ module "thinkwork" {
   requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression
   requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
+  agentcore_memory_id                           = var.agentcore_memory_id
 
   # Mapbox public token for apps/spaces MapView primitive. Flows through
   # to scripts/build-spaces.sh → VITE_MAPBOX_PUBLIC_TOKEN.
