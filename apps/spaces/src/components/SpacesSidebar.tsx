@@ -22,7 +22,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarTrigger,
   useSidebar,
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
@@ -77,7 +76,6 @@ export function SpacesSidebar() {
                 </span>
               </div>
             </Link>
-            <SidebarTrigger className="mt-0.5 shrink-0 self-start group-data-[collapsible=icon]:hidden" />
           </div>
         </SidebarHeader>
       )}

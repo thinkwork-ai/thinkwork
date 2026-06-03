@@ -103,6 +103,7 @@ interface ThreadResult {
     } | null;
     title?: string | null;
     status?: string | null;
+    pinnedAt?: string | null;
     spaceId?: string | null;
     space?: {
       id: string;
@@ -282,6 +283,10 @@ export function SpacesThreadDetailRoute({
   const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
   const [filesModeOpen, setFilesModeOpen] = useState(false);
+  // Hide the "…" actions menu while the title is being renamed — leaving the
+  // trigger mounted lets Radix's focus-restore steal focus back from the
+  // rename input on menu close, cancelling the edit.
+  const [renamingTitle, setRenamingTitle] = useState(false);
   const [goalReviewError, setGoalReviewError] = useState<string | null>(null);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
     null,
@@ -1101,15 +1106,22 @@ export function SpacesThreadDetailRoute({
         threadId={threadId}
         title={threadTitle}
         className="min-w-0 max-w-[min(28rem,55vw)]"
+        // Full-width while editing so long titles aren't clipped in the field.
+        editingClassName="min-w-0 w-full flex-1"
         textClassName="text-sm font-medium"
-        inputClassName="h-7 min-w-[12rem]"
+        inputClassName="h-7"
+        onEditingChange={setRenamingTitle}
         onRenamed={() => reexecuteQuery({ requestPolicy: "network-only" })}
       />
     ) : undefined,
-    titleTrailing: (
+    // While renaming, unmount the "…" menu entirely so its trigger can't
+    // reclaim focus from the inline rename input when the menu closes.
+    titleTrailing: renamingTitle ? undefined : (
       <ThreadDetailActions
         threadId={threadId}
         threadTitle={threadTitle}
+        tenantId={tenantId ?? ""}
+        isPinned={Boolean(routeThread?.pinnedAt)}
         attachedArtifacts={attachedArtifacts}
         turns={thread?.turns ?? []}
         onDeleted={() => {

@@ -2521,7 +2521,7 @@ function FollowUpComposer({
               value={composer.text}
               onChange={(event) => composer.setText(event.target.value)}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type a command, attach an .xlsx / .csv..."
+              placeholder="Type a command, attach a file..."
               disabled={disabled}
             />
           </PromptInputBody>

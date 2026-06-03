@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "urql";
-import { MoreHorizontal, Archive, FileText, Trash2 } from "lucide-react";
+import {
+  MoreHorizontal,
+  Archive,
+  FileText,
+  Trash2,
+  Pencil,
+} from "lucide-react";
+import { IconPin, IconPinnedOff } from "@tabler/icons-react";
+import { THREAD_RENAME_EVENT } from "@/lib/thread-rename";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -24,6 +32,8 @@ import {
 import {
   DeleteArtifactMutation,
   DeleteThreadMutation,
+  PinThreadMutation,
+  UnpinThreadMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
 import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
@@ -39,6 +49,10 @@ export interface AttachedArtifactSummary {
 export interface ThreadDetailActionsProps {
   threadId: string;
   threadTitle: string;
+  /** Tenant for the pin/unpin mutations. */
+  tenantId: string;
+  /** Whether the thread is currently pinned (drives Pin vs Unpin). */
+  isPinned?: boolean;
   attachedArtifacts: AttachedArtifactSummary[];
   /** Persisted turns, used by the read-only System Prompt viewer. */
   turns?: TaskThreadTurn[];
@@ -52,7 +66,38 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const navigate = useNavigate();
   const [, updateThread] = useMutation(UpdateThreadMutation);
+  const [, pinThread] = useMutation(PinThreadMutation);
+  const [, unpinThread] = useMutation(UnpinThreadMutation);
   const [working, setWorking] = useState(false);
+
+  async function handlePinToggle() {
+    setWorking(true);
+    try {
+      const result = props.isPinned
+        ? await unpinThread({
+            tenantId: props.tenantId,
+            threadId: props.threadId,
+          })
+        : await pinThread({
+            tenantId: props.tenantId,
+            threadId: props.threadId,
+          });
+      if (result.error) {
+        toast.error(
+          `Could not ${props.isPinned ? "unpin" : "pin"} thread: ${result.error.message}`,
+        );
+        return;
+      }
+      toast.success(props.isPinned ? "Thread unpinned." : "Thread pinned.");
+    } catch (err) {
+      console.error("[ThreadDetailActions] pin toggle failed", err);
+      toast.error(
+        `Could not ${props.isPinned ? "unpin" : "pin"} thread: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
 
   async function handleArchive() {
     setWorking(true);
@@ -92,19 +137,52 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-[10rem]">
+        <DropdownMenuContent
+          align="start"
+          className="min-w-[10rem]"
+          // Don't let Radix restore focus to the "…" trigger on close — the
+          // Rename item hands focus to the inline title input (a sibling
+          // component), and the default focus-restore would steal it straight
+          // back, blurring the input and cancelling the rename. Dialog-opening
+          // items (System Prompt, Delete) manage their own focus on mount, so
+          // suppressing the restore here is safe for every item.
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
           <DropdownMenuItem
             className="whitespace-nowrap"
-            data-testid="thread-actions-archive"
+            data-testid="thread-actions-pin"
             disabled={working}
-            // No event.preventDefault — let Radix close the menu, then
-            // the async work runs. Keeping the menu open during a
-            // network request blocks focus from reaching subsequent
-            // dialog buttons.
-            onSelect={() => void handleArchive()}
+            onSelect={() => void handlePinToggle()}
           >
-            <Archive className="mr-2 h-4 w-4" />
-            Archive thread
+            {props.isPinned ? (
+              <>
+                <IconPinnedOff className="mr-2 h-3.5 w-3.5" stroke={2} />
+                Unpin thread
+              </>
+            ) : (
+              <>
+                <IconPin className="mr-2 h-3.5 w-3.5" stroke={2} />
+                Pin thread
+              </>
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="whitespace-nowrap"
+            data-testid="thread-actions-rename"
+            // Defer one frame so Radix's menu close doesn't fight the inline
+            // title input for focus, then ask the title to enter edit mode.
+            onSelect={() => {
+              window.setTimeout(() => {
+                window.dispatchEvent(
+                  new CustomEvent(THREAD_RENAME_EVENT, {
+                    detail: { threadId: props.threadId },
+                  }),
+                );
+              }, 0);
+            }}
+          >
+            <Pencil className="mr-2 h-3.5 w-3.5" />
+            Rename thread
           </DropdownMenuItem>
           <DropdownMenuItem
             className="whitespace-nowrap"
@@ -116,10 +194,23 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
               window.setTimeout(() => setSystemPromptOpen(true), 0);
             }}
           >
-            <FileText className="mr-2 h-4 w-4" />
+            <FileText className="mr-2 h-3.5 w-3.5" />
             System Prompt
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="whitespace-nowrap"
+            data-testid="thread-actions-archive"
+            disabled={working}
+            // No event.preventDefault — let Radix close the menu, then
+            // the async work runs. Keeping the menu open during a
+            // network request blocks focus from reaching subsequent
+            // dialog buttons.
+            onSelect={() => void handleArchive()}
+          >
+            <Archive className="mr-2 h-3.5 w-3.5" />
+            Archive thread
+          </DropdownMenuItem>
           <DropdownMenuItem
             className="whitespace-nowrap"
             variant="destructive"
@@ -133,7 +224,7 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
               window.setTimeout(() => setDeleteOpen(true), 0);
             }}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="mr-2 h-3.5 w-3.5" />
             Delete thread
           </DropdownMenuItem>
         </DropdownMenuContent>

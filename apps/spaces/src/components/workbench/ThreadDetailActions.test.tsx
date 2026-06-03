@@ -12,6 +12,8 @@ const {
   updateThreadMock,
   deleteThreadMock,
   deleteArtifactMock,
+  pinThreadMock,
+  unpinThreadMock,
   toastSuccessMock,
   toastErrorMock,
   toastWarningMock,
@@ -21,6 +23,8 @@ const {
   updateThreadMock: vi.fn(),
   deleteThreadMock: vi.fn(),
   deleteArtifactMock: vi.fn(),
+  pinThreadMock: vi.fn(),
+  unpinThreadMock: vi.fn(),
   toastSuccessMock: vi.fn(),
   toastErrorMock: vi.fn(),
   toastWarningMock: vi.fn(),
@@ -28,6 +32,8 @@ const {
     UpdateThreadMutation: Symbol("UpdateThreadMutation"),
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
     DeleteArtifactMutation: Symbol("DeleteArtifactMutation"),
+    PinThreadMutation: Symbol("PinThreadMutation"),
+    UnpinThreadMutation: Symbol("UnpinThreadMutation"),
   },
 }));
 
@@ -49,6 +55,10 @@ vi.mock("urql", () => ({
       return [{ fetching: false }, deleteThreadMock];
     if (doc === queryDocs.DeleteArtifactMutation)
       return [{ fetching: false }, deleteArtifactMock];
+    if (doc === queryDocs.PinThreadMutation)
+      return [{ fetching: false }, pinThreadMock];
+    if (doc === queryDocs.UnpinThreadMutation)
+      return [{ fetching: false }, unpinThreadMock];
     return [{ fetching: false }, vi.fn()];
   },
 }));
@@ -88,6 +98,7 @@ describe("ThreadDetailActions (dropdown trigger)", () => {
     render(
       <ThreadDetailActions
         threadId="t1"
+        tenantId="t1"
         threadTitle="Map runbook smoke"
         attachedArtifacts={[]}
       />,
@@ -105,6 +116,7 @@ describe("ThreadDeleteDialog cascade flow", () => {
         open
         onOpenChange={() => {}}
         threadId="t1"
+        tenantId="t1"
         threadTitle="Empty"
         attachedArtifacts={[]}
       />,
@@ -118,6 +130,7 @@ describe("ThreadDeleteDialog cascade flow", () => {
         open
         onOpenChange={() => {}}
         threadId="t1"
+        tenantId="t1"
         threadTitle="Solo"
         attachedArtifacts={[{ id: "a1", title: "Only one" }]}
       />,
@@ -133,6 +146,7 @@ describe("ThreadDeleteDialog cascade flow", () => {
         open
         onOpenChange={() => {}}
         threadId="t1"
+        tenantId="t1"
         threadTitle="Busy"
         attachedArtifacts={[
           { id: "a1", title: "One" },
@@ -152,6 +166,7 @@ describe("ThreadDeleteDialog cascade flow", () => {
         open
         onOpenChange={() => {}}
         threadId="t1"
+        tenantId="t1"
         threadTitle="Busy"
         attachedArtifacts={[
           { id: "a1", title: "One" },
@@ -175,6 +190,7 @@ describe("ThreadDeleteDialog cascade flow", () => {
         open
         onOpenChange={() => {}}
         threadId="t1"
+        tenantId="t1"
         threadTitle="Busy"
         attachedArtifacts={[]}
         onDeleted={onDeleted}
@@ -195,6 +211,7 @@ describe("ThreadDeleteDialog cascade flow", () => {
         open
         onOpenChange={() => {}}
         threadId="t1"
+        tenantId="t1"
         threadTitle="Busy"
         attachedArtifacts={[
           { id: "a1", title: "One" },
@@ -225,6 +242,7 @@ describe("ThreadDeleteDialog cascade flow", () => {
         open
         onOpenChange={() => {}}
         threadId="t1"
+        tenantId="t1"
         threadTitle="Busy"
         attachedArtifacts={[
           { id: "a1", title: "One" },
@@ -250,6 +268,7 @@ describe("ThreadDeleteDialog cascade flow", () => {
         open
         onOpenChange={onOpenChange}
         threadId="t1"
+        tenantId="t1"
         threadTitle="Cancellable"
         attachedArtifacts={[{ id: "a1", title: "x" }]}
       />,
