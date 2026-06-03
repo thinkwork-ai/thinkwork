@@ -22,17 +22,31 @@ REGION="${AWS_REGION:-us-east-1}"
 echo "▸ Reading Terraform outputs for stage=$STAGE ..."
 cd "$TF_DIR"
 
-source "$REPO_ROOT/scripts/lib/terraform-output.sh"
+TF_OUTPUT_JSON="$(terraform output -json)"
 
-API_ENDPOINT="$(tf_output_raw api_endpoint)"
-APPSYNC_API_URL="$(tf_output_raw appsync_api_url)"
-APPSYNC_REALTIME_URL="$(tf_output_raw appsync_realtime_url)"
-APPSYNC_API_KEY="$(tf_output_raw appsync_api_key)"
-USER_POOL_ID="$(tf_output_raw user_pool_id)"
-ADMIN_CLIENT_ID="$(tf_output_raw admin_client_id)"
-AUTH_DOMAIN="$(tf_output_raw auth_domain)"
-ADMIN_BUCKET="$(tf_output_raw admin_bucket_name)"
-ADMIN_CF_ID="$(tf_output_raw admin_distribution_id)"
+tf_output_cached_raw() {
+  local name="${1:?terraform output name required}"
+
+  jq -er --arg name "$name" '
+    .[$name] // empty
+    | .value
+    | if type == "string" then .
+      elif type == "number" or type == "boolean" then tostring
+      elif type == "array" or type == "object" then @json
+      else empty
+      end
+  ' <<<"$TF_OUTPUT_JSON"
+}
+
+API_ENDPOINT="$(tf_output_cached_raw api_endpoint)"
+APPSYNC_API_URL="$(tf_output_cached_raw appsync_api_url)"
+APPSYNC_REALTIME_URL="$(tf_output_cached_raw appsync_realtime_url)"
+APPSYNC_API_KEY="$(tf_output_cached_raw appsync_api_key)"
+USER_POOL_ID="$(tf_output_cached_raw user_pool_id)"
+ADMIN_CLIENT_ID="$(tf_output_cached_raw admin_client_id)"
+AUTH_DOMAIN="$(tf_output_cached_raw auth_domain)"
+ADMIN_BUCKET="$(tf_output_cached_raw admin_bucket_name)"
+ADMIN_CF_ID="$(tf_output_cached_raw admin_distribution_id)"
 
 # Construct full Cognito domain URL from the short domain prefix
 COGNITO_DOMAIN="https://${AUTH_DOMAIN}.auth.${REGION}.amazoncognito.com"
@@ -88,6 +102,6 @@ aws cloudfront create-invalidation \
   --region "$REGION" \
   --output text > /dev/null
 
-ADMIN_URL="$(cd "$TF_DIR" && tf_output_raw admin_url)"
+ADMIN_URL="$(cd "$TF_DIR" && tf_output_cached_raw admin_url)"
 echo ""
 echo "✓ Admin deployed: ${ADMIN_URL:-https://<pending>}"
