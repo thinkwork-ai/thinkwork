@@ -359,11 +359,17 @@ function OperatorAppletTabs({
         ) : null}
       </div>
 
-      <TabsContent value="app" className="min-h-0 overflow-hidden">
+      <TabsContent
+        value="app"
+        className="min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col"
+      >
         {children}
       </TabsContent>
 
-      <TabsContent value="source" className="min-h-0 overflow-hidden">
+      <TabsContent
+        value="source"
+        className="min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col"
+      >
         <div className="h-full min-h-0 overflow-hidden rounded-md border bg-black [&>div]:h-full [&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto">
           <CodeMirror
             value={draft}
@@ -384,7 +390,7 @@ function OperatorAppletTabs({
         </div>
       </TabsContent>
 
-      <TabsContent value="config" className="min-h-0 overflow-auto">
+      <TabsContent value="config" className="min-h-0 flex-1 overflow-auto">
         <div className="grid gap-4 [grid-template-columns:minmax(280px,360px)_minmax(0,1fr)]">
           <section className="space-y-2 rounded-md border p-4">
             <h2 className="text-sm font-semibold">Provenance</h2>
