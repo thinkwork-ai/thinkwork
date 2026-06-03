@@ -14,12 +14,14 @@ import {
   SelectValue,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { useTenant } from "@/context/TenantContext";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import {
   SettingsPageTitle,
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { SettingsKnowledgeBaseBinding } from "@/components/settings/SettingsKnowledgeBaseBinding";
 import {
   DeleteKnowledgeBaseMutation,
   KnowledgeBaseDetailQuery,
@@ -59,6 +61,7 @@ export function SettingsKnowledgeBaseDetail() {
     from: "/_authed/settings/knowledge-bases/$kbId",
   });
   const navigate = useNavigate();
+  const { tenantId } = useTenant();
 
   const [result, refetch] = useQuery({
     query: KnowledgeBaseDetailQuery,
@@ -198,6 +201,10 @@ export function SettingsKnowledgeBaseDetail() {
         />
 
         <TestRetrievalSection kbId={kb.id} status={kb.status} />
+
+        {tenantId ? (
+          <SettingsKnowledgeBaseBinding kbId={kb.id} tenantId={tenantId} />
+        ) : null}
 
         <div className="flex items-center justify-end gap-2">
           {confirmDelete ? (

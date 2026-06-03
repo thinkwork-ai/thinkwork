@@ -101,3 +101,46 @@ export const DeleteKnowledgeBaseMutation = graphql(`
     deleteKnowledgeBase(id: $id)
   }
 `);
+
+// Binding state (U11): the tenant's platform agent (tenant-wide scope) and its
+// active Spaces, each with their current KB bindings. The set* mutations
+// replace the whole binding set, so the UI reads the current set and writes it
+// back with this KB added/removed.
+export const KnowledgeBaseBindingsQuery = graphql(`
+  query KnowledgeBaseBindings($tenantId: ID!) {
+    tenantAgent(tenantId: $tenantId) {
+      id
+      knowledgeBases {
+        knowledgeBaseId
+      }
+    }
+    spaces(tenantId: $tenantId, status: ACTIVE) {
+      id
+      name
+      knowledgeBases {
+        knowledgeBaseId
+      }
+    }
+  }
+`);
+
+export const SetAgentKnowledgeBasesMutation = graphql(`
+  mutation SetAgentKnowledgeBases(
+    $agentId: ID!
+    $knowledgeBases: [AgentKnowledgeBaseInput!]!
+  ) {
+    setAgentKnowledgeBases(agentId: $agentId, knowledgeBases: $knowledgeBases) {
+      id
+      knowledgeBaseId
+    }
+  }
+`);
+
+export const SetSpaceKnowledgeBasesMutation = graphql(`
+  mutation SetSpaceKnowledgeBases($input: SetSpaceKnowledgeBasesInput!) {
+    setSpaceKnowledgeBases(input: $input) {
+      id
+      knowledgeBaseId
+    }
+  }
+`);
