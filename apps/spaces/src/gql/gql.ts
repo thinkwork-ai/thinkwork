@@ -34,6 +34,14 @@ type Documents = {
     "\n  mutation DeleteEvalRun($id: ID!) {\n    deleteEvalRun(id: $id)\n  }\n": typeof types.DeleteEvalRunDocument,
     "\n  mutation CancelEvalRun($id: ID!) {\n    cancelEvalRun(id: $id) {\n      id\n      status\n      completedAt\n    }\n  }\n": typeof types.CancelEvalRunDocument,
     "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n": typeof types.OnEvalRunUpdatedDocument,
+    "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n": typeof types.KnowledgeBasesListDocument,
+    "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n    }\n  }\n": typeof types.KnowledgeBaseDetailDocument,
+    "\n  query TestKnowledgeBaseRetrieval($id: ID!, $query: String!) {\n    testKnowledgeBaseRetrieval(id: $id, query: $query) {\n      status\n      hits {\n        snippet\n        score\n        source\n      }\n    }\n  }\n": typeof types.TestKnowledgeBaseRetrievalDocument,
+    "\n  mutation CreateKnowledgeBase($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      status\n    }\n  }\n": typeof types.CreateKnowledgeBaseDocument,
+    "\n  mutation UpdateKnowledgeBase($id: ID!, $input: UpdateKnowledgeBaseInput!) {\n    updateKnowledgeBase(id: $id, input: $input) {\n      id\n      name\n      description\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n    }\n  }\n": typeof types.UpdateKnowledgeBaseDocument,
+    "\n  mutation SyncKnowledgeBase($id: ID!) {\n    syncKnowledgeBase(id: $id) {\n      id\n      status\n      lastSyncStatus\n    }\n  }\n": typeof types.SyncKnowledgeBaseDocument,
+    "\n  mutation RetryKnowledgeBase($id: ID!) {\n    retryKnowledgeBase(id: $id) {\n      id\n      status\n      errorMessage\n    }\n  }\n": typeof types.RetryKnowledgeBaseDocument,
+    "\n  mutation DeleteKnowledgeBase($id: ID!) {\n    deleteKnowledgeBase(id: $id)\n  }\n": typeof types.DeleteKnowledgeBaseDocument,
     "\n  query RoutineDetail($id: ID!) {\n    routine(id: $id) {\n      id\n      tenantId\n      name\n      description\n      type\n      status\n      schedule\n      engine\n      currentVersion\n      config\n      lastRunAt\n      nextRunAt\n      agentId\n      agent {\n        id\n        name\n        avatarUrl\n      }\n      triggers {\n        id\n        triggerType\n        config\n        enabled\n      }\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.RoutineDetailDocument,
     "\n  query RoutineRecipeCatalog($tenantId: ID!) {\n    routineRecipeCatalog(tenantId: $tenantId) {\n      id\n      displayName\n      description\n      category\n      hitlCapable\n      defaultArgs\n      configFields {\n        key\n        label\n        value\n        inputType\n        control\n        required\n        editable\n        options\n        placeholder\n        helpText\n        min\n        max\n        pattern\n      }\n    }\n  }\n": typeof types.RoutineRecipeCatalogDocument,
     "\n  query TenantCredentials($tenantId: ID!, $status: TenantCredentialStatus) {\n    tenantCredentials(tenantId: $tenantId, status: $status) {\n      id\n      tenantId\n      displayName\n      slug\n      kind\n      status\n      metadataJson\n      schemaJson\n      eventbridgeConnectionArn\n      lastUsedAt\n      lastValidatedAt\n      createdAt\n      updatedAt\n      deletedAt\n    }\n  }\n": typeof types.TenantCredentialsDocument,
@@ -86,6 +94,14 @@ const documents: Documents = {
     "\n  mutation DeleteEvalRun($id: ID!) {\n    deleteEvalRun(id: $id)\n  }\n": types.DeleteEvalRunDocument,
     "\n  mutation CancelEvalRun($id: ID!) {\n    cancelEvalRun(id: $id) {\n      id\n      status\n      completedAt\n    }\n  }\n": types.CancelEvalRunDocument,
     "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n": types.OnEvalRunUpdatedDocument,
+    "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n": types.KnowledgeBasesListDocument,
+    "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n    }\n  }\n": types.KnowledgeBaseDetailDocument,
+    "\n  query TestKnowledgeBaseRetrieval($id: ID!, $query: String!) {\n    testKnowledgeBaseRetrieval(id: $id, query: $query) {\n      status\n      hits {\n        snippet\n        score\n        source\n      }\n    }\n  }\n": types.TestKnowledgeBaseRetrievalDocument,
+    "\n  mutation CreateKnowledgeBase($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      status\n    }\n  }\n": types.CreateKnowledgeBaseDocument,
+    "\n  mutation UpdateKnowledgeBase($id: ID!, $input: UpdateKnowledgeBaseInput!) {\n    updateKnowledgeBase(id: $id, input: $input) {\n      id\n      name\n      description\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n    }\n  }\n": types.UpdateKnowledgeBaseDocument,
+    "\n  mutation SyncKnowledgeBase($id: ID!) {\n    syncKnowledgeBase(id: $id) {\n      id\n      status\n      lastSyncStatus\n    }\n  }\n": types.SyncKnowledgeBaseDocument,
+    "\n  mutation RetryKnowledgeBase($id: ID!) {\n    retryKnowledgeBase(id: $id) {\n      id\n      status\n      errorMessage\n    }\n  }\n": types.RetryKnowledgeBaseDocument,
+    "\n  mutation DeleteKnowledgeBase($id: ID!) {\n    deleteKnowledgeBase(id: $id)\n  }\n": types.DeleteKnowledgeBaseDocument,
     "\n  query RoutineDetail($id: ID!) {\n    routine(id: $id) {\n      id\n      tenantId\n      name\n      description\n      type\n      status\n      schedule\n      engine\n      currentVersion\n      config\n      lastRunAt\n      nextRunAt\n      agentId\n      agent {\n        id\n        name\n        avatarUrl\n      }\n      triggers {\n        id\n        triggerType\n        config\n        enabled\n      }\n      createdAt\n      updatedAt\n    }\n  }\n": types.RoutineDetailDocument,
     "\n  query RoutineRecipeCatalog($tenantId: ID!) {\n    routineRecipeCatalog(tenantId: $tenantId) {\n      id\n      displayName\n      description\n      category\n      hitlCapable\n      defaultArgs\n      configFields {\n        key\n        label\n        value\n        inputType\n        control\n        required\n        editable\n        options\n        placeholder\n        helpText\n        min\n        max\n        pattern\n      }\n    }\n  }\n": types.RoutineRecipeCatalogDocument,
     "\n  query TenantCredentials($tenantId: ID!, $status: TenantCredentialStatus) {\n    tenantCredentials(tenantId: $tenantId, status: $status) {\n      id\n      tenantId\n      displayName\n      slug\n      kind\n      status\n      metadataJson\n      schemaJson\n      eventbridgeConnectionArn\n      lastUsedAt\n      lastValidatedAt\n      createdAt\n      updatedAt\n      deletedAt\n    }\n  }\n": types.TenantCredentialsDocument,
@@ -212,6 +228,38 @@ export function graphql(source: "\n  mutation CancelEvalRun($id: ID!) {\n    can
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n"): (typeof documents)["\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n    }\n  }\n"): (typeof documents)["\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query TestKnowledgeBaseRetrieval($id: ID!, $query: String!) {\n    testKnowledgeBaseRetrieval(id: $id, query: $query) {\n      status\n      hits {\n        snippet\n        score\n        source\n      }\n    }\n  }\n"): (typeof documents)["\n  query TestKnowledgeBaseRetrieval($id: ID!, $query: String!) {\n    testKnowledgeBaseRetrieval(id: $id, query: $query) {\n      status\n      hits {\n        snippet\n        score\n        source\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateKnowledgeBase($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CreateKnowledgeBase($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateKnowledgeBase($id: ID!, $input: UpdateKnowledgeBaseInput!) {\n    updateKnowledgeBase(id: $id, input: $input) {\n      id\n      name\n      description\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateKnowledgeBase($id: ID!, $input: UpdateKnowledgeBaseInput!) {\n    updateKnowledgeBase(id: $id, input: $input) {\n      id\n      name\n      description\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SyncKnowledgeBase($id: ID!) {\n    syncKnowledgeBase(id: $id) {\n      id\n      status\n      lastSyncStatus\n    }\n  }\n"): (typeof documents)["\n  mutation SyncKnowledgeBase($id: ID!) {\n    syncKnowledgeBase(id: $id) {\n      id\n      status\n      lastSyncStatus\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RetryKnowledgeBase($id: ID!) {\n    retryKnowledgeBase(id: $id) {\n      id\n      status\n      errorMessage\n    }\n  }\n"): (typeof documents)["\n  mutation RetryKnowledgeBase($id: ID!) {\n    retryKnowledgeBase(id: $id) {\n      id\n      status\n      errorMessage\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteKnowledgeBase($id: ID!) {\n    deleteKnowledgeBase(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteKnowledgeBase($id: ID!) {\n    deleteKnowledgeBase(id: $id)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
