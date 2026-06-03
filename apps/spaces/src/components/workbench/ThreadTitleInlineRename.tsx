@@ -9,6 +9,10 @@ import { Pencil } from "lucide-react";
 import { useMutation } from "urql";
 import { toast } from "sonner";
 import {
+  THREAD_RENAME_EVENT,
+  type ThreadRenameEventDetail,
+} from "@/lib/thread-rename";
+import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -76,6 +80,17 @@ export function ThreadTitleInlineRename({
     setDraft(title);
     setEditing(true);
   }, [committing, disabled, title]);
+
+  // Enter edit mode when the thread's "…" menu fires the rename request.
+  useEffect(() => {
+    function onRenameRequest(event: Event) {
+      const detail = (event as CustomEvent<ThreadRenameEventDetail>).detail;
+      if (detail?.threadId === threadId) startRename();
+    }
+    window.addEventListener(THREAD_RENAME_EVENT, onRenameRequest);
+    return () =>
+      window.removeEventListener(THREAD_RENAME_EVENT, onRenameRequest);
+  }, [threadId, startRename]);
 
   const cancelRename = useCallback(() => {
     setDraft(title);

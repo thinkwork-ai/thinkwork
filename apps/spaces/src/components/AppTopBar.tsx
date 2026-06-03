@@ -31,7 +31,7 @@ export function AppTopBar() {
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-4">
       {actions ? (
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {actions.backHref ? (
             actions.backBehavior === "history" ? (
               <Button
@@ -61,20 +61,30 @@ export function AppTopBar() {
           {actions.breadcrumbs && actions.breadcrumbs.length > 0 ? (
             <nav
               aria-label="Breadcrumb"
-              className="flex min-w-0 items-center gap-1 overflow-hidden text-sm font-medium"
+              // Grow to fill the bar only while an inline title editor is
+              // active (titleContent present, the "…" titleTrailing hidden),
+              // so the rename input spans the full width. When not editing,
+              // stay content-sized so the "…" menu hugs the title.
+              className={`flex min-w-0 items-center gap-1 overflow-hidden text-sm font-medium${
+                actions.titleContent && !actions.titleTrailing ? " flex-1" : ""
+              }`}
             >
               {actions.breadcrumbs.map((crumb, index) => {
                 const isLast = index === actions.breadcrumbs!.length - 1;
                 return (
                   <span
                     key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
-                    className="flex min-w-0 items-center gap-1"
+                    className={`flex min-w-0 items-center gap-1${
+                      isLast && actions.titleContent ? " flex-1" : ""
+                    }`}
                   >
                     {index > 0 ? (
                       <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" />
                     ) : null}
                     {isLast && actions.titleContent ? (
-                      <div className="min-w-0">{actions.titleContent}</div>
+                      <div className="min-w-0 flex-1">
+                        {actions.titleContent}
+                      </div>
                     ) : isLast || !crumb.href ? (
                       <span
                         className={
