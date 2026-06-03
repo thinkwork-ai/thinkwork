@@ -1208,15 +1208,6 @@ function ThreadListSection({
             </button>
           </SidebarGroupLabel>
         </CollapsibleTrigger>
-        <SectionHeaderControls
-          sectionId={sectionId}
-          label={label}
-          unreadThreadIds={unreadThreadIds}
-          filterOn={filterOn}
-          scopeSpaceId={scopeSpaceId}
-          scopeSpaceName={scopeSpaceName}
-          onMarkSectionRead={onMarkSectionRead}
-        />
         <Link
           to="/new"
           search={{ spaceId: scopeSpaceId }}
@@ -1227,6 +1218,15 @@ function ThreadListSection({
         >
           <SquarePen className="size-3.5" />
         </Link>
+        <SectionHeaderControls
+          sectionId={sectionId}
+          label={label}
+          unreadThreadIds={unreadThreadIds}
+          filterOn={filterOn}
+          scopeSpaceId={scopeSpaceId}
+          scopeSpaceName={scopeSpaceName}
+          onMarkSectionRead={onMarkSectionRead}
+        />
       </div>
       <CollapsibleContent>
         <SidebarGroupContent>
@@ -1565,15 +1565,6 @@ function SpaceThreadSection({
             </button>
           </SidebarGroupLabel>
         </CollapsibleTrigger>
-        <SectionHeaderControls
-          sectionId={sectionId}
-          label={label}
-          unreadThreadIds={unreadThreadIds}
-          filterOn={filterOn}
-          scopeSpaceId={space.id}
-          scopeSpaceName={label}
-          onMarkSectionRead={onMarkSectionRead}
-        />
         <Link
           to="/new"
           search={{ spaceId: space.id }}
@@ -1584,6 +1575,15 @@ function SpaceThreadSection({
         >
           <SquarePen className="size-3.5" />
         </Link>
+        <SectionHeaderControls
+          sectionId={sectionId}
+          label={label}
+          unreadThreadIds={unreadThreadIds}
+          filterOn={filterOn}
+          scopeSpaceId={space.id}
+          scopeSpaceName={label}
+          onMarkSectionRead={onMarkSectionRead}
+        />
       </div>
       <CollapsibleContent>
         <SidebarGroupContent>
