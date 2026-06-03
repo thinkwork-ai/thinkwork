@@ -240,6 +240,14 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           content: trimmed,
           expectAssistantResponse: agentRequested !== false,
           startedAt: new Date().toISOString(),
+          attachments:
+            files.length > 0
+              ? files.map((file) => ({
+                  name: file.name,
+                  sizeBytes: file.size,
+                  mimeType: file.type,
+                }))
+              : undefined,
         });
       }
       navigateToCreatedThread(

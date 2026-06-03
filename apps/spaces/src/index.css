@@ -31,6 +31,21 @@
 }
 
 /*
+ * Web-only surface match: the desktop build paints sidebar + content with a
+ * warm, translucent vibrancy material over the macOS window, which reads
+ * warmer and more settled than the default neutral-gray dark tokens. The web
+ * build has no vibrancy, so it looked lighter and cooler/bluer by comparison.
+ * Re-tone the opaque web surfaces toward the desktop's warm dark. Scoped to
+ * `:not(.desktop-vibrancy)` so the desktop build keeps its own treatment.
+ */
+.dark:not(.desktop-vibrancy) {
+  --background: oklch(0.155 0.004 65);
+  --card: oklch(0.205 0.006 65);
+  --sidebar: oklch(0.205 0.006 65);
+  --sidebar-accent: oklch(0.269 0.006 65);
+}
+
+/*
  * No global `*::-webkit-scrollbar` styling — defining it opts every scroll
  * container out of the macOS native overlay scrollbar (which auto-hides) and
  * forces an always-visible classic bar. `color-scheme: dark` above already
