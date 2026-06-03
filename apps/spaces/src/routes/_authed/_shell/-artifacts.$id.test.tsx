@@ -1,19 +1,62 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { useTenant } from "@/context/TenantContext";
 import { AppletMount, AppletRouteContent } from "./artifacts.$id";
 
 vi.mock("urql", () => ({
   gql: (strings: TemplateStringsArray) => strings.join(""),
   useQuery: vi.fn(),
+  useMutation: vi.fn(),
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: vi.fn(),
 }));
 
+vi.mock("@/context/TenantContext", () => ({
+  useTenant: vi.fn(),
+}));
+
+const { toastSuccess, toastError } = vi.hoisted(() => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
+vi.mock("sonner", () => ({
+  toast: { success: toastSuccess, error: toastError },
+}));
+
+// Stub CodeMirror with a plain textarea so the editor is interactive in jsdom
+// without pulling the full editor runtime.
+vi.mock("@uiw/react-codemirror", () => ({
+  default: ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+  }) => (
+    <textarea
+      data-testid="applet-source-editor"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+}));
+
 const reexecuteAppletQuery = vi.fn();
+
+function setTenant(overrides: {
+  isOperator?: boolean;
+  roleResolved?: boolean;
+}) {
+  vi.mocked(useTenant).mockReturnValue({
+    isOperator: overrides.isOperator ?? false,
+    roleResolved: overrides.roleResolved ?? true,
+    tenantId: "11111111-1111-4111-8111-111111111111",
+  } as ReturnType<typeof useTenant>);
+}
 
 function appletPayload({
   source = "export default function App() { return <main>Hello</main>; }",
@@ -39,8 +82,18 @@ function appletPayload({
   };
 }
 
+const updateAppletSourceMock = vi.fn();
+
 beforeEach(() => {
   reexecuteAppletQuery.mockReset();
+  updateAppletSourceMock.mockReset();
+  toastSuccess.mockReset();
+  toastError.mockReset();
+  setTenant({ isOperator: false, roleResolved: true });
+  vi.mocked(useMutation).mockReturnValue([
+    { fetching: false, stale: false } as ReturnType<typeof useMutation>[0],
+    updateAppletSourceMock,
+  ] as unknown as ReturnType<typeof useMutation>);
   vi.mocked(useQuery).mockReturnValue([
     {
       data: {
@@ -196,6 +249,101 @@ describe("AppletRouteContent", () => {
     expect(
       shell.querySelector('[data-runtime-mode="nativeTrusted"]'),
     ).toBeNull();
+  });
+});
+
+// U3 — operator-gated Source/Config tabs (R2, R4). The route is never
+// OperatorGuard-wrapped; only the extra tabs are gated on isOperator.
+describe("operator Source/Config tabs", () => {
+  const appId = "33333333-3333-4333-8333-333333333333";
+
+  it("does not render Source/Config tabs for a non-operator", async () => {
+    setTenant({ isOperator: false, roleResolved: true });
+    render(<AppletRouteContent appId={appId} />);
+    await screen.findByTestId("applet-iframe-host");
+    expect(screen.queryByRole("tab", { name: "Source" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Config" })).toBeNull();
+  });
+
+  it("hides the tabs until the role resolves (no operator-UI flash)", async () => {
+    setTenant({ isOperator: true, roleResolved: false });
+    render(<AppletRouteContent appId={appId} />);
+    await screen.findByTestId("applet-iframe-host");
+    expect(screen.queryByRole("tab", { name: "Source" })).toBeNull();
+  });
+
+  it("renders App/Source/Config tabs for a resolved operator", async () => {
+    setTenant({ isOperator: true, roleResolved: true });
+    render(<AppletRouteContent appId={appId} />);
+    await screen.findByTestId("applet-iframe-host");
+    expect(screen.getByRole("tab", { name: "App" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Source" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Config" })).toBeTruthy();
+  });
+
+  it("saves edited source through AdminUpdateAppletSource and refetches", async () => {
+    setTenant({ isOperator: true, roleResolved: true });
+    updateAppletSourceMock.mockResolvedValue({
+      data: { adminUpdateAppletSource: { ok: true, version: 2, errors: [] } },
+    });
+    render(<AppletRouteContent appId={appId} />);
+    await screen.findByTestId("applet-iframe-host");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Source" }));
+    const editor = screen.getByTestId(
+      "applet-source-editor",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(editor, {
+      target: { value: "export default function App() { return null; }" },
+    });
+    fireEvent.click(screen.getByTestId("applet-source-save"));
+
+    expect(updateAppletSourceMock).toHaveBeenCalledWith({
+      input: {
+        appId,
+        source: "export default function App() { return null; }",
+      },
+    });
+    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    expect(reexecuteAppletQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
+  it("surfaces the real server validation message and does not refetch", async () => {
+    setTenant({ isOperator: true, roleResolved: true });
+    reexecuteAppletQuery.mockClear();
+    // The server returns object errors ({ code, message }), never strings —
+    // assert the operator sees the actual message, not a generic fallback.
+    updateAppletSourceMock.mockResolvedValue({
+      data: {
+        adminUpdateAppletSource: {
+          ok: false,
+          errors: [
+            {
+              code: "IMPORT_NOT_ALLOWED",
+              message: "Import 'fs' is not allowed",
+            },
+          ],
+        },
+      },
+    });
+    render(<AppletRouteContent appId={appId} />);
+    await screen.findByTestId("applet-iframe-host");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Source" }));
+    fireEvent.change(screen.getByTestId("applet-source-editor"), {
+      target: { value: "broken" },
+    });
+    fireEvent.click(screen.getByTestId("applet-source-save"));
+
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining("Import 'fs' is not allowed"),
+    );
+    expect(reexecuteAppletQuery).not.toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
   });
 });
 

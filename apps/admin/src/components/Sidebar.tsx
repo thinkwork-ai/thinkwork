@@ -15,7 +15,6 @@ import {
   Slack,
   CalendarClock,
   ShieldCheck,
-  AppWindow,
   Bot,
 } from "lucide-react";
 import { IconPlanet } from "@tabler/icons-react";
@@ -249,7 +248,6 @@ export function AppSidebar() {
   const BILLING_VISIBLE = false;
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
-    { to: "/applets", icon: AppWindow, label: "Artifacts" },
     ...(BILLING_VISIBLE && isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),

@@ -155,4 +155,42 @@ describe("ArtifactsListBody", () => {
     expect(navigateMock).toHaveBeenCalledTimes(1);
     expect(navigateMock).toHaveBeenCalledWith({ to: "/artifacts/a2" });
   });
+
+  // U2 — operator-only user-ID filter (R1, R4). The filter affordance is
+  // gated on roleResolved && isOperator; non-operators keep the unchanged
+  // tenant-wide list with no filter input.
+  describe("operator user-ID filter", () => {
+    it("hides the filter for a default (non-operator) viewer", () => {
+      render(<ArtifactsListBody items={items} />);
+      expect(screen.queryByTestId("artifacts-user-filter")).toBeNull();
+    });
+
+    it("hides the filter for an explicit non-operator", () => {
+      render(
+        <ArtifactsListBody items={items} isOperator={false} roleResolved />,
+      );
+      expect(screen.queryByTestId("artifacts-user-filter")).toBeNull();
+    });
+
+    it("shows the filter for a resolved operator", () => {
+      render(<ArtifactsListBody items={items} isOperator roleResolved />);
+      expect(screen.getByTestId("artifacts-user-filter-input")).not.toBeNull();
+    });
+
+    it("hides the filter until the role resolves (no operator-UI flash)", () => {
+      render(
+        <ArtifactsListBody items={items} isOperator roleResolved={false} />,
+      );
+      expect(screen.queryByTestId("artifacts-user-filter")).toBeNull();
+    });
+
+    it("lets an operator type a user ID into the filter", () => {
+      render(<ArtifactsListBody items={items} isOperator roleResolved />);
+      const input = screen.getByTestId(
+        "artifacts-user-filter-input",
+      ) as HTMLInputElement;
+      fireEvent.change(input, { target: { value: "user-123" } });
+      expect(input.value).toBe("user-123");
+    });
+  });
 });
