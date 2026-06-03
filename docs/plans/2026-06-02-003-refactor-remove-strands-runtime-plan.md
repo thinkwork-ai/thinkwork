@@ -1,8 +1,9 @@
 ---
 title: "refactor: Remove legacy Strands AgentCore runtime"
 type: refactor
-status: active
+status: completed
 date: 2026-06-02
+completed: 2026-06-03
 origin: docs/plans/2026-06-02-001-refactor-agentcore-first-pi-execution-plan.md
 ---
 
