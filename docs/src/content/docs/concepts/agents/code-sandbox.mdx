@@ -60,7 +60,7 @@ For the admin surface that toggles per-tenant policy, see the operator runbook's
 
 ## What the agent sees
 
-At invocation time, when a template declaring `sandbox` runs for a tenant with `sandbox_enabled = true`, the dispatcher registers a single Strands tool:
+At invocation time, when a template declaring `sandbox` runs for a tenant with `sandbox_enabled = true`, the dispatcher registers a single runtime tool:
 
 ```python
 execute_code(code: str) -> dict
@@ -95,7 +95,7 @@ One line per step, in order, for one turn that calls `execute_code` once:
 
 1. **Dispatch** — user message lands, agent + template resolved.
 2. **Pre-flight** — policy check + interpreter-ready check. Dispatcher threads `sandbox_interpreter_id` + `sandbox_environment` onto the invocation payload.
-3. **Tool register** — `execute_code` appears in the Strands tool surface for this turn only.
+3. **Tool register** — `execute_code` appears in the runtime tool surface for this turn only.
 4. **Agent calls `execute_code(code)`** — the substrate call begins.
 5. **Quota check** — atomic `WHERE count < cap` increment against `sandbox_tenant_daily_counters` + `sandbox_agent_hourly_counters`. Breach ⇒ `SandboxCapExceeded`, no session created.
 6. **Session start** — raw boto3 `bedrock-agentcore.StartCodeInterpreterSession` against the tenant's interpreter, followed by the readiness preamble (`sitecustomize.installed()` check) as `InvokeCodeInterpreter` call #1.

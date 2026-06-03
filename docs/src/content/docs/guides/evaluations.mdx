@@ -105,7 +105,7 @@ The Studio editor lets you attach any of AWS Bedrock AgentCore Evaluations' 16 b
 - **Response quality**: Helpfulness, Correctness, Faithfulness, ResponseRelevance, Conciseness, Coherence
 - **Instruction following**: InstructionFollowing, Refusal
 - **Safety**: Harmfulness, Stereotyping
-- **Agent behaviour** (Strands-native): ToolSelectionAccuracy, ToolParameterAccuracy, GoalSuccessRate, TrajectoryExactOrderMatch, TrajectoryInOrderMatch, TrajectoryAnyOrderMatch
+- **Agent behaviour** (AgentCore-native): ToolSelectionAccuracy, ToolParameterAccuracy, GoalSuccessRate, TrajectoryExactOrderMatch, TrajectoryInOrderMatch, TrajectoryAnyOrderMatch
 
 Evaluators run one call per evaluator per test case (AgentCore enforces a 1-evaluator-per-call quota). They return a numeric `value` (0–1) plus an explanation string.
 
@@ -252,7 +252,7 @@ A 15-test red-team slice with Helpfulness + Refusal evaluators runs around $0.30
 ## Design choices
 
 <Aside type="note" title="Why AgentCore Evaluations?">
-ThinkWork's agent layer is Strands-based. AgentCore's built-in evaluators include Strands-aware ones — ToolSelectionAccuracy, ToolParameterAccuracy, GoalSuccessRate, Trajectory matchers — that no third-party eval library offers for our agent shape. Mastra and promptfoo were considered and rejected: Mastra only scores text I/O (no tool/trajectory awareness), promptfoo's bundled Lambda size is too heavy for runtime use. The `eval_results.evaluator_results` JSONB stores `{evaluatorId, source}` per entry, so adding Mastra- or promptfoo-scored layers later is purely additive.
+ThinkWork's agent layer runs on Bedrock AgentCore. AgentCore's built-in evaluators include tool- and trajectory-aware scorers — ToolSelectionAccuracy, ToolParameterAccuracy, GoalSuccessRate, Trajectory matchers — that no third-party eval library offers for our agent shape. Mastra and promptfoo were considered and rejected: Mastra only scores text I/O (no tool/trajectory awareness), promptfoo's bundled Lambda size is too heavy for runtime use. The `eval_results.evaluator_results` JSONB stores `{evaluatorId, source}` per entry, so adding Mastra- or promptfoo-scored layers later is purely additive.
 </Aside>
 
 <Aside type="tip" title="Why the heuristic fallback?">

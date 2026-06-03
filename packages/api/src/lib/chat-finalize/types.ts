@@ -1,5 +1,5 @@
 /**
- * Shape of the JSON body that the Strands runtime POSTs to
+ * Shape of the JSON body that the AgentCore runtime POSTs to
  * /api/threads/{threadId}/finalize at end-of-turn (plan 2026-05-22-006).
  *
  * Mirrors the AgentCore Lambda-response shape that chat-agent-invoke

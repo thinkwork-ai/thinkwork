@@ -280,7 +280,7 @@ async function createArtifact(
       .returning();
 
     // Audit emit (U6 of finance pilot plan). The /api/messages/*/artifacts
-    // endpoint is API-secret-authed (Strands container is the primary
+    // endpoint is API-secret-authed (runtime callers are the primary
     // caller), so the actor is "system" with the platform-credential
     // pseudonym constant — matching the apikey branch in
     // createAgent.mutation.ts.

@@ -3,7 +3,7 @@ title: Automations
 description: How ThinkWork runs agent work without a human chat message — schedules, webhooks, and Step Functions routines, all backed by the same ASL substrate, observable end-to-end via routine_executions + step events or AUTO threads.
 ---
 
-import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
 Automations are how ThinkWork starts agent work from outside a chat conversation — a daily digest at 9am, a webhook that triages new tickets, a multi-step routine that fetches data, classifies it, drafts a reply, waits for human approval, and sends. The harness exposes three primitives: **routines** (multi-step Step Functions workflows), **schedules** (cron + rate triggers via AWS Scheduler), and **webhooks** (public HTTPS endpoints with shared-secret tokens). All three live behind one Automations parent in the admin sidebar; all three flow through the same Step Functions substrate when the work is non-trivial.
 
@@ -27,10 +27,15 @@ ThinkWork lets each shape have the surface that fits. A scheduled `agent_invoke`
 
 <CardGrid>
   <Card title="Scheduled and Event-driven" icon="time">
-    Cron-like schedules ("every weekday at 9am") and event triggers (webhooks, integration events). Backed by AWS Scheduler + EventBridge. Both can target a routine or a single agent invocation.
+    Cron-like schedules ("every weekday at 9am") and event triggers (webhooks,
+    integration events). Backed by AWS Scheduler + EventBridge. Both can target
+    a routine or a single agent invocation.
   </Card>
   <Card title="Routines and Execution Model" icon="gear">
-    Multi-step work backed by Step Functions — branching, retries, human-in-the-loop waits, parallel fan-out, and failure handling, all composed from a small fixed catalog of recipes that the chat builder agent emits as ASL.
+    Multi-step work backed by Step Functions — branching, retries,
+    human-in-the-loop waits, parallel fan-out, and failure handling, all
+    composed from a small fixed catalog of recipes that the chat builder agent
+    emits as ASL.
   </Card>
 </CardGrid>
 
@@ -66,7 +71,7 @@ AWS Scheduler fires (or webhook arrives)
 job-trigger Lambda (or webhook handler)
         │
         ▼
-Agent wakeup → AgentCore Strands runtime
+Agent wakeup → AgentCore Pi runtime
         │
         ▼
 ThinkWork creates AUTO- thread in Aurora
@@ -120,7 +125,11 @@ Three complementary views depending on the shape:
 For agent-level failures inside a routine, the run-detail UI's step panel surfaces the agent turn directly. For state-machine-level failures (a step timed out, retries exhausted, a branch routed wrong), the SFN execution view is the one to open.
 
 <Aside type="tip">
-  A common pitfall: thinking a "failed automation" means the agent did the wrong thing. Often it means the state machine couldn't *reach* the agent — a step that fetches input data failed, a trigger misfired, or a scheduler configuration was wrong. For routines, always check the run-detail step graph before drilling into a specific step's agent turn.
+  A common pitfall: thinking a "failed automation" means the agent did the wrong
+  thing. Often it means the state machine couldn't *reach* the agent — a step
+  that fetches input data failed, a trigger misfired, or a scheduler
+  configuration was wrong. For routines, always check the run-detail step graph
+  before drilling into a specific step's agent turn.
 </Aside>
 
 ## Related pages

@@ -1,5 +1,5 @@
 /**
- * chat-agent-finalize — HTTP endpoint that the Strands runtime POSTs to
+ * chat-agent-finalize — HTTP endpoint that the AgentCore runtime POSTs to
  * at end-of-turn so the post-AgentCore bookkeeping can run without
  * chat-agent-invoke holding a Lambda open for the full turn duration
  * (plan 2026-05-22-006).

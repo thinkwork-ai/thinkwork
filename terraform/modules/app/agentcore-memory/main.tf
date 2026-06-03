@@ -2,7 +2,7 @@
 # AgentCore Memory — App Module
 #
 # Provisions an AWS Bedrock AgentCore Memory resource with the four strategies
-# the Strands agent container expects (semantic, preferences, summaries,
+# the ThinkWork AgentCore runtime expects (semantic, preferences, summaries,
 # episodes). The resource is always created — AgentCore managed memory is
 # on by default so every agent gets automatic per-turn retention into
 # semantic / preference / summary / episode strategies without any tool-

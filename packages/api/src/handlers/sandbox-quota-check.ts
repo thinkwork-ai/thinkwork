@@ -1,5 +1,5 @@
 /**
- * sandbox-quota-check — narrow REST endpoint the Strands sandbox tool
+ * sandbox-quota-check — narrow REST endpoint the runtime sandbox tool
  * calls before every executeCode to atomically claim quota (plan Unit 10).
  *
  * POST /api/sandbox/quota/check-and-increment
@@ -10,7 +10,7 @@
  *
  * Uses the service-endpoint auth pattern (API_AUTH_SECRET) rather than
  * the GraphQL resolver auth path — avoids widening resolveCaller to
- * accept container-originated calls (per
+ * accept runtime-originated calls (per
  * docs/solutions/best-practices/service-endpoint-vs-widening-resolvecaller-auth-2026-04-21.md).
  */
 

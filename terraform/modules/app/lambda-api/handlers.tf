@@ -263,7 +263,7 @@ resource "aws_lambda_function" "handler" {
     "managed-delegation",
     "desktop-eval-runs",
     # chat-agent-finalize — POST /api/threads/{threadId}/finalize. The
-    # Strands runtime POSTs here at end-of-turn so the post-AgentCore
+    # AgentCore runtime POSTs here at end-of-turn so the post-AgentCore
     # bookkeeping (cost recording, message insert, AppSync notify,
     # computer-task completion, memory retain dispatch) can run without
     # chat-agent-invoke holding a Lambda open for the full turn duration.
@@ -335,7 +335,7 @@ resource "aws_lambda_function" "handler" {
     "eval-worker",
     "eval-runs-reconciler",
     # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
-    # Both are service-endpoint shape: the Strands container POSTs with
+    # Both are service-endpoint shape: the runtime POSTs with
     # Bearer API_AUTH_SECRET. No GraphQL resolver involvement, no extra IAM.
     "sandbox-quota-check",
     "sandbox-invocation-log",
@@ -375,12 +375,12 @@ resource "aws_lambda_function" "handler" {
     "routine-execution-callback",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
-    # Strands container's `kind=run_skill` handler calls this with Bearer
-    # API_AUTH_SECRET to pull the agent's template + skills + MCP + KBs
-    # before building the headless agent turn.
+    # runtime skill dispatch calls this with Bearer API_AUTH_SECRET to pull
+    # the agent's template + skills + MCP + KBs before building the headless
+    # agent turn.
     "agents-runtime-config",
     # Admin-Ops MCP — JSON-RPC endpoint at POST /mcp/admin, exposes the
-    # @thinkwork/admin-ops package as MCP tools for Strands agents.
+    # @thinkwork/admin-ops package as MCP tools for managed agents.
     "admin-ops-mcp",
     # MCP admin key management — per-tenant Bearer tokens for admin-ops.
     # Admin-ops-mcp authenticates incoming tokens by sha256-hash lookup
@@ -425,17 +425,17 @@ resource "aws_lambda_function" "handler" {
     # Hourly sweeper: reaps orphan S3 staging from failed / interrupted
     # plugin install sagas + marks matching plugin_uploads rows 'failed'.
     "plugin-staging-sweeper",
-    # Resolved Capability Manifest write endpoint (plan §U15). Strands
-    # container POSTs one row per agent-session-start. Shared
+    # Resolved Capability Manifest write endpoint (plan §U15). The runtime
+    # POSTs one row per agent-session-start. Shared
     # API_AUTH_SECRET bearer (runtime→API; no tenant OAuth).
     "manifest-log",
-    # SI-7 catalog-list read endpoint (plan §U15 pt 3/3). Strands
-    # container fetches the allowed builtin-tool slug set once per
+    # SI-7 catalog-list read endpoint (plan §U15 pt 3/3). The runtime
+    # fetches the allowed builtin-tool slug set once per
     # session-start + feature-flag-gated enforcement filter drops
     # catalog-missing tools before Agent(tools=...). Shared
     # API_AUTH_SECRET bearer.
     "capability-catalog-list",
-    # Brain v0 narrow write endpoint. Strands calls this with
+    # Brain v0 narrow write endpoint. Runtime callers use
     # Bearer API_AUTH_SECRET; GraphQL remains user/admin-facing only.
     "brain-agent-write",
     # Phase 3 U4 of the Compliance audit-event log
@@ -446,10 +446,9 @@ resource "aws_lambda_function" "handler" {
     # U2). EventBridge rate(1 minute) schedule + DLQ + MaxRetryAttempts=0
     # (defined in dedicated resources below).
     "compliance-outbox-drainer",
-    # Phase 3 U6 of the Compliance audit-event log
-    # (docs/plans/2026-05-07-007-feat-compliance-u6-strands-emit-path-plan.md).
+    # Phase 3 U6 of the Compliance audit-event log: runtime REST emit path.
     # Cross-runtime emit endpoint POST /api/compliance/events — Bearer
-    # API_AUTH_SECRET, Strands Python client posts here with a
+    # API_AUTH_SECRET, runtime clients post here with a
     # client-supplied UUIDv7 event_id for idempotency. Connects to
     # Aurora via the master DATABASE_SECRET_ARN like every other narrow
     # handler (compliance_writer role is reserved for future hardening).
@@ -678,7 +677,7 @@ resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
   maximum_event_age_in_seconds = 3600
 }
 
-# Per-turn auto-retain: the runtime (Strands + Pi) Event-invokes
+# Per-turn auto-retain: the runtime Event-invokes
 # memory-retain after every chat turn. AWS Lambda's default async-retry
 # policy is 2 attempts; without overriding it, a transient failure on the
 # canonical-transcript fetch or adapter write retries the entire writeback
@@ -845,7 +844,7 @@ locals {
     "ANY /api/invites"          = "invites"
 
     # Compliance audit-event emit (Phase 3 U6) — narrow Bearer
-    # API_AUTH_SECRET endpoint, Strands Python client posts here.
+    # API_AUTH_SECRET endpoint, runtime clients post here.
     "POST /api/compliance/events" = "compliance-events"
 
     # Skills
@@ -964,8 +963,8 @@ locals {
     "ANY /api/github-app/{proxy+}" = "github-app"
     "POST /api/github/webhook"     = "github-app"
 
-    # AgentCore Code Sandbox (plan Unit 10 + Unit 11). Strands container
-    # calls both with Bearer API_AUTH_SECRET before + after every
+    # AgentCore Code Sandbox (plan Unit 10 + Unit 11). The runtime calls
+    # both with Bearer API_AUTH_SECRET before + after every
     # executeCode. 429 on quota denial, 201 on audit-row insert.
     "POST /api/sandbox/quota/check-and-increment" = "sandbox-quota-check"
     "POST /api/sandbox/invocations"               = "sandbox-invocation-log"
@@ -988,7 +987,7 @@ locals {
     "POST /api/routines/execution"    = "routine-execution-callback"
     "OPTIONS /api/routines/execution" = "routine-execution-callback"
 
-    # chat-agent-finalize — Strands runtime POSTs here at end-of-turn so
+    # chat-agent-finalize — AgentCore runtime POSTs here at end-of-turn so
     # the post-AgentCore bookkeeping runs out-of-band from chat-agent-invoke.
     # Bearer API_AUTH_SECRET. Plan 2026-05-22-006.
     "POST /api/threads/{threadId}/finalize"    = "chat-agent-finalize"
@@ -997,7 +996,7 @@ locals {
     # Skill-run dispatcher runtime-config fetch. Service-auth GET.
     "GET /api/agents/runtime-config" = "agents-runtime-config"
 
-    # Admin-Ops MCP server — single JSON-RPC endpoint. Strands agents
+    # Admin-Ops MCP server — single JSON-RPC endpoint. Managed agents
     # (and anyone else) POST with Bearer <tenant-scoped token> issued by
     # the mcp-admin-keys handler below. The shared API_AUTH_SECRET is
     # retained as a break-glass superuser path for bootstrap/debug.
@@ -1058,13 +1057,13 @@ locals {
     "POST /api/agents/{agentId}/import-bundle"    = "folder-bundle-import"
     "OPTIONS /api/agents/{agentId}/import-bundle" = "folder-bundle-import"
 
-    # Resolved Capability Manifest write endpoint (plan §U15). Strands
-    # container posts one row per agent-session-start. Shared
+    # Resolved Capability Manifest write endpoint (plan §U15). The runtime
+    # posts one row per agent-session-start. Shared
     # API_AUTH_SECRET; no tenant OAuth.
     "POST /api/runtime/manifests"    = "manifest-log"
     "OPTIONS /api/runtime/manifests" = "manifest-log"
 
-    # SI-7 catalog-list read (plan §U15 pt 3/3). Strands container fetches
+    # SI-7 catalog-list read (plan §U15 pt 3/3). The runtime fetches
     # the allowed slug set once per session-start. Shared API_AUTH_SECRET.
     "GET /api/runtime/capability-catalog"     = "capability-catalog-list"
     "OPTIONS /api/runtime/capability-catalog" = "capability-catalog-list"

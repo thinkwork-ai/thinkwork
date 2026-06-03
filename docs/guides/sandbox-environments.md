@@ -1,7 +1,7 @@
 # AgentCore Code Sandbox — operator runbook
 
 Per-tenant AgentCore Code Interpreter substrate for the `execute_code`
-Strands tool. This runbook covers the first-30-days ops surface:
+runtime tool. This runbook covers the first-30-days ops surface:
 toggling policy, debugging the two named failure modes, and reading
 the residual-threats list so incident response understands what the
 substrate does and does not promise.
@@ -13,8 +13,8 @@ Dispatcher (chat-agent-invoke / wakeup-processor)
     ↓  checkSandboxPreflight → ready | disabled | provisioning | not-requested
     ↓  applySandboxPayloadFields → invokePayload.sandbox_interpreter_id + sandbox_environment
     ↓
-Strands container (invocation_env → os.environ.SANDBOX_*)
-    ↓  server.py sees SANDBOX_INTERPRETER_ID → registers execute_code
+Pi runtime (invocation env → sandbox payload)
+    ↓  runtime sees SANDBOX_INTERPRETER_ID → registers execute_code
     ↓
 Agent calls execute_code(code)
     ↓  POST /api/sandbox/quota/check-and-increment  (circuit breaker)
@@ -37,11 +37,10 @@ composable-skill connector scripts.
 
 ```graphql
 mutation {
-  updateTenantPolicy(
-    tenantId: "..."
-    input: { sandboxEnabled: true }
-  ) {
-    id sandboxEnabled complianceTier
+  updateTenantPolicy(tenantId: "...", input: { sandboxEnabled: true }) {
+    id
+    sandboxEnabled
+    complianceTier
   }
 }
 ```
@@ -57,10 +56,11 @@ mutation {
 
 ```graphql
 mutation {
-  updateTenantPolicy(
-    tenantId: "..."
-    input: { complianceTier: "regulated" }
-  ) { id sandboxEnabled complianceTier }
+  updateTenantPolicy(tenantId: "...", input: { complianceTier: "regulated" }) {
+    id
+    sandboxEnabled
+    complianceTier
+  }
 }
 ```
 
@@ -122,11 +122,11 @@ carries `dimension` + `resets_at`.
 
 **Cause:** the circuit breaker fired. One of:
 
-| dimension | reset |
-|---|---|
-| `tenant_daily` | tomorrow 00:00 UTC |
-| `agent_hourly` | top of the next UTC hour |
-| `unknown` | `+60s` (deadlock fallback) |
+| dimension      | reset                      |
+| -------------- | -------------------------- |
+| `tenant_daily` | tomorrow 00:00 UTC         |
+| `agent_hourly` | top of the next UTC hour   |
+| `unknown`      | `+60s` (deadlock fallback) |
 
 **Triage:**
 
@@ -198,11 +198,11 @@ The deploy pipeline can succeed end-to-end while the sandbox substrate on a stag
 ```bash
 aws bedrock-agentcore-control get-agent-runtime \
   --region us-east-1 \
-  --agent-runtime-id $(aws ssm get-parameter --name /thinkwork/${STAGE}/agentcore/runtime-id-strands --region us-east-1 --query Parameter.Value --output text) \
+  --agent-runtime-id $(aws ssm get-parameter --name /thinkwork/${STAGE}/agentcore/runtime-id-pi --region us-east-1 --query Parameter.Value --output text) \
   --query '{v:agentRuntimeVersion,image:agentRuntimeArtifact.containerConfiguration.containerUri,updated:lastUpdatedAt}'
 ```
 
-The `updated` timestamp should be after the last merge that touched `packages/agentcore-strands/**`. If it isn't, the runtime is dark.
+The `updated` timestamp should be after the last merge that touched `packages/agentcore-pi/**` or the sandbox runtime wiring. If it isn't, the runtime is dark.
 
 The image URI should end with `-arm64` (see `docs/solutions/build-errors/multi-arch-image-lambda-vs-agentcore-split-tags-2026-04-24.md` for why). A URI without that suffix is from before the multi-arch split — the runtime will refuse `UpdateAgentRuntime` with `ValidationException: Architecture incompatible for uri`.
 
@@ -255,11 +255,11 @@ The error message includes the full ARN + action string — copy-pasteable strai
 The substrate ships with these residuals explicit. They are **not
 bugs**.
 
-| Track | Class | Mitigation plan |
-|---|---|---|
-| **T2** — malicious `pip install` | runtime `pip install` has no allowlist; typo-squatted / compromised packages execute at import time with access to whatever data the session reads | v2 private PyPI mirror + install allowlist |
-| **T3** — PHI/PII handling | sandbox isn't HIPAA-certified; regulated-tenant default is `sandbox_enabled = false` | v2 regulated-tenant-specific environment with per-log-group encryption + shorter retention |
-| **Stdout-bypass** class | `os.write(fd, ...)`, subprocess inheriting fds, C-extension writes, `multiprocessing` workers, split-writes | CloudWatch subscription-filter backstop covers the subset whose values match known OAuth prefixes (in case an agent *prints* a token fetched from an API response); primary stdio redactor in `sitecustomize.py` covers everything flowing through Python's normal print path |
+| Track                            | Class                                                                                                                                              | Mitigation plan                                                                                                                                                                                                                                                               |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T2** — malicious `pip install` | runtime `pip install` has no allowlist; typo-squatted / compromised packages execute at import time with access to whatever data the session reads | v2 private PyPI mirror + install allowlist                                                                                                                                                                                                                                    |
+| **T3** — PHI/PII handling        | sandbox isn't HIPAA-certified; regulated-tenant default is `sandbox_enabled = false`                                                               | v2 regulated-tenant-specific environment with per-log-group encryption + shorter retention                                                                                                                                                                                    |
+| **Stdout-bypass** class          | `os.write(fd, ...)`, subprocess inheriting fds, C-extension writes, `multiprocessing` workers, split-writes                                        | CloudWatch subscription-filter backstop covers the subset whose values match known OAuth prefixes (in case an agent _prints_ a token fetched from an API response); primary stdio redactor in `sitecustomize.py` covers everything flowing through Python's normal print path |
 
 ## Stdio redactor invariant — honestly scoped
 
@@ -285,12 +285,12 @@ real regression.
 
 ## What to monitor in CloudWatch
 
-| Query | Signal |
-|---|---|
-| `filter @message like /SandboxCapExceeded/` | Revisit-trigger signal |
+| Query                                            | Signal                                  |
+| ------------------------------------------------ | --------------------------------------- |
+| `filter @message like /SandboxCapExceeded/`      | Revisit-trigger signal                  |
 | `filter @message like /sandbox tool registered/` | Pre-flight decided to register per turn |
-| `filter @message like /sandbox pre-flight/` | Pre-flight decision log (status field) |
-| `filter @message like /StopSession failed/` | AgentCore session cleanup issues |
+| `filter @message like /sandbox pre-flight/`      | Pre-flight decision log (status field)  |
+| `filter @message like /StopSession failed/`      | AgentCore session cleanup issues        |
 
 Dashboard candidates for v1.1:
 

@@ -250,7 +250,7 @@ When AgentCore receives a message for an agent with installed skill packs:
 1. Syncs the agent workspace from S3 into `/tmp/workspace`
 2. Discovers installed skill folders under `skills/<slug>/`
 3. Parses each `SKILL.md`
-4. Registers tools with the Strands agent loop
+4. Registers tools with the AgentCore agent loop
 5. Appends skill guidance through the AgentSkills progressive-disclosure plugin
 
 The total latency depends on the number and size of installed workspace skill folders and the workspace sync cache state.

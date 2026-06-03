@@ -58,8 +58,8 @@ export interface AuthResult {
    *    verify those claims independently. This is the impersonation
    *    path used by the thinkwork-admin skill.
    *  - `service` — shared service secret with NO declared user or
-   *    agent. The bearer IS the credential. This is the CLI / Strands
-   *    runtime / scheduled-job back-channel path. Tenant scope comes
+   *    agent. The bearer IS the credential. This is the CLI / runtime /
+   *    scheduled-job back-channel path. Tenant scope comes
    *    from `x-tenant-id` when present; otherwise it's a tenant-less
    *    platform call. Admin-only mutations may opt in via
    *    `requireAdminOrServiceCaller`; mutations that stamp a specific
@@ -98,8 +98,8 @@ function getVerifier() {
  * Three acceptance paths, in order:
  *   1. Cognito JWT in the Authorization header (admin SPA, mobile, `thinkwork login`).
  *   2. Shared service secret in the `x-api-key` header (canonical service-to-service path).
- *   3. Shared service secret in the Authorization header as a Bearer token (CLI + Strands
- *      container back-compat — they historically send `Authorization: Bearer <secret>`
+ *   3. Shared service secret in the Authorization header as a Bearer token (CLI + runtime
+ *      back-compat — they historically send `Authorization: Bearer <secret>`
  *      with no `x-api-key` header).
  */
 export async function authenticate(
@@ -142,7 +142,7 @@ export async function authenticate(
     }
   }
 
-  // 3. API key sent as Authorization: Bearer <secret> — CLI + Strands container
+  // 3. API key sent as Authorization: Bearer <secret> — CLI + runtime
   // back-compat. Only matches when the bearer string is an accepted apikey
   // value; an expired or malformed JWT falls here but will not match any
   // accepted key and safely returns null.
@@ -167,7 +167,7 @@ export async function authenticate(
  *     tenant role table and (for admin-skill ops) the per-agent skill
  *     allowlist.
  *   - `service` — bearer-only. No declared user, no declared agent. The
- *     bearer IS the credential. Used by the CLI, the Strands runtime
+ *     bearer IS the credential. Used by the CLI, the runtime
  *     calling back via API, and scheduled jobs. Tenant scope arrives via
  *     `x-tenant-id` when present.
  *

@@ -95,7 +95,7 @@ export interface EmitAuditEventInput {
    * uses this value as-is instead of generating a fresh UUIDv7. The
    * caller is responsible for passing a UUIDv7-shaped value — the
    * helper validates the shape and throws on mismatch. This exists so
-   * cross-runtime callers (Strands Python client) can supply the same
+   * cross-runtime callers can supply the same
    * event_id across retries; the `audit_outbox.uq_audit_outbox_event_id`
    * unique constraint then makes replays idempotent at the DB layer.
    *

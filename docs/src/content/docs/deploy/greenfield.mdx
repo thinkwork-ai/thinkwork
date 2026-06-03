@@ -218,14 +218,14 @@ In the AWS console:
 | KMS             | 4        | App data, audit logs, credential vault, Bedrock                       |
 | Aurora          | 12       | Cluster, instance, subnet group, parameter groups, security groups    |
 | S3              | 8        | Skill catalog, KB docs, audit logs, assets, CF logs, Lambda artifacts |
-| Lambda          | 18       | AgentCore, integration handlers, auth triggers, migration runner        |
+| Lambda          | 18       | AgentCore, integration handlers, auth triggers, migration runner      |
 | AppSync         | 14       | API, schema, resolvers, data sources, functions                       |
 | API Gateway     | 8        | HTTP API, routes, integrations, stage                                 |
 | CloudFront      | 6        | Admin dist, end-user dist, OAC policies, cache behaviors              |
 | Step Functions  | 4        | State machines for automations, routine runner                        |
 | EventBridge     | 3        | Scheduled automation rules, event bus                                 |
 | SES             | 5        | Identity, config set, event destination, suppression list             |
-| Secrets Manager | 4        | DB credentials, Cognito secrets, integration secrets                    |
+| Secrets Manager | 4        | DB credentials, Cognito secrets, integration secrets                  |
 | Route53 / ACM   | 8        | Hosted zone records, certificates, validation records                 |
 | Misc            | 18       | CloudWatch log groups, SSM parameters, ECR repo                       |
 | **Total**       | **~258** |                                                                       |
@@ -242,7 +242,7 @@ Operations that take longer:
 
 ### Post-deploy probe
 
-After `terraform apply` finishes, `thinkwork deploy` runs a non-fatal probe of every Strands AgentCore runtime (`scripts/post-deploy.sh`) and prints `ok` / `WARN` per runtime. It verifies that the runtime is `READY`, the `DEFAULT` endpoint has no pending `targetVersion`, and the endpoint's `liveVersion` matches the runtime's current version.
+After `terraform apply` finishes, `thinkwork deploy` runs a non-fatal probe of the Pi AgentCore runtime (`scripts/post-deploy.sh`) and prints `ok` / `WARN`. It verifies that the runtime is `READY`, the `DEFAULT` endpoint has no pending `targetVersion`, and the endpoint's `liveVersion` matches the runtime's current version.
 
 The probe does **not** force a warm-container flush — AgentCore rejects `UpdateAgentRuntimeEndpoint` on DEFAULT endpoints with "managed through agent updates". When a deploy changes runtime env vars (e.g. a new `THINKWORK_API_URL`), warm containers booted before the update continue serving until AgentCore's **15-minute internal reconciler** cycles them out. The probe's role is early-warning visibility, not mitigation.
 
