@@ -1,30 +1,58 @@
 import { useEffect, useMemo, useState } from "react";
-import { Upload } from "lucide-react";
+import { Palette, Upload } from "lucide-react";
 import { useMutation, useQuery } from "urql";
-import { Button, Textarea } from "@thinkwork/ui";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Textarea,
+} from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsTenantFeaturesQuery,
   SettingsUpdateTenantArtifactStyleMutation,
 } from "@/lib/settings-queries";
-import {
-  SettingsHeader,
-  SettingsPane,
-} from "@/components/settings/SettingsContent";
 
 const MAX_CSS_LENGTH = 20_000;
 
 /**
- * Operator-only "App Style" section: sets the tenant-wide applet theme CSS
+ * Operator action on the Artifacts page: sets the tenant-wide applet theme CSS
  * injected into every rendered app artifact (unless an artifact carries its
- * own theme). Ported from the deprecated admin Set App Style dialog. The
- * `updateTenantSettings` mutation re-enforces operator auth server-side. CSS
- * safety is layered: the authoritative gate is the iframe-side allowlist
+ * own theme). Ported from the deprecated admin "Set App Style" dialog.
+ *
+ * CSS safety is layered: the authoritative gate is the iframe-side allowlist
  * (`parseShadcnThemeCss` in applets/theme-tokens.ts), backed by a server-side
- * strip (`sanitizeAppletThemeCss`); the client checks below are UX-only,
- * mirrored from admin for fast feedback.
+ * strip (`sanitizeAppletThemeCss`); the checks here are UX-only.
  */
-export function SettingsAppStyle() {
+export function SetAppStyleButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+        data-testid="set-app-style-trigger"
+      >
+        <Palette className="h-4 w-4" />
+        Set App Style
+      </Button>
+      <SetAppStyleDialog open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+function SetAppStyleDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { tenantId } = useTenant();
 
   const [{ data, fetching }, refetch] = useQuery({
@@ -47,15 +75,14 @@ export function SettingsAppStyle() {
 
   const [css, setCss] = useState(savedCss);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
-  // Reseed the editor whenever the persisted theme changes (initial load,
-  // post-save refetch, tenant switch).
+  // Reseed the editor when the dialog opens or the persisted theme changes.
   useEffect(() => {
-    setCss(savedCss);
-    setError(null);
-    setNotice(null);
-  }, [savedCss]);
+    if (open) {
+      setCss(savedCss);
+      setError(null);
+    }
+  }, [open, savedCss]);
 
   const tooLong = css.length > MAX_CSS_LENGTH;
   const dirty = css.trim() !== savedCss.trim();
@@ -66,7 +93,6 @@ export function SettingsAppStyle() {
     try {
       setCss(await file.text());
       setError(null);
-      setNotice(null);
     } catch {
       setError("Could not read that theme file.");
     }
@@ -75,7 +101,6 @@ export function SettingsAppStyle() {
   async function handleSave() {
     if (!tenantId) return;
     setError(null);
-    setNotice(null);
     const appletTheme = buildAppletTheme(css);
     if (!appletTheme) {
       setError(
@@ -99,14 +124,13 @@ export function SettingsAppStyle() {
       setError(result.error.message);
       return;
     }
-    setNotice("App style saved.");
     refetch({ requestPolicy: "network-only" });
+    onOpenChange(false);
   }
 
   async function handleClear() {
     if (!tenantId) return;
     setError(null);
-    setNotice(null);
     const { appletTheme: _removed, ...artifactStyle } =
       normalizeRecord(features.artifactStyle) ?? {};
     const nextFeatures = {
@@ -124,99 +148,95 @@ export function SettingsAppStyle() {
       setError(result.error.message);
       return;
     }
-    setCss("");
-    setNotice("App style cleared.");
     refetch({ requestPolicy: "network-only" });
+    onOpenChange(false);
   }
 
   return (
-    <SettingsPane>
-      <SettingsHeader
-        title="App Style"
-        description="Set the theme tokens injected into every rendered app artifact, unless an artifact carries its own theme. Paste the globals.css Theme block copied from shadcn Create."
-      />
-
-      <div className="space-y-4">
-        <div className="flex justify-end">
-          <label>
-            <input
-              type="file"
-              accept=".css,text/css,text/plain"
-              className="sr-only"
-              onChange={(event) =>
-                void handleFile(event.currentTarget.files?.[0])
-              }
-              data-testid="app-style-upload"
-            />
-            <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
-              <Upload className="h-4 w-4" />
-              Upload CSS
-            </span>
-          </label>
-        </div>
-
-        <Textarea
-          value={css}
-          onChange={(event) => {
-            setCss(event.target.value);
-            setError(null);
-            setNotice(null);
-          }}
-          placeholder=":root { --background: oklch(...); --chart-1: oklch(...); }"
-          className="h-[min(28rem,48vh)] min-h-0 resize-none overflow-y-auto font-mono text-xs [field-sizing:fixed]"
-          data-testid="app-style-textarea"
-        />
-
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-h-5 text-sm" role="alert" aria-live="polite">
-            {tooLong ? (
-              <span className="text-destructive" data-testid="app-style-error">
-                CSS exceeds {MAX_CSS_LENGTH.toLocaleString()} characters (
-                {css.length.toLocaleString()}/{MAX_CSS_LENGTH.toLocaleString()})
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[min(90vh,720px)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Set App Style</DialogTitle>
+        </DialogHeader>
+        <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+          <p className="text-sm text-muted-foreground">
+            Paste the Theme code copied from shadcn Create. These tokens are
+            stored on tenant settings and injected into every rendered app
+            artifact unless an artifact carries its own theme.
+          </p>
+          <div className="flex justify-end">
+            <label>
+              <input
+                type="file"
+                accept=".css,text/css,text/plain"
+                className="sr-only"
+                onChange={(event) =>
+                  void handleFile(event.currentTarget.files?.[0])
+                }
+                data-testid="app-style-upload"
+              />
+              <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+                <Upload className="h-4 w-4" />
+                Upload CSS
               </span>
-            ) : error ? (
-              <span className="text-destructive" data-testid="app-style-error">
-                {error}
-              </span>
-            ) : notice ? (
-              <span
-                className="text-muted-foreground"
-                data-testid="app-style-notice"
-              >
-                {notice}
-              </span>
-            ) : null}
+            </label>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy || !savedCss}
-              onClick={() => void handleClear()}
-              data-testid="app-style-clear"
+          <Textarea
+            value={css}
+            onChange={(event) => {
+              setCss(event.target.value);
+              setError(null);
+            }}
+            placeholder=":root { --background: oklch(...); --chart-1: oklch(...); }"
+            className="h-[min(28rem,48vh)] min-h-0 resize-none overflow-y-auto font-mono text-xs [field-sizing:fixed]"
+            data-testid="app-style-textarea"
+          />
+          {tooLong ? (
+            <p
+              className="text-sm text-destructive"
+              data-testid="app-style-error"
             >
-              Clear
-            </Button>
-            <Button
-              type="button"
-              disabled={busy || tooLong || !dirty || !tenantId}
-              onClick={() => void handleSave()}
-              data-testid="app-style-save"
+              CSS exceeds {MAX_CSS_LENGTH.toLocaleString()} characters (
+              {css.length.toLocaleString()}/{MAX_CSS_LENGTH.toLocaleString()})
+            </p>
+          ) : error ? (
+            <p
+              className="text-sm text-destructive"
+              data-testid="app-style-error"
             >
-              Save Style
-            </Button>
-          </div>
+              {error}
+            </p>
+          ) : null}
         </div>
-      </div>
-    </SettingsPane>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy || !savedCss}
+            onClick={() => void handleClear()}
+            data-testid="app-style-clear"
+          >
+            Clear
+          </Button>
+          <Button
+            type="button"
+            disabled={busy || tooLong || !dirty || !tenantId}
+            onClick={() => void handleSave()}
+            data-testid="app-style-save"
+          >
+            Save Style
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 // ─── Theme helpers (ported verbatim from admin applets/index.tsx) ────────
-// The `parseThemeTokens` strip is what enforces the
+// `parseThemeTokens`'s value check enforces the
 // url()/expression()/@import/javascript: rejection at validation time; keep it
 // intact. The authoritative security strip lives server-side in
-// `parseAppletThemeCss` (packages/api) — these run client-side for UX.
+// `sanitizeAppletThemeCss` (packages/api) + the iframe allowlist.
 
 function normalizeFeatures(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {

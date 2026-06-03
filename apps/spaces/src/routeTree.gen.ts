@@ -26,7 +26,7 @@ import { Route as AuthedSettingsLocalWorkspaceRouteImport } from "./routes/_auth
 import { Route as AuthedSettingsKnowledgeBasesRouteImport } from "./routes/_authed/settings.knowledge-bases";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
 import { Route as AuthedSettingsAutomationsRouteImport } from "./routes/_authed/settings.automations";
-import { Route as AuthedSettingsAppStyleRouteImport } from "./routes/_authed/settings.app-style";
+import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
 import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/settings.analytics";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
 import { Route as AuthedShellMemoryRouteImport } from "./routes/_authed/_shell/memory";
@@ -156,9 +156,9 @@ const AuthedSettingsAutomationsRoute =
     path: "/automations",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
-const AuthedSettingsAppStyleRoute = AuthedSettingsAppStyleRouteImport.update({
-  id: "/app-style",
-  path: "/app-style",
+const AuthedSettingsArtifactsRoute = AuthedSettingsArtifactsRouteImport.update({
+  id: "/artifacts",
+  path: "/artifacts",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
 const AuthedSettingsAnalyticsRoute = AuthedSettingsAnalyticsRouteImport.update({
@@ -413,7 +413,7 @@ export interface FileRoutesByFullPath {
   "/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/new": typeof AuthedShellNewRoute;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
-  "/settings/app-style": typeof AuthedSettingsAppStyleRoute;
+  "/settings/artifacts": typeof AuthedSettingsArtifactsRoute;
   "/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
@@ -469,7 +469,7 @@ export interface FileRoutesByTo {
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/new": typeof AuthedShellNewRoute;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
-  "/settings/app-style": typeof AuthedSettingsAppStyleRoute;
+  "/settings/artifacts": typeof AuthedSettingsArtifactsRoute;
   "/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
@@ -532,7 +532,7 @@ export interface FileRoutesById {
   "/_authed/_shell/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
-  "/_authed/settings/app-style": typeof AuthedSettingsAppStyleRoute;
+  "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRoute;
   "/_authed/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
@@ -594,7 +594,7 @@ export interface FileRouteTypes {
     | "/memory"
     | "/new"
     | "/settings/analytics"
-    | "/settings/app-style"
+    | "/settings/artifacts"
     | "/settings/automations"
     | "/settings/general"
     | "/settings/knowledge-bases"
@@ -650,7 +650,7 @@ export interface FileRouteTypes {
     | "/auth/desktop-callback"
     | "/new"
     | "/settings/analytics"
-    | "/settings/app-style"
+    | "/settings/artifacts"
     | "/settings/automations"
     | "/settings/general"
     | "/settings/knowledge-bases"
@@ -712,7 +712,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory"
     | "/_authed/_shell/new"
     | "/_authed/settings/analytics"
-    | "/_authed/settings/app-style"
+    | "/_authed/settings/artifacts"
     | "/_authed/settings/automations"
     | "/_authed/settings/general"
     | "/_authed/settings/knowledge-bases"
@@ -891,11 +891,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsAutomationsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/app-style": {
-      id: "/_authed/settings/app-style";
-      path: "/app-style";
-      fullPath: "/settings/app-style";
-      preLoaderRoute: typeof AuthedSettingsAppStyleRouteImport;
+    "/_authed/settings/artifacts": {
+      id: "/_authed/settings/artifacts";
+      path: "/artifacts";
+      fullPath: "/settings/artifacts";
+      preLoaderRoute: typeof AuthedSettingsArtifactsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/analytics": {
@@ -1321,7 +1321,7 @@ const AuthedSettingsAutomationsRouteWithChildren =
 
 interface AuthedSettingsRouteChildren {
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
-  AuthedSettingsAppStyleRoute: typeof AuthedSettingsAppStyleRoute;
+  AuthedSettingsArtifactsRoute: typeof AuthedSettingsArtifactsRoute;
   AuthedSettingsAutomationsRoute: typeof AuthedSettingsAutomationsRouteWithChildren;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsKnowledgeBasesRoute: typeof AuthedSettingsKnowledgeBasesRoute;
@@ -1352,7 +1352,7 @@ interface AuthedSettingsRouteChildren {
 
 const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAnalyticsRoute: AuthedSettingsAnalyticsRoute,
-  AuthedSettingsAppStyleRoute: AuthedSettingsAppStyleRoute,
+  AuthedSettingsArtifactsRoute: AuthedSettingsArtifactsRoute,
   AuthedSettingsAutomationsRoute: AuthedSettingsAutomationsRouteWithChildren,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsKnowledgeBasesRoute: AuthedSettingsKnowledgeBasesRoute,

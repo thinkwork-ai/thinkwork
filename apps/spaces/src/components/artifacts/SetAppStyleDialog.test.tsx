@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
-import { SettingsAppStyle } from "./SettingsAppStyle";
+import { SetAppStyleButton } from "./SetAppStyleDialog";
 
 vi.mock("urql", () => ({
   useQuery: vi.fn(),
@@ -11,10 +11,6 @@ vi.mock("urql", () => ({
 
 vi.mock("@/context/TenantContext", () => ({
   useTenant: vi.fn(),
-}));
-
-vi.mock("@/context/PageHeaderContext", () => ({
-  usePageHeaderActions: vi.fn(),
 }));
 
 const mutateMock = vi.fn();
@@ -32,6 +28,11 @@ function setFeatures(features: unknown) {
     },
     refetchMock,
   ] as unknown as ReturnType<typeof useQuery>);
+}
+
+function openDialog() {
+  render(<SetAppStyleButton />);
+  fireEvent.click(screen.getByTestId("set-app-style-trigger"));
 }
 
 beforeEach(() => {
@@ -54,9 +55,9 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe("SettingsAppStyle", () => {
-  it("renders an empty first-use state with Save and Clear disabled", () => {
-    render(<SettingsAppStyle />);
+describe("SetAppStyleDialog", () => {
+  it("opens from the trigger and shows an empty first-use state with Save/Clear disabled", () => {
+    openDialog();
     const textarea = screen.getByTestId(
       "app-style-textarea",
     ) as HTMLTextAreaElement;
@@ -70,7 +71,7 @@ describe("SettingsAppStyle", () => {
   });
 
   it("saves valid CSS through the mutation with the theme nested in features", async () => {
-    render(<SettingsAppStyle />);
+    openDialog();
     fireEvent.change(screen.getByTestId("app-style-textarea"), {
       target: { value: VALID_CSS },
     });
@@ -91,7 +92,7 @@ describe("SettingsAppStyle", () => {
   });
 
   it("blocks save and shows an error when CSS exceeds 20,000 chars", () => {
-    render(<SettingsAppStyle />);
+    openDialog();
     const huge = `:root { --x: ${"a".repeat(20_001)}; }`;
     fireEvent.change(screen.getByTestId("app-style-textarea"), {
       target: { value: huge },
@@ -106,8 +107,8 @@ describe("SettingsAppStyle", () => {
     expect(mutateMock).not.toHaveBeenCalled();
   });
 
-  it("rejects CSS with no :root/.dark token block on save without firing the mutation", () => {
-    render(<SettingsAppStyle />);
+  it("rejects CSS with no :root/.dark token block without firing the mutation", () => {
+    openDialog();
     fireEvent.change(screen.getByTestId("app-style-textarea"), {
       target: { value: "body { color: red; }" },
     });
@@ -118,7 +119,7 @@ describe("SettingsAppStyle", () => {
 
   it("pre-fills the editor and enables Clear when a theme is already set", () => {
     setFeatures({ artifactStyle: { appletTheme: { css: VALID_CSS } } });
-    render(<SettingsAppStyle />);
+    openDialog();
     expect(
       (screen.getByTestId("app-style-textarea") as HTMLTextAreaElement).value,
     ).toBe(VALID_CSS);
@@ -129,7 +130,7 @@ describe("SettingsAppStyle", () => {
 
   it("clears an existing theme by writing features without appletTheme", async () => {
     setFeatures({ artifactStyle: { appletTheme: { css: VALID_CSS } } });
-    render(<SettingsAppStyle />);
+    openDialog();
     fireEvent.click(screen.getByTestId("app-style-clear"));
     expect(mutateMock).toHaveBeenCalledTimes(1);
     const features = JSON.parse(mutateMock.mock.calls[0][0].input.features);

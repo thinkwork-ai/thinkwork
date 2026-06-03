@@ -1,10 +1,10 @@
 import type { ComponentType } from "react";
 import {
+  AppWindow,
   BookOpen,
   Brain,
   FolderTree,
   NotebookText,
-  Palette,
   Plug,
   Repeat,
   Settings as SettingsIcon,
@@ -69,9 +69,9 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
-    label: "App Style",
-    to: "/settings/app-style",
-    icon: Palette,
+    label: "Artifacts",
+    to: "/settings/artifacts",
+    icon: AppWindow,
     operatorOnly: true,
   },
   {

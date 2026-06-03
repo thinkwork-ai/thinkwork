@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsAppStyle } from "@/components/settings/SettingsAppStyle";
+import { SettingsArtifacts } from "@/components/settings/SettingsArtifacts";
 
-export const Route = createFileRoute("/_authed/settings/app-style")({
+export const Route = createFileRoute("/_authed/settings/artifacts")({
   component: () => (
     <OperatorGuard>
-      <SettingsAppStyle />
+      <SettingsArtifacts />
     </OperatorGuard>
   ),
 });
