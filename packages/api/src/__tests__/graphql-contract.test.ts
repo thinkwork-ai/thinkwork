@@ -574,6 +574,31 @@ describe("GraphQL Schema Contract", () => {
       expect(terraform).toContain('"notifyWorkspaceAccessRevoked"');
     });
 
+    // Regression guard: a subscription bound via @aws_subscribe to a notify
+    // mutation that has NO AppSync resolver fans out nothing — the server's
+    // publish lands on a missing resolver and the client silently receives no
+    // events. (This is exactly how onThreadTurnStep shipped broken: schema +
+    // helper present, terraform resolver list missing the entry.) Every
+    // @aws_subscribe mutation MUST appear in the terraform notification list.
+    it("every @aws_subscribe mutation has a terraform AppSync resolver", () => {
+      const sdl = readFileSync(TF_SCHEMA, "utf-8");
+      const terraform = readFileSync(TF_APPSYNC_SUBSCRIPTIONS, "utf-8");
+      const boundMutations = new Set<string>();
+      for (const match of sdl.matchAll(
+        /@aws_subscribe\(mutations:\s*\[([^\]]*)\]\)/g,
+      )) {
+        for (const raw of match[1].split(",")) {
+          const name = raw.trim().replace(/^["']|["']$/g, "");
+          if (name) boundMutations.add(name);
+        }
+      }
+      expect(boundMutations.size).toBeGreaterThan(0);
+      const missing = [...boundMutations].filter(
+        (m) => !terraform.includes(`"${m}"`),
+      );
+      expect(missing).toEqual([]);
+    });
+
     it("Computer thread chunk subscription is retired", () => {
       const mutationType = tfSchema.getMutationType();
       const subscriptionType = tfSchema.getSubscriptionType();
