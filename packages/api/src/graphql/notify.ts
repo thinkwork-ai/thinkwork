@@ -148,6 +148,47 @@ function deriveMessageOwner(payload: {
   };
 }
 
+/**
+ * Fire a mid-turn activity step to AppSync (onThreadTurnStep subscribers).
+ * Best-effort — postToAppSync swallows errors. The durable record is the
+ * thread_turn_events row already persisted by the caller; a dropped notify
+ * costs latency, not data (the client replays via threadTurnEvents(afterSeq)).
+ */
+export async function notifyThreadTurnStep(payload: {
+  runId: string;
+  threadId: string;
+  tenantId: string;
+  seq: number;
+  eventType: string;
+  stream?: string | null;
+  level?: string | null;
+  color?: string | null;
+  message?: string | null;
+  payload?: Record<string, unknown> | null;
+  createdAt: string;
+}): Promise<void> {
+  await postToAppSync(
+    `mutation($runId: ID!, $threadId: ID!, $tenantId: ID!, $seq: Int!, $eventType: String!, $stream: String, $level: String, $color: String, $message: String, $payload: AWSJSON, $createdAt: AWSDateTime!) {
+			notifyThreadTurnStep(runId: $runId, threadId: $threadId, tenantId: $tenantId, seq: $seq, eventType: $eventType, stream: $stream, level: $level, color: $color, message: $message, payload: $payload, createdAt: $createdAt) {
+				runId threadId tenantId seq eventType stream level color message payload createdAt
+			}
+		}`,
+    {
+      runId: payload.runId,
+      threadId: payload.threadId,
+      tenantId: payload.tenantId,
+      seq: payload.seq,
+      eventType: payload.eventType,
+      stream: payload.stream ?? null,
+      level: payload.level ?? null,
+      color: payload.color ?? null,
+      message: payload.message ?? null,
+      payload: payload.payload ? JSON.stringify(payload.payload) : null,
+      createdAt: payload.createdAt,
+    },
+  );
+}
+
 export async function publishComputerThreadChunk(payload: {
   threadId: string;
   chunk: Record<string, unknown>;

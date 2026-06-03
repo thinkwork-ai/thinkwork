@@ -675,6 +675,29 @@ export const NewMessageSubscription = gql`
   }
 `;
 
+// Live mid-turn activity steps (tool/skill/phase in Phase 1, coalesced text
+// deltas in Phase 2). The full payload rides in the event so the client can
+// reduce it into the running turn's events[] without a refetch (urql here is
+// a document cache, not graphcache). Ordered by seq; replayed on reconnect via
+// the threadTurnEvents(runId, afterSeq) query.
+export const ThreadTurnStepSubscription = gql`
+  subscription ThreadTurnStep($threadId: ID!) {
+    onThreadTurnStep(threadId: $threadId) {
+      runId
+      threadId
+      tenantId
+      seq
+      eventType
+      stream
+      level
+      color
+      message
+      payload
+      createdAt
+    }
+  }
+`;
+
 export const ThreadUpdatedSubscription = gql`
   subscription ThreadUpdated($tenantId: ID!) {
     onThreadUpdated(tenantId: $tenantId) {

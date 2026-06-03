@@ -5,11 +5,13 @@ process.env.APPSYNC_ENDPOINT = "https://appsync.test/graphql";
 process.env.APPSYNC_API_KEY = "test-key";
 
 const fetchSpy = vi.fn(
-  async (_url: string, _init?: RequestInit) => new Response("{}", { status: 200 }),
+  async (_url: string, _init?: RequestInit) =>
+    new Response("{}", { status: 200 }),
 );
 vi.stubGlobal("fetch", fetchSpy);
 
-const { notifyThreadActivity } = await import("./notify.js");
+const { notifyThreadActivity, notifyThreadTurnStep } =
+  await import("./notify.js");
 
 function lastBody() {
   const call = fetchSpy.mock.calls.at(-1)!;
@@ -70,5 +72,71 @@ describe("notifyThreadActivity", () => {
       threadTitle: null,
       createdAt: null,
     });
+  });
+});
+
+describe("notifyThreadTurnStep", () => {
+  beforeEach(() => fetchSpy.mockClear());
+
+  it("posts a notifyThreadTurnStep mutation with JSON-stringified payload + int seq", async () => {
+    await notifyThreadTurnStep({
+      runId: "r1",
+      threadId: "th1",
+      tenantId: "t1",
+      seq: 7,
+      eventType: "tool_invocation_started",
+      stream: "step",
+      message: "Using browser automation",
+      payload: { tool: "browser", args: { url: "https://x" } },
+      createdAt: "2026-06-03T00:00:00.000Z",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const { query, variables } = lastBody();
+    expect(query).toContain("notifyThreadTurnStep");
+    expect(query).toContain("$payload: AWSJSON");
+    expect(query).toContain("$seq: Int!");
+    expect(variables.seq).toBe(7);
+    expect(variables.stream).toBe("step");
+    // payload is serialized as an AWSJSON string, not a nested object.
+    expect(typeof variables.payload).toBe("string");
+    expect(JSON.parse(variables.payload as string)).toEqual({
+      tool: "browser",
+      args: { url: "https://x" },
+    });
+  });
+
+  it("nulls optional fields and payload when omitted", async () => {
+    await notifyThreadTurnStep({
+      runId: "r1",
+      threadId: "th1",
+      tenantId: "t1",
+      seq: 0,
+      eventType: "phase",
+      createdAt: "2026-06-03T00:00:00.000Z",
+    });
+
+    const { variables } = lastBody();
+    expect(variables).toMatchObject({
+      stream: null,
+      level: null,
+      color: null,
+      message: null,
+      payload: null,
+    });
+  });
+
+  it("is best-effort — swallows an AppSync fetch failure", async () => {
+    fetchSpy.mockRejectedValueOnce(new Error("network down"));
+    await expect(
+      notifyThreadTurnStep({
+        runId: "r1",
+        threadId: "th1",
+        tenantId: "t1",
+        seq: 1,
+        eventType: "tool_invocation_started",
+        createdAt: "2026-06-03T00:00:00.000Z",
+      }),
+    ).resolves.toBeUndefined();
   });
 });

@@ -547,7 +547,16 @@ describe("GraphQL Schema Contract", () => {
       expect(fields).toContain("notifyAgentStatus");
       expect(fields).toContain("notifyNewMessage");
       expect(fields).toContain("notifyThreadUpdate");
+      expect(fields).toContain("notifyThreadTurnStep");
       expect(fields).toContain("notifyWorkspaceAccessRevoked");
+    });
+
+    it("exposes the threadId-scoped onThreadTurnStep subscription", () => {
+      const subscriptionType = tfSchema.getSubscriptionType();
+      const field = subscriptionType?.getFields().onThreadTurnStep;
+      expect(field).toBeDefined();
+      // Live step feed is threadId-scoped (like onNewMessage), not tenant-wide.
+      expect(field?.args.map((a) => a.name)).toEqual(["threadId"]);
     });
 
     it("does not allow API-key revocation subscriptions", () => {
