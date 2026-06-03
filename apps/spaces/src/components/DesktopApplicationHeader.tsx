@@ -10,6 +10,7 @@ import {
 } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
 import { DesktopUpdateBadge } from "@/components/update-banner";
+import { refreshAuthTokenNow } from "@/lib/graphql-client";
 import {
   desktopToolbarButtonClassName,
   desktopToolbarGapClassName,
@@ -60,16 +61,23 @@ export function DesktopNavigationControls({
       window.clearTimeout(refreshFallbackRef.current);
     }
 
-    const handled = !window.dispatchEvent(
-      new CustomEvent("thinkwork:desktop-refresh", { cancelable: true }),
-    );
-    refreshFallbackRef.current = window.setTimeout(
-      () => {
-        setRefreshing(false);
-        refreshFallbackRef.current = null;
-      },
-      handled ? 10_000 : 600,
-    );
+    const dispatchRefetch = () => {
+      const handled = !window.dispatchEvent(
+        new CustomEvent("thinkwork:desktop-refresh", { cancelable: true }),
+      );
+      refreshFallbackRef.current = window.setTimeout(
+        () => {
+          setRefreshing(false);
+          refreshFallbackRef.current = null;
+        },
+        handled ? 10_000 : 600,
+      );
+    };
+
+    // Refresh the Cognito/OAuth token first so the refetch recovers from a
+    // stale token ("[GraphQL] Requester user identity required") without a full
+    // sign-out, then dispatch the data refetch regardless of the outcome.
+    void refreshAuthTokenNow().finally(dispatchRefetch);
   };
 
   return (
