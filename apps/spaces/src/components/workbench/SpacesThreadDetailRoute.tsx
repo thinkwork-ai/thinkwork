@@ -344,27 +344,54 @@ export function SpacesThreadDetailRoute({
   });
 
   const computerId = routeThread?.computerId ?? null;
-  const [{ data: tasksData, fetching: tasksFetching }, reexecuteTasksQuery] =
+  // ComputerThreadTasks / ComputerEvents / RunbookRuns are vestigial: the
+  // Computer + runbook features were removed and these operations no longer
+  // exist in the GraphQL schema, so the server validation-rejects them (400).
+  // `pause: !computerId` keeps them off for normal threads — but a forced
+  // `reexecute()` (e.g. the active-agent poll) bypasses `pause` and fires them
+  // every couple seconds, flooding the console. Gate the reexecute fns on
+  // `computerId` (effectively never now) so they can't force a dead query.
+  const [{ data: tasksData, fetching: tasksFetching }, rawReexecuteTasksQuery] =
     useQuery<ThreadTasksResult>({
       query: ComputerThreadTasksQuery,
       variables: { computerId, threadId, limit: 6 },
       pause: !computerId,
     });
-  const [{ data: eventsData, fetching: eventsFetching }, reexecuteEventsQuery] =
-    useQuery<ThreadEventsResult>({
-      query: ComputerEventsQuery,
-      variables: { computerId, limit: 100 },
-      pause: !computerId,
-    });
+  const [
+    { data: eventsData, fetching: eventsFetching },
+    rawReexecuteEventsQuery,
+  ] = useQuery<ThreadEventsResult>({
+    query: ComputerEventsQuery,
+    variables: { computerId, limit: 100 },
+    pause: !computerId,
+  });
   const [
     { data: runbookRunsData, fetching: runbookRunsFetching },
-    reexecuteRunbookRunsQuery,
+    rawReexecuteRunbookRunsQuery,
   ] = useQuery<RunbookRunsResult>({
     query: RunbookRunsQuery,
     variables: { computerId, threadId, limit: 5 },
     pause: !computerId,
     requestPolicy: "cache-and-network",
   });
+  const reexecuteTasksQuery = useCallback(
+    (opts?: Parameters<typeof rawReexecuteTasksQuery>[0]) => {
+      if (computerId) rawReexecuteTasksQuery(opts);
+    },
+    [computerId, rawReexecuteTasksQuery],
+  );
+  const reexecuteEventsQuery = useCallback(
+    (opts?: Parameters<typeof rawReexecuteEventsQuery>[0]) => {
+      if (computerId) rawReexecuteEventsQuery(opts);
+    },
+    [computerId, rawReexecuteEventsQuery],
+  );
+  const reexecuteRunbookRunsQuery = useCallback(
+    (opts?: Parameters<typeof rawReexecuteRunbookRunsQuery>[0]) => {
+      if (computerId) rawReexecuteRunbookRunsQuery(opts);
+    },
+    [computerId, rawReexecuteRunbookRunsQuery],
+  );
   const [
     {
       data: linkedTasksData,

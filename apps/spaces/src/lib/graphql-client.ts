@@ -8,7 +8,13 @@ import { print, type DocumentNode } from "graphql";
 
 // HTTP endpoint for queries/mutations (API Gateway). apps/spaces Phase 1
 // AppSync carries the subscription-only realtime schema.
-const GRAPHQL_HTTP_URL = import.meta.env.VITE_GRAPHQL_HTTP_URL || "";
+// Collapse accidental double slashes in the path (the api_endpoint terraform
+// output carries a trailing slash, so `${base}/graphql` yields `…com//graphql`)
+// while preserving the `https://` scheme separator.
+const GRAPHQL_HTTP_URL = (import.meta.env.VITE_GRAPHQL_HTTP_URL || "").replace(
+  /([^:]\/)\/+/g,
+  "$1",
+);
 const GRAPHQL_APPSYNC_URL = import.meta.env.VITE_GRAPHQL_URL || "";
 const GRAPHQL_WS_URL = import.meta.env.VITE_GRAPHQL_WS_URL || "";
 const GRAPHQL_API_KEY = import.meta.env.VITE_GRAPHQL_API_KEY || "";

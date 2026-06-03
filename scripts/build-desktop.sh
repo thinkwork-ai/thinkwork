@@ -114,8 +114,12 @@ EOF
   COGNITO_DOMAIN="https://${AUTH_DOMAIN}.auth.${REGION}.amazoncognito.com"
 
   cd "$REPO_ROOT"
+  # `api_endpoint` carries a trailing slash, so strip it before appending paths
+  # (otherwise VITE_GRAPHQL_HTTP_URL becomes `…amazonaws.com//graphql`).
+  API_ENDPOINT="${API_ENDPOINT%/}"
   cat > apps/spaces/.env.production <<EOF
 VITE_THINKWORK_STAGE=${STAGE}
+VITE_APP_VERSION=${DESKTOP_VERSION}
 VITE_GRAPHQL_HTTP_URL=${API_ENDPOINT}/graphql
 VITE_GRAPHQL_URL=${APPSYNC_API_URL}
 VITE_GRAPHQL_WS_URL=${APPSYNC_REALTIME_URL}
