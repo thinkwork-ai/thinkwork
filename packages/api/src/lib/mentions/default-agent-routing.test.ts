@@ -71,6 +71,7 @@ describe("default agent routing", () => {
             return true;
           },
         },
+        async () => [],
       ),
     ).resolves.toEqual({
       agentId: "agent-1",
@@ -94,6 +95,48 @@ describe("default agent routing", () => {
     ]);
   });
 
+  it("forwards resolved message attachments to the direct chat invoke", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const invoked: unknown[] = [];
+    const attachment = {
+      attachmentId: "att-1",
+      s3Key: "tenants/t/attachments/a/x/Budget.xlsx",
+      name: "Budget.xlsx",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      sizeBytes: 7704,
+    };
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "What can you tell me about the Budget attached?",
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input);
+          return true;
+        },
+      },
+      async () => [attachment],
+    );
+
+    expect(invoked).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        messageId: "message-1",
+        userMessage: "What can you tell me about the Budget attached?",
+        messageAttachments: [attachment],
+      },
+    ]);
+  });
+
   it("falls back to the wakeup queue when direct chat invoke is unavailable", async () => {
     const repository = makeRepository({ agentId: "agent-1" });
 
@@ -111,6 +154,7 @@ describe("default agent routing", () => {
             return false;
           },
         },
+        async () => [],
       ),
     ).resolves.toEqual({
       agentId: "agent-1",

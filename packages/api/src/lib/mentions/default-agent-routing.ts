@@ -9,6 +9,10 @@ import {
   PlatformAgentNotFoundError,
   resolveTenantPlatformAgent,
 } from "../agents/tenant-platform-agent.js";
+import {
+  type DispatchMessageAttachment,
+  resolveDispatchMessageAttachments,
+} from "../thread-attachments/message-attachment-refs.js";
 
 export interface DefaultAgentTurnWakeup {
   tenantId: string;
@@ -58,16 +62,33 @@ export interface DefaultAgentChatInvoke {
   agentId: string;
   userMessage: string;
   messageId: string;
+  /**
+   * Finalized attachment records the USER message references. Resolved from
+   * `messages.metadata.attachments` and forwarded to chat-agent-invoke so the
+   * agent can read uploaded files on the direct-invoke path (parity with the
+   * wakeup-processor path).
+   */
+  messageAttachments?: DispatchMessageAttachment[];
 }
 
 export interface DefaultAgentChatExecutor {
   invokeChatAgent(input: DefaultAgentChatInvoke): Promise<boolean>;
 }
 
+export type DispatchMessageAttachmentResolver = (input: {
+  tenantId: string;
+  threadId: string;
+  messageId: string;
+}) => Promise<DispatchMessageAttachment[]>;
+
+const defaultAttachmentResolver: DispatchMessageAttachmentResolver = (input) =>
+  resolveDispatchMessageAttachments({ db: getDb(), ...input });
+
 export async function dispatchDefaultAgentChatTurn(
   input: DispatchDefaultAgentTurnInput,
   repository: DefaultAgentRoutingRepository = new DrizzleDefaultAgentRoutingRepository(),
   executor: DefaultAgentChatExecutor = defaultChatExecutor,
+  resolveAttachments: DispatchMessageAttachmentResolver = defaultAttachmentResolver,
 ) {
   const defaultAgent = await repository.loadDefaultAgent({
     tenantId: input.tenantId,
@@ -81,12 +102,30 @@ export async function dispatchDefaultAgentChatTurn(
     agentId: defaultAgent.agentId,
   });
 
+  // Resolve uploaded-file attachments the message references so the agent can
+  // read them on the direct-invoke path. The wakeup-processor fallback already
+  // resolves these independently, so only the direct call needs them here.
+  let messageAttachments: DispatchMessageAttachment[] = [];
+  try {
+    messageAttachments = await resolveAttachments({
+      tenantId: input.tenantId,
+      threadId: input.threadId,
+      messageId: input.messageId,
+    });
+  } catch (err) {
+    console.error(
+      "[default-agent-routing] Failed to resolve message attachments for dispatch:",
+      err,
+    );
+  }
+
   const directInvoked = await executor.invokeChatAgent({
     tenantId: input.tenantId,
     threadId: input.threadId,
     agentId: defaultAgent.agentId,
     messageId: input.messageId,
     userMessage: input.content ?? "",
+    ...(messageAttachments.length > 0 ? { messageAttachments } : {}),
   });
   if (directInvoked) {
     return {
