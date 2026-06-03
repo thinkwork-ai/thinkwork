@@ -43,7 +43,6 @@ locals {
     # packages/api/src/lib/cognito-auth.ts). Empty ⇒ the gate
     # rejects every call, which is the safe default pre-rollout.
     THINKWORK_PLATFORM_OPERATOR_EMAILS = var.platform_operator_emails
-    AGENTCORE_FUNCTION_NAME            = var.agentcore_function_name
     AGENTCORE_PI_FUNCTION_NAME         = var.agentcore_pi_function_name
     WORKSPACE_RENDERER_FUNCTION_NAME   = "thinkwork-${var.stage}-api-workspace-renderer"
     WORKSPACE_BUCKET                   = var.bucket_name
@@ -197,12 +196,10 @@ locals {
     "eval-runner" = {
       EVAL_FANOUT_QUEUE_URL                = local.eval_fanout_queue_url
       EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS = "20"
-      # SSM parameter names for the Bedrock AgentCore Runtime IDs (one per
-      # runtime type). deploy.yml's "Update AgentCore Runtimes" job writes
-      # these in `update-agentcore-runtime-image.sh`; eval-runner reads them
-      # via `loadRuntimeId(runtimeType)` to start the correct runtime.
-      AGENTCORE_RUNTIME_SSM_STRANDS = "/thinkwork/${var.stage}/agentcore/runtime-id-strands"
-      AGENTCORE_RUNTIME_SSM_PI      = "/thinkwork/${var.stage}/agentcore/runtime-id-pi"
+      # SSM parameter name for the Pi Bedrock AgentCore Runtime ID. deploy.yml's
+      # runtime update job writes this in `update-agentcore-runtime-image.sh`;
+      # eval-runner reads it via `loadRuntimeId(runtimeType)`.
+      AGENTCORE_RUNTIME_SSM_PI = "/thinkwork/${var.stage}/agentcore/runtime-id-pi"
     }
     "eval-worker" = {
       EVAL_FANOUT_QUEUE_URL     = local.eval_fanout_queue_url

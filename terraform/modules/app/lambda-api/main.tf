@@ -292,10 +292,10 @@ resource "aws_iam_role_policy" "lambda_ses_send" {
   })
 }
 
-# Allow API Lambdas to directly invoke the AgentCore Lambda. Used by
-# chat-agent-invoke (and future wake-up/retry paths) via InvokeCommand.
+# Allow API Lambdas to directly invoke the Pi AgentCore Lambda. Used by
+# chat-agent-invoke, wake-up, retry, and skill-run paths via InvokeCommand.
 resource "aws_iam_role_policy" "lambda_agentcore_invoke" {
-  count = var.agentcore_function_arn != "" ? 1 : 0
+  count = var.agentcore_pi_function_arn != "" ? 1 : 0
   name  = "agentcore-invoke"
   role  = aws_iam_role.lambda.id
 
@@ -307,8 +307,6 @@ resource "aws_iam_role_policy" "lambda_agentcore_invoke" {
         "lambda:InvokeFunction",
       ]
       Resource = compact([
-        var.agentcore_function_arn,
-        "${var.agentcore_function_arn}:*",
         var.agentcore_pi_function_arn,
         var.agentcore_pi_function_arn != "" ? "${var.agentcore_pi_function_arn}:*" : "",
       ])
@@ -320,9 +318,8 @@ resource "aws_iam_role_policy" "lambda_agentcore_invoke" {
 # under test, and call AgentCore Evaluations.Evaluate to score the
 # resulting spans. Both APIs are on the bedrock-agentcore service. Also
 # allow reading spans + log events from CloudWatch Logs (aws/spans is
-# the Transaction Search destination; the runtime log groups carry the
-# OTel scope=strands.telemetry.tracer log records that EvaluateCommand
-# requires alongside the spans).
+# the Transaction Search destination; runtime log groups carry the OTel records
+# that EvaluateCommand requires alongside the spans).
 resource "aws_iam_role_policy" "lambda_eval_runner" {
   name = "eval-runner-bedrock-agentcore"
   role = aws_iam_role.lambda.id
@@ -483,9 +480,9 @@ resource "aws_iam_role_policy" "lambda_scheduler" {
 # Allow API handler Lambdas to invoke each other directly. sendMessage
 # dispatches to chat-agent-invoke for instant chat response; the memory
 # resolvers reach knowledge-base-manager and job-schedule-manager for
-# admin-driven operations. The existing lambda_agentcore_invoke policy
-# covers the Strands runtime Lambda only — this one covers internal
-# api-to-api calls. ARNs are constructed deterministically from the
+# admin-driven operations. The existing lambda_agentcore_invoke policy covers
+# the Pi runtime Lambda only — this one covers internal api-to-api calls. ARNs
+# are constructed deterministically from the
 # handler naming pattern so we don't create a dependency cycle with the
 # handler resource.
 resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
@@ -527,7 +524,7 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
         # and read EFS directly. Standalone resource below.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-files-efs",
         # workspace-renderer: chat-agent-invoke invokes this synchronously
-        # before AgentCore so the Strands runtime can opt into the rendered
+        # before AgentCore so Pi can opt into the rendered
         # per-(agent, Space, user) workspace prefix.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-renderer",
       ]

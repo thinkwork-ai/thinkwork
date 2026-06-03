@@ -4,26 +4,19 @@
 # Plan §005 U2 — provisions the Pi agent runtime as a Lambda+LWA function.
 #
 # Layout note: this module owns the IAM role, log group, Lambda function, and
-# event-invoke config that are unique to Pi. The shared ECR repo and async
-# DLQ live in `../agentcore-runtime` and are injected via input variables; the
-# IAM policy here grants `sqs:SendMessage` against the shared DLQ ARN.
+# event-invoke config that are unique to Pi. Shared AgentCore platform
+# resources are injected via input variables; the IAM policy here grants
+# `sqs:SendMessage` against the shared DLQ ARN.
 #
 # State migration: the resources here previously lived inside `module.agentcore`
-# (the Strands runtime module) under the address `aws_*.agentcore_pi`. The
-# `moved {}` blocks in `terraform/modules/thinkwork/main.tf` realign state
-# across modules without destroy+create on the underlying AWS resources.
-#
-# Forward compat: U4-U8 will tighten the IAM role with Aurora Data API
-# permissions for SessionStore, Secrets Manager for resolved DB credentials,
-# and the AgentCore Code Interpreter actions that the FR-9a spike exercised.
-# U2 lays the role down with the minimum permissions Pi needs to boot —
-# subsequent units extend it as their dependencies land.
+# (the legacy runtime module) under the address `aws_*.agentcore_pi`. The
+# parent module's `moved {}` blocks realign state across modules without
+# destroy+create on the underlying AWS resources.
 ################################################################################
 
 # memory-retain Lambda name + ARN are constructed locally rather than
 # taken as inputs to avoid a circular dependency: the lambda-api module
 # already consumes this module's output (agentcore_pi_function_name/arn).
-# Mirrors the pattern in `../agentcore-runtime/main.tf`.
 locals {
   memory_retain_fn_name = "thinkwork-${var.stage}-api-memory-retain"
   memory_retain_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.memory_retain_fn_name}"
@@ -51,11 +44,6 @@ resource "aws_iam_role" "agentcore_pi" {
 }
 
 resource "aws_iam_role_policy" "agentcore_pi" {
-  # Sibling policy: ../agentcore-runtime/main.tf `aws_iam_role_policy.agentcore`.
-  # The two policies share ~83% of statements (S3, Bedrock, AgentCore Memory,
-  # Code Interpreter, Logs, X-Ray, ECR, SSM, MemoryRetain). Pi adds Aurora
-  # Data API + Secrets Manager for U4 SessionStore. Keep both surfaces in
-  # sync for shared statements; let Pi-only additions diverge here.
   name = "agentcore-pi-permissions"
   role = aws_iam_role.agentcore_pi.id
 
@@ -84,8 +72,8 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         # us-east-2, us-west-2). The narrow ARN caused every agent turn
         # to fail with AccessDenied silently inside pi-ai's Bedrock
         # provider, surfacing as an empty assistant message with zero
-        # token usage. Strands uses `Resource = "*"` for the same actions;
-        # we match that posture.
+        # token usage. Inference profiles and their routed foundation-model
+        # calls require broad model resource scope.
         Sid      = "BedrockInvoke"
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:InvokeAgent"]
@@ -95,7 +83,7 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         # Automatic memory retention — every agent turn calls CreateEvent
         # to feed AgentCore's background strategies. Also needs read access
         # so the recall() tool can fetch previously extracted records and
-        # so forget() can soft-archive old records. Mirrors the Strands role.
+        # so forget() can soft-archive old records.
         Sid    = "AgentCoreMemoryReadWrite"
         Effect = "Allow"
         Action = [
@@ -111,9 +99,9 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         Resource = "*"
       },
       {
-        # Browser Automation (browser_automation tool). Mirrors the Strands
-        # runtime permissions so Pi can open managed AgentCore Browser sessions
-        # when the built-in browser capability is enabled for an agent.
+        # Browser Automation (browser_automation tool). Pi can open managed
+        # AgentCore Browser sessions when the built-in browser capability is
+        # enabled for an agent.
         Sid    = "AgentCoreBrowser"
         Effect = "Allow"
         Action = [
@@ -322,7 +310,6 @@ resource "aws_lambda_function" "agentcore_pi" {
 ################################################################################
 # Async-invoke hardening — MaximumRetryAttempts=0 + DLQ
 #
-# Mirrors the Strands runtime's invoke-config in `../agentcore-runtime/main.tf`.
 # AWS Lambda async-invoke defaults to 2 retries; the agent loop is not
 # idempotent (Bedrock tokens get re-burned, partial deliverables can
 # overwrite the first), so retries are disabled and failed invokes land in

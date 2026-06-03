@@ -279,21 +279,6 @@ variable "mapbox_public_token" {
   sensitive   = true
 }
 
-variable "nova_act_api_key" {
-  description = <<-EOT
-    Nova Act API key used by the Strands Browser Automation tool. When empty,
-    Terraform creates /thinkwork/<stage>/agentcore/nova-act-api-key with a
-    placeholder value; populate or rotate the real key with:
-      aws ssm put-parameter --overwrite --name /thinkwork/<stage>/agentcore/nova-act-api-key --type SecureString --value <KEY>
-
-    The parameter's value has lifecycle.ignore_changes set, so operator
-    rotation sticks across applies.
-  EOT
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
 variable "wiki_deterministic_linking_enabled" {
   description = <<-EOT
     Feature flag for deterministic compile-time link emission:
@@ -465,7 +450,6 @@ module "thinkwork" {
   requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
   requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression
   requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
-  nova_act_api_key                              = var.nova_act_api_key
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
 
   # Mapbox public token for apps/spaces MapView primitive. Flows through
