@@ -12,7 +12,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { Braces, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
-import { Button, cn, Tabs, TabsList, TabsTrigger } from "@thinkwork/ui";
+import { Button, cn } from "@thinkwork/ui";
 import {
   AppletFailure,
   AppletLoading,
@@ -245,9 +245,19 @@ export function AppletRouteContent({ appId }: { appId: string }) {
   );
 }
 
+const APPLET_TABS = [
+  { value: "app", label: "App" },
+  { value: "source", label: "Source" },
+  { value: "config", label: "Config" },
+] as const;
+
+type AppletTabValue = (typeof APPLET_TABS)[number]["value"];
+
 // Operator-only Source/Config inspector wrapping the live App preview. Gated
 // in the parent on `roleResolved && isOperator`; the save mutation re-enforces
-// `requireTenantAdmin` server-side so a forced UI gains nothing.
+// `requireTenantAdmin` server-side so a forced UI gains nothing. Uses plain
+// buttons (not Radix Tabs) for tab switching — Radix Tabs crashed here under a
+// duplicated-React dev dep cache, and plain buttons avoid that hook path.
 function OperatorAppletTabs({
   appId,
   persistedSource,
@@ -263,7 +273,7 @@ function OperatorAppletTabs({
   reexecuteAppletQuery: (opts?: { requestPolicy?: "network-only" }) => void;
   children: ReactNode;
 }) {
-  const [tab, setTab] = useState("app");
+  const [tab, setTab] = useState<AppletTabValue>("app");
   const [draft, setDraft] = useState(persistedSource);
   const [{ fetching: saving }, updateAppletSource] = useMutation(
     AdminUpdateAppletSourceMutation,
@@ -305,19 +315,25 @@ function OperatorAppletTabs({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4">
       <div className="relative flex min-h-9 shrink-0 items-center justify-center gap-3">
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
-            <TabsTrigger value="app" className="px-6">
-              App
-            </TabsTrigger>
-            <TabsTrigger value="source" className="px-6">
-              Source
-            </TabsTrigger>
-            <TabsTrigger value="config" className="px-6">
-              Config
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/40 p-1">
+          {APPLET_TABS.map((entry) => (
+            <button
+              key={entry.value}
+              type="button"
+              role="tab"
+              aria-selected={tab === entry.value}
+              onClick={() => setTab(entry.value)}
+              className={cn(
+                "rounded-md px-6 py-1 text-sm font-medium transition-colors",
+                tab === entry.value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
         {tab === "source" ? (
           <div className="absolute right-0">
             <Button

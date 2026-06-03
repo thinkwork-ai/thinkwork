@@ -289,7 +289,7 @@ describe("operator Source/Config tabs", () => {
     render(<AppletRouteContent appId={appId} />);
     await screen.findByTestId("applet-iframe-host");
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Source" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Source" }));
     const editor = screen.getByTestId(
       "applet-source-editor",
     ) as HTMLTextAreaElement;
@@ -331,7 +331,7 @@ describe("operator Source/Config tabs", () => {
     render(<AppletRouteContent appId={appId} />);
     await screen.findByTestId("applet-iframe-host");
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Source" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Source" }));
     fireEvent.change(screen.getByTestId("applet-source-editor"), {
       target: { value: "broken" },
     });
