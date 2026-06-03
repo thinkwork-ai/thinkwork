@@ -1087,10 +1087,10 @@ function SectionHeaderControls({
     // Filter indicator and "…" menu share one slot: the filter icon shows when
     // the section is filtered and idle; on hover, touch, or while the menu is
     // open it gives way to the "…" trigger so the two never stack.
-    <div className="relative ml-auto size-7 shrink-0">
+    <div className="relative ml-auto size-6 shrink-0">
       {filterOn && !menuOpen ? (
         <ListFilter
-          className="pointer-events-none absolute inset-0 m-auto size-4 text-sidebar-foreground/45 transition-opacity group-hover/section-row:opacity-0 [@media(hover:none)]:opacity-0"
+          className="pointer-events-none absolute inset-0 m-auto size-3.5 text-sidebar-foreground/45 transition-opacity group-hover/section-row:opacity-0 [@media(hover:none)]:opacity-0"
           aria-label="Filtered to unread"
         />
       ) : null}
@@ -1099,9 +1099,9 @@ function SectionHeaderControls({
           <button
             type="button"
             aria-label={`${label} options`}
-            className="absolute inset-0 flex size-7 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
+            className="absolute inset-0 flex size-6 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
           >
-            <MoreHorizontal className="size-4" />
+            <MoreHorizontal className="size-3.5" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -1195,7 +1195,7 @@ function ThreadListSection({
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/thread-section">
-      <div className="group/section-row flex w-full items-center gap-1">
+      <div className="group/section-row flex w-full items-center gap-0">
         <CollapsibleTrigger asChild>
           <SidebarGroupLabel
             asChild
@@ -1214,7 +1214,7 @@ function ThreadListSection({
           onClick={requestSpacesComposerFocus}
           aria-label={`New thread in ${label}`}
           title="New thread"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
         >
           <SquarePen className="size-3.5" />
         </Link>
@@ -1549,7 +1549,7 @@ function SpaceThreadSection({
       defaultOpen={isActiveSpace || threads.length > 0}
       className="group/space"
     >
-      <div className="group/section-row flex w-full items-center gap-1">
+      <div className="group/section-row flex w-full items-center gap-0">
         <CollapsibleTrigger asChild>
           <SidebarGroupLabel
             asChild
@@ -1571,7 +1571,7 @@ function SpaceThreadSection({
           onClick={requestSpacesComposerFocus}
           aria-label={`New thread in ${label}`}
           title="New thread"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
         >
           <SquarePen className="size-3.5" />
         </Link>

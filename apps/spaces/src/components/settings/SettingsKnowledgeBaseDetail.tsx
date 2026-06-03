@@ -139,7 +139,7 @@ export function SettingsKnowledgeBaseDetail() {
 
   if (!kb) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
+      <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">
           This knowledge base could not be found — it may have been removed.
         </p>
@@ -151,7 +151,7 @@ export function SettingsKnowledgeBaseDetail() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
+      <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <SettingsPageTitle
           title={kb.name}
           description={kb.description ?? undefined}

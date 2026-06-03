@@ -156,10 +156,20 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     : true;
   const composerSpaces = useMemo(
     () =>
-      spaces.map((space) => ({
-        id: space.id,
-        name: space.name || space.slug || "Space",
-      })),
+      // Default Space pinned to the top; the rest sorted alphabetically.
+      [...spaces]
+        .sort((a, b) => {
+          const aDefault = isDefaultSpace(a);
+          const bDefault = isDefaultSpace(b);
+          if (aDefault !== bDefault) return aDefault ? -1 : 1;
+          return (a.name || a.slug || "Space").localeCompare(
+            b.name || b.slug || "Space",
+          );
+        })
+        .map((space) => ({
+          id: space.id,
+          name: space.name || space.slug || "Space",
+        })),
     [spaces],
   );
   const mentionTargets = useMemo(
