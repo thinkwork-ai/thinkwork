@@ -4,15 +4,13 @@ import { Type } from "typebox";
 /**
  * Plan §005 U6 — Hindsight `recall` + `reflect` ToolDefs.
  *
- * Ports `packages/agentcore-strands/agent-container/container-sources/
- * hindsight_tools.py` to TypeScript ToolDefs shaped for Pi's
- * `init({ tools })`.
+ * Hindsight `recall` + `reflect` ToolDefs shaped for Pi's `init({ tools })`.
  *
  * Async semantics (per `feedback_hindsight_async_tools`):
  * - Each invocation uses a fresh HTTP request (native `fetch`); no
  *   shared connection pool. The call site has no module-level state.
  * - Bounded retry on transient failures: 5xx and network errors retry
- *   on `[1s, 3s, 9s]` with ±0.5s jitter (matches Strands' SLA). 4xx
+ *   on `[1s, 3s, 9s]` with ±0.5s jitter. 4xx
  *   is terminal — request shape problems should not retry.
  * - Each request carries an `AbortSignal.timeout(30s)`. The retry
  *   loop creates a fresh signal per attempt so the deadline applies
@@ -27,9 +25,8 @@ import { Type } from "typebox";
  * - `tenantId` and `userId` come from the trusted-handler invocation
  *   scope. There is no agent-supplied override; missing values throw
  *   before any HTTP call.
- * - The Hindsight bank id is `user_<userId>` to match the Strands
- *   writer. Cross-runtime parity matters because a Strands user can
- *   flip to Pi and continue against the same Hindsight bank.
+ * - The Hindsight bank id is `user_<userId>` to preserve existing memory-bank
+ *   continuity.
  *
  * Inert-ship (U6): nothing imports this yet. U9's handler shell wires
  * it into `init({ tools })`. The legacy pi-mono Hindsight tool at

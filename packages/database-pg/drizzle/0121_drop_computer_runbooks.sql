@@ -3,8 +3,8 @@
 -- skills (crm-dashboard, research-dashboard, map-artifact) have been
 -- rewritten as regular agentskills.io skills that compose with the
 -- platform artifact-builder skill, and the runbook orchestration
--- machinery in the Strands runtime + the API resolvers + the
--- packages/agentcore-strands runbook code paths have all been removed.
+-- machinery in the runtime + the API resolvers + legacy runbook code paths
+-- have all been removed.
 -- See refactor commit "drop runbook functionality entirely (L3)".
 --
 -- The dev tenant has no production data in these tables that needs

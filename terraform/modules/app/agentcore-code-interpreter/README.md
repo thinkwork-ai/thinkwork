@@ -19,16 +19,15 @@ stops at the substrate everything else depends on.
 
 ## Files
 
-| File | Purpose |
-|---|---|
-| `main.tf` | ECR + outputs. No per-tenant resources. |
-| `Dockerfile.sandbox-base` | Python 3.12 + pinned libs + `sitecustomize.py`. Build context is the **repo root** so the COPY can reach `packages/agentcore-strands/agent-container-sandbox/sitecustomize.py`. |
-| `scripts/build_and_push_sandbox_base.sh` | CI builds + pushes. Not called from Terraform — image lifecycle is a reviewable-PR concern. |
+| File                                     | Purpose                                                                                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `main.tf`                                | ECR + outputs. No per-tenant resources.                                                                                                   |
+| `Dockerfile.sandbox-base`                | Python 3.12 + pinned libs + `sitecustomize.py`. Build context is the **repo root** so the COPY can reach the module-owned sandbox helper. |
+| `scripts/build_and_push_sandbox_base.sh` | CI builds + pushes. Not called from Terraform — image lifecycle is a reviewable-PR concern.                                               |
 
 The Python source `sitecustomize.py` and its pytest suite `test_sitecustomize.py`
-live under `packages/agentcore-strands/agent-container-sandbox/` (colocated with
-the rest of the Strands agent-container Python, per handoff P2 #10). That's
-where `uv run pytest` finds them without extra config.
+live under `terraform/modules/app/agentcore-code-interpreter/sandbox/`, next to
+the sandbox base image they protect.
 
 ## What this module does **not** do
 
@@ -39,7 +38,7 @@ where `uv run pytest` finds them without extra config.
 ## Bumping the image
 
 1. Edit `Dockerfile.sandbox-base` (pin a new pandas / add a lib / etc.).
-2. Edit `packages/agentcore-strands/agent-container-sandbox/sitecustomize.py` if the R13 invariant or its coverage gaps shift.
+2. Edit `terraform/modules/app/agentcore-code-interpreter/sandbox/sitecustomize.py` if the R13 invariant or its coverage gaps shift.
 3. PR. CI runs `pytest` on the scrubber plus a build-then-startup-assertion smoke test.
 4. After merge, `build_and_push_sandbox_base.sh` tags with the merge-commit SHA.
 

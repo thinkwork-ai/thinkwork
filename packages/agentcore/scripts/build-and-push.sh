@@ -2,16 +2,14 @@
 # Build the Agent Container Docker image and push to ECR.
 #
 # Usage:
-#   bash scripts/build-and-push.sh --stage main --runtime sdk
 #   bash scripts/build-and-push.sh --stage ericodom --runtime pi
 #
 # The --stage flag determines the ECR repository:
 #   thinkwork-{stage}-agentcore (managed by Terraform —
-#   terraform/modules/app/agentcore-runtime/main.tf)
+#   terraform/modules/app/agentcore-platform/main.tf)
 #
 # The --runtime flag selects the Dockerfile:
-#   sdk (default) → packages/agentcore-sdk/agent-container/Dockerfile
-#   pi            → packages/agentcore-pi/agent-container/Dockerfile
+#   pi (default) → packages/agentcore-pi/agent-container/Dockerfile
 #
 # Must be run from the monorepo root (packages/agentcore/scripts/../..).
 set -euo pipefail
@@ -19,7 +17,7 @@ set -euo pipefail
 STAGE=""
 REGION="us-east-1"
 TAG=""
-RUNTIME="sdk"
+RUNTIME="pi"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -41,22 +39,16 @@ TAG="${TAG:-${RUNTIME}-latest}"
 
 # Select Dockerfile based on runtime type
 case "$RUNTIME" in
-  sdk)
-    DOCKERFILE="packages/agentcore-sdk/agent-container/Dockerfile"
-    ;;
   pi)
     DOCKERFILE="packages/agentcore-pi/agent-container/Dockerfile"
     ;;
-  strands)
-    DOCKERFILE="packages/agentcore-strands/agent-container/Dockerfile"
-    ;;
   *)
-    echo "Error: --runtime must be 'sdk', 'pi', or 'strands' (got '$RUNTIME')"
+    echo "Error: --runtime must be 'pi' (got '$RUNTIME')"
     exit 1
     ;;
 esac
 
-# ECR repository URI (managed by SST — infra/agentcore.ts)
+# ECR repository URI (managed by Terraform)
 ACCOUNT_ID="487219502366"
 ECR_DOMAIN="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 ECR_URI="${ECR_DOMAIN}/thinkwork-${STAGE}-agentcore"

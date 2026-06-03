@@ -3,22 +3,21 @@
 #
 # Usage:
 #   bash scripts/create-runtime.sh --stage main --runtime pi
-#   bash scripts/create-runtime.sh --stage ericodom --runtime chat
 #
 # The --stage flag determines resource names:
 #   ECR:  thinkwork-{stage}-agentcore
 #   Role: thinkwork-{stage}-agentcore-role
-#   SSM:  /thinkwork/{stage}/agentcore/runtime-id-{type}
+#   SSM:  /thinkwork/{stage}/agentcore/runtime-id-pi
 #
 # Prerequisites:
-#   - Terraform applied (terraform/modules/app/agentcore-runtime manages ECR + IAM)
+#   - Terraform applied (agentcore-platform manages ECR; agentcore-pi manages IAM)
 #   - Agent container image pushed to ECR (scripts/build-and-push.sh)
 set -euo pipefail
 
 STAGE=""
 REGION="us-east-1"
 RUNTIME_NAME=""
-RUNTIME="chat"
+RUNTIME="pi"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -37,20 +36,16 @@ fi
 
 # Validate runtime type
 case "$RUNTIME" in
-  chat|code|pi|sdk|strands) ;;
+  pi) ;;
   *)
-    echo "Error: --runtime must be 'chat', 'code', 'pi', 'sdk', or 'strands' (got '$RUNTIME')"
+    echo "Error: --runtime must be 'pi' (got '$RUNTIME')"
     exit 1
     ;;
 esac
 
 ACCOUNT_ID="487219502366"
 ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/thinkwork-${STAGE}-agentcore"
-if [[ "$RUNTIME" == "pi" ]]; then
-  ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-pi-role"
-else
-  ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-role"
-fi
+ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-pi-role"
 RUNTIME_NAME="${RUNTIME_NAME:-thinkwork-${STAGE}-runtime-${RUNTIME}}"
 
 # Type-specific SSM path

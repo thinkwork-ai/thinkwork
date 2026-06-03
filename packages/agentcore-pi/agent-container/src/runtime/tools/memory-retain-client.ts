@@ -3,9 +3,7 @@
  * after each agent turn, so the API's normalized memory layer can persist the
  * conversation transcript through the active engine (Hindsight or AgentCore).
  *
- * TypeScript port of Strands' `api_memory_client.retain_conversation`
- * (`packages/agentcore-strands/agent-container/container-sources/api_memory_client.py:40-93`).
- * Adapted to Pi's identity + env snapshot shape:
+ * Runtime memory-retain client adapted to Pi's identity + env snapshot shape:
  *   - Identity comes from `IdentitySnapshot` validated at /invocations entry
  *     (`handler-context.ts:62-91`); we never re-extract from a loose payload.
  *   - The receiving Lambda name comes from `RuntimeEnvSnapshot.memoryRetainFnName`,
@@ -77,9 +75,8 @@ export interface RetainConversationResult {
  * Build the per-turn transcript: history (filtered to user/assistant with
  * non-empty content) + [user message, assistant response].
  *
- * Mirrors Strands' `_build_full_thread_transcript`
- * (`packages/agentcore-strands/agent-container/container-sources/server.py:1782-1809`)
- * exactly; the receiving Lambda does longest-suffix-prefix merge against the
+ * Builds the same user/assistant transcript tail the receiving Lambda expects;
+ * the Lambda does longest-suffix-prefix merge against the
  * canonical DB transcript so this tail is sufficient.
  */
 export function buildRetainTranscript(

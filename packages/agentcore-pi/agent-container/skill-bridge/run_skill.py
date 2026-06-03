@@ -53,10 +53,9 @@ def _emit(envelope: dict[str, Any]) -> None:
 def _load_function(script_path: str, func_name: str):
     """Import the named function from a .py file at ``script_path``.
 
-    Mirrors ``packages/agentcore-strands/agent-container/container-sources/
-    skill_runner.py:_load_function`` so script-skills behave the same
-    whether the Strands runtime imports them in-process or the Pi
-    runtime subprocess-bridges them.
+    Matches the original Python skill-runner import behavior so
+    script-skills keep the same callable contract under the Pi subprocess
+    bridge.
     """
     spec = importlib.util.spec_from_file_location(
         f"thinkwork_skill_bridge_{func_name}", script_path
@@ -69,9 +68,7 @@ def _load_function(script_path: str, func_name: str):
 
     func = getattr(module, func_name, None)
     if not callable(func):
-        raise AttributeError(
-            f"Function '{func_name}' not found in {script_path}"
-        )
+        raise AttributeError(f"Function '{func_name}' not found in {script_path}")
     return func
 
 
@@ -123,11 +120,7 @@ def main() -> int:
         )
         return 2
 
-    full_path = (
-        script_path
-        if os.path.isabs(script_path)
-        else os.path.join(skill_dir, script_path)
-    )
+    full_path = script_path if os.path.isabs(script_path) else os.path.join(skill_dir, script_path)
 
     # Path-traversal containment: when script_path is relative, the
     # resolved file must live under skill_dir. Defends against a
@@ -176,9 +169,8 @@ def main() -> int:
 
     # Redirect skill stdout to stderr for the duration of the call so
     # `print()` from the skill (or its imports) does not interleave with
-    # the JSON envelope on stdout. Strands gets in-process stdout
-    # multiplexing for free; the subprocess bridge has to defend the
-    # channel explicitly.
+    # the JSON envelope on stdout. In-process runners multiplex stdout
+    # naturally; the subprocess bridge has to defend the channel explicitly.
     try:
         with contextlib.redirect_stdout(sys.stderr):
             result = func(**kwargs)

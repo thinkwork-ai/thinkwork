@@ -271,7 +271,7 @@ export function parseSkillMd(source: string, path: string): SkillMdResult {
 
 /**
  * Lenient counterpart to `parseSkillMd` for thinkwork-internal callers
- * (catalog loaders, agentcore-strands skill registration). Tolerates
+ * (catalog loaders, runtime skill registration). Tolerates
  * SKILL.md files with no frontmatter (returns `data: {}`,
  * `frontmatterPresent: false`) but still rejects malformed YAML and
  * `execution: composition`. Does NOT enforce `name`/`description` —

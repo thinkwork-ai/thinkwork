@@ -9,7 +9,7 @@
 # Tags are immutable; a bump ships as a reviewable PR.
 #
 # Build context is the repository root so the COPY line can reach the
-# Python source under packages/agentcore-strands/agent-container-sandbox/.
+# module-owned Python source below.
 #
 #   docker build -f terraform/modules/app/agentcore-code-interpreter/Dockerfile.sandbox-base .
 
@@ -47,7 +47,7 @@ RUN pip install --no-cache-dir \
 # (and before the framework traceback on cold start). See the module
 # docstring for the honestly-scoped invariant and named residual gaps.
 # ---------------------------------------------------------------------------
-COPY packages/agentcore-strands/agent-container-sandbox/sitecustomize.py \
+COPY terraform/modules/app/agentcore-code-interpreter/sandbox/sitecustomize.py \
      /usr/local/lib/python3.12/site-packages/sitecustomize.py
 
 # ---------------------------------------------------------------------------

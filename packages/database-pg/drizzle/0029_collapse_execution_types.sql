@@ -4,7 +4,7 @@
 -- plus the `idx_skill_catalog_execution` index. The runtime no longer branches
 -- on these fields: the `composition` + `declarative` execution types were
 -- deleted in U6, and the remaining `script` / `context` distinction is read
--- from each skill's on-disk `skill.yaml` by the agentcore-strands runtime —
+-- from each skill's on-disk `skill.yaml` by the runtime —
 -- never from the catalog table.
 --
 -- See docs/plans/2026-04-23-007-feat-v1-agent-architecture-final-call-plan.md

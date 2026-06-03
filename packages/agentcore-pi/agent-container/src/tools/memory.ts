@@ -12,9 +12,8 @@ import { Type } from "typebox";
 /**
  * Plan §005 U6 — AgentCore Memory tools as Pi ToolDefs.
  *
- * Ports `packages/agentcore-strands/agent-container/container-sources/
- * memory_tools.py`'s `remember()` + `recall()` to TypeScript ToolDefs
- * shaped for Pi's `init({ tools })`. Strands writes through
+ * AgentCore Memory `remember()` + `recall()` ToolDefs shaped for Pi's
+ * `init({ tools })`. Writes flow through
  * `BatchCreateMemoryRecords` + `CreateEvent` so the conversational
  * extraction strategies process the new fact in the background;
  * `recall()` first tries semantic `RetrieveMemoryRecords`, then falls
@@ -24,9 +23,8 @@ import { Type } from "typebox";
  * - `tenantId` and `userId` come from the trusted-handler invocation
  *   scope. There is no agent-supplied override; missing values throw
  *   before any AWS call.
- * - The namespace key is `user_<userId>` to match the Strands writer.
- *   Cross-runtime parity matters because a Strands user can flip to
- *   Pi and continue with the same memory store.
+ * - The namespace key is `user_<userId>` to preserve existing memory-store
+ *   continuity.
  *
  * Async semantics (per `feedback_hindsight_async_tools` — the same
  * principle applies to AgentCore Memory even though the SDK is sync):
@@ -126,8 +124,8 @@ function normalise(record: unknown): NormalisedRecord | null {
   if (!text) return null;
   const r = record as Record<string, unknown>;
   // The SDK exposes `memoryStrategyId` on `MemoryRecordSummary`; older
-  // Strands code used `strategy`. Read both so a Strands-shaped fixture
-  // and a real SDK response both produce a meaningful tag.
+  // fixtures used `strategy`. Read both so legacy-shaped records and real SDK
+  // responses both produce a meaningful tag.
   const strategy =
     typeof r.memoryStrategyId === "string"
       ? r.memoryStrategyId
@@ -310,9 +308,8 @@ export function buildRecallTool(context: MemoryToolsContext): AgentTool<any> {
           .map((r) => normalise(r))
           .filter((r): r is NormalisedRecord => r !== null);
       } catch (err) {
-        // Capture the error so the list-fallback path can re-raise if
-        // the list call also fails. Strands silently falls through too,
-        // but at least surfaces the original cause when both fail.
+        // Capture the error so the list-fallback path can re-raise if the
+        // list call also fails, preserving the original cause.
         semanticErr = err;
         records = [];
       }

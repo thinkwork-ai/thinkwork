@@ -571,8 +571,7 @@ export async function buildInvocationResources(
   }
 
   // Web Search (Exa/SerpApi) — tenant/template-configured, arrives as
-  // `web_search_config`. Ported from the Strands runtime (the Pi runtime had
-  // no web_search, so the model fell back to apologizing it lacked search).
+  // `web_search_config`.
   if (
     typeof args.payload.web_search_config === "object" &&
     args.payload.web_search_config
@@ -801,9 +800,7 @@ export async function buildInvocationResources(
 // ---------------------------------------------------------------------------
 // Completion callback — POST /api/skills/complete with snapshotted secret.
 //
-// IMPORTANT contract (mirrored from
-// `packages/agentcore-strands/agent-container/container-sources/run_skill_dispatch.py`
-// and validated against `packages/api/src/handlers/skills.ts`'s
+// IMPORTANT contract (validated against `packages/api/src/handlers/skills.ts`'s
 // `completeSkillRunService`):
 //
 //   - Body uses camelCase: `runId`, `tenantId`, `status`, `failureReason?`,

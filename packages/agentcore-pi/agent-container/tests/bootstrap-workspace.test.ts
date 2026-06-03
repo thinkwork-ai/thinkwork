@@ -1,8 +1,6 @@
 /**
- * Pi-runtime bootstrap-workspace tests — same contract as the Strands
- * Python helper (test_bootstrap_workspace.py): list, download, delete
- * orphans. No overlay, no manifest fingerprint, no ETag-conditional
- * GETs.
+ * Pi-runtime bootstrap-workspace tests: list, download, delete orphans.
+ * No overlay, no manifest fingerprint, no ETag-conditional GETs.
  */
 
 import {

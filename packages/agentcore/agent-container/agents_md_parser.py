@@ -5,10 +5,10 @@ inside an AGENTS.md document into typed routing rows. Surrounding prose is
 preserved on `raw_markdown` so callers can edit a row without clobbering
 the rest of the document.
 
-Used by the Strands runtime (`packages/agentcore-strands/agent-container/
-container-sources/`) for delegation-time skill resolution and sub-agent
-enumeration. The TS counterpart at `packages/api/src/lib/agents-md-parser.ts`
-serves the admin builder routing-row editor and the bundle importer.
+Used by the AgentCore runtime for delegation-time skill resolution and
+sub-agent enumeration. The TS counterpart at
+`packages/api/src/lib/agents-md-parser.ts` serves the admin builder routing-row
+editor and the bundle importer.
 
 ═════════════════════════════════════════════════════════════════════════
 PINNED_SHAPE_CONTRACT
@@ -70,7 +70,7 @@ logger = logging.getLogger(__name__)
 #
 # Mirrors `RESERVED_FOLDER_NAMES` exported from
 # `packages/api/src/lib/reserved-folder-names.ts` (Plan §008 U8 single source
-# of truth on the TS side). The Strands runtime is offline from npm, so we
+# of truth on the TS side). The Python runtime is offline from npm, so we
 # inline the constant here per the
 # `inline-helpers-vs-shared-package-for-cross-surface-code` learning.
 # Add to both sides + refresh the shared

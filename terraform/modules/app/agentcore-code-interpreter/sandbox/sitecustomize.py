@@ -30,7 +30,8 @@ import binascii
 import os
 import sys
 import urllib.parse
-from typing import Any, Iterable, List, Set
+from collections.abc import Iterable
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Module state
@@ -40,7 +41,7 @@ from typing import Any, Iterable, List, Set
 # registered token expands into its cleartext, standard base64, URL-safe
 # base64, URL-encoded, and hex forms (only the forms whose length is at least
 # MIN_TOKEN_LEN, to avoid redacting short accidental matches like "AQ").
-_redactions: Set[bytes] = set()
+_redactions: set[bytes] = set()
 
 # Redaction placeholder. Length unimportant — stream layout survives because
 # writes stay synchronous.
@@ -59,7 +60,7 @@ MIN_TOKEN_LEN = 12
 _rolling_buffer_size: int = 0
 
 
-def _expand(value: str) -> List[bytes]:
+def _expand(value: str) -> list[bytes]:
     """Return the encoded forms of a token value we treat as equivalent.
 
     Each form is added to the redaction set so ``print(base64.b64encode(token))``
@@ -68,7 +69,7 @@ def _expand(value: str) -> List[bytes]:
     if not value:
         return []
     raw = value.encode("utf-8")
-    forms: List[bytes] = []
+    forms: list[bytes] = []
 
     def maybe_add(candidate: bytes) -> None:
         if len(candidate) >= MIN_TOKEN_LEN:
@@ -130,7 +131,7 @@ def _redact(chunk: bytes, tail_buffer: bytearray) -> tuple[bytes, bytearray]:
         combined = combined.replace(form, _REDACTION)
 
     if _rolling_buffer_size and len(combined) > _rolling_buffer_size:
-        emit = combined[: -_rolling_buffer_size]
+        emit = combined[:-_rolling_buffer_size]
         new_tail = bytearray(combined[-_rolling_buffer_size:])
     else:
         emit = b""
