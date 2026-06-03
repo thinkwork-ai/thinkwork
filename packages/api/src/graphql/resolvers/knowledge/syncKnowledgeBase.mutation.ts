@@ -1,3 +1,4 @@
+import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
   db,
@@ -6,12 +7,26 @@ import {
   snakeToCamel,
   getKbManagerFnArn,
 } from "../../utils.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 export const syncKnowledgeBase = async (
   _parent: any,
   args: any,
   ctx: GraphQLContext,
 ) => {
+  // Authz: derive the tenant pin from the row, then gate before kicking
+  // off a Bedrock ingestion job (U13 — these resolvers shipped with no gate).
+  const [existing] = await db
+    .select({ tenant_id: knowledgeBases.tenant_id })
+    .from(knowledgeBases)
+    .where(eq(knowledgeBases.id, args.id));
+  if (!existing) throw new GraphQLError("Knowledge base not found");
+  await requireAdminOrServiceCaller(
+    ctx,
+    existing.tenant_id,
+    "sync_knowledge_base",
+  );
+
   const [row] = await db
     .update(knowledgeBases)
     .set({
@@ -21,7 +36,7 @@ export const syncKnowledgeBase = async (
     })
     .where(eq(knowledgeBases.id, args.id))
     .returning();
-  if (!row) throw new Error("Knowledge base not found");
+  if (!row) throw new GraphQLError("Knowledge base not found");
   // Fire-and-forget: invoke KB manager Lambda to sync
   try {
     const kbManagerArn = await getKbManagerFnArn();

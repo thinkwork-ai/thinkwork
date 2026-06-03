@@ -6,6 +6,7 @@ import {
   generateSlug,
   getKbManagerFnArn,
 } from "../../utils.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 export const createKnowledgeBase = async (
   _parent: any,
@@ -13,6 +14,9 @@ export const createKnowledgeBase = async (
   ctx: GraphQLContext,
 ) => {
   const i = args.input;
+  // Authz: the caller must be an admin/owner of the target tenant before
+  // we provision anything (these resolvers shipped with no gate — see U13).
+  await requireAdminOrServiceCaller(ctx, i.tenantId, "create_knowledge_base");
   const slug =
     i.name
       .toLowerCase()
