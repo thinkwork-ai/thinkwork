@@ -66,6 +66,27 @@ export function stopTokenRefresh() {
   }
 }
 
+/**
+ * Force a one-shot token refresh and update the cached token immediately.
+ * The provider (auth.getIdToken) renews an expired id token via the Cognito /
+ * OAuth refresh-token path, so this recovers the "[GraphQL] Requester user
+ * identity required" error without a full sign-out. Wired to the header refresh
+ * control. Best-effort: resolves false if there's no provider or it fails.
+ */
+export async function refreshAuthTokenNow(): Promise<boolean> {
+  if (!tokenProvider) return false;
+  try {
+    const fresh = await tokenProvider();
+    if (fresh) {
+      cachedToken = fresh;
+      return true;
+    }
+  } catch {
+    /* best-effort — leave the existing cached token in place */
+  }
+  return false;
+}
+
 function authHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   if (currentTenantId) {
