@@ -289,9 +289,16 @@ function OperatorAppletTabs({
     });
     const payload = result.data?.adminUpdateAppletSource;
     if (result.error || !payload?.ok) {
-      const firstError = payload?.errors?.[0];
+      // SaveAppletPayload.errors is `[AWSJSON!]!` — the server returns objects
+      // ({ code, message }) from appletError(), never bare strings. Read
+      // `.message` (string branch kept only as a defensive fallback) so the
+      // operator sees the real validation reason, not a generic message.
+      const firstError = payload?.errors?.[0] as
+        | { message?: string }
+        | string
+        | undefined;
       const message =
-        (typeof firstError === "string" ? firstError : undefined) ||
+        (typeof firstError === "string" ? firstError : firstError?.message) ||
         result.error?.message ||
         "Could not save source.";
       toast.error(`Save failed: ${message}`);

@@ -310,14 +310,21 @@ describe("operator Source/Config tabs", () => {
     });
   });
 
-  it("surfaces a save error and does not refetch", async () => {
+  it("surfaces the real server validation message and does not refetch", async () => {
     setTenant({ isOperator: true, roleResolved: true });
     reexecuteAppletQuery.mockClear();
+    // The server returns object errors ({ code, message }), never strings —
+    // assert the operator sees the actual message, not a generic fallback.
     updateAppletSourceMock.mockResolvedValue({
       data: {
         adminUpdateAppletSource: {
           ok: false,
-          errors: ["Invalid import"],
+          errors: [
+            {
+              code: "IMPORT_NOT_ALLOWED",
+              message: "Import 'fs' is not allowed",
+            },
+          ],
         },
       },
     });
@@ -331,6 +338,9 @@ describe("operator Source/Config tabs", () => {
     fireEvent.click(screen.getByTestId("applet-source-save"));
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining("Import 'fs' is not allowed"),
+    );
     expect(reexecuteAppletQuery).not.toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });

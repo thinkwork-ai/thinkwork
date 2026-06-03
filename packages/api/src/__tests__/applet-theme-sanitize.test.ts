@@ -47,4 +47,31 @@ describe("sanitizeAppletThemeCss (OQ1 server-side strip)", () => {
     expect(out).not.toMatch(/url\(/i);
     expect(out).not.toMatch(/javascript:/i);
   });
+
+  it("strips CSS comments so they cannot split a keyword (u/*c*/rl bypass)", () => {
+    const out = sanitizeAppletThemeCss(
+      ":root { --safe: oklch(1 0 0); --x: u/*c*/rl(https://evil.example/x); }",
+    );
+    expect(out).not.toMatch(/url\(/i);
+    expect(out).toContain("--safe: oklch(1 0 0)");
+  });
+
+  it("drops image-set() / -webkit-image-set() URL vectors", () => {
+    const out = sanitizeAppletThemeCss(
+      ':root { --a: image-set("https://evil/x" 1x); --b: -webkit-image-set(url(https://evil/y) 1x); --safe: oklch(1 0 0); }',
+    );
+    expect(out).not.toMatch(/image-set\s*\(/i);
+    expect(out).not.toMatch(/url\(/i);
+    expect(out).toContain("--safe: oklch(1 0 0)");
+  });
+
+  it("retains the :root/.dark selector even when its first declaration is stripped", () => {
+    const out = sanitizeAppletThemeCss(
+      ":root { --x: url(https://evil/x); --safe: oklch(1 0 0); }",
+    );
+    // Block boundary preserved (the selector is never consumed) so the
+    // downstream :root/.dark presence check still passes.
+    expect(out).toContain(":root {");
+    expect(out).toContain("--safe: oklch(1 0 0)");
+  });
 });

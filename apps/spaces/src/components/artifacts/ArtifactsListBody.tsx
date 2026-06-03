@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
@@ -96,7 +96,9 @@ function LiveArtifactsListBody() {
   const operatorReady = roleResolved && isOperator;
 
   const [userIdFilter, setUserIdFilter] = useState("");
-  const trimmedUserId = userIdFilter.trim();
+  // Debounce the value that drives the query so a typed user ID issues ONE
+  // admin request, not one per keystroke. The input itself stays instant.
+  const trimmedUserId = useDebouncedValue(userIdFilter.trim(), 250);
   // tenantId always comes from TenantContext, never a route param or
   // user-editable field — the server still re-enforces requireTenantAdmin.
   const filterActive = operatorReady && !!tenantId && trimmedUserId.length > 0;
@@ -236,6 +238,18 @@ function ArtifactsListBodyView({
       </div>
     </div>
   );
+}
+
+// Returns `value` delayed by `delayMs`, collapsing rapid changes (e.g. typing
+// in the operator user-ID filter) into a single settled value so we issue one
+// query per pause instead of one per keystroke.
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
 }
 
 export function ArtifactsCreateAction() {

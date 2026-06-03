@@ -18,10 +18,11 @@ const MAX_CSS_LENGTH = 20_000;
  * Operator-only "App Style" section: sets the tenant-wide applet theme CSS
  * injected into every rendered app artifact (unless an artifact carries its
  * own theme). Ported from the deprecated admin Set App Style dialog. The
- * `updateTenantSettings` mutation re-enforces operator auth server-side; the
- * server read path (`parseAppletThemeCss`) is the security gate for the
- * `url()`/`expression()`/`@import`/`javascript:` strip — the client checks
- * below are UX, mirrored from admin for fast feedback.
+ * `updateTenantSettings` mutation re-enforces operator auth server-side. CSS
+ * safety is layered: the authoritative gate is the iframe-side allowlist
+ * (`parseShadcnThemeCss` in applets/theme-tokens.ts), backed by a server-side
+ * strip (`sanitizeAppletThemeCss`); the client checks below are UX-only,
+ * mirrored from admin for fast feedback.
  */
 export function SettingsAppStyle() {
   const { tenantId } = useTenant();
