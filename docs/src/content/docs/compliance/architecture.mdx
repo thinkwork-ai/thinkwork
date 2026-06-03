@@ -11,7 +11,7 @@ Audit events traverse five layers: **emit → outbox → drainer → events → 
 flowchart LR
   subgraph Emit
     Y[Yoga resolver<br/>db.transaction]
-    S[Strands runtime<br/>ComplianceClient]
+    S[AgentCore runtime<br/>REST emit]
     R[POST /api/compliance/events<br/>compliance-events Lambda]
     S --> R
   end
@@ -59,7 +59,7 @@ flowchart LR
 ASCII fallback for terminal viewers:
 
 ```
-emit (Yoga in-tx | Strands HTTP)
+emit (Yoga in-tx | runtime HTTP)
     -> compliance.audit_outbox
         -> drainer Lambda (single-writer)
             -> compliance.audit_events (per-tenant SHA-256 chain)
@@ -81,11 +81,11 @@ audit_events (read API)
 
 Three roles partition write privileges so a compromise of one cannot tamper with the chain. Provisioned by [`packages/database-pg/drizzle/0070_compliance_aurora_roles.sql`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/drizzle/0070_compliance_aurora_roles.sql); password rotation is `STAGE=<stage> bash scripts/bootstrap-compliance-roles.sh`.
 
-| Role | GRANTs | Used by |
-|------|--------|---------|
-| `compliance_writer` | `INSERT` on `audit_outbox`, `export_jobs` | `emitAuditEvent` helper (Yoga resolvers + REST handler); `createComplianceExport` mutation |
+| Role                 | GRANTs                                                                                        | Used by                                                                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compliance_writer`  | `INSERT` on `audit_outbox`, `export_jobs`                                                     | `emitAuditEvent` helper (Yoga resolvers + REST handler); `createComplianceExport` mutation                                                          |
 | `compliance_drainer` | `SELECT, UPDATE` on `audit_outbox`; `SELECT` on `actor_pseudonym`; `INSERT` on `audit_events` | `compliance-outbox-drainer` Lambda; the anchor Lambda also reuses this role for `tenant_anchor_state` UPDATEs (Decision #5 / #6 in the master plan) |
-| `compliance_reader` | `SELECT` on all four `compliance.*` tables | U10 read API (`complianceEvents`, `complianceEvent`, `complianceEventByHash`, `complianceTenants`) |
+| `compliance_reader`  | `SELECT` on all four `compliance.*` tables                                                    | U10 read API (`complianceEvents`, `complianceEvent`, `complianceEventByHash`, `complianceTenants`)                                                  |
 
 All three roles also have `USAGE ON SCHEMA compliance` (single GRANT covers all three).
 
@@ -95,11 +95,11 @@ The export runner uses the **writer pool** (the main app role) rather than a ded
 
 Two S3 buckets, three prefixes:
 
-| Bucket | Prefix | Contents | Retention |
-|--------|--------|----------|-----------|
-| `thinkwork-{stage}-compliance-anchors` | `anchors/cadence-{cadenceId}.json` | Per-cadence Merkle anchor with global root + RFC 6962 domain-separated leaves | Object Lock GOVERNANCE/COMPLIANCE retention (`var.retention_days`, default 365) |
-| `thinkwork-{stage}-compliance-anchors` | `proofs/{tenantId}/{cadenceId}.json` | Per-tenant proof slice (chain-head leaves + Merkle path) | Object Lock retention; shorter per-object override applied by the anchor Lambda (U8b) |
-| `thinkwork-{stage}-compliance-exports` | `{tenantId}/{jobId}.{csv\|ndjson}` | Ephemeral export artifact (operator + cross-tenant runs use `multi-tenant/` prefix) | 7-day lifecycle expiration; **NOT** Object Lock |
+| Bucket                                 | Prefix                               | Contents                                                                            | Retention                                                                             |
+| -------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `thinkwork-{stage}-compliance-anchors` | `anchors/cadence-{cadenceId}.json`   | Per-cadence Merkle anchor with global root + RFC 6962 domain-separated leaves       | Object Lock GOVERNANCE/COMPLIANCE retention (`var.retention_days`, default 365)       |
+| `thinkwork-{stage}-compliance-anchors` | `proofs/{tenantId}/{cadenceId}.json` | Per-tenant proof slice (chain-head leaves + Merkle path)                            | Object Lock retention; shorter per-object override applied by the anchor Lambda (U8b) |
+| `thinkwork-{stage}-compliance-exports` | `{tenantId}/{jobId}.{csv\|ndjson}`   | Ephemeral export artifact (operator + cross-tenant runs use `multi-tenant/` prefix) | 7-day lifecycle expiration; **NOT** Object Lock                                       |
 
 Anchor bucket Terraform: [`terraform/modules/data/compliance-audit-bucket/`](https://github.com/thinkwork-ai/thinkwork/tree/main/terraform/modules/data/compliance-audit-bucket) — see the module README for the GOVERNANCE→COMPLIANCE cutover playbook.
 
@@ -149,17 +149,17 @@ Master plan reference: R6 in [`docs/plans/2026-05-06-011-feat-compliance-audit-e
 
 ## Where the wiring lives
 
-| Concern | Path |
-|---------|------|
-| Schema | [`packages/database-pg/drizzle/0069_compliance_schema.sql`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/drizzle/0069_compliance_schema.sql) + [`src/schema/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/src/schema/compliance.ts) |
-| Aurora roles | [`0070_compliance_aurora_roles.sql`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/drizzle/0070_compliance_aurora_roles.sql) + [`scripts/bootstrap-compliance-roles.sh`](https://github.com/thinkwork-ai/thinkwork/blob/main/scripts/bootstrap-compliance-roles.sh) |
-| Emit helper + redaction | [`packages/api/src/lib/compliance/emit.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/emit.ts) + [`redaction.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/redaction.ts) |
-| Outbox drainer Lambda | [`packages/lambda/compliance-outbox-drainer.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-outbox-drainer.ts) |
-| Strands runtime emit | [`packages/agentcore-strands/agent-container/`](https://github.com/thinkwork-ai/thinkwork/tree/main/packages/agentcore-strands/agent-container) (`compliance_client.py`) + [`packages/api/src/handlers/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/handlers/compliance.ts) |
-| Anchor Lambda | [`packages/lambda/compliance-anchor.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-anchor.ts) |
-| Anchor bucket Terraform | [`terraform/modules/data/compliance-audit-bucket/`](https://github.com/thinkwork-ai/thinkwork/tree/main/terraform/modules/data/compliance-audit-bucket) |
-| Read API | [`packages/api/src/graphql/resolvers/compliance/`](https://github.com/thinkwork-ai/thinkwork/tree/main/packages/api/src/graphql/resolvers/compliance) |
-| Admin SPA | [`apps/admin/src/routes/_authed/_tenant/compliance/`](https://github.com/thinkwork-ai/thinkwork/tree/main/apps/admin/src/routes/_authed/_tenant/compliance) + [`components/compliance/`](https://github.com/thinkwork-ai/thinkwork/tree/main/apps/admin/src/components/compliance) |
-| Export runner | [`packages/lambda/compliance-export-runner.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-export-runner.ts) |
-| Exports bucket Terraform | [`terraform/modules/data/compliance-exports-bucket/`](https://github.com/thinkwork-ai/thinkwork/tree/main/terraform/modules/data/compliance-exports-bucket) |
-| Verifier CLI | [`packages/audit-verifier/`](https://github.com/thinkwork-ai/thinkwork/tree/main/packages/audit-verifier) |
+| Concern                  | Path                                                                                                                                                                                                                                                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema                   | [`packages/database-pg/drizzle/0069_compliance_schema.sql`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/drizzle/0069_compliance_schema.sql) + [`src/schema/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/src/schema/compliance.ts) |
+| Aurora roles             | [`0070_compliance_aurora_roles.sql`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/database-pg/drizzle/0070_compliance_aurora_roles.sql) + [`scripts/bootstrap-compliance-roles.sh`](https://github.com/thinkwork-ai/thinkwork/blob/main/scripts/bootstrap-compliance-roles.sh)             |
+| Emit helper + redaction  | [`packages/api/src/lib/compliance/emit.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/emit.ts) + [`redaction.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/redaction.ts)                                              |
+| Outbox drainer Lambda    | [`packages/lambda/compliance-outbox-drainer.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-outbox-drainer.ts)                                                                                                                                                         |
+| Runtime REST emit        | AgentCore runtime callers + [`packages/api/src/handlers/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/handlers/compliance.ts)                                                                                                                                       |
+| Anchor Lambda            | [`packages/lambda/compliance-anchor.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-anchor.ts)                                                                                                                                                                         |
+| Anchor bucket Terraform  | [`terraform/modules/data/compliance-audit-bucket/`](https://github.com/thinkwork-ai/thinkwork/tree/main/terraform/modules/data/compliance-audit-bucket)                                                                                                                                                    |
+| Read API                 | [`packages/api/src/graphql/resolvers/compliance/`](https://github.com/thinkwork-ai/thinkwork/tree/main/packages/api/src/graphql/resolvers/compliance)                                                                                                                                                      |
+| Admin SPA                | [`apps/admin/src/routes/_authed/_tenant/compliance/`](https://github.com/thinkwork-ai/thinkwork/tree/main/apps/admin/src/routes/_authed/_tenant/compliance) + [`components/compliance/`](https://github.com/thinkwork-ai/thinkwork/tree/main/apps/admin/src/components/compliance)                         |
+| Export runner            | [`packages/lambda/compliance-export-runner.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/compliance-export-runner.ts)                                                                                                                                                           |
+| Exports bucket Terraform | [`terraform/modules/data/compliance-exports-bucket/`](https://github.com/thinkwork-ai/thinkwork/tree/main/terraform/modules/data/compliance-exports-bucket)                                                                                                                                                |
+| Verifier CLI             | [`packages/audit-verifier/`](https://github.com/thinkwork-ai/thinkwork/tree/main/packages/audit-verifier)                                                                                                                                                                                                  |

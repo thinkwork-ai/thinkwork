@@ -34,17 +34,17 @@ This is how template-backed authoring flows stay reusable. It is separate from S
 
 The list is a searchable table showing every Agent Template in the tenant.
 
-| Column      | Notes                                                                            |
-| ----------- | -------------------------------------------------------------------------------- |
-| Name        | Display name                                                                     |
-| Description | Short summary                                                                    |
-| Category    | Author-chosen category tag                                                       |
-| Runtime     | Default managed runtime for agents created from the template (`Strands` or `Pi`) |
-| Model       | The default model this template uses (Claude Haiku, Sonnet, Nova, etc.)          |
-| Source      | Where the template came from (built-in, tenant-created, imported)                |
-| Skill count | How many skills are attached                                                     |
-| Published   | Badge showing whether the template is publishable to child agents                |
-| Action      | Supported legacy or authoring actions                                            |
+| Column      | Notes                                                                   |
+| ----------- | ----------------------------------------------------------------------- |
+| Name        | Display name                                                            |
+| Description | Short summary                                                           |
+| Category    | Author-chosen category tag                                              |
+| Runtime     | Default managed runtime for agents created from the template (`Pi`)     |
+| Model       | The default model this template uses (Claude Haiku, Sonnet, Nova, etc.) |
+| Source      | Where the template came from (built-in, tenant-created, imported)       |
+| Skill count | How many skills are attached                                            |
+| Published   | Badge showing whether the template is publishable to child agents       |
+| Action      | Supported legacy or authoring actions                                   |
 
 The backing query is `AgentTemplatesListQuery`. Where an Agent Template still exposes a create-agent action, treat it as legacy or authoring infrastructure rather than the primary path for new managed-agent specialization.
 
@@ -62,7 +62,7 @@ The detail page has three tabs:
 ### Configuration tab
 
 - **Identity** — name, slug, description, category, publish toggle
-- **Runtime selector** — default managed runtime for new agents created from this template: Strands or Pi
+- **Runtime selector** — default managed runtime for new agents created from this template: Pi
 - **Model select** — dropdown backed by the tenant's configured model catalog
 - **System prompt editor** — the prompt inherited by agents created from the template
 - **Code Sandbox card** — opt this template into `execute_code` and pick a network mode
@@ -130,8 +130,7 @@ The toggle persists to the template's `sendEmail` GraphQL field / `send_email` d
 
 The Configuration tab includes the template's runtime selector:
 
-- **Strands** — the stable default managed runtime.
-- **Pi** — the parallel managed runtime substrate for Pi-backed canaries and agents.
+- **Pi** — the active managed runtime substrate for agents.
 
 The template runtime is retained for template-backed flows. It is not the primary user-facing control for normal Space operation. See [Runtime Configuration](/concepts/agents/runtime-selection/) for tenant-agent defaults and Space overrides.
 

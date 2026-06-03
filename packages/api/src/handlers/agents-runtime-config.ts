@@ -1,6 +1,6 @@
 /**
- * agents-runtime-config — service-auth REST endpoint the Strands
- * container calls during `kind=run_skill` dispatch to fetch the agent's
+ * agents-runtime-config — service-auth REST endpoint the AgentCore runtime
+ * calls during skill dispatch to fetch the agent's
  * runtime config (template, skills, MCP, KBs, guardrail, etc.).
  *
  * GET /api/agents/runtime-config?tenantId=<uuid>&agentId=<uuid>

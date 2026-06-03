@@ -10,7 +10,7 @@
  *     }
  *     → 201 { id, created_at }
  *
- * Auth rationale: the Strands container calls this from its own tenant's
+ * Auth rationale: the runtime calls this from its own tenant's
  * AgentCore runtime at session-start. There is no tenant OAuth user on
  * the call (runtime → API path), so we use the shared service secret
  * — same pattern as mcp-admin-keys / sandbox-quota-check. Tenant
@@ -20,8 +20,8 @@
  * No reads. No list. Admin UI will read via GraphQL (part 3 of U15); the
  * write endpoint stays narrow so it's trivially auditable.
  *
- * Inert ship: this PR lands the handler + terraform routes. The Python
- * capability_manifest.py that POSTs here ships in U15 part 2.
+ * Inert ship: this PR lands the handler + terraform routes. The runtime
+ * capability manifest client that POSTs here ships in U15 part 2.
  */
 
 import type {

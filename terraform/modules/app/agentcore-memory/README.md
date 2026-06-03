@@ -1,13 +1,13 @@
 # AgentCore Memory — App Module
 
 Provisions an AWS Bedrock AgentCore Memory resource with the four strategies
-the thinkwork Strands agent container uses for automatic retention:
+the ThinkWork AgentCore runtime uses for automatic retention:
 
-| Strategy    | Namespace template           | Purpose                                  |
-|-------------|------------------------------|------------------------------------------|
-| semantic    | `assistant_{actorId}`        | Cross-thread facts about the user        |
-| preferences | `preferences_{actorId}`      | User-stated preferences                  |
-| summaries   | `session_{sessionId}`        | Per-thread rolling summaries             |
+| Strategy    | Namespace template               | Purpose                              |
+| ----------- | -------------------------------- | ------------------------------------ |
+| semantic    | `assistant_{actorId}`            | Cross-thread facts about the user    |
+| preferences | `preferences_{actorId}`          | User-stated preferences              |
+| summaries   | `session_{sessionId}`            | Per-thread rolling summaries         |
 | episodes    | `episodes_{actorId}/{sessionId}` | Episodic memory of past interactions |
 
 Automatic retention is wired in the agent container: every turn emits a

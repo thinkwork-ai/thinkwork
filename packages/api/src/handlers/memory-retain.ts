@@ -1,6 +1,6 @@
 /**
  * Internal Lambda handler — receives memory retain requests from the runtime
- * containers (Strands + Pi) and routes them through the normalized memory
+ * and routes them through the normalized memory
  * layer.
  *
  * For per-thread retain (event.threadId present + adapter.retainConversation
@@ -8,11 +8,11 @@
  * table — filtered by BOTH tenant_id AND thread_id for cross-tenant safety —
  * and merges with the runtime-supplied event.transcript using a
  * longest-suffix-prefix overlap match. This handles both transcript shapes
- * the runtimes send: small (latest pair only) and large (full history +
+ * the runtime sends: small (latest pair only) and large (full history +
  * latest pair) without producing duplicate-bloated documents.
  *
  * Cutover compatibility accepts the legacy agent-scoped messages payload while
- * containers roll forward.
+ * runtime callers roll forward.
  */
 
 import { and, asc, eq } from "drizzle-orm";

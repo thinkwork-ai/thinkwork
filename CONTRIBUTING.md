@@ -45,7 +45,7 @@ scripts/     # build, release, migration scripts
 ## Development environment
 
 - **Node** ≥ 20, **pnpm** ≥ 9 — `pnpm install` from the repo root
-- **Python** ≥ 3.11 with **uv** for the Strands runtime under `packages/agentcore-strands/`
+- **Python** ≥ 3.11 with **uv** for remaining Python helper tests; the active AgentCore runtime is TypeScript under `packages/agentcore-pi`
 - **Terraform** ≥ 1.5 (or **OpenTofu** ≥ 1.6) for the IaC layer
 - **An AWS account** for end-to-end testing — there is no local-only mode
 

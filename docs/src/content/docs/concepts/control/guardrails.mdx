@@ -5,7 +5,7 @@ description: How ThinkWork applies Bedrock Guardrails to managed agents — wher
 
 import { Aside } from "@astrojs/starlight/components";
 
-Guardrails are the harness's safety boundary around model invocation — the load-bearing implementation of the **Security** operating guarantee at the model tier. They run _inside_ the Strands invocation path every time an agent calls Bedrock, and they enforce rules that shouldn't depend on a prompt being written correctly: disallowed topics, content filters, PII handling, grounding checks. Inside-the-call enforcement is what makes the boundary non-bypassable — a skill pack that tries to call Bedrock directly still gets the guardrail applied, because the runtime passes the guardrail id through every invocation configured for the template.
+Guardrails are the harness's safety boundary around model invocation — the load-bearing implementation of the **Security** operating guarantee at the model tier. They run _inside_ the AgentCore invocation path every time an agent calls Bedrock, and they enforce rules that shouldn't depend on a prompt being written correctly: disallowed topics, content filters, PII handling, grounding checks. Inside-the-call enforcement is what makes the boundary non-bypassable — a skill pack that tries to call Bedrock directly still gets the guardrail applied, because the runtime passes the guardrail id through every invocation configured for the template.
 
 ThinkWork uses Amazon Bedrock Guardrails as the primary enforcement layer for managed agents, because it plugs into the same Bedrock Converse API path the agent is already using. There's no separate policy engine to run, no extra service to keep in sync.
 
@@ -45,7 +45,7 @@ When a guardrail blocks or modifies a response, the event is visible in three pl
 2. **Turn trace.** Expanding the turn's trace panel shows the full guardrail evaluator output: input and output scores, triggered categories, and latency.
 3. **Audit log.** The NDJSON audit record for that invocation includes the guardrail evaluator's full decision — useful for compliance reconstruction three months later.
 
-From the agent's side, a blocked response is handled like any other non-success. Strands surfaces the guardrail intervention to the agent loop, and AgentCore's standard fallback (a canned "I can't help with that" response, configurable per template) is what the user sees.
+From the agent's side, a blocked response is handled like any other non-success. The runtime surfaces the guardrail intervention to the agent loop, and AgentCore's standard fallback (a canned "I can't help with that" response, configurable per template) is what the user sees.
 
 ## Authoring a guardrail
 

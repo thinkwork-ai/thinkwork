@@ -1,5 +1,5 @@
 /**
- * sandbox-invocation-log — narrow REST endpoint the Strands sandbox tool
+ * sandbox-invocation-log — narrow REST endpoint the runtime sandbox tool
  * POSTs to after each execute_code call finishes (plan Unit 11).
  *
  * POST /api/sandbox/invocations

@@ -1,21 +1,21 @@
 ---
 title: On-call notes
-description: "Alarm-to-playbook quick reference plus procedures for anchor/exports DLQs, watchdog heartbeat missing, anchor gap, drift gate, audit_outbox runaway, and Strands env shadowing."
+description: "Alarm-to-playbook quick reference plus procedures for anchor/exports DLQs, watchdog heartbeat missing, anchor gap, drift gate, audit_outbox runaway, and runtime REST emit failures."
 ---
 
 When a compliance alarm fires, find it in the table below and follow the linked playbook. For background read [overview](/compliance/overview/). For operator-side procedures (export request flow, GOVERNANCE→COMPLIANCE flip, password rotation) read [operator-runbook](/compliance/operator-runbook/).
 
 ## Alarm → playbook
 
-| Alarm                                                                       | Playbook                                                                    |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `thinkwork-{stage}-compliance-anchor-dlq-depth` (or U8a/U8b equivalent)     | [Anchor DLQ depth non-zero](#anchor-dlq-depth-non-zero)                     |
-| `thinkwork-{stage}-compliance-exports-dlq-depth`                            | [Exports DLQ depth non-zero](#exports-dlq-depth-non-zero)                   |
-| `thinkwork-{stage}-compliance-anchor-watchdog-heartbeat-missing`            | [Anchor watchdog heartbeat missing](#anchor-watchdog-heartbeat-missing)     |
-| `thinkwork-{stage}-compliance-anchor-gap`                                   | [Anchor gap too large](#anchor-gap-too-large)                               |
-| (CI gate, not CloudWatch) deploy fails on drift gate                        | [Drift gate fails on deploy](#drift-gate-fails-on-deploy)                   |
-| (No alarm; surface via DB monitoring) `audit_outbox` growing unbounded      | [audit_outbox runaway](#audit_outbox-runaway)                               |
-| (No alarm; surface via Strands runtime errors) audit emits silently failing | [Strands runtime emit silent failure](#strands-runtime-emit-silent-failure) |
+| Alarm                                                                   | Playbook                                                                |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `thinkwork-{stage}-compliance-anchor-dlq-depth` (or U8a/U8b equivalent) | [Anchor DLQ depth non-zero](#anchor-dlq-depth-non-zero)                 |
+| `thinkwork-{stage}-compliance-exports-dlq-depth`                        | [Exports DLQ depth non-zero](#exports-dlq-depth-non-zero)               |
+| `thinkwork-{stage}-compliance-anchor-watchdog-heartbeat-missing`        | [Anchor watchdog heartbeat missing](#anchor-watchdog-heartbeat-missing) |
+| `thinkwork-{stage}-compliance-anchor-gap`                               | [Anchor gap too large](#anchor-gap-too-large)                           |
+| (CI gate, not CloudWatch) deploy fails on drift gate                    | [Drift gate fails on deploy](#drift-gate-fails-on-deploy)               |
+| (No alarm; surface via DB monitoring) `audit_outbox` growing unbounded  | [audit_outbox runaway](#audit_outbox-runaway)                           |
+| (No alarm; surface via runtime errors) audit emits silently failing     | [Runtime REST emit silent failure](#runtime-rest-emit-silent-failure)   |
 
 ---
 
@@ -179,21 +179,21 @@ Drainer Lambda: [`packages/lambda/compliance-outbox-drainer.ts`](https://github.
 
 ---
 
-## Strands runtime emit silent failure
+## Runtime REST emit silent failure
 
-**Symptom:** Audit events from Strands runtime (folder-specialist operations, tool invocations from Python containers) stop appearing in `audit_events` while Yoga-emitted events continue normally. Strands logs show no obvious errors.
+**Symptom:** Audit events emitted through `/api/compliance/events` stop appearing in `audit_events` while Yoga-emitted events continue normally. Runtime logs show no obvious errors.
 
-**Likely cause:** Env-var shadowing on the Strands container. The `ComplianceClient` reads `THINKWORK_API_URL` + `API_AUTH_SECRET` once at module load; if Lambda's warm-container update path re-injects these env vars mid-process, a re-read mid-handler can pick up stale values that don't match the live API endpoint.
+**Likely cause:** Env-var drift or an API secret mismatch on the runtime caller. The runtime should snapshot `THINKWORK_API_URL` + `API_AUTH_SECRET` at invocation entry; a stale value will fail bearer validation at the REST handler.
 
 This was observed on AgentCore deploys mid-2026 — see [project_agentcore_deploy_race_env](`memory/project_agentcore_deploy_race_env.md`).
 
 **Resolution:**
 
-1. Check `compliance-events` REST handler logs for failed bearer validations. If you see auth failures from Strands, the `API_AUTH_SECRET` env var on the Strands container is stale.
-2. Force a warm pool flush on the Strands AgentCore Endpoint. The DEFAULT endpoint does not expose a flush API ([project_agentcore_default_endpoint_no_flush](`memory/project_agentcore_default_endpoint_no_flush.md`)) — the 15-minute reconciler is the only flush mechanism.
-3. Verify the Python `ComplianceClient` snapshots env at coroutine entry, not on each call. The fix landed in U6 but is fragile to refactor — if a contributor inadvertently moved the env read into a per-request function, audit emits silently break on the next AgentCore deploy.
+1. Check `compliance-events` REST handler logs for failed bearer validations. If you see auth failures from runtime callers, compare the deployed `API_AUTH_SECRET` and runtime env snapshot.
+2. Confirm the AgentCore endpoint has rolled to the expected runtime version. The DEFAULT endpoint does not expose a flush API ([project_agentcore_default_endpoint_no_flush](`memory/project_agentcore_default_endpoint_no_flush.md`)) — the reconciler is the only flush mechanism.
+3. Verify runtime callers snapshot env at invocation entry, not on each REST call. Re-reading mutable env mid-handler can silently break audit emits after an AgentCore deploy.
 
-Cross-runtime emit reference: [developer-guide.md → Cross-runtime emit path](/compliance/developer-guide/#cross-runtime-emit-path-strands-python).
+Runtime emit reference: [developer-guide.md → Runtime REST emit path](/compliance/developer-guide/#runtime-rest-emit-path).
 
 ---
 

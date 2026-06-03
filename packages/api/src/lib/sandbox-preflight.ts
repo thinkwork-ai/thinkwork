@@ -1,5 +1,5 @@
 /**
- * sandbox-preflight — shared helper every Strands-runtime caller (chat-
+ * sandbox-preflight — shared helper every runtime caller (chat-
  * agent-invoke, wakeup-processor, composition dispatch, self-serve tools)
  * uses to decide whether the sandbox tool should be registered for this
  * invocation (plan Unit 9).
@@ -11,8 +11,8 @@
  *   - "provisioning"  — sandbox_enabled=true but the interpreter id for
  *                       the requested environment is null
  *   - "ready"         — register execute_code; result carries the
- *                       interpreter_id + environment the Strands
- *                       container uses to start the session
+ *                       interpreter_id + environment the runtime
+ *                       uses to start the session
  *
  * Historical note: v1 also had a "missing-connection" outcome for the
  * now-retired OAuth preamble path. The sandbox no longer injects tokens
@@ -84,9 +84,9 @@ export type SandboxPreflightResult =
 
 /**
  * Run the pre-flight check. The caller threads the result fields into
- * the Strands invocation payload (sandbox_interpreter_id +
- * sandbox_environment). server.py + invocation_env.py consume them and
- * start the per-turn session inside the container.
+ * the runtime invocation payload (sandbox_interpreter_id +
+ * sandbox_environment). The runtime consumes them and starts the per-turn
+ * session inside the container.
  */
 export async function checkSandboxPreflight(
   input: SandboxPreflightInput,
@@ -134,9 +134,8 @@ export async function checkSandboxPreflight(
 }
 
 /**
- * Thread a ready pre-flight result into the Strands invocation payload.
- * The container's invocation_env sets SANDBOX_INTERPRETER_ID +
- * SANDBOX_ENVIRONMENT on os.environ; server.py reads them and starts
+ * Thread a ready pre-flight result into the runtime invocation payload.
+ * The runtime uses SANDBOX_INTERPRETER_ID + SANDBOX_ENVIRONMENT to start
  * the per-turn session.
  */
 export function applySandboxPayloadFields(

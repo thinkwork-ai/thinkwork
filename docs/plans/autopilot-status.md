@@ -11,9 +11,9 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-02-003-refactor-remove-strands-runtime-plan.md`.
 - Target branch: `main`.
-- Current unit: U5 Delete Strands container source and retire Strands-only scripts.
-- Current branch: `codex/remove-strands-u5`.
-- Current worktree: `.Codex/worktrees/remove-strands-u5`.
+- Current unit: U6 Clean up docs, runbooks, AGENTS guidance, and product language.
+- Current branch: `codex/remove-strands-u6`.
+- Current worktree: `.Codex/worktrees/remove-strands-u6`.
 
 | Unit                                                               | Branch                    | PR                                                           | State   | Notes                                                                                          |
 | ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------- |
@@ -21,8 +21,8 @@ status: in_progress
 | U2 Make API, GraphQL, and Database runtime defaults Pi-only        | `codex/remove-strands-u2` | [#2006](https://github.com/thinkwork-ai/thinkwork/pull/2006) | Merged  | Squash merged as `251e4a05`; stored/public runtime defaults are Pi-only.                       |
 | U3 Make deploy and release workflows Pi-only                       | `codex/remove-strands-u3` | [#2007](https://github.com/thinkwork-ai/thinkwork/pull/2007) | Merged  | Squash merged as `44054999`; deploy/release workflows and helper scripts are Pi-only.          |
 | U4 Move shared Terraform resources out of the Strands module       | `codex/remove-strands-u4` | [#2008](https://github.com/thinkwork-ai/thinkwork/pull/2008) | Merged  | Squash merged as `359f93d5`; shared ECR/DLQ moved to `agentcore-platform`.                     |
-| U5 Delete Strands container source and retire Strands-only scripts | `codex/remove-strands-u5` | [#2009](https://github.com/thinkwork-ai/thinkwork/pull/2009) | Open    | Legacy package deleted; sandbox scrubber moved; Pi packages and active source scans passed.    |
-| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | Pending                   | Pending                                                      | Pending | Not started.                                                                                   |
+| U5 Delete Strands container source and retire Strands-only scripts | `codex/remove-strands-u5` | [#2009](https://github.com/thinkwork-ai/thinkwork/pull/2009) | Merged  | Squash merged as `c9372cb5`; legacy package deleted and active source scans passed.            |
+| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | `codex/remove-strands-u6` | Pending                                                      | Open    | Active docs and runbooks now describe the Pi-only AgentCore runtime; local checks passed.      |
 | U7 End-to-end verification and deployment proof                    | Pending                   | Pending                                                      | Pending | Not started.                                                                                   |
 
 ### Progress Log
@@ -134,6 +134,25 @@ status: in_progress
   known optional `canvas` native-build warning on Node 25.
 - Opened U5 PR
   [#2009](https://github.com/thinkwork-ai/thinkwork/pull/2009).
+- Squash merged U5 PR
+  [#2009](https://github.com/thinkwork-ai/thinkwork/pull/2009) as
+  `c9372cb5`; removed the U5 worktree/local branch and synced `main` from
+  `origin/main`.
+- Created isolated U6 worktree `.Codex/worktrees/remove-strands-u6` on branch
+  `codex/remove-strands-u6`.
+- U6 updated active repo guidance, docs-site pages, runbooks, specs, and
+  AgentCore module documentation so current operational language points at the
+  Pi-only Bedrock AgentCore runtime. Historical planning/solution docs retain
+  old runtime references as archival records.
+- U6 verification passed:
+  `pnpm --filter @thinkwork/docs build`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm dlx prettier --check <changed supported U6 files>`;
+  `terraform -chdir=terraform/examples/greenfield fmt -recursive`;
+  `git diff --check`; and active docs/runbooks/specs scans for
+  `Strands`, `strands`, `agentcore-strands`, and `runtime-id-strands`.
+  `pnpm install --frozen-lockfile` completed with the known optional `canvas`
+  native-build warning on Node 25.
 
 ### U1 Strands Reference Classification
 

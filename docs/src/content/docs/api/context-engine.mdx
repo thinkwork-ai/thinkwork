@@ -60,7 +60,7 @@ MCP server approval is necessary but not sufficient. A tool must also have a row
 
 ## Runtime Tools
 
-Strands and Pi register `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping source routing and result normalization aligned with mobile and external MCP callers.
+Pi registers `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping source routing and result normalization aligned with mobile and external MCP callers.
 
 When Memory is enabled for an agent template, runtimes may also expose specialized split tools such as `query_memory_context`, `query_wiki_context`, and `query_brain_context`. These are still Context Engine tools at the API layer: Hindsight memory, compiled pages, and ontology-shaped Brain remain providers behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
 

@@ -1,5 +1,8 @@
 # Finance pilot — operator runbook
 
+> Historical note: this pilot runbook predates the Pi-only runtime cutover.
+> Use it as a demo-flow reference, not as current runtime deployment guidance.
+
 Operator-facing guide for installing the finance-analysis skills into a prospect tenant and demoing the upload-and-analyze flow.
 
 This runbook is intentionally short. The pilot is a focused demo, not a multi-tenant rollout. If you find yourself reaching for a deeper procedure, escalate to engineering rather than improvising.
@@ -13,12 +16,12 @@ This runbook is intentionally short. The pilot is a focused demo, not a multi-te
    - `#1235` U6 compliance event types
    - `#1236` U5 finance skills (skill catalog)
    - `#1237` U2 attachment upload endpoints
-   - `#1238` U3 Strands `/tmp` staging
+   - `#1238` U3 runtime `/tmp` staging
    - `#1239` U1 Computer composer wiring
    - `#1240` U4 `skill.activated` audit emit (inert; cutover separate)
    - `#1241` U9-remainder admin upload + download endpoint
 
-2. **The Strands AgentCore image is current.** The U3 + U4 changes ship in the Python container; the runtime endpoint flushes via the 15-min reconciler post-merge. Confirm with:
+2. **The AgentCore Pi image is current.** Runtime changes ship in the Pi container; the runtime endpoint flushes via the reconciler post-merge. Confirm with:
 
    ```bash
    aws lambda get-function \
@@ -84,7 +87,7 @@ aws lambda get-function \
 git rev-parse origin/main
 ```
 
-If they diverge, the Strands container hasn't picked up the U3/U4 changes yet. Wait 15 minutes for the reconciler, or trigger the endpoint update manually (`bash scripts/update-agentcore-runtime-image.sh`).
+If they diverge, the runtime hasn't picked up the expected changes yet. Wait for the reconciler, or trigger the endpoint update manually (`bash scripts/update-agentcore-runtime-image.sh --runtime pi`).
 
 ---
 
@@ -97,7 +100,7 @@ If they diverge, the Strands container hasn't picked up the U3/U4 changes yet. W
 | Upload chip stays in "uploading…" state                                      | `WORKSPACE_BUCKET` env not set on the API Lambdas                                   | Check Terraform apply succeeded                                                                                      |
 | `415 macro_enabled` on upload                                                | The workbook contains `xl/vbaProject.bin`                                           | Save the workbook as a plain `.xlsx` without macros                                                                  |
 | `415 magic_byte_mismatch` on upload                                          | File extension doesn't match content (e.g., `.xlsx` is actually a renamed `.exe`)   | Use the actual file the prospect provided                                                                            |
-| Agent response doesn't cite file values                                      | Strands container hasn't picked up U3                                               | Confirm runtime image SHA per the pre-pilot gate                                                                     |
+| Agent response doesn't cite file values                                      | Runtime image hasn't picked up the file-staging change                              | Confirm runtime image SHA per the pre-pilot gate                                                                     |
 | Compliance log shows `attachment.received` but no `skill.activated`          | The Skill meta-tool cutover hasn't landed yet (U4 is inert until the cutover PR)    | Expected for now — `skill.activated` will start firing once the cutover ships                                        |
 | Drift gate fails post-merge with `MISSING audit_outbox_event_type_prefix_v2` | The `0088_compliance_event_types_finance_pilot.sql` migration wasn't applied to dev | Apply manually: `psql "$DATABASE_URL" -f packages/database-pg/drizzle/0088_compliance_event_types_finance_pilot.sql` |
 
