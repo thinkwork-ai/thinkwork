@@ -42,7 +42,6 @@ import { Route as AuthedTenantEvaluationsIndexRouteImport } from "./routes/_auth
 import { Route as AuthedTenantComplianceIndexRouteImport } from "./routes/_authed/_tenant/compliance/index";
 import { Route as AuthedTenantAutomationsIndexRouteImport } from "./routes/_authed/_tenant/automations/index";
 import { Route as AuthedTenantArtifactsIndexRouteImport } from "./routes/_authed/_tenant/artifacts/index";
-import { Route as AuthedTenantAppletsIndexRouteImport } from "./routes/_authed/_tenant/applets/index";
 import { Route as AuthedTenantAnalyticsIndexRouteImport } from "./routes/_authed/_tenant/analytics/index";
 import { Route as AuthedTenantAgentIndexRouteImport } from "./routes/_authed/_tenant/agent/index";
 import { Route as AuthedTenantWebhooksWebhookIdRouteImport } from "./routes/_authed/_tenant/webhooks/$webhookId";
@@ -60,7 +59,6 @@ import { Route as AuthedTenantKnowledgeBasesKbIdRouteImport } from "./routes/_au
 import { Route as AuthedTenantInboxInboxItemIdRouteImport } from "./routes/_authed/_tenant/inbox/$inboxItemId";
 import { Route as AuthedTenantExtensionsExtensionIdRouteImport } from "./routes/_authed/_tenant/extensions/$extensionId";
 import { Route as AuthedTenantEvaluationsRunIdRouteImport } from "./routes/_authed/_tenant/evaluations/$runId";
-import { Route as AuthedTenantAppletsAppIdRouteImport } from "./routes/_authed/_tenant/applets/$appId";
 import { Route as AuthedTenantAnalyticsPerformanceRouteImport } from "./routes/_authed/_tenant/analytics/performance";
 import { Route as AuthedTenantAnalyticsCostRouteImport } from "./routes/_authed/_tenant/analytics/cost";
 import { Route as AuthedTenantAnalyticsActivityRouteImport } from "./routes/_authed/_tenant/analytics/activity";
@@ -267,12 +265,6 @@ const AuthedTenantArtifactsIndexRoute =
     path: "/artifacts/",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
-const AuthedTenantAppletsIndexRoute =
-  AuthedTenantAppletsIndexRouteImport.update({
-    id: "/applets/",
-    path: "/applets/",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
 const AuthedTenantAnalyticsIndexRoute =
   AuthedTenantAnalyticsIndexRouteImport.update({
     id: "/",
@@ -371,12 +363,6 @@ const AuthedTenantEvaluationsRunIdRoute =
   AuthedTenantEvaluationsRunIdRouteImport.update({
     id: "/evaluations/$runId",
     path: "/evaluations/$runId",
-    getParentRoute: () => AuthedTenantRoute,
-  } as any);
-const AuthedTenantAppletsAppIdRoute =
-  AuthedTenantAppletsAppIdRouteImport.update({
-    id: "/applets/$appId",
-    path: "/applets/$appId",
     getParentRoute: () => AuthedTenantRoute,
   } as any);
 const AuthedTenantAnalyticsPerformanceRoute =
@@ -581,7 +567,6 @@ export interface FileRoutesByFullPath {
   "/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
   "/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
   "/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
-  "/applets/$appId": typeof AuthedTenantAppletsAppIdRoute;
   "/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
   "/extensions/$extensionId": typeof AuthedTenantExtensionsExtensionIdRoute;
   "/inbox/$inboxItemId": typeof AuthedTenantInboxInboxItemIdRoute;
@@ -599,7 +584,6 @@ export interface FileRoutesByFullPath {
   "/webhooks/$webhookId": typeof AuthedTenantWebhooksWebhookIdRoute;
   "/agent/": typeof AuthedTenantAgentIndexRoute;
   "/analytics/": typeof AuthedTenantAnalyticsIndexRoute;
-  "/applets/": typeof AuthedTenantAppletsIndexRoute;
   "/artifacts/": typeof AuthedTenantArtifactsIndexRoute;
   "/automations/": typeof AuthedTenantAutomationsIndexRoute;
   "/compliance/": typeof AuthedTenantComplianceIndexRoute;
@@ -659,7 +643,6 @@ export interface FileRoutesByTo {
   "/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
   "/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
   "/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
-  "/applets/$appId": typeof AuthedTenantAppletsAppIdRoute;
   "/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
   "/extensions/$extensionId": typeof AuthedTenantExtensionsExtensionIdRoute;
   "/inbox/$inboxItemId": typeof AuthedTenantInboxInboxItemIdRoute;
@@ -677,7 +660,6 @@ export interface FileRoutesByTo {
   "/webhooks/$webhookId": typeof AuthedTenantWebhooksWebhookIdRoute;
   "/agent": typeof AuthedTenantAgentIndexRoute;
   "/analytics": typeof AuthedTenantAnalyticsIndexRoute;
-  "/applets": typeof AuthedTenantAppletsIndexRoute;
   "/artifacts": typeof AuthedTenantArtifactsIndexRoute;
   "/automations": typeof AuthedTenantAutomationsIndexRoute;
   "/compliance": typeof AuthedTenantComplianceIndexRoute;
@@ -744,7 +726,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/analytics/activity": typeof AuthedTenantAnalyticsActivityRoute;
   "/_authed/_tenant/analytics/cost": typeof AuthedTenantAnalyticsCostRoute;
   "/_authed/_tenant/analytics/performance": typeof AuthedTenantAnalyticsPerformanceRoute;
-  "/_authed/_tenant/applets/$appId": typeof AuthedTenantAppletsAppIdRoute;
   "/_authed/_tenant/evaluations/$runId": typeof AuthedTenantEvaluationsRunIdRoute;
   "/_authed/_tenant/extensions/$extensionId": typeof AuthedTenantExtensionsExtensionIdRoute;
   "/_authed/_tenant/inbox/$inboxItemId": typeof AuthedTenantInboxInboxItemIdRoute;
@@ -762,7 +743,6 @@ export interface FileRoutesById {
   "/_authed/_tenant/webhooks/$webhookId": typeof AuthedTenantWebhooksWebhookIdRoute;
   "/_authed/_tenant/agent/": typeof AuthedTenantAgentIndexRoute;
   "/_authed/_tenant/analytics/": typeof AuthedTenantAnalyticsIndexRoute;
-  "/_authed/_tenant/applets/": typeof AuthedTenantAppletsIndexRoute;
   "/_authed/_tenant/artifacts/": typeof AuthedTenantArtifactsIndexRoute;
   "/_authed/_tenant/automations/": typeof AuthedTenantAutomationsIndexRoute;
   "/_authed/_tenant/compliance/": typeof AuthedTenantComplianceIndexRoute;
@@ -828,7 +808,6 @@ export interface FileRouteTypes {
     | "/analytics/activity"
     | "/analytics/cost"
     | "/analytics/performance"
-    | "/applets/$appId"
     | "/evaluations/$runId"
     | "/extensions/$extensionId"
     | "/inbox/$inboxItemId"
@@ -846,7 +825,6 @@ export interface FileRouteTypes {
     | "/webhooks/$webhookId"
     | "/agent/"
     | "/analytics/"
-    | "/applets/"
     | "/artifacts/"
     | "/automations/"
     | "/compliance/"
@@ -906,7 +884,6 @@ export interface FileRouteTypes {
     | "/analytics/activity"
     | "/analytics/cost"
     | "/analytics/performance"
-    | "/applets/$appId"
     | "/evaluations/$runId"
     | "/extensions/$extensionId"
     | "/inbox/$inboxItemId"
@@ -924,7 +901,6 @@ export interface FileRouteTypes {
     | "/webhooks/$webhookId"
     | "/agent"
     | "/analytics"
-    | "/applets"
     | "/artifacts"
     | "/automations"
     | "/compliance"
@@ -990,7 +966,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/analytics/activity"
     | "/_authed/_tenant/analytics/cost"
     | "/_authed/_tenant/analytics/performance"
-    | "/_authed/_tenant/applets/$appId"
     | "/_authed/_tenant/evaluations/$runId"
     | "/_authed/_tenant/extensions/$extensionId"
     | "/_authed/_tenant/inbox/$inboxItemId"
@@ -1008,7 +983,6 @@ export interface FileRouteTypes {
     | "/_authed/_tenant/webhooks/$webhookId"
     | "/_authed/_tenant/agent/"
     | "/_authed/_tenant/analytics/"
-    | "/_authed/_tenant/applets/"
     | "/_authed/_tenant/artifacts/"
     | "/_authed/_tenant/automations/"
     | "/_authed/_tenant/compliance/"
@@ -1293,13 +1267,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedTenantArtifactsIndexRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
-    "/_authed/_tenant/applets/": {
-      id: "/_authed/_tenant/applets/";
-      path: "/applets";
-      fullPath: "/applets/";
-      preLoaderRoute: typeof AuthedTenantAppletsIndexRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
     "/_authed/_tenant/analytics/": {
       id: "/_authed/_tenant/analytics/";
       path: "/";
@@ -1417,13 +1384,6 @@ declare module "@tanstack/react-router" {
       path: "/evaluations/$runId";
       fullPath: "/evaluations/$runId";
       preLoaderRoute: typeof AuthedTenantEvaluationsRunIdRouteImport;
-      parentRoute: typeof AuthedTenantRoute;
-    };
-    "/_authed/_tenant/applets/$appId": {
-      id: "/_authed/_tenant/applets/$appId";
-      path: "/applets/$appId";
-      fullPath: "/applets/$appId";
-      preLoaderRoute: typeof AuthedTenantAppletsAppIdRouteImport;
       parentRoute: typeof AuthedTenantRoute;
     };
     "/_authed/_tenant/analytics/performance": {
@@ -1748,7 +1708,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantKnowledgeRoute: typeof AuthedTenantKnowledgeRouteWithChildren;
   AuthedTenantOntologyRoute: typeof AuthedTenantOntologyRoute;
   AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute;
-  AuthedTenantAppletsAppIdRoute: typeof AuthedTenantAppletsAppIdRoute;
   AuthedTenantEvaluationsRunIdRoute: typeof AuthedTenantEvaluationsRunIdRoute;
   AuthedTenantExtensionsExtensionIdRoute: typeof AuthedTenantExtensionsExtensionIdRoute;
   AuthedTenantInboxInboxItemIdRoute: typeof AuthedTenantInboxInboxItemIdRoute;
@@ -1759,7 +1718,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantThreadsThreadIdRoute: typeof AuthedTenantThreadsThreadIdRoute;
   AuthedTenantUsersUserIdRoute: typeof AuthedTenantUsersUserIdRoute;
   AuthedTenantWebhooksWebhookIdRoute: typeof AuthedTenantWebhooksWebhookIdRoute;
-  AuthedTenantAppletsIndexRoute: typeof AuthedTenantAppletsIndexRoute;
   AuthedTenantArtifactsIndexRoute: typeof AuthedTenantArtifactsIndexRoute;
   AuthedTenantAutomationsIndexRoute: typeof AuthedTenantAutomationsIndexRoute;
   AuthedTenantEvaluationsIndexRoute: typeof AuthedTenantEvaluationsIndexRoute;
@@ -1806,7 +1764,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantKnowledgeRoute: AuthedTenantKnowledgeRouteWithChildren,
   AuthedTenantOntologyRoute: AuthedTenantOntologyRoute,
   AuthedTenantSettingsRoute: AuthedTenantSettingsRoute,
-  AuthedTenantAppletsAppIdRoute: AuthedTenantAppletsAppIdRoute,
   AuthedTenantEvaluationsRunIdRoute: AuthedTenantEvaluationsRunIdRoute,
   AuthedTenantExtensionsExtensionIdRoute:
     AuthedTenantExtensionsExtensionIdRoute,
@@ -1819,7 +1776,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantThreadsThreadIdRoute: AuthedTenantThreadsThreadIdRoute,
   AuthedTenantUsersUserIdRoute: AuthedTenantUsersUserIdRoute,
   AuthedTenantWebhooksWebhookIdRoute: AuthedTenantWebhooksWebhookIdRoute,
-  AuthedTenantAppletsIndexRoute: AuthedTenantAppletsIndexRoute,
   AuthedTenantArtifactsIndexRoute: AuthedTenantArtifactsIndexRoute,
   AuthedTenantAutomationsIndexRoute: AuthedTenantAutomationsIndexRoute,
   AuthedTenantEvaluationsIndexRoute: AuthedTenantEvaluationsIndexRoute,
