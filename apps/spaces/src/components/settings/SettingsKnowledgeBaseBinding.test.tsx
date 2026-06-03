@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mutateMock, bindingData, kbDocs } = vi.hoisted(() => ({
-  mutateMock: vi.fn(() => Promise.resolve({ error: undefined })),
+  mutateMock: vi.fn((_input: unknown) => Promise.resolve({ error: undefined })),
   bindingData: {
     tenantAgent: {
       id: "agent-1",
