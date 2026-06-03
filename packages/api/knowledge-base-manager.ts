@@ -20,7 +20,16 @@ const DB_CLUSTER_ARN = process.env.DATABASE_CLUSTER_ARN || "";
 const DB_NAME = process.env.DATABASE_NAME || "thinkwork";
 
 async function getBedrockKbSecretArn(): Promise<string> {
-  // Look up the full ARN (with random suffix) from Secrets Manager
+  // Bedrock's RDS storage needs a `{username, password}` secret to connect to
+  // Aurora. The Lambda already has DATABASE_SECRET_ARN — the cluster's
+  // credentials secret, a full ARN, in exactly that format, and readable by
+  // both this role and the KB service role. Reuse it rather than maintaining a
+  // separate bedrock-kb secret (which was never provisioned, so the old
+  // name-resolution path silently fell back to a bare name and Bedrock rejected
+  // it as not-an-ARN).
+  const fromEnv = process.env.DATABASE_SECRET_ARN;
+  if (fromEnv) return fromEnv;
+  // Legacy fallback: resolve a dedicated secret by name.
   const stage = process.env.STAGE || "dev";
   const secretName = `thinkwork-${stage}-bedrock-kb-rds-credentials`;
   try {

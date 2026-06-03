@@ -304,7 +304,11 @@ resource "aws_iam_policy" "lambda_bedrock_knowledge_base" {
           "bedrock:ListIngestionJobs",
           "bedrock:Retrieve",
         ]
-        Resource = "arn:aws:bedrock:${var.region}:${var.account_id}:knowledge-base/*"
+        # CreateKnowledgeBase/CreateDataSource have no resource ARN at create
+        # time and don't support resource-level scoping, so a knowledge-base/*
+        # ARN makes the grant not match. Control-plane "*" for this internal
+        # manager Lambda; PassRole below stays scoped to the KB service role.
+        Resource = "*"
       },
       {
         Effect   = "Allow"
