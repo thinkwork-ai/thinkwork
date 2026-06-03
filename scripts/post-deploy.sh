@@ -106,6 +106,10 @@ image_contains_source_sha() {
   git merge-base --is-ancestor "$source_sha" "$image_sha"
 }
 
+is_agentcore_forbidden() {
+  grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$1"
+}
+
 ACTIVE_RUNTIME_ID=$(aws ssm get-parameter \
   --name "/thinkwork/${STAGE}/agentcore/runtime-id-${RUNTIME}" \
   --region "$REGION" \
@@ -116,6 +120,11 @@ if [[ -n "$ACTIVE_RUNTIME_ID" && "$ACTIVE_RUNTIME_ID" != "None" ]]; then
 
   active_detail=$(aws bedrock-agentcore-control get-agent-runtime \
     --agent-runtime-id "$ACTIVE_RUNTIME_ID" --region "$REGION" --output json 2>&1) || {
+    if is_agentcore_forbidden "$active_detail"; then
+      echo "WARN: get-agent-runtime $ACTIVE_RUNTIME_ID is forbidden; skipping AgentCore control-plane drift probe" >&2
+      [[ "$JSON" -eq 1 ]] && printf '{"stage":"%s","region":"%s","drift":0,"permissionSkipped":true,"runtimes":[]}\n' "$STAGE" "$REGION"
+      exit 0
+    fi
     echo "ERROR: get-agent-runtime $ACTIVE_RUNTIME_ID failed:" >&2
     echo "$active_detail" >&2
     exit 2
@@ -155,6 +164,10 @@ while read -r rt_id rt_name rt_status; do
   # Each runtime's top-level status + current version
   rt_detail=$(aws bedrock-agentcore-control get-agent-runtime \
     --agent-runtime-id "$rt_id" --region "$REGION" --output json 2>&1) || {
+    if is_agentcore_forbidden "$rt_detail"; then
+      echo "WARN: get-agent-runtime $rt_id is forbidden; skipping runtime detail probe" >&2
+      continue
+    fi
     echo "ERROR: get-agent-runtime $rt_id failed:" >&2
     echo "$rt_detail" >&2
     drift=$((drift + 1))
@@ -168,6 +181,10 @@ while read -r rt_id rt_name rt_status; do
   # DEFAULT endpoint is the one Terraform manages for us
   eps=$(aws bedrock-agentcore-control list-agent-runtime-endpoints \
     --agent-runtime-id "$rt_id" --region "$REGION" --output json 2>&1) || {
+    if is_agentcore_forbidden "$eps"; then
+      echo "WARN: list-agent-runtime-endpoints $rt_id is forbidden; skipping endpoint drift probe" >&2
+      continue
+    fi
     echo "ERROR: list-agent-runtime-endpoints $rt_id failed:" >&2
     echo "$eps" >&2
     drift=$((drift + 1))
