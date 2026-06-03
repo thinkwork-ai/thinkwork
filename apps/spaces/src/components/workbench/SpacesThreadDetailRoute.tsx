@@ -16,6 +16,7 @@ import {
   type ComposerMention,
   type TaskThread,
   type TaskThreadTurn,
+  type TaskThreadEvent,
   type ThreadInfoChecklistTask,
   type ThreadInfoGoalRecord,
   type ThreadInfoGoalRecordGroup,
@@ -42,6 +43,7 @@ import {
   ThreadMentionTargetsQuery,
   ThreadUpdatedSubscription,
   ThreadTurnUpdatedSubscription,
+  ThreadTurnStepSubscription,
   RefreshThreadProgressMutation,
   ReviewGoalMutation,
   UpdateThreadMutation,
@@ -485,6 +487,76 @@ export function SpacesThreadDetailRoute({
     pause: !threadId,
   });
 
+  // Live mid-turn activity steps (plan 2026-06-03-001 U6). The step payload
+  // rides in the subscription event so we reduce it straight into local turn
+  // state — urql here is a document cache, not graphcache, so a bare event
+  // would not update the rendered turn, and refetch-per-step would add load.
+  // Accumulated per run_id, de-duplicated by seq (AppSync is at-least-once).
+  const [liveStepsByRun, setLiveStepsByRun] = useState<
+    Map<string, TaskThreadEvent[]>
+  >(new Map());
+  const liveStepSeqByRun = useRef<Map<string, Set<number>>>(new Map());
+  const [{ data: stepUpdate }] = useSubscription<{
+    onThreadTurnStep?: {
+      runId?: string | null;
+      seq?: number | null;
+      eventType?: string | null;
+      level?: string | null;
+      payload?: string | null;
+      createdAt?: string | null;
+    } | null;
+  }>({
+    query: ThreadTurnStepSubscription,
+    variables: { threadId },
+    pause: !threadId,
+  });
+
+  // Reset accumulated live steps when switching threads.
+  useEffect(() => {
+    setLiveStepsByRun(new Map());
+    liveStepSeqByRun.current = new Map();
+  }, [threadId]);
+
+  useEffect(() => {
+    const step = stepUpdate?.onThreadTurnStep;
+    if (!step?.runId || step.seq === null || step.seq === undefined) return;
+    const runId = step.runId;
+    const seq = step.seq;
+    const seenSeq = liveStepSeqByRun.current.get(runId) ?? new Set<number>();
+    if (seenSeq.has(seq)) return; // at-least-once de-dup
+    seenSeq.add(seq);
+    liveStepSeqByRun.current.set(runId, seenSeq);
+
+    let payload: unknown = null;
+    if (step.payload) {
+      try {
+        payload = JSON.parse(step.payload);
+      } catch {
+        payload = null;
+      }
+    }
+    const event: TaskThreadEvent = {
+      id: `${runId}:${seq}`,
+      eventType: step.eventType ?? null,
+      level: step.level ?? null,
+      payload,
+      createdAt: step.createdAt ?? null,
+    };
+    setLiveStepsByRun((prev) => {
+      const next = new Map(prev);
+      const existing = next.get(runId) ?? [];
+      next.set(
+        runId,
+        [...existing, event].sort((a, b) => {
+          const sa = Number(a.id.split(":")[1] ?? 0);
+          const sb = Number(b.id.split(":")[1] ?? 0);
+          return sa - sb;
+        }),
+      );
+      return next;
+    });
+  }, [stepUpdate]);
+
   const refreshThreadTurns = useCallback(async () => {
     if (!tenantId || !threadId) {
       setThreadTurnRows([]);
@@ -615,7 +687,7 @@ export function SpacesThreadDetailRoute({
       : null;
   const threadTurns = [
     ...toTaskThreadTurns(tasksData?.computerTasks, eventsData?.computerEvents),
-    ...toTaskThreadTurnsFromRows(threadTurnRows),
+    ...toTaskThreadTurnsFromRows(threadTurnRows, liveStepsByRun),
   ];
   if (thread) {
     thread.turns = threadTurns;
@@ -2056,7 +2128,14 @@ function toTaskThreadTurns(
   });
 }
 
-function toTaskThreadTurnsFromRows(rows: ThreadTurnRow[]): TaskThreadTurn[] {
+function toTaskThreadTurnsFromRows(
+  rows: ThreadTurnRow[],
+  // Live mid-turn steps keyed by run_id (plan 2026-06-03-001 U6). Injected as
+  // turn.events[] so groups stream in while running; on completion the existing
+  // name-based dedup in TaskThreadView converges them against
+  // usage.tool_invocations without double-rendering.
+  liveStepsByRun?: Map<string, TaskThreadEvent[]>,
+): TaskThreadTurn[] {
   return rows
     .filter((row) => !isHiddenDesktopDelegationRow(row))
     .map((row) => ({
@@ -2075,7 +2154,7 @@ function toTaskThreadTurnsFromRows(rows: ThreadTurnRow[]): TaskThreadTurn[] {
       error: row.error ?? null,
       errorCode: row.error_code ?? null,
       systemPrompt: row.system_prompt ?? null,
-      events: [],
+      events: liveStepsByRun?.get(row.id) ?? [],
     }));
 }
 

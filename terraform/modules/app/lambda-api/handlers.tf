@@ -270,6 +270,13 @@ resource "aws_lambda_function" "handler" {
     # Bearer API_AUTH_SECRET. Idempotent on thread_turns.finalized_at
     # (migration 0123). Plan: 2026-05-22-006.
     "chat-agent-finalize",
+    # chat-agent-activity — POST /api/threads/{threadId}/activity. The Pi
+    # runtime POSTs here mid-turn so live agent activity (tool/skill/phase
+    # steps, coalesced text deltas) streams to the Spaces thread via
+    # thread_turn_events + the onThreadTurnStep AppSync subscription.
+    # Bearer API_AUTH_SECRET, best-effort (never fails the turn).
+    # Plan: 2026-06-03-001.
+    "chat-agent-activity",
     "wakeup-processor",
     "workspace-event-dispatcher",
     "workspace-renderer",
@@ -992,6 +999,12 @@ locals {
     # Bearer API_AUTH_SECRET. Plan 2026-05-22-006.
     "POST /api/threads/{threadId}/finalize"    = "chat-agent-finalize"
     "OPTIONS /api/threads/{threadId}/finalize" = "chat-agent-finalize"
+
+    # chat-agent-activity — Pi runtime POSTs here mid-turn to stream live
+    # agent activity to the Spaces thread. Bearer API_AUTH_SECRET, best-effort.
+    # Plan 2026-06-03-001.
+    "POST /api/threads/{threadId}/activity"    = "chat-agent-activity"
+    "OPTIONS /api/threads/{threadId}/activity" = "chat-agent-activity"
 
     # Skill-run dispatcher runtime-config fetch. Service-auth GET.
     "GET /api/agents/runtime-config" = "agents-runtime-config"

@@ -75,6 +75,24 @@ type ThreadTurnUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
+# Mid-turn activity step — mirrors a thread_turn_events row so the client can
+# render live (tool/skill/phase steps in Phase 1, coalesced text deltas in
+# Phase 2) without a refetch. seq gives total order; payload carries the
+# step detail (AWSJSON). Subscribe by threadId.
+type ThreadTurnStepEvent {
+  runId: ID!
+  threadId: ID!
+  tenantId: ID!
+  seq: Int!
+  eventType: String!
+  stream: String
+  level: String
+  color: String
+  message: String
+  payload: AWSJSON
+  createdAt: AWSDateTime!
+}
+
 type OrgUpdateEvent {
   tenantId: ID!
   changeType: String!
@@ -184,6 +202,20 @@ extend type Mutation {
     triggerName: String
   ): ThreadTurnUpdateEvent
 
+  notifyThreadTurnStep(
+    runId: ID!
+    threadId: ID!
+    tenantId: ID!
+    seq: Int!
+    eventType: String!
+    stream: String
+    level: String
+    color: String
+    message: String
+    payload: AWSJSON
+    createdAt: AWSDateTime!
+  ): ThreadTurnStepEvent
+
   notifyOrgUpdate(
     tenantId: ID!
     changeType: String!
@@ -245,6 +277,9 @@ extend type Subscription {
 
   onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent
     @aws_subscribe(mutations: ["notifyThreadTurnUpdate"])
+
+  onThreadTurnStep(threadId: ID!): ThreadTurnStepEvent
+    @aws_subscribe(mutations: ["notifyThreadTurnStep"])
 
   onOrgUpdated(tenantId: ID!): OrgUpdateEvent
     @aws_subscribe(mutations: ["notifyOrgUpdate"])

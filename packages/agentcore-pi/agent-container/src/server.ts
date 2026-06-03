@@ -68,10 +68,12 @@ import { S3Client } from "@aws-sdk/client-s3";
 import {
   BUILTIN_TOOL_NAMES,
   collectToolCosts,
+  createActivityEmitter,
   type DelegationProvider,
   isFinalizeCallbackConfigured,
   normalizeHistory,
   postFinalizeCallback,
+  readActivityCallbackConfig,
   runAgentLoop,
   type InvocationResponse,
   type PiRetainStatus,
@@ -1643,6 +1645,13 @@ export async function handleInvocation(
       count: bundle.tools.length,
     });
     runLoopStart = Date.now();
+    // Live activity emitter (plan 2026-06-03-001). Config (url/secret/api-url)
+    // is snapshotted HERE, at coroutine entry, and never re-read from the env
+    // mid-turn (env-shadowing guard). No-op when the host didn't opt in.
+    const activityEmitter = createActivityEmitter(
+      readActivityCallbackConfig(args.payload),
+      { logger: (entry) => logStructured(entry) },
+    );
     runResult = await runLoop(
       {
         message: userMessage,
@@ -1672,8 +1681,15 @@ export async function handleInvocation(
         // session file.
         sessionDir: "/tmp/pi-sessions",
       },
-      { log: (entry) => logStructured(entry) },
+      {
+        log: (entry) => logStructured(entry),
+        emitActivity: activityEmitter.emit,
+      },
     );
+    // Flush any in-flight live-activity POSTs now that the turn is done — the
+    // turn already completed, so this never extends its wall-clock, and it
+    // closes the Lambda-Web-Adapter unawaited-promise gap for the live view.
+    await activityEmitter.drain();
     logStructured({
       level: "info",
       event: "agent_loop_completed",

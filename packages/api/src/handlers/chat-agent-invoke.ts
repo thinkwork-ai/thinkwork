@@ -1111,6 +1111,16 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           : undefined,
       finalize_callback_secret:
         THINKWORK_API_SECRET && turnId ? THINKWORK_API_SECRET : undefined,
+      // Activity-callback opt-in (plan 2026-06-03-001). The Pi runtime POSTs
+      // live mid-turn activity (tool/skill/phase steps, coalesced text deltas)
+      // to this URL with the same bearer secret, so the Spaces thread can
+      // stream steps while the turn runs. Best-effort — never blocks the turn.
+      activity_callback_url:
+        THINKWORK_API_URL && turnId
+          ? `${THINKWORK_API_URL.replace(/\/$/, "")}/api/threads/${threadId}/activity`
+          : undefined,
+      activity_callback_secret:
+        THINKWORK_API_SECRET && turnId ? THINKWORK_API_SECRET : undefined,
       thread_turn_id: turnId || undefined,
     } as Record<string, unknown>;
 

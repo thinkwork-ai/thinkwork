@@ -1792,6 +1792,7 @@ export type Mutation = {
   notifyNewMessage?: Maybe<NewMessageEvent>;
   notifyOrgUpdate?: Maybe<OrgUpdateEvent>;
   notifyThreadActivity?: Maybe<ThreadActivityEvent>;
+  notifyThreadTurnStep?: Maybe<ThreadTurnStepEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
@@ -2259,6 +2260,20 @@ export type MutationNotifyThreadActivityArgs = {
   threadId: Scalars["ID"]["input"];
   threadTitle?: InputMaybe<Scalars["String"]["input"]>;
   userId: Scalars["ID"]["input"];
+};
+
+export type MutationNotifyThreadTurnStepArgs = {
+  color?: InputMaybe<Scalars["String"]["input"]>;
+  createdAt: Scalars["AWSDateTime"]["input"];
+  eventType: Scalars["String"]["input"];
+  level?: InputMaybe<Scalars["String"]["input"]>;
+  message?: InputMaybe<Scalars["String"]["input"]>;
+  payload?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  runId: Scalars["ID"]["input"];
+  seq: Scalars["Int"]["input"];
+  stream?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
 };
 
 export type MutationNotifyThreadTurnUpdateArgs = {
@@ -4669,6 +4684,7 @@ export type Subscription = {
   onNewMessage?: Maybe<NewMessageEvent>;
   onOrgUpdated?: Maybe<OrgUpdateEvent>;
   onThreadActivity?: Maybe<ThreadActivityEvent>;
+  onThreadTurnStep?: Maybe<ThreadTurnStepEvent>;
   onThreadTurnUpdated?: Maybe<ThreadTurnUpdateEvent>;
   onThreadUpdated?: Maybe<ThreadUpdateEvent>;
   onWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
@@ -4704,6 +4720,10 @@ export type SubscriptionOnOrgUpdatedArgs = {
 
 export type SubscriptionOnThreadActivityArgs = {
   userId: Scalars["ID"]["input"];
+};
+
+export type SubscriptionOnThreadTurnStepArgs = {
+  threadId: Scalars["ID"]["input"];
 };
 
 export type SubscriptionOnThreadTurnUpdatedArgs = {
@@ -5250,6 +5270,21 @@ export type ThreadTurnEvent = {
   seq: Scalars["Int"]["output"];
   stream?: Maybe<Scalars["String"]["output"]>;
   tenantId: Scalars["ID"]["output"];
+};
+
+export type ThreadTurnStepEvent = {
+  __typename?: "ThreadTurnStepEvent";
+  color?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  eventType: Scalars["String"]["output"];
+  level?: Maybe<Scalars["String"]["output"]>;
+  message?: Maybe<Scalars["String"]["output"]>;
+  payload?: Maybe<Scalars["AWSJSON"]["output"]>;
+  runId: Scalars["ID"]["output"];
+  seq: Scalars["Int"]["output"];
+  stream?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
 };
 
 export type ThreadTurnUpdateEvent = {

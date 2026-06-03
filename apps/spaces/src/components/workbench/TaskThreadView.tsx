@@ -3199,7 +3199,9 @@ interface ActionRowData {
   kind: "thinking" | "tool" | "source" | "code";
 }
 
-function actionRowsForTurn(
+// Exported for convergence testing (plan 2026-06-03-001 R1): live step events
+// and the finalized usage.tool_invocations must collapse to one row set.
+export function actionRowsForTurn(
   turn: TaskThreadTurn,
   usage: Record<string, unknown>,
 ): ActionRowData[] {
