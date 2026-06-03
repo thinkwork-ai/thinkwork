@@ -65,7 +65,7 @@ jobs:
         run: bash scripts/post-deploy-smoke-pi.sh --stage ${{ env.STAGE }}
 
   # ── Computer thread streaming smoke ─────────────────────────────
-  # Exercises the deployed Python Strands Computer path end-to-end:
+  # Exercises the deployed Pi Computer path end-to-end:
   # blank thread creation → AppSync chunk subscription → sendMessage →
   # durable assistant persistence → completed computer_tasks row.
   spaces-thread-streaming-smoke:

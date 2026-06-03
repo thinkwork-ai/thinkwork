@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Post-deploy probe for AgentCore runtimes.
+# Post-deploy probe for the Pi AgentCore runtime.
 #
 # Background: after `terraform apply`, AgentCore cycles its warm container
 # pool over the next 15 minutes as old-env containers idle out. During that
 # window, a chat turn can land on a container booted before Terraform injected
-# the new env vars — the canonical symptom is a skill_runs strand logging
+# the new env vars — the canonical symptom is a skill_runs row logging
 # "missing THINKWORK_API_URL" (see memory: project_agentcore_deploy_race_env).
 #
 # AgentCore does not expose a "flush warm pool" API for DEFAULT endpoints:
 # `UpdateAgentRuntimeEndpoint` rejects DEFAULT endpoints with "managed through
-# agent updates." So this script does the next-best thing: verify that every
-# Strands runtime reports a clean end-state after Terraform apply, and surface
-# drift (runtime not READY, endpoint liveVersion behind runtime version) as
-# warnings so an operator knows to wait or investigate.
+# agent updates." So this script does the next-best thing: verify that the Pi
+# runtime reports a clean end-state after Terraform apply, and surface drift
+# (runtime not READY, endpoint liveVersion behind runtime version) as warnings
+# so an operator knows to wait or investigate.
 #
 # The 15-minute reconciler inside AgentCore is the real backstop; this probe
 # is an early-warning channel, not a mitigation.
@@ -30,7 +30,7 @@ STRICT=0
 JSON=0
 REGION="${AWS_REGION:-us-east-1}"
 MIN_SOURCE_SHA=""
-RUNTIME="strands"
+RUNTIME="pi"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,6 +56,18 @@ if [[ -z "$STAGE" ]]; then
   exit 2
 fi
 
+case "$RUNTIME" in
+  pi) ;;
+  strands)
+    echo "ERROR: legacy Strands runtime is retired; use --runtime pi" >&2
+    exit 2
+    ;;
+  *)
+    echo "ERROR: --runtime must be 'pi' (got '$RUNTIME')" >&2
+    exit 2
+    ;;
+esac
+
 if ! command -v aws >/dev/null 2>&1; then
   echo "ERROR: aws CLI not found on PATH" >&2
   exit 2
@@ -68,13 +80,6 @@ fi
 # Match any runtime whose name begins with `thinkwork_<stage>_<runtime>`. The
 # Terraform module creates one per deployment and the name format has been
 # stable since the maniflow→thinkwork rename.
-case "$RUNTIME" in
-  strands|pi) ;;
-  *)
-    echo "ERROR: --runtime must be 'strands' or 'pi' (got '$RUNTIME')" >&2
-    exit 2
-    ;;
-esac
 NAME_PREFIX="thinkwork_${STAGE}_${RUNTIME}"
 
 log() {

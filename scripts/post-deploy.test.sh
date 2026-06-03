@@ -22,20 +22,20 @@ shift 2
 
 case "$cmd" in
   "ssm get-parameter")
-    echo "thinkwork_dev_strands_active"
+    echo "thinkwork_dev_pi_active"
     ;;
   "bedrock-agentcore-control list-agent-runtimes")
     cat <<'JSON'
 {
   "agentRuntimes": [
     {
-      "agentRuntimeId": "thinkwork_dev_strands_active",
-      "agentRuntimeName": "thinkwork_dev_strands_active",
+      "agentRuntimeId": "thinkwork_dev_pi_active",
+      "agentRuntimeName": "thinkwork_dev_pi_active",
       "status": "READY"
     },
     {
-      "agentRuntimeId": "thinkwork_dev_strands_orphan",
-      "agentRuntimeName": "thinkwork_dev_strands_orphan",
+      "agentRuntimeId": "thinkwork_dev_pi_orphan",
+      "agentRuntimeName": "thinkwork_dev_pi_orphan",
       "status": "READY"
     }
   ]
@@ -50,7 +50,7 @@ JSON
         *) shift ;;
       esac
     done
-    if [[ "$runtime_id" == "thinkwork_dev_strands_active" ]]; then
+    if [[ "$runtime_id" == "thinkwork_dev_pi_active" ]]; then
       image_sha="${ACTIVE_IMAGE_SHA:?}"
       version="35"
     else
@@ -76,7 +76,7 @@ JSON
         *) shift ;;
       esac
     done
-    if [[ "$runtime_id" == "thinkwork_dev_strands_active" ]]; then
+    if [[ "$runtime_id" == "thinkwork_dev_pi_active" ]]; then
       live="35"
     else
       live="1"
@@ -134,11 +134,27 @@ assert_passes_when_active_runtime_image_contains_source() {
   grep -q "post-deploy] ok" "$TMPDIR/fresh.out"
 }
 
-source_sha="$(git -C "$ROOT" rev-parse b4de57b547ec4e5b596a364aafe0ff8954b0cfa3)"
-stale_sha="$(git -C "$ROOT" rev-parse 92fbf1e96861f72153c7cf21942daf6ef3c42ab6)"
+assert_rejects_legacy_strands_runtime() {
+  set +e
+  PATH="$FAKEBIN:$PATH" ACTIVE_IMAGE_SHA="$fresh_sha" ORPHAN_IMAGE_SHA="$stale_sha" \
+    bash "$ROOT/scripts/post-deploy.sh" --stage dev --region us-east-1 --runtime strands --strict \
+    >"$TMPDIR/strands.out" 2>"$TMPDIR/strands.err"
+  local status=$?
+  set -e
+
+  if [[ "$status" -eq 0 ]]; then
+    echo "expected legacy Strands runtime probe to be rejected" >&2
+    exit 1
+  fi
+  grep -q "legacy Strands runtime is retired" "$TMPDIR/strands.err"
+}
+
+source_sha="$(git -C "$ROOT" rev-parse HEAD~1)"
+stale_sha="$(git -C "$ROOT" rev-parse HEAD~2)"
 fresh_sha="$(git -C "$ROOT" rev-parse HEAD)"
 
 assert_fails_when_active_runtime_image_is_stale "$source_sha" "$stale_sha" "$fresh_sha"
 assert_passes_when_active_runtime_image_contains_source "$source_sha" "$stale_sha" "$fresh_sha"
+assert_rejects_legacy_strands_runtime
 
 echo "post-deploy tests passed"

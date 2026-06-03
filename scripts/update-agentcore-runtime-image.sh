@@ -17,7 +17,7 @@ Usage:
   bash scripts/update-agentcore-runtime-image.sh \
     --stage dev \
     --region us-east-1 \
-    --runtime strands|pi \
+    --runtime pi \
     --image <ecr-image-uri> \
     [--account-id <aws-account-id>] \
     [--wait-seconds 900]
@@ -49,9 +49,13 @@ if [[ -z "$STAGE" || -z "$RUNTIME" || -z "$IMAGE" ]]; then
 fi
 
 case "$RUNTIME" in
-  strands|pi) ;;
+  pi) ;;
+  strands)
+    echo "ERROR: legacy Strands runtime is retired; use --runtime pi" >&2
+    exit 2
+    ;;
   *)
-    echo "ERROR: --runtime must be 'strands' or 'pi' (got '$RUNTIME')" >&2
+    echo "ERROR: --runtime must be 'pi' (got '$RUNTIME')" >&2
     exit 2
     ;;
 esac
@@ -70,14 +74,10 @@ ssm_name="/thinkwork/${STAGE}/agentcore/runtime-id-${RUNTIME}"
 
 # Canonical IAM role per runtime type — used on both create and update paths
 # so an existing runtime created against an earlier role naming reconciles to
-# the canonical role on every deploy. Pi's role split out of the Strands
+# the canonical role on every deploy. Pi's role split out of the legacy shared
 # `agentcore-role` in plan §005 U2; reading the role from `get-agent-runtime`
 # (the prior pattern) preserved the stale role indefinitely.
-case "$RUNTIME" in
-  pi)    canonical_role_name="thinkwork-${STAGE}-agentcore-pi-role" ;;
-  strands) canonical_role_name="thinkwork-${STAGE}-agentcore-role" ;;
-  *)       canonical_role_name="thinkwork-${STAGE}-agentcore-role" ;;
-esac
+canonical_role_name="thinkwork-${STAGE}-agentcore-pi-role"
 if [[ -n "$ACCOUNT_ID" ]]; then
   canonical_role_arn="arn:aws:iam::${ACCOUNT_ID}:role/${canonical_role_name}"
 else
@@ -96,7 +96,7 @@ if [[ -z "$runtime_id" || "$runtime_id" == "None" ]]; then
     --output text 2>/dev/null || echo "")
 fi
 
-create_pi_runtime() {
+create_runtime() {
   if [[ -z "$canonical_role_arn" ]]; then
     echo "ERROR: --account-id is required to create the Pi AgentCore runtime" >&2
     exit 2
@@ -157,12 +157,7 @@ update_runtime() {
 }
 
 if [[ -z "$runtime_id" || "$runtime_id" == "None" ]]; then
-  if [[ "$RUNTIME" == "pi" ]]; then
-    create_pi_runtime
-  else
-    echo "ERROR: no ${RUNTIME} AgentCore runtime found in SSM (${ssm_name}) or runtime list" >&2
-    exit 1
-  fi
+  create_runtime
 else
   update_runtime
 fi
