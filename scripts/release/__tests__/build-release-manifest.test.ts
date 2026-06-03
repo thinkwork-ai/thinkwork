@@ -40,17 +40,17 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     ],
     runtimeImages: [
       {
-        name: "agentcore-strands-arm64",
+        name: "agentcore-pi-arm64",
         repository: "ghcr.io/thinkwork-ai/thinkwork-agentcore",
-        tag: "v1.2.3-arm64",
+        tag: "v1.2.3-pi-arm64",
         digest:
           "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         architecture: "arm64",
       },
       {
-        name: "agentcore-strands-amd64",
+        name: "agentcore-pi-amd64",
         repository: "ghcr.io/thinkwork-ai/thinkwork-agentcore",
-        tag: "v1.2.3-amd64",
+        tag: "v1.2.3-pi-amd64",
         digest:
           "sha256:2222222222222222222222222222222222222222222222222222222222222222",
         architecture: "amd64",
@@ -72,11 +72,11 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   assert.equal(manifest.artifacts[0]?.sha256.length, 64);
   assert.deepEqual(
     manifest.runtimeImages.map((image) => image.name),
-    ["agentcore-strands-amd64", "agentcore-strands-arm64"],
+    ["agentcore-pi-amd64", "agentcore-pi-arm64"],
   );
   assert.equal(
     manifest.runtimeImages[0]?.uri,
-    "ghcr.io/thinkwork-ai/thinkwork-agentcore:v1.2.3-amd64@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "ghcr.io/thinkwork-ai/thinkwork-agentcore:v1.2.3-pi-amd64@sha256:2222222222222222222222222222222222222222222222222222222222222222",
   );
 });
 
@@ -141,7 +141,7 @@ test("spec parsers reject incomplete artifact and image definitions", () => {
   assert.throws(
     () =>
       parseRuntimeImageSpec(
-        "name=strands,repository=ghcr.io/thinkwork-ai/thinkwork-agentcore,tag=v1",
+        "name=agentcore-pi,repository=ghcr.io/thinkwork-ai/thinkwork-agentcore,tag=v1",
       ),
     /architecture/,
   );

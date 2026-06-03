@@ -79,42 +79,6 @@ jobs:
         id: build_time
         run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push AgentCore Strands amd64
-        id: strands-amd64
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: packages/agentcore-strands/agent-container/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-strands-amd64
-            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-strands-amd64
-          build-args: |
-            GIT_SHA=${{ github.sha }}
-            BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=release-strands-amd64
-          cache-to: type=gha,scope=release-strands-amd64,mode=max
-          provenance: false
-
-      - name: Build and push AgentCore Strands arm64
-        id: strands-arm64
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: packages/agentcore-strands/agent-container/Dockerfile
-          platforms: linux/arm64
-          push: true
-          tags: |
-            ${{ steps.release.outputs.agentcore_repository }}:${{ github.ref_name }}-strands-arm64
-            ${{ steps.release.outputs.agentcore_repository }}:${{ github.sha }}-strands-arm64
-          build-args: |
-            GIT_SHA=${{ github.sha }}
-            BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=release-strands-arm64
-          cache-to: type=gha,scope=release-strands-arm64,mode=max
-          provenance: false
-
       - name: Build and push AgentCore Pi amd64
         id: pi-amd64
         uses: docker/build-push-action@v6
@@ -182,8 +146,6 @@ jobs:
             --artifact "name=admin,type=static-site,path=dist/release/static/admin.tar.gz" \
             --artifact "name=spaces,type=static-site,path=dist/release/static/spaces.tar.gz" \
             --artifact "name=docs,type=static-site,path=dist/release/static/docs.tar.gz" \
-            --image "name=agentcore-strands-amd64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-strands-amd64,digest=${{ steps.strands-amd64.outputs.digest }},architecture=amd64" \
-            --image "name=agentcore-strands-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-strands-arm64,digest=${{ steps.strands-arm64.outputs.digest }},architecture=arm64" \
             --image "name=agentcore-pi-amd64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-pi-amd64,digest=${{ steps.pi-amd64.outputs.digest }},architecture=amd64" \
             --image "name=agentcore-pi-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-pi-arm64,digest=${{ steps.pi-arm64.outputs.digest }},architecture=arm64" \
             --image "name=computer-runtime-arm64,repository=${COMPUTER_RUNTIME_REPOSITORY},tag=${GITHUB_REF_NAME}-arm64,digest=${{ steps.computer-runtime-arm64.outputs.digest }},architecture=arm64"

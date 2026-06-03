@@ -31,7 +31,6 @@ jobs:
       lambdas: ${{ steps.filter.outputs.lambdas }}
       container: ${{ steps.filter.outputs.container }}
       container_source_sha: ${{ steps.container-source.outputs.sha }}
-      strands_container_source_sha: ${{ steps.container-source.outputs.strands_sha }}
       pi_container_source_sha: ${{ steps.container-source.outputs.pi_sha }}
       runtime_container_stale: ${{ steps.runtime-image.outputs.stale }}
       computer_runtime: ${{ steps.filter.outputs.computer_runtime }}
@@ -58,7 +57,6 @@ jobs:
               # and AWS kept running stale code.
               - 'packages/lambda/**'
             container:
-              - 'packages/agentcore-strands/**'
               - 'packages/agentcore-pi/**'
               - 'packages/agentcore/**'
               - 'packages/pi-aws/**'
@@ -94,10 +92,6 @@ jobs:
         id: container-source
         run: |
           set -euo pipefail
-          STRANDS_SHA=$(git log -1 --format=%H -- \
-            packages/agentcore-strands \
-            packages/agentcore \
-            .github/workflows/deploy.yml)
           PI_SHA=$(git log -1 --format=%H -- \
             packages/agentcore-pi \
             packages/agentcore \
@@ -105,8 +99,7 @@ jobs:
             packages/pi-extensions \
             packages/pi-runtime-core \
             .github/workflows/deploy.yml)
-          echo "sha=$STRANDS_SHA" >> "$GITHUB_OUTPUT"
-          echo "strands_sha=$STRANDS_SHA" >> "$GITHUB_OUTPUT"
+          echo "sha=$PI_SHA" >> "$GITHUB_OUTPUT"
           echo "pi_sha=$PI_SHA" >> "$GITHUB_OUTPUT"
 
       - uses: aws-actions/configure-aws-credentials@v4
@@ -150,7 +143,6 @@ jobs:
               echo "${runtime} AgentCore runtime image ${image_sha:-unknown} is stale; latest container source is $source_sha."
             fi
           }
-          check_runtime strands "${{ steps.container-source.outputs.strands_sha }}"
           check_runtime pi "${{ steps.container-source.outputs.pi_sha }}"
           echo "stale=$stale" >> "$GITHUB_OUTPUT"
 
@@ -222,23 +214,6 @@ jobs:
         id: build_time
         run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push amd64 (Lambda)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: packages/agentcore-strands/agent-container/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:latest
-          build-args: |
-            GIT_SHA=${{ github.sha }}
-            BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=amd64
-          cache-to: type=gha,scope=amd64,mode=max
-          provenance: false
-
       - name: Build and push Pi amd64 (Lambda)
         uses: docker/build-push-action@v6
         with:
@@ -254,23 +229,6 @@ jobs:
             BUILD_TIME=${{ steps.build_time.outputs.value }}
           cache-from: type=gha,scope=pi-amd64
           cache-to: type=gha,scope=pi-amd64,mode=max
-          provenance: false
-
-      - name: Build and push arm64 (AgentCore Runtime)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: packages/agentcore-strands/agent-container/Dockerfile
-          platforms: linux/arm64
-          push: true
-          tags: |
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-arm64
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:latest-arm64
-          build-args: |
-            GIT_SHA=${{ github.sha }}
-            BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=arm64
-          cache-to: type=gha,scope=arm64,mode=max
           provenance: false
 
       - name: Build and push Pi arm64 (AgentCore Runtime)
@@ -290,16 +248,6 @@ jobs:
           cache-to: type=gha,scope=pi-arm64,mode=max
           provenance: false
 
-      - name: Update Lambda function code (x86_64)
-        run: |
-          aws lambda update-function-code \
-            --function-name thinkwork-${{ env.STAGE }}-agentcore \
-            --image-uri ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }} \
-            --region ${{ env.AWS_REGION }}
-          aws lambda wait function-updated \
-            --function-name thinkwork-${{ env.STAGE }}-agentcore \
-            --region ${{ env.AWS_REGION }}
-
       - name: Update Pi Lambda function code (x86_64)
         run: |
           if aws lambda get-function \
@@ -315,48 +263,6 @@ jobs:
           else
             echo "Pi Lambda function not found yet; terraform apply will create it from pi-latest."
           fi
-
-      - name: Update AgentCore Runtime (arm64 variant)
-        # Bedrock AgentCore Runtime doesn't repull on its own — it pins
-        # to whatever containerUri UpdateAgentRuntime last set. Without
-        # this step the runtime keeps serving a previous build's arm64
-        # image indefinitely, regardless of how many times we push the
-        # tag. Idempotent: skips cleanly on greenfield stages where
-        # the runtime SSM param hasn't been published yet (first
-        # terraform-apply on that stage writes it).
-        run: |
-          set -euo pipefail
-          RUNTIME_ID=$(aws ssm get-parameter \
-            --name /thinkwork/${{ env.STAGE }}/agentcore/runtime-id-strands \
-            --region ${{ env.AWS_REGION }} \
-            --query Parameter.Value --output text 2>/dev/null || echo "")
-          if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "None" ]; then
-            echo "No Strands runtime ID in SSM — skipping (first greenfield apply will create it)."
-            exit 0
-          fi
-          # -arm64 suffix: UpdateAgentRuntime requires a single-platform
-          # arm64 manifest. The unsuffixed ${sha} tag is amd64 (for
-          # Lambda). Both point at the same commit's code.
-          NEW_IMAGE="${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-arm64"
-          echo "Updating runtime $RUNTIME_ID to $NEW_IMAGE"
-          # Preserve roleArn / network / protocol from the existing
-          # runtime — hard-coding them here would drift from terraform.
-          CURRENT=$(aws bedrock-agentcore-control get-agent-runtime \
-            --region ${{ env.AWS_REGION }} \
-            --agent-runtime-id "$RUNTIME_ID" \
-            --output json)
-          ROLE_ARN=$(echo "$CURRENT" | jq -r '.roleArn')
-          NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode')
-          SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol')
-          aws bedrock-agentcore-control update-agent-runtime \
-            --region ${{ env.AWS_REGION }} \
-            --agent-runtime-id "$RUNTIME_ID" \
-            --role-arn "$ROLE_ARN" \
-            --network-configuration "networkMode=$NETWORK_MODE" \
-            --protocol-configuration "serverProtocol=$SERVER_PROTOCOL" \
-            --agent-runtime-artifact "containerConfiguration={containerUri=$NEW_IMAGE}" \
-            --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
-            --output json
 
       - name: Create or update Pi AgentCore Runtime (arm64 variant)
         run: |
@@ -374,7 +280,7 @@ jobs:
               --query "agentRuntimes[?agentRuntimeName=='${RUNTIME_NAME}'].agentRuntimeId | [0]" \
               --output text 2>/dev/null || echo "")
           fi
-          # Pi's IAM role split out of the Strands `agentcore-role` in plan §005 U2.
+          # Pi's IAM role split out of the legacy shared `agentcore-role` in plan §005 U2.
           # The role is provisioned by terraform module
           # `terraform/modules/app/agentcore-pi/main.tf` (resource
           # `aws_iam_role.agentcore_pi`). On the FIRST deploy of this stage
@@ -383,7 +289,7 @@ jobs:
           # workflow run, so the role does not yet exist when this step
           # fires. The fallback below detects the missing role and reuses
           # the existing runtime's roleArn (which currently points at the
-          # shared Strands role); the next deploy after terraform-apply
+          # legacy shared role); the next deploy after terraform-apply
           # creates the role will pick up the canonical Pi role on the
           # update path. New stages where the role doesn't exist AND no
           # runtime exists yet (greenfield) must run terraform-apply once
@@ -514,9 +420,9 @@ jobs:
 
       # Runtime rename backfill — agents.runtime `flue` → `pi`. Runs BEFORE the
       # Terraform apply that updates the dispatcher Lambda code so the new
-      # AgentRuntimeType union (`strands` | `pi`) never sees a `flue` value
-      # it can't route. Idempotent: WHERE runtime = 'flue' is a no-op once the
-      # rows are gone, so subsequent deploys are clean.
+      # Pi-only runtime path never sees a `flue` value it can't route.
+      # Idempotent: WHERE runtime = 'flue' is a no-op once the rows are gone,
+      # so subsequent deploys are clean.
       #
       # Skips cleanly on greenfield (no existing terraform state → no DB
       # endpoint output → step exits 0 without running psql). Once the
@@ -724,16 +630,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update Strands and Pi AgentCore runtimes
+      - name: Update Pi AgentCore runtime
         run: |
           set -euo pipefail
           REPO="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/thinkwork-${{ env.STAGE }}-agentcore"
-          bash scripts/update-agentcore-runtime-image.sh \
-            --stage ${{ env.STAGE }} \
-            --region ${{ env.AWS_REGION }} \
-            --runtime strands \
-            --image "${REPO}:${{ github.sha }}-arm64" \
-            --wait-seconds 900
           bash scripts/update-agentcore-runtime-image.sh \
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }} \
@@ -1282,12 +1182,6 @@ jobs:
 
       - name: Verify AgentCore runtime image
         run: |
-          bash scripts/post-deploy.sh \
-            --stage ${{ env.STAGE }} \
-            --region ${{ env.AWS_REGION }} \
-            --runtime strands \
-            --min-source-sha ${{ needs.detect-changes.outputs.strands_container_source_sha }} \
-            --strict
           bash scripts/post-deploy.sh \
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }} \

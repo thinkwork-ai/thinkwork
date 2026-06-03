@@ -11,19 +11,19 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-02-003-refactor-remove-strands-runtime-plan.md`.
 - Target branch: `main`.
-- Current unit: U2 Make API, GraphQL, and Database runtime defaults Pi-only.
-- Current branch: `codex/remove-strands-u2`.
-- Current worktree: `.Codex/worktrees/remove-strands-u2`.
+- Current unit: U3 Make deploy and release workflows Pi-only.
+- Current branch: `codex/remove-strands-u3`.
+- Current worktree: `.Codex/worktrees/remove-strands-u3`.
 
-| Unit                                                               | Branch                    | PR                                                           | State    | Notes                                                                                                                    |
-| ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| U1 Characterize Strands usage and data safety                      | `codex/remove-strands-u1` | [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004) | Merged   | Squash merged as `3fdfd62f`; runtime contract tests and Strands cleanup classification landed.                           |
-| U2 Make API, GraphQL, and Database runtime defaults Pi-only        | `codex/remove-strands-u2` | Pending                                                      | Verified | Stored/public runtime defaults are Pi-only; focused tests, typechecks, formatting, and whitespace checks passed locally. |
-| U3 Make deploy and release workflows Pi-only                       | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
-| U4 Move shared Terraform resources out of the Strands module       | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
-| U5 Delete Strands container source and retire Strands-only scripts | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
-| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
-| U7 End-to-end verification and deployment proof                    | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                             |
+| Unit                                                               | Branch                    | PR                                                           | State    | Notes                                                                                                        |
+| ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------ |
+| U1 Characterize Strands usage and data safety                      | `codex/remove-strands-u1` | [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004) | Merged   | Squash merged as `3fdfd62f`; runtime contract tests and Strands cleanup classification landed.               |
+| U2 Make API, GraphQL, and Database runtime defaults Pi-only        | `codex/remove-strands-u2` | [#2006](https://github.com/thinkwork-ai/thinkwork/pull/2006) | Merged   | Squash merged as `251e4a05`; stored/public runtime defaults are Pi-only.                                     |
+| U3 Make deploy and release workflows Pi-only                       | `codex/remove-strands-u3` | Pending                                                      | Verified | Deploy/release workflows and helper scripts are Pi-only; focused tests and formatting checks passed locally. |
+| U4 Move shared Terraform resources out of the Strands module       | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                 |
+| U5 Delete Strands container source and retire Strands-only scripts | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                 |
+| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                 |
+| U7 End-to-end verification and deployment proof                    | Pending                   | Pending                                                      | Pending  | Not started.                                                                                                 |
 
 ### Progress Log
 
@@ -66,6 +66,25 @@ status: in_progress
   `pnpm dlx prettier --check <changed supported U2 files>`; and
   `git diff --check`. The repo-local `prettier` binary is still not available
   on PATH in this worktree, so the formatting check used `pnpm dlx prettier`.
+- Squash merged U2 PR
+  [#2006](https://github.com/thinkwork-ai/thinkwork/pull/2006) as
+  `251e4a05`; removed the U2 worktree/local branch and synced `main` from
+  `origin/main`.
+- Created isolated U3 worktree `.Codex/worktrees/remove-strands-u3` on branch
+  `codex/remove-strands-u3`.
+- U3 removed legacy Strands container source detection, Docker builds, Lambda
+  image updates, AgentCore runtime updates, deploy summary probes, release
+  image publication, and "Python Strands" smoke wording from active
+  deploy/release workflows. `scripts/post-deploy.sh` and
+  `scripts/update-agentcore-runtime-image.sh` now default to or accept Pi only
+  and reject `--runtime strands` with a retirement message.
+- U3 verification passed: `bash scripts/post-deploy.test.sh`;
+  `pnpm test:release`;
+  `bash -c '<legacy update-agentcore-runtime-image strands rejection check>'`;
+  `bash -n scripts/post-deploy.sh scripts/post-deploy.test.sh scripts/update-agentcore-runtime-image.sh`;
+  `pnpm dlx prettier --check <changed supported U3 files>`; and
+  `git diff --check`. `actionlint` is not installed locally, so workflow
+  syntax validation is left to PR CI.
 
 ### U1 Strands Reference Classification
 
