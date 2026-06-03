@@ -13,8 +13,7 @@
 -- Pre-merge consumer survey (per feedback_grep_must_match_import_form):
 -- grep across apps/, packages/api/src, packages/lambda,
 -- packages/database-pg/src (excluding drizzle/ and the table's own
--- schema declaration), packages/agentcore-strands, packages/agentcore-pi,
--- and scripts/ returned only the schema definitions + the utils.ts
+-- schema declaration), packages/agentcore-pi, and scripts/ returned only the schema definitions + the utils.ts
 -- re-exports. The companion code commit removes those.
 --
 -- Order matters: agent_task_sessions has a FK to agent_runtime_state,

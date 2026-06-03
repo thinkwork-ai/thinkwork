@@ -17,10 +17,6 @@ export type { PiInvocationPayload } from "./system-prompt-compose.js";
  * path, and exposed as a Pi extension whose `before_agent_start` hook produces
  * the prompt inside the session lifecycle instead of the host hand-building a
  * string and passing it in.
- *
- * Strands' `_build_system_prompt` in
- * packages/agentcore-strands/agent-container/container-sources/server.py
- * mirrors the file order below — keep them in sync when editing.
  */
 
 export type WorkspaceFileReader = (filePath: string) => Promise<string | null>;
@@ -49,7 +45,7 @@ const defaultFileReader: WorkspaceFileReader = async (filePath) => {
 /**
  * Build the agent's system prompt by reading workspace files from disk.
  *
- * Mirrors Strands' `_build_system_prompt`: date prefix → runtime policy →
+ * Composes the runtime system prompt as date prefix → runtime policy →
  * workspace files (AGENTS/CONTEXT/GUARDRAILS/SPACE/USER) → workspace skills
  * block.
  *

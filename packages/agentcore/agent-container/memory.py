@@ -134,8 +134,8 @@ def store_turn_pair(
 
     Cheaper than two separate store_turn calls (one API request vs two),
     and the AgentCore strategies process the pair as a single conversational
-    unit. Called from the per-turn hook in server.py after the Strands
-    agent produces a response.
+    unit. Called from the per-turn hook in server.py after the runtime
+    produces a response.
 
     Best-effort: returns False on any failure; never raises.
     """

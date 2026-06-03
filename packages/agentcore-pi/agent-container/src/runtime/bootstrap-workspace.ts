@@ -9,9 +9,9 @@
  * every source object in S3. Legacy invocations fall back to listing and
  * downloading the agent's canonical source prefix directly.
  *
- * TypeScript port of the Strands `bootstrap_workspace.py` helper —
- * intentionally identical contract so an agent invoked on either runtime
- * sees the same on-disk tree.
+ * Pi workspace bootstrap keeps the same flat S3 sync contract older
+ * runtimes used so existing rendered workspace prefixes hydrate to the same
+ * on-disk tree.
  */
 
 import {

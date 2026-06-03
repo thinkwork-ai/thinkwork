@@ -4,8 +4,8 @@ from __future__ import annotations
 
 Each workspace folder (e.g., personal-assistant/, research/) contains a CONTEXT.md
 that defines the sub-agent's role, model, skills, loading rules, and guardrails.
-The runtime discovers these folders, parses their CONTEXT.md, and spawns a Strands
-sub-agent for each workspace.
+The runtime discovers these folders, parses their CONTEXT.md, and spawns a
+workspace sub-agent for each folder.
 
 Expected CONTEXT.md format:
 

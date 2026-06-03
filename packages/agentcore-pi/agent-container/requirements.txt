@@ -6,6 +6,5 @@
 # corpus as of 2026-05-03.
 #
 # When a new skill adds a third-party import, append it here. Pin
-# matches the agentcore-strands runtime so cross-runtime skill behavior
-# stays consistent.
+# stays consistent with the current workspace skill corpus.
 boto3>=1.34.0
