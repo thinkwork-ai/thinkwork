@@ -28,22 +28,36 @@ REGION="${AWS_REGION:-us-east-1}"
 echo "▸ Reading Terraform outputs for stage=$STAGE ..."
 cd "$TF_DIR"
 
-source "$REPO_ROOT/scripts/lib/terraform-output.sh"
+TF_OUTPUT_JSON="$(terraform output -json)"
 
-API_ENDPOINT="$(tf_output_raw api_endpoint)"
-APPSYNC_API_URL="$(tf_output_raw appsync_api_url)"
-APPSYNC_REALTIME_URL="$(tf_output_raw appsync_realtime_url)"
-APPSYNC_API_KEY="$(tf_output_raw appsync_api_key)"
-USER_POOL_ID="$(tf_output_raw user_pool_id)"
-ADMIN_CLIENT_ID="$(tf_output_raw admin_client_id)"
-AUTH_DOMAIN="$(tf_output_raw auth_domain)"
-APP_BUCKET="$(tf_output_raw app_bucket_name 2>/dev/null || tf_output_raw computer_bucket_name)"
-APP_CF_ID="$(tf_output_raw app_distribution_id 2>/dev/null || tf_output_raw computer_distribution_id)"
-COMPUTER_SANDBOX_BUCKET="$(tf_output_raw computer_sandbox_bucket_name 2>/dev/null || echo '')"
-COMPUTER_SANDBOX_CF_ID="$(tf_output_raw computer_sandbox_distribution_id 2>/dev/null || echo '')"
-COMPUTER_SANDBOX_URL="$(tf_output_raw computer_sandbox_url 2>/dev/null || echo '')"
-COMPUTER_SANDBOX_PARENT_ORIGINS="$(tf_output_raw computer_sandbox_allowed_parent_origins 2>/dev/null || echo '')"
-MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN:-$(tf_output_raw mapbox_public_token)}"
+tf_output_cached_raw() {
+  local name="${1:?terraform output name required}"
+
+  jq -er --arg name "$name" '
+    .[$name] // empty
+    | .value
+    | if type == "string" then .
+      elif type == "number" or type == "boolean" then tostring
+      elif type == "array" or type == "object" then @json
+      else empty
+      end
+  ' <<<"$TF_OUTPUT_JSON"
+}
+
+API_ENDPOINT="$(tf_output_cached_raw api_endpoint)"
+APPSYNC_API_URL="$(tf_output_cached_raw appsync_api_url)"
+APPSYNC_REALTIME_URL="$(tf_output_cached_raw appsync_realtime_url)"
+APPSYNC_API_KEY="$(tf_output_cached_raw appsync_api_key)"
+USER_POOL_ID="$(tf_output_cached_raw user_pool_id)"
+ADMIN_CLIENT_ID="$(tf_output_cached_raw admin_client_id)"
+AUTH_DOMAIN="$(tf_output_cached_raw auth_domain)"
+APP_BUCKET="$(tf_output_cached_raw app_bucket_name 2>/dev/null || tf_output_cached_raw computer_bucket_name)"
+APP_CF_ID="$(tf_output_cached_raw app_distribution_id 2>/dev/null || tf_output_cached_raw computer_distribution_id)"
+COMPUTER_SANDBOX_BUCKET="$(tf_output_cached_raw computer_sandbox_bucket_name 2>/dev/null || echo '')"
+COMPUTER_SANDBOX_CF_ID="$(tf_output_cached_raw computer_sandbox_distribution_id 2>/dev/null || echo '')"
+COMPUTER_SANDBOX_URL="$(tf_output_cached_raw computer_sandbox_url 2>/dev/null || echo '')"
+COMPUTER_SANDBOX_PARENT_ORIGINS="$(tf_output_cached_raw computer_sandbox_allowed_parent_origins 2>/dev/null || echo '')"
+MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN:-$(tf_output_cached_raw mapbox_public_token 2>/dev/null || echo '')}"
 
 if [[ -z "$COMPUTER_SANDBOX_URL" || -z "$COMPUTER_SANDBOX_BUCKET" || -z "$COMPUTER_SANDBOX_CF_ID" ]]; then
   cat >&2 <<EOF
@@ -134,7 +148,7 @@ aws cloudfront create-invalidation \
   --region "$REGION" \
   --output text > /dev/null
 
-APP_URL="$(cd "$TF_DIR" && (tf_output_raw app_url 2>/dev/null || tf_output_raw computer_url))"
+APP_URL="$(tf_output_cached_raw app_url 2>/dev/null || tf_output_cached_raw computer_url 2>/dev/null || echo '')"
 echo ""
 echo "✓ App deployed: ${APP_URL:-https://<pending>}"
 if [[ -n "$COMPUTER_SANDBOX_URL" ]]; then
