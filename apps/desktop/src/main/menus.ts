@@ -133,15 +133,16 @@ function createEditMenu(): MenuItemConstructorOptions {
   };
 }
 
-function createViewMenu(isDev: boolean): MenuItemConstructorOptions {
+function createViewMenu(_isDev: boolean): MenuItemConstructorOptions {
   const submenu: MenuItemConstructorOptions[] = [
     { role: "reload" },
     { role: "forceReload" },
   ];
 
-  if (isDev) {
-    submenu.push({ role: "toggleDevTools" });
-  }
+  // Always expose DevTools (not just in dev). Packaged canary/release builds
+  // disable the dev server, so without this the only way to diagnose a renderer
+  // failure was to cut a new build — DevTools makes errors visible in-place.
+  submenu.push({ role: "toggleDevTools" });
 
   submenu.push(
     { type: "separator" },

@@ -59,6 +59,9 @@ describe("thinkwork protocol handler", () => {
     // attachment upload.
     expect(connectSrc).toContain("data:");
     expect(connectSrc).toContain("blob:");
+    // Attachment uploads PUT directly to an S3 presigned URL; without the AWS
+    // origin the upload is refused after presign and the message never sends.
+    expect(connectSrc).toContain("https://*.amazonaws.com");
   });
 
   it("serves JavaScript assets with the expected content type", async () => {
