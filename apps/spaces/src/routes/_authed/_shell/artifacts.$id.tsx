@@ -48,7 +48,21 @@ function AppArtifactPage() {
   return <AppletRouteContent appId={id} />;
 }
 
-export function AppletRouteContent({ appId }: { appId: string }) {
+export function AppletRouteContent({
+  appId,
+  backHref = "/artifacts",
+  fill = false,
+  breadcrumbRoot,
+}: {
+  appId: string;
+  /** Header back-button target + history fallback. */
+  backHref?: string;
+  /** Fill the parent container instead of the viewport (Settings embed). */
+  fill?: boolean;
+  /** When set (Settings embed), render a "<root> / <artifact>" breadcrumb in
+   *  the Settings header bar instead of relying on the main-shell title. */
+  breadcrumbRoot?: { label: string; to: string };
+}) {
   const [{ data, fetching, error }, reexecuteAppletQuery] =
     useQuery<AppletResult>({
       query: AppletQuery,
@@ -112,7 +126,10 @@ export function AppletRouteContent({ appId }: { appId: string }) {
 
   usePageHeaderActions({
     title,
-    backHref: "/artifacts",
+    ...(breadcrumbRoot
+      ? { breadcrumbs: [breadcrumbRoot, { label: title }] }
+      : {}),
+    backHref,
     backBehavior: "history",
     action: composedHeaderAction,
     titleTrailing,
@@ -159,7 +176,11 @@ export function AppletRouteContent({ appId }: { appId: string }) {
 
   if (!source) {
     return (
-      <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
+      <AppArtifactSplitShell
+        title={title}
+        runtimeMode={runtimeMode}
+        fill={fill}
+      >
         <AppletFailure>
           This artifact does not include a source file that can be mounted.
         </AppletFailure>
@@ -227,7 +248,7 @@ export function AppletRouteContent({ appId }: { appId: string }) {
   );
 
   return (
-    <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
+    <AppArtifactSplitShell title={title} runtimeMode={runtimeMode} fill={fill}>
       {operator ? (
         <OperatorAppletTabs
           appId={appId}
