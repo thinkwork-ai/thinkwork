@@ -87,88 +87,111 @@ async function handleCreate(kbId: string): Promise<void> {
     await import("@aws-sdk/client-bedrock-agent");
 
   try {
-    // 1. Create Knowledge Base in Bedrock
-    // Pre-create pgvector table that Bedrock KB expects
+    // Idempotent resumable provisioning (U9/KTD6): each Bedrock resource is
+    // created only when its id isn't already persisted, and each id is written
+    // immediately after creation. A retry after a partial failure therefore
+    // resumes where it left off instead of creating a duplicate Bedrock KB.
+
+    // Pre-create the pgvector table Bedrock KB expects (CREATE ... IF NOT
+    // EXISTS — already idempotent).
     const tableName = `bedrock_kb_${kb.slug.replace(/-/g, "_")}`;
     await createVectorTable(tableName);
 
-    const secretArn = await getBedrockKbSecretArn();
-    console.log(`[kb-manager] Using secret ARN: ${secretArn}`);
-    console.log(`[kb-manager] Using cluster ARN: ${DB_CLUSTER_ARN}`);
-    console.log(`[kb-manager] Using role ARN: ${KB_SERVICE_ROLE_ARN}`);
+    // 1. Knowledge Base — skip if already provisioned.
+    let awsKbId = kb.aws_kb_id ?? undefined;
+    if (!awsKbId) {
+      const secretArn = await getBedrockKbSecretArn();
+      console.log(`[kb-manager] Using secret ARN: ${secretArn}`);
+      console.log(`[kb-manager] Using cluster ARN: ${DB_CLUSTER_ARN}`);
+      console.log(`[kb-manager] Using role ARN: ${KB_SERVICE_ROLE_ARN}`);
 
-    const createKbResp = await client.send(
-      new CreateKnowledgeBaseCommand({
-        name: `thinkwork-${tenantSlug}-${kb.slug}-${kb.id.slice(0, 8)}`,
-        roleArn: KB_SERVICE_ROLE_ARN,
-        knowledgeBaseConfiguration: {
-          type: "VECTOR",
-          vectorKnowledgeBaseConfiguration: {
-            embeddingModelArn: `arn:aws:bedrock:${AWS_REGION}::foundation-model/${kb.embedding_model}`,
-          },
-        },
-        storageConfiguration: {
-          type: "RDS",
-          rdsConfiguration: {
-            resourceArn: DB_CLUSTER_ARN,
-            credentialsSecretArn: secretArn,
-            databaseName: DB_NAME,
-            tableName: `bedrock_kb.bedrock_kb_${kb.slug.replace(/-/g, "_")}`,
-            fieldMapping: {
-              primaryKeyField: "id",
-              vectorField: "embedding",
-              textField: "chunks",
-              metadataField: "metadata",
+      const createKbResp = await client.send(
+        new CreateKnowledgeBaseCommand({
+          name: `thinkwork-${tenantSlug}-${kb.slug}-${kb.id.slice(0, 8)}`,
+          roleArn: KB_SERVICE_ROLE_ARN,
+          knowledgeBaseConfiguration: {
+            type: "VECTOR",
+            vectorKnowledgeBaseConfiguration: {
+              embeddingModelArn: `arn:aws:bedrock:${AWS_REGION}::foundation-model/${kb.embedding_model}`,
             },
           },
-        },
-      }),
-    );
-
-    const awsKbId = createKbResp.knowledgeBase?.knowledgeBaseId;
-    if (!awsKbId)
-      throw new Error("Failed to create Bedrock KB — no ID returned");
-
-    // 2. Create Data Source (S3)
-    const s3Prefix = `tenants/${tenantSlug}/knowledge-bases/${kb.slug}/documents/`;
-    const createDsResp = await client.send(
-      new CreateDataSourceCommand({
-        knowledgeBaseId: awsKbId,
-        name: `${kb.slug}-s3`,
-        dataSourceConfiguration: {
-          type: "S3",
-          s3Configuration: {
-            bucketArn: `arn:aws:s3:::${WORKSPACE_BUCKET}`,
-            inclusionPrefixes: [s3Prefix],
+          storageConfiguration: {
+            type: "RDS",
+            rdsConfiguration: {
+              resourceArn: DB_CLUSTER_ARN,
+              credentialsSecretArn: secretArn,
+              databaseName: DB_NAME,
+              tableName: `bedrock_kb.bedrock_kb_${kb.slug.replace(/-/g, "_")}`,
+              fieldMapping: {
+                primaryKeyField: "id",
+                vectorField: "embedding",
+                textField: "chunks",
+                metadataField: "metadata",
+              },
+            },
           },
-        },
-        vectorIngestionConfiguration: {
-          chunkingConfiguration: {
-            chunkingStrategy:
-              kb.chunking_strategy === "FIXED_SIZE" ? "FIXED_SIZE" : "NONE",
-            fixedSizeChunkingConfiguration:
-              kb.chunking_strategy === "FIXED_SIZE"
-                ? {
-                    maxTokens: kb.chunk_size_tokens ?? 300,
-                    overlapPercentage: kb.chunk_overlap_percent ?? 20,
-                  }
-                : undefined,
+        }),
+      );
+
+      awsKbId = createKbResp.knowledgeBase?.knowledgeBaseId;
+      if (!awsKbId)
+        throw new Error("Failed to create Bedrock KB — no ID returned");
+      // Persist immediately so a later-step failure doesn't orphan this KB.
+      await db
+        .update(knowledgeBases)
+        .set({ aws_kb_id: awsKbId, updated_at: new Date() })
+        .where(eq(knowledgeBases.id, kbId));
+    }
+
+    // 2. Data Source (S3) — skip if already provisioned.
+    let awsDsId = kb.aws_data_source_id ?? undefined;
+    if (!awsDsId) {
+      const s3Prefix = `tenants/${tenantSlug}/knowledge-bases/${kb.slug}/documents/`;
+      const createDsResp = await client.send(
+        new CreateDataSourceCommand({
+          knowledgeBaseId: awsKbId,
+          name: `${kb.slug}-s3`,
+          dataSourceConfiguration: {
+            type: "S3",
+            s3Configuration: {
+              bucketArn: `arn:aws:s3:::${WORKSPACE_BUCKET}`,
+              inclusionPrefixes: [s3Prefix],
+            },
           },
-        },
-      }),
-    );
+          vectorIngestionConfiguration: {
+            chunkingConfiguration: {
+              chunkingStrategy:
+                kb.chunking_strategy === "FIXED_SIZE" ? "FIXED_SIZE" : "NONE",
+              fixedSizeChunkingConfiguration:
+                kb.chunking_strategy === "FIXED_SIZE"
+                  ? {
+                      maxTokens: kb.chunk_size_tokens ?? 300,
+                      overlapPercentage: kb.chunk_overlap_percent ?? 20,
+                    }
+                  : undefined,
+            },
+          },
+        }),
+      );
 
-    const awsDsId = createDsResp.dataSource?.dataSourceId;
+      awsDsId = createDsResp.dataSource?.dataSourceId;
+      // Never mark the KB active without a data source — keep it failed so the
+      // operator can retry into the data-source step (the prior code silently
+      // marked it active with a null data source id).
+      if (!awsDsId)
+        throw new Error(
+          "Failed to create Bedrock data source — no ID returned",
+        );
+      await db
+        .update(knowledgeBases)
+        .set({ aws_data_source_id: awsDsId, updated_at: new Date() })
+        .where(eq(knowledgeBases.id, kbId));
+    }
 
-    // 3. Update DB with Bedrock IDs
+    // 3. Mark active and clear any prior error.
     await db
       .update(knowledgeBases)
-      .set({
-        aws_kb_id: awsKbId,
-        aws_data_source_id: awsDsId ?? null,
-        status: "active",
-        updated_at: new Date(),
-      })
+      .set({ status: "active", error_message: null, updated_at: new Date() })
       .where(eq(knowledgeBases.id, kbId));
 
     console.log(
