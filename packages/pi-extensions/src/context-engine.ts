@@ -19,6 +19,9 @@ export interface ContextEngineExtensionOptions {
   userId: string;
   agentId: string;
   threadTurnId?: string;
+  // The thread this turn runs in. Forwarded as a query_context argument so the
+  // backend can scope Space-bound Knowledge Bases to the thread's Space (U7).
+  threadId?: string;
   contextEngineConfig?: Record<string, unknown>;
   fetchImpl?: FetchLike;
 }
@@ -124,7 +127,12 @@ export function createContextEngineExtension(
               jsonrpc: "2.0",
               id: "pi-context-engine",
               method: "tools/call",
-              params: { name, arguments: args },
+              params: {
+                name,
+                arguments: options.threadId
+                  ? { ...args, threadId: options.threadId }
+                  : args,
+              },
             }),
             signal: controller.signal,
           });

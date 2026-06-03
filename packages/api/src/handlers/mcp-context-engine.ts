@@ -38,6 +38,11 @@ const TOOLS = [
           description:
             "Optional Thinkwork agent id whose workspace files should be searched.",
         },
+        threadId: {
+          type: "string",
+          description:
+            "Optional Thinkwork thread id for the current turn. Used to scope Space-bound Knowledge Bases to the thread's Space.",
+        },
         providers: {
           type: "object",
           properties: {
@@ -357,8 +362,13 @@ async function handleToolCall(
   if (requesterContext.error) {
     return jsonRpcError(request.id, -32602, requesterContext.error);
   }
+  const threadId = stringArg(args.threadId);
+  const threadScope = threadId
+    ? await resolveThreadScope(threadId, caller.tenantId)
+    : null;
   const callerWithTarget = {
     ...callerWithTargetArgs(caller, args),
+    ...(threadScope ?? {}),
     ...(requesterContext.value
       ? { requesterContext: requesterContext.value }
       : {}),
@@ -577,6 +587,28 @@ function callerWithTargetArgs<T extends { agentId?: string | null }>(
 ): T {
   const agentId = stringArg(args.agentId);
   return agentId ? { ...caller, agentId } : caller;
+}
+
+/**
+ * Resolve the Space a thread belongs to so the Bedrock KB provider can union
+ * Space-bound KBs (U7). Tenant-scoped: a threadId from another tenant resolves
+ * to no row, so no foreign Space identity is attached. Failures degrade to
+ * threadId-only (no space scope) rather than blocking the query.
+ */
+async function resolveThreadScope(
+  threadId: string,
+  tenantId: string,
+): Promise<{ threadId: string; spaceId?: string }> {
+  try {
+    const { db, eq, and, threads } = await import("../graphql/utils.js");
+    const [row] = await db
+      .select({ spaceId: threads.space_id })
+      .from(threads)
+      .where(and(eq(threads.id, threadId), eq(threads.tenant_id, tenantId)));
+    return row?.spaceId ? { threadId, spaceId: row.spaceId } : { threadId };
+  } catch {
+    return { threadId };
+  }
 }
 
 function requesterContextArg(
