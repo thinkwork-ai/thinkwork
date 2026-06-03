@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository at a glance
 
-Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Python agent runtime, deployed by the repo's own CLI via Terraform. There is **no local-only mode** — end-to-end work requires a deployed AWS stack. "Thinkwork supersedes maniflow" — ignore the old `maniflow*` names you may see on stale resources.
+Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Pi AgentCore runtime, deployed by the repo's own CLI via Terraform. There is **no local-only mode** — end-to-end work requires a deployed AWS stack. "Thinkwork supersedes maniflow" — ignore the old `maniflow*` names you may see on stale resources.
 
 - `apps/admin` — React 19 + Vite + TanStack Router operator SPA (dev port **5174**)
 - `apps/mobile` — Expo + React Native + NativeWind (iOS via TestFlight)
@@ -12,7 +12,7 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Python ag
 - `packages/database-pg` — Drizzle schema + migrations + canonical GraphQL source (`graphql/types/*.graphql`)
 - `packages/api` — GraphQL (Yoga) resolvers, Lambda handlers, AppSync subscription bridge
 - `packages/lambda` — additional Lambda handlers (job-schedule-manager, job-trigger, agentcore-admin, github-workspace)
-- `packages/agentcore-strands/agent-container` — **Python** Strands runtime (Bedrock models, MCP tools, Docker image)
+- `packages/agentcore-pi` — active AgentCore Pi runtime (Bedrock models, MCP tools, Docker image)
 - `packages/agentcore` — tenant-router + auth-agent (separate AgentCore image)
 - Tenant S3 skill catalogs — per-tenant folders at `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`; installed skills materialize into workspace `skills/<slug>/` folders
 - `packages/workspace-defaults` — canonical workspace defaults (CAPABILITIES/GUARDRAILS/PLATFORM/MEMORY_GUIDE)
@@ -22,7 +22,7 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Python ag
 ## Tooling ground rules
 
 - **pnpm ≥ 9, Node ≥ 22. Never use `npm` inside this workspace** — scripts assume pnpm's workspace protocol. `npx` is fine for one-off CLI tools. (Node 22 became the floor when `streamdown` landed; its transitive `mermaid → langium → chevrotain@12` chain enforces `engines.node >= 22`.)
-- **Python ≥ 3.11 with `uv`** for the Strands runtime (`pyproject.toml` declares `packages/agentcore-strands` as a uv workspace member). Ruff is the linter (line-length 100, target `py311`).
+- **Python ≥ 3.11 with `uv`** only for remaining Python helpers/tests. Ruff is the linter (line-length 100, target `py311`). The active AgentCore runtime is TypeScript under `packages/agentcore-pi`.
 - **Terraform ≥ 1.5 (or OpenTofu ≥ 1.6)**. Modules are registry-shaped; most real changes happen under `terraform/modules/`.
 - Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`).
 - CI runs against Apache-2.0-licensed code; new contributors must sign the CLA on their first PR (CLA Assistant bot).
@@ -48,7 +48,7 @@ Per-workspace scripts are in each `package.json`. CLI's "lint" is a no-op stub �
 ### Running a single test
 
 - **TypeScript (vitest)** — from a package dir: `npx vitest run path/to/file.test.ts` or `npx vitest run -t "test name"`. Suite locations vary: `packages/api` uses `src/**/*.test.ts` **and** `test/integration/**/*.test.ts`; `apps/cli` uses `__tests__/**/*.test.ts`.
-- **Python (pytest)** — from repo root: `uv run pytest packages/agentcore-strands/agent-container/test_<name>.py::test_<case>`. `pyproject.toml` limits `testpaths` to `packages/`.
+- **Python (pytest)** — from repo root: `uv run --with pytest pytest packages/agentcore/agent-container/test_<name>.py::test_<case>` or the specific Python helper test path. `pyproject.toml` limits `testpaths` to `packages/`.
 
 ### Database / GraphQL schema
 
@@ -98,7 +98,7 @@ Concurrent admin vite instances (worktrees) must bind to 5175+. **Each port must
 2. **Edge** — AppSync (subscriptions) + HTTP API Gateway fronting `graphql-http` Lambda. The AppSync schema is _subscription-only_ and is generated from the same GraphQL source as the HTTP API by `scripts/schema-build.sh`.
 3. **GraphQL server** — Yoga in `packages/api/src/graphql`. `ctx.auth.tenantId` is **null for Google-federated users** until the Cognito pre-token trigger lands; resolvers must use `resolveCallerTenantId(ctx)` as a fallback.
 4. **Persistence** — Aurora Postgres via Drizzle (`packages/database-pg`). Schema changes flow: edit `src/schema/*` → `db:generate` → PR the new `drizzle/NNNN_*.sql` → `db:push` after deploy. `agent_skills` is **derived** from composed AGENTS.md routing rows: `packages/api/src/lib/derive-agent-skills.ts` runs on every `AGENTS.md` put inside `packages/api/workspace-files.ts`. The legacy `setAgentSkills` GraphQL mutation continues to work but logs a deprecation warning — Plan §008 U21 retires it.
-5. **Agent runtime** — Bedrock AgentCore hosts the **Strands** Python container (`packages/agentcore-strands/agent-container/server.py`). The runtime loads installed skills from materialized workspace `skills/<slug>/` folders and keeps tenant catalog source files in S3 under `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`; MCP tool servers use streamable HTTP. Memory engine is either **AgentCore managed** or **Hindsight**, selected in Terraform by `enable_hindsight` / `memory_engine`. Hindsight's `recall`/`reflect` tool wrappers must stay `async def` (with `arecall`/`areflect`, fresh client, `aclose`, retry) — see `feedback_hindsight_async_tools`.
+5. **Agent runtime** — Bedrock AgentCore hosts the **Pi** runtime (`packages/agentcore-pi`). The runtime loads installed skills from materialized workspace `skills/<slug>/` folders and keeps tenant catalog source files in S3 under `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`; MCP tool servers use streamable HTTP. Memory engine is either **AgentCore managed** or **Hindsight**, selected in Terraform by `enable_hindsight` / `memory_engine`.
 6. **Scheduling / background work** — `scheduled_jobs` rows → `job-schedule-manager` Lambda → AWS Scheduler (`rate()` is _creation-time + interval_, not wall-clock) → `job-trigger` Lambda → agent wakeups. User-initiated create/update Lambda invokes must use **`RequestResponse`** and surface errors — never fire-and-forget.
 7. **Connectors** — Slack, GitHub, Google Workspace. Per-user OAuth and MCP tokens live on the **mobile** client; tenant-wide infra config stays in admin (don't add end-user-facing toggles to the admin SPA).
 8. **Evaluations** — AWS Bedrock AgentCore Evaluations is the backing store (16 built-in evaluators); the UI adds test-case authoring on top. Don't reintroduce Mastra/promptfoo.
@@ -114,7 +114,7 @@ Concurrent admin vite instances (worktrees) must bind to 5175+. **Each port must
 ## Secrets + config
 
 - Stage config lives in `~/.thinkwork/config.json` (per-stage sessions + Cognito token cache) and in `terraform/examples/greenfield/terraform.tfvars` (currently plaintext; SSM migration pending — don't paste tfvars secrets into PRs).
-- Deployed stack secrets live in Secrets Manager / SSM Parameter Store under `/thinkwork/<stage>/...`. The Strands runtime resolves Nova Act and similar keys from there at boot (see `_load_nova_act_key` in `server.py`).
+- Deployed stack secrets live in Secrets Manager / SSM Parameter Store under `/thinkwork/<stage>/...`. The Pi runtime resolves runtime secrets from the deployed handler environment and SSM/Secrets Manager wiring.
 - **Never commit** `terraform.tfvars`, `.env`, or Cognito/GitHub App secrets.
 
 ## Scope guardrails

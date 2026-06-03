@@ -15,9 +15,8 @@ filter, so re-running the wipe is a no-op.
 ## Prerequisites
 
 - The PR carrying U1, U2, U3, U2-Pi, U3-Pi, U8, U9, U10 has merged to `main`.
-- Both AgentCore runtime images (`agentcore-strands` and `agentcore-pi`)
-  have been rebuilt and pushed.
-- Both runtimes' `containerUri` matches the merged SHA via
+- The AgentCore Pi runtime image has been rebuilt and pushed.
+- The runtime's `containerUri` matches the merged SHA via
   `aws bedrock-agentcore-control get-agent-runtime`. AgentCore does not
   auto-repull; an out-of-date container would still serve the old retain
   shape and the wipe would race against it. See
@@ -36,26 +35,21 @@ filter, so re-running the wipe is a no-op.
 
 ## AgentCore container repull verification
 
-Before the wipe runs, confirm both runtimes are actually serving the
-merged SHA. AgentCore does not auto-repull when an image tag is
-overwritten in ECR; both runtimes have to be explicitly updated.
+Before the wipe runs, confirm the runtime is actually serving the merged SHA.
+AgentCore does not auto-repull when an image tag is overwritten in ECR; the
+runtime has to be explicitly updated.
 
 ```bash
 # Replace <merged-sha> with the SHA at the tip of main after the merge.
 MERGED_SHA=<merged-sha>
 
 aws bedrock-agentcore-control get-agent-runtime \
-  --agent-runtime-name agentcore-strands-<stage> \
-  --query containerUri --output text
-
-aws bedrock-agentcore-control get-agent-runtime \
   --agent-runtime-name agentcore-pi-<stage> \
   --query containerUri --output text
 ```
 
-Both `containerUri` outputs must end with `:${MERGED_SHA}`. If either
-is stale, run the AgentCore update command (see the env-shadowing
-runbook for the exact CLI invocation) and re-verify before proceeding.
+The `containerUri` output must end with `:${MERGED_SHA}`. If it is stale, run
+the AgentCore update command and re-verify before proceeding.
 
 ## Step 1 — Dry-run
 

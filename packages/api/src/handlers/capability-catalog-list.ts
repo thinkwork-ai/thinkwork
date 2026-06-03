@@ -6,7 +6,7 @@
  *     Authorization: Bearer <API_AUTH_SECRET>
  *     → 200 { slugs: string[], count: number, version: string }
  *
- * The Strands container calls this once per session-start. It trusts the
+ * The runtime calls this once per session-start. It trusts the
  * slug list over its own hard-coded tool registration — a catalog-missing
  * tool cannot register (SI-7). Shipped behind a container-side
  * `RCM_ENFORCE=true` env feature flag, so the API contract is stable but

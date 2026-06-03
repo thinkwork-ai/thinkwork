@@ -1,6 +1,6 @@
 /**
  * Validator for AgentTemplate.sandbox — the opt-in metadata that tells the
- * dispatcher to register the `execute_code` Strands tool for agents linked
+ * dispatcher to register the `execute_code` runtime tool for agents linked
  * to this template (AgentCore Code Sandbox plan, Unit 3).
  *
  * Shape:

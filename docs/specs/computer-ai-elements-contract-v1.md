@@ -19,7 +19,7 @@ fragments. It is the coordination artifact for plan
 explicitly supersedes plan-001's same-origin trust decision wherever the
 iframe substrate replaces it. Plan-001's same-origin substrate
 (`apps/computer/src/applets/`, `@thinkwork/computer-stdlib`, applet GraphQL
-surface, Strands `save_app`/`load_app`/`list_apps`) remains the foundation;
+surface, runtime `save_app`/`load_app`/`list_apps`) remains the foundation;
 the iframe flip below reverses only the same-origin execution boundary
 plan-001 accepted under prompt injection.
 
@@ -44,7 +44,7 @@ useAppletMutation, refresh}`)
 - `packages/computer-stdlib/` (workspace package, source-as-published)
 - `packages/api/src/lib/applets/`,
   `packages/api/src/graphql/resolvers/applets/` (GraphQL applet surface)
-- `packages/agentcore-strands/agent-container/container-sources/applet_tool.py`
+- runtime applet tools
   (`make_save_app_fn`/`make_load_app_fn`/`make_list_apps_fn` factory closures)
 
 ## Wire vocabulary — `UIMessagePart` discriminators
@@ -55,7 +55,7 @@ Messages flow end-to-end as Vercel AI SDK `UIMessage` shapes. Allowed
 ```text
 text
 reasoning
-tool-${name}                # name is the Strands tool name, e.g. tool-renderFragment
+tool-${name}                # name is the runtime tool name, e.g. tool-renderFragment
 source-url
 source-document
 file
@@ -106,7 +106,7 @@ controller after the iframe acknowledges mount):
 ```
 
 Tool input is emitted as terminal `tool-input-available` only —
-`tool-input-delta` deltas are skipped in v1 because Strands materializes
+`tool-input-delta` deltas are skipped in v1 because the runtime materializes
 tool-call arguments atomically.
 
 ## AppSync chunk envelope — `ComputerThreadChunkEvent.chunk`

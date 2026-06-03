@@ -11,7 +11,7 @@
  *   3. Dispatches the AgentCore adapter Lambda in Event mode (no wait).
  *   4. Returns in ~5 seconds end-to-end.
  *
- * The Strands runtime POSTs its end-of-turn result to
+ * The AgentCore runtime POSTs its end-of-turn result to
  * /api/threads/{threadId}/finalize. The chat-agent-finalize Lambda runs
  * the post-AgentCore bookkeeping (cost, guardrail-block, message insert,
  * AppSync notify, computer-task completion, memory retain) out-of-band.
@@ -1086,12 +1086,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             renderedWorkspacePrefix,
           }
         : undefined,
-      // U3 of the finance pilot — Strands' _execute_agent_turn reads
-      // payload["message_attachments"] directly off this dict (no
-      // apply_invocation_env indirection; that helper is an os.environ
-      // setter for scalar strings, not an array-of-records carrier).
-      // Convert camelCase → snake_case at the field-shape boundary so
-      // the Python side sees the conventional Python casing.
+      // U3 of the finance pilot — the runtime reads message_attachments
+      // directly off this dict. Convert camelCase → snake_case at the
+      // field-shape boundary so runtime adapters see the stable casing.
       message_attachments:
         event.messageAttachments && event.messageAttachments.length > 0
           ? event.messageAttachments.map((att) => ({
@@ -1102,7 +1099,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               size_bytes: att.sizeBytes,
             }))
           : undefined,
-      // Finalize-callback opt-in (plan 2026-05-22-006 U3). The Strands
+      // Finalize-callback opt-in (plan 2026-05-22-006 U3). The AgentCore
       // runtime POSTs its end-of-turn result to this URL with the bearer
       // secret, so chat-agent-invoke can dispatch Event-mode without
       // waiting for the AgentCore Lambda response. eval-runner /
@@ -1142,7 +1139,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       isBase64Encoded: false,
     });
 
-    // Event-mode dispatch (plan 2026-05-22-006 U3). The Strands runtime
+    // Event-mode dispatch (plan 2026-05-22-006 U3). The runtime
     // owns the post-AgentCore bookkeeping via the finalize-callback POST
     // wired in U2; chat-agent-invoke just sets up the payload, fires
     // AgentCore Event-mode, and returns. The SDK call resolves once AWS

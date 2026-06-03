@@ -113,10 +113,8 @@ See [Memory](/concepts/knowledge/).
 Agents are the execution layer. The tenant platform agent receives a thread plus assembled context, decides what to do, calls tools, and produces a response. Per-Space configuration (CONTEXT.md, skills, MCP) is rendered into the workspace the agent runs against.
 
 ThinkWork agent execution runs in AWS-managed AgentCore isolation; desktop and
-mobile are clients. Strands is the default runtime; Pi is a parallel runtime
-substrate that individual agents or templates can opt into. The surrounding
-harness remains ThinkWork's either way. That distinction is important: managed
-does not mean vendor-hosted.
+mobile are clients. Pi is the active managed runtime on Bedrock AgentCore. The
+surrounding harness remains ThinkWork's: managed does not mean vendor-hosted.
 
 See [Agents](/concepts/agents/).
 
@@ -185,7 +183,7 @@ The app tier is where computation happens. It depends on both lower tiers.
 | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | AppSync GraphQL API      | Real-time subscriptions (WebSocket), used for streaming responses                                          |
 | API Gateway v2           | HTTP queries and mutations, integration webhook ingress                                                    |
-| AgentCore runtimes       | Container-based managed runtimes: Strands (default) and Pi (opt-in), both on Bedrock AgentCore             |
+| AgentCore runtime        | Container-based Pi managed runtime on Bedrock AgentCore                                                    |
 | Integration Lambdas      | One per integration (GitHub, Google) — handles inbound events                                              |
 | Step Functions           | Automation runner, routine executor                                                                        |
 | EventBridge              | Triggers for scheduled automations                                                                         |
@@ -207,7 +205,7 @@ A full round trip from user message to agent response:
 
 2. Runtime dispatcher resolves the target
    └─ Reads agent/template runtime selector
-   └─ Chooses Strands or Pi AgentCore function
+   └─ Chooses the Pi AgentCore function
 
 3. Selected AgentCore runtime receives event
    └─ Reads thread history from Aurora
@@ -347,18 +345,9 @@ CREATE POLICY tenant_isolation ON threads
 | Secrets at rest     | KMS encryption (dedicated key per secret category)           |
 | Audit trail         | Append-only S3 bucket (no delete permissions on Lambda role) |
 
-## AgentCore runtime containers
+## AgentCore runtime container
 
-ThinkWork deploys managed runtimes as container images stored in ECR and hosted by Bedrock AgentCore. The runtime selector chooses between the provisioned functions at invocation time.
-
-The Strands image includes:
-
-- Python 3.12
-- [Strands](https://strandsagents.com) agent framework
-- Boto3 (Bedrock, S3, SSM, Secrets Manager clients)
-- httpx (for skill HTTP tools)
-- psycopg3 (Aurora connection)
-- The ThinkWork runtime library (tool registration, memory read/write, context assembly)
+ThinkWork deploys the Pi managed runtime as a container image stored in ECR and hosted by Bedrock AgentCore. Invocation routes call the deployed Pi function for the tenant and Space context.
 
 The Pi image includes:
 
@@ -367,4 +356,4 @@ The Pi image includes:
 - The ThinkWork invocation envelope and response contract
 - Runtime adapters needed to preserve the same thread, memory, tool, audit, and cost surfaces
 
-Deployments pin both image tags. Upgrading either runtime is a deploy operation, not an admin web setting. Selecting which runtime an agent uses is an agent/template configuration decision.
+Deployments pin the image tag. Upgrading the runtime is a deploy operation, not an admin web setting.

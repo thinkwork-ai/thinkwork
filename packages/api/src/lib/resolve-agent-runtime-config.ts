@@ -4,13 +4,13 @@
  * Two callers today:
  * - `packages/api/src/handlers/chat-agent-invoke.ts` — chat turn flow.
  * - `packages/api/src/handlers/agents-runtime-config.ts` — service-auth REST
- *   endpoint consumed by the Strands container's `kind=run_skill` dispatcher
+ *   endpoint consumed by the runtime skill dispatcher
  *   (plan `docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md` §U1).
  *
  * Keeping both callers on a single helper is the anti-drift invariant. Any
  * field the chat path needs must also be available to the dispatcher, and
- * vice versa — they run the same agent in the same container and expect the
- * same shape from `_call_strands_agent`.
+ * vice versa — they run the same agent in the same runtime and expect the
+ * same resolved shape.
  *
  * What this helper resolves:
  *   - agent + tenant metadata (name, slug, model, blocked tools, sandbox config)

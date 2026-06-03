@@ -1,12 +1,12 @@
 /**
  * Compliance audit event emit endpoint — POST /api/compliance/events
  *
- * Cross-runtime emit path (U6). The Python Strands runtime authenticates
+ * Cross-runtime emit path (U6). Runtime callers authenticate
  * via API_AUTH_SECRET (no user session) and POSTs audit events to this
  * endpoint, which validates the cross-tenant boundary, emits through the
  * U3 helper inside a transaction, and returns idempotent-replay metadata.
  *
- * Auth: Bearer API_AUTH_SECRET only (no Cognito). Strands has no user
+ * Auth: Bearer API_AUTH_SECRET only (no Cognito). Runtime callers have no user
  * session; the platform-credential is the trust boundary.
  *
  * Idempotency: client supplies `event_id` (UUIDv7) in the body and
@@ -19,7 +19,7 @@
  * re-run the SELECT and return idempotent: true.
  *
  * Tier semantics: handler is internally atomic (db.transaction rolls
- * back on any error). The Strands caller treats this as telemetry —
+ * back on any error). The runtime caller treats this as telemetry —
  * if the entire round-trip fails, agent action proceeds anyway.
  */
 
@@ -87,7 +87,7 @@ export async function handler(
     return error("Not found", 404);
   }
 
-  // ── Auth: API_AUTH_SECRET only (no Cognito). Strands has no user session.
+  // ── Auth: API_AUTH_SECRET only (no Cognito). Runtime callers have no user session.
   const bearer = extractBearerToken(event);
   if (!bearer || !validateApiSecret(bearer)) {
     return error("Unauthorized", 401);

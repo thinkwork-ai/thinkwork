@@ -90,6 +90,7 @@ audit-verifier verify \
 ```
 
 **Why it matters:** The verifier independently:
+
 1. Lists all anchor objects under `anchors/cadence-*.json` in the WORM bucket.
 2. Verifies each anchor's S3 Object Lock retention is at or beyond the configured retention floor (`--check-retention`).
 3. Walks each per-tenant chain in `compliance.audit_events` and recomputes per-event hashes; rejects on chain breaks (`--check-chain`).
@@ -136,7 +137,7 @@ Audit events flow from two runtimes through the same outbox:
 
 1. **Yoga TypeScript resolvers** — call `emitAuditEvent(tx, ...)` inside their existing `db.transaction` block. Audit failure rolls back the originating mutation (control-evidence tier). Source: [`packages/api/src/lib/compliance/emit.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/emit.ts).
 
-2. **Strands Python runtime** — uses `ComplianceClient` to POST `/api/compliance/events` with bearer `API_AUTH_SECRET` and a UUIDv7 `event_id` generated client-side. The REST handler ([`packages/api/src/handlers/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/handlers/compliance.ts)) validates and inserts into the outbox. The `audit_outbox.uq_audit_outbox_event_id` unique constraint makes retries idempotent — if the network drops mid-call, the Strands client retries with the same `event_id` and the second insert is a no-op.
+2. **AgentCore runtime REST emit** — runtime callers POST `/api/compliance/events` with bearer `API_AUTH_SECRET` and a UUIDv7 `event_id` generated client-side. The REST handler ([`packages/api/src/handlers/compliance.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/handlers/compliance.ts)) validates and inserts into the outbox. The `audit_outbox.uq_audit_outbox_event_id` unique constraint makes retries idempotent — if the network drops mid-call, the runtime caller retries with the same `event_id` and the second insert is a no-op.
 
 Both paths land in the same `audit_outbox` table and are drained by the same single-writer Lambda into the same per-tenant chain. The auditor sees one audit log, regardless of which runtime emitted.
 

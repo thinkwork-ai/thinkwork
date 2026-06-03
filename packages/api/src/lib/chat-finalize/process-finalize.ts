@@ -5,7 +5,7 @@
  * Today's chat-agent-invoke Lambda calls AgentCore RequestResponse-style
  * and runs every line of this function after the response returns. Once
  * the chat-agent-finalize Lambda ships (U3), the same logic runs from a
- * Strands-runtime HTTP callback instead.
+ * AgentCore runtime HTTP callback instead.
  *
  * The function takes a {@link FinalizePayload} (mirrors the
  * AgentCore-response shape chat-agent-invoke used to read directly) and

@@ -31,7 +31,7 @@ into a VPC. This contract follows the plan: applet source and metadata are
 stored in the existing private dashboard artifacts bucket under tenant-scoped
 keys.
 
-## Strands Tool Surface
+## Runtime Tool Surface
 
 The Computer agent receives three tools:
 
@@ -51,7 +51,7 @@ async def list_apps() -> dict: ...
 `save_app` is the only write tool. A null or empty `app_id` creates a new
 applet. A provided `app_id` regenerates that stable applet, increments the
 metadata version, and overwrites the newest source. There is no separate
-`regenerate_app` Strands tool.
+`regenerate_app` runtime tool.
 
 Tool responses must preserve these smoke-pin fields:
 
@@ -297,7 +297,9 @@ type AppletAPI = {
     initialValue: T,
   ): [T, (nextValue: T) => void, { saving: boolean; error?: Error }];
   useAppletQuery<T>(name: string, variables?: Record<string, unknown>): T;
-  useAppletMutation<T>(name: string): (variables: Record<string, unknown>) => Promise<T>;
+  useAppletMutation<T>(
+    name: string,
+  ): (variables: Record<string, unknown>) => Promise<T>;
   refresh<T = unknown>(): Promise<RefreshResult<T>>;
 };
 
