@@ -94,7 +94,11 @@ cd "$REPO_ROOT"
 # REST calls with the user's Cognito id token (via apiFetch in
 # apps/spaces/src/lib/api-fetch.ts). Never re-add a service-to-service
 # secret here — Vite inlines it into the public JS bundle.
+# Strip the trailing slash the api_endpoint output carries, so derived URLs
+# don't become `…amazonaws.com//graphql`.
+API_ENDPOINT="${API_ENDPOINT%/}"
 cat > apps/spaces/.env.production <<EOF
+VITE_APP_VERSION=${VITE_APP_VERSION:-}
 VITE_GRAPHQL_HTTP_URL=${API_ENDPOINT}/graphql
 VITE_GRAPHQL_URL=${APPSYNC_API_URL}
 VITE_GRAPHQL_WS_URL=${APPSYNC_WS_URL}
