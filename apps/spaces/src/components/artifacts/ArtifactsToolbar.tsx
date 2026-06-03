@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { Search, User } from "lucide-react";
 import {
   Input,
   Select,
@@ -36,6 +36,14 @@ export interface ArtifactsToolbarProps {
   sortBy: ArtifactSortBy;
   onSortByChange: (value: ArtifactSortBy) => void;
   searchPlaceholder?: string;
+  /**
+   * Operator-only: show a "filter by user ID" input. Distinct from the
+   * content `search` field — this scopes the list to one user's applets via
+   * the admin query. Hidden for non-operators.
+   */
+  showUserFilter?: boolean;
+  userIdFilter?: string;
+  onUserIdFilterChange?: (value: string) => void;
 }
 
 // Tabs are in-page state (not route children like Customize) because
@@ -52,6 +60,9 @@ export function ArtifactsToolbar({
   sortBy,
   onSortByChange,
   searchPlaceholder = "Search artifacts…",
+  showUserFilter = false,
+  userIdFilter = "",
+  onUserIdFilterChange,
 }: ArtifactsToolbarProps) {
   return (
     <div
@@ -120,6 +131,20 @@ export function ArtifactsToolbar({
           ))}
         </SelectContent>
       </Select>
+
+      {showUserFilter ? (
+        <div className="relative w-fit min-w-52" data-testid="artifacts-user-filter">
+          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Filter by user ID"
+            value={userIdFilter}
+            onChange={(event) => onUserIdFilterChange?.(event.target.value)}
+            className="h-8 pl-9"
+            data-testid="artifacts-user-filter-input"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

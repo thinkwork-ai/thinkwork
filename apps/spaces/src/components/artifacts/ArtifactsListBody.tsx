@@ -2,6 +2,8 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
+import { useTenant } from "@/context/TenantContext";
+import { AdminAppletsQuery } from "@/lib/applet-admin-queries";
 import { type AppletPreviewNode, toAppletPreview } from "@/lib/app-artifacts";
 import { computerArtifactRoute } from "@/lib/computer-routes";
 import { AppletsQuery } from "@/lib/graphql-queries";
@@ -31,42 +33,111 @@ export interface ArtifactsListBodyProps {
   items?: ArtifactItem[];
   fetching?: boolean;
   errorMessage?: string;
+  /**
+   * Test seam: force the operator user-ID filter affordance on/off without a
+   * TenantContext. Defaults to hidden, matching a non-operator viewer.
+   */
+  isOperator?: boolean;
+  roleResolved?: boolean;
 }
 
 export function ArtifactsListBody({
   items: itemsProp,
   fetching: fetchingProp,
   errorMessage: errorMessageProp,
+  isOperator: isOperatorProp,
+  roleResolved: roleResolvedProp,
 }: ArtifactsListBodyProps = {}) {
   if (itemsProp) {
     return (
-      <ArtifactsListBodyView
+      <StaticArtifactsListBody
         items={itemsProp}
         fetching={fetchingProp ?? false}
         errorMessage={errorMessageProp}
+        showUserFilter={(roleResolvedProp ?? true) && !!isOperatorProp}
       />
     );
   }
   return <LiveArtifactsListBody />;
 }
 
-function LiveArtifactsListBody() {
-  const [{ data, fetching, error }] = useQuery<AppletsResult>({
-    query: AppletsQuery,
-    requestPolicy: "cache-and-network",
-  });
-  const items: ArtifactItem[] = useMemo(
-    () =>
-      (data?.applets?.nodes ?? []).map((node) =>
-        toArtifactItem(toAppletPreview(node)),
-      ),
-    [data?.applets?.nodes],
-  );
+// Test-seam path: holds the filter input state locally so the affordance is
+// interactive in tests without driving a live query switch.
+function StaticArtifactsListBody({
+  items,
+  fetching,
+  errorMessage,
+  showUserFilter,
+}: {
+  items: ArtifactItem[];
+  fetching: boolean;
+  errorMessage?: string;
+  showUserFilter: boolean;
+}) {
+  const [userIdFilter, setUserIdFilter] = useState("");
   return (
     <ArtifactsListBodyView
       items={items}
       fetching={fetching}
-      errorMessage={error?.message}
+      errorMessage={errorMessage}
+      showUserFilter={showUserFilter}
+      userIdFilter={userIdFilter}
+      onUserIdFilterChange={setUserIdFilter}
+      filterActive={false}
+    />
+  );
+}
+
+function LiveArtifactsListBody() {
+  // Operator state lives in the live-data layer (not the presentational
+  // toolbar) because the user-ID filter switches which query runs. Gate on
+  // `roleResolved` so the affordance never flashes before the role is known.
+  const { isOperator, roleResolved, tenantId } = useTenant();
+  const operatorReady = roleResolved && isOperator;
+
+  const [userIdFilter, setUserIdFilter] = useState("");
+  const trimmedUserId = userIdFilter.trim();
+  // tenantId always comes from TenantContext, never a route param or
+  // user-editable field — the server still re-enforces requireTenantAdmin.
+  const filterActive = operatorReady && !!tenantId && trimmedUserId.length > 0;
+
+  const [defaultResult] = useQuery<AppletsResult>({
+    query: AppletsQuery,
+    requestPolicy: "cache-and-network",
+    pause: filterActive,
+  });
+  const [adminResult] = useQuery({
+    query: AdminAppletsQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      userId: trimmedUserId || undefined,
+    },
+    requestPolicy: "cache-and-network",
+    pause: !filterActive,
+  });
+
+  const source = filterActive ? adminResult : defaultResult;
+  const rawNodes = filterActive
+    ? adminResult.data?.adminApplets?.nodes
+    : defaultResult.data?.applets?.nodes;
+
+  const items: ArtifactItem[] = useMemo(
+    () =>
+      (rawNodes ?? []).map((node) =>
+        toArtifactItem(toAppletPreview(node as AppletPreviewNode)),
+      ),
+    [rawNodes],
+  );
+
+  return (
+    <ArtifactsListBodyView
+      items={items}
+      fetching={source.fetching}
+      errorMessage={source.error?.message}
+      showUserFilter={operatorReady}
+      userIdFilter={userIdFilter}
+      onUserIdFilterChange={setUserIdFilter}
+      filterActive={filterActive}
     />
   );
 }
@@ -75,10 +146,18 @@ function ArtifactsListBodyView({
   items,
   fetching,
   errorMessage,
+  showUserFilter,
+  userIdFilter,
+  onUserIdFilterChange,
+  filterActive,
 }: {
   items: ArtifactItem[];
   fetching: boolean;
   errorMessage?: string;
+  showUserFilter: boolean;
+  userIdFilter: string;
+  onUserIdFilterChange: (value: string) => void;
+  filterActive: boolean;
 }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -111,7 +190,9 @@ function ArtifactsListBodyView({
     : fetching
       ? "Loading artifacts…"
       : items.length === 0
-        ? "Ask ThinkWork to create an artifact and it will appear here."
+        ? filterActive
+          ? "No artifacts found for this user ID."
+          : "Ask ThinkWork to create an artifact and it will appear here."
         : "No artifacts match your filters.";
 
   return (
@@ -126,6 +207,9 @@ function ArtifactsListBodyView({
         onKindChange={setKind}
         sortBy={sortBy}
         onSortByChange={setSortBy}
+        showUserFilter={showUserFilter}
+        userIdFilter={userIdFilter}
+        onUserIdFilterChange={onUserIdFilterChange}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
         {showLoadingShell ? (
