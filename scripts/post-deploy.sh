@@ -106,25 +106,39 @@ image_contains_source_sha() {
   git merge-base --is-ancestor "$source_sha" "$image_sha"
 }
 
-log "[post-deploy] stage=$STAGE region=$REGION runtime=$RUNTIME matching runtimes: ${NAME_PREFIX}*"
-
-runtimes_json=$(aws bedrock-agentcore-control list-agent-runtimes \
-  --region "$REGION" --output json 2>&1) || {
-  echo "ERROR: list-agent-runtimes failed:" >&2
-  echo "$runtimes_json" >&2
-  exit 2
-}
-
 ACTIVE_RUNTIME_ID=$(aws ssm get-parameter \
   --name "/thinkwork/${STAGE}/agentcore/runtime-id-${RUNTIME}" \
   --region "$REGION" \
   --query Parameter.Value --output text 2>/dev/null || true)
 
-# Filter to our stage + runtime prefix, plus the active SSM runtime when a
-# legacy/manual name does not follow the current prefix convention.
-matched=$(echo "$runtimes_json" \
-  | jq --arg p "$NAME_PREFIX" --arg active "$ACTIVE_RUNTIME_ID" \
-       '[.agentRuntimes[] | select((.agentRuntimeName | startswith($p)) or (.agentRuntimeId == $active))]')
+if [[ -n "$ACTIVE_RUNTIME_ID" && "$ACTIVE_RUNTIME_ID" != "None" ]]; then
+  log "[post-deploy] stage=$STAGE region=$REGION runtime=$RUNTIME active runtime: $ACTIVE_RUNTIME_ID"
+
+  active_detail=$(aws bedrock-agentcore-control get-agent-runtime \
+    --agent-runtime-id "$ACTIVE_RUNTIME_ID" --region "$REGION" --output json 2>&1) || {
+    echo "ERROR: get-agent-runtime $ACTIVE_RUNTIME_ID failed:" >&2
+    echo "$active_detail" >&2
+    exit 2
+  }
+
+  matched=$(echo "$active_detail" | jq --arg fallback "$NAME_PREFIX" '[{
+    agentRuntimeId: .agentRuntimeId,
+    agentRuntimeName: (.agentRuntimeName // $fallback),
+    status: (.status // "UNKNOWN")
+  }]')
+else
+  log "[post-deploy] stage=$STAGE region=$REGION runtime=$RUNTIME matching runtimes: ${NAME_PREFIX}*"
+
+  runtimes_json=$(aws bedrock-agentcore-control list-agent-runtimes \
+    --region "$REGION" --output json 2>&1) || {
+    echo "ERROR: list-agent-runtimes failed:" >&2
+    echo "$runtimes_json" >&2
+    exit 2
+  }
+
+  matched=$(echo "$runtimes_json" \
+    | jq --arg p "$NAME_PREFIX" '[.agentRuntimes[] | select(.agentRuntimeName | startswith($p))]')
+fi
 
 count=$(echo "$matched" | jq 'length')
 if [[ "$count" -eq 0 ]]; then
