@@ -1,6 +1,6 @@
 ---
 title: "feat: Port admin Artifacts operator tooling into spaces"
-status: active
+status: completed
 date: 2026-06-03
 type: feat
 origin: docs/brainstorms/2026-06-03-artifacts-admin-to-spaces-requirements.md
