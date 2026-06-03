@@ -73,9 +73,7 @@ export function SettingsPane({
   className?: string;
 }) {
   return (
-    <div className={cn("mx-auto w-full max-w-3xl px-6 pb-10 pt-6", className)}>
-      {children}
-    </div>
+    <div className={cn("w-full px-6 pb-10 pt-6", className)}>{children}</div>
   );
 }
 

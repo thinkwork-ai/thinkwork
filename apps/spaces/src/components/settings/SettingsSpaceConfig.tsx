@@ -64,7 +64,7 @@ export function SettingsSpaceConfig() {
 
   if (!space) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
+      <div className="w-full px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">
           This space could not be loaded — it may have been removed.
         </p>
@@ -79,7 +79,7 @@ export function SettingsSpaceConfig() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-4xl px-6 pb-10 pt-6">
+      <div className="w-full px-6 pb-10 pt-6">
         <SettingsPageTitle title={spaceName} />
         <InformationSection
           spaceId={spaceId}

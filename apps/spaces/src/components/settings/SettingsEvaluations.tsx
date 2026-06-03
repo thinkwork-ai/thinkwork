@@ -453,7 +453,7 @@ export function SettingsEvaluations() {
   }
 
   return (
-    <SettingsPane className="max-w-5xl">
+    <SettingsPane>
       <SettingsPageTitle title="Evaluations" />
       <div className="space-y-6">
         {/* Summary metric cards */}

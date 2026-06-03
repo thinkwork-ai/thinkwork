@@ -148,7 +148,7 @@ export function SettingsUsers() {
 
   if (result.error) {
     return (
-      <SettingsPane className="max-w-5xl">
+      <SettingsPane>
         <SettingsHeader title="Users" />
         <div className="flex items-center justify-between rounded-xl border border-border p-6">
           <span className="text-sm text-muted-foreground">

@@ -222,7 +222,7 @@ export function SettingsEvalTestCaseDetail() {
   }
   if (!tc) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
+      <div className="w-full px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">Test case not found.</p>
       </div>
     );
@@ -239,7 +239,7 @@ export function SettingsEvalTestCaseDetail() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl space-y-6 px-6 pb-10 pt-6">
+      <div className="w-full space-y-6 px-6 pb-10 pt-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Test Configuration</CardTitle>
@@ -264,7 +264,10 @@ export function SettingsEvalTestCaseDetail() {
                     key={i}
                     className="flex items-start gap-2 bg-muted/50 p-2 rounded-md"
                   >
-                    <Badge variant="outline" className="text-xs shrink-0 mt-0.5">
+                    <Badge
+                      variant="outline"
+                      className="text-xs shrink-0 mt-0.5"
+                    >
                       {a.type ?? "?"}
                     </Badge>
                     <span className="text-sm">{a.value ?? "—"}</span>

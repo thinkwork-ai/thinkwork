@@ -422,7 +422,7 @@ export function SettingsEvalRunDetail() {
   }
   if (!runDetail) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
+      <div className="w-full px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">Run not found.</p>
       </div>
     );
