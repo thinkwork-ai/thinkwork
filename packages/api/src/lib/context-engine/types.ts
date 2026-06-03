@@ -22,6 +22,12 @@ export interface ContextEngineCaller {
   tenantId: string;
   userId?: string | null;
   agentId?: string | null;
+  // The thread the turn is running in, and the Space that thread belongs to.
+  // The Bedrock Knowledge Base provider unions space-bound KBs (resolved from
+  // spaceId) with the agent's tenant-wide KBs (U7). spaceId is resolved
+  // server-side from threadId in the MCP handler.
+  threadId?: string | null;
+  spaceId?: string | null;
   templateId?: string | null;
   traceId?: string | null;
   requesterContext?: {

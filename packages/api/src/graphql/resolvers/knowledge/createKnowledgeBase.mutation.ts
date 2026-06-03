@@ -1,11 +1,14 @@
+import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
   db,
+  eq,
   knowledgeBases,
   snakeToCamel,
   generateSlug,
-  getKbManagerFnArn,
 } from "../../utils.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
+import { dispatchKbManager } from "./kb-manager-dispatch.js";
 
 export const createKnowledgeBase = async (
   _parent: any,
@@ -13,6 +16,9 @@ export const createKnowledgeBase = async (
   ctx: GraphQLContext,
 ) => {
   const i = args.input;
+  // Authz: the caller must be an admin/owner of the target tenant before
+  // we provision anything (these resolvers shipped with no gate — see U13).
+  await requireAdminOrServiceCaller(ctx, i.tenantId, "create_knowledge_base");
   const slug =
     i.name
       .toLowerCase()
@@ -32,26 +38,28 @@ export const createKnowledgeBase = async (
       status: "creating",
     })
     .returning();
-  // Fire-and-forget: invoke KB manager Lambda to provision in Bedrock
+  // Surface a dispatch failure synchronously (U6/KTD7) instead of leaving the
+  // KB stuck in "creating" with no signal. Bedrock provisioning itself stays
+  // async; only the dispatch is awaited. On failure the row is marked failed
+  // so the operator can recover via retry (U9).
   try {
-    const kbManagerArn = await getKbManagerFnArn();
-    if (kbManagerArn) {
-      const { LambdaClient, InvokeCommand } =
-        await import("@aws-sdk/client-lambda");
-      const lambda = new LambdaClient({});
-      await lambda.send(
-        new InvokeCommand({
-          FunctionName: kbManagerArn,
-          InvocationType: "Event",
-          Payload: JSON.stringify({
-            action: "create",
-            knowledgeBaseId: row.id,
-          }),
-        }),
-      );
-    }
+    await dispatchKbManager("create", row.id);
   } catch (err) {
-    console.error("[graphql] Failed to invoke KB manager:", err);
+    await db
+      .update(knowledgeBases)
+      .set({
+        status: "failed",
+        error_message: errorText(err),
+        updated_at: new Date(),
+      })
+      .where(eq(knowledgeBases.id, row.id));
+    throw new GraphQLError(
+      "Failed to start knowledge base provisioning. The knowledge base is marked failed; you can retry it.",
+    );
   }
   return snakeToCamel(row);
 };
+
+function errorText(err: unknown): string {
+  return (err instanceof Error ? err.message : String(err)).slice(0, 1000);
+}

@@ -1,46 +1,53 @@
+import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
   db,
   eq,
   knowledgeBases,
   agentKnowledgeBases,
-  getKbManagerFnArn,
+  spaceKnowledgeBases,
 } from "../../utils.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
+import { dispatchKbManager } from "./kb-manager-dispatch.js";
 
 export const deleteKnowledgeBase = async (
   _parent: any,
   args: any,
   ctx: GraphQLContext,
 ) => {
-  // Mark as deleting, fire-and-forget cleanup
+  // Authz: derive the tenant pin from the row being deleted, then gate
+  // before any side effect (U13 — these resolvers shipped with no gate).
+  const [existing] = await db
+    .select({ tenant_id: knowledgeBases.tenant_id })
+    .from(knowledgeBases)
+    .where(eq(knowledgeBases.id, args.id));
+  if (!existing) throw new GraphQLError("Knowledge base not found");
+  await requireAdminOrServiceCaller(
+    ctx,
+    existing.tenant_id,
+    "delete_knowledge_base",
+  );
+
+  // Mark as deleting, then clean up both binding tables. The agent binding
+  // was already cleared here; the space binding was being orphaned (U6) —
+  // a KB deleted while bound to a Space left a dangling space_knowledge_bases
+  // row pointing at a now-gone KB.
   const [row] = await db
     .update(knowledgeBases)
     .set({ status: "deleting", updated_at: new Date() })
     .where(eq(knowledgeBases.id, args.id))
     .returning();
-  if (!row) throw new Error("Knowledge base not found");
-  // Remove agent assignments
+  if (!row) throw new GraphQLError("Knowledge base not found");
   await db
     .delete(agentKnowledgeBases)
     .where(eq(agentKnowledgeBases.knowledge_base_id, args.id));
-  // Fire-and-forget: invoke KB manager Lambda to delete in Bedrock
+  await db
+    .delete(spaceKnowledgeBases)
+    .where(eq(spaceKnowledgeBases.knowledge_base_id, args.id));
+  // Best-effort Bedrock teardown — the DB rows are already cleared, so a
+  // dispatch failure is logged rather than surfaced.
   try {
-    const kbManagerArn = await getKbManagerFnArn();
-    if (kbManagerArn) {
-      const { LambdaClient, InvokeCommand } =
-        await import("@aws-sdk/client-lambda");
-      const lambda = new LambdaClient({});
-      await lambda.send(
-        new InvokeCommand({
-          FunctionName: kbManagerArn,
-          InvocationType: "Event",
-          Payload: JSON.stringify({
-            action: "delete",
-            knowledgeBaseId: args.id,
-          }),
-        }),
-      );
-    }
+    await dispatchKbManager("delete", args.id);
   } catch (err) {
     console.error("[graphql] Failed to invoke KB manager for delete:", err);
   }
