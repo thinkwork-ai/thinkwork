@@ -118,6 +118,12 @@ export function buildDesktopCsp(options: DesktopCspOptions = {}): string {
     // server's looser CSP masked it. img-src/font-src already allow data:.
     "data:",
     "blob:",
+    // Attachment uploads PUT the file bytes directly to an S3 presigned URL
+    // (`<bucket>.s3.<region>.amazonaws.com`), and downloads/finalize hit other
+    // AWS endpoints. fetch() is governed by connect-src, so the S3 origin must
+    // be allowed or the PUT is refused and the upload fails after presign — the
+    // exact symptom that left new threads empty on packaged builds.
+    "https://*.amazonaws.com",
     DESKTOP_APP_ORIGIN,
     originFromUrl(options.graphqlHttpUrl),
     originFromUrl(options.apiUrl),
