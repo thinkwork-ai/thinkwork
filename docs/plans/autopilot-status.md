@@ -11,19 +11,19 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-02-003-refactor-remove-strands-runtime-plan.md`.
 - Target branch: `main`.
-- Current unit: U6 Clean up docs, runbooks, AGENTS guidance, and product language.
-- Current branch: `codex/remove-strands-u6`.
-- Current worktree: `.Codex/worktrees/remove-strands-u6`.
+- Current unit: U7 End-to-end verification and deployment proof.
+- Current branch: `codex/remove-strands-u7`.
+- Current worktree: `.Codex/worktrees/remove-strands-u7`.
 
-| Unit                                                               | Branch                    | PR                                                           | State   | Notes                                                                                          |
-| ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------- |
-| U1 Characterize Strands usage and data safety                      | `codex/remove-strands-u1` | [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004) | Merged  | Squash merged as `3fdfd62f`; runtime contract tests and Strands cleanup classification landed. |
-| U2 Make API, GraphQL, and Database runtime defaults Pi-only        | `codex/remove-strands-u2` | [#2006](https://github.com/thinkwork-ai/thinkwork/pull/2006) | Merged  | Squash merged as `251e4a05`; stored/public runtime defaults are Pi-only.                       |
-| U3 Make deploy and release workflows Pi-only                       | `codex/remove-strands-u3` | [#2007](https://github.com/thinkwork-ai/thinkwork/pull/2007) | Merged  | Squash merged as `44054999`; deploy/release workflows and helper scripts are Pi-only.          |
-| U4 Move shared Terraform resources out of the Strands module       | `codex/remove-strands-u4` | [#2008](https://github.com/thinkwork-ai/thinkwork/pull/2008) | Merged  | Squash merged as `359f93d5`; shared ECR/DLQ moved to `agentcore-platform`.                     |
-| U5 Delete Strands container source and retire Strands-only scripts | `codex/remove-strands-u5` | [#2009](https://github.com/thinkwork-ai/thinkwork/pull/2009) | Merged  | Squash merged as `c9372cb5`; legacy package deleted and active source scans passed.            |
-| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | `codex/remove-strands-u6` | Pending                                                      | Open    | Active docs and runbooks now describe the Pi-only AgentCore runtime; local checks passed.      |
-| U7 End-to-end verification and deployment proof                    | Pending                   | Pending                                                      | Pending | Not started.                                                                                   |
+| Unit                                                               | Branch                    | PR                                                           | State  | Notes                                                                                          |
+| ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------- |
+| U1 Characterize Strands usage and data safety                      | `codex/remove-strands-u1` | [#2004](https://github.com/thinkwork-ai/thinkwork/pull/2004) | Merged | Squash merged as `3fdfd62f`; runtime contract tests and Strands cleanup classification landed. |
+| U2 Make API, GraphQL, and Database runtime defaults Pi-only        | `codex/remove-strands-u2` | [#2006](https://github.com/thinkwork-ai/thinkwork/pull/2006) | Merged | Squash merged as `251e4a05`; stored/public runtime defaults are Pi-only.                       |
+| U3 Make deploy and release workflows Pi-only                       | `codex/remove-strands-u3` | [#2007](https://github.com/thinkwork-ai/thinkwork/pull/2007) | Merged | Squash merged as `44054999`; deploy/release workflows and helper scripts are Pi-only.          |
+| U4 Move shared Terraform resources out of the Strands module       | `codex/remove-strands-u4` | [#2008](https://github.com/thinkwork-ai/thinkwork/pull/2008) | Merged | Squash merged as `359f93d5`; shared ECR/DLQ moved to `agentcore-platform`.                     |
+| U5 Delete Strands container source and retire Strands-only scripts | `codex/remove-strands-u5` | [#2009](https://github.com/thinkwork-ai/thinkwork/pull/2009) | Merged | Squash merged as `c9372cb5`; legacy package deleted and active source scans passed.            |
+| U6 Clean up docs, runbooks, AGENTS guidance, and product language  | `codex/remove-strands-u6` | [#2014](https://github.com/thinkwork-ai/thinkwork/pull/2014) | Merged | Squash merged as `8bd34fa6`; active docs and runbooks describe the Pi-only AgentCore runtime.  |
+| U7 End-to-end verification and deployment proof                    | `codex/remove-strands-u7` | [#2017](https://github.com/thinkwork-ai/thinkwork/pull/2017) | Active | Deploy proof passed on run `26860293884`; final ledger update in progress.                     |
 
 ### Progress Log
 
@@ -153,6 +153,39 @@ status: in_progress
   `Strands`, `strands`, `agentcore-strands`, and `runtime-id-strands`.
   `pnpm install --frozen-lockfile` completed with the known optional `canvas`
   native-build warning on Node 25.
+- Squash merged U6 PR
+  [#2014](https://github.com/thinkwork-ai/thinkwork/pull/2014) as
+  `8bd34fa6`; removed the U6 worktree and synced from `origin/main`.
+- U7 deploy proof first exposed two CI/deploy issues outside the Strands
+  removal units:
+  [#2010](https://github.com/thinkwork-ai/thinkwork/pull/2010) cached Spaces
+  deploy Terraform outputs after old main deploy runs spent ~38 minutes
+  reading outputs; [#2011](https://github.com/thinkwork-ai/thinkwork/pull/2011)
+  reused the configured AgentCore memory and switched Pi runtime verification
+  to SSM-first lookup; [#2012](https://github.com/thinkwork-ai/thinkwork/pull/2012)
+  declared the greenfield root `agentcore_memory_id` variable so CI could pass
+  that override.
+- Main deploy run
+  [26859443038](https://github.com/thinkwork-ai/thinkwork/actions/runs/26859443038)
+  passed after #2010-#2012. `Build & Deploy Spaces` completed in 2m10s,
+  Terraform Apply completed in 59s, and Deploy Summary verified the Pi
+  AgentCore runtime without Strands runtime inspection.
+- U6 merge triggered main deploy run
+  [26859863160](https://github.com/thinkwork-ai/thinkwork/actions/runs/26859863160).
+  It proved the docs/runtime-guidance merge skipped the container build and
+  passed Terraform, Spaces, Docs, Admin, and Pi runtime summary checks, but the
+  stale workflow still hung while Workspace Layout Migration was getting deploy
+  outputs. The run was force-canceled after the replacement hotfix was merged.
+- Hotfix PR
+  [#2015](https://github.com/thinkwork-ai/thinkwork/pull/2015) cached Terraform
+  outputs for Bootstrap and Workspace Layout Migration. Its PR checks passed:
+  `cla`, `lint`, `test`, `typecheck`, and `verify`.
+- Replacement main deploy run
+  [26860293884](https://github.com/thinkwork-ai/thinkwork/actions/runs/26860293884)
+  passed end to end. The container job built and updated Pi only, the runtime
+  update job updated Pi only, `Workspace Layout Migration` completed in 3m11s
+  with the cached output step passing, `Build & Deploy Spaces`
+  completed in 1m45s, and Deploy Summary verified the Pi AgentCore runtime.
 
 ### U1 Strands Reference Classification
 
