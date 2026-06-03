@@ -1,0 +1,63 @@
+name: Release Mobile (TestFlight)
+
+# Cut a mobile release by pushing a `mobile-v*` tag (mirrors `desktop-v*` for
+# the desktop app). This triggers an EAS cloud build of the iOS app and
+# auto-submits it to TestFlight. The build + submit run on EAS's builders, not
+# on GitHub — this job only queues them (`--no-wait`), so watch progress at
+# https://expo.dev/accounts/thinkwork-ai/projects/thinkwork-mobile.
+#
+# Requires the `EXPO_TOKEN` repo secret (an Expo robot/personal access token
+# with access to the thinkwork-mobile project). The iOS submit credentials
+# (Apple ID, ASC App ID, team) live in apps/mobile/eas.json `submit.production`,
+# and the ASC API key is stored on EAS — so no extra GitHub secrets are needed.
+on:
+  push:
+    tags:
+      - "mobile-v*"
+
+concurrency:
+  group: release-mobile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-submit:
+    name: EAS build + submit (iOS → TestFlight)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Preflight EXPO_TOKEN
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "${EXPO_TOKEN:-}" ]; then
+            echo "EXPO_TOKEN secret is not set — add an Expo access token as EXPO_TOKEN." >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # Queue the EAS iOS build with auto-submit to TestFlight. `--no-wait`
+      # returns once the build is queued; EAS runs the build then the submit.
+      - name: EAS build + auto-submit (iOS, production)
+        working-directory: apps/mobile
+        run: |
+          eas build \
+            --platform ios \
+            --profile production \
+            --auto-submit \
+            --non-interactive \
+            --no-wait
