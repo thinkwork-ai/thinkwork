@@ -204,7 +204,6 @@ export type AgentPerformance = {
 
 export enum AgentRuntime {
   Flue = "FLUE",
-  Strands = "STRANDS",
 }
 
 export type AgentSkill = {

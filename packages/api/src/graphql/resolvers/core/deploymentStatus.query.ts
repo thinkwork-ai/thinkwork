@@ -37,7 +37,7 @@ export const deploymentStatus = async (
     appsyncUrl: process.env.APPSYNC_ENDPOINT || null,
     appsyncRealtimeUrl: process.env.APPSYNC_REALTIME_URL || null,
     hindsightEndpoint: process.env.HINDSIGHT_ENDPOINT || null,
-    agentcoreStatus: process.env.AGENTCORE_FUNCTION_NAME
+    agentcoreStatus: process.env.AGENTCORE_PI_FUNCTION_NAME
       ? "managed (always on)"
       : "not deployed",
     hindsightEnabled: !!process.env.HINDSIGHT_ENDPOINT,

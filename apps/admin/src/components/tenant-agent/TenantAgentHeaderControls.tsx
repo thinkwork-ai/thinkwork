@@ -57,10 +57,7 @@ export function TenantAgentHeaderControls({
       <BadgeSelectorSelect
         icon={<Cpu className="h-3.5 w-3.5" />}
         value={agent.runtime}
-        options={[
-          { value: AgentRuntime.Flue, label: "Pi" },
-          { value: AgentRuntime.Strands, label: "Strands" },
-        ]}
+        options={[{ value: AgentRuntime.Flue, label: "Pi" }]}
         onSelect={(value) =>
           value ? save({ runtime: value as AgentRuntime }) : Promise.resolve()
         }

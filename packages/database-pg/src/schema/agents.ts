@@ -42,12 +42,12 @@ export const agents = pgTable(
     type: text("type").notNull().default("agent"),
     /** "user" = created by tenant admins, "system" = platform-managed (eval test agent, etc.) */
     source: text("source").notNull().default("user"),
-    /** Agent runtime substrate. Strands remains the default; Pi is opt-in per agent. */
-    runtime: text("runtime").notNull().default("strands"),
+    /** Agent runtime substrate. Pi is the only active runtime. */
+    runtime: text("runtime").notNull().default("pi"),
     status: text("status").notNull().default("idle"),
     system_prompt: text("system_prompt"),
     reports_to: uuid("reports_to").references((): any => agents.id),
-    /** Parent agent for sub-agent relationship. Sub-agents run in-process via Strands @tool. */
+    /** Parent agent for sub-agent relationship. */
     parent_agent_id: uuid("parent_agent_id").references((): any => agents.id),
     human_pair_id: uuid("human_pair_id").references(() => users.id),
     adapter_type: text("adapter_type"),

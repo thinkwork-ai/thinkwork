@@ -368,8 +368,8 @@ function formatThreadActivityTime(primary: unknown, fallback: unknown): string {
 
 export function formatRuntimeType(runtimeType: string): string {
   const normalized = runtimeType.trim().toLowerCase();
-  if (normalized === "pi") return "Pi";
-  if (normalized === "strands") return "Strands";
+  if (normalized === "pi" || normalized === "flue" || normalized === "strands")
+    return "Pi";
   return runtimeType.trim();
 }
 

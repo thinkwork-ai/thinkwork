@@ -15,7 +15,6 @@ enum AgentStatus {
 }
 
 enum AgentRuntime {
-  STRANDS
   FLUE
 }
 

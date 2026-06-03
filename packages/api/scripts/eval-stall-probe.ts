@@ -72,9 +72,6 @@ interface StageTiming {
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const ACCOUNT_ID = process.env.AWS_ACCOUNT_ID || "487219502366";
-const SSM_RUNTIME_ID_STRANDS =
-  process.env.AGENTCORE_RUNTIME_SSM_STRANDS ||
-  "/thinkwork/dev/agentcore/runtime-id-strands";
 const SSM_RUNTIME_ID_PI = process.env.AGENTCORE_RUNTIME_SSM_PI || "";
 const SPANS_LOG_GROUP = process.env.SPANS_LOG_GROUP || "aws/spans";
 const RUNTIME_LOG_GROUP_PREFIX = "/aws/bedrock-agentcore/runtimes/";
@@ -225,18 +222,17 @@ async function timed<T>(fn: () => Promise<T>) {
 }
 
 async function loadRuntimeId(runtimeType: AgentRuntimeType) {
-  if (runtimeIds[runtimeType]) return runtimeIds[runtimeType]!;
-  const parameterName =
-    runtimeType === "pi" ? SSM_RUNTIME_ID_PI : SSM_RUNTIME_ID_STRANDS;
+  const normalizedRuntimeType = normalizeAgentRuntimeType(runtimeType);
+  if (runtimeIds[normalizedRuntimeType])
+    return runtimeIds[normalizedRuntimeType]!;
+  const parameterName = SSM_RUNTIME_ID_PI;
   if (!parameterName) {
-    throw new Error(
-      `${runtimeType} AgentCore runtime SSM parameter is not configured`,
-    );
+    throw new Error("Pi AgentCore runtime SSM parameter is not configured");
   }
   const resp = await ssm.send(new GetParameterCommand({ Name: parameterName }));
   if (!resp.Parameter?.Value)
     throw new Error(`SSM parameter ${parameterName} is empty`);
-  runtimeIds[runtimeType] = resp.Parameter.Value;
+  runtimeIds[normalizedRuntimeType] = resp.Parameter.Value;
   return resp.Parameter.Value;
 }
 
@@ -249,7 +245,7 @@ async function resolveRuntimeType(run: EvalRun | null, tenantId: string) {
       .where(and(eq(agents.id, run.agent_id), eq(agents.tenant_id, tenantId)));
     return normalizeAgentRuntimeType(row?.runtime);
   }
-  return "strands";
+  return "pi";
 }
 
 async function loadCases(args: CliArgs, run: EvalRun | null) {

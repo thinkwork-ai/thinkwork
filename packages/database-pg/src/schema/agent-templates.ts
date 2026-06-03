@@ -43,7 +43,7 @@ export const agentTemplates = pgTable(
     /** 'system' = platform-provided, 'user' = tenant-created */
     source: text("source").notNull().default("user"),
     /** Default runtime substrate for agents created from this template. */
-    runtime: text("runtime").notNull().default("strands"),
+    runtime: text("runtime").notNull().default("pi"),
     /** Template category in the ThinkWork Computer product model. */
     template_kind: text("template_kind").notNull().default("agent"),
     /** The Bedrock model agents in this template use */
@@ -101,7 +101,7 @@ export const agentTemplates = pgTable(
     /**
      * Context Engine opt-in metadata for the query_context built-in tool.
      * Shape: { enabled: true } | null. Null = the template does not register
-     * query_context for Strands/PI turns.
+     * query_context for Pi turns.
      *
      * Shape is validated at create/update mutation time by
      * packages/api/src/lib/templates/context-engine-config.ts.
