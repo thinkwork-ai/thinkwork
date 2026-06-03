@@ -222,7 +222,7 @@ export function SettingsEvalTestCaseDetail() {
   }
   if (!tc) {
     return (
-      <div className="w-full px-6 pb-10 pt-6">
+      <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">Test case not found.</p>
       </div>
     );
@@ -239,7 +239,7 @@ export function SettingsEvalTestCaseDetail() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="w-full space-y-6 px-6 pb-10 pt-6">
+      <div className="w-full max-w-[750px] space-y-6 px-6 pb-10 pt-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Test Configuration</CardTitle>

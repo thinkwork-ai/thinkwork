@@ -120,7 +120,7 @@ export function SettingsRoutineDetail() {
 
   if (!routine) {
     return (
-      <div className="w-full px-6 pb-10 pt-6">
+      <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">
           This routine could not be loaded — it may have been removed.
         </p>

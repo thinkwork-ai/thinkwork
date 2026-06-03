@@ -101,7 +101,7 @@ export function SettingsRoutineExecutionDetail() {
   }
   if (error || !execution || execution.routineId !== routineId) {
     return (
-      <div className="w-full px-6 pb-10 pt-6">
+      <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">
             {error?.message ??

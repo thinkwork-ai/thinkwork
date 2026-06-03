@@ -64,7 +64,11 @@ export function SettingsPageTitle({
   );
 }
 
-/** Outer padding wrapper for a settings content pane. */
+/**
+ * Outer padding wrapper for a settings content pane. Form/detail pages keep a
+ * readable 750px column (left-justified, not centered); DataTable/list pages
+ * pass `className="max-w-none"` to fill the full width.
+ */
 export function SettingsPane({
   children,
   className,
@@ -73,7 +77,9 @@ export function SettingsPane({
   className?: string;
 }) {
   return (
-    <div className={cn("w-full px-6 pb-10 pt-6", className)}>{children}</div>
+    <div className={cn("w-full max-w-[750px] px-6 pb-10 pt-6", className)}>
+      {children}
+    </div>
   );
 }
 
