@@ -115,6 +115,19 @@ esac
 AWS
 chmod +x "$FAKEBIN/aws"
 
+cat > "$FAKEBIN/timeout" <<'TIMEOUT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${TIMEOUT_SHOULD_EXPIRE:-0}" == "1" ]]; then
+  exit 124
+fi
+
+shift
+exec "$@"
+TIMEOUT
+chmod +x "$FAKEBIN/timeout"
+
 assert_fails_when_active_runtime_image_is_stale() {
   local source_sha="$1"
   local stale_sha="$2"
@@ -188,6 +201,19 @@ assert_skips_when_active_runtime_get_is_forbidden() {
   grep -q "skipping AgentCore control-plane drift probe" "$TMPDIR/get-forbidden.err"
 }
 
+assert_skips_when_active_runtime_get_times_out() {
+  local source_sha="$1"
+  local stale_sha="$2"
+  local fresh_sha="$3"
+
+  PATH="$FAKEBIN:$PATH" TIMEOUT_SHOULD_EXPIRE=1 ACTIVE_IMAGE_SHA="$fresh_sha" ORPHAN_IMAGE_SHA="$stale_sha" \
+    bash "$ROOT/scripts/post-deploy.sh" --stage dev --region us-east-1 --min-source-sha "$source_sha" --strict \
+    >"$TMPDIR/get-timeout.out" 2>"$TMPDIR/get-timeout.err"
+
+  grep -q "active runtime: thinkwork_dev_pi_active" "$TMPDIR/get-timeout.out"
+  grep -q "skipping AgentCore control-plane drift probe" "$TMPDIR/get-timeout.err"
+}
+
 source_sha="$(git -C "$ROOT" rev-parse HEAD~1)"
 stale_sha="$(git -C "$ROOT" rev-parse HEAD~2)"
 fresh_sha="$(git -C "$ROOT" rev-parse HEAD)"
@@ -197,5 +223,6 @@ assert_passes_when_active_runtime_image_contains_source "$source_sha" "$stale_sh
 assert_rejects_legacy_strands_runtime
 assert_uses_ssm_runtime_without_list_permission "$source_sha" "$stale_sha" "$fresh_sha"
 assert_skips_when_active_runtime_get_is_forbidden "$source_sha" "$stale_sha" "$fresh_sha"
+assert_skips_when_active_runtime_get_times_out "$source_sha" "$stale_sha" "$fresh_sha"
 
 echo "post-deploy tests passed"

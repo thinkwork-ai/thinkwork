@@ -31,6 +31,7 @@ JSON=0
 REGION="${AWS_REGION:-us-east-1}"
 MIN_SOURCE_SHA=""
 RUNTIME="pi"
+AGENTCORE_CONTROL_TIMEOUT_SECONDS="${AGENTCORE_CONTROL_TIMEOUT_SECONDS:-20}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -110,6 +111,28 @@ is_agentcore_forbidden() {
   grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$1"
 }
 
+is_agentcore_control_unavailable() {
+  is_agentcore_forbidden "$1" || grep -q 'timed out after' <<<"$1"
+}
+
+agentcore_control() {
+  local output
+  local status
+
+  if command -v timeout >/dev/null 2>&1; then
+    output="$(timeout "${AGENTCORE_CONTROL_TIMEOUT_SECONDS}s" aws bedrock-agentcore-control "$@" 2>&1)"
+    status=$?
+    if [[ "$status" -eq 124 ]]; then
+      echo "aws bedrock-agentcore-control $1 timed out after ${AGENTCORE_CONTROL_TIMEOUT_SECONDS}s"
+      return "$status"
+    fi
+    printf '%s' "$output"
+    return "$status"
+  fi
+
+  aws bedrock-agentcore-control "$@"
+}
+
 ACTIVE_RUNTIME_ID=$(aws ssm get-parameter \
   --name "/thinkwork/${STAGE}/agentcore/runtime-id-${RUNTIME}" \
   --region "$REGION" \
@@ -118,10 +141,10 @@ ACTIVE_RUNTIME_ID=$(aws ssm get-parameter \
 if [[ -n "$ACTIVE_RUNTIME_ID" && "$ACTIVE_RUNTIME_ID" != "None" ]]; then
   log "[post-deploy] stage=$STAGE region=$REGION runtime=$RUNTIME active runtime: $ACTIVE_RUNTIME_ID"
 
-  active_detail=$(aws bedrock-agentcore-control get-agent-runtime \
-    --agent-runtime-id "$ACTIVE_RUNTIME_ID" --region "$REGION" --output json 2>&1) || {
-    if is_agentcore_forbidden "$active_detail"; then
-      echo "WARN: get-agent-runtime $ACTIVE_RUNTIME_ID is forbidden; skipping AgentCore control-plane drift probe" >&2
+  active_detail=$(agentcore_control get-agent-runtime \
+    --agent-runtime-id "$ACTIVE_RUNTIME_ID" --region "$REGION" --output json) || {
+    if is_agentcore_control_unavailable "$active_detail"; then
+      echo "WARN: get-agent-runtime $ACTIVE_RUNTIME_ID unavailable; skipping AgentCore control-plane drift probe" >&2
       [[ "$JSON" -eq 1 ]] && printf '{"stage":"%s","region":"%s","drift":0,"permissionSkipped":true,"runtimes":[]}\n' "$STAGE" "$REGION"
       exit 0
     fi
@@ -138,8 +161,8 @@ if [[ -n "$ACTIVE_RUNTIME_ID" && "$ACTIVE_RUNTIME_ID" != "None" ]]; then
 else
   log "[post-deploy] stage=$STAGE region=$REGION runtime=$RUNTIME matching runtimes: ${NAME_PREFIX}*"
 
-  runtimes_json=$(aws bedrock-agentcore-control list-agent-runtimes \
-    --region "$REGION" --output json 2>&1) || {
+  runtimes_json=$(agentcore_control list-agent-runtimes \
+    --region "$REGION" --output json) || {
     echo "ERROR: list-agent-runtimes failed:" >&2
     echo "$runtimes_json" >&2
     exit 2
@@ -162,10 +185,10 @@ results=()
 
 while read -r rt_id rt_name rt_status; do
   # Each runtime's top-level status + current version
-  rt_detail=$(aws bedrock-agentcore-control get-agent-runtime \
-    --agent-runtime-id "$rt_id" --region "$REGION" --output json 2>&1) || {
-    if is_agentcore_forbidden "$rt_detail"; then
-      echo "WARN: get-agent-runtime $rt_id is forbidden; skipping runtime detail probe" >&2
+  rt_detail=$(agentcore_control get-agent-runtime \
+    --agent-runtime-id "$rt_id" --region "$REGION" --output json) || {
+    if is_agentcore_control_unavailable "$rt_detail"; then
+      echo "WARN: get-agent-runtime $rt_id unavailable; skipping runtime detail probe" >&2
       continue
     fi
     echo "ERROR: get-agent-runtime $rt_id failed:" >&2
@@ -179,10 +202,10 @@ while read -r rt_id rt_name rt_status; do
   rt_image_sha=$(image_sha_from_uri "$rt_image")
 
   # DEFAULT endpoint is the one Terraform manages for us
-  eps=$(aws bedrock-agentcore-control list-agent-runtime-endpoints \
-    --agent-runtime-id "$rt_id" --region "$REGION" --output json 2>&1) || {
-    if is_agentcore_forbidden "$eps"; then
-      echo "WARN: list-agent-runtime-endpoints $rt_id is forbidden; skipping endpoint drift probe" >&2
+  eps=$(agentcore_control list-agent-runtime-endpoints \
+    --agent-runtime-id "$rt_id" --region "$REGION" --output json) || {
+    if is_agentcore_control_unavailable "$eps"; then
+      echo "WARN: list-agent-runtime-endpoints $rt_id unavailable; skipping endpoint drift probe" >&2
       continue
     fi
     echo "ERROR: list-agent-runtime-endpoints $rt_id failed:" >&2
