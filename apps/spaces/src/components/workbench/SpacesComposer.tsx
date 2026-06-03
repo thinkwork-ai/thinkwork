@@ -35,6 +35,7 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
+import { toast } from "sonner";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { cn } from "@/lib/utils";
 import { deriveAgentDefault } from "@/lib/agent-mode";
@@ -289,6 +290,12 @@ export function SpacesComposer({
           maxFileSize={25 * 1024 * 1024}
           multiple
           onSubmit={handlePromptSubmit}
+          onError={(err) => {
+            // Surface attach rejections instead of silently dropping the file
+            // (parity with the follow-up composer). Empty/odd MIME types no
+            // longer reject — see matchesAccept in prompt-input.tsx.
+            toast.error(err.message);
+          }}
         >
           <PromptInputBody>
             <PromptInputAttachments>

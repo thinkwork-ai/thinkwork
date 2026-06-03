@@ -499,7 +499,16 @@ export const PromptInput = ({
         .map((s) => s.trim())
         .filter(Boolean);
 
+      const fileName = f.name.toLowerCase();
       return patterns.some((pattern) => {
+        // Extension pattern (e.g. ".xlsx") — match on filename. The browser
+        // sometimes reports an empty or generic MIME type for .xlsx/.csv
+        // (especially on desktop/Electron and some OSes), so matching the
+        // declared extension is what keeps a real spreadsheet from being
+        // silently dropped. Exact-MIME-only matching was too brittle.
+        if (pattern.startsWith(".")) {
+          return fileName.endsWith(pattern.toLowerCase());
+        }
         if (pattern.endsWith("/*")) {
           const prefix = pattern.slice(0, -1); // e.g: image/* -> image/
           return f.type.startsWith(prefix);
