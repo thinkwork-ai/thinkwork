@@ -26,6 +26,7 @@ import {
   useSidebar,
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
+import { APP_VERSION_LABEL } from "@/lib/app-version";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
 import { DesktopNavigationControls } from "@/components/DesktopApplicationHeader";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
@@ -72,7 +73,7 @@ export function SpacesSidebar() {
                   ThinkWork
                 </span>
                 <span className="truncate text-xs text-sidebar-foreground/55">
-                  Spaces
+                  {APP_VERSION_LABEL}
                 </span>
               </div>
             </Link>
@@ -180,8 +181,11 @@ function AccountMenu({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               data-testid="logout-confirm"
-              onClick={(event) => {
-                event.preventDefault();
+              onClick={() => {
+                // Close the dialog (don't preventDefault — that kept the modal
+                // open over the sign-in redirect, so "Log out" looked dead),
+                // then sign out.
+                setConfirmSignOutOpen(false);
                 onSignOut();
               }}
             >
