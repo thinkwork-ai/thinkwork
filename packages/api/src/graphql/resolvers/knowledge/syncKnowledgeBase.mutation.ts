@@ -1,13 +1,8 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import {
-  db,
-  eq,
-  knowledgeBases,
-  snakeToCamel,
-  getKbManagerFnArn,
-} from "../../utils.js";
+import { db, eq, knowledgeBases, snakeToCamel } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
+import { dispatchKbManager } from "./kb-manager-dispatch.js";
 
 export const syncKnowledgeBase = async (
   _parent: any,
@@ -37,23 +32,27 @@ export const syncKnowledgeBase = async (
     .where(eq(knowledgeBases.id, args.id))
     .returning();
   if (!row) throw new GraphQLError("Knowledge base not found");
-  // Fire-and-forget: invoke KB manager Lambda to sync
+  // Surface a dispatch failure synchronously (U6/KTD7): if the ingestion job
+  // never started, roll the KB back to active with a FAILED sync status and a
+  // reason, then tell the caller — don't leave it stuck "syncing".
   try {
-    const kbManagerArn = await getKbManagerFnArn();
-    if (kbManagerArn) {
-      const { LambdaClient, InvokeCommand } =
-        await import("@aws-sdk/client-lambda");
-      const lambda = new LambdaClient({});
-      await lambda.send(
-        new InvokeCommand({
-          FunctionName: kbManagerArn,
-          InvocationType: "Event",
-          Payload: JSON.stringify({ action: "sync", knowledgeBaseId: args.id }),
-        }),
-      );
-    }
+    await dispatchKbManager("sync", row.id);
   } catch (err) {
-    console.error("[graphql] Failed to invoke KB manager for sync:", err);
+    await db
+      .update(knowledgeBases)
+      .set({
+        status: "active",
+        last_sync_status: "FAILED",
+        error_message: (err instanceof Error ? err.message : String(err)).slice(
+          0,
+          1000,
+        ),
+        updated_at: new Date(),
+      })
+      .where(eq(knowledgeBases.id, row.id));
+    throw new GraphQLError(
+      "Failed to start knowledge base sync. Please try again.",
+    );
   }
   return snakeToCamel(row);
 };
