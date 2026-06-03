@@ -185,6 +185,9 @@ build_handler "mcp-proxy" \
 build_handler "chat-agent-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-finalize.ts"
 
+build_handler "chat-agent-activity" \
+  "$REPO_ROOT/packages/api/src/handlers/chat-agent-activity.ts"
+
 build_handler "wakeup-processor" \
   "$REPO_ROOT/packages/api/src/handlers/wakeup-processor.ts"
 
