@@ -4,6 +4,7 @@ import {
   Brain,
   FolderTree,
   NotebookText,
+  Palette,
   Plug,
   Repeat,
   Settings as SettingsIcon,
@@ -65,6 +66,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "MCP Servers",
     to: "/settings/mcp-servers",
     icon: Plug,
+    operatorOnly: true,
+  },
+  {
+    label: "App Style",
+    to: "/settings/app-style",
+    icon: Palette,
     operatorOnly: true,
   },
   {

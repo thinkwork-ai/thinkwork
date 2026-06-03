@@ -44,6 +44,7 @@ import {
   AppletSyntaxError,
   validateAppletSource,
 } from "../../../lib/applets/validation.js";
+import { sanitizeAppletThemeCss } from "../../../lib/applets/theme-sanitize.js";
 
 const DEFAULT_APPLET_FILE = "App.tsx";
 const DEFAULT_STDLIB_VERSION = "0.1.0";
@@ -859,7 +860,7 @@ function parseAppletThemeCss(input: unknown): string | undefined {
   const css = value.css.trim();
   if (!css || css.length > 20_000) return undefined;
   if (!css.includes(":root") && !css.includes(".dark")) return undefined;
-  return css;
+  return sanitizeAppletThemeCss(css);
 }
 
 function parseDraftPreviewMetadata(
