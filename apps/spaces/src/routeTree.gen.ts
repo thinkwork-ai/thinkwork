@@ -38,6 +38,7 @@ import { Route as AuthedSettingsSkillsIndexRouteImport } from "./routes/_authed/
 import { Route as AuthedSettingsRoutinesIndexRouteImport } from "./routes/_authed/settings.routines.index";
 import { Route as AuthedSettingsMcpServersIndexRouteImport } from "./routes/_authed/settings.mcp-servers.index";
 import { Route as AuthedSettingsEvaluationsIndexRouteImport } from "./routes/_authed/settings.evaluations.index";
+import { Route as AuthedSettingsArtifactsIndexRouteImport } from "./routes/_authed/settings.artifacts.index";
 import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_shell/threads.index";
 import { Route as AuthedShellSpacesIndexRouteImport } from "./routes/_authed/_shell/spaces.index";
 import { Route as AuthedShellMemoryIndexRouteImport } from "./routes/_authed/_shell/memory.index";
@@ -222,6 +223,12 @@ const AuthedSettingsEvaluationsIndexRoute =
     id: "/evaluations/",
     path: "/evaluations/",
     getParentRoute: () => AuthedSettingsRoute,
+  } as any);
+const AuthedSettingsArtifactsIndexRoute =
+  AuthedSettingsArtifactsIndexRouteImport.update({
+    id: "/",
+    path: "/",
+    getParentRoute: () => AuthedSettingsArtifactsRoute,
   } as any);
 const AuthedShellThreadsIndexRoute = AuthedShellThreadsIndexRouteImport.update({
   id: "/threads/",
@@ -455,6 +462,7 @@ export interface FileRoutesByFullPath {
   "/memory/": typeof AuthedShellMemoryIndexRoute;
   "/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
   "/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
   "/settings/mcp-servers/": typeof AuthedSettingsMcpServersIndexRoute;
   "/settings/routines/": typeof AuthedSettingsRoutinesIndexRoute;
@@ -477,7 +485,6 @@ export interface FileRoutesByTo {
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/new": typeof AuthedShellNewRoute;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
-  "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/settings/automations": typeof AuthedSettingsAutomationsRouteWithChildren;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesRoute;
@@ -512,6 +519,7 @@ export interface FileRoutesByTo {
   "/memory": typeof AuthedShellMemoryIndexRoute;
   "/spaces": typeof AuthedShellSpacesIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
+  "/settings/artifacts": typeof AuthedSettingsArtifactsIndexRoute;
   "/settings/evaluations": typeof AuthedSettingsEvaluationsIndexRoute;
   "/settings/mcp-servers": typeof AuthedSettingsMcpServersIndexRoute;
   "/settings/routines": typeof AuthedSettingsRoutinesIndexRoute;
@@ -576,6 +584,7 @@ export interface FileRoutesById {
   "/_authed/_shell/memory/": typeof AuthedShellMemoryIndexRoute;
   "/_authed/_shell/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/_authed/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
   "/_authed/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
   "/_authed/settings/mcp-servers/": typeof AuthedSettingsMcpServersIndexRoute;
   "/_authed/settings/routines/": typeof AuthedSettingsRoutinesIndexRoute;
@@ -639,6 +648,7 @@ export interface FileRouteTypes {
     | "/memory/"
     | "/spaces/"
     | "/threads/"
+    | "/settings/artifacts/"
     | "/settings/evaluations/"
     | "/settings/mcp-servers/"
     | "/settings/routines/"
@@ -661,7 +671,6 @@ export interface FileRouteTypes {
     | "/auth/desktop-callback"
     | "/new"
     | "/settings/analytics"
-    | "/settings/artifacts"
     | "/settings/automations"
     | "/settings/general"
     | "/settings/knowledge-bases"
@@ -696,6 +705,7 @@ export interface FileRouteTypes {
     | "/memory"
     | "/spaces"
     | "/threads"
+    | "/settings/artifacts"
     | "/settings/evaluations"
     | "/settings/mcp-servers"
     | "/settings/routines"
@@ -759,6 +769,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory/"
     | "/_authed/_shell/spaces/"
     | "/_authed/_shell/threads/"
+    | "/_authed/settings/artifacts/"
     | "/_authed/settings/evaluations/"
     | "/_authed/settings/mcp-servers/"
     | "/_authed/settings/routines/"
@@ -987,6 +998,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/evaluations/";
       preLoaderRoute: typeof AuthedSettingsEvaluationsIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/artifacts/": {
+      id: "/_authed/settings/artifacts/";
+      path: "/";
+      fullPath: "/settings/artifacts/";
+      preLoaderRoute: typeof AuthedSettingsArtifactsIndexRouteImport;
+      parentRoute: typeof AuthedSettingsArtifactsRoute;
     };
     "/_authed/_shell/threads/": {
       id: "/_authed/_shell/threads/";
@@ -1326,11 +1344,13 @@ const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
 
 interface AuthedSettingsArtifactsRouteChildren {
   AuthedSettingsArtifactsIdRoute: typeof AuthedSettingsArtifactsIdRoute;
+  AuthedSettingsArtifactsIndexRoute: typeof AuthedSettingsArtifactsIndexRoute;
 }
 
 const AuthedSettingsArtifactsRouteChildren: AuthedSettingsArtifactsRouteChildren =
   {
     AuthedSettingsArtifactsIdRoute: AuthedSettingsArtifactsIdRoute,
+    AuthedSettingsArtifactsIndexRoute: AuthedSettingsArtifactsIndexRoute,
   };
 
 const AuthedSettingsArtifactsRouteWithChildren =
