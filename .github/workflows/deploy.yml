@@ -33,7 +33,6 @@ jobs:
       container_source_sha: ${{ steps.container-source.outputs.sha }}
       pi_container_source_sha: ${{ steps.container-source.outputs.pi_sha }}
       runtime_container_stale: ${{ steps.runtime-image.outputs.stale }}
-      computer_runtime: ${{ steps.filter.outputs.computer_runtime }}
       terraform: ${{ steps.filter.outputs.terraform }}
       workspace_defaults: ${{ steps.filter.outputs.workspace_defaults }}
       admin: ${{ steps.filter.outputs.admin }}
@@ -65,10 +64,6 @@ jobs:
               # Build config changes count as container changes — a
               # platform or base-image tweak must rebuild even if no
               # Python source moved.
-              - '.github/workflows/deploy.yml'
-            computer_runtime:
-              - 'packages/computer-runtime/**'
-              - 'scripts/build-spaces-runtime-image.sh'
               - '.github/workflows/deploy.yml'
             terraform:
               - 'terraform/**'
@@ -643,110 +638,6 @@ jobs:
             --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
             --wait-seconds 900
 
-  # ── Build + refresh ECS Computer runtime ────────────────────────
-  # Computer runtimes run as long-lived ECS/Fargate services. Pushing a
-  # mutable image tag is not enough: an already-running task keeps the old
-  # container until ECS starts a replacement. Build the arm64 image after
-  # terraform has created the dedicated ECR repository, then force existing
-  # Computer services to roll onto the freshly pushed phase2-skeleton tag.
-  build-spaces-runtime:
-    name: Build Computer Runtime
-    needs: [detect-changes, terraform-apply]
-    # Allow terraform-apply == skipped: ECR repo + ECS services exist
-    # from prior applies; this job pushes a new image and force-rolls
-    # ECS. The same `(success || skipped)` pattern is used by
-    # build-admin / build-spaces / build-docs / bootstrap.
-    if: >-
-      always()
-      && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
-      && (
-        needs.detect-changes.outputs.computer_runtime == 'true' ||
-        github.event_name == 'workflow_dispatch'
-      )
-      && (
-        github.event_name != 'workflow_dispatch' ||
-        inputs.skip_container != true
-      )
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: aws-actions/amazon-ecr-login@v2
-        id: ecr
-
-      - uses: docker/setup-qemu-action@v3
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Build Computer runtime TypeScript
-        run: pnpm --filter @thinkwork/computer-runtime build
-
-      - name: Ensure Computer runtime ECR repository
-        run: |
-          set -euo pipefail
-          REPO="thinkwork-${{ env.STAGE }}-computer-runtime"
-          aws ecr describe-repositories \
-            --repository-names "$REPO" \
-            --region ${{ env.AWS_REGION }} >/dev/null 2>&1 || \
-            aws ecr create-repository \
-              --repository-name "$REPO" \
-              --image-scanning-configuration scanOnPush=true \
-              --region ${{ env.AWS_REGION }} >/dev/null
-
-      - name: Build and push Computer runtime arm64
-        uses: docker/build-push-action@v6
-        with:
-          context: packages/computer-runtime
-          file: packages/computer-runtime/Dockerfile
-          platforms: linux/arm64
-          push: true
-          tags: |
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-computer-runtime:phase2-skeleton
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-computer-runtime:${{ github.sha }}-arm64
-          cache-from: type=gha,scope=computer-runtime-arm64
-          cache-to: type=gha,scope=computer-runtime-arm64,mode=max
-          provenance: false
-
-      - name: Force ECS Computer services onto refreshed image
-        run: |
-          set -euo pipefail
-          CLUSTER="thinkwork-${{ env.STAGE }}-computer"
-          SERVICES=$(aws ecs list-services \
-            --cluster "$CLUSTER" \
-            --region ${{ env.AWS_REGION }} \
-            --query 'serviceArns[]' \
-            --output text 2>/dev/null || true)
-          if [ -z "$SERVICES" ] || [ "$SERVICES" = "None" ]; then
-            echo "No Computer ECS services found in $CLUSTER."
-            exit 0
-          fi
-          for SERVICE in $SERVICES; do
-            echo "Forcing new deployment for $SERVICE"
-            aws ecs update-service \
-              --cluster "$CLUSTER" \
-              --service "$SERVICE" \
-              --force-new-deployment \
-              --region ${{ env.AWS_REGION }} \
-              --query '{service:service.serviceName,desiredCount:service.desiredCount,taskDefinition:service.taskDefinition}' \
-              --output json
-          done
-
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after
   # terraform-apply has ensured the cluster exists. Fails the deploy if
@@ -923,47 +814,10 @@ jobs:
         # The server-side Lambda env injection (terraform-apply step
         # above) is a separate path and remains untouched.
 
-  # ── Build & deploy Spaces SPA (apps/spaces at app.thinkwork.ai) ───────
-  build-spaces:
-    name: Build & Deploy Spaces
-    needs: [terraform-apply]
-    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Terraform init
-        working-directory: terraform/examples/greenfield
-        run: |
-          terraform init
-          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
-
-      - name: Build & deploy
-        env:
-          MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}
-        run: bash scripts/build-spaces.sh ${{ env.STAGE }}
-        # Same API_AUTH_SECRET hygiene as build-admin: the Spaces SPA
-        # authenticates REST calls with the user's Cognito id token (via
-        # apps/spaces/src/lib/api-fetch.ts). Never inline a service-to-
-        # service secret into the public JS bundle.
+  # NOTE: the Spaces SPA (apps/spaces → app.thinkwork.ai) is intentionally NOT
+  # deployed on every push to main. It now ships only when a desktop release is
+  # cut (release-desktop.yml on a `desktop-v*` tag), so the web app and the
+  # desktop app always update together. See the `build-spaces` step there.
 
   # ── Build & deploy docs site ────────────────────────────────────
   build-docs:
@@ -1141,10 +995,8 @@ jobs:
         build-container,
         terraform-apply,
         update-agentcore-runtimes,
-        build-spaces-runtime,
         migration-drift-check,
         build-admin,
-        build-spaces,
         build-docs,
         bootstrap,
         workspace-layout-migration,
@@ -1229,10 +1081,8 @@ jobs:
           echo "║ Job Results:"
           echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"
           echo "║   AgentCore Runtime:      ${{ needs.update-agentcore-runtimes.result }}"
-          echo "║   Computer Runtime:       ${{ needs.build-spaces-runtime.result }}"
           echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
           echo "║   Build Admin:            ${{ needs.build-admin.result }}"
-          echo "║   Build Spaces:           ${{ needs.build-spaces.result }}"
           echo "║   Build Docs:             ${{ needs.build-docs.result }}"
           echo "║   Bootstrap:              ${{ needs.bootstrap.result }}"
           echo "╚══════════════════════════════════════════════════════════════╝"
