@@ -18,7 +18,6 @@ import {
   toArtifactItem,
   uniqueKinds,
   type ArtifactItem,
-  type ArtifactSortBy,
 } from "./artifacts-filtering";
 
 interface AppletsResult {
@@ -165,12 +164,12 @@ function ArtifactsListBodyView({
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<string>(TAB_ALL);
   const [kind, setKind] = useState<string>(ALL_KINDS);
-  const [sortBy, setSortBy] = useState<ArtifactSortBy>(DEFAULT_SORT_BY);
 
   const kinds = useMemo(() => uniqueKinds(items), [items]);
+  // Fixed sort (generated, newest first) — no user-facing sort control.
   const sortedItems = useMemo(
-    () => sortArtifactItems(items, sortBy),
-    [items, sortBy],
+    () => sortArtifactItems(items, DEFAULT_SORT_BY),
+    [items],
   );
   const filtered = useMemo(
     () => filterArtifactItems({ items: sortedItems, search, kind, tab }),
@@ -207,8 +206,6 @@ function ArtifactsListBodyView({
         kind={kind}
         kinds={kinds}
         onKindChange={setKind}
-        sortBy={sortBy}
-        onSortByChange={setSortBy}
         showUserFilter={showUserFilter}
         userIdFilter={userIdFilter}
         onUserIdFilterChange={onUserIdFilterChange}

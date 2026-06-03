@@ -34,12 +34,13 @@ export function SetAppStyleButton() {
       <Button
         type="button"
         variant="outline"
-        size="sm"
+        size="icon"
         onClick={() => setOpen(true)}
+        aria-label="Set app style"
+        title="Set app style"
         data-testid="set-app-style-trigger"
       >
         <Palette className="h-4 w-4" />
-        Set App Style
       </Button>
       <SetAppStyleDialog open={open} onOpenChange={setOpen} />
     </>
