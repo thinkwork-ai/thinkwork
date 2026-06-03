@@ -1045,10 +1045,13 @@ jobs:
         run: |
           terraform init
           terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
-          source ../../../scripts/lib/terraform-output.sh
-          echo "bucket=$(tf_output_raw bucket_name)" >> "$GITHUB_OUTPUT"
-          echo "db_endpoint=$(tf_output_raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
-          echo "db_secret_arn=$(tf_output_raw db_secret_arn)" >> "$GITHUB_OUTPUT"
+          TF_OUTPUT_JSON="$(terraform output -json)"
+          tf_output_cached_raw() {
+            jq -er --arg name "$1" '.[$name].value | if type == "string" then . else @json end' <<<"$TF_OUTPUT_JSON"
+          }
+          echo "bucket=$(tf_output_cached_raw bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "db_endpoint=$(tf_output_cached_raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "db_secret_arn=$(tf_output_cached_raw db_secret_arn)" >> "$GITHUB_OUTPUT"
 
       - name: Run bootstrap
         run: |
@@ -1110,10 +1113,13 @@ jobs:
         run: |
           terraform init
           terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
-          source ../../../scripts/lib/terraform-output.sh
-          echo "bucket=$(tf_output_raw bucket_name)" >> "$GITHUB_OUTPUT"
-          echo "db_endpoint=$(tf_output_raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
-          echo "db_secret_arn=$(tf_output_raw db_secret_arn)" >> "$GITHUB_OUTPUT"
+          TF_OUTPUT_JSON="$(terraform output -json)"
+          tf_output_cached_raw() {
+            jq -er --arg name "$1" '.[$name].value | if type == "string" then . else @json end' <<<"$TF_OUTPUT_JSON"
+          }
+          echo "bucket=$(tf_output_cached_raw bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "db_endpoint=$(tf_output_cached_raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "db_secret_arn=$(tf_output_cached_raw db_secret_arn)" >> "$GITHUB_OUTPUT"
 
       - name: Migrate tuple workspace source layout
         run: |
