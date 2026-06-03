@@ -86,7 +86,7 @@ export function SettingsAnalytics() {
 
   if (loading) {
     return (
-      <SettingsPane className="max-w-5xl">
+      <SettingsPane className="max-w-none">
         <SettingsHeader title="Analytics" />
         <div className="flex items-center justify-center py-24">
           <LoadingShimmer />
@@ -102,7 +102,7 @@ export function SettingsAnalytics() {
       : 0;
 
   return (
-    <SettingsPane className="max-w-5xl">
+    <SettingsPane className="max-w-none">
       <SettingsHeader
         title="Analytics"
         description="Usage cost over the last 30 days."
