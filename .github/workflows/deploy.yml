@@ -928,6 +928,7 @@ jobs:
     needs: [terraform-apply]
     if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
