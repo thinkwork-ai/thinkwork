@@ -60,8 +60,9 @@ export function AppletRouteContent({
   /** Fill the parent container instead of the viewport (Settings embed). */
   fill?: boolean;
   /** When set (Settings embed), render a "<root> / <artifact>" breadcrumb in
-   *  the Settings header bar instead of relying on the main-shell title. */
-  breadcrumbRoot?: { label: string; to: string };
+   *  the Settings header bar instead of relying on the main-shell title. The
+   *  root crumb links back via `href`. */
+  breadcrumbRoot?: { label: string; href: string };
 }) {
   const [{ data, fetching, error }, reexecuteAppletQuery] =
     useQuery<AppletResult>({

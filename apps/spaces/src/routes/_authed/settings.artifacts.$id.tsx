@@ -17,7 +17,7 @@ function SettingsArtifactDetail() {
       appId={id}
       fill
       backHref="/settings/artifacts"
-      breadcrumbRoot={{ label: "Artifacts", to: "/settings/artifacts" }}
+      breadcrumbRoot={{ label: "Artifacts", href: "/settings/artifacts" }}
     />
   );
 }
