@@ -43,6 +43,10 @@ const THINKWORK_VARS = resolve(
 );
 const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-spaces.sh");
 const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
+const RELEASE_DESKTOP_WORKFLOW = resolve(
+  REPO_ROOT,
+  ".github/workflows/release-desktop.yml",
+);
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -389,12 +393,15 @@ describe("U11.5 — computer deploy script sandbox enforcement", () => {
 });
 
 describe("Computer Mapbox production wiring", () => {
-  it("deploy passes the Mapbox public token into Terraform and the Computer build", () => {
-    const source = read(DEPLOY_WORKFLOW);
-    expect(source).toMatch(
+  it("deploy passes the Mapbox public token into Terraform; the release web build passes it to Vite", () => {
+    // deploy.yml still threads the token into terraform-apply.
+    expect(read(DEPLOY_WORKFLOW)).toMatch(
       /mapbox_public_token=\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
     );
-    expect(source).toMatch(
+    // The Spaces web build moved to release-desktop.yml (deploy-sync: web ships
+    // on the desktop release cut), which is where the MAPBOX_PUBLIC_TOKEN env
+    // now feeds build-spaces.sh → VITE_MAPBOX_PUBLIC_TOKEN.
+    expect(read(RELEASE_DESKTOP_WORKFLOW)).toMatch(
       /MAPBOX_PUBLIC_TOKEN:\s*\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
     );
   });
