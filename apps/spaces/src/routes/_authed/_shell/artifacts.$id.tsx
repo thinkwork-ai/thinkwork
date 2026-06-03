@@ -6,9 +6,19 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshCw } from "lucide-react";
-import { useQuery } from "urql";
-import { Button } from "@thinkwork/ui";
+import { javascript } from "@codemirror/lang-javascript";
+import { vscodeDark } from "@uiw/codemirror-theme-vscode";
+import CodeMirror from "@uiw/react-codemirror";
+import { Braces, RefreshCw, Save } from "lucide-react";
+import { toast } from "sonner";
+import { useMutation, useQuery } from "urql";
+import {
+  Button,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@thinkwork/ui";
 import {
   AppletFailure,
   AppletLoading,
@@ -20,12 +30,16 @@ import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { useTenant } from "@/context/TenantContext";
+import { AdminUpdateAppletSourceMutation } from "@/lib/applet-admin-queries";
 import {
   appletThemeCss,
   resolveGeneratedAppRuntimeMode,
   type AppletPayload,
+  type AppletPreviewNode,
 } from "@/lib/app-artifacts";
 import { AppletQuery } from "@/lib/graphql-queries";
+import { relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/_shell/artifacts/$id")({
   component: AppArtifactPage,
@@ -48,6 +62,11 @@ export function AppletRouteContent({ appId }: { appId: string }) {
       requestPolicy: "cache-and-network",
     });
   const applet = data?.applet ?? null;
+  // Operator-only Source/Config tabs. The detail route itself is NOT
+  // OperatorGuard-wrapped — non-operators must still reach the artifact; only
+  // the extra tabs are gated. Server re-enforces requireTenantAdmin on save.
+  const { isOperator, roleResolved } = useTenant();
+  const operator = roleResolved && isOperator;
   const title = applet?.applet?.name?.trim() || "Artifact";
   const source = useMemo(() => appletSource(applet), [applet]);
   const runtimeMode = resolveGeneratedAppRuntimeMode(applet?.metadata);
@@ -159,10 +178,9 @@ export function AppletRouteContent({ appId }: { appId: string }) {
     typeof mountedSnapshot?.version === "number" &&
     latestVersion > mountedSnapshot.version;
 
-  return (
-    <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
-      <div className="grid h-full min-h-0 min-w-0 p-4">
-        {hasNewerVersion ? (
+  const appPanel = (
+    <div className="grid h-full min-h-0 min-w-0 p-4">
+      {hasNewerVersion ? (
           <div className="m-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
             <p className="text-primary">
               A newer version of this artifact is available.
@@ -211,9 +229,211 @@ export function AppletRouteContent({ appId }: { appId: string }) {
         ) : (
           <AppletLoading />
         )}
-      </div>
+    </div>
+  );
+
+  return (
+    <AppArtifactSplitShell title={title} runtimeMode={runtimeMode}>
+      {operator ? (
+        <OperatorAppletTabs
+          appId={appId}
+          persistedSource={source}
+          metadata={applet.metadata}
+          preview={applet.applet ?? null}
+          reexecuteAppletQuery={reexecuteAppletQuery}
+        >
+          {appPanel}
+        </OperatorAppletTabs>
+      ) : (
+        appPanel
+      )}
     </AppArtifactSplitShell>
   );
+}
+
+// Operator-only Source/Config inspector wrapping the live App preview. Gated
+// in the parent on `roleResolved && isOperator`; the save mutation re-enforces
+// `requireTenantAdmin` server-side so a forced UI gains nothing.
+function OperatorAppletTabs({
+  appId,
+  persistedSource,
+  metadata,
+  preview,
+  reexecuteAppletQuery,
+  children,
+}: {
+  appId: string;
+  persistedSource: string;
+  metadata: unknown;
+  preview: AppletPreviewNode | null;
+  reexecuteAppletQuery: (opts?: { requestPolicy?: "network-only" }) => void;
+  children: ReactNode;
+}) {
+  const [tab, setTab] = useState("app");
+  const [draft, setDraft] = useState(persistedSource);
+  const [{ fetching: saving }, updateAppletSource] = useMutation(
+    AdminUpdateAppletSourceMutation,
+  );
+
+  // Reseed the editor when the persisted source changes (e.g. after a refetch
+  // following save, or navigating between applets).
+  useEffect(() => {
+    setDraft(persistedSource);
+  }, [persistedSource]);
+
+  const dirty = draft !== persistedSource;
+
+  const handleSave = useCallback(async () => {
+    const result = await updateAppletSource({ input: { appId, source: draft } });
+    const payload = result.data?.adminUpdateAppletSource;
+    if (result.error || !payload?.ok) {
+      const firstError = payload?.errors?.[0];
+      const message =
+        (typeof firstError === "string" ? firstError : undefined) ||
+        result.error?.message ||
+        "Could not save source.";
+      toast.error(`Save failed: ${message}`);
+      return;
+    }
+    toast.success(`Saved v${payload.version ?? ""}`.trim());
+    reexecuteAppletQuery({ requestPolicy: "network-only" });
+  }, [appId, draft, reexecuteAppletQuery, updateAppletSource]);
+
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={setTab}
+      className="flex h-full min-h-0 flex-col gap-3 p-4"
+    >
+      <div className="relative flex min-h-9 shrink-0 items-center justify-center gap-3">
+        <TabsList>
+          <TabsTrigger value="app" className="px-6">
+            App
+          </TabsTrigger>
+          <TabsTrigger value="source" className="px-6">
+            Source
+          </TabsTrigger>
+          <TabsTrigger value="config" className="px-6">
+            Config
+          </TabsTrigger>
+        </TabsList>
+        {tab === "source" ? (
+          <div className="absolute right-0">
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto px-0 text-muted-foreground hover:text-foreground"
+              disabled={!dirty || saving}
+              onClick={() => void handleSave()}
+              data-testid="applet-source-save"
+            >
+              <Save className="h-4 w-4" />
+              Save
+            </Button>
+          </div>
+        ) : null}
+      </div>
+
+      <TabsContent value="app" className="min-h-0 overflow-hidden">
+        {children}
+      </TabsContent>
+
+      <TabsContent value="source" className="min-h-0 overflow-hidden">
+        <div className="h-full min-h-0 overflow-hidden rounded-md border bg-black [&>div]:h-full [&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto">
+          <CodeMirror
+            value={draft}
+            onChange={setDraft}
+            height="100%"
+            theme={vscodeDark}
+            extensions={[javascript({ jsx: true, typescript: true })]}
+            style={{ fontSize: "13px", backgroundColor: "black" }}
+            className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              highlightActiveLine: false,
+              bracketMatching: true,
+            }}
+            data-testid="applet-source-editor"
+          />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="config" className="min-h-0 overflow-auto">
+        <div className="grid gap-4 [grid-template-columns:minmax(280px,360px)_minmax(0,1fr)]">
+          <section className="space-y-2 rounded-md border p-4">
+            <h2 className="text-sm font-semibold">Provenance</h2>
+            <dl className="grid gap-2 text-sm">
+              <ProvenanceRow label="App ID" value={preview?.appId ?? appId} />
+              <ProvenanceRow
+                label="Version"
+                value={preview?.version != null ? `v${preview.version}` : "—"}
+              />
+              <ProvenanceRow
+                label="Generated"
+                value={
+                  preview?.generatedAt
+                    ? relativeTime(preview.generatedAt)
+                    : "—"
+                }
+              />
+              <ProvenanceRow
+                label="Thread"
+                value={preview?.threadId ?? "None"}
+              />
+              <ProvenanceRow
+                label="Model"
+                value={preview?.modelId ?? "Unknown"}
+              />
+              <ProvenanceRow
+                label="Agent version"
+                value={preview?.agentVersion ?? "Unknown"}
+              />
+              <ProvenanceRow
+                label="Stdlib"
+                value={preview?.stdlibVersionAtGeneration ?? "—"}
+              />
+            </dl>
+          </section>
+
+          <section className="min-w-0 space-y-2 rounded-md border p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Braces className="h-4 w-4 text-primary" />
+              Metadata
+            </div>
+            <pre className="max-h-[calc(100vh-20rem)] overflow-auto rounded-md bg-muted/30 p-3 text-xs leading-relaxed">
+              <code className="whitespace-pre-wrap break-words">
+                {formatJson(metadata)}
+              </code>
+            </pre>
+          </section>
+        </div>
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function ProvenanceRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium uppercase text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="break-all font-mono text-xs text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function formatJson(value: unknown): string {
+  if (typeof value === "string") {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  return JSON.stringify(value ?? {}, null, 2);
 }
 
 // Re-export AppletMount for any external consumers that imported it from this
