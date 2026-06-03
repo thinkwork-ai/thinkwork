@@ -46,9 +46,16 @@ locals {
     AGENTCORE_PI_FUNCTION_NAME         = var.agentcore_pi_function_name
     WORKSPACE_RENDERER_FUNCTION_NAME   = "thinkwork-${var.stage}-api-workspace-renderer"
     WORKSPACE_BUCKET                   = var.bucket_name
-    HINDSIGHT_ENDPOINT                 = var.hindsight_endpoint
-    AGENTCORE_MEMORY_ID                = var.agentcore_memory_id
-    MEMORY_ENGINE                      = var.memory_engine
+    # Bedrock Knowledge Base provisioning (knowledge-base-manager): the Bedrock
+    # KB uses Aurora+pgvector as its vector store, reached via the RDS Data API,
+    # so the manager passes the cluster ARN + the KB service role to Bedrock at
+    # CreateKnowledgeBase time. These were never wired, so CreateKnowledgeBase
+    # got an empty roleArn (PassRole failure) and an empty resourceArn.
+    KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
+    DATABASE_CLUSTER_ARN = var.db_cluster_arn
+    HINDSIGHT_ENDPOINT   = var.hindsight_endpoint
+    AGENTCORE_MEMORY_ID  = var.agentcore_memory_id
+    MEMORY_ENGINE        = var.memory_engine
     # Skip the SSM indirection for cross-function ARN lookup. Terraform
     # already knows this ARN at apply time and the Lambda role's SSM
     # permission has been a recurring source of silent failures where
