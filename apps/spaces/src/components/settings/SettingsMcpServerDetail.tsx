@@ -94,7 +94,7 @@ export function SettingsMcpServerDetail() {
 
   if (!server) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
+      <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">
           {error ??
             "This MCP server could not be found — it may have been removed."}
@@ -114,7 +114,7 @@ export function SettingsMcpServerDetail() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl px-6 pb-10 pt-6">
+      <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         {error ? (
           <p className="mb-4 text-sm text-destructive">{error}</p>
         ) : null}
