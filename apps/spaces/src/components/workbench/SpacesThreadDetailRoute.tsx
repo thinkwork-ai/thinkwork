@@ -69,10 +69,17 @@ interface SpacesThreadDetailRouteProps {
   documentTitlePrefix?: string;
 }
 
+interface OptimisticAttachmentPreview {
+  name: string;
+  sizeBytes?: number | null;
+  mimeType?: string | null;
+}
+
 interface OptimisticMessage {
   content: string;
   expectAssistantResponse: boolean;
   startedAt?: string | null;
+  attachments?: OptimisticAttachmentPreview[];
 }
 
 const ACTIVE_AGENT_REFRESH_MS = 2_000;
@@ -620,6 +627,7 @@ export function SpacesThreadDetailRoute({
           expectAssistantResponse:
             optimisticThreadStart.expectAssistantResponse,
           startedAt: optimisticThreadStart.startedAt ?? null,
+          attachments: optimisticThreadStart.attachments,
         }
       : null;
   const effectiveOptimisticMessage =
@@ -629,6 +637,7 @@ export function SpacesThreadDetailRoute({
         expectAssistantResponse:
           effectiveOptimisticMessage.expectAssistantResponse,
         startedAt: effectiveOptimisticMessage.startedAt,
+        attachments: effectiveOptimisticMessage.attachments,
       })
     : thread;
   const threadArtifacts = useMemo(
@@ -696,9 +705,9 @@ export function SpacesThreadDetailRoute({
     isActiveLifecycleStatus(visibleThread?.lifecycleStatus);
   const shouldPollActiveAgentResult = Boolean(
     latestMessageAwaitsAssistant &&
-      (hasActiveAgentTurn ||
-        (effectiveOptimisticMessage &&
-          effectiveOptimisticMessage.expectAssistantResponse !== false)),
+    (hasActiveAgentTurn ||
+      (effectiveOptimisticMessage &&
+        effectiveOptimisticMessage.expectAssistantResponse !== false)),
   );
 
   useEffect(() => {
@@ -1266,6 +1275,16 @@ export function SpacesThreadDetailRoute({
           content,
           expectAssistantResponse: agentRequested !== false,
           startedAt: new Date().toISOString(),
+          // Show the attached file on the user message immediately, before the
+          // upload + persist round-trip completes.
+          attachments:
+            files && files.length > 0
+              ? files.map((file) => ({
+                  name: file.name,
+                  sizeBytes: file.size,
+                  mimeType: file.type,
+                }))
+              : undefined,
         });
         resetStreamingChunks();
 
@@ -1736,6 +1755,9 @@ async function downloadThreadAttachment(
   threadId: string,
   attachmentId: string,
 ) {
+  // Optimistic chips carry synthetic ids and aren't downloadable yet; they're
+  // replaced by the persisted message (with a real id) within a couple seconds.
+  if (attachmentId.startsWith("optimistic-attachment-")) return;
   const apiUrl = import.meta.env.VITE_API_URL || "";
   const token = await getIdToken();
   if (!apiUrl || !token) {
@@ -1774,7 +1796,11 @@ async function downloadThreadAttachment(
 function withOptimisticUserTurn(
   thread: TaskThread | null,
   content: string,
-  options: { expectAssistantResponse?: boolean; startedAt?: string | null } = {},
+  options: {
+    expectAssistantResponse?: boolean;
+    startedAt?: string | null;
+    attachments?: OptimisticAttachmentPreview[];
+  } = {},
 ): TaskThread | null {
   if (!thread) return null;
   const alreadyPersisted = thread.messages.some(
@@ -1821,6 +1847,18 @@ function withOptimisticUserTurn(
             role: "USER",
             content,
             createdAt: optimisticStartedAt,
+            // Display-ready chips shown immediately; the renderer prefers these
+            // over metadata resolution while the upload is still in flight.
+            optimisticAttachments:
+              options.attachments && options.attachments.length > 0
+                ? options.attachments.map((attachment, index) => ({
+                    id: `optimistic-attachment-${index}`,
+                    name: attachment.name,
+                    mimeType: attachment.mimeType ?? null,
+                    sizeBytes: attachment.sizeBytes ?? null,
+                    label: attachment.name,
+                  }))
+                : undefined,
           },
         ],
     turns,

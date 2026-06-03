@@ -123,6 +123,12 @@ export interface TaskThreadMessage {
   toolResults?: unknown;
   parts?: AccumulatedPart[];
   durableArtifact?: GeneratedArtifact | null;
+  /**
+   * Display-ready chips for a not-yet-persisted optimistic user message, so the
+   * attached file shows immediately instead of waiting for the upload + persist
+   * round-trip. Real messages resolve attachments from `metadata` instead.
+   */
+  optimisticAttachments?: MessageAttachmentDisplay[] | null;
 }
 
 export interface TaskThreadMessageSender {
@@ -1711,7 +1717,9 @@ function withUserVisibleTurnTiming(
   const assistantMessage = messages
     .slice(userIndex + 1)
     .find((message) => message.role.toUpperCase() === "ASSISTANT");
-  const assistantTime = parseEventTimestamp(assistantMessage?.createdAt ?? null);
+  const assistantTime = parseEventTimestamp(
+    assistantMessage?.createdAt ?? null,
+  );
   const displayFinishedAt =
     assistantMessage?.createdAt && assistantTime >= displayStartTime
       ? assistantMessage.createdAt
@@ -1905,10 +1913,11 @@ function TranscriptMessage({
   const questionCards = !isUser ? questionCardsForMessage(message) : [];
   const body = message.content?.trim() ?? "";
   const attachments = isUser
-    ? resolveMessageAttachments({
+    ? (message.optimisticAttachments ??
+      resolveMessageAttachments({
         metadata: message.metadata,
         threadAttachments,
-      })
+      }))
     : [];
   const typedParts = !isUser ? (message.parts ?? []) : [];
   const renderedTypedParts =
