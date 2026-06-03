@@ -595,6 +595,7 @@ jobs:
             -var 'tenant_slugs=["academic-bobcat-897","sleek-squirrel-230"]' \
             -var "stripe_price_ids_json=${{ vars.STRIPE_PRICE_IDS_JSON || '{}' }}" \
             -var "agentcore_code_interpreter_id=${{ vars.AGENTCORE_CODE_INTERPRETER_ID || '' }}" \
+            -var "agentcore_memory_id=${{ vars.AGENTCORE_MEMORY_ID || '' }}" \
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}" \
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
 
