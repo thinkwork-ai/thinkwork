@@ -70,7 +70,10 @@ describe("createActivityEmitter", () => {
     await emitter.drain();
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
     expect(url).toContain("/activity");
     expect((init.headers as Record<string, string>).authorization).toBe(
       "Bearer secret-xyz",
