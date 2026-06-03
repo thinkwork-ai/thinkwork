@@ -160,7 +160,7 @@ describe("DesktopApplicationHeader", () => {
     );
   });
 
-  it("emits a desktop refresh event from the navigation controls", () => {
+  it("emits a desktop refresh event from the navigation controls", async () => {
     const onRefresh = vi.fn();
     sidebarMock.open = false;
     window.addEventListener("thinkwork:desktop-refresh", onRefresh);
@@ -168,7 +168,9 @@ describe("DesktopApplicationHeader", () => {
     render(<DesktopApplicationHeader />);
     screen.getByRole("button", { name: "Refresh thread" }).click();
 
-    expect(onRefresh).toHaveBeenCalledTimes(1);
+    // The refetch event now dispatches after the one-shot auth-token refresh
+    // resolves (so the refetch carries a fresh token), i.e. on a later tick.
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
     window.removeEventListener("thinkwork:desktop-refresh", onRefresh);
   });
 
