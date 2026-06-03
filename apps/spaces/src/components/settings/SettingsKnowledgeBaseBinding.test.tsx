@@ -30,14 +30,17 @@ beforeEach(() => mutateMock.mockClear());
 afterEach(cleanup);
 
 describe("SettingsKnowledgeBaseBinding", () => {
-  it("renders tenant-wide + per-Space toggles", () => {
+  it("renders tenant-wide switch + per-Space multi-select checkboxes", () => {
     render(<SettingsKnowledgeBaseBinding kbId="kb-1" tenantId="t1" />);
     expect(screen.getByText("Tenant-wide")).toBeTruthy();
     expect(screen.getByText("Onboarding")).toBeTruthy();
-    // kb-1 is not yet bound tenant-wide → switch is off.
+    // Tenant-wide is the only switch; kb-1 isn't bound tenant-wide → off.
     expect(screen.getAllByRole("switch")[0].getAttribute("aria-checked")).toBe(
       "false",
     );
+    // Each Space is a checkbox (multi-select), not bound yet → unchecked.
+    const spaceBox = screen.getAllByRole("checkbox")[0];
+    expect(spaceBox.getAttribute("aria-checked")).toBe("false");
   });
 
   it("writes the union set when binding tenant-wide (replace-all semantics)", async () => {
@@ -55,7 +58,7 @@ describe("SettingsKnowledgeBaseBinding", () => {
 
   it("writes the space set with this KB added when binding per-Space", async () => {
     render(<SettingsKnowledgeBaseBinding kbId="kb-1" tenantId="t1" />);
-    fireEvent.click(screen.getAllByRole("switch")[1]); // space row
+    fireEvent.click(screen.getAllByRole("checkbox")[0]); // space checkbox
     expect(mutateMock).toHaveBeenCalledTimes(1);
     const arg = mutateMock.mock.calls[0][0] as {
       input: { spaceId: string; knowledgeBases: { knowledgeBaseId: string }[] };
