@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import {
+  AppWindow,
   BookOpen,
   Brain,
   FolderTree,
@@ -65,6 +66,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "MCP Servers",
     to: "/settings/mcp-servers",
     icon: Plug,
+    operatorOnly: true,
+  },
+  {
+    label: "Artifacts",
+    to: "/settings/artifacts",
+    icon: AppWindow,
     operatorOnly: true,
   },
   {

@@ -12,7 +12,6 @@ import {
   Moon,
   Sun,
   KeyRound,
-  AppWindow,
 } from "lucide-react";
 import { IconPlanet } from "@tabler/icons-react";
 import { useTheme } from "@/context/ThemeContext";
@@ -33,7 +32,6 @@ const NAV_ITEMS = [
   { label: "Spaces", to: "/spaces", icon: IconPlanet },
   { label: "Threads", to: "/threads", icon: MessagesSquare },
   { label: "Inbox", to: "/inbox", icon: Inbox },
-  { label: "Artifacts", to: "/applets", icon: AppWindow },
   { label: "Routines", to: "/automations/routines", icon: Repeat },
   { label: "Credentials", to: "/automations/credentials", icon: KeyRound },
   { label: "Analytics", to: "/analytics", icon: BarChart3 },
