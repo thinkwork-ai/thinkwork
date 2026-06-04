@@ -7,11 +7,11 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U7 - Spaces Knowledge Graph Explorer UI
+- Current unit: U8 - Smoke Test, Docs, and E2E Validation
 - Current branch/worktree:
-  `codex/cognee-kg-u7-spaces` /
-  `.Codex/worktrees/cognee-kg-u7-spaces`
-- Current PR: [#2083](https://github.com/thinkwork-ai/thinkwork/pull/2083)
+  `codex/cognee-kg-u8-smoke` /
+  `.Codex/worktrees/cognee-kg-u8-smoke`
+- Current PR: [#2084](https://github.com/thinkwork-ai/thinkwork/pull/2084)
 - Blocker: none
 
 ## Progress Log
@@ -207,3 +207,38 @@ Started: 2026-06-04
   warnings only.
 - 2026-06-04: Opened U7 PR
   [#2083](https://github.com/thinkwork-ai/thinkwork/pull/2083).
+- 2026-06-04: U7 PR
+  [#2083](https://github.com/thinkwork-ai/thinkwork/pull/2083) passed required
+  CI and was squash-merged into `main` at
+  `e647c7e87aeb16439e188f9ca452584878586314`; deleted the remote branch and
+  removed the local U7 worktree/branch.
+- 2026-06-04: Synced `origin/main` and created isolated U8 worktree
+  `.Codex/worktrees/cognee-kg-u8-smoke` on branch
+  `codex/cognee-kg-u8-smoke` from `origin/main`.
+- 2026-06-04: Implemented U8 smoke/docs validation path: added
+  `scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs`, documented it in
+  `scripts/smoke/README.md`, and added the solution note
+  `docs/solutions/best-practices/cognee-thread-ingest-explorer-2026-06-04.md`
+  covering live-mode semantics, empty graph diagnostics, and browser validation
+  expectations.
+- 2026-06-04: U8 local verification passed:
+  `node --check scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs`;
+  `node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs` dry-run;
+  `pnpm --filter @thinkwork/database-pg test`;
+  `pnpm --filter @thinkwork/api test`;
+  `pnpm --filter @thinkwork/graph test`;
+  `pnpm --filter @thinkwork/spaces test`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  targeted Prettier check via `pnpm dlx prettier --check ...`;
+  `git diff --check`; and a Spaces dev-server smoke on
+  `http://127.0.0.1:5177/` plus
+  `http://127.0.0.1:5177/settings/knowledge-graph`.
+- 2026-06-04: U8 live deployed smoke did not mutate anything because the local
+  environment lacks an operator identity. The live command exited before
+  GraphQL calls with: `Missing operator identity. Set SMOKE_TENANT_ID and
+SMOKE_USER_ID, or provide DATABASE_URL for fallback.` The copied
+  `apps/spaces/.env` has GraphQL endpoint/key values but no
+  `SMOKE_TENANT_ID`, `SMOKE_USER_ID`, or `DATABASE_URL`;
+  `~/.thinkwork/config.json` only records default stage `dev`.
+- 2026-06-04: Opened U8 PR
+  [#2084](https://github.com/thinkwork-ai/thinkwork/pull/2084).
