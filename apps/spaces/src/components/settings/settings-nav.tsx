@@ -4,7 +4,6 @@ import {
   BookOpen,
   Brain,
   FolderTree,
-  Network,
   NotebookText,
   Plug,
   Repeat,
@@ -16,7 +15,11 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
-import { IconChartBar, IconPlanet } from "@tabler/icons-react";
+import {
+  IconChartBar,
+  IconPlanet,
+  IconTopologyStar3,
+} from "@tabler/icons-react";
 
 export interface SettingsNavItem {
   label: string;
@@ -76,18 +79,18 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
+    label: "Knowledge Graph",
+    to: "/settings/knowledge-graph",
+    icon: IconTopologyStar3,
+    operatorOnly: true,
+  },
+  {
     label: "Knowledge Bases",
     to: "/settings/knowledge-bases",
     icon: BookOpen,
     operatorOnly: true,
   },
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
-  {
-    label: "Knowledge Graph",
-    to: "/settings/knowledge-graph",
-    icon: Network,
-    operatorOnly: true,
-  },
   {
     label: "Wiki Memory",
     to: "/settings/wiki",

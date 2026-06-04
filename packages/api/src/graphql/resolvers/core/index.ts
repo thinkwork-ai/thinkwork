@@ -19,6 +19,7 @@ import { registerPushToken } from "./registerPushToken.mutation.js";
 import { unregisterPushToken } from "./unregisterPushToken.mutation.js";
 import { bootstrapUser } from "./bootstrapUser.mutation.js";
 import { deploymentStatus } from "./deploymentStatus.query.js";
+import { knowledgeGraphHealthCheck } from "./knowledgeGraphHealthCheck.query.js";
 import { adminRoleCheck } from "./adminRoleCheck.query.js";
 
 export const coreQueries = {
@@ -28,6 +29,7 @@ export const coreQueries = {
   user,
   tenantMembers,
   deploymentStatus,
+  knowledgeGraphHealthCheck,
   adminRoleCheck,
 };
 export const coreMutations = {

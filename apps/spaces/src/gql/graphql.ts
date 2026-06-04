@@ -1338,6 +1338,16 @@ export type KnowledgeGraphDeploymentChange = {
   workflowUrl: Scalars["String"]["output"];
 };
 
+export type KnowledgeGraphHealthCheck = {
+  __typename?: "KnowledgeGraphHealthCheck";
+  checkedAt: Scalars["AWSDateTime"]["output"];
+  endpoint?: Maybe<Scalars["String"]["output"]>;
+  healthy: Scalars["Boolean"]["output"];
+  latencyMs: Scalars["Int"]["output"];
+  message: Scalars["String"]["output"];
+  statusCode?: Maybe<Scalars["Int"]["output"]>;
+};
+
 export type LinkedTask = {
   __typename?: "LinkedTask";
   assigneeDisplay?: Maybe<Scalars["String"]["output"]>;
@@ -3124,6 +3134,7 @@ export type Query = {
   inboxItems: Array<InboxItem>;
   knowledgeBase?: Maybe<KnowledgeBase>;
   knowledgeBases: Array<KnowledgeBase>;
+  knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
@@ -6989,6 +7000,23 @@ export type SettingsSetKnowledgeGraphDeploymentMutation = {
     __typename?: "KnowledgeGraphDeploymentChange";
     desiredEnabled: boolean;
     workflowUrl: string;
+    message: string;
+  };
+};
+
+export type SettingsKnowledgeGraphHealthCheckQueryVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type SettingsKnowledgeGraphHealthCheckQuery = {
+  __typename?: "Query";
+  knowledgeGraphHealthCheck: {
+    __typename?: "KnowledgeGraphHealthCheck";
+    healthy: boolean;
+    statusCode?: number | null;
+    latencyMs: number;
+    endpoint?: string | null;
+    checkedAt: any;
     message: string;
   };
 };
@@ -11048,6 +11076,39 @@ export const SettingsSetKnowledgeGraphDeploymentDocument = {
 } as unknown as DocumentNode<
   SettingsSetKnowledgeGraphDeploymentMutation,
   SettingsSetKnowledgeGraphDeploymentMutationVariables
+>;
+export const SettingsKnowledgeGraphHealthCheckDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphHealthCheck" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "knowledgeGraphHealthCheck" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "healthy" } },
+                { kind: "Field", name: { kind: "Name", value: "statusCode" } },
+                { kind: "Field", name: { kind: "Name", value: "latencyMs" } },
+                { kind: "Field", name: { kind: "Name", value: "endpoint" } },
+                { kind: "Field", name: { kind: "Name", value: "checkedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphHealthCheckQuery,
+  SettingsKnowledgeGraphHealthCheckQueryVariables
 >;
 export const SettingsRenameTenantSlugDocument = {
   kind: "Document",

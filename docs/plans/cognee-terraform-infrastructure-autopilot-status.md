@@ -7,15 +7,16 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U7 Spaces/Desktop Knowledge Graph settings surface
+- Current unit: U8 Spaces/Desktop Knowledge Graph health check
 - Current branch/worktree:
-  `codex/cognee-settings-spaces` /
-  `.Codex/worktrees/cognee-settings-spaces`
+  `codex/cognee-settings-health-check` /
+  `.Codex/worktrees/cognee-settings-health-check`
 - Current PR: not opened yet
-- Blocker: the in-app Settings switch needs an AWS Secrets Manager token secret
+- Blocker: the in-app Settings switch still needs an AWS Secrets Manager token secret
   at `thinkwork/dev/github/deploy-token` before the deployed API can dispatch
   GitHub Actions. Direct pipeline deployment remains available through GitHub
-  Actions variables and `deploy.yml`.
+  Actions variables and `deploy.yml`; status and health-check validation do not
+  depend on that secret.
 - AWS status: Cognee is running in dev on ECS service
   `thinkwork-dev-cognee` in cluster `thinkwork-dev-cognee-cluster`; desired /
   running tasks are 1 / 1, the ALB target is healthy, and `/health` logs are
@@ -187,6 +188,26 @@ Started: 2026-06-04
   `http://127.0.0.1:5176/settings/knowledge-graph`; unauthenticated users land
   on the sign-in redirect and authenticated GraphQL `deploymentStatus` returns
   live Cognee details.
+- 2026-06-04: U7 PR [#2067](https://github.com/thinkwork-ai/thinkwork/pull/2067)
+  passed checks and squash merged to `main` as
+  `5446c51f17449f435a266df74ff14efb4c616458`. Merge-triggered deploy run
+  [26968819897](https://github.com/thinkwork-ai/thinkwork/actions/runs/26968819897)
+  passed end to end, including Terraform Apply, AgentCore runtime update,
+  docs/admin deploy, and Deploy Summary.
+- 2026-06-04: Started U8 branch `codex/cognee-settings-health-check` from
+  `origin/main` to add an operator-only GraphQL health check that probes the
+  private Cognee `/health` endpoint through the Thinkwork API and exposes a
+  Spaces/Desktop “Test connection” action.
+- 2026-06-04: U8 local verification passed:
+  `pnpm schema:build`;
+  `pnpm --filter @thinkwork/spaces codegen`;
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/knowledgeGraphHealthCheck.query.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsKnowledgeGraph.test.ts src/components/settings/settings-nav.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces build`; and `git diff --check`. Restarted
+  the local Spaces dev server on
+  `http://127.0.0.1:5174/settings/knowledge-graph` from the U8 worktree.
 
 ## Implementation Units
 
@@ -206,7 +227,8 @@ Started: 2026-06-04
 | U6 hotfix. Create Cognee DB without target-role ownership              | merged | `codex/cognee-db-create-hotfix`            | [#2063](https://github.com/thinkwork-ai/thinkwork/pull/2063) | passed | `9d788511f11a4d4be59dca2205c42285c44831a7` |
 | U6 hotfix. Compact Cognee Lambda status env                            | merged | `codex/cognee-lambda-env-status`           | [#2065](https://github.com/thinkwork-ai/thinkwork/pull/2065) | passed | `4292af1ae5429a35d9ee2e6fbb847a0c1f3b8417` |
 | Deploy hotfix. Avoid AgentCore runtime pre-read failure                | merged | `codex/agentcore-runtime-update-forbidden` | [#2066](https://github.com/thinkwork-ai/thinkwork/pull/2066) | passed | `d5203b06fecd25df5acc8187ca8354f2976b2199` |
-| U7. Move Knowledge Graph settings into Spaces/Desktop                  | active | `codex/cognee-settings-spaces`             | Pending                                                      | local  | Pending                                    |
+| U7. Move Knowledge Graph settings into Spaces/Desktop                  | merged | `codex/cognee-settings-spaces`             | [#2067](https://github.com/thinkwork-ai/thinkwork/pull/2067) | passed | `5446c51f17449f435a266df74ff14efb4c616458` |
+| U8. Add API-backed Knowledge Graph health check                        | active | `codex/cognee-settings-health-check`       | Pending                                                      | local  | Pending                                    |
 
 ## CI Failures
 
@@ -228,6 +250,7 @@ Started: 2026-06-04
 - [#2063](https://github.com/thinkwork-ai/thinkwork/pull/2063) — U6 hotfix. Create Cognee DB without target-role ownership — squash merged as `9d788511f11a4d4be59dca2205c42285c44831a7`.
 - [#2065](https://github.com/thinkwork-ai/thinkwork/pull/2065) — U6 hotfix. Compact Cognee Lambda status env — squash merged as `4292af1ae5429a35d9ee2e6fbb847a0c1f3b8417`.
 - [#2066](https://github.com/thinkwork-ai/thinkwork/pull/2066) — Deploy hotfix. Avoid AgentCore runtime pre-read failure — squash merged as `d5203b06fecd25df5acc8187ca8354f2976b2199`.
+- [#2067](https://github.com/thinkwork-ai/thinkwork/pull/2067) — U7. Move Knowledge Graph settings into Spaces/Desktop — squash merged as `5446c51f17449f435a266df74ff14efb4c616458`.
 
 ## CI / Deploy Failures
 

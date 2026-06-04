@@ -3,6 +3,7 @@ import { SETTINGS_NAV_ITEMS, visibleSettingsNavItems } from "./settings-nav";
 
 const LOCAL_WORKSPACE = "/settings/local-workspace";
 const KNOWLEDGE_GRAPH = "/settings/knowledge-graph";
+const KNOWLEDGE_BASES = "/settings/knowledge-bases";
 
 describe("visibleSettingsNavItems", () => {
   it("declares Workspace as a non-operator, non-desktop-gated section", () => {
@@ -69,5 +70,18 @@ describe("visibleSettingsNavItems", () => {
     expect(operatorWeb.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(true);
     expect(operatorDesktop.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(true);
     expect(memberWeb.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(false);
+  });
+
+  it("places Knowledge Graph above Knowledge Bases", () => {
+    const graphIndex = SETTINGS_NAV_ITEMS.findIndex(
+      (i) => i.to === KNOWLEDGE_GRAPH,
+    );
+    const basesIndex = SETTINGS_NAV_ITEMS.findIndex(
+      (i) => i.to === KNOWLEDGE_BASES,
+    );
+
+    expect(graphIndex).toBeGreaterThanOrEqual(0);
+    expect(basesIndex).toBeGreaterThanOrEqual(0);
+    expect(graphIndex).toBeLessThan(basesIndex);
   });
 });
