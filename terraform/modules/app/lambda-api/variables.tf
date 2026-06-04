@@ -248,6 +248,18 @@ variable "cognee_service_name" {
   default     = ""
 }
 
+variable "cognee_worker_subnet_ids" {
+  description = "Subnet IDs for the Knowledge Graph ingest worker Lambda VPC attachment. Leave empty to deploy the worker without VPC access."
+  type        = list(string)
+  default     = []
+}
+
+variable "cognee_worker_security_group_ids" {
+  description = "Security group IDs for the Knowledge Graph ingest worker Lambda VPC attachment. Leave empty to deploy the worker without VPC access."
+  type        = list(string)
+  default     = []
+}
+
 variable "agentcore_pi_function_name" {
   description = "Pi AgentCore Lambda function name (for direct SDK invoke); empty until the Pi runtime is provisioned for the stage."
   type        = string

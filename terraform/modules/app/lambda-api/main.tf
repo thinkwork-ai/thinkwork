@@ -352,6 +352,13 @@ resource "aws_iam_role_policy_attachment" "lambda_cognee_health_read" {
   policy_arn = aws_iam_policy.lambda_cognee_health_read.arn
 }
 
+resource "aws_iam_role_policy_attachment" "lambda_cognee_worker_vpc_access" {
+  count = var.cognee_enabled && length(var.cognee_worker_subnet_ids) > 0 && length(var.cognee_worker_security_group_ids) > 0 ? 1 : 0
+
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
 # SES send permissions for the email-send handler. Scoped to any
 # verified identity in this account+region so the email-send Lambda
 # can SendRawEmail from agents.thinkwork.ai (and any other domain

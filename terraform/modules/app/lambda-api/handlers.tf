@@ -155,6 +155,11 @@ locals {
       KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
       DATABASE_CLUSTER_ARN = var.db_cluster_arn
     }
+    "knowledge-graph-thread-ingest" = {
+      COGNEE_ENDPOINT     = var.cognee_endpoint
+      COGNEE_BACKEND_MODE = var.cognee_backend_mode
+      COGNEE_INGEST_MODE  = "remember"
+    }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
     # provisioned by the agentcore-code-interpreter module and exposed via
@@ -521,6 +526,15 @@ resource "aws_lambda_function" "handler" {
       { FUNCTION_NAME = each.key },
       lookup(local.handler_extra_env, each.key, {}),
     )
+  }
+
+  dynamic "vpc_config" {
+    for_each = each.key == "knowledge-graph-thread-ingest" && length(var.cognee_worker_subnet_ids) > 0 && length(var.cognee_worker_security_group_ids) > 0 ? [1] : []
+
+    content {
+      subnet_ids         = var.cognee_worker_subnet_ids
+      security_group_ids = var.cognee_worker_security_group_ids
+    }
   }
 
   tags = {
