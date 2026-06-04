@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/cognee-kg-u5-infra` /
   `.Codex/worktrees/cognee-kg-u5-infra`
-- Current PR: not opened
+- Current PR: [#2081](https://github.com/thinkwork-ai/thinkwork/pull/2081)
 - Blocker: none
 
 ## Progress Log
@@ -156,3 +156,5 @@ Started: 2026-06-04
   `pnpm --filter @thinkwork/api typecheck`;
   `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts src/__tests__/knowledge-graph-start-ingest.test.ts`;
   and `git diff --check`.
+- 2026-06-04: Opened U5 PR
+  [#2081](https://github.com/thinkwork-ai/thinkwork/pull/2081).
