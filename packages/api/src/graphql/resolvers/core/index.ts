@@ -8,6 +8,7 @@ import { updateTenant } from "./updateTenant.mutation.js";
 import { renameTenantSlug } from "./renameTenantSlug.mutation.js";
 import { updateTenantPolicy } from "./updateTenantPolicy.mutation.js";
 import { updateTenantSettings } from "./updateTenantSettings.mutation.js";
+import { setKnowledgeGraphDeployment } from "./setKnowledgeGraphDeployment.mutation.js";
 import { addTenantMember } from "./addTenantMember.mutation.js";
 import { updateTenantMember } from "./updateTenantMember.mutation.js";
 import { removeTenantMember } from "./removeTenantMember.mutation.js";
@@ -36,6 +37,7 @@ export const coreMutations = {
   renameTenantSlug,
   updateTenantPolicy,
   updateTenantSettings,
+  setKnowledgeGraphDeployment,
   addTenantMember,
   updateTenantMember,
   removeTenantMember,

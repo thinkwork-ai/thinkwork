@@ -49,6 +49,20 @@ locals {
     HINDSIGHT_ENDPOINT                 = var.hindsight_endpoint
     AGENTCORE_MEMORY_ID                = var.agentcore_memory_id
     MEMORY_ENGINE                      = var.memory_engine
+    COGNEE_ENABLED                     = tostring(var.cognee_enabled)
+    COGNEE_ENDPOINT                    = var.cognee_endpoint
+    COGNEE_LOG_GROUP_NAME              = var.cognee_log_group_name
+    COGNEE_BACKEND_MODE                = var.cognee_backend_mode
+    COGNEE_CLUSTER_ARN                 = var.cognee_cluster_arn
+    COGNEE_SERVICE_NAME                = var.cognee_service_name
+    KNOWLEDGE_GRAPH_GITHUB_TOKEN_SECRET_ID = (
+      var.knowledge_graph_github_token_secret_id != ""
+      ? var.knowledge_graph_github_token_secret_id
+      : "thinkwork/${var.stage}/github/deploy-token"
+    )
+    KNOWLEDGE_GRAPH_DEPLOY_REPOSITORY    = var.knowledge_graph_deploy_repository
+    KNOWLEDGE_GRAPH_DEPLOY_WORKFLOW_FILE = var.knowledge_graph_deploy_workflow_file
+    KNOWLEDGE_GRAPH_DEPLOY_REF           = var.knowledge_graph_deploy_ref
     # Skip the SSM indirection for cross-function ARN lookup. Terraform
     # already knows this ARN at apply time and the Lambda role's SSM
     # permission has been a recurring source of silent failures where

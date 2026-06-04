@@ -420,20 +420,44 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(source).toMatch(/output "cognee_endpoint"/);
   });
 
-  it("keeps CI Terraform runs explicitly opted out of Cognee", () => {
+  it("keeps CI Terraform runs disabled by default but aligned with Cognee deployment inputs", () => {
     for (const workflow of [read(VERIFY_WORKFLOW), read(DEPLOY_WORKFLOW)]) {
-      expect(workflow).toMatch(/-var "enable_cognee=false"/);
-      expect(workflow).toMatch(/-var "cognee_image_uri="/);
-      expect(workflow).toMatch(/-var "cognee_db_username=thinkwork_cognee"/);
-      expect(workflow).toMatch(/-var "cognee_db_password_secret_arn="/);
-      expect(workflow).toMatch(/-var "cognee_backend_mode=dogfood"/);
-      expect(workflow).toMatch(/-var "cognee_desired_count=1"/);
-      expect(workflow).toMatch(/-var "cognee_llm_provider=bedrock"/);
-      expect(workflow).toMatch(/-var "cognee_embedding_provider=bedrock"/);
+      expect(workflow).toMatch(/COGNEE_ENABLED_INPUT/);
+      expect(workflow).toMatch(/vars\.COGNEE_ENABLED \|\| 'false'/);
+      expect(workflow).toMatch(/cognee\/cognee@sha256:5ce7e4052b1d/);
       expect(workflow).toMatch(
-        /-var 'cognee_bedrock_model_resource_arns=\[\]'/,
+        /thinkwork\/\$\{STAGE\}\/cognee\/db-credentials/,
       );
+      expect(workflow).toMatch(/cognee_bedrock_model_resource_arns/);
+      expect(workflow).toMatch(/amazon\.nova-lite-v1:0/);
+      expect(workflow).toMatch(/amazon\.titan-embed-text-v2:0/);
+      expect(workflow).toMatch(/-var "enable_cognee=\$/);
+      expect(workflow).toMatch(/-var "cognee_image_uri=\$/);
+      expect(workflow).toMatch(/-var "cognee_db_username=\$/);
+      expect(workflow).toMatch(/-var "cognee_db_password_secret_arn=\$/);
+      expect(workflow).toMatch(/-var "cognee_backend_mode=\$/);
+      expect(workflow).toMatch(/-var "cognee_desired_count=\$/);
+      expect(workflow).toMatch(/-var "cognee_llm_provider=\$/);
+      expect(workflow).toMatch(/-var "cognee_embedding_provider=\$/);
     }
+  });
+
+  it("prepares the Cognee DB secret and role before Terraform apply when enabled", () => {
+    const workflow = read(DEPLOY_WORKFLOW);
+
+    expect(workflow).toMatch(/Prepare Cognee database credentials/);
+    expect(workflow).toMatch(
+      /if \[ "\$\{COGNEE_ENABLED:-false\}" != "true" \]/,
+    );
+    expect(workflow).toMatch(/Cognee disabled; skipping Cognee database/);
+    expect(workflow).toMatch(/aws secretsmanager create-secret/);
+    expect(workflow).toMatch(/aws secretsmanager put-secret-value/);
+    expect(workflow).toMatch(/COGNEE_DB_PASSWORD_SECRET_ARN=\$secret_arn/);
+    expect(workflow).toMatch(/CREATE ROLE %I LOGIN PASSWORD %L/);
+    expect(workflow).toMatch(/ALTER ROLE %I LOGIN PASSWORD %L/);
+    expect(workflow).toMatch(/GRANT CONNECT ON DATABASE thinkwork/);
+    expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);
+    expect(workflow).toMatch(/ALTER DEFAULT PRIVILEGES IN SCHEMA public/);
   });
 });
 

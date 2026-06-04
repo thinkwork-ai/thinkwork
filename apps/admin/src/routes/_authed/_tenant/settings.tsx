@@ -18,8 +18,20 @@ import { CopyableRow } from "@/components/ui/copyable-row";
 import {
   DeploymentStatusQuery,
   RenameTenantSlugMutation,
+  SetKnowledgeGraphDeploymentMutation,
   TenantDetailQuery,
 } from "@/lib/graphql-queries";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +51,10 @@ function SettingsPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [slugDraft, setSlugDraft] = useState("");
   const [slugError, setSlugError] = useState<string | null>(null);
+  const [disableKnowledgeGraphOpen, setDisableKnowledgeGraphOpen] =
+    useState(false);
+  const [pendingKnowledgeGraphEnabled, setPendingKnowledgeGraphEnabled] =
+    useState<boolean | null>(null);
 
   const [tenantResult, refetchTenant] = useQuery({
     query: TenantDetailQuery,
@@ -49,12 +65,22 @@ function SettingsPage() {
     RenameTenantSlugMutation,
   );
 
-  const [deployResult] = useQuery({ query: DeploymentStatusQuery });
+  const [deployResult, refetchDeploy] = useQuery({
+    query: DeploymentStatusQuery,
+  });
+  const [knowledgeGraphResult, setKnowledgeGraphDeployment] = useMutation(
+    SetKnowledgeGraphDeploymentMutation,
+  );
 
   if (!tenantId) return <PageSkeleton />;
 
   const tenant = tenantResult.data?.tenant;
   const deploy = deployResult.data?.deploymentStatus;
+  const knowledgeGraphDesiredEnabled =
+    pendingKnowledgeGraphEnabled ?? Boolean(deploy?.cogneeEnabled);
+  const knowledgeGraphQueued =
+    pendingKnowledgeGraphEnabled !== null &&
+    pendingKnowledgeGraphEnabled !== Boolean(deploy?.cogneeEnabled);
 
   async function submitTenantSlug(nextSlug: string) {
     if (!tenant) return;
@@ -76,6 +102,23 @@ function SettingsPage() {
     setRenameOpen(false);
     refetchTenant({ requestPolicy: "network-only" });
     refetchTenantContext();
+  }
+
+  async function requestKnowledgeGraphDeployment(enabled: boolean) {
+    const result = await setKnowledgeGraphDeployment({ enabled });
+    if (result.error) {
+      toast.error(
+        `Could not ${enabled ? "enable" : "disable"} Knowledge Graph: ${result.error.message}`,
+      );
+      return;
+    }
+    setPendingKnowledgeGraphEnabled(enabled);
+    setDisableKnowledgeGraphOpen(false);
+    const message =
+      result.data?.setKnowledgeGraphDeployment.message ??
+      `Knowledge Graph ${enabled ? "enable" : "disable"} deployment queued.`;
+    toast.success(message);
+    refetchDeploy({ requestPolicy: "network-only" });
   }
 
   return (
@@ -166,6 +209,63 @@ function SettingsPage() {
             <>
               <Card>
                 <CardHeader>
+                  <CardTitle>Knowledge Graph</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">Cognee</div>
+                      <div className="text-xs text-muted-foreground">
+                        Ontology and knowledge-graph infrastructure
+                      </div>
+                    </div>
+                    <Switch
+                      checked={knowledgeGraphDesiredEnabled}
+                      disabled={knowledgeGraphResult.fetching}
+                      aria-label="Toggle Knowledge Graph infrastructure"
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          void requestKnowledgeGraphDeployment(true);
+                        } else {
+                          setDisableKnowledgeGraphOpen(true);
+                        }
+                      }}
+                    />
+                  </div>
+                  <StatusRow
+                    label="Status"
+                    value={
+                      knowledgeGraphQueued
+                        ? "deployment queued"
+                        : deploy.cogneeEnabled
+                          ? "enabled"
+                          : "disabled"
+                    }
+                    active={deploy.cogneeEnabled || knowledgeGraphQueued}
+                  />
+                  {deploy.cogneeBackendMode && (
+                    <Row label="Backend" value={deploy.cogneeBackendMode} />
+                  )}
+                  {deploy.cogneeServiceName && (
+                    <Row label="Service" value={deploy.cogneeServiceName} />
+                  )}
+                  {deploy.cogneeLogGroupName && (
+                    <CopyableRow
+                      label="Logs"
+                      value={deploy.cogneeLogGroupName}
+                    />
+                  )}
+                  {deploy.cogneeEndpoint && (
+                    <CopyableRow
+                      label="Endpoint"
+                      value={deploy.cogneeEndpoint}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
                   <CardTitle>Deployment</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -244,6 +344,9 @@ function SettingsPage() {
                       url
                     />
                   )}
+                  {deploy.cogneeEndpoint && (
+                    <CopyableRow label="Cognee" value={deploy.cogneeEndpoint} />
+                  )}
                 </CardContent>
               </Card>
             </>
@@ -276,15 +379,39 @@ function SettingsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={disableKnowledgeGraphOpen}
+        onOpenChange={setDisableKnowledgeGraphOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disable Knowledge Graph?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This queues a Terraform deployment that disables Cognee
+              infrastructure for the stage. Snapshot or export graph data before
+              confirming if it needs to be retained.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void requestKnowledgeGraphDeployment(false)}
+            >
+              Disable
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageLayout>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span>{value}</span>
+    <div className="flex justify-between gap-4 text-sm">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="min-w-0 break-words text-right">{value}</span>
     </div>
   );
 }
@@ -299,8 +426,8 @@ function StatusRow({
   active: boolean;
 }) {
   return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
+    <div className="flex justify-between gap-4 text-sm">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
       <Badge variant={active ? "default" : "secondary"}>
         {value || "unknown"}
       </Badge>

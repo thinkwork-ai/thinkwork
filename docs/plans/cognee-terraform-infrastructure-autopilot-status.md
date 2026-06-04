@@ -6,11 +6,16 @@ Started: 2026-06-04
 
 ## Current Status
 
-- State: complete
-- Current unit: all implementation units complete
-- Current branch/worktree: none
-- Current PR: none
-- Blocker: none
+- State: in_progress
+- Current unit: U6 Knowledge Graph settings control and deploy activation
+- Current branch/worktree:
+  `codex/cognee-deploy-enable` /
+  `.Codex/worktrees/cognee-deploy-enable`
+- Current PR: not opened yet
+- Blocker: the in-app Settings switch needs an AWS Secrets Manager token secret
+  at `thinkwork/dev/github/deploy-token` before the deployed API can dispatch
+  GitHub Actions. Direct pipeline deployment remains available through GitHub
+  Actions variables and `deploy.yml`.
 
 ## Progress Log
 
@@ -48,6 +53,23 @@ Started: 2026-06-04
 - 2026-06-04: Opened U5 PR [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049).
 - 2026-06-04: U5 PR [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) passed GitHub checks (`cla`, `lint`, `test`, `typecheck`, `verify`) and squash merged to `main` as `32a2f95761c8adcf9ab33be1ff0ace4ad51558b9`; remote branch deleted.
 - 2026-06-04: All Cognee Terraform infrastructure implementation units are complete and merged.
+- 2026-06-04: Started post-plan U6 to turn Cognee deployment into an operator-facing Knowledge Graph setting and activate deployment through the normal GitHub Actions pipeline.
+- 2026-06-04: U6 implemented deploy workflow Cognee inputs, DB credential/role preparation, API deployment status fields, a platform-operator mutation that updates `COGNEE_ENABLED` and dispatches `deploy.yml`, and a tenant Settings card with an enable switch, disable confirmation, and Cognee status/details.
+- 2026-06-04: U6 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/admin exec vitest run src/routes/_authed/_tenant/-settings.test.ts`;
+  `pnpm --filter @thinkwork/admin build`;
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts`;
+  `pnpm --filter thinkwork-cli typecheck`;
+  `terraform -chdir=terraform/modules/thinkwork init -backend=false && terraform -chdir=terraform/modules/thinkwork validate`;
+  `terraform -chdir=terraform/examples/greenfield init -backend=false && terraform -chdir=terraform/examples/greenfield validate`;
+  `pnpm dlx prettier --check <changed supported U6 files>`; and
+  `git diff --check`. Admin browser screenshot verification reached the local
+  sign-in page; authenticated visual QA is still pending.
+- 2026-06-04: Confirmed AWS dev does not currently have
+  `thinkwork/dev/github/deploy-token`; this must be created before the deployed
+  Settings switch can dispatch workflows from the API.
 
 ## Implementation Units
 
@@ -58,6 +80,7 @@ Started: 2026-06-04
 | U3. Add Cognee secrets and configuration hygiene                       | merged | `codex/u3-cognee-secrets-config`   | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
 | U4. Propagate Cognee through examples, CLI templates, and CI workflows | merged | `codex/u4-cognee-cli-templates`    | [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) | passed | `c045ce844ff08580a62403515413c8498d915fc9` |
 | U5. Add operational handoff and smoke-check guidance                   | merged | `codex/u5-cognee-ops-guidance`     | [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) | passed | `32a2f95761c8adcf9ab33be1ff0ace4ad51558b9` |
+| U6. Add Knowledge Graph settings control and deploy activation         | active | `codex/cognee-deploy-enable`       | Not opened                                                   | local  | Pending                                    |
 
 ## CI Failures
 
@@ -73,4 +96,8 @@ Started: 2026-06-04
 
 ## Blockers
 
-- None.
+- AWS Secrets Manager secret `thinkwork/dev/github/deploy-token` is missing.
+  The deployed API mutation cannot dispatch GitHub Actions until an operator
+  stores a GitHub token there. The immediate Cognee deployment can still be
+  triggered through GitHub Actions after U6 merges by setting the repo variable
+  `COGNEE_ENABLED=true` and running `deploy.yml`.

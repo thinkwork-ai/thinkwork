@@ -198,11 +198,47 @@ jobs:
         working-directory: terraform/examples/greenfield
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || 'placeholder-not-configured' }}
+          COGNEE_ENABLED_INPUT: ${{ vars.COGNEE_ENABLED || 'false' }}
+          COGNEE_IMAGE_URI_INPUT: ${{ vars.COGNEE_IMAGE_URI || '' }}
+          COGNEE_DB_USERNAME_INPUT: ${{ vars.COGNEE_DB_USERNAME || 'thinkwork_cognee' }}
+          COGNEE_DB_PASSWORD_SECRET_ARN_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ARN || '' }}
+          COGNEE_DB_PASSWORD_SECRET_ID_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ID || '' }}
+          COGNEE_BACKEND_MODE_INPUT: ${{ vars.COGNEE_BACKEND_MODE || 'dogfood' }}
+          COGNEE_DESIRED_COUNT_INPUT: ${{ vars.COGNEE_DESIRED_COUNT || '1' }}
+          COGNEE_LLM_PROVIDER_INPUT: ${{ vars.COGNEE_LLM_PROVIDER || 'bedrock' }}
+          COGNEE_EMBEDDING_PROVIDER_INPUT: ${{ vars.COGNEE_EMBEDDING_PROVIDER || 'bedrock' }}
+          COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT: ${{ vars.COGNEE_BEDROCK_MODEL_RESOURCE_ARNS || '' }}
         run: |
           # -detailed-exitcode: 0=no changes, 1=error, 2=changes detected.
           # We treat 2 (drift) as a soft signal and write a summary instead
           # of failing — operators triage manually rather than getting
           # paged by every benign drift.
+          cognee_enabled=$(printf '%s' "$COGNEE_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
+          if [ "$cognee_enabled" != "true" ] && [ "$cognee_enabled" != "false" ]; then
+            echo "::error::COGNEE_ENABLED must be true or false."
+            exit 1
+          fi
+
+          cognee_image_uri="${COGNEE_IMAGE_URI_INPUT:-cognee/cognee@sha256:5ce7e4052b1d16738d1e24476d64847fcb5b1666631b642651e8ccce414046f8}"
+          cognee_db_username="${COGNEE_DB_USERNAME_INPUT:-thinkwork_cognee}"
+          cognee_db_password_secret_id="${COGNEE_DB_PASSWORD_SECRET_ID_INPUT:-thinkwork/${STAGE}/cognee/db-credentials}"
+          cognee_db_password_secret_arn="$COGNEE_DB_PASSWORD_SECRET_ARN_INPUT"
+          cognee_backend_mode="${COGNEE_BACKEND_MODE_INPUT:-dogfood}"
+          cognee_desired_count="${COGNEE_DESIRED_COUNT_INPUT:-1}"
+          cognee_llm_provider="${COGNEE_LLM_PROVIDER_INPUT:-bedrock}"
+          cognee_embedding_provider="${COGNEE_EMBEDDING_PROVIDER_INPUT:-bedrock}"
+          cognee_bedrock_model_resource_arns="${COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT:-[\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.nova-lite-v1:0\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.titan-embed-text-v2:0\"]}"
+
+          if [ "$cognee_enabled" = "true" ] && [ -z "$cognee_db_password_secret_arn" ]; then
+            cognee_db_password_secret_arn=$(aws secretsmanager describe-secret \
+              --secret-id "$cognee_db_password_secret_id" \
+              --query ARN --output text 2>/dev/null || echo "")
+            if [ -z "$cognee_db_password_secret_arn" ] || [ "$cognee_db_password_secret_arn" = "None" ]; then
+              echo "::error::COGNEE_ENABLED=true but the Cognee DB secret does not exist yet. Run the deploy workflow once to create it."
+              exit 1
+            fi
+          fi
+
           set +e
           terraform plan \
             -refresh=true \
@@ -214,15 +250,15 @@ jobs:
             -var "db_password=${{ secrets.DB_PASSWORD }}" \
             -var "database_engine=aurora-serverless" \
             -var "enable_hindsight=true" \
-            -var "enable_cognee=false" \
-            -var "cognee_image_uri=" \
-            -var "cognee_db_username=thinkwork_cognee" \
-            -var "cognee_db_password_secret_arn=" \
-            -var "cognee_backend_mode=dogfood" \
-            -var "cognee_desired_count=1" \
-            -var "cognee_llm_provider=bedrock" \
-            -var "cognee_embedding_provider=bedrock" \
-            -var 'cognee_bedrock_model_resource_arns=[]' \
+            -var "enable_cognee=$cognee_enabled" \
+            -var "cognee_image_uri=$cognee_image_uri" \
+            -var "cognee_db_username=$cognee_db_username" \
+            -var "cognee_db_password_secret_arn=$cognee_db_password_secret_arn" \
+            -var "cognee_backend_mode=$cognee_backend_mode" \
+            -var "cognee_desired_count=$cognee_desired_count" \
+            -var "cognee_llm_provider=$cognee_llm_provider" \
+            -var "cognee_embedding_provider=$cognee_embedding_provider" \
+            -var "cognee_bedrock_model_resource_arns=$cognee_bedrock_model_resource_arns" \
             -var "enable_workspace_orchestration=true" \
             -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
             -var "mapbox_public_token=${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}" \

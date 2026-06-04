@@ -1048,6 +1048,12 @@ export type DeploymentStatus = {
   appsyncRealtimeUrl?: Maybe<Scalars["String"]["output"]>;
   appsyncUrl?: Maybe<Scalars["String"]["output"]>;
   bucketName?: Maybe<Scalars["String"]["output"]>;
+  cogneeBackendMode?: Maybe<Scalars["String"]["output"]>;
+  cogneeClusterArn?: Maybe<Scalars["String"]["output"]>;
+  cogneeEnabled: Scalars["Boolean"]["output"];
+  cogneeEndpoint?: Maybe<Scalars["String"]["output"]>;
+  cogneeLogGroupName?: Maybe<Scalars["String"]["output"]>;
+  cogneeServiceName?: Maybe<Scalars["String"]["output"]>;
   databaseEndpoint?: Maybe<Scalars["String"]["output"]>;
   docsUrl?: Maybe<Scalars["String"]["output"]>;
   ecrUrl?: Maybe<Scalars["String"]["output"]>;
@@ -1309,6 +1315,26 @@ export type KnowledgeBase = {
   status: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type KnowledgeBaseRetrievalHit = {
+  __typename?: "KnowledgeBaseRetrievalHit";
+  score?: Maybe<Scalars["Float"]["output"]>;
+  snippet: Scalars["String"]["output"];
+  source?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type KnowledgeBaseRetrievalResult = {
+  __typename?: "KnowledgeBaseRetrievalResult";
+  hits: Array<KnowledgeBaseRetrievalHit>;
+  status: Scalars["String"]["output"];
+};
+
+export type KnowledgeGraphDeploymentChange = {
+  __typename?: "KnowledgeGraphDeploymentChange";
+  desiredEnabled: Scalars["Boolean"]["output"];
+  message: Scalars["String"]["output"];
+  workflowUrl: Scalars["String"]["output"];
 };
 
 export type LinkedTask = {
@@ -1792,6 +1818,7 @@ export type Mutation = {
   notifyNewMessage?: Maybe<NewMessageEvent>;
   notifyOrgUpdate?: Maybe<OrgUpdateEvent>;
   notifyThreadActivity?: Maybe<ThreadActivityEvent>;
+  notifyThreadTurnStep?: Maybe<ThreadTurnStepEvent>;
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
@@ -1827,6 +1854,7 @@ export type Mutation = {
   resetWikiCursor: WikiResetCursorResult;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
+  retryKnowledgeBase: KnowledgeBase;
   reviewGoal: ReviewGoalPayload;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
@@ -1837,6 +1865,7 @@ export type Mutation = {
   seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
+  setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
   setSpaceEmailTriggers: Space;
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
@@ -2261,6 +2290,20 @@ export type MutationNotifyThreadActivityArgs = {
   userId: Scalars["ID"]["input"];
 };
 
+export type MutationNotifyThreadTurnStepArgs = {
+  color?: InputMaybe<Scalars["String"]["input"]>;
+  createdAt: Scalars["AWSDateTime"]["input"];
+  eventType: Scalars["String"]["input"];
+  level?: InputMaybe<Scalars["String"]["input"]>;
+  message?: InputMaybe<Scalars["String"]["input"]>;
+  payload?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  runId: Scalars["ID"]["input"];
+  seq: Scalars["Int"]["input"];
+  stream?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
+};
+
 export type MutationNotifyThreadTurnUpdateArgs = {
   agentId?: InputMaybe<Scalars["ID"]["input"]>;
   runId: Scalars["ID"]["input"];
@@ -2408,6 +2451,10 @@ export type MutationResumeAgentWorkspaceRunArgs = {
   runId: Scalars["ID"]["input"];
 };
 
+export type MutationRetryKnowledgeBaseArgs = {
+  id: Scalars["ID"]["input"];
+};
+
 export type MutationReviewGoalArgs = {
   input: ReviewGoalInput;
 };
@@ -2450,6 +2497,10 @@ export type MutationSendMessageArgs = {
 export type MutationSetAgentKnowledgeBasesArgs = {
   agentId: Scalars["ID"]["input"];
   knowledgeBases: Array<AgentKnowledgeBaseInput>;
+};
+
+export type MutationSetKnowledgeGraphDeploymentArgs = {
+  input: SetKnowledgeGraphDeploymentInput;
 };
 
 export type MutationSetRoutineTriggerArgs = {
@@ -3147,6 +3198,7 @@ export type Query = {
   tenantMembers: Array<TenantMember>;
   tenantMentionTargets: Array<ThreadMentionTarget>;
   tenantToolInventory: TenantToolInventory;
+  testKnowledgeBaseRetrieval: KnowledgeBaseRetrievalResult;
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
   threadGoal?: Maybe<ThreadGoal>;
@@ -3674,6 +3726,11 @@ export type QueryTenantMentionTargetsArgs = {
 
 export type QueryTenantToolInventoryArgs = {
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryTestKnowledgeBaseRetrievalArgs = {
+  id: Scalars["ID"]["input"];
+  query: Scalars["String"]["input"];
 };
 
 export type QueryThreadArgs = {
@@ -4315,6 +4372,10 @@ export type SendMessageMentionInput = {
   targetType: MessageMentionTargetType;
 };
 
+export type SetKnowledgeGraphDeploymentInput = {
+  enabled: Scalars["Boolean"]["input"];
+};
+
 export type SetSpaceKnowledgeBasesInput = {
   knowledgeBases: Array<SpaceKnowledgeBaseInput>;
   spaceId: Scalars["ID"]["input"];
@@ -4669,6 +4730,7 @@ export type Subscription = {
   onNewMessage?: Maybe<NewMessageEvent>;
   onOrgUpdated?: Maybe<OrgUpdateEvent>;
   onThreadActivity?: Maybe<ThreadActivityEvent>;
+  onThreadTurnStep?: Maybe<ThreadTurnStepEvent>;
   onThreadTurnUpdated?: Maybe<ThreadTurnUpdateEvent>;
   onThreadUpdated?: Maybe<ThreadUpdateEvent>;
   onWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
@@ -4704,6 +4766,10 @@ export type SubscriptionOnOrgUpdatedArgs = {
 
 export type SubscriptionOnThreadActivityArgs = {
   userId: Scalars["ID"]["input"];
+};
+
+export type SubscriptionOnThreadTurnStepArgs = {
+  threadId: Scalars["ID"]["input"];
 };
 
 export type SubscriptionOnThreadTurnUpdatedArgs = {
@@ -5252,6 +5318,21 @@ export type ThreadTurnEvent = {
   tenantId: Scalars["ID"]["output"];
 };
 
+export type ThreadTurnStepEvent = {
+  __typename?: "ThreadTurnStepEvent";
+  color?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  eventType: Scalars["String"]["output"];
+  level?: Maybe<Scalars["String"]["output"]>;
+  message?: Maybe<Scalars["String"]["output"]>;
+  payload?: Maybe<Scalars["AWSJSON"]["output"]>;
+  runId: Scalars["ID"]["output"];
+  seq: Scalars["Int"]["output"];
+  stream?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
+};
+
 export type ThreadTurnUpdateEvent = {
   __typename?: "ThreadTurnUpdateEvent";
   agentId?: Maybe<Scalars["ID"]["output"]>;
@@ -5318,6 +5399,9 @@ export type UpdateEvalTestCaseInput = {
 };
 
 export type UpdateKnowledgeBaseInput = {
+  chunkOverlapPercent?: InputMaybe<Scalars["Int"]["input"]>;
+  chunkSizeTokens?: InputMaybe<Scalars["Int"]["input"]>;
+  chunkingStrategy?: InputMaybe<Scalars["String"]["input"]>;
   description?: InputMaybe<Scalars["String"]["input"]>;
   name?: InputMaybe<Scalars["String"]["input"]>;
 };
@@ -7690,6 +7774,26 @@ export type DeploymentStatusQuery = {
     agentcoreStatus?: string | null;
     hindsightEnabled: boolean;
     managedMemoryEnabled: boolean;
+    cogneeEnabled: boolean;
+    cogneeEndpoint?: string | null;
+    cogneeLogGroupName?: string | null;
+    cogneeBackendMode?: string | null;
+    cogneeClusterArn?: string | null;
+    cogneeServiceName?: string | null;
+  };
+};
+
+export type SetKnowledgeGraphDeploymentMutationVariables = Exact<{
+  enabled: Scalars["Boolean"]["input"];
+}>;
+
+export type SetKnowledgeGraphDeploymentMutation = {
+  __typename?: "Mutation";
+  setKnowledgeGraphDeployment: {
+    __typename?: "KnowledgeGraphDeploymentChange";
+    desiredEnabled: boolean;
+    workflowUrl: string;
+    message: string;
   };
 };
 
@@ -15777,6 +15881,30 @@ export const DeploymentStatusDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "managedMemoryEnabled" },
                 },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeEnabled" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeEndpoint" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeLogGroupName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeBackendMode" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeClusterArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeServiceName" },
+                },
               ],
             },
           },
@@ -15787,6 +15915,74 @@ export const DeploymentStatusDocument = {
 } as unknown as DocumentNode<
   DeploymentStatusQuery,
   DeploymentStatusQueryVariables
+>;
+export const SetKnowledgeGraphDeploymentDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SetKnowledgeGraphDeployment" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "enabled" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "Boolean" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "setKnowledgeGraphDeployment" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "ObjectValue",
+                  fields: [
+                    {
+                      kind: "ObjectField",
+                      name: { kind: "Name", value: "enabled" },
+                      value: {
+                        kind: "Variable",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredEnabled" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "workflowUrl" } },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SetKnowledgeGraphDeploymentMutation,
+  SetKnowledgeGraphDeploymentMutationVariables
 >;
 export const TenantMembersListDocument = {
   kind: "Document",
