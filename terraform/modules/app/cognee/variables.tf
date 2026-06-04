@@ -40,14 +40,21 @@ variable "db_username" {
   type        = string
 
   validation {
-    condition     = !contains(["postgres", "thinkwork_admin", "rdsadmin"], var.db_username)
+    condition     = !contains(["postgres", "thinkwork_admin", "rdsadmin"], lower(var.db_username))
     error_message = "db_username must be a dedicated least-privilege Cognee database user, not the shared admin/master user."
   }
 }
 
 variable "db_password_secret_arn" {
-  description = "Secrets Manager ARN containing a JSON password field for the Cognee PostgreSQL user"
+  description = "Secrets Manager ARN containing a JSON password field for the Cognee PostgreSQL user. Leave empty only when create_secret_placeholders = true."
   type        = string
+  default     = ""
+}
+
+variable "create_secret_placeholders" {
+  description = "Create operator-owned Secrets Manager placeholder containers for missing Cognee secrets. Secret values are seeded with placeholders and ignored after creation so rotation survives Terraform applies."
+  type        = bool
+  default     = false
 }
 
 variable "allowed_internal_cidr_blocks" {

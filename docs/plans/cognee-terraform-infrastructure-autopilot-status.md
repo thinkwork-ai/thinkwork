@@ -7,9 +7,9 @@ Started: 2026-06-04
 ## Current Status
 
 - State: active
-- Current unit: U2. Wire Cognee through the composite Thinkwork module
-- Current branch/worktree: `codex/u2-cognee-thinkwork-wiring` at `.Codex/worktrees/cognee-u2`
-- Current PR: [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046)
+- Current unit: U3. Add Cognee secrets and configuration hygiene
+- Current branch/worktree: `codex/u3-cognee-secrets-config` at `.Codex/worktrees/cognee-u3`
+- Current PR: [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047)
 - Blocker: none
 
 ## Progress Log
@@ -29,14 +29,20 @@ Started: 2026-06-04
 - 2026-06-04: Ran U2 Compound review pass. Correctness found no issues; security found and fixed two guardrails: reject the shared Thinkwork admin DB secret ARN when Cognee is enabled, and reject wildcard Bedrock model resource ARNs in both the composite and app module surfaces.
 - 2026-06-04: Post-review U2 verification passed: `terraform fmt -recursive terraform/modules/thinkwork terraform/modules/app/cognee`; `terraform -chdir=terraform/modules/thinkwork init -backend=false && terraform -chdir=terraform/modules/thinkwork validate`; `pnpm dlx prettier --write apps/cli/__tests__/terraform-cognee-fixture.test.ts docs/plans/cognee-terraform-infrastructure-autopilot-status.md`; `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts`; `git diff --check`.
 - 2026-06-04: Opened U2 PR [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046).
+- 2026-06-04: U2 PR [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) passed GitHub checks (`cla`, `lint`, `test`, `typecheck`, `verify`) and squash merged to `main` as `c8fa82a705975b53217eb79d09bfd4aeeace819c`; remote branch deleted and U2 worktree removed.
+- 2026-06-04: Created isolated worktree `.Codex/worktrees/cognee-u3` on branch `codex/u3-cognee-secrets-config` from `origin/main`.
+- 2026-06-04: Implemented U3 Cognee app-module secret hygiene with optional operator-owned Secrets Manager placeholder containers, `ignore_changes` secret versions, effective secret ARN plumbing for ECS injection/IAM, ARN-only secret outputs, README rotation guidance, and fixture coverage.
+- 2026-06-04: U3 local verification passed: `terraform fmt -recursive terraform/modules/app/cognee`; `terraform -chdir=terraform/modules/app/cognee init -backend=false && terraform -chdir=terraform/modules/app/cognee validate`; `pnpm dlx prettier --write apps/cli/__tests__/terraform-cognee-fixture.test.ts terraform/modules/app/cognee/README.md`; `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts`; `git diff --check`.
+- 2026-06-04: Ran targeted U3 local review focused on secret value exposure, effective ARN propagation, ECS secret injection, IAM scoping, and parent-module scope. No code changes required after review.
+- 2026-06-04: Opened U3 PR [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047).
 
 ## Implementation Units
 
 | Unit                                                                   | Status    | Branch                             | PR                                                           | CI      | Merge                                      |
 | ---------------------------------------------------------------------- | --------- | ---------------------------------- | ------------------------------------------------------------ | ------- | ------------------------------------------ |
 | U1. Create the Cognee Terraform app module                             | merged    | `codex/u1-cognee-terraform-module` | [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) | passed  | `30ec4984677de7a0c044bbe8ce745b890271e13a` |
-| U2. Wire Cognee through the composite Thinkwork module                 | in review | `codex/u2-cognee-thinkwork-wiring` | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | pending | pending                                    |
-| U3. Add Cognee secrets and configuration hygiene                       | pending   | pending                            | pending                                                      | pending | pending                                    |
+| U2. Wire Cognee through the composite Thinkwork module                 | merged    | `codex/u2-cognee-thinkwork-wiring` | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | passed  | `c8fa82a705975b53217eb79d09bfd4aeeace819c` |
+| U3. Add Cognee secrets and configuration hygiene                       | in review | `codex/u3-cognee-secrets-config`   | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | pending | pending                                    |
 | U4. Propagate Cognee through examples, CLI templates, and CI workflows | pending   | pending                            | pending                                                      | pending | pending                                    |
 | U5. Add operational handoff and smoke-check guidance                   | pending   | pending                            | pending                                                      | pending | pending                                    |
 
@@ -47,6 +53,7 @@ Started: 2026-06-04
 ## Merged PRs
 
 - [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) — U1. Create the Cognee Terraform app module — squash merged as `30ec4984677de7a0c044bbe8ce745b890271e13a`.
+- [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) — U2. Wire Cognee through the composite Thinkwork module — squash merged as `c8fa82a705975b53217eb79d09bfd4aeeace819c`.
 
 ## Blockers
 
