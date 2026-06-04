@@ -617,12 +617,16 @@ jobs:
           fi
 
           secret_selector="${COGNEE_DB_PASSWORD_SECRET_ARN:-$COGNEE_DB_PASSWORD_SECRET_ID}"
+          new_cognee_password() {
+            openssl rand -hex 32 | tr -d '\n'
+          }
+
           secret_arn=$(aws secretsmanager describe-secret \
             --secret-id "$secret_selector" \
             --query ARN --output text 2>/dev/null || echo "")
 
           if [ -z "$secret_arn" ] || [ "$secret_arn" = "None" ]; then
-            cognee_password=$(openssl rand -base64 36 | tr -d '\n')
+            cognee_password=$(new_cognee_password)
             echo "::add-mask::$cognee_password"
             secret_json=$(jq -n \
               --arg username "$COGNEE_DB_USERNAME" \
@@ -639,7 +643,17 @@ jobs:
               --query SecretString --output text)
             cognee_password=$(jq -r '.password // empty' <<< "$secret_json")
             if [ -z "$cognee_password" ] || [ "$cognee_password" = "PLACEHOLDER_SET_VIA_CLI" ]; then
-              cognee_password=$(openssl rand -base64 36 | tr -d '\n')
+              cognee_password=$(new_cognee_password)
+              echo "::add-mask::$cognee_password"
+              secret_json=$(jq -n \
+                --arg username "$COGNEE_DB_USERNAME" \
+                --arg password "$cognee_password" \
+                '{username: $username, password: $password}')
+              aws secretsmanager put-secret-value \
+                --secret-id "$secret_arn" \
+                --secret-string "$secret_json" >/dev/null
+            elif [[ ! "$cognee_password" =~ ^[A-Za-z0-9._~-]+$ ]]; then
+              cognee_password=$(new_cognee_password)
               echo "::add-mask::$cognee_password"
               secret_json=$(jq -n \
                 --arg username "$COGNEE_DB_USERNAME" \

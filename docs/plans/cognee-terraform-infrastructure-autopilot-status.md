@@ -82,18 +82,49 @@ Started: 2026-06-04
   from Terraform, omits empty Cognee detail env vars, derives `cogneeEnabled`
   from deployed Cognee details, and adds regression coverage for the lean env
   wiring.
+- 2026-06-04: U6 env-limit hotfix PR
+  [#2055](https://github.com/thinkwork-ai/thinkwork/pull/2055) passed checks
+  and squash merged to `main` as
+  `718142d4cfe027310d5a578523530a708d345deb`; merge-triggered deploy run
+  [26958925199](https://github.com/thinkwork-ai/thinkwork/actions/runs/26958925199)
+  passed.
+- 2026-06-04: Set GitHub repo variable `COGNEE_ENABLED=true` and dispatched
+  deploy run
+  [26959458258](https://github.com/thinkwork-ai/thinkwork/actions/runs/26959458258).
+  Terraform failed because Cognee EFS mount targets used a `for_each` over
+  subnet IDs that were unknown until apply.
+- 2026-06-04: Cognee EFS mount target hotfix PR
+  [#2057](https://github.com/thinkwork-ai/thinkwork/pull/2057) passed checks
+  and squash merged to `main` as
+  `e4cc4b82a95451daa701a3a5c76ed79395a39ed5`. The next deploy created the
+  Cognee ECS/ALB/EFS resources but Cognee exited during startup because the
+  dedicated database role lacked `REFERENCES` on existing tables.
+- 2026-06-04: Cognee database grants hotfix PR
+  [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) passed checks
+  and squash merged to `main` as
+  `360cc0f4caf4db3e64242c5e582b82c1560b1335`. The follow-up deploy passed
+  Terraform and admin/docs deployment, but Cognee still failed startup because
+  Alembic rejected the URL-encoded database password (`%2F`) as invalid
+  `configparser` interpolation syntax.
+- 2026-06-04: Started Cognee URL-safe DB password hotfix branch
+  `codex/cognee-url-safe-db-password` from `origin/main`. The hotfix generates
+  Cognee DB passwords with `openssl rand -hex 32` and rotates existing Cognee
+  secrets containing URL-unsafe characters before applying the role password.
 
 ## Implementation Units
 
-| Unit                                                                   | Status | Branch                             | PR                                                           | CI     | Merge                                      |
-| ---------------------------------------------------------------------- | ------ | ---------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------ |
-| U1. Create the Cognee Terraform app module                             | merged | `codex/u1-cognee-terraform-module` | [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) | passed | `30ec4984677de7a0c044bbe8ce745b890271e13a` |
-| U2. Wire Cognee through the composite Thinkwork module                 | merged | `codex/u2-cognee-thinkwork-wiring` | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | passed | `c8fa82a705975b53217eb79d09bfd4aeeace819c` |
-| U3. Add Cognee secrets and configuration hygiene                       | merged | `codex/u3-cognee-secrets-config`   | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
-| U4. Propagate Cognee through examples, CLI templates, and CI workflows | merged | `codex/u4-cognee-cli-templates`    | [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) | passed | `c045ce844ff08580a62403515413c8498d915fc9` |
-| U5. Add operational handoff and smoke-check guidance                   | merged | `codex/u5-cognee-ops-guidance`     | [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) | passed | `32a2f95761c8adcf9ab33be1ff0ace4ad51558b9` |
-| U6. Add Knowledge Graph settings control and deploy activation         | merged | `codex/cognee-deploy-enable`       | [#2053](https://github.com/thinkwork-ai/thinkwork/pull/2053) | passed | `10b3f6922a8b0ac8b6a54b351a9206b3b2034353` |
-| U6 hotfix. Keep GraphQL Lambda env under 4KB                           | active | `codex/cognee-env-limit-hotfix`    | Not opened                                                   | local  | Pending                                    |
+| Unit                                                                   | Status | Branch                              | PR                                                           | CI     | Merge                                      |
+| ---------------------------------------------------------------------- | ------ | ----------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------ |
+| U1. Create the Cognee Terraform app module                             | merged | `codex/u1-cognee-terraform-module`  | [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) | passed | `30ec4984677de7a0c044bbe8ce745b890271e13a` |
+| U2. Wire Cognee through the composite Thinkwork module                 | merged | `codex/u2-cognee-thinkwork-wiring`  | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | passed | `c8fa82a705975b53217eb79d09bfd4aeeace819c` |
+| U3. Add Cognee secrets and configuration hygiene                       | merged | `codex/u3-cognee-secrets-config`    | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
+| U4. Propagate Cognee through examples, CLI templates, and CI workflows | merged | `codex/u4-cognee-cli-templates`     | [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) | passed | `c045ce844ff08580a62403515413c8498d915fc9` |
+| U5. Add operational handoff and smoke-check guidance                   | merged | `codex/u5-cognee-ops-guidance`      | [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) | passed | `32a2f95761c8adcf9ab33be1ff0ace4ad51558b9` |
+| U6. Add Knowledge Graph settings control and deploy activation         | merged | `codex/cognee-deploy-enable`        | [#2053](https://github.com/thinkwork-ai/thinkwork/pull/2053) | passed | `10b3f6922a8b0ac8b6a54b351a9206b3b2034353` |
+| U6 hotfix. Keep GraphQL Lambda env under 4KB                           | merged | `codex/cognee-env-limit-hotfix`     | [#2055](https://github.com/thinkwork-ai/thinkwork/pull/2055) | passed | `718142d4cfe027310d5a578523530a708d345deb` |
+| U6 hotfix. Stabilize Cognee EFS mount targets                          | merged | `codex/cognee-efs-mount-target-fix` | [#2057](https://github.com/thinkwork-ai/thinkwork/pull/2057) | passed | `e4cc4b82a95451daa701a3a5c76ed79395a39ed5` |
+| U6 hotfix. Grant Cognee table reference privileges                     | merged | `codex/cognee-db-references-grant`  | [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) | passed | `360cc0f4caf4db3e64242c5e582b82c1560b1335` |
+| U6 hotfix. Rotate Cognee URL-safe DB passwords                         | active | `codex/cognee-url-safe-db-password` | [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) | local  | Pending                                    |
 
 ## CI Failures
 
@@ -107,6 +138,9 @@ Started: 2026-06-04
 - [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) — U4. Propagate Cognee through examples, CLI templates, and CI workflows — squash merged as `c045ce844ff08580a62403515413c8498d915fc9`.
 - [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) — U5. Add operational handoff and smoke-check guidance — squash merged as `32a2f95761c8adcf9ab33be1ff0ace4ad51558b9`.
 - [#2053](https://github.com/thinkwork-ai/thinkwork/pull/2053) — U6. Add Knowledge Graph settings control and deploy activation — squash merged as `10b3f6922a8b0ac8b6a54b351a9206b3b2034353`.
+- [#2055](https://github.com/thinkwork-ai/thinkwork/pull/2055) — U6 hotfix. Keep GraphQL Lambda env under 4KB — squash merged as `718142d4cfe027310d5a578523530a708d345deb`.
+- [#2057](https://github.com/thinkwork-ai/thinkwork/pull/2057) — U6 hotfix. Stabilize Cognee EFS mount targets — squash merged as `e4cc4b82a95451daa701a3a5c76ed79395a39ed5`.
+- [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) — U6 hotfix. Grant Cognee table reference privileges — squash merged as `360cc0f4caf4db3e64242c5e582b82c1560b1335`.
 
 ## CI / Deploy Failures
 
@@ -114,8 +148,20 @@ Started: 2026-06-04
   [26957471228](https://github.com/thinkwork-ai/thinkwork/actions/runs/26957471228)
   failed in Terraform Apply while updating
   `thinkwork-dev-api-graphql-http`: Lambda rejected the environment map for
-  exceeding the 4KB environment-variable limit. Hotfix branch
-  `codex/cognee-env-limit-hotfix` is in progress.
+  exceeding the 4KB environment-variable limit. Fixed by PR #2055.
+- Deploy run
+  [26959458258](https://github.com/thinkwork-ai/thinkwork/actions/runs/26959458258)
+  failed in Terraform Apply because Cognee EFS mount target `for_each` keys
+  depended on subnet IDs only known during apply. Fixed by PR #2057.
+- Merge-triggered deploy after PR #2057 failed while waiting for ECS service
+  stability. Cognee exited because the dedicated database role lacked
+  `REFERENCES` privilege for foreign keys against existing tables. Fixed by
+  PR #2058.
+- Merge-triggered deploy after PR #2058 passed Terraform and admin/docs deploy
+  but Cognee ECS tasks exited during startup. Cognee/Alembic rejected the
+  URL-encoded DB password (`%2F`) as invalid Python `configparser`
+  interpolation syntax. Fix is in progress on
+  `codex/cognee-url-safe-db-password`.
 
 ## Blockers
 
