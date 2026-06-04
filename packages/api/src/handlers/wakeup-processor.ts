@@ -50,8 +50,10 @@ import {
 import { validateTemplateBrowser } from "../lib/templates/browser-config.js";
 import { validateTemplateContextEngine } from "../lib/templates/context-engine-config.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
+import { validateTemplateWebExtract } from "../lib/templates/web-extract-config.js";
 import { validateTemplateWebSearch } from "../lib/templates/web-search-config.js";
 import { resolveWebSearchConfigFromSkills } from "../lib/web-search-config.js";
+import { loadTenantWebExtractConfig } from "../lib/builtin-tools/web-extract.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import {
   isThreadBlocked,
@@ -73,6 +75,9 @@ import {
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
+import { isToolAllowed } from "../lib/workspace-renderer/index.js";
+import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
+import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
 import {
   applyAgentSkillMetadata,
   loadWorkspaceSkillConfigs,
@@ -544,6 +549,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       sandbox: agentTemplates.sandbox,
       browser: agentTemplates.browser,
       web_search: agentTemplates.web_search,
+      web_extract: agentTemplates.web_extract,
       send_email: agentTemplates.send_email,
       context_engine: agentTemplates.context_engine,
     })
@@ -666,6 +672,17 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   if (!templateWebSearchResult.ok) {
     console.warn(
       `[wakeup-processor] Invalid template webSearch config ignored for agent ${wakeup.agent_id}: ${templateWebSearchResult.error}`,
+    );
+  }
+  const templateWebExtractResult = validateTemplateWebExtract(
+    agent.web_extract,
+  );
+  const templateWebExtractEnabled = templateWebExtractResult.ok
+    ? templateWebExtractResult.value?.enabled === true
+    : false;
+  if (!templateWebExtractResult.ok) {
+    console.warn(
+      `[wakeup-processor] Invalid template webExtract config ignored for agent ${wakeup.agent_id}: ${templateWebExtractResult.error}`,
     );
   }
   const templateSendEmailResult = validateTemplateSendEmail(agent.send_email);
@@ -1396,6 +1413,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   };
   let renderedWorkspacePrefix: string | undefined;
   let effectiveBlockedTools = blockedTools;
+  let effectiveToolPolicy: EffectiveWorkspacePolicy = {
+    blockedTools,
+    allowedTools: null,
+    mcpAllowedServers: null,
+    mcpBlockedServers: [],
+    diagnostics: [],
+  };
   let effectiveMcpPolicy: EffectiveWorkspacePolicy | null = null;
   if (runSpaceId) {
     try {
@@ -1411,6 +1435,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       if (renderedWorkspace.rendered) {
         renderedWorkspacePrefix = renderedWorkspace.renderedPrefix;
         effectiveMcpPolicy = renderedWorkspace.effectivePolicy ?? null;
+        effectiveToolPolicy =
+          renderedWorkspace.effectivePolicy ?? effectiveToolPolicy;
         effectiveBlockedTools =
           renderedWorkspace.effectivePolicy?.blockedTools ?? blockedTools;
         console.log(
@@ -1444,32 +1470,46 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     effectiveBlockedTools.includes(toolName);
   const isAnyEffectivelyBlocked = (...toolNames: string[]): boolean =>
     toolNames.some((toolName) => isEffectivelyBlocked(toolName));
+  const isAnyToolAllowed = (...toolNames: string[]): boolean => {
+    if (isAnyEffectivelyBlocked(...toolNames)) return false;
+    return toolNames.some((toolName) =>
+      isToolAllowed(effectiveToolPolicy, toolName),
+    );
+  };
+  const isSkillAllowedByPolicy = (skill: { skillId: string }): boolean => {
+    const aliases = toolPolicyAliases(skill.skillId);
+    if (isAnyEffectivelyBlocked(...aliases)) return false;
+    if (!isBuiltinToolSlug(skill.skillId)) return true;
+    return isAnyToolAllowed(...aliases);
+  };
   const effectiveSkillsConfig =
-    effectiveBlockedTools.length > 0
-      ? skillsConfig.filter(
-          (skill: { skillId: string }) =>
-            !effectiveBlockedTools.includes(skill.skillId),
-        )
+    effectiveBlockedTools.length > 0 || effectiveToolPolicy.allowedTools
+      ? skillsConfig.filter(isSkillAllowedByPolicy)
       : skillsConfig;
-  const effectiveWebSearchConfig = !isAnyEffectivelyBlocked(
-    "web-search",
-    "web_search",
+  const effectiveWebSearchConfig = isAnyToolAllowed(
+    ...toolPolicyAliases("web-search"),
   )
     ? resolveWebSearchConfigFromSkills(effectiveSkillsConfig)
     : undefined;
+  const webExtractConfig =
+    templateWebExtractEnabled &&
+    isAnyToolAllowed(...toolPolicyAliases("web-extract"))
+      ? await loadTenantWebExtractConfig(wakeup.tenant_id)
+      : null;
+  const effectiveWebExtractConfig = webExtractConfig ?? undefined;
   const effectiveSendEmailConfig =
-    sendEmailConfig && !isEffectivelyBlocked("send_email")
+    sendEmailConfig && isAnyToolAllowed(...toolPolicyAliases("send_email"))
       ? sendEmailConfig
       : undefined;
   const effectiveContextEngineEnabled =
     contextEngineEnabled &&
-    !isAnyEffectivelyBlocked("query_context", "context_engine");
+    isAnyToolAllowed(...toolPolicyAliases("context_engine"));
   const effectiveContextEngineConfig = effectiveContextEngineEnabled
     ? contextEngineConfig
     : undefined;
   const effectiveBrowserAutomationEnabled =
     browserAutomationEnabled &&
-    !isAnyEffectivelyBlocked("browser_automation", "browser");
+    isAnyToolAllowed("browser_automation", "browser");
 
   // Resolve thread_id — for email_triage, use the dedicated triage thread
   let resolvedThreadId = String(payload?.threadId || "");
@@ -1622,6 +1662,14 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       appsync_api_key: APPSYNC_API_KEY || undefined,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
       web_search_config: effectiveWebSearchConfig,
+      web_extract_config: effectiveWebExtractConfig
+        ? {
+            toolSlug: effectiveWebExtractConfig.toolSlug,
+            provider: effectiveWebExtractConfig.provider,
+            apiKey: effectiveWebExtractConfig.apiKey,
+            config: effectiveWebExtractConfig.config,
+          }
+        : undefined,
       send_email_config: effectiveSendEmailConfig
         ? { ...effectiveSendEmailConfig, threadId: resolvedThreadId }
         : undefined,
@@ -2133,6 +2181,14 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             appsync_api_key: APPSYNC_API_KEY || undefined,
             hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
             web_search_config: effectiveWebSearchConfig,
+            web_extract_config: effectiveWebExtractConfig
+              ? {
+                  toolSlug: effectiveWebExtractConfig.toolSlug,
+                  provider: effectiveWebExtractConfig.provider,
+                  apiKey: effectiveWebExtractConfig.apiKey,
+                  config: effectiveWebExtractConfig.config,
+                }
+              : undefined,
             send_email_config: effectiveSendEmailConfig
               ? { ...effectiveSendEmailConfig, threadId: resolvedThreadId }
               : undefined,

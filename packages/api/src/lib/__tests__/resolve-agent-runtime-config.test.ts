@@ -16,6 +16,7 @@ const {
   whereCalls,
   mockBuildSkillEnvOverrides,
   mockLoadTenantBuiltinTools,
+  mockLoadTenantWebExtractConfig,
   mockBuildMcpConfigs,
   mockS3Send,
 } = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ const {
   whereCalls: [] as unknown[],
   mockBuildSkillEnvOverrides: vi.fn(),
   mockLoadTenantBuiltinTools: vi.fn(),
+  mockLoadTenantWebExtractConfig: vi.fn(),
   mockBuildMcpConfigs: vi.fn(),
   mockS3Send: vi.fn(),
 }));
@@ -80,6 +82,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     sandbox: "agents.sandbox",
     browser: "agents.browser",
     web_search: "agents.web_search",
+    web_extract: "agents.web_extract",
     send_email: "agents.send_email",
     context_engine: "agents.context_engine",
   },
@@ -170,6 +173,10 @@ vi.mock("../../handlers/skills.js", () => ({
   loadTenantBuiltinTools: mockLoadTenantBuiltinTools,
 }));
 
+vi.mock("../builtin-tools/web-extract.js", () => ({
+  loadTenantWebExtractConfig: mockLoadTenantWebExtractConfig,
+}));
+
 import {
   AgentNotFoundError,
   resolveAgentRuntimeConfig,
@@ -197,6 +204,7 @@ function stageAgentRow(overrides?: Record<string, unknown>) {
       sandbox: null,
       browser: null,
       web_search: { enabled: true },
+      web_extract: null,
       send_email: { enabled: true },
       context_engine: { enabled: true },
       ...overrides,
@@ -224,6 +232,7 @@ beforeEach(() => {
   vi.stubEnv("WORKSPACE_BUCKET", "");
   mockBuildSkillEnvOverrides.mockResolvedValue(null);
   mockLoadTenantBuiltinTools.mockResolvedValue([]);
+  mockLoadTenantWebExtractConfig.mockResolvedValue(null);
   mockBuildMcpConfigs.mockResolvedValue([]);
 });
 
@@ -755,6 +764,65 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.skillsConfig.some((s) => s.skillId === "web-search")).toBe(
       false,
     );
+  });
+
+  it("resolves Web Extraction runtime config only when the template opt-in and tenant config are present", async () => {
+    stageAgentRow({ web_extract: { enabled: true } });
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // kbs
+    mockLoadTenantWebExtractConfig.mockResolvedValueOnce({
+      toolSlug: "web-extract",
+      provider: "firecrawl",
+      apiKey: "fc-test-key",
+      config: { formats: ["markdown"] },
+      secretRef: "secret/firecrawl",
+    });
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(mockLoadTenantWebExtractConfig).toHaveBeenCalledWith(TENANT_ID);
+    expect(cfg.webExtractConfig).toEqual({
+      toolSlug: "web-extract",
+      provider: "firecrawl",
+      apiKey: "fc-test-key",
+      config: { formats: ["markdown"] },
+    });
+  });
+
+  it("does not resolve Web Extraction secrets when the template opt-in is null or blocked", async () => {
+    stageAgentRow({ web_extract: null });
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // kbs
+
+    const disabledCfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(disabledCfg.webExtractConfig).toBeUndefined();
+    expect(mockLoadTenantWebExtractConfig).not.toHaveBeenCalled();
+
+    rowsQueue.length = 0;
+    stageAgentRow({
+      web_extract: { enabled: true },
+      blocked_tools: ["web_extract"],
+    });
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // kbs
+
+    const blockedCfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(blockedCfg.webExtractConfig).toBeUndefined();
+    expect(mockLoadTenantWebExtractConfig).not.toHaveBeenCalled();
   });
 
   it("delegates MCP config construction to buildMcpConfigs with the agent + human pair", async () => {

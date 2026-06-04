@@ -99,6 +99,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("AGENTCORE_FUNCTION_NAME", "strands-runtime-fn");
   vi.stubEnv("AGENTCORE_PI_FUNCTION_NAME", "pi-runtime-fn");
+  vi.stubEnv("WORKSPACE_RENDERER_FUNCTION_NAME", "");
   vi.stubEnv("THINKWORK_API_URL", "https://api.example.com");
   vi.stubEnv("THINKWORK_API_SECRET", "test-secret");
   mocks.selectRows = [
@@ -320,5 +321,124 @@ describe("chat-agent-invoke runtime routing", () => {
         "https://api.example.com/api/threads/thread-1/finalize",
       finalize_callback_secret: "test-secret",
     });
+  });
+
+  it("passes Web Extraction config only when Space allowed-tools policy permits its alias", async () => {
+    vi.stubEnv("WORKSPACE_RENDERER_FUNCTION_NAME", "workspace-renderer-fn");
+    mocks.selectRows = [
+      [{ sender_id: "user-1", sender_type: "human" }],
+      [{ email: "user-1@example.com" }],
+      [{ spaceId: "space-1" }],
+      [{ slug: "research" }],
+      [{ count: 0 }],
+      [],
+    ];
+    mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      agentName: "ThinkWork",
+      agentSlug: "thinkwork",
+      agentSystemPrompt: null,
+      humanName: undefined,
+      humanPairId: null,
+      tenantSlug: "acme",
+      templateId: null,
+      templateModel: "moonshotai.kimi-k2.5",
+      runtimeType: "pi",
+      budgetMonthlyCents: null,
+      budgetPaused: false,
+      blockedTools: [],
+      sandboxTemplate: null,
+      browserAutomationEnabled: true,
+      contextEngineEnabled: true,
+      contextEngineConfig: { enabled: true },
+      webSearchConfig: { provider: "exa", apiKey: "exa-key" },
+      webExtractConfig: {
+        toolSlug: "web-extract",
+        provider: "firecrawl",
+        apiKey: "fc-key",
+        config: { onlyMainContent: true },
+      },
+      sendEmailConfig: {
+        agentId: "agent-1",
+        tenantId: "tenant-1",
+        apiUrl: "https://api.example.com",
+        apiSecret: "test-secret",
+      },
+      guardrailId: null,
+      guardrailConfig: undefined,
+      skillsConfig: [
+        {
+          skillId: "web-search",
+          s3Key: "tenants/acme/skill-catalog/web-search",
+        },
+        {
+          skillId: "custom-research-skill",
+          s3Key:
+            "tenants/acme/agents/thinkwork/workspace/skills/custom-research-skill",
+        },
+      ],
+      knowledgeBasesConfig: undefined,
+      mcpConfigs: [],
+    });
+    mocks.lambdaSend
+      .mockResolvedValueOnce({
+        Payload: new TextEncoder().encode(
+          JSON.stringify({
+            ok: true,
+            renderedPrefix: "spaces/research/thread-1",
+            activeSpace: {
+              id: "space-1",
+              slug: "research",
+              name: "Research",
+              isDefault: false,
+            },
+            effectivePolicy: {
+              blockedTools: [],
+              allowedTools: ["web_extract"],
+              mcpAllowedServers: null,
+              mcpBlockedServers: [],
+              diagnostics: [],
+            },
+            cacheStatus: "miss",
+          }),
+        ),
+      })
+      .mockResolvedValueOnce({});
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "Extract the current page",
+      messageId: "message-1",
+    });
+
+    expect(mocks.lambdaSend).toHaveBeenCalledTimes(2);
+    const command = mocks.lambdaSend.mock.calls[1][0] as {
+      input: {
+        Payload: Uint8Array;
+      };
+    };
+    const body = decodeInvokeBody(command);
+
+    expect(body.web_extract_config).toEqual({
+      toolSlug: "web-extract",
+      provider: "firecrawl",
+      apiKey: "fc-key",
+      config: { onlyMainContent: true },
+    });
+    expect(body.web_search_config).toBeUndefined();
+    expect(body.send_email_config).toBeUndefined();
+    expect(body.context_engine_config).toBeUndefined();
+    expect(body.browser_automation_enabled).toBeUndefined();
+    expect(body.skills).toEqual([
+      {
+        skillId: "custom-research-skill",
+        s3Key:
+          "tenants/acme/agents/thinkwork/workspace/skills/custom-research-skill",
+      },
+    ]);
   });
 });

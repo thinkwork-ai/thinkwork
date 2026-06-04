@@ -32,6 +32,12 @@ const runtimeConfig: AgentRuntimeConfig = {
   guardrailConfig: undefined,
   runtimeType: "pi",
   skillsConfig: [],
+  webExtractConfig: {
+    toolSlug: "web-extract",
+    provider: "firecrawl",
+    apiKey: "fc-key",
+    config: null,
+  },
   knowledgeBasesConfig: undefined,
   mcpConfigs: [],
 };
@@ -59,6 +65,12 @@ describe("direct AgentCore eval payload", () => {
       use_memory: false,
       context_engine_enabled: false,
       context_engine_config: undefined,
+      web_extract_config: {
+        toolSlug: "web-extract",
+        provider: "firecrawl",
+        apiKey: "fc-key",
+        config: null,
+      },
       mcp_configs: undefined,
       browser_automation_enabled: false,
     });
