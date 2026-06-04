@@ -264,6 +264,17 @@ vi.mock("../lib/computers/tasks.js", () => ({
   enqueueComputerTask: enqueueComputerTaskMock,
 }));
 
+// Write-through to the skill_catalog index is unit-tested in catalog-index.test.ts;
+// here we mock it to a controllable spy so we can assert the handler fires it on
+// the right catalog mutations and that a failure is non-fatal (U3).
+const { reindexCatalogSkillMock } = vi.hoisted(() => ({
+  reindexCatalogSkillMock: vi.fn(),
+}));
+
+vi.mock("../lib/catalog-index.js", () => ({
+  reindexCatalogSkill: reindexCatalogSkillMock,
+}));
+
 // ─── S3 mock ─────────────────────────────────────────────────────────────────
 
 const s3Mock = mockClient(S3Client);
@@ -411,6 +422,8 @@ beforeEach(() => {
   resetEqCalls();
   resetDbUpdateCalls();
   authMockImpl.mockReset();
+  reindexCatalogSkillMock.mockReset();
+  reindexCatalogSkillMock.mockResolvedValue({ slug: "", action: "upserted" });
   enqueueComputerTaskMock.mockReset();
   enqueueComputerTaskMock.mockResolvedValue({ id: "computer-task-1" });
   bootstrapAgentWorkspaceMock.mockReset();
@@ -1308,6 +1321,125 @@ Use this for stage-three reviews.
   s3Mock.on(CopyObjectCommand).resolves({});
   s3Mock.on(PutObjectCommand).resolves({});
 }
+
+// ─── 4c. Catalog write-through to skill_catalog index (U3) ───────────────────
+
+describe("catalog write-through (U3)", () => {
+  it("re-indexes the affected slug after a catalog put", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          catalog: true,
+          path: "finance-audit-xls/SKILL.md",
+          content: "# Finance Audit XLS\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.indexWarning).toBeUndefined();
+    expect(reindexCatalogSkillMock).toHaveBeenCalledTimes(1);
+    expect(reindexCatalogSkillMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_A,
+        tenantSlug: "acme",
+        slug: "finance-audit-xls",
+      }),
+    );
+  });
+
+  it("re-indexes the affected slug after a catalog delete", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "delete",
+          catalog: true,
+          path: "finance-audit-xls/reference.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(reindexCatalogSkillMock).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "finance-audit-xls" }),
+    );
+  });
+
+  it("returns ok with a non-fatal indexWarning when the reindex fails (S3 already committed)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+    reindexCatalogSkillMock.mockRejectedValueOnce(new Error("db unavailable"));
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          catalog: true,
+          path: "finance-audit-xls/SKILL.md",
+          content: "# Finance Audit XLS\n",
+        }),
+      ),
+    );
+
+    // The durable S3 write happened, so the response must NOT fail.
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.indexWarning).toMatch(/rebuild/i);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(1);
+  });
+
+  it("does not support move for catalog targets, so no reindex fires", async () => {
+    // The dispatcher rejects move/rename for catalog targets (only
+    // get/list/put/delete are allowed), so write-through is put/delete only.
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "move",
+          catalog: true,
+          fromPath: "finance-audit-xls/notes.md",
+          toFolder: "web-search",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+  });
+
+  it("does not re-index on a non-catalog (agent) put", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "notes/scratch.md",
+          content: "hello",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+  });
+});
 
 describe("agent install-skill action", () => {
   it("copies a catalog skill into the agent workspace and refreshes agent state", async () => {
