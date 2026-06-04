@@ -196,12 +196,14 @@ describe("U1 - Cognee Terraform app module", () => {
 
     expect(source).toMatch(/resource "aws_efs_file_system" "cognee"/);
     expect(source).toMatch(/encrypted\s*=\s*true/);
-    expect(source).toMatch(/data "aws_subnet" "cognee"/);
-    expect(source).toMatch(/subnet_ids_by_az/);
-    expect(source).toMatch(/efs_mount_subnet_ids/);
+    expect(source).not.toMatch(/data "aws_subnet" "cognee"/);
+    expect(source).toMatch(/efs_mount_subnet_ids_by_index/);
+    expect(source).toMatch(
+      /for index, subnet_id in var\.subnet_ids : tostring\(index\) => subnet_id/,
+    );
     expect(source).toMatch(/resource "aws_efs_mount_target" "cognee"/);
     expect(source).toMatch(
-      /for_each\s*=\s*toset\(local\.efs_mount_subnet_ids\)/,
+      /for_each\s*=\s*local\.efs_mount_subnet_ids_by_index/,
     );
     expect(source).toMatch(/DATA_ROOT_DIRECTORY/);
     expect(source).toMatch(/SYSTEM_ROOT_DIRECTORY/);
