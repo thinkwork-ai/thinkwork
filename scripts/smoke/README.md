@@ -28,6 +28,7 @@ This kit fills the gap.
 | `fixtures/task-completed.json`            | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                                                                                                    |
 | `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                               |
 | `spaces-runbook-smoke.mjs`                | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
+| `knowledge-graph-thread-ingest-smoke.mjs` | Cognee Knowledge Graph smoke. Dry-run reports required live-mode configuration; live mode starts a manual thread ingest, polls the run, and verifies table/graph/detail GraphQL reads from the normalized snapshot.                         |
 
 ## Quick start — run the full smoke suite
 
@@ -69,6 +70,37 @@ All shell scripts are `bash` (tested on macOS 3.x / Linux 5.x). Require
 script resolves the API URL via `terraform output -raw api_endpoint`
 from `terraform/examples/greenfield`, so `terraform init` must have
 been run there first (usually the deploy workflow handles this).
+
+## Knowledge Graph thread ingest smoke
+
+The Knowledge Graph smoke covers Phase II Cognee thread ingest and Explorer
+reads:
+
+```sh
+node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs
+SMOKE_ENABLE_KNOWLEDGE_GRAPH=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_USER_ID=<operator-user-id> \
+  SMOKE_KG_THREAD_ID=<thread-id> \
+  node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs
+```
+
+Live mode requires deployed GraphQL credentials from `apps/spaces/.env` or
+equivalent `VITE_GRAPHQL_HTTP_URL`/`GRAPHQL_HTTP_URL` plus
+`API_AUTH_SECRET`/`THINKWORK_API_SECRET` or an API key. If `SMOKE_KG_THREAD_ID`
+is omitted, the smoke uses `knowledgeGraphThreadCandidates` and optional
+`SMOKE_KG_THREAD_QUERY` to pick a thread with messages. Set `SMOKE_KG_FORCE=1`
+to request a fresh ingest.
+
+Passing live mode means:
+
+- `startKnowledgeGraphThreadIngest` returns a run.
+- The run reaches `SUCCEEDED` before `SMOKE_TIMEOUT_MS`.
+- `knowledgeGraphEntities` and `knowledgeGraphGraph` read the same normalized
+  thread snapshot through ThinkWork GraphQL.
+- When entities exist, `knowledgeGraphEntity` can load the first detail sheet
+  payload. If Cognee returns no graph nodes, the script exits successfully with
+  an explicit `emptyGraphDiagnostic` object instead of hiding the empty output.
 
 ## One-time setup per tenant
 
