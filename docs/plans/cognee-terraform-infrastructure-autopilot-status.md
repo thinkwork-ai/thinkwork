@@ -9,7 +9,7 @@ Started: 2026-06-04
 - State: active
 - Current unit: U5. Add operational handoff and smoke-check guidance
 - Current branch/worktree: `codex/u5-cognee-ops-guidance` at `.Codex/worktrees/cognee-u5`
-- Current PR: not opened yet
+- Current PR: [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049)
 - Blocker: none
 
 ## Progress Log
@@ -45,16 +45,17 @@ Started: 2026-06-04
 - 2026-06-04: Created isolated worktree `.Codex/worktrees/cognee-u5` on branch `codex/u5-cognee-ops-guidance` from `origin/main`.
 - 2026-06-04: Implemented U5 operational handoff guidance in the Cognee module README, Business Ontology operations guide, and Business Ontology concept page. Added fixture coverage for operator outputs, disabled/default behavior, smoke checks, startup failure locations, rollback, cleanup, and the product boundary that Cognee infrastructure does not migrate Wiki/Brain content or change agent context.
 - 2026-06-04: U5 local verification passed: `pnpm install --frozen-lockfile`; `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm dlx prettier --check terraform/modules/app/cognee/README.md docs/src/content/docs/guides/business-ontology-operations.mdx docs/src/content/docs/concepts/knowledge/business-ontology.mdx apps/cli/__tests__/terraform-cognee-fixture.test.ts docs/plans/cognee-terraform-infrastructure-autopilot-status.md`; `pnpm --filter @thinkwork/docs build`; `git diff --check`. The docs build emitted existing Starlight/i18n/sitemap/pagefind warnings but completed successfully.
+- 2026-06-04: Opened U5 PR [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049).
 
 ## Implementation Units
 
-| Unit                                                                   | Status | Branch                             | PR                                                           | CI      | Merge                                      |
-| ---------------------------------------------------------------------- | ------ | ---------------------------------- | ------------------------------------------------------------ | ------- | ------------------------------------------ |
-| U1. Create the Cognee Terraform app module                             | merged | `codex/u1-cognee-terraform-module` | [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) | passed  | `30ec4984677de7a0c044bbe8ce745b890271e13a` |
-| U2. Wire Cognee through the composite Thinkwork module                 | merged | `codex/u2-cognee-thinkwork-wiring` | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | passed  | `c8fa82a705975b53217eb79d09bfd4aeeace819c` |
-| U3. Add Cognee secrets and configuration hygiene                       | merged | `codex/u3-cognee-secrets-config`   | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed  | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
-| U4. Propagate Cognee through examples, CLI templates, and CI workflows | merged | `codex/u4-cognee-cli-templates`    | [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) | passed  | `c045ce844ff08580a62403515413c8498d915fc9` |
-| U5. Add operational handoff and smoke-check guidance                   | active | `codex/u5-cognee-ops-guidance`     | pending                                                      | pending | pending                                    |
+| Unit                                                                   | Status    | Branch                             | PR                                                           | CI      | Merge                                      |
+| ---------------------------------------------------------------------- | --------- | ---------------------------------- | ------------------------------------------------------------ | ------- | ------------------------------------------ |
+| U1. Create the Cognee Terraform app module                             | merged    | `codex/u1-cognee-terraform-module` | [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) | passed  | `30ec4984677de7a0c044bbe8ce745b890271e13a` |
+| U2. Wire Cognee through the composite Thinkwork module                 | merged    | `codex/u2-cognee-thinkwork-wiring` | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | passed  | `c8fa82a705975b53217eb79d09bfd4aeeace819c` |
+| U3. Add Cognee secrets and configuration hygiene                       | merged    | `codex/u3-cognee-secrets-config`   | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed  | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
+| U4. Propagate Cognee through examples, CLI templates, and CI workflows | merged    | `codex/u4-cognee-cli-templates`    | [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) | passed  | `c045ce844ff08580a62403515413c8498d915fc9` |
+| U5. Add operational handoff and smoke-check guidance                   | in review | `codex/u5-cognee-ops-guidance`     | [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) | pending | pending                                    |
 
 ## CI Failures
 
