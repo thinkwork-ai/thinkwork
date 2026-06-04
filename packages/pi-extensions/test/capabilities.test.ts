@@ -61,6 +61,10 @@ describe("U7 capability extensions", () => {
     await toExtensionFactory(extension, {})(api);
 
     expect(extension.toolNames).toEqual(["web_search"]);
+    expect(getTool(tools, "web_search").description).toContain("web_extract");
+    expect(getTool(tools, "web_search").description).toContain(
+      "candidate URLs",
+    );
     const result = await getTool(tools, "web_search").execute(
       "call-1",
       { query: "current pi docs", num_results: 1 },
@@ -315,6 +319,12 @@ describe("U7 capability extensions", () => {
     });
     await toExtensionFactory(extension, {})(api);
 
+    expect(getTool(tools, "browser_automation").description).toContain(
+      "`web_extract`",
+    );
+    expect(getTool(tools, "browser_automation").description).toContain(
+      "Only reach for `browser_automation`",
+    );
     await getTool(tools, "browser_automation").execute(
       "call-1",
       { url: "https://example.com", task: "inspect" },

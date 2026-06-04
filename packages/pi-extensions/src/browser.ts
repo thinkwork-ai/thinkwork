@@ -43,15 +43,15 @@ export function createBrowserAutomationExtension(
         description:
           "Heavyweight browser-automation session — open a managed AgentCore " +
           "Browser, navigate to a public HTTPS URL, interact with the page, and " +
-          "capture evidence. DO NOT use for ordinary information lookups such " +
-          "as locations, business hours, prices, schedules, news, or " +
-          "definitions — prefer the `web_search` tool for those (fast, cheap, " +
-          "indexed). Only reach for `browser_automation` when the task " +
-          "genuinely requires page interaction (filling forms, clicking " +
-          "through an auth flow, scraping JS-rendered content that search " +
-          "engines do not index, or following a multi-step user journey). " +
-          "This tool is expensive and slow; if `web_search` would answer the " +
-          "question, use it instead.",
+          "capture evidence. DO NOT use for ordinary information lookups or " +
+          "normal page reading. Prefer `web_search` to find candidate URLs and " +
+          "`web_extract` to read, summarize, analyze, or quote a known public " +
+          "page as clean content. Only reach for `browser_automation` when the " +
+          "task genuinely requires page interaction (filling forms, clicking " +
+          "through an auth flow, rendered-state inspection, scraping JS-rendered " +
+          "content that extraction cannot read, or following a multi-step user " +
+          "journey). This tool is expensive and slow; if `web_search` or " +
+          "`web_extract` would answer the question, use those instead.",
         parameters: Type.Object({
           url: Type.String({ description: "Starting public HTTPS URL." }),
           task: Type.Optional(

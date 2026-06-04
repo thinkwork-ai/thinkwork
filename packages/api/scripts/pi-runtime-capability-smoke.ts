@@ -80,6 +80,9 @@ const ALL_CAPABILITIES: Capability[] = [
   "hindsight",
   "mcp",
 ];
+// Provider-backed browser and extraction smokes are selectable but excluded
+// from `--capability all`; they require explicit tenant config and can spend
+// external provider quota.
 const SELECTABLE_CAPABILITIES: Capability[] = [
   ...ALL_CAPABILITIES,
   "browser_automation",
@@ -92,7 +95,7 @@ function usage(exitCode = 2): never {
     --tenant-id <tenant-id> \\
     --agent-id <agent-id> \\
     [--sender-id <human-user-id>] \\
-    [--capability plain,web_search,execute_code,browser_automation,hindsight,mcp] \\
+    [--capability plain,web_search,web_extract,execute_code,browser_automation,hindsight,mcp] \\
     [--timeout 90000] [--json]
 
 Environment:
@@ -518,9 +521,9 @@ function promptFor(capability: Capability, token: string): string {
       ].join(" ");
     case "web_extract":
       return [
-        "Use the web_extract tool to read https://example.com/ and extract the page markdown.",
-        `After using the tool, reply with ${token} and the page title plus one phrase from the extracted content.`,
-        "Do not answer from memory and do not use browser_automation unless web_extract fails.",
+        "Use the web_extract tool exactly once to read https://example.com/ and extract clean page markdown.",
+        `After the tool returns, reply with ${token}, the page title, and a phrase from the extracted content such as This domain.`,
+        "Do not answer from memory, do not use web_search for this known URL, and do not use browser_automation unless web_extract fails.",
       ].join(" ");
     case "execute_code":
       return [
@@ -611,7 +614,9 @@ function evaluate(
       ...base,
       reason: failedTool
         ? "matching_tool_invocation_failed"
-        : "no_successful_tool_evidence_in_thread_turn_usage_json",
+        : capability === "web_extract"
+          ? "web_extract_unavailable_or_missing_firecrawl_config"
+          : "no_successful_tool_evidence_in_thread_turn_usage_json",
       evidence: { ...base.evidence, failedTool },
     };
   }
