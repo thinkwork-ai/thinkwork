@@ -266,6 +266,14 @@ variable "bedrock_model_resource_arns" {
   description = "Explicit Bedrock model ARNs Cognee may invoke when a Bedrock LLM or embedding provider is selected."
   type        = list(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for arn in var.bedrock_model_resource_arns :
+      arn != "*" && !can(regex("\\*", arn))
+    ])
+    error_message = "bedrock_model_resource_arns must list explicit model or inference-profile ARNs, not wildcards."
+  }
 }
 
 variable "kms_key_arns" {

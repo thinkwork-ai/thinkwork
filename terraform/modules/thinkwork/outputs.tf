@@ -127,6 +127,56 @@ output "hindsight_endpoint" {
   value       = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : null
 }
 
+output "cognee_enabled" {
+  description = "Whether the Cognee ontology/knowledge-graph add-on is enabled"
+  value       = local.cognee_enabled
+}
+
+output "cognee_endpoint" {
+  description = "Internal Cognee API endpoint (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? module.cognee[0].cognee_endpoint : null
+}
+
+output "cognee_log_group_name" {
+  description = "CloudWatch log group for Cognee (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? module.cognee[0].cognee_log_group_name : null
+}
+
+output "cognee_task_role_arn" {
+  description = "IAM role assumed by the Cognee ECS task (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? module.cognee[0].cognee_task_role_arn : null
+}
+
+output "cognee_execution_role_arn" {
+  description = "IAM role used by ECS to pull the Cognee image and inject secrets (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? module.cognee[0].cognee_execution_role_arn : null
+}
+
+output "cognee_backend_mode" {
+  description = "Selected Cognee backend mode (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? module.cognee[0].cognee_backend_mode : null
+}
+
+output "cognee_cluster_arn" {
+  description = "ECS cluster ARN for the Cognee service (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? module.cognee[0].cognee_cluster_arn : null
+}
+
+output "cognee_service_name" {
+  description = "ECS service name for Cognee (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? module.cognee[0].cognee_service_name : null
+}
+
+output "cognee_security_group_id" {
+  description = "Security group ID for the Cognee ECS task (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? module.cognee[0].cognee_security_group_id : null
+}
+
+output "cognee_storage_file_system_id" {
+  description = "EFS file system ID backing Cognee writable data/system directories (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? module.cognee[0].cognee_storage_file_system_id : null
+}
+
 # Admin static site
 output "admin_distribution_id" {
   description = "CloudFront distribution ID for the admin app"

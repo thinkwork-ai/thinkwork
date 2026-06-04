@@ -28,6 +28,18 @@ const COGNEE_README = resolve(
   REPO_ROOT,
   "terraform/modules/app/cognee/README.md",
 );
+const THINKWORK_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/modules/thinkwork/main.tf",
+);
+const THINKWORK_VARS = resolve(
+  REPO_ROOT,
+  "terraform/modules/thinkwork/variables.tf",
+);
+const THINKWORK_OUTPUTS = resolve(
+  REPO_ROOT,
+  "terraform/modules/thinkwork/outputs.tf",
+);
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -177,6 +189,7 @@ describe("U1 - Cognee Terraform app module", () => {
 
     expect(vars).toMatch(/db_username must be a dedicated least-privilege/);
     expect(vars).toMatch(/image_uri must be pinned to an immutable sha256/);
+    expect(vars).toMatch(/bedrock_model_resource_arns must list explicit/);
     expect(vars).toMatch(/allowed_internal_cidr_blocks must not include/);
     expect(vars).toMatch(/vector_db_url must not embed credentials/);
     expect(vars).toMatch(/graph_database_url must not embed credentials/);
@@ -211,5 +224,94 @@ describe("U1 - Cognee Terraform app module", () => {
     expect(source).toMatch(/assign_public_ip = true/);
     expect(source).toMatch(/desired_count = 1/);
     expect(source).toMatch(/ECS secret injection/);
+  });
+});
+
+describe("U2 - Cognee composite Thinkwork wiring", () => {
+  it("keeps Cognee disabled by default with explicit safe enablement inputs", () => {
+    const vars = read(THINKWORK_VARS);
+
+    expect(vars).toMatch(/variable "enable_cognee"/);
+    expect(vars).toMatch(/default\s*=\s*false/);
+    expect(vars).toMatch(/variable "cognee_image_uri"/);
+    expect(vars).toMatch(/cognee_image_uri must be empty or pinned/);
+    expect(vars).toMatch(/variable "cognee_db_password_secret_arn"/);
+    expect(vars).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
+    expect(vars).toMatch(/variable "cognee_db_username"/);
+    expect(vars).toMatch(/default\s*=\s*"thinkwork_cognee"/);
+    expect(vars).toMatch(/lower\(var\.cognee_db_username\)/);
+    expect(vars).toMatch(
+      /cognee_bedrock_model_resource_arns must list explicit/,
+    );
+  });
+
+  it("wires the Cognee module behind enable_cognee without touching memory selection", () => {
+    const source = read(THINKWORK_MAIN);
+    const cogneeModule = firstNestedBlock(source, 'module "cognee"');
+
+    expect(source).toMatch(/cognee_enabled\s*=\s*var\.enable_cognee/);
+    expect(source).toMatch(/resolved_memory_engine/);
+    expect(source).not.toMatch(
+      /enable_cognee[\s\S]{0,120}resolved_memory_engine/,
+    );
+    expect(cogneeModule).toMatch(/count\s*=\s*local\.cognee_enabled \? 1 : 0/);
+    expect(cogneeModule).toMatch(/source\s*=\s*"\.\.\/app\/cognee"/);
+    expect(cogneeModule).toMatch(/vpc_id\s*=\s*module\.vpc\.vpc_id/);
+    expect(cogneeModule).toMatch(
+      /subnet_ids\s*=\s*module\.vpc\.public_subnet_ids/,
+    );
+    expect(cogneeModule).toMatch(
+      /db_security_group_id\s*=\s*module\.database\.db_security_group_id/,
+    );
+    expect(cogneeModule).toMatch(
+      /db_host\s*=\s*module\.database\.cluster_endpoint/,
+    );
+    expect(cogneeModule).toMatch(
+      /db_password_secret_arn\s*=\s*var\.cognee_db_password_secret_arn/,
+    );
+    expect(cogneeModule).not.toMatch(
+      /db_password_secret_arn\s*=\s*module\.database/,
+    );
+  });
+
+  it("fails unsafe enabled Cognee parent configurations at plan time", () => {
+    const source = read(THINKWORK_MAIN);
+    const guardrails = firstNestedBlock(
+      source,
+      'resource "terraform_data" "cognee_configuration_guardrails"',
+    );
+
+    expect(guardrails).toMatch(/count\s*=\s*var\.enable_cognee \? 1 : 0/);
+    expect(guardrails).toMatch(/enable_cognee requires cognee_image_uri/);
+    expect(guardrails).toMatch(
+      /enable_cognee requires cognee_db_password_secret_arn/,
+    );
+    expect(guardrails).toMatch(
+      /not the shared Thinkwork admin database secret/,
+    );
+    expect(guardrails).toMatch(
+      /enable_cognee requires at least one public subnet/,
+    );
+    expect(guardrails).toMatch(
+      /cognee_backend_mode = dogfood requires cognee_desired_count = 1/,
+    );
+    expect(guardrails).toMatch(
+      /cognee_backend_mode = remote requires cognee_vector_db_url/,
+    );
+    expect(guardrails).toMatch(/Non-Bedrock Cognee LLM or embedding providers/);
+    expect(guardrails).toMatch(/Bedrock Cognee providers require explicit/);
+  });
+
+  it("exposes nullable stable Cognee outputs from the composite module", () => {
+    const outputs = read(THINKWORK_OUTPUTS);
+
+    expect(outputs).toMatch(/output "cognee_enabled"/);
+    expect(outputs).toMatch(/output "cognee_endpoint"/);
+    expect(outputs).toMatch(/output "cognee_log_group_name"/);
+    expect(outputs).toMatch(/output "cognee_task_role_arn"/);
+    expect(outputs).toMatch(/output "cognee_backend_mode"/);
+    expect(outputs).toMatch(/output "cognee_storage_file_system_id"/);
+    expect(outputs).toMatch(/local\.cognee_enabled \? module\.cognee\[0\]/);
+    expect(outputs).toMatch(/: null/);
   });
 });

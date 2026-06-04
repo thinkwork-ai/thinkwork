@@ -173,6 +173,181 @@ variable "hindsight_image_tag" {
   default     = "0.5.0"
 }
 
+variable "enable_cognee" {
+  description = "Enable Cognee as an optional ontology/knowledge-graph add-on. This does not change memory_engine or replace Hindsight."
+  type        = bool
+  default     = false
+}
+
+variable "cognee_image_uri" {
+  description = "Cognee container image URI pinned to an immutable sha256 digest. Required when enable_cognee = true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.cognee_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.cognee_image_uri))
+    error_message = "cognee_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "cognee_db_username" {
+  description = "Dedicated PostgreSQL username for Cognee metadata storage. Do not use the shared Aurora admin/master user."
+  type        = string
+  default     = "thinkwork_cognee"
+
+  validation {
+    condition     = !contains(["postgres", "thinkwork_admin", "rdsadmin"], lower(var.cognee_db_username))
+    error_message = "cognee_db_username must be a dedicated least-privilege Cognee database user."
+  }
+}
+
+variable "cognee_db_password_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON password field for the dedicated Cognee PostgreSQL user. Required when enable_cognee = true."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_allowed_internal_cidr_blocks" {
+  description = "CIDR blocks allowed to reach the internal Cognee ALB"
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for cidr in var.cognee_allowed_internal_cidr_blocks :
+      cidr != "0.0.0.0/0" && cidr != "::/0"
+    ])
+    error_message = "cognee_allowed_internal_cidr_blocks must not include all-network CIDRs such as 0.0.0.0/0 or ::/0."
+  }
+}
+
+variable "cognee_allowed_internal_security_group_ids" {
+  description = "Security group IDs allowed to reach the internal Cognee ALB"
+  type        = list(string)
+  default     = []
+}
+
+variable "cognee_backend_mode" {
+  description = "Cognee backend mode. dogfood uses local graph/vector paths on EFS; remote requires remote graph/vector URLs."
+  type        = string
+  default     = "dogfood"
+
+  validation {
+    condition     = contains(["dogfood", "remote"], var.cognee_backend_mode)
+    error_message = "cognee_backend_mode must be dogfood or remote."
+  }
+}
+
+variable "cognee_desired_count" {
+  description = "Desired number of Cognee ECS tasks. Dogfood/local backend mode must stay single-task."
+  type        = number
+  default     = 1
+}
+
+variable "cognee_llm_provider" {
+  description = "Cognee LLM provider"
+  type        = string
+  default     = "bedrock"
+}
+
+variable "cognee_llm_model" {
+  description = "Cognee LLM model"
+  type        = string
+  default     = "bedrock/amazon.nova-lite-v1:0"
+}
+
+variable "cognee_llm_api_key_secret_arn" {
+  description = "Optional Secrets Manager ARN for non-Bedrock LLM provider API key"
+  type        = string
+  default     = ""
+}
+
+variable "cognee_embedding_provider" {
+  description = "Cognee embedding provider"
+  type        = string
+  default     = "bedrock"
+}
+
+variable "cognee_embedding_model" {
+  description = "Cognee embedding model"
+  type        = string
+  default     = "amazon.titan-embed-text-v2:0"
+}
+
+variable "cognee_embedding_dimensions" {
+  description = "Embedding vector dimensions. Must match the selected Cognee vector store."
+  type        = number
+  default     = 1024
+}
+
+variable "cognee_embedding_api_key_secret_arn" {
+  description = "Optional Secrets Manager ARN for non-Bedrock embedding provider API key"
+  type        = string
+  default     = ""
+}
+
+variable "cognee_vector_db_provider" {
+  description = "Cognee vector store provider"
+  type        = string
+  default     = "lancedb"
+}
+
+variable "cognee_vector_db_url" {
+  description = "Cognee vector store URL. Leave empty in dogfood mode to use the EFS-backed local default."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_vector_db_key_secret_arn" {
+  description = "Optional Secrets Manager ARN for a remote vector store key"
+  type        = string
+  default     = ""
+}
+
+variable "cognee_graph_database_provider" {
+  description = "Cognee graph store provider"
+  type        = string
+  default     = "kuzu"
+}
+
+variable "cognee_graph_database_url" {
+  description = "Cognee graph store URL. Leave empty in dogfood mode to use the EFS-backed local Kuzu default."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_graph_database_username" {
+  description = "Optional Cognee graph store username"
+  type        = string
+  default     = ""
+}
+
+variable "cognee_graph_database_password_secret_arn" {
+  description = "Optional Secrets Manager ARN for a remote graph store password"
+  type        = string
+  default     = ""
+}
+
+variable "cognee_bedrock_model_resource_arns" {
+  description = "Explicit Bedrock model ARNs Cognee may invoke when a Bedrock LLM or embedding provider is selected."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for arn in var.cognee_bedrock_model_resource_arns :
+      arn != "*" && !can(regex("\\*", arn))
+    ])
+    error_message = "cognee_bedrock_model_resource_arns must list explicit model or inference-profile ARNs, not wildcards."
+  }
+}
+
+variable "cognee_kms_key_arns" {
+  description = "Optional KMS key ARNs needed to decrypt Cognee-injected secrets"
+  type        = list(string)
+  default     = []
+}
+
 variable "agentcore_memory_id" {
   description = "Optional pre-existing AgentCore Memory resource ID. When set, the agentcore-memory module skips provisioning and reuses this ID. Leave empty to auto-provision."
   type        = string

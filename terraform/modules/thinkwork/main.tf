@@ -24,6 +24,7 @@ locals {
   # For one release we also honor the legacy var.memory_engine == "hindsight"
   # so existing tfvars keep working.
   hindsight_enabled = var.enable_hindsight || var.memory_engine == "hindsight"
+  cognee_enabled    = var.enable_cognee
 
   # Canonical long-term memory engine for this deployment. Exactly one engine
   # is active per deployment for recall/inspect/export. Auto-selects from
@@ -91,6 +92,69 @@ locals {
 module "workspace_guard" {
   source = "../_internal/workspace-guard"
   stage  = var.stage
+}
+
+resource "terraform_data" "cognee_configuration_guardrails" {
+  count = var.enable_cognee ? 1 : 0
+
+  input = {
+    cognee_backend_mode            = var.cognee_backend_mode
+    cognee_desired_count           = var.cognee_desired_count
+    cognee_image_uri               = var.cognee_image_uri
+    cognee_db_password_secret_arn  = var.cognee_db_password_secret_arn
+    cognee_llm_provider            = var.cognee_llm_provider
+    cognee_embedding_provider      = var.cognee_embedding_provider
+    cognee_bedrock_model_resources = var.cognee_bedrock_model_resource_arns
+    public_subnet_count            = length(module.vpc.public_subnet_ids)
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.cognee_image_uri != ""
+      error_message = "enable_cognee requires cognee_image_uri pinned to an immutable digest."
+    }
+
+    precondition {
+      condition     = var.cognee_db_password_secret_arn != ""
+      error_message = "enable_cognee requires cognee_db_password_secret_arn for a dedicated Cognee database user."
+    }
+
+    precondition {
+      condition     = var.cognee_db_password_secret_arn != module.database.graphql_db_secret_arn
+      error_message = "enable_cognee requires a dedicated Cognee database secret, not the shared Thinkwork admin database secret."
+    }
+
+    precondition {
+      condition     = length(module.vpc.public_subnet_ids) > 0
+      error_message = "enable_cognee requires at least one public subnet for the phase-1 public-subnet task egress pattern."
+    }
+
+    precondition {
+      condition     = var.cognee_backend_mode != "dogfood" || var.cognee_desired_count == 1
+      error_message = "cognee_backend_mode = dogfood requires cognee_desired_count = 1."
+    }
+
+    precondition {
+      condition     = var.cognee_backend_mode != "remote" || (var.cognee_vector_db_url != "" && var.cognee_graph_database_url != "")
+      error_message = "cognee_backend_mode = remote requires cognee_vector_db_url and cognee_graph_database_url."
+    }
+
+    precondition {
+      condition = (
+        (var.cognee_llm_provider == "bedrock" || var.cognee_llm_api_key_secret_arn != "") &&
+        (var.cognee_embedding_provider == "bedrock" || var.cognee_embedding_api_key_secret_arn != "")
+      )
+      error_message = "Non-Bedrock Cognee LLM or embedding providers require matching secret ARN inputs."
+    }
+
+    precondition {
+      condition = (
+        (var.cognee_llm_provider != "bedrock" && var.cognee_embedding_provider != "bedrock") ||
+        length(var.cognee_bedrock_model_resource_arns) > 0
+      )
+      error_message = "Bedrock Cognee providers require explicit cognee_bedrock_model_resource_arns."
+    }
+  }
 }
 
 ################################################################################
@@ -547,6 +611,49 @@ module "hindsight" {
   db_security_group_id = module.database.db_security_group_id
   database_url         = module.database.database_url
   image_tag            = var.hindsight_image_tag
+}
+
+module "cognee" {
+  count  = local.cognee_enabled ? 1 : 0
+  source = "../app/cognee"
+
+  stage                  = var.stage
+  vpc_id                 = module.vpc.vpc_id
+  subnet_ids             = module.vpc.public_subnet_ids
+  db_security_group_id   = module.database.db_security_group_id
+  db_host                = module.database.cluster_endpoint
+  db_name                = var.database_name
+  db_username            = var.cognee_db_username
+  db_password_secret_arn = var.cognee_db_password_secret_arn
+
+  allowed_internal_cidr_blocks        = var.cognee_allowed_internal_cidr_blocks
+  allowed_internal_security_group_ids = var.cognee_allowed_internal_security_group_ids
+  image_uri                           = var.cognee_image_uri
+  desired_count                       = var.cognee_desired_count
+  backend_mode                        = var.cognee_backend_mode
+
+  llm_provider           = var.cognee_llm_provider
+  llm_model              = var.cognee_llm_model
+  llm_api_key_secret_arn = var.cognee_llm_api_key_secret_arn
+
+  embedding_provider           = var.cognee_embedding_provider
+  embedding_model              = var.cognee_embedding_model
+  embedding_dimensions         = var.cognee_embedding_dimensions
+  embedding_api_key_secret_arn = var.cognee_embedding_api_key_secret_arn
+
+  vector_db_provider       = var.cognee_vector_db_provider
+  vector_db_url            = var.cognee_vector_db_url
+  vector_db_key_secret_arn = var.cognee_vector_db_key_secret_arn
+
+  graph_database_provider            = var.cognee_graph_database_provider
+  graph_database_url                 = var.cognee_graph_database_url
+  graph_database_username            = var.cognee_graph_database_username
+  graph_database_password_secret_arn = var.cognee_graph_database_password_secret_arn
+
+  bedrock_model_resource_arns = var.cognee_bedrock_model_resource_arns
+  kms_key_arns                = var.cognee_kms_key_arns
+
+  depends_on = [terraform_data.cognee_configuration_guardrails]
 }
 
 module "ses" {
