@@ -43,6 +43,16 @@ output "memory_retain_fn_arn" {
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["memory-retain"].arn : ""
 }
 
+output "knowledge_graph_thread_ingest_fn_name" {
+  description = "Knowledge Graph thread ingest worker Lambda function name."
+  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["knowledge-graph-thread-ingest"].function_name : ""
+}
+
+output "knowledge_graph_thread_ingest_fn_arn" {
+  description = "Knowledge Graph thread ingest worker Lambda ARN."
+  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["knowledge-graph-thread-ingest"].arn : ""
+}
+
 output "email_inbound_fn_arn" {
   description = "email-inbound Lambda ARN. Used by the SES module to wire the receipt rule Lambda action."
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["email-inbound"].arn : ""

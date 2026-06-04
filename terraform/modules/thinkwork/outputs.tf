@@ -172,6 +172,21 @@ output "cognee_security_group_id" {
   value       = local.cognee_enabled ? module.cognee[0].cognee_security_group_id : null
 }
 
+output "cognee_worker_security_group_id" {
+  description = "Security group ID attached to the Knowledge Graph ingest worker Lambda (null when enable_cognee = false)"
+  value       = local.cognee_enabled ? aws_security_group.cognee_worker[0].id : null
+}
+
+output "knowledge_graph_thread_ingest_fn_name" {
+  description = "Knowledge Graph thread ingest worker Lambda function name"
+  value       = module.api.knowledge_graph_thread_ingest_fn_name
+}
+
+output "knowledge_graph_thread_ingest_fn_arn" {
+  description = "Knowledge Graph thread ingest worker Lambda ARN"
+  value       = module.api.knowledge_graph_thread_ingest_fn_arn
+}
+
 output "cognee_storage_file_system_id" {
   description = "EFS file system ID backing Cognee writable data/system directories (null when enable_cognee = false)"
   value       = local.cognee_enabled ? module.cognee[0].cognee_storage_file_system_id : null

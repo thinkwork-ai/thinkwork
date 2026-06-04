@@ -7,11 +7,11 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U4 - Cognee Thread Ingest Worker and Normalizer
+- Current unit: U5 - Worker Infrastructure, IAM, and Private Cognee Access
 - Current branch/worktree:
-  `codex/cognee-kg-u4-worker` /
-  `.Codex/worktrees/cognee-kg-u4-worker`
-- Current PR: [#2080](https://github.com/thinkwork-ai/thinkwork/pull/2080)
+  `codex/cognee-kg-u5-infra` /
+  `.Codex/worktrees/cognee-kg-u5-infra`
+- Current PR: [#2081](https://github.com/thinkwork-ai/thinkwork/pull/2081)
 - Blocker: none
 
 ## Progress Log
@@ -135,3 +135,26 @@ Started: 2026-06-04
   passed, 9 skipped); targeted Prettier check; and `git diff --check`.
 - 2026-06-04: Opened U4 PR
   [#2080](https://github.com/thinkwork-ai/thinkwork/pull/2080).
+- 2026-06-04: U4 PR
+  [#2080](https://github.com/thinkwork-ai/thinkwork/pull/2080) passed required
+  CI and was squash-merged into `main` at
+  `78393d45fbbffede73d2d87418a904c7e6f41da8`; deleted the remote branch and
+  removed the local U4 worktree/branch.
+- 2026-06-04: Synced `origin/main` and created isolated U5 worktree
+  `.Codex/worktrees/cognee-kg-u5-infra` on branch
+  `codex/cognee-kg-u5-infra` from `origin/main`.
+- 2026-06-04: Implemented U5 worker infrastructure: added
+  worker-only `COGNEE_ENDPOINT`/mode env vars, VPC attachment inputs for the
+  `knowledge-graph-thread-ingest` Lambda, Lambda VPC access IAM, composite
+  worker security group, Aurora ingress from the worker security group, Cognee
+  ALB ingress from the worker security group, and outputs for the worker Lambda
+  and security group.
+- 2026-06-04: U5 local verification passed:
+  `terraform -chdir=terraform/examples/greenfield validate`;
+  `terraform fmt -check terraform/modules/app/lambda-api/main.tf terraform/modules/app/lambda-api/handlers.tf terraform/modules/thinkwork/main.tf terraform/modules/thinkwork/outputs.tf terraform/modules/app/lambda-api/variables.tf terraform/modules/app/lambda-api/outputs.tf`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts src/__tests__/knowledge-graph-start-ingest.test.ts`;
+  and `git diff --check`.
+- 2026-06-04: Opened U5 PR
+  [#2081](https://github.com/thinkwork-ai/thinkwork/pull/2081).

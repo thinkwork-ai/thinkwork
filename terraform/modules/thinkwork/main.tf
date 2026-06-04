@@ -25,6 +25,11 @@ locals {
   # so existing tfvars keep working.
   hindsight_enabled = var.enable_hindsight || var.memory_engine == "hindsight"
   cognee_enabled    = var.enable_cognee
+  cognee_worker_subnet_ids = (
+    length(module.vpc.private_subnet_ids) > 0
+    ? module.vpc.private_subnet_ids
+    : module.vpc.public_subnet_ids
+  )
 
   # Canonical long-term memory engine for this deployment. Exactly one engine
   # is active per deployment for recall/inspect/export. Auto-selects from
@@ -155,6 +160,35 @@ resource "terraform_data" "cognee_configuration_guardrails" {
       error_message = "Bedrock Cognee providers require explicit cognee_bedrock_model_resource_arns."
     }
   }
+}
+
+resource "aws_security_group" "cognee_worker" {
+  count = local.cognee_enabled ? 1 : 0
+
+  name_prefix = "thinkwork-${var.stage}-cognee-worker-"
+  description = "Knowledge Graph ingest Lambda access to Cognee and Aurora"
+  vpc_id      = module.vpc.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "thinkwork-${var.stage}-cognee-worker-sg" }
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_security_group_rule" "aurora_from_cognee_worker" {
+  count = local.cognee_enabled ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.cognee_worker[0].id
+  security_group_id        = module.database.db_security_group_id
 }
 
 ################################################################################
@@ -437,6 +471,8 @@ module "api" {
   cognee_backend_mode                           = local.cognee_enabled ? module.cognee[0].cognee_backend_mode : ""
   cognee_cluster_arn                            = local.cognee_enabled ? module.cognee[0].cognee_cluster_arn : ""
   cognee_service_name                           = local.cognee_enabled ? module.cognee[0].cognee_service_name : ""
+  cognee_worker_subnet_ids                      = local.cognee_enabled ? local.cognee_worker_subnet_ids : []
+  cognee_worker_security_group_ids              = local.cognee_enabled ? [aws_security_group.cognee_worker[0].id] : []
   admin_url                                     = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
   docs_url                                      = "https://${module.docs_site.distribution_domain}"
   www_url                                       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
@@ -632,11 +668,14 @@ module "cognee" {
   db_username            = var.cognee_db_username
   db_password_secret_arn = var.cognee_db_password_secret_arn
 
-  allowed_internal_cidr_blocks        = var.cognee_allowed_internal_cidr_blocks
-  allowed_internal_security_group_ids = var.cognee_allowed_internal_security_group_ids
-  image_uri                           = var.cognee_image_uri
-  desired_count                       = var.cognee_desired_count
-  backend_mode                        = var.cognee_backend_mode
+  allowed_internal_cidr_blocks = var.cognee_allowed_internal_cidr_blocks
+  allowed_internal_security_group_ids = concat(
+    var.cognee_allowed_internal_security_group_ids,
+    [aws_security_group.cognee_worker[0].id],
+  )
+  image_uri     = var.cognee_image_uri
+  desired_count = var.cognee_desired_count
+  backend_mode  = var.cognee_backend_mode
 
   llm_provider           = var.cognee_llm_provider
   llm_model              = var.cognee_llm_model
