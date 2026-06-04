@@ -4,6 +4,7 @@ import {
   BookOpen,
   Brain,
   FolderTree,
+  Network,
   NotebookText,
   Plug,
   Repeat,
@@ -81,6 +82,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
+  {
+    label: "Knowledge Graph",
+    to: "/settings/knowledge-graph",
+    icon: Network,
+    operatorOnly: true,
+  },
   {
     label: "Wiki Memory",
     to: "/settings/wiki",

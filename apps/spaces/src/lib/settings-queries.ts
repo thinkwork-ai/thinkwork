@@ -43,6 +43,22 @@ export const SettingsDeploymentStatusQuery = graphql(`
       agentcoreStatus
       hindsightEnabled
       managedMemoryEnabled
+      cogneeEnabled
+      cogneeEndpoint
+      cogneeLogGroupName
+      cogneeBackendMode
+      cogneeClusterArn
+      cogneeServiceName
+    }
+  }
+`);
+
+export const SettingsSetKnowledgeGraphDeploymentMutation = graphql(`
+  mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {
+    setKnowledgeGraphDeployment(input: { enabled: $enabled }) {
+      desiredEnabled
+      workflowUrl
+      message
     }
   }
 `);

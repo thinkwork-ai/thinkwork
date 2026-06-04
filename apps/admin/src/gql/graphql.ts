@@ -7778,26 +7778,6 @@ export type DeploymentStatusQuery = {
     agentcoreStatus?: string | null;
     hindsightEnabled: boolean;
     managedMemoryEnabled: boolean;
-    cogneeEnabled: boolean;
-    cogneeEndpoint?: string | null;
-    cogneeLogGroupName?: string | null;
-    cogneeBackendMode?: string | null;
-    cogneeClusterArn?: string | null;
-    cogneeServiceName?: string | null;
-  };
-};
-
-export type SetKnowledgeGraphDeploymentMutationVariables = Exact<{
-  enabled: Scalars["Boolean"]["input"];
-}>;
-
-export type SetKnowledgeGraphDeploymentMutation = {
-  __typename?: "Mutation";
-  setKnowledgeGraphDeployment: {
-    __typename?: "KnowledgeGraphDeploymentChange";
-    desiredEnabled: boolean;
-    workflowUrl: string;
-    message: string;
   };
 };
 
@@ -15887,30 +15867,6 @@ export const DeploymentStatusDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "managedMemoryEnabled" },
                 },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "cogneeEnabled" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "cogneeEndpoint" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "cogneeLogGroupName" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "cogneeBackendMode" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "cogneeClusterArn" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "cogneeServiceName" },
-                },
               ],
             },
           },
@@ -15921,74 +15877,6 @@ export const DeploymentStatusDocument = {
 } as unknown as DocumentNode<
   DeploymentStatusQuery,
   DeploymentStatusQueryVariables
->;
-export const SetKnowledgeGraphDeploymentDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SetKnowledgeGraphDeployment" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "enabled" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "Boolean" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "setKnowledgeGraphDeployment" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "ObjectValue",
-                  fields: [
-                    {
-                      kind: "ObjectField",
-                      name: { kind: "Name", value: "enabled" },
-                      value: {
-                        kind: "Variable",
-                        name: { kind: "Name", value: "enabled" },
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "desiredEnabled" },
-                },
-                { kind: "Field", name: { kind: "Name", value: "workflowUrl" } },
-                { kind: "Field", name: { kind: "Name", value: "message" } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SetKnowledgeGraphDeploymentMutation,
-  SetKnowledgeGraphDeploymentMutationVariables
 >;
 export const TenantMembersListDocument = {
   kind: "Document",
