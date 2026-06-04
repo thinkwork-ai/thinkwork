@@ -10,9 +10,26 @@ locals {
   use_local_zips        = var.lambda_zips_dir != ""
   eval_fanout_queue_url = local.deploy_lambda_handlers ? aws_sqs_queue.eval_fanout[0].url : ""
   runtime               = "nodejs20.x"
+  cognee_env = merge(
+    var.cognee_endpoint != "" ? {
+      COGNEE_ENDPOINT = var.cognee_endpoint
+    } : {},
+    var.cognee_log_group_name != "" ? {
+      COGNEE_LOG_GROUP_NAME = var.cognee_log_group_name
+    } : {},
+    var.cognee_backend_mode != "" ? {
+      COGNEE_BACKEND_MODE = var.cognee_backend_mode
+    } : {},
+    var.cognee_cluster_arn != "" ? {
+      COGNEE_CLUSTER_ARN = var.cognee_cluster_arn
+    } : {},
+    var.cognee_service_name != "" ? {
+      COGNEE_SERVICE_NAME = var.cognee_service_name
+    } : {}
+  )
 
   # Common environment variables shared by all API handlers
-  common_env = {
+  common_env = merge({
     STAGE                       = var.stage
     DATABASE_URL                = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
     DATABASE_SECRET_ARN         = var.graphql_db_secret_arn
@@ -49,20 +66,6 @@ locals {
     HINDSIGHT_ENDPOINT                 = var.hindsight_endpoint
     AGENTCORE_MEMORY_ID                = var.agentcore_memory_id
     MEMORY_ENGINE                      = var.memory_engine
-    COGNEE_ENABLED                     = tostring(var.cognee_enabled)
-    COGNEE_ENDPOINT                    = var.cognee_endpoint
-    COGNEE_LOG_GROUP_NAME              = var.cognee_log_group_name
-    COGNEE_BACKEND_MODE                = var.cognee_backend_mode
-    COGNEE_CLUSTER_ARN                 = var.cognee_cluster_arn
-    COGNEE_SERVICE_NAME                = var.cognee_service_name
-    KNOWLEDGE_GRAPH_GITHUB_TOKEN_SECRET_ID = (
-      var.knowledge_graph_github_token_secret_id != ""
-      ? var.knowledge_graph_github_token_secret_id
-      : "thinkwork/${var.stage}/github/deploy-token"
-    )
-    KNOWLEDGE_GRAPH_DEPLOY_REPOSITORY    = var.knowledge_graph_deploy_repository
-    KNOWLEDGE_GRAPH_DEPLOY_WORKFLOW_FILE = var.knowledge_graph_deploy_workflow_file
-    KNOWLEDGE_GRAPH_DEPLOY_REF           = var.knowledge_graph_deploy_ref
     # Skip the SSM indirection for cross-function ARN lookup. Terraform
     # already knows this ARN at apply time and the Lambda role's SSM
     # permission has been a recurring source of silent failures where
@@ -100,7 +103,7 @@ locals {
     # hello@agents.thinkwork.ai (the already-verified SES inbound domain);
     # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.
     STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
-  }
+  }, local.cognee_env)
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't

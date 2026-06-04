@@ -48,6 +48,10 @@ const THINKWORK_OUTPUTS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/outputs.tf",
 );
+const LAMBDA_API_HANDLERS = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/lambda-api/handlers.tf",
+);
 const GREENFIELD_MAIN = resolve(
   REPO_ROOT,
   "terraform/examples/greenfield/main.tf",
@@ -458,6 +462,16 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(workflow).toMatch(/GRANT CONNECT ON DATABASE thinkwork/);
     expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);
     expect(workflow).toMatch(/ALTER DEFAULT PRIVILEGES IN SCHEMA public/);
+  });
+
+  it("keeps Knowledge Graph deploy dispatch defaults out of the GraphQL Lambda env", () => {
+    const source = read(LAMBDA_API_HANDLERS);
+
+    expect(source).toMatch(/cognee_env = merge/);
+    expect(source).not.toMatch(/KNOWLEDGE_GRAPH_DEPLOY_REPOSITORY/);
+    expect(source).not.toMatch(/KNOWLEDGE_GRAPH_DEPLOY_WORKFLOW_FILE/);
+    expect(source).not.toMatch(/KNOWLEDGE_GRAPH_DEPLOY_REF/);
+    expect(source).not.toMatch(/KNOWLEDGE_GRAPH_GITHUB_TOKEN_SECRET_ID/);
   });
 });
 

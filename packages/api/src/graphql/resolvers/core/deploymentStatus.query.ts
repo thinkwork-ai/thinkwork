@@ -42,7 +42,11 @@ export const deploymentStatus = async (
       : "not deployed",
     hindsightEnabled: !!process.env.HINDSIGHT_ENDPOINT,
     managedMemoryEnabled: !!process.env.AGENTCORE_MEMORY_ID,
-    cogneeEnabled: process.env.COGNEE_ENABLED === "true",
+    cogneeEnabled: Boolean(
+      process.env.COGNEE_ENDPOINT ||
+      process.env.COGNEE_SERVICE_NAME ||
+      process.env.COGNEE_LOG_GROUP_NAME,
+    ),
     cogneeEndpoint: process.env.COGNEE_ENDPOINT || null,
     cogneeLogGroupName: process.env.COGNEE_LOG_GROUP_NAME || null,
     cogneeBackendMode: process.env.COGNEE_BACKEND_MODE || null,
