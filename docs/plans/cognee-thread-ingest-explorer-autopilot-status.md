@@ -6,13 +6,16 @@ Started: 2026-06-04
 
 ## Current Status
 
-- State: in_progress
-- Current unit: U8 - Smoke Test, Docs, and E2E Validation
+- State: blocked_on_live_deployed_smoke
+- Current unit: none - implementation units U1-U8 are merged
 - Current branch/worktree:
-  `codex/cognee-kg-u8-smoke` /
-  `.Codex/worktrees/cognee-kg-u8-smoke`
-- Current PR: [#2084](https://github.com/thinkwork-ai/thinkwork/pull/2084)
-- Blocker: none
+  `codex/cognee-kg-final-status` /
+  `.Codex/worktrees/cognee-kg-final-status`
+- Current PR: not opened
+- Blocker: live deployed smoke requires an operator identity. Provide
+  `SMOKE_TENANT_ID` and `SMOKE_USER_ID`, or a `DATABASE_URL` that can resolve
+  an active tenant owner/admin, then run
+  `SMOKE_ENABLE_KNOWLEDGE_GRAPH=1 node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs`.
 
 ## Progress Log
 
@@ -242,3 +245,12 @@ SMOKE_USER_ID, or provide DATABASE_URL for fallback.` The copied
   `~/.thinkwork/config.json` only records default stage `dev`.
 - 2026-06-04: Opened U8 PR
   [#2084](https://github.com/thinkwork-ai/thinkwork/pull/2084).
+- 2026-06-04: U8 PR
+  [#2084](https://github.com/thinkwork-ai/thinkwork/pull/2084) passed required
+  CI and was squash-merged into `main` at
+  `4cc4b032bc50d003705e1984fa11d3487dafa089`; deleted the remote branch and
+  removed the local U8 worktree/branch.
+- 2026-06-04: All implementation units U1-U8 are merged. Remaining validation
+  blocker is live deployed smoke execution: the local `apps/spaces/.env` has
+  GraphQL endpoint/key values but no operator identity, no `DATABASE_URL`
+  fallback, and `~/.thinkwork/config.json` only records default stage `dev`.
