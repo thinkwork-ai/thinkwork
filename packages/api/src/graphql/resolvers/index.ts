@@ -27,6 +27,10 @@ import { threadMutations } from "./threads/index.js";
 import { inboxMutations } from "./inbox/index.js";
 import { costMutations } from "./costs/index.js";
 import { knowledgeMutations } from "./knowledge/index.js";
+import {
+  knowledgeGraphMutations,
+  knowledgeGraphQueries,
+} from "./knowledge-graph/index.js";
 import { artifactMutations } from "./artifacts/index.js";
 import { orchestrationMutations } from "./orchestration/index.js";
 import { webhookMutations } from "./webhooks/index.js";
@@ -77,6 +81,7 @@ export const queryResolvers: Record<string, any> = {
   ...triggerQueries,
   ...costQueries,
   ...knowledgeQueries,
+  ...knowledgeGraphQueries,
   ...artifactQueries,
   ...appletQueries,
   ...orchestrationQueries,
@@ -112,6 +117,7 @@ export const mutationResolvers: Record<string, any> = {
   ...inboxMutations,
   ...costMutations,
   ...knowledgeMutations,
+  ...knowledgeGraphMutations,
   ...artifactMutations,
   ...appletMutations,
   ...orchestrationMutations,

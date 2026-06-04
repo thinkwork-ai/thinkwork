@@ -1,0 +1,211 @@
+enum KnowledgeGraphIngestStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  STALE_NOOP
+}
+
+enum KnowledgeGraphGroundingStatus {
+  GROUNDED
+  UNAPPROVED_TYPE
+  UNGROUNDED
+  CONFLICT
+  UNKNOWN
+}
+
+enum KnowledgeGraphProvenanceStatus {
+  STRONG
+  WEAK
+  MISSING
+}
+
+enum KnowledgeGraphEvidenceSourceKind {
+  THREAD_MESSAGE
+  COGNEE_PAYLOAD
+  NORMALIZER
+}
+
+type KnowledgeGraphIngestRun {
+  id: ID!
+  tenantId: ID!
+  threadId: ID!
+  requestedByUserId: ID
+  status: KnowledgeGraphIngestStatus!
+  trigger: String!
+  cogneeDatasetName: String!
+  cogneeDatasetId: String
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  durationMs: Int
+  error: String
+  entityCount: Int!
+  relationshipCount: Int!
+  evidenceCount: Int!
+  diagnosticCount: Int!
+  messageCount: Int!
+  input: AWSJSON!
+  metrics: AWSJSON!
+  metadata: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type KnowledgeGraphEntity {
+  id: ID!
+  tenantId: ID!
+  threadId: ID!
+  ingestRunId: ID!
+  cogneeNodeId: String!
+  label: String!
+  normalizedLabel: String!
+  typeLabel: String
+  ontologyEntityTypeId: ID
+  ontologyTypeSlug: String
+  groundingStatus: KnowledgeGraphGroundingStatus!
+  provenanceStatus: KnowledgeGraphProvenanceStatus!
+  summary: String
+  aliases: [String!]!
+  properties: AWSJSON!
+  diagnostics: AWSJSON!
+  relationshipCount: Int!
+  evidenceCount: Int!
+  lastSeenAt: AWSDateTime
+  relationships: [KnowledgeGraphRelationship!]!
+  evidence: [KnowledgeGraphEvidence!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type KnowledgeGraphRelationship {
+  id: ID!
+  tenantId: ID!
+  threadId: ID!
+  ingestRunId: ID!
+  cogneeEdgeId: String
+  sourceEntityId: ID!
+  targetEntityId: ID!
+  label: String!
+  ontologyRelationshipTypeId: ID
+  ontologyTypeSlug: String
+  groundingStatus: KnowledgeGraphGroundingStatus!
+  provenanceStatus: KnowledgeGraphProvenanceStatus!
+  confidence: Float
+  properties: AWSJSON!
+  diagnostics: AWSJSON!
+  evidenceCount: Int!
+  lastSeenAt: AWSDateTime
+  evidence: [KnowledgeGraphEvidence!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type KnowledgeGraphEvidence {
+  id: ID!
+  tenantId: ID!
+  threadId: ID!
+  ingestRunId: ID!
+  entityId: ID
+  relationshipId: ID
+  messageId: ID
+  messageRole: String
+  messageCreatedAt: AWSDateTime
+  speakerLabel: String
+  snippet: String!
+  charStart: Int
+  charEnd: Int
+  sourceKind: KnowledgeGraphEvidenceSourceKind!
+  sourceRef: String
+  metadata: AWSJSON!
+  observedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type KnowledgeGraphGraphNode {
+  id: ID!
+  entityId: ID!
+  label: String!
+  typeLabel: String
+  ontologyTypeSlug: String
+  groundingStatus: KnowledgeGraphGroundingStatus!
+  provenanceStatus: KnowledgeGraphProvenanceStatus!
+  relationshipCount: Int!
+  evidenceCount: Int!
+}
+
+type KnowledgeGraphGraphEdge {
+  id: ID!
+  relationshipId: ID!
+  source: ID!
+  target: ID!
+  label: String!
+  ontologyTypeSlug: String
+  groundingStatus: KnowledgeGraphGroundingStatus!
+  provenanceStatus: KnowledgeGraphProvenanceStatus!
+  evidenceCount: Int!
+}
+
+type KnowledgeGraphGraph {
+  nodes: [KnowledgeGraphGraphNode!]!
+  edges: [KnowledgeGraphGraphEdge!]!
+}
+
+type KnowledgeGraphThreadCandidate {
+  threadId: ID!
+  tenantId: ID!
+  title: String!
+  number: Int!
+  requesterUserId: ID
+  requesterName: String
+  spaceId: ID
+  spaceName: String
+  messageCount: Int!
+  lastMessageAt: AWSDateTime
+  lastIngestRun: KnowledgeGraphIngestRun
+}
+
+input StartKnowledgeGraphThreadIngestInput {
+  tenantId: ID
+  threadId: ID!
+  force: Boolean = false
+  metadata: AWSJSON
+}
+
+extend type Query {
+  knowledgeGraphThreadCandidates(
+    tenantId: ID
+    requesterUserId: ID
+    query: String
+    limit: Int = 25
+  ): [KnowledgeGraphThreadCandidate!]!
+  knowledgeGraphIngestRuns(
+    tenantId: ID
+    threadId: ID
+    limit: Int = 25
+  ): [KnowledgeGraphIngestRun!]!
+  knowledgeGraphEntities(
+    tenantId: ID
+    threadId: ID
+    search: String
+    ontologyType: String
+    groundingStatus: KnowledgeGraphGroundingStatus
+    provenanceStatus: KnowledgeGraphProvenanceStatus
+    limit: Int = 100
+  ): [KnowledgeGraphEntity!]!
+  knowledgeGraphGraph(
+    tenantId: ID
+    threadId: ID
+    search: String
+    ontologyType: String
+    groundingStatus: KnowledgeGraphGroundingStatus
+    provenanceStatus: KnowledgeGraphProvenanceStatus
+  ): KnowledgeGraphGraph!
+  knowledgeGraphEntity(tenantId: ID, entityId: ID!): KnowledgeGraphEntity
+}
+
+extend type Mutation {
+  startKnowledgeGraphThreadIngest(
+    input: StartKnowledgeGraphThreadIngestInput!
+  ): KnowledgeGraphIngestRun!
+}
