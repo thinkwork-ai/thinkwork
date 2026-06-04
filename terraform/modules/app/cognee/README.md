@@ -63,6 +63,22 @@ needed by default. Callers must still pass the specific
 consume secrets through ECS secret injection, do not enable that provider mode
 until a wrapper/entrypoint is added.
 
+The module accepts pre-existing secret ARNs by default. For deployments that
+want Terraform to create the secret containers, set
+`create_secret_placeholders = true`. Terraform then creates only the missing
+secret containers required by the selected configuration:
+
+- `thinkwork/{stage}/cognee/db-credentials`
+- `thinkwork/{stage}/cognee/llm-api-key`
+- `thinkwork/{stage}/cognee/embedding-api-key`
+- `thinkwork/{stage}/cognee/vector-db-key`
+- `thinkwork/{stage}/cognee/graph-database-password`
+
+Secret versions are seeded with `PLACEHOLDER_SET_VIA_CLI` and use
+`lifecycle.ignore_changes = [secret_string]`. Operators populate or rotate the
+real values with Secrets Manager after apply, and later Terraform applies do not
+clobber those values. Outputs expose only the selected secret ARNs.
+
 `vector_db_url` and `graph_database_url` must not embed credentials in userinfo
 or query parameters. Put remote-store credentials in the matching secret ARN
 inputs.

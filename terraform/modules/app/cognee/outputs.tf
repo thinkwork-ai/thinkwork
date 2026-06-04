@@ -47,3 +47,28 @@ output "cognee_storage_file_system_id" {
   description = "EFS file system ID backing Cognee writable data/system directories"
   value       = aws_efs_file_system.cognee.id
 }
+
+output "cognee_db_password_secret_arn" {
+  description = "Secrets Manager ARN used for the Cognee DB password"
+  value       = local.effective_db_password_secret_arn
+}
+
+output "cognee_llm_api_key_secret_arn" {
+  description = "Secrets Manager ARN used for the optional Cognee LLM API key"
+  value       = local.effective_llm_api_key_secret_arn
+}
+
+output "cognee_embedding_api_key_secret_arn" {
+  description = "Secrets Manager ARN used for the optional Cognee embedding API key"
+  value       = local.effective_embedding_api_key_secret_arn
+}
+
+output "cognee_vector_db_key_secret_arn" {
+  description = "Secrets Manager ARN used for the optional Cognee vector store key"
+  value       = local.effective_vector_db_key_secret_arn
+}
+
+output "cognee_graph_database_password_secret_arn" {
+  description = "Secrets Manager ARN used for the optional Cognee graph store password"
+  value       = local.effective_graph_database_password_secret_arn
+}

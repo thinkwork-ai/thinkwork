@@ -138,6 +138,36 @@ describe("U1 - Cognee Terraform app module", () => {
     }
   });
 
+  it("can create operator-owned placeholder secret containers without exposing values", () => {
+    const source = read(COGNEE_MAIN);
+    const vars = read(COGNEE_VARS);
+    const outputs = read(COGNEE_OUTPUTS);
+    const secretVersion = firstNestedBlock(
+      source,
+      'resource "aws_secretsmanager_secret_version" "cognee"',
+    );
+
+    expect(vars).toMatch(/variable "create_secret_placeholders"/);
+    expect(vars).toMatch(/default\s*=\s*false/);
+    expect(source).toMatch(/managed_secret_specs/);
+    expect(source).toMatch(
+      /thinkwork\/\$\{var\.stage\}\/cognee\/db-credentials/,
+    );
+    expect(source).toMatch(/resource "aws_secretsmanager_secret" "cognee"/);
+    expect(source).toMatch(/for_each\s*=\s*local\.managed_secrets/);
+    expect(source).toMatch(/PLACEHOLDER_SET_VIA_CLI/);
+    expect(secretVersion).toMatch(
+      /secret_string\s*=\s*each\.value\.secret_string/,
+    );
+    expect(secretVersion).toMatch(/ignore_changes\s*=\s*\[secret_string\]/);
+    expect(source).toMatch(/effective_db_password_secret_arn/);
+    expect(source).toMatch(/effective_llm_api_key_secret_arn/);
+    expect(outputs).toMatch(/output "cognee_db_password_secret_arn"/);
+    expect(outputs).toMatch(/output "cognee_llm_api_key_secret_arn"/);
+    expect(outputs).not.toMatch(/secret_string/);
+    expect(outputs).not.toMatch(/PLACEHOLDER_SET_VIA_CLI/);
+  });
+
   it("adds persistent encrypted EFS storage for Cognee data and system paths", () => {
     const source = read(COGNEE_MAIN);
 

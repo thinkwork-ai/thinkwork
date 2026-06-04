@@ -15,6 +15,69 @@ locals {
   vector_db_url = var.vector_db_url != "" ? var.vector_db_url : "${local.system_root_directory}/databases/cognee.lancedb"
   graph_db_url  = var.graph_database_url != "" ? var.graph_database_url : "${local.system_root_directory}/databases/cognee.kuzu"
 
+  managed_secret_specs = {
+    db_password = {
+      enabled       = var.create_secret_placeholders && var.db_password_secret_arn == ""
+      name          = "thinkwork/${var.stage}/cognee/db-credentials"
+      description   = "Dedicated Cognee PostgreSQL credentials"
+      secret_string = jsonencode({ password = "PLACEHOLDER_SET_VIA_CLI" })
+    }
+    llm_api_key = {
+      enabled       = var.create_secret_placeholders && var.llm_provider != "bedrock" && var.llm_api_key_secret_arn == ""
+      name          = "thinkwork/${var.stage}/cognee/llm-api-key"
+      description   = "Cognee non-Bedrock LLM provider API key"
+      secret_string = "PLACEHOLDER_SET_VIA_CLI"
+    }
+    embedding_api_key = {
+      enabled       = var.create_secret_placeholders && var.embedding_provider != "bedrock" && var.embedding_api_key_secret_arn == ""
+      name          = "thinkwork/${var.stage}/cognee/embedding-api-key"
+      description   = "Cognee non-Bedrock embedding provider API key"
+      secret_string = "PLACEHOLDER_SET_VIA_CLI"
+    }
+    vector_db_key = {
+      enabled       = var.create_secret_placeholders && var.vector_db_provider != "lancedb" && var.vector_db_key_secret_arn == ""
+      name          = "thinkwork/${var.stage}/cognee/vector-db-key"
+      description   = "Cognee remote vector store key"
+      secret_string = "PLACEHOLDER_SET_VIA_CLI"
+    }
+    graph_database_password = {
+      enabled       = var.create_secret_placeholders && var.graph_database_provider != "kuzu" && var.graph_database_password_secret_arn == ""
+      name          = "thinkwork/${var.stage}/cognee/graph-database-password"
+      description   = "Cognee remote graph store password"
+      secret_string = "PLACEHOLDER_SET_VIA_CLI"
+    }
+  }
+
+  managed_secrets = {
+    for key, spec in local.managed_secret_specs : key => spec if spec.enabled
+  }
+
+  effective_db_password_secret_arn = (
+    var.db_password_secret_arn != ""
+    ? var.db_password_secret_arn
+    : try(aws_secretsmanager_secret.cognee["db_password"].arn, "")
+  )
+  effective_llm_api_key_secret_arn = (
+    var.llm_api_key_secret_arn != ""
+    ? var.llm_api_key_secret_arn
+    : try(aws_secretsmanager_secret.cognee["llm_api_key"].arn, "")
+  )
+  effective_embedding_api_key_secret_arn = (
+    var.embedding_api_key_secret_arn != ""
+    ? var.embedding_api_key_secret_arn
+    : try(aws_secretsmanager_secret.cognee["embedding_api_key"].arn, "")
+  )
+  effective_vector_db_key_secret_arn = (
+    var.vector_db_key_secret_arn != ""
+    ? var.vector_db_key_secret_arn
+    : try(aws_secretsmanager_secret.cognee["vector_db_key"].arn, "")
+  )
+  effective_graph_database_password_secret_arn = (
+    var.graph_database_password_secret_arn != ""
+    ? var.graph_database_password_secret_arn
+    : try(aws_secretsmanager_secret.cognee["graph_database_password"].arn, "")
+  )
+
   subnet_ids_by_az = {
     for subnet_id, subnet in data.aws_subnet.cognee : subnet.availability_zone => subnet_id...
   }
@@ -52,19 +115,19 @@ locals {
   )
 
   container_secrets = concat(
-    [{ name = "DB_PASSWORD", valueFrom = "${var.db_password_secret_arn}:password::" }],
-    var.llm_api_key_secret_arn != "" ? [{ name = "LLM_API_KEY", valueFrom = var.llm_api_key_secret_arn }] : [],
-    var.embedding_api_key_secret_arn != "" ? [{ name = "EMBEDDING_API_KEY", valueFrom = var.embedding_api_key_secret_arn }] : [],
-    var.vector_db_key_secret_arn != "" ? [{ name = "VECTOR_DB_KEY", valueFrom = var.vector_db_key_secret_arn }] : [],
-    var.graph_database_password_secret_arn != "" ? [{ name = "GRAPH_DATABASE_PASSWORD", valueFrom = var.graph_database_password_secret_arn }] : []
+    [{ name = "DB_PASSWORD", valueFrom = "${local.effective_db_password_secret_arn}:password::" }],
+    local.effective_llm_api_key_secret_arn != "" ? [{ name = "LLM_API_KEY", valueFrom = local.effective_llm_api_key_secret_arn }] : [],
+    local.effective_embedding_api_key_secret_arn != "" ? [{ name = "EMBEDDING_API_KEY", valueFrom = local.effective_embedding_api_key_secret_arn }] : [],
+    local.effective_vector_db_key_secret_arn != "" ? [{ name = "VECTOR_DB_KEY", valueFrom = local.effective_vector_db_key_secret_arn }] : [],
+    local.effective_graph_database_password_secret_arn != "" ? [{ name = "GRAPH_DATABASE_PASSWORD", valueFrom = local.effective_graph_database_password_secret_arn }] : []
   )
 
   secret_arns = compact([
-    var.db_password_secret_arn,
-    var.llm_api_key_secret_arn,
-    var.embedding_api_key_secret_arn,
-    var.vector_db_key_secret_arn,
-    var.graph_database_password_secret_arn,
+    local.effective_db_password_secret_arn,
+    local.effective_llm_api_key_secret_arn,
+    local.effective_embedding_api_key_secret_arn,
+    local.effective_vector_db_key_secret_arn,
+    local.effective_graph_database_password_secret_arn,
   ])
 }
 
@@ -74,6 +137,29 @@ data "aws_subnet" "cognee" {
   for_each = toset(var.subnet_ids)
 
   id = each.value
+}
+
+resource "aws_secretsmanager_secret" "cognee" {
+  for_each = local.managed_secrets
+
+  name        = each.value.name
+  description = each.value.description
+
+  tags = {
+    Name = each.value.name
+    Role = "cognee"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "cognee" {
+  for_each = local.managed_secrets
+
+  secret_id     = aws_secretsmanager_secret.cognee[each.key].id
+  secret_string = each.value.secret_string
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
 
 ################################################################################
@@ -88,8 +174,9 @@ resource "terraform_data" "configuration_guardrails" {
     graph_database_url           = var.graph_database_url
     llm_provider                 = var.llm_provider
     embedding_provider           = var.embedding_provider
-    llm_api_key_secret_arn       = var.llm_api_key_secret_arn
-    embedding_api_key_secret_arn = var.embedding_api_key_secret_arn
+    db_password_secret_arn       = local.effective_db_password_secret_arn
+    llm_api_key_secret_arn       = local.effective_llm_api_key_secret_arn
+    embedding_api_key_secret_arn = local.effective_embedding_api_key_secret_arn
     bedrock_model_resource_arns  = var.bedrock_model_resource_arns
   }
 
@@ -105,10 +192,15 @@ resource "terraform_data" "configuration_guardrails" {
     }
 
     precondition {
+      condition     = local.effective_db_password_secret_arn != ""
+      error_message = "Cognee requires db_password_secret_arn or create_secret_placeholders = true."
+    }
+
+    precondition {
       condition = (
-        var.llm_provider == "bedrock" || var.llm_api_key_secret_arn != ""
+        var.llm_provider == "bedrock" || local.effective_llm_api_key_secret_arn != ""
         ) && (
-        var.embedding_provider == "bedrock" || var.embedding_api_key_secret_arn != ""
+        var.embedding_provider == "bedrock" || local.effective_embedding_api_key_secret_arn != ""
       )
       error_message = "Non-Bedrock LLM or embedding providers must use Secrets Manager ARNs, not plaintext environment values."
     }
