@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Sparkles } from "lucide-react";
 import { DataTable, Input } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -40,24 +39,21 @@ export function SettingsSkills() {
       {
         accessorKey: "slug",
         header: "Skill",
-        cell: ({ row }) => {
-          const { slug, displayName, description } = row.original;
-          return (
-            <div className="flex items-start gap-2">
-              <Sparkles className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0">
-                <div className="truncate font-medium">
-                  {displayName?.trim() || slug}
-                </div>
-                {description?.trim() ? (
-                  <div className="truncate text-sm text-muted-foreground">
-                    {description}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          );
-        },
+        size: 280,
+        cell: ({ row }) => (
+          <span className="block truncate font-medium">
+            {row.original.displayName?.trim() || row.original.slug}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "description",
+        header: "Description",
+        cell: ({ row }) => (
+          <span className="block truncate text-muted-foreground">
+            {row.original.description?.trim() || "—"}
+          </span>
+        ),
       },
     ],
     [],

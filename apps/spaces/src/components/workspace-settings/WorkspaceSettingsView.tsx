@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Loader2Icon } from "lucide-react";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { createConsolidatedWorkspaceClient } from "@/lib/consolidated-workspace-client";
 import { useConsolidatedSources } from "./useConsolidatedSources";
 
@@ -71,6 +72,7 @@ export function WorkspaceSettingsView() {
       defaultOpenFile="Agent/AGENTS.md"
       bordered={false}
       className="h-full"
+      loadingSlot={<LoadingShimmer />}
     />
   );
 }
