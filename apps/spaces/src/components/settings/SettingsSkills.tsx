@@ -4,24 +4,25 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Sparkles } from "lucide-react";
 import { DataTable, Input } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
-import { listSkillSlugs } from "@/lib/workspace-files-api";
+import {
+  listSkillSummaries,
+  type SkillSummary,
+} from "@/lib/workspace-files-api";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
-
-type SkillRow = { slug: string };
 
 export function SettingsSkills() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [slugs, setSlugs] = useState<string[] | null>(null);
+  const [skills, setSkills] = useState<SkillSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tenantId) return;
     let cancelled = false;
     setError(null);
-    listSkillSlugs()
-      .then((s) => !cancelled && setSlugs(s))
+    listSkillSummaries()
+      .then((s) => !cancelled && setSkills(s))
       .catch(
         (e) =>
           !cancelled &&
@@ -32,22 +33,31 @@ export function SettingsSkills() {
     };
   }, [tenantId]);
 
-  const rows = useMemo<SkillRow[]>(
-    () => (slugs ?? []).map((slug) => ({ slug })),
-    [slugs],
-  );
+  const rows = useMemo<SkillSummary[]>(() => skills ?? [], [skills]);
 
-  const columns = useMemo<ColumnDef<SkillRow>[]>(
+  const columns = useMemo<ColumnDef<SkillSummary>[]>(
     () => [
       {
         accessorKey: "slug",
         header: "Skill",
-        cell: ({ row }) => (
-          <span className="flex items-center gap-2 font-medium">
-            <Sparkles className="size-4 shrink-0 text-muted-foreground" />
-            {row.original.slug}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const { slug, displayName, description } = row.original;
+          return (
+            <div className="flex items-start gap-2">
+              <Sparkles className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <div className="truncate font-medium">
+                  {displayName?.trim() || slug}
+                </div>
+                {description?.trim() ? (
+                  <div className="truncate text-sm text-muted-foreground">
+                    {description}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        },
       },
     ],
     [],
@@ -56,7 +66,7 @@ export function SettingsSkills() {
   return (
     <SettingsTablePane
       title="Skills"
-      loading={!slugs && !error}
+      loading={!skills && !error}
       toolbar={
         error ? (
           <p className="text-sm text-destructive">{error}</p>
