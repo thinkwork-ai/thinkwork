@@ -116,6 +116,7 @@ export type Agent = {
   type: AgentType;
   updatedAt: Scalars["AWSDateTime"]["output"];
   version: Scalars["Int"]["output"];
+  webExtract?: Maybe<Scalars["AWSJSON"]["output"]>;
   webSearch?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
@@ -5537,6 +5538,7 @@ export type UpdateTenantAgentInput = {
   sandbox?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   sendEmail?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
+  webExtract?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   webSearch?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
@@ -6304,6 +6306,7 @@ export type TenantAgentQuery = {
     sandbox?: any | null;
     browser?: any | null;
     webSearch?: any | null;
+    webExtract?: any | null;
     sendEmail?: any | null;
     contextEngine?: any | null;
     humanPairId?: string | null;
@@ -6370,6 +6373,7 @@ export type UpdateTenantAgentMutation = {
     adapterType?: string | null;
     budgetMonthlyCents?: number | null;
     sandbox?: any | null;
+    webExtract?: any | null;
     updatedAt: any;
   };
 };
@@ -10537,6 +10541,7 @@ export const TenantAgentDocument = {
                 { kind: "Field", name: { kind: "Name", value: "sandbox" } },
                 { kind: "Field", name: { kind: "Name", value: "browser" } },
                 { kind: "Field", name: { kind: "Name", value: "webSearch" } },
+                { kind: "Field", name: { kind: "Name", value: "webExtract" } },
                 { kind: "Field", name: { kind: "Name", value: "sendEmail" } },
                 {
                   kind: "Field",
@@ -10735,6 +10740,7 @@ export const UpdateTenantAgentDocument = {
                   name: { kind: "Name", value: "budgetMonthlyCents" },
                 },
                 { kind: "Field", name: { kind: "Name", value: "sandbox" } },
+                { kind: "Field", name: { kind: "Name", value: "webExtract" } },
                 { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
               ],
             },

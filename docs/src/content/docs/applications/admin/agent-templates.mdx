@@ -68,6 +68,7 @@ The detail page has three tabs:
 - **Code Sandbox card** — opt this template into `execute_code` and pick a network mode
 - **Browser Automation card** — opt this template into `browser_automation`
 - **Web Search card** — opt this template into the tenant-configured `web_search` built-in
+- **Web Extraction card** — opt this template into the tenant-configured `web_extract` built-in
 - **Send Email card** — opt this template into the platform `send_email` built-in
 
 The older **Skills** tab redirects to the Workspace tab. Operator-editable skills now live as workspace files under `workspace/skills/<slug>/SKILL.md`; built-in tools remain separate template configuration.
@@ -84,12 +85,13 @@ Below the main form, the template detail page lists every agent currently linked
 
 The Configuration tab carries compact cards for the built-in tools that are controlled per template. These cards do not install workspace skills; they set JSON configuration fields on the template that the runtime config resolver reads before every turn.
 
-| Card               | Template field             | Runtime tool         | Extra gates                                                              |
-| ------------------ | -------------------------- | -------------------- | ------------------------------------------------------------------------ |
-| Code Sandbox       | `sandbox`                  | `execute_code`       | Tenant `sandbox_enabled`; Code Interpreter provisioning                  |
-| Browser Automation | `browser`                  | `browser_automation` | Agent-level capability overrides can enable or disable individual agents |
-| Web Search         | `webSearch` / `web_search` | `web_search`         | Tenant Web Search provider row must be configured and enabled            |
-| Send Email         | `sendEmail` / `send_email` | `send_email`         | Agent email channel controls sending address and delivery policy         |
+| Card               | Template field               | Runtime tool         | Extra gates                                                              |
+| ------------------ | ---------------------------- | -------------------- | ------------------------------------------------------------------------ |
+| Code Sandbox       | `sandbox`                    | `execute_code`       | Tenant `sandbox_enabled`; Code Interpreter provisioning                  |
+| Browser Automation | `browser`                    | `browser_automation` | Agent-level capability overrides can enable or disable individual agents |
+| Web Search         | `webSearch` / `web_search`   | `web_search`         | Tenant Web Search provider row must be configured and enabled            |
+| Web Extraction     | `webExtract` / `web_extract` | `web_extract`        | Tenant Firecrawl provider row must be configured and enabled             |
+| Send Email         | `sendEmail` / `send_email`   | `send_email`         | Agent email channel controls sending address and delivery policy         |
 
 #### Code Sandbox card
 
@@ -100,7 +102,7 @@ The Configuration tab carries a **Code Sandbox** card that controls the template
 
 The toggle persists to the template's `sandbox` field as JSON: `{ "environment": "default-public" | "internal-only" }` when opted in, `null` when the template doesn't use the sandbox. The shape is validated server-side by `packages/api/src/lib/templates/sandbox-config.ts`.
 
-The `execute_code` tool only registers on a turn when **both** the template is opted in on this card **and** the tenant has `sandbox_enabled` set in tenant policy. Template opt-in without tenant policy is a no-op. See [Admin → Built-in Tools](/applications/admin/builtin-tools/#policy-gated-tools) for the tenant-policy side of the gate and the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for how the opt-in flows through to the agent runtime.
+The `execute_code` tool only registers on a turn when **both** the template is opted in on this card **and** the tenant has `sandbox_enabled` set in tenant policy. Template opt-in without tenant policy is a no-op. See [Spaces -> Built-in Tools](/applications/admin/builtin-tools/#policy-gated-tools) for the tenant-policy side of the gate and the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for how the opt-in flows through to the agent runtime.
 
 #### Browser Automation card
 
@@ -112,11 +114,21 @@ Agent-level capability rows can still override the template default for individu
 
 #### Web Search card
 
-The **Web Search** card controls whether agents using this template can receive the `web_search` built-in. This is separate from configuring the tenant's provider key under [Admin → Built-in Tools](/applications/admin/builtin-tools/).
+The **Web Search** card controls whether agents using this template can receive the `web_search` built-in. This is separate from configuring the tenant's provider key under [Spaces -> Built-in Tools](/applications/admin/builtin-tools/).
 
 The toggle persists to the template's `webSearch` GraphQL field / `web_search` database column as JSON: `{ "enabled": true }` when opted in, `null` when disabled. The shape is validated server-side by `packages/api/src/lib/templates/web-search-config.ts`.
 
 `web_search` is injected by runtime configuration. Do not install `web-search` as `workspace/skills/web-search/SKILL.md`.
+
+#### Web Extraction card
+
+The **Web Extraction** card controls whether agents using this template can receive the `web_extract` built-in. This is separate from configuring the tenant's Firecrawl key under [Spaces -> Built-in Tools](/applications/admin/builtin-tools/).
+
+The toggle persists to the template's `webExtract` GraphQL field / `web_extract` database column as JSON: `{ "enabled": true }` when opted in, `null` when disabled. The shape is validated server-side by `packages/api/src/lib/templates/web-extract-config.ts`.
+
+Use Web Extraction for reading, summarizing, analyzing, or quoting one known public URL. Use Web Search to discover candidate URLs, then Web Extraction to read selected pages. Browser Automation remains the fallback for pages that require interaction or rendered-state inspection.
+
+`web_extract` is injected by runtime configuration. Do not install `web-extract` as `workspace/skills/web-extract/SKILL.md`.
 
 #### Send Email card
 
@@ -219,7 +231,7 @@ Until an operator clicks Sync, linked agents continue running with the pre-edit 
 1. Open the template at `/agent-templates/:templateId/configuration`
 2. Toggle the relevant built-in tool card
 3. Save the template
-4. Verify any tenant-level prerequisite on [Built-in Tools](/applications/admin/builtin-tools/), such as the Web Search provider key or Code Sandbox policy
+4. Verify any tenant-level prerequisite on [Built-in Tools](/applications/admin/builtin-tools/), such as the Web Search provider key, Firecrawl Web Extraction key, or Code Sandbox policy
 5. Run one linked agent as a canary before syncing broadly
 
 ### Tune a system prompt across the fleet
@@ -242,7 +254,7 @@ Template history is not currently versioned — rollback means editing forward. 
 
 - **Don't edit a linked agent directly when you want a fleet change.** Per-agent edits do not back-propagate to the template. If multiple agents need the same change, edit the template and sync.
 - **Don't skip the sync step.** Editing a template without syncing leaves the linked agents in a divergent state where the template is nominally their source of truth but they're actually running the old config.
-- **Don't install built-ins as skills.** `web_search`, `send_email`, `browser_automation`, and `execute_code` are injected runtime tools controlled by template and tenant policy.
+- **Don't install built-ins as skills.** `web_search`, `web_extract`, `send_email`, `browser_automation`, and `execute_code` are injected runtime tools controlled by Space, platform-agent, template, and tenant policy.
 
 ## Known limits
 

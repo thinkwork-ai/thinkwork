@@ -113,11 +113,18 @@ const CATALOG: CatalogEntry[] = [
     slug: "web-search",
     name: "Web Search",
     description:
-      "Lets agents search the web, read pages, and research companies. Choose a provider and supply an API key.",
+      "Lets agents find candidate URLs and web results for research. Choose a provider and supply an API key.",
     providers: [
       { id: "exa", label: "Exa" },
       { id: "serpapi", label: "SerpAPI" },
     ],
+  },
+  {
+    slug: "web-extract",
+    name: "Web Extraction",
+    description:
+      "Lets agents read a known public URL as clean markdown through Firecrawl. Use it after Web Search finds a page, while Browser Automation remains for interaction.",
+    providers: [{ id: "firecrawl", label: "Firecrawl" }],
   },
 ].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -139,6 +146,7 @@ type AgentToolConfig = {
   sandbox: unknown;
   browser: unknown;
   webSearch: unknown;
+  webExtract: unknown;
   sendEmail: unknown;
   contextEngine: unknown;
 };
@@ -174,6 +182,8 @@ function toolNameFor(slug: string): string | null {
       return "browser_automation";
     case "web-search":
       return "web_search";
+    case "web-extract":
+      return "web_extract";
     default:
       return null;
   }
@@ -192,6 +202,8 @@ function agentConfigFor(slug: string, agent: AgentToolConfig | null): unknown {
       return agent.browser;
     case "web-search":
       return agent.webSearch;
+    case "web-extract":
+      return agent.webExtract;
     default:
       return null;
   }
@@ -472,6 +484,7 @@ function BuiltinToolsPage() {
         sandbox: agentData.agent.sandbox,
         browser: agentData.agent.browser,
         webSearch: agentData.agent.webSearch,
+        webExtract: agentData.agent.webExtract,
         sendEmail: agentData.agent.sendEmail,
         contextEngine: agentData.agent.contextEngine,
       }

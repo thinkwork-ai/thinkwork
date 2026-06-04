@@ -70,6 +70,14 @@ describe("agent detail tools tabs", () => {
     );
   });
 
+  it("shows Web Extraction as a Firecrawl credentialed built-in", () => {
+    expect(builtinToolsSource).toContain('slug: "web-extract"');
+    expect(builtinToolsSource).toContain('name: "Web Extraction"');
+    expect(builtinToolsSource).toContain('id: "firecrawl"');
+    expect(builtinToolsSource).toContain('return "web_extract"');
+    expect(builtinToolsSource).toContain("agent.webExtract");
+  });
+
   it("removes the standalone Tools navigation item", () => {
     expect(sidebarSource).not.toContain('to: "/capabilities"');
     expect(sidebarSource).not.toContain('label: "Tools"');

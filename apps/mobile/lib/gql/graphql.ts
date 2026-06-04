@@ -116,6 +116,7 @@ export type Agent = {
   type: AgentType;
   updatedAt: Scalars["AWSDateTime"]["output"];
   version: Scalars["Int"]["output"];
+  webExtract?: Maybe<Scalars["AWSJSON"]["output"]>;
   webSearch?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
@@ -5537,6 +5538,7 @@ export type UpdateTenantAgentInput = {
   sandbox?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   sendEmail?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
+  webExtract?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   webSearch?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
