@@ -76,6 +76,188 @@ export const SettingsKnowledgeGraphHealthCheckQuery = graphql(`
   }
 `);
 
+export const SettingsKnowledgeGraphThreadCandidatesQuery = graphql(`
+  query SettingsKnowledgeGraphThreadCandidates(
+    $tenantId: ID!
+    $query: String
+    $limit: Int
+  ) {
+    knowledgeGraphThreadCandidates(
+      tenantId: $tenantId
+      query: $query
+      limit: $limit
+    ) {
+      threadId
+      tenantId
+      title
+      number
+      requesterUserId
+      requesterName
+      spaceId
+      spaceName
+      messageCount
+      lastMessageAt
+      lastIngestRun {
+        id
+        status
+        entityCount
+        relationshipCount
+        evidenceCount
+        diagnosticCount
+        messageCount
+        durationMs
+        error
+        createdAt
+        startedAt
+        finishedAt
+      }
+    }
+  }
+`);
+
+export const SettingsKnowledgeGraphIngestRunsQuery = graphql(`
+  query SettingsKnowledgeGraphIngestRuns(
+    $tenantId: ID!
+    $threadId: ID!
+    $limit: Int
+  ) {
+    knowledgeGraphIngestRuns(
+      tenantId: $tenantId
+      threadId: $threadId
+      limit: $limit
+    ) {
+      id
+      status
+      trigger
+      cogneeDatasetName
+      cogneeDatasetId
+      entityCount
+      relationshipCount
+      evidenceCount
+      diagnosticCount
+      messageCount
+      durationMs
+      error
+      createdAt
+      updatedAt
+      startedAt
+      finishedAt
+    }
+  }
+`);
+
+export const SettingsKnowledgeGraphEntitiesQuery = graphql(`
+  query SettingsKnowledgeGraphEntities(
+    $tenantId: ID!
+    $threadId: ID!
+    $search: String
+    $ontologyType: String
+    $groundingStatus: KnowledgeGraphGroundingStatus
+    $provenanceStatus: KnowledgeGraphProvenanceStatus
+    $limit: Int
+  ) {
+    knowledgeGraphEntities(
+      tenantId: $tenantId
+      threadId: $threadId
+      search: $search
+      ontologyType: $ontologyType
+      groundingStatus: $groundingStatus
+      provenanceStatus: $provenanceStatus
+      limit: $limit
+    ) {
+      id
+      label
+      normalizedLabel
+      typeLabel
+      ontologyTypeSlug
+      groundingStatus
+      provenanceStatus
+      summary
+      aliases
+      relationshipCount
+      evidenceCount
+      lastSeenAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsKnowledgeGraphEntityQuery = graphql(`
+  query SettingsKnowledgeGraphEntity($tenantId: ID!, $entityId: ID!) {
+    knowledgeGraphEntity(tenantId: $tenantId, entityId: $entityId) {
+      id
+      label
+      normalizedLabel
+      typeLabel
+      ontologyTypeSlug
+      groundingStatus
+      provenanceStatus
+      summary
+      aliases
+      properties
+      diagnostics
+      relationshipCount
+      evidenceCount
+      lastSeenAt
+      relationships {
+        id
+        sourceEntityId
+        targetEntityId
+        label
+        ontologyTypeSlug
+        groundingStatus
+        provenanceStatus
+        confidence
+        evidenceCount
+        lastSeenAt
+        evidence {
+          id
+          snippet
+          messageId
+          messageRole
+          messageCreatedAt
+          speakerLabel
+          sourceKind
+          sourceRef
+        }
+      }
+      evidence {
+        id
+        snippet
+        messageId
+        messageRole
+        messageCreatedAt
+        speakerLabel
+        sourceKind
+        sourceRef
+      }
+    }
+  }
+`);
+
+export const SettingsStartKnowledgeGraphThreadIngestMutation = graphql(`
+  mutation SettingsStartKnowledgeGraphThreadIngest(
+    $input: StartKnowledgeGraphThreadIngestInput!
+  ) {
+    startKnowledgeGraphThreadIngest(input: $input) {
+      id
+      status
+      threadId
+      entityCount
+      relationshipCount
+      evidenceCount
+      diagnosticCount
+      messageCount
+      durationMs
+      error
+      createdAt
+      startedAt
+      finishedAt
+    }
+  }
+`);
+
 export const SettingsRenameTenantSlugMutation = graphql(`
   mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {
     renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {

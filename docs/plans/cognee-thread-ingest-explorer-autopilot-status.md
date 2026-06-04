@@ -7,11 +7,11 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U6 - Generic Knowledge Graph Renderer
+- Current unit: U7 - Spaces Knowledge Graph Explorer UI
 - Current branch/worktree:
-  `codex/cognee-kg-u6-graph` /
-  `.Codex/worktrees/cognee-kg-u6-graph`
-- Current PR: [#2082](https://github.com/thinkwork-ai/thinkwork/pull/2082)
+  `codex/cognee-kg-u7-spaces` /
+  `.Codex/worktrees/cognee-kg-u7-spaces`
+- Current PR: [#2083](https://github.com/thinkwork-ai/thinkwork/pull/2083)
 - Blocker: none
 
 ## Progress Log
@@ -178,3 +178,32 @@ Started: 2026-06-04
   `pnpm dlx prettier --check ...`; and `git diff --check`.
 - 2026-06-04: Opened U6 PR
   [#2082](https://github.com/thinkwork-ai/thinkwork/pull/2082).
+- 2026-06-04: U6 PR
+  [#2082](https://github.com/thinkwork-ai/thinkwork/pull/2082) passed required
+  CI and was squash-merged into `main` at
+  `3bff54ef3f4b86948461d7c9366ee94b094fb0c9`; deleted the remote branch and
+  removed the local U6 worktree/branch.
+- 2026-06-04: Synced `origin/main` and created isolated U7 worktree
+  `.Codex/worktrees/cognee-kg-u7-spaces` on branch
+  `codex/cognee-kg-u7-spaces` from `origin/main`.
+- 2026-06-04: Implemented U7 Spaces Explorer UI: moved the existing Cognee
+  deployment controls into a configuration panel, made the Knowledge Graph
+  Explorer the default settings view, added thread search/selection and manual
+  ingest controls, added latest/prior ingest run status, wired table and graph
+  views to the same entity filters, added entity detail sheet drill-in with
+  relationship/evidence context, added GraphQL operations/codegen, and added
+  source-level coverage for the shell, query wiring, filters, ingest controls,
+  and entity sheet behavior.
+- 2026-06-04: U7 local verification passed:
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsKnowledgeGraph.test.ts src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx`;
+  `pnpm --filter @thinkwork/spaces test`;
+  `pnpm --filter @thinkwork/spaces build`;
+  targeted Prettier check via `pnpm dlx prettier --check ...`;
+  `git diff --check`; and a dev-server smoke check with
+  `curl -I http://localhost:5174/`. The in-app browser connector was not
+  exposed in this compacted tool context, so no screenshot was captured; the
+  production build completed with existing workspace sourcemap/chunk-size
+  warnings only.
+- 2026-06-04: Opened U7 PR
+  [#2083](https://github.com/thinkwork-ai/thinkwork/pull/2083).
