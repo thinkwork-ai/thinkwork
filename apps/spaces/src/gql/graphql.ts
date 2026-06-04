@@ -103,6 +103,7 @@ export type Agent = {
   type: AgentType;
   updatedAt: Scalars['AWSDateTime']['output'];
   version: Scalars['Int']['output'];
+  webExtract?: Maybe<Scalars['AWSJSON']['output']>;
   webSearch?: Maybe<Scalars['AWSJSON']['output']>;
 };
 
@@ -1035,6 +1036,12 @@ export type DeploymentStatus = {
   appsyncRealtimeUrl?: Maybe<Scalars['String']['output']>;
   appsyncUrl?: Maybe<Scalars['String']['output']>;
   bucketName?: Maybe<Scalars['String']['output']>;
+  cogneeBackendMode?: Maybe<Scalars['String']['output']>;
+  cogneeClusterArn?: Maybe<Scalars['String']['output']>;
+  cogneeEnabled: Scalars['Boolean']['output'];
+  cogneeEndpoint?: Maybe<Scalars['String']['output']>;
+  cogneeLogGroupName?: Maybe<Scalars['String']['output']>;
+  cogneeServiceName?: Maybe<Scalars['String']['output']>;
   databaseEndpoint?: Maybe<Scalars['String']['output']>;
   docsUrl?: Maybe<Scalars['String']['output']>;
   ecrUrl?: Maybe<Scalars['String']['output']>;
@@ -1309,6 +1316,13 @@ export type KnowledgeBaseRetrievalResult = {
   __typename?: 'KnowledgeBaseRetrievalResult';
   hits: Array<KnowledgeBaseRetrievalHit>;
   status: Scalars['String']['output'];
+};
+
+export type KnowledgeGraphDeploymentChange = {
+  __typename?: 'KnowledgeGraphDeploymentChange';
+  desiredEnabled: Scalars['Boolean']['output'];
+  message: Scalars['String']['output'];
+  workflowUrl: Scalars['String']['output'];
 };
 
 export type LinkedTask = {
@@ -1839,6 +1853,7 @@ export type Mutation = {
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
+  setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
   setSpaceEmailTriggers: Space;
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
@@ -2583,6 +2598,11 @@ export type MutationSendMessageArgs = {
 export type MutationSetAgentKnowledgeBasesArgs = {
   agentId: Scalars['ID']['input'];
   knowledgeBases: Array<AgentKnowledgeBaseInput>;
+};
+
+
+export type MutationSetKnowledgeGraphDeploymentArgs = {
+  input: SetKnowledgeGraphDeploymentInput;
 };
 
 
@@ -4617,6 +4637,10 @@ export type SendMessageMentionInput = {
   targetType: MessageMentionTargetType;
 };
 
+export type SetKnowledgeGraphDeploymentInput = {
+  enabled: Scalars['Boolean']['input'];
+};
+
 export type SetSpaceKnowledgeBasesInput = {
   knowledgeBases: Array<SpaceKnowledgeBaseInput>;
   spaceId: Scalars['ID']['input'];
@@ -5791,6 +5815,7 @@ export type UpdateTenantAgentInput = {
   sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
   sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
+  webExtract?: InputMaybe<Scalars['AWSJSON']['input']>;
   webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
@@ -6658,7 +6683,14 @@ export type SettingsTenantAgentQueryVariables = Exact<{
 }>;
 
 
-export type SettingsTenantAgentQuery = { __typename?: 'Query', agent: { __typename?: 'Agent', id: string, tenantId: string, runtime: AgentRuntime, model?: string | null } };
+export type SettingsTenantAgentQuery = { __typename?: 'Query', agent: { __typename?: 'Agent', id: string, tenantId: string, name: string, runtime: AgentRuntime, model?: string | null, blockedTools?: any | null, sandbox?: any | null, browser?: any | null, webSearch?: any | null, webExtract?: any | null, sendEmail?: any | null, contextEngine?: any | null } };
+
+export type SettingsTenantSandboxStatusQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type SettingsTenantSandboxStatusQuery = { __typename?: 'Query', tenant?: { __typename?: 'Tenant', id: string, sandboxEnabled: boolean, complianceTier: string, sandboxInterpreterPublicId?: string | null, sandboxInterpreterInternalId?: string | null } | null };
 
 export type SettingsModelCatalogQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -6807,7 +6839,8 @@ export const SettingsSpacesListDocument = {"kind":"Document","definitions":[{"ki
 export const SettingsCreateSpaceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsCreateSpace"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateSpaceInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createSpace"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"accessMode"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsCreateSpaceMutation, SettingsCreateSpaceMutationVariables>;
 export const SettingsSpaceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsSpace"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"space"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"accessMode"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"renderDiagnostics"}},{"kind":"Field","name":{"kind":"Name","value":"toolPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"mcpPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"builtInTools"}}]}}]}}]} as unknown as DocumentNode<SettingsSpaceQuery, SettingsSpaceQueryVariables>;
 export const SettingsUpdateSpaceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsUpdateSpace"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateSpaceInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateSpace"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"accessMode"}}]}}]}}]} as unknown as DocumentNode<SettingsUpdateSpaceMutation, SettingsUpdateSpaceMutationVariables>;
-export const SettingsTenantAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsTenantAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"agent"},"name":{"kind":"Name","value":"tenantAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"model"}}]}}]}}]} as unknown as DocumentNode<SettingsTenantAgentQuery, SettingsTenantAgentQueryVariables>;
+export const SettingsTenantAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsTenantAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","alias":{"kind":"Name","value":"agent"},"name":{"kind":"Name","value":"tenantAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"blockedTools"}},{"kind":"Field","name":{"kind":"Name","value":"sandbox"}},{"kind":"Field","name":{"kind":"Name","value":"browser"}},{"kind":"Field","name":{"kind":"Name","value":"webSearch"}},{"kind":"Field","name":{"kind":"Name","value":"webExtract"}},{"kind":"Field","name":{"kind":"Name","value":"sendEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contextEngine"}}]}}]}}]} as unknown as DocumentNode<SettingsTenantAgentQuery, SettingsTenantAgentQueryVariables>;
+export const SettingsTenantSandboxStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsTenantSandboxStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"sandboxEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"complianceTier"}},{"kind":"Field","name":{"kind":"Name","value":"sandboxInterpreterPublicId"}},{"kind":"Field","name":{"kind":"Name","value":"sandboxInterpreterInternalId"}}]}}]}}]} as unknown as DocumentNode<SettingsTenantSandboxStatusQuery, SettingsTenantSandboxStatusQueryVariables>;
 export const SettingsModelCatalogDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsModelCatalog"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"modelCatalog"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"modelId"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}}]}}]}}]} as unknown as DocumentNode<SettingsModelCatalogQuery, SettingsModelCatalogQueryVariables>;
 export const SettingsUpdateTenantAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsUpdateTenantAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTenantAgentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTenantAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsUpdateTenantAgentMutation, SettingsUpdateTenantAgentMutationVariables>;
 export const SettingsTenantMembersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsTenantMembers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantMembers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"principalType"}},{"kind":"Field","name":{"kind":"Name","value":"principalId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"profile"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"timezone"}},{"kind":"Field","name":{"kind":"Name","value":"pronouns"}},{"kind":"Field","name":{"kind":"Name","value":"callBy"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}}]}}]}}]}}]}}]} as unknown as DocumentNode<SettingsTenantMembersQuery, SettingsTenantMembersQueryVariables>;

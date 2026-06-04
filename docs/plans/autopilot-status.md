@@ -11,18 +11,18 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-04-002-feat-firecrawl-web-extraction-plan.md`.
 - Target branch: `main`.
-- Current unit: U4 Register the Pi `web_extract` extension tool.
-- Current branch: `codex/u4-firecrawl-pi-extension`.
-- Current worktree: `.Codex/worktrees/u4-firecrawl-pi-extension`.
+- Current unit: U5 Update Spaces Built-in Tools, generated clients, and docs.
+- Current branch: `codex/u5-firecrawl-admin-docs`.
+- Current worktree: `.Codex/worktrees/u5-firecrawl-admin-docs`.
 
-| Unit                                         | Branch                              | PR                                                           | State  | Notes                                                      |
-| -------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------- |
-| U1 Extend built-in data model and catalog    | `codex/u1-firecrawl-catalog`        | [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051) | Merged | Squash merged as `f3a855ed`; dev migration `0143` applied. |
-| U2 Add Firecrawl config loading and test     | `codex/u2-firecrawl-config-test`    | [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052) | Merged | Squash merged as `a0aadc53`; CI passed.                    |
-| U3 Thread runtime config and policy          | `codex/u3-firecrawl-runtime-policy` | [#2054](https://github.com/thinkwork-ai/thinkwork/pull/2054) | Merged | Squash merged as `932b7575`; CI passed.                    |
-| U4 Register Pi `web_extract` extension       | `codex/u4-firecrawl-pi-extension`   | [#2056](https://github.com/thinkwork-ai/thinkwork/pull/2056) | Active | PR open; waiting for CI.                                   |
-| U5 Update Admin, generated clients, and docs | TBD                                 | TBD                                                          | Todo   | Pending U1-U3.                                             |
-| U6 Update agent guidance and verification    | TBD                                 | TBD                                                          | Todo   | Pending U4-U5.                                             |
+| Unit                                           | Branch                              | PR                                                           | State  | Notes                                                      |
+| ---------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------- |
+| U1 Extend built-in data model and catalog      | `codex/u1-firecrawl-catalog`        | [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051) | Merged | Squash merged as `f3a855ed`; dev migration `0143` applied. |
+| U2 Add Firecrawl config loading and test       | `codex/u2-firecrawl-config-test`    | [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052) | Merged | Squash merged as `a0aadc53`; CI passed.                    |
+| U3 Thread runtime config and policy            | `codex/u3-firecrawl-runtime-policy` | [#2054](https://github.com/thinkwork-ai/thinkwork/pull/2054) | Merged | Squash merged as `932b7575`; CI passed.                    |
+| U4 Register Pi `web_extract` extension         | `codex/u4-firecrawl-pi-extension`   | [#2056](https://github.com/thinkwork-ai/thinkwork/pull/2056) | Merged | Squash merged as `996d5103`; CI passed.                    |
+| U5 Update Spaces Built-in Tools, clients, docs | `codex/u5-firecrawl-admin-docs`     | [#2059](https://github.com/thinkwork-ai/thinkwork/pull/2059) | Active | Local verification passed; CI pending.                     |
+| U6 Update agent guidance and verification      | TBD                                 | TBD                                                          | Todo   | Pending U4-U5.                                             |
 
 ### Progress Log
 
@@ -98,6 +98,37 @@ status: in_progress
   `pnpm dlx prettier --check <changed supported files>`;
   and `git diff --check`.
 - Opened U4 PR [#2056](https://github.com/thinkwork-ai/thinkwork/pull/2056).
+- U4 CI passed after rebasing onto the latest `origin/main`; squash merged PR
+  [#2056](https://github.com/thinkwork-ai/thinkwork/pull/2056) as
+  `996d5103`, then removed the U4 worktree and pruned the deleted remote
+  branch.
+- Created isolated U5 worktree `.Codex/worktrees/u5-firecrawl-admin-docs`
+  from `origin/main`.
+- Implemented U5 Spaces/docs/codegen updates: Spaces Settings -> Built-in Tools
+  now carries the full standalone catalog from Admin's Agent -> Tools tab,
+  including policy-gated platform rows, credential configure/test/remove
+  dialogs, Firecrawl Web Extraction, tenant-agent access state via `webExtract`,
+  regenerated GraphQL clients, and docs that distinguish Web Search discovery,
+  Web Extraction page reading, and Browser Automation interaction fallback.
+- U5 local verification passed after the Spaces pivot:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsTools.test.tsx`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces build`;
+  `pnpm --filter @thinkwork/admin test -- src/routes/_authed/_tenant/agent/__tests__/-AgentToolsTabs.target.test.ts`;
+  `pnpm --filter thinkwork-cli typecheck`;
+  `pnpm --filter @thinkwork/docs build`;
+  `pnpm --filter @thinkwork/admin build`;
+  `pnpm --filter @thinkwork/mobile test -- lib/agentcore-first-mobile.test.ts`;
+  `pnpm dlx prettier --check <changed supported files>`;
+  and `git diff --check`.
+- Started the Spaces dev server in the U5 worktree at
+  `http://127.0.0.1:5175/settings/tools`; `curl -I` returned `200 OK`, and
+  Vite-served module content includes `Web Extraction`, `firecrawl`,
+  `web_extract`, `PolicyGatedInfoDialog`, and `Agent access`.
+- Tightened the Spaces table after visual review: removed the row description
+  subtitle, removed the Last tested overview column, and switched the table to
+  auto layout so columns fit their visible content instead of fixed widths.
+- Opened U5 PR [#2059](https://github.com/thinkwork-ai/thinkwork/pull/2059).
 
 ### CI / Verification
 

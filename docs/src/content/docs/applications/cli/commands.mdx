@@ -498,7 +498,7 @@ The admin SPA's Agent Templates → MCP Servers tab also exposes a **Generate an
 
 ## tools
 
-Manage credentialed tenant built-in tool configuration. Today this command manages Web Search provider keys; policy/template-gated built-ins such as Code Sandbox, Browser Automation, and Send Email are configured in the admin app.
+Manage credentialed tenant built-in tool configuration. Today this command manages Web Search provider keys. Web Extraction (Firecrawl) provider keys and policy-gated built-ins such as Code Sandbox, Browser Automation, and Send Email are configured in Spaces Settings.
 
 ```bash
 thinkwork tools list
@@ -507,7 +507,7 @@ thinkwork tools web-search set|test|disable|clear
 
 Run `thinkwork tools --help` for the full subcommand tree.
 
-Use [Admin → Built-in Tools](/applications/admin/builtin-tools/) to inspect the full built-in catalog, and [Admin → Agent Templates](/applications/admin/agent-templates/) to opt templates into `execute_code`, `browser_automation`, `web_search`, and `send_email`.
+Use [Spaces -> Built-in Tools](/applications/admin/builtin-tools/) to inspect the full built-in catalog, configure Firecrawl Web Extraction, test credentials, and confirm the tenant platform agent has access to `execute_code`, `browser_automation`, `web_search`, `web_extract`, and `send_email`.
 
 ---
 

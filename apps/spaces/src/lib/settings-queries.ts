@@ -153,8 +153,28 @@ export const SettingsTenantAgentQuery = graphql(`
     agent: tenantAgent(tenantId: $tenantId) {
       id
       tenantId
+      name
       runtime
       model
+      blockedTools
+      sandbox
+      browser
+      webSearch
+      webExtract
+      sendEmail
+      contextEngine
+    }
+  }
+`);
+
+export const SettingsTenantSandboxStatusQuery = graphql(`
+  query SettingsTenantSandboxStatus($id: ID!) {
+    tenant(id: $id) {
+      id
+      sandboxEnabled
+      complianceTier
+      sandboxInterpreterPublicId
+      sandboxInterpreterInternalId
     }
   }
 `);

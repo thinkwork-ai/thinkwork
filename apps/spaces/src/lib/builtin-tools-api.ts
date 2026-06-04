@@ -1,8 +1,7 @@
 import { apiFetch, ApiError } from "@/lib/api-fetch";
 
-// Minimal client for the built-in tools REST surface (same endpoints admin
-// uses). Spaces Settings exposes list + enable/disable; key-config and test
-// flows remain admin-only for now.
+// Client for the built-in tools REST surface. Spaces Settings is the primary
+// operator surface for credentialed built-ins.
 
 export type BuiltinTool = {
   id: string;
@@ -10,7 +9,23 @@ export type BuiltinTool = {
   provider: string | null;
   enabled: boolean;
   hasSecret: boolean;
+  lastTestedAt?: string | null;
+  createdAt?: string;
   updatedAt?: string;
+};
+
+export type BuiltinToolInput = {
+  provider?: string;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
+  apiKey?: string;
+};
+
+export type BuiltinToolTestResult = {
+  ok: boolean;
+  provider?: string;
+  resultCount?: number;
+  error?: string;
 };
 
 async function request<T>(
@@ -47,5 +62,44 @@ export function setBuiltinToolEnabled(
     method: "PUT",
     tenantSlug,
     body: JSON.stringify({ enabled }),
+  });
+}
+
+export function upsertBuiltinTool(
+  tenantSlug: string,
+  slug: string,
+  input: BuiltinToolInput,
+): Promise<{
+  id: string;
+  toolSlug: string;
+  created?: boolean;
+  updated?: boolean;
+}> {
+  return request(`/api/skills/builtin-tools/${slug}`, {
+    method: "PUT",
+    tenantSlug,
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteBuiltinTool(
+  tenantSlug: string,
+  slug: string,
+): Promise<{ ok: boolean }> {
+  return request(`/api/skills/builtin-tools/${slug}`, {
+    method: "DELETE",
+    tenantSlug,
+  });
+}
+
+export function testBuiltinTool(
+  tenantSlug: string,
+  slug: string,
+  body: { provider?: string; apiKey?: string } = {},
+): Promise<BuiltinToolTestResult> {
+  return request(`/api/skills/builtin-tools/${slug}/test`, {
+    method: "POST",
+    tenantSlug,
+    body: JSON.stringify(body),
   });
 }
