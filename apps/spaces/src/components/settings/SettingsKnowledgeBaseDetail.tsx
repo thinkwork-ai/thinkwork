@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
-import { Loader2 } from "lucide-react";
+import { Loader2, Pencil } from "lucide-react";
 import {
   Badge,
   Button,
@@ -22,6 +22,7 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { SettingsKnowledgeBaseBinding } from "@/components/settings/SettingsKnowledgeBaseBinding";
+import { KnowledgeBaseFormDialog } from "@/components/settings/KnowledgeBaseFormDialog";
 import {
   DeleteKnowledgeBaseMutation,
   KnowledgeBaseDetailQuery,
@@ -78,6 +79,7 @@ export function SettingsKnowledgeBaseDetail() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   usePageHeaderActions({
     title: kb?.name ?? "Knowledge Base",
@@ -154,6 +156,28 @@ export function SettingsKnowledgeBaseDetail() {
           title={kb.name}
           description={kb.description ?? undefined}
           badge={<Badge variant={statusVariant(kb.status)}>{kb.status}</Badge>}
+          actions={
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Edit knowledge base"
+              title="Edit name & description"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          }
+        />
+
+        <KnowledgeBaseFormDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSaved={reload}
+          kb={{
+            id: kb.id,
+            name: kb.name,
+            description: kb.description,
+          }}
         />
 
         {actionError ? (
@@ -566,8 +590,29 @@ function TestRetrievalSection({
     else setSubmitted(q);
   };
 
+  const clear = () => {
+    setQuery("");
+    setSubmitted("");
+  };
+
+  const hasContent = query.trim() !== "" || submitted !== "";
+
   return (
-    <SettingsSection label="Test retrieval">
+    <SettingsSection
+      label="Test retrieval"
+      action={
+        !notProvisioned && hasContent ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={result.fetching}
+            onClick={clear}
+          >
+            Clear
+          </Button>
+        ) : null
+      }
+    >
       <div className="space-y-3 p-4">
         {notProvisioned ? (
           <p className="text-sm text-muted-foreground">

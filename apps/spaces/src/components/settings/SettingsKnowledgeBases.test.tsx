@@ -6,6 +6,7 @@ const { navigateMock, kbDocs, kbRows } = vi.hoisted(() => ({
   kbDocs: {
     KnowledgeBasesListQuery: Symbol("list"),
     CreateKnowledgeBaseMutation: Symbol("create"),
+    UpdateKnowledgeBaseMutation: Symbol("update"),
   },
   kbRows: [
     {
