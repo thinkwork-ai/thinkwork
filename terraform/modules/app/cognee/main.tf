@@ -78,12 +78,9 @@ locals {
     : try(aws_secretsmanager_secret.cognee["graph_database_password"].arn, "")
   )
 
-  subnet_ids_by_az = {
-    for subnet_id, subnet in data.aws_subnet.cognee : subnet.availability_zone => subnet_id...
+  efs_mount_subnet_ids_by_index = {
+    for index, subnet_id in var.subnet_ids : tostring(index) => subnet_id
   }
-  efs_mount_subnet_ids = [
-    for subnet_ids in local.subnet_ids_by_az : subnet_ids[0]
-  ]
 
   base_environment = [
     { name = "DB_PROVIDER", value = "postgres" },
@@ -132,12 +129,6 @@ locals {
 }
 
 data "aws_region" "current" {}
-
-data "aws_subnet" "cognee" {
-  for_each = toset(var.subnet_ids)
-
-  id = each.value
-}
 
 resource "aws_secretsmanager_secret" "cognee" {
   for_each = local.managed_secrets
@@ -461,7 +452,7 @@ resource "aws_efs_file_system" "cognee" {
 }
 
 resource "aws_efs_mount_target" "cognee" {
-  for_each = toset(local.efs_mount_subnet_ids)
+  for_each = local.efs_mount_subnet_ids_by_index
 
   file_system_id  = aws_efs_file_system.cognee.id
   subnet_id       = each.value
