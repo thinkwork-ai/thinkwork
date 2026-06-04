@@ -589,6 +589,10 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
         # retainTurn when the tenant's wiki_compile_enabled flag is on.
         # compileWikiNow admin mutation also Event-invokes.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile",
+        # knowledge-graph-thread-ingest: graphql-http's
+        # startKnowledgeGraphThreadIngest mutation invokes this with
+        # RequestResponse after inserting the durable ingest run.
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-graph-thread-ingest",
         # wiki-bootstrap-import: bootstrapJournalImport admin mutation
         # Event-invokes this for the long-running ingest path.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-bootstrap-import",

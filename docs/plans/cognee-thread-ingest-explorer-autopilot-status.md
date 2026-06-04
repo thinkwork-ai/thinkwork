@@ -7,11 +7,11 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U2 - GraphQL Read Resolvers and Thread Picker
+- Current unit: U3 - Manual Ingest Mutation and Worker Enqueue
 - Current branch/worktree:
-  `codex/cognee-kg-u2-read-resolvers` /
-  `.Codex/worktrees/cognee-kg-u2-read-resolvers`
-- Current PR: [#2078](https://github.com/thinkwork-ai/thinkwork/pull/2078)
+  `codex/cognee-kg-u3-ingest-enqueue` /
+  `.Codex/worktrees/cognee-kg-u3-ingest-enqueue`
+- Current PR: [#2079](https://github.com/thinkwork-ai/thinkwork/pull/2079)
 - Blocker: none
 
 ## Progress Log
@@ -85,3 +85,29 @@ Started: 2026-06-04
   `lint` script.
 - 2026-06-04: Opened U2 PR
   [#2078](https://github.com/thinkwork-ai/thinkwork/pull/2078).
+- 2026-06-04: U2 PR
+  [#2078](https://github.com/thinkwork-ai/thinkwork/pull/2078) passed required
+  CI and was squash-merged into `main` at
+  `e77c4ea83ad83c95e8f8979692d65f6ce692ca6b`; deleted the remote branch and
+  removed the local U2 worktree/branch.
+- 2026-06-04: Synced `origin/main` and created isolated U3 worktree
+  `.Codex/worktrees/cognee-kg-u3-ingest-enqueue` on branch
+  `codex/cognee-kg-u3-ingest-enqueue` from `origin/main`.
+- 2026-06-04: Implemented U3 manual ingest enqueue path: added the
+  `startKnowledgeGraphThreadIngest` mutation resolver, durable queued-run
+  creation/deduplication, RequestResponse Lambda invocation with failure
+  marking, the `knowledge-graph-thread-ingest` Lambda build/terraform wiring,
+  and an acceptance worker stub. The stub validates the run payload and returns
+  success; U4 owns replacing that stub with Cognee extraction, entity merge, and
+  evidence persistence.
+- 2026-06-04: U3 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-start-ingest.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
+  `bash scripts/build-lambdas.sh graphql-http`;
+  `terraform -chdir=terraform/examples/greenfield validate`;
+  `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf terraform/modules/app/lambda-api/main.tf`;
+  `pnpm --filter @thinkwork/api test` (399 files passed, 3 skipped; 3529 tests
+  passed, 9 skipped); targeted Prettier check; and `git diff --check`.
+- 2026-06-04: Opened U3 PR
+  [#2079](https://github.com/thinkwork-ai/thinkwork/pull/2079).
