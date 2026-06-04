@@ -7,16 +7,12 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U8 Spaces/Desktop Knowledge Graph health check
+- Current unit: U8 hotfix — AWS-backed Knowledge Graph health probe
 - Current branch/worktree:
-  `codex/cognee-settings-health-check` /
-  `.Codex/worktrees/cognee-settings-health-check`
-- Current PR: not opened yet
-- Blocker: the in-app Settings switch still needs an AWS Secrets Manager token secret
-  at `thinkwork/dev/github/deploy-token` before the deployed API can dispatch
-  GitHub Actions. Direct pipeline deployment remains available through GitHub
-  Actions variables and `deploy.yml`; status and health-check validation do not
-  depend on that secret.
+  `codex/cognee-health-aws-probe` /
+  `.Codex/worktrees/cognee-health-aws-probe`
+- Current PR: [#2071](https://github.com/thinkwork-ai/thinkwork/pull/2071)
+- Blocker: none.
 - AWS status: Cognee is running in dev on ECS service
   `thinkwork-dev-cognee` in cluster `thinkwork-dev-cognee-cluster`; desired /
   running tasks are 1 / 1, the ALB target is healthy, and `/health` logs are
@@ -208,6 +204,25 @@ Started: 2026-06-04
   `pnpm --filter @thinkwork/spaces build`; and `git diff --check`. Restarted
   the local Spaces dev server on
   `http://127.0.0.1:5174/settings/knowledge-graph` from the U8 worktree.
+- 2026-06-04: U8 PR [#2070](https://github.com/thinkwork-ai/thinkwork/pull/2070)
+  passed checks and squash merged to `main` as
+  `f9a023f280771d12f1c2b01d0af758a2c03e5513`. Merge-triggered deploy run
+  [26970614160](https://github.com/thinkwork-ai/thinkwork/actions/runs/26970614160)
+  passed end to end. Post-deploy GraphQL validation confirmed
+  `deploymentStatus` reports Cognee enabled with the internal ALB endpoint, but
+  `knowledgeGraphHealthCheck` timed out because the GraphQL Lambda is outside
+  the VPC path for that private ALB.
+- 2026-06-04: Started U8 hotfix branch `codex/cognee-health-aws-probe` to make
+  the Knowledge Graph connection test use ECS service steadiness and ALB target
+  health through AWS control-plane APIs instead of directly fetching the
+  private ALB.
+- 2026-06-04: U8 hotfix local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/knowledgeGraphHealthCheck.query.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `terraform fmt -check terraform/modules/app/lambda-api`;
+  `terraform -chdir=terraform/modules/app/lambda-api init -backend=false && terraform -chdir=terraform/modules/app/lambda-api validate`;
+  `pnpm dlx prettier --write <changed API/status files>`; and
+  `git diff --check`.
 
 ## Implementation Units
 
@@ -228,7 +243,8 @@ Started: 2026-06-04
 | U6 hotfix. Compact Cognee Lambda status env                            | merged | `codex/cognee-lambda-env-status`           | [#2065](https://github.com/thinkwork-ai/thinkwork/pull/2065) | passed | `4292af1ae5429a35d9ee2e6fbb847a0c1f3b8417` |
 | Deploy hotfix. Avoid AgentCore runtime pre-read failure                | merged | `codex/agentcore-runtime-update-forbidden` | [#2066](https://github.com/thinkwork-ai/thinkwork/pull/2066) | passed | `d5203b06fecd25df5acc8187ca8354f2976b2199` |
 | U7. Move Knowledge Graph settings into Spaces/Desktop                  | merged | `codex/cognee-settings-spaces`             | [#2067](https://github.com/thinkwork-ai/thinkwork/pull/2067) | passed | `5446c51f17449f435a266df74ff14efb4c616458` |
-| U8. Add API-backed Knowledge Graph health check                        | active | `codex/cognee-settings-health-check`       | Pending                                                      | local  | Pending                                    |
+| U8. Add API-backed Knowledge Graph health check                        | merged | `codex/cognee-settings-health-check`       | [#2070](https://github.com/thinkwork-ai/thinkwork/pull/2070) | passed | `f9a023f280771d12f1c2b01d0af758a2c03e5513` |
+| U8 hotfix. Probe Cognee health through AWS control plane               | active | `codex/cognee-health-aws-probe`            | [#2071](https://github.com/thinkwork-ai/thinkwork/pull/2071) | local  | Pending                                    |
 
 ## CI Failures
 
@@ -251,6 +267,7 @@ Started: 2026-06-04
 - [#2065](https://github.com/thinkwork-ai/thinkwork/pull/2065) — U6 hotfix. Compact Cognee Lambda status env — squash merged as `4292af1ae5429a35d9ee2e6fbb847a0c1f3b8417`.
 - [#2066](https://github.com/thinkwork-ai/thinkwork/pull/2066) — Deploy hotfix. Avoid AgentCore runtime pre-read failure — squash merged as `d5203b06fecd25df5acc8187ca8354f2976b2199`.
 - [#2067](https://github.com/thinkwork-ai/thinkwork/pull/2067) — U7. Move Knowledge Graph settings into Spaces/Desktop — squash merged as `5446c51f17449f435a266df74ff14efb4c616458`.
+- [#2070](https://github.com/thinkwork-ai/thinkwork/pull/2070) — U8. Add API-backed Knowledge Graph health check — squash merged as `f9a023f280771d12f1c2b01d0af758a2c03e5513`.
 
 ## CI / Deploy Failures
 
@@ -286,6 +303,10 @@ Started: 2026-06-04
   GraphQL Lambda, but the overall deploy failed earlier in Build Container
   because the Pi AgentCore runtime update path called `get-agent-runtime` and
   received `Forbidden`. Fixed by PR #2066.
+- Post-deploy validation after PR #2070 showed `knowledgeGraphHealthCheck`
+  timing out after 5 seconds. The resolver was directly fetching Cognee's
+  internal ALB from the GraphQL Lambda, which is intentionally outside the
+  private ALB path. In progress on `codex/cognee-health-aws-probe`.
 
 ## Blockers
 

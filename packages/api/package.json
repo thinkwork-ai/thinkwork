@@ -22,6 +22,7 @@
     "@aws-sdk/client-dynamodb": "^3.1024.0",
     "@aws-sdk/client-ecs": "^3.1043.0",
     "@aws-sdk/client-efs": "^3.1043.0",
+    "@aws-sdk/client-elastic-load-balancing-v2": "^3.1043.0",
     "@aws-sdk/client-lambda": "^3.917.0",
     "@aws-sdk/client-s3": "^3.1018.0",
     "@aws-sdk/client-secrets-manager": "^3.917.0",
