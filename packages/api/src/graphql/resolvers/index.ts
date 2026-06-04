@@ -36,6 +36,7 @@ import {
 } from "./evaluations/index.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
+import { skillCatalogMutations } from "./skill-catalog/index.js";
 import { runtimeQueries } from "./runtime/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 import { brainQueries, brainMutations } from "./brain/index.js";
@@ -120,6 +121,7 @@ export const mutationResolvers: Record<string, any> = {
   ...evaluationsMutations,
   ...wikiMutations,
   ...skillRunsMutations,
+  ...skillCatalogMutations,
   ...workspaceMutations,
   ...brainMutations,
   ...routineMutations,
