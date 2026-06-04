@@ -101,6 +101,8 @@ import {
   tenantCredentials,
   // Customize page (apps/spaces)
   tenantWorkflowCatalog,
+  // Skills settings list — per-tenant index of the S3 skill catalog
+  skillCatalog,
   slackWorkspaces,
   slackUserLinks,
   spaces,
@@ -192,6 +194,7 @@ export {
   tenantMcpServers,
   tenantCredentials,
   tenantWorkflowCatalog,
+  skillCatalog,
   slackWorkspaces,
   slackUserLinks,
   spaces,

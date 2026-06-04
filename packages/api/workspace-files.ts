@@ -103,6 +103,7 @@ import {
   uninstallCatalogSkill,
 } from "./src/lib/catalog-uninstall.js";
 import { computeCatalogSkillShaBySlug } from "./src/lib/catalog-skill-sha.js";
+import { reindexCatalogSkill } from "./src/lib/catalog-index.js";
 import {
   identityFieldLabel,
   isAgentIdentityField,
@@ -1019,6 +1020,40 @@ function rejectSpaceCapabilityWrite(
   });
 }
 
+/**
+ * Write-through to the skill_catalog index after a catalog S3 mutation.
+ *
+ * S3 is already committed by the time this runs, so a reindex failure must NOT
+ * fail the response — that would falsely report the durable write as failed and
+ * invite a retry. Instead we log and return a non-fatal warning string; the
+ * `thinkwork skill catalog rebuild` command is the recovery valve for the rare
+ * drift this leaves. Returns the warning, or undefined on success.
+ */
+async function reindexCatalogAfterMutation(
+  target: CatalogTarget,
+  tenantId: string,
+  slug: string,
+  operation: string,
+): Promise<string | undefined> {
+  if (!slug) return undefined;
+  try {
+    await reindexCatalogSkill({
+      tenantId,
+      tenantSlug: target.tenantSlug,
+      slug,
+      client: s3,
+      bucket: bucket(),
+    });
+    return undefined;
+  } catch (err) {
+    console.error(
+      `[workspace-files] skill_catalog reindex failed (op=${operation}, slug=${slug})`,
+      err,
+    );
+    return `Skill catalog index not updated for '${slug}'; run 'thinkwork skill catalog rebuild' to reconcile.`;
+  }
+}
+
 async function handlePut(
   deps: HandlerDeps,
   path: string,
@@ -1099,7 +1134,13 @@ async function handlePut(
         ContentType: "text/plain; charset=utf-8",
       }),
     );
-    return json(200, { ok: true });
+    const indexWarning = await reindexCatalogAfterMutation(
+      target,
+      tenantId,
+      catalogPathSlug(cleanPath),
+      "put",
+    );
+    return json(200, { ok: true, ...(indexWarning ? { indexWarning } : {}) });
   }
 
   if (target.kind === "thread") {
@@ -1436,6 +1477,7 @@ async function handleDelete(
   await s3.send(
     new DeleteObjectCommand({ Bucket: bucket(), Key: target.key(cleanPath) }),
   );
+  let indexWarning: string | undefined;
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
     if (isSkillMarkerPath(cleanPath)) {
@@ -1449,9 +1491,17 @@ async function handleDelete(
     }
     const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
     if (refreshError) return refreshError;
-  } else {
+  } else if (target.kind === "catalog") {
+    // Re-index the affected slug: deleting one file of a multi-file skill
+    // refreshes its sha; deleting the last file removes the row.
+    indexWarning = await reindexCatalogAfterMutation(
+      target,
+      tenantId,
+      catalogPathSlug(cleanPath),
+      "delete",
+    );
   }
-  return json(200, { ok: true });
+  return json(200, { ok: true, ...(indexWarning ? { indexWarning } : {}) });
 }
 
 async function handleInstallSkill(
@@ -1896,6 +1946,9 @@ async function handleSingleFileMove(
     const refreshError = await refreshAgentAgentsMdSections(target, "move");
     if (refreshError) return refreshError;
   }
+  // No catalog branch: the dispatcher rejects move/rename for catalog targets
+  // (only get/list/put/delete are allowed), so skill_catalog write-through lives
+  // only in handlePut/handleDelete.
 
   const payload: MoveSuccessPayload = {
     ok: true,
@@ -2055,6 +2108,8 @@ async function handleFolderMove(
     const refreshError = await refreshAgentAgentsMdSections(target, "move");
     if (refreshError) return refreshError;
   }
+  // No catalog branch: move/rename are rejected for catalog targets upstream
+  // (see dispatcher allowlist), so write-through is put/delete only.
 
   const payload: MoveSuccessPayload = {
     ok: true,
