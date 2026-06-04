@@ -414,6 +414,11 @@ variable "cognee_db_username" {
   default = "thinkwork_cognee"
 }
 
+variable "cognee_db_name" {
+  type    = string
+  default = "thinkwork_cognee"
+}
+
 variable "cognee_db_password_secret_arn" {
   type    = string
   default = ""
@@ -585,6 +590,7 @@ module "thinkwork" {
   enable_cognee              = var.enable_cognee
   cognee_image_uri           = var.cognee_image_uri
   cognee_db_username         = var.cognee_db_username
+  cognee_db_name             = var.cognee_db_name
   cognee_db_password_secret_arn = var.cognee_db_password_secret_arn
   cognee_allowed_internal_cidr_blocks = var.cognee_allowed_internal_cidr_blocks
   cognee_allowed_internal_security_group_ids = var.cognee_allowed_internal_security_group_ids

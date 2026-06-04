@@ -201,6 +201,17 @@ variable "cognee_db_username" {
   }
 }
 
+variable "cognee_db_name" {
+  description = "Dedicated PostgreSQL database name for Cognee metadata storage. Do not use the shared Thinkwork application database."
+  type        = string
+  default     = "thinkwork_cognee"
+
+  validation {
+    condition     = var.cognee_db_name != var.database_name && can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.cognee_db_name))
+    error_message = "cognee_db_name must be a valid PostgreSQL identifier distinct from the shared Thinkwork database name."
+  }
+}
+
 variable "cognee_db_password_secret_arn" {
   description = "Secrets Manager ARN containing a JSON password field for the dedicated Cognee PostgreSQL user. Required when enable_cognee = true."
   type        = string

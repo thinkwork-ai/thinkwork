@@ -628,7 +628,7 @@ module "cognee" {
   subnet_ids             = module.vpc.public_subnet_ids
   db_security_group_id   = module.database.db_security_group_id
   db_host                = module.database.cluster_endpoint
-  db_name                = var.database_name
+  db_name                = var.cognee_db_name
   db_username            = var.cognee_db_username
   db_password_secret_arn = var.cognee_db_password_secret_arn
 

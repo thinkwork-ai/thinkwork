@@ -110,6 +110,16 @@ Started: 2026-06-04
   `codex/cognee-url-safe-db-password` from `origin/main`. The hotfix generates
   Cognee DB passwords with `openssl rand -hex 32` and rotates existing Cognee
   secrets containing URL-unsafe characters before applying the role password.
+- 2026-06-04: URL-safe password hotfix PR
+  [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) passed checks
+  and squash merged to `main` as
+  `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066`. Merge-triggered deploy run
+  [26963195279](https://github.com/thinkwork-ai/thinkwork/actions/runs/26963195279)
+  passed, but Cognee ECS tasks still exited during startup because Cognee
+  migrations were running against the shared `thinkwork` database and attempted
+  to create an index on the existing `public.tenants` table. Started hotfix
+  branch `codex/cognee-db-ownership-hotfix` to isolate Cognee into a dedicated
+  `thinkwork_cognee` database created during deploy credential preparation.
 
 ## Implementation Units
 
@@ -124,7 +134,8 @@ Started: 2026-06-04
 | U6 hotfix. Keep GraphQL Lambda env under 4KB                           | merged | `codex/cognee-env-limit-hotfix`     | [#2055](https://github.com/thinkwork-ai/thinkwork/pull/2055) | passed | `718142d4cfe027310d5a578523530a708d345deb` |
 | U6 hotfix. Stabilize Cognee EFS mount targets                          | merged | `codex/cognee-efs-mount-target-fix` | [#2057](https://github.com/thinkwork-ai/thinkwork/pull/2057) | passed | `e4cc4b82a95451daa701a3a5c76ed79395a39ed5` |
 | U6 hotfix. Grant Cognee table reference privileges                     | merged | `codex/cognee-db-references-grant`  | [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) | passed | `360cc0f4caf4db3e64242c5e582b82c1560b1335` |
-| U6 hotfix. Rotate Cognee URL-safe DB passwords                         | active | `codex/cognee-url-safe-db-password` | [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) | local  | Pending                                    |
+| U6 hotfix. Rotate Cognee URL-safe DB passwords                         | merged | `codex/cognee-url-safe-db-password` | [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) | passed | `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066` |
+| U6 hotfix. Isolate Cognee into dedicated database                      | active | `codex/cognee-db-ownership-hotfix`  | Pending                                                      | local  | Pending                                    |
 
 ## CI Failures
 
@@ -141,6 +152,7 @@ Started: 2026-06-04
 - [#2055](https://github.com/thinkwork-ai/thinkwork/pull/2055) — U6 hotfix. Keep GraphQL Lambda env under 4KB — squash merged as `718142d4cfe027310d5a578523530a708d345deb`.
 - [#2057](https://github.com/thinkwork-ai/thinkwork/pull/2057) — U6 hotfix. Stabilize Cognee EFS mount targets — squash merged as `e4cc4b82a95451daa701a3a5c76ed79395a39ed5`.
 - [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) — U6 hotfix. Grant Cognee table reference privileges — squash merged as `360cc0f4caf4db3e64242c5e582b82c1560b1335`.
+- [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) — U6 hotfix. Rotate Cognee URL-safe DB passwords — squash merged as `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066`.
 
 ## CI / Deploy Failures
 
@@ -160,8 +172,12 @@ Started: 2026-06-04
 - Merge-triggered deploy after PR #2058 passed Terraform and admin/docs deploy
   but Cognee ECS tasks exited during startup. Cognee/Alembic rejected the
   URL-encoded DB password (`%2F`) as invalid Python `configparser`
-  interpolation syntax. Fix is in progress on
-  `codex/cognee-url-safe-db-password`.
+  interpolation syntax. Fixed by PR #2060.
+- Merge-triggered deploy after PR #2060 passed, but Cognee ECS tasks still
+  exited during startup. Cognee migrations were running against the shared
+  `thinkwork` database and attempted to alter/index `public.tenants`, which is
+  a Thinkwork application table. Fix is in progress on
+  `codex/cognee-db-ownership-hotfix` by adding a dedicated Cognee database.
 
 ## Blockers
 
