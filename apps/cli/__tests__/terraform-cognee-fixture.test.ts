@@ -456,6 +456,10 @@ describe("U4 - Cognee deployment template propagation", () => {
       /if \[ "\$\{COGNEE_ENABLED:-false\}" != "true" \]/,
     );
     expect(workflow).toMatch(/Cognee disabled; skipping Cognee database/);
+    expect(workflow).toMatch(/openssl rand -hex 32/);
+    expect(workflow).toMatch(
+      /\[\[ ! "\$cognee_password" =~ \^\[A-Za-z0-9\._~-\]\+\$ \]\]/,
+    );
     expect(workflow).toMatch(/aws secretsmanager create-secret/);
     expect(workflow).toMatch(/aws secretsmanager put-secret-value/);
     expect(workflow).toMatch(/COGNEE_DB_PASSWORD_SECRET_ARN=\$secret_arn/);
