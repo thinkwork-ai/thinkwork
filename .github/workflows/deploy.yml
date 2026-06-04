@@ -675,10 +675,10 @@ jobs:
 
           GRANT CONNECT ON DATABASE thinkwork TO :"cognee_user";
           GRANT USAGE, CREATE ON SCHEMA public TO :"cognee_user";
-          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO :"cognee_user";
+          GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES IN SCHEMA public TO :"cognee_user";
           GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO :"cognee_user";
           ALTER DEFAULT PRIVILEGES IN SCHEMA public
-            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"cognee_user";
+            GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES TO :"cognee_user";
           ALTER DEFAULT PRIVILEGES IN SCHEMA public
             GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"cognee_user";
           SQL
