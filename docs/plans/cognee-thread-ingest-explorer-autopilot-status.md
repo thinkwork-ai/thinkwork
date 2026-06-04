@@ -7,11 +7,11 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U1 - Persistence and GraphQL Contract
+- Current unit: U2 - GraphQL Read Resolvers and Thread Picker
 - Current branch/worktree:
-  `codex/cognee-kg-u1-contract` /
-  `.Codex/worktrees/cognee-kg-u1-contract`
-- Current PR: [#2077](https://github.com/thinkwork-ai/thinkwork/pull/2077)
+  `codex/cognee-kg-u2-read-resolvers` /
+  `.Codex/worktrees/cognee-kg-u2-read-resolvers`
+- Current PR: [#2078](https://github.com/thinkwork-ai/thinkwork/pull/2078)
 - Blocker: none
 
 ## Progress Log
@@ -64,3 +64,24 @@ Started: 2026-06-04
   failed before mutation with missing AWS region, second applied successfully,
   and a follow-up `scripts/db-migrate-manual.sh` scoped to `0145` passed with
   every table, index, constraint, function, and trigger present.
+- 2026-06-04: Rebasing U1 after main moved completed cleanly; all required CI
+  checks passed on the fresh head. Squash-merged U1 PR
+  [#2077](https://github.com/thinkwork-ai/thinkwork/pull/2077) into `main` at
+  `a333f8f29a1383d1ca0b713a748cbf74195dacdb`, deleted the remote branch, then
+  removed local U1 worktree/branch.
+- 2026-06-04: Synced `origin/main` and created isolated U2 worktree
+  `.Codex/worktrees/cognee-kg-u2-read-resolvers` on branch
+  `codex/cognee-kg-u2-read-resolvers` from `origin/main`.
+- 2026-06-04: Implemented U2 Knowledge Graph read resolvers for thread
+  candidates, ingest runs, entity table reads, graph payloads, and entity
+  details. Added shared tenant-operator auth, Cognito caller thread visibility,
+  row serialization, search/status/type filters, and resolver tests for
+  successful reads plus forbidden/cross-tenant behavior.
+- 2026-06-04: U2 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts src/__tests__/knowledge-graph-tenant-scoping.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`; `git diff --check`; and
+  `pnpm --filter @thinkwork/api test` (398 files passed, 3 skipped; 3523 tests
+  passed, 9 skipped). API lint is a no-op because `@thinkwork/api` has no
+  `lint` script.
+- 2026-06-04: Opened U2 PR
+  [#2078](https://github.com/thinkwork-ai/thinkwork/pull/2078).
