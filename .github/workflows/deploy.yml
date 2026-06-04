@@ -320,23 +320,24 @@ jobs:
               --region ${{ env.AWS_REGION }}
           else
             echo "Updating Pi runtime $RUNTIME_ID to $NEW_IMAGE"
-            CURRENT=$(aws bedrock-agentcore-control get-agent-runtime \
-              --region ${{ env.AWS_REGION }} \
-              --agent-runtime-id "$RUNTIME_ID" \
-              --output json)
             # Plan §005 U2: force the role to the new agentcore-pi-role on
             # every update so an existing dev runtime created in U1 against
             # the shared `agentcore-role` reconciles to the canonical Pi
-            # role. Reading roleArn from CURRENT (the prior pattern) preserved
-            # the stale role indefinitely. Fallback: when the new role does
-            # not exist yet (terraform-apply hasn't run on this stage), keep
-            # the runtime's CURRENT role so the update succeeds anyway.
+            # role. When the canonical role exists, avoid a pre-update
+            # get-agent-runtime read; AgentCore's control plane can return
+            # Forbidden for reads while still allowing the update call.
+            NETWORK_MODE="PUBLIC"
+            SERVER_PROTOCOL="HTTP"
             if [ -z "$ROLE_ARN" ]; then
+              CURRENT=$(aws bedrock-agentcore-control get-agent-runtime \
+                --region ${{ env.AWS_REGION }} \
+                --agent-runtime-id "$RUNTIME_ID" \
+                --output json)
               ROLE_ARN=$(echo "$CURRENT" | jq -r '.roleArn')
               echo "Reusing existing role: $ROLE_ARN (canonical Pi role will be adopted on the next deploy after terraform-apply creates it)"
+              NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
+              SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
             fi
-            NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
-            SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
             aws bedrock-agentcore-control update-agent-runtime \
               --region ${{ env.AWS_REGION }} \
               --agent-runtime-id "$RUNTIME_ID" \
@@ -353,7 +354,7 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --agent-runtime-id "$RUNTIME_ID" \
             --query '{id:agentRuntimeId,name:agentRuntimeName,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
-            --output json
+            --output json || echo "WARN: get-agent-runtime returned non-zero after update; Deploy Summary will perform the tolerant drift probe."
 
   # ── Terraform apply ──────────────────────────────────────────────
   terraform-apply:

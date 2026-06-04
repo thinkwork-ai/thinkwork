@@ -142,24 +142,37 @@ Started: 2026-06-04
   vars pushed the Lambda environment over AWS's 4KB limit. Started hotfix branch
   `codex/cognee-lambda-env-status` to compact Cognee status into one env value
   and derive stable service/log names in the API resolver.
+- 2026-06-04: Cognee Lambda env status hotfix PR
+  [#2065](https://github.com/thinkwork-ai/thinkwork/pull/2065) passed checks
+  and squash merged to `main` as
+  `4292af1ae5429a35d9ee2e6fbb847a0c1f3b8417`. Merge-triggered deploy run
+  [26966444501](https://github.com/thinkwork-ai/thinkwork/actions/runs/26966444501)
+  passed Terraform Apply, confirming the GraphQL Lambda accepted the compact
+  Cognee env. The run still concluded failed because the unrelated Build
+  Container AgentCore Runtime update step received `Forbidden` from
+  `get-agent-runtime` before issuing the runtime update. Started deploy hotfix
+  branch `codex/agentcore-runtime-update-forbidden` to avoid that pre-read and
+  treat post-update AgentCore read probes as best-effort when the control plane
+  refuses reads.
 
 ## Implementation Units
 
-| Unit                                                                   | Status | Branch                              | PR                                                           | CI     | Merge                                      |
-| ---------------------------------------------------------------------- | ------ | ----------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------ |
-| U1. Create the Cognee Terraform app module                             | merged | `codex/u1-cognee-terraform-module`  | [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) | passed | `30ec4984677de7a0c044bbe8ce745b890271e13a` |
-| U2. Wire Cognee through the composite Thinkwork module                 | merged | `codex/u2-cognee-thinkwork-wiring`  | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | passed | `c8fa82a705975b53217eb79d09bfd4aeeace819c` |
-| U3. Add Cognee secrets and configuration hygiene                       | merged | `codex/u3-cognee-secrets-config`    | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
-| U4. Propagate Cognee through examples, CLI templates, and CI workflows | merged | `codex/u4-cognee-cli-templates`     | [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) | passed | `c045ce844ff08580a62403515413c8498d915fc9` |
-| U5. Add operational handoff and smoke-check guidance                   | merged | `codex/u5-cognee-ops-guidance`      | [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) | passed | `32a2f95761c8adcf9ab33be1ff0ace4ad51558b9` |
-| U6. Add Knowledge Graph settings control and deploy activation         | merged | `codex/cognee-deploy-enable`        | [#2053](https://github.com/thinkwork-ai/thinkwork/pull/2053) | passed | `10b3f6922a8b0ac8b6a54b351a9206b3b2034353` |
-| U6 hotfix. Keep GraphQL Lambda env under 4KB                           | merged | `codex/cognee-env-limit-hotfix`     | [#2055](https://github.com/thinkwork-ai/thinkwork/pull/2055) | passed | `718142d4cfe027310d5a578523530a708d345deb` |
-| U6 hotfix. Stabilize Cognee EFS mount targets                          | merged | `codex/cognee-efs-mount-target-fix` | [#2057](https://github.com/thinkwork-ai/thinkwork/pull/2057) | passed | `e4cc4b82a95451daa701a3a5c76ed79395a39ed5` |
-| U6 hotfix. Grant Cognee table reference privileges                     | merged | `codex/cognee-db-references-grant`  | [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) | passed | `360cc0f4caf4db3e64242c5e582b82c1560b1335` |
-| U6 hotfix. Rotate Cognee URL-safe DB passwords                         | merged | `codex/cognee-url-safe-db-password` | [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) | passed | `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066` |
-| U6 hotfix. Isolate Cognee into dedicated database                      | merged | `codex/cognee-db-ownership-hotfix`  | [#2062](https://github.com/thinkwork-ai/thinkwork/pull/2062) | passed | `d212a457ed4fc9d99808945e3c4c782961e7cabb` |
-| U6 hotfix. Create Cognee DB without target-role ownership              | merged | `codex/cognee-db-create-hotfix`     | [#2063](https://github.com/thinkwork-ai/thinkwork/pull/2063) | passed | `9d788511f11a4d4be59dca2205c42285c44831a7` |
-| U6 hotfix. Compact Cognee Lambda status env                            | active | `codex/cognee-lambda-env-status`    | [#2065](https://github.com/thinkwork-ai/thinkwork/pull/2065) | local  | Pending                                    |
+| Unit                                                                   | Status | Branch                                     | PR                                                           | CI     | Merge                                      |
+| ---------------------------------------------------------------------- | ------ | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------ |
+| U1. Create the Cognee Terraform app module                             | merged | `codex/u1-cognee-terraform-module`         | [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) | passed | `30ec4984677de7a0c044bbe8ce745b890271e13a` |
+| U2. Wire Cognee through the composite Thinkwork module                 | merged | `codex/u2-cognee-thinkwork-wiring`         | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | passed | `c8fa82a705975b53217eb79d09bfd4aeeace819c` |
+| U3. Add Cognee secrets and configuration hygiene                       | merged | `codex/u3-cognee-secrets-config`           | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
+| U4. Propagate Cognee through examples, CLI templates, and CI workflows | merged | `codex/u4-cognee-cli-templates`            | [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) | passed | `c045ce844ff08580a62403515413c8498d915fc9` |
+| U5. Add operational handoff and smoke-check guidance                   | merged | `codex/u5-cognee-ops-guidance`             | [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) | passed | `32a2f95761c8adcf9ab33be1ff0ace4ad51558b9` |
+| U6. Add Knowledge Graph settings control and deploy activation         | merged | `codex/cognee-deploy-enable`               | [#2053](https://github.com/thinkwork-ai/thinkwork/pull/2053) | passed | `10b3f6922a8b0ac8b6a54b351a9206b3b2034353` |
+| U6 hotfix. Keep GraphQL Lambda env under 4KB                           | merged | `codex/cognee-env-limit-hotfix`            | [#2055](https://github.com/thinkwork-ai/thinkwork/pull/2055) | passed | `718142d4cfe027310d5a578523530a708d345deb` |
+| U6 hotfix. Stabilize Cognee EFS mount targets                          | merged | `codex/cognee-efs-mount-target-fix`        | [#2057](https://github.com/thinkwork-ai/thinkwork/pull/2057) | passed | `e4cc4b82a95451daa701a3a5c76ed79395a39ed5` |
+| U6 hotfix. Grant Cognee table reference privileges                     | merged | `codex/cognee-db-references-grant`         | [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) | passed | `360cc0f4caf4db3e64242c5e582b82c1560b1335` |
+| U6 hotfix. Rotate Cognee URL-safe DB passwords                         | merged | `codex/cognee-url-safe-db-password`        | [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) | passed | `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066` |
+| U6 hotfix. Isolate Cognee into dedicated database                      | merged | `codex/cognee-db-ownership-hotfix`         | [#2062](https://github.com/thinkwork-ai/thinkwork/pull/2062) | passed | `d212a457ed4fc9d99808945e3c4c782961e7cabb` |
+| U6 hotfix. Create Cognee DB without target-role ownership              | merged | `codex/cognee-db-create-hotfix`            | [#2063](https://github.com/thinkwork-ai/thinkwork/pull/2063) | passed | `9d788511f11a4d4be59dca2205c42285c44831a7` |
+| U6 hotfix. Compact Cognee Lambda status env                            | merged | `codex/cognee-lambda-env-status`           | [#2065](https://github.com/thinkwork-ai/thinkwork/pull/2065) | passed | `4292af1ae5429a35d9ee2e6fbb847a0c1f3b8417` |
+| Deploy hotfix. Avoid AgentCore runtime pre-read failure                | active | `codex/agentcore-runtime-update-forbidden` | [#2066](https://github.com/thinkwork-ai/thinkwork/pull/2066) | local  | Pending                                    |
 
 ## CI Failures
 
@@ -179,6 +192,7 @@ Started: 2026-06-04
 - [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) — U6 hotfix. Rotate Cognee URL-safe DB passwords — squash merged as `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066`.
 - [#2062](https://github.com/thinkwork-ai/thinkwork/pull/2062) — U6 hotfix. Isolate Cognee into dedicated database — squash merged as `d212a457ed4fc9d99808945e3c4c782961e7cabb`.
 - [#2063](https://github.com/thinkwork-ai/thinkwork/pull/2063) — U6 hotfix. Create Cognee DB without target-role ownership — squash merged as `9d788511f11a4d4be59dca2205c42285c44831a7`.
+- [#2065](https://github.com/thinkwork-ai/thinkwork/pull/2065) — U6 hotfix. Compact Cognee Lambda status env — squash merged as `4292af1ae5429a35d9ee2e6fbb847a0c1f3b8417`.
 
 ## CI / Deploy Failures
 
@@ -209,9 +223,13 @@ Started: 2026-06-04
 - Merge-triggered deploy after PR #2063 brought Cognee ECS to steady state, but
   Terraform failed while updating `thinkwork-dev-api-graphql-http` because
   separate Cognee status environment variables pushed the Lambda environment
-  over AWS's 4KB limit. Fix is in progress on
-  `codex/cognee-lambda-env-status` by compacting Cognee status into one env
-  value and deriving stable service/log names in code.
+  over AWS's 4KB limit. Fixed by PR #2065.
+- Merge-triggered deploy after PR #2065 passed Terraform Apply and updated the
+  GraphQL Lambda, but the overall deploy failed earlier in Build Container
+  because the Pi AgentCore runtime update path called `get-agent-runtime` and
+  received `Forbidden`. Fix is in progress on
+  `codex/agentcore-runtime-update-forbidden` by updating with known canonical
+  runtime defaults before any AgentCore read probe.
 
 ## Blockers
 

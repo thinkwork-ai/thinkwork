@@ -122,13 +122,8 @@ create_runtime() {
 
 update_runtime() {
   local current network_mode server_protocol role_arn
-  current=$(aws bedrock-agentcore-control get-agent-runtime \
-    --region "$REGION" \
-    --agent-runtime-id "$runtime_id" \
-    --output json)
-
-  network_mode=$(echo "$current" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
-  server_protocol=$(echo "$current" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
+  network_mode="PUBLIC"
+  server_protocol="HTTP"
 
   # Force the canonical role for this runtime type. If --account-id wasn't
   # passed, fall back to whatever role the runtime already has — preserves
@@ -137,11 +132,17 @@ update_runtime() {
   if [[ -n "$canonical_role_arn" ]]; then
     role_arn="$canonical_role_arn"
   else
+    current=$(aws bedrock-agentcore-control get-agent-runtime \
+      --region "$REGION" \
+      --agent-runtime-id "$runtime_id" \
+      --output json)
     role_arn=$(echo "$current" | jq -r '.roleArn // empty')
     if [[ -z "$role_arn" ]]; then
       echo "ERROR: existing runtime ${runtime_id} did not report roleArn and --account-id was not provided" >&2
       exit 2
     fi
+    network_mode=$(echo "$current" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
+    server_protocol=$(echo "$current" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
   fi
 
   echo "Updating ${RUNTIME} AgentCore runtime ${runtime_id} to ${IMAGE} with role ${role_arn}"
@@ -167,7 +168,15 @@ while true; do
   detail=$(aws bedrock-agentcore-control get-agent-runtime \
     --region "$REGION" \
     --agent-runtime-id "$runtime_id" \
-    --output json)
+    --output json 2>&1) || {
+    if grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$detail"; then
+      echo "WARN: get-agent-runtime ${runtime_id} returned Forbidden after update; skipping AgentCore readiness wait." >&2
+      exit 0
+    fi
+    echo "ERROR: get-agent-runtime ${runtime_id} failed:" >&2
+    echo "$detail" >&2
+    exit 2
+  }
   status=$(echo "$detail" | jq -r '.status // "UNKNOWN"')
   version=$(echo "$detail" | jq -r '.agentRuntimeVersion // "null"')
   current_image=$(echo "$detail" | jq -r '.agentRuntimeArtifact.containerConfiguration.containerUri // ""')
@@ -175,7 +184,15 @@ while true; do
   endpoints=$(aws bedrock-agentcore-control list-agent-runtime-endpoints \
     --region "$REGION" \
     --agent-runtime-id "$runtime_id" \
-    --output json)
+    --output json 2>&1) || {
+    if grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$endpoints"; then
+      echo "WARN: list-agent-runtime-endpoints ${runtime_id} returned Forbidden after update; skipping AgentCore readiness wait." >&2
+      exit 0
+    fi
+    echo "ERROR: list-agent-runtime-endpoints ${runtime_id} failed:" >&2
+    echo "$endpoints" >&2
+    exit 2
+  }
   default_endpoint=$(echo "$endpoints" | jq -r '[.runtimeEndpoints[] | select(.name=="DEFAULT")][0] // null')
 
   if [[ "$default_endpoint" != "null" ]]; then
