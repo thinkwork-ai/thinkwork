@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/cognee-kg-u4-worker` /
   `.Codex/worktrees/cognee-kg-u4-worker`
-- Current PR: not opened
+- Current PR: [#2080](https://github.com/thinkwork-ai/thinkwork/pull/2080)
 - Blocker: none
 
 ## Progress Log
@@ -133,3 +133,5 @@ Started: 2026-06-04
   `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
   `pnpm --filter @thinkwork/api test` (403 files passed, 3 skipped; 3535 tests
   passed, 9 skipped); targeted Prettier check; and `git diff --check`.
+- 2026-06-04: Opened U4 PR
+  [#2080](https://github.com/thinkwork-ai/thinkwork/pull/2080).
