@@ -52,3 +52,15 @@ Started: 2026-06-04
   completed with existing sourcemap/chunk-size warnings only.
 - 2026-06-04: Opened U1 PR
   [#2077](https://github.com/thinkwork-ai/thinkwork/pull/2077).
+- 2026-06-04: U1 PR
+  [#2077](https://github.com/thinkwork-ai/thinkwork/pull/2077) initially
+  failed CI `Migration Drift Precheck (dev)` because the new hand-rolled
+  migration `0145_knowledge_graph_thread_ingest.sql` had not yet been applied
+  to the dev database. Lint, typecheck, verify, and CLA were green while test
+  was still pending.
+- 2026-06-04: Applied only
+  `packages/database-pg/drizzle/0145_knowledge_graph_thread_ingest.sql` to the
+  dev Aurora database via `psql` using `sslmode=require`; first local attempt
+  failed before mutation with missing AWS region, second applied successfully,
+  and a follow-up `scripts/db-migrate-manual.sh` scoped to `0145` passed with
+  every table, index, constraint, function, and trigger present.
