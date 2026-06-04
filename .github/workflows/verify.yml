@@ -201,6 +201,7 @@ jobs:
           COGNEE_ENABLED_INPUT: ${{ vars.COGNEE_ENABLED || 'false' }}
           COGNEE_IMAGE_URI_INPUT: ${{ vars.COGNEE_IMAGE_URI || '' }}
           COGNEE_DB_USERNAME_INPUT: ${{ vars.COGNEE_DB_USERNAME || 'thinkwork_cognee' }}
+          COGNEE_DB_NAME_INPUT: ${{ vars.COGNEE_DB_NAME || 'thinkwork_cognee' }}
           COGNEE_DB_PASSWORD_SECRET_ARN_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ARN || '' }}
           COGNEE_DB_PASSWORD_SECRET_ID_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ID || '' }}
           COGNEE_BACKEND_MODE_INPUT: ${{ vars.COGNEE_BACKEND_MODE || 'dogfood' }}
@@ -221,6 +222,7 @@ jobs:
 
           cognee_image_uri="${COGNEE_IMAGE_URI_INPUT:-cognee/cognee@sha256:5ce7e4052b1d16738d1e24476d64847fcb5b1666631b642651e8ccce414046f8}"
           cognee_db_username="${COGNEE_DB_USERNAME_INPUT:-thinkwork_cognee}"
+          cognee_db_name="${COGNEE_DB_NAME_INPUT:-thinkwork_cognee}"
           cognee_db_password_secret_id="${COGNEE_DB_PASSWORD_SECRET_ID_INPUT:-thinkwork/${STAGE}/cognee/db-credentials}"
           cognee_db_password_secret_arn="$COGNEE_DB_PASSWORD_SECRET_ARN_INPUT"
           cognee_backend_mode="${COGNEE_BACKEND_MODE_INPUT:-dogfood}"
@@ -253,6 +255,7 @@ jobs:
             -var "enable_cognee=$cognee_enabled" \
             -var "cognee_image_uri=$cognee_image_uri" \
             -var "cognee_db_username=$cognee_db_username" \
+            -var "cognee_db_name=$cognee_db_name" \
             -var "cognee_db_password_secret_arn=$cognee_db_password_secret_arn" \
             -var "cognee_backend_mode=$cognee_backend_mode" \
             -var "cognee_desired_count=$cognee_desired_count" \

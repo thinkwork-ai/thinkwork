@@ -293,8 +293,10 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     expect(vars).toMatch(/variable "cognee_db_password_secret_arn"/);
     expect(vars).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
     expect(vars).toMatch(/variable "cognee_db_username"/);
+    expect(vars).toMatch(/variable "cognee_db_name"/);
     expect(vars).toMatch(/default\s*=\s*"thinkwork_cognee"/);
     expect(vars).toMatch(/lower\(var\.cognee_db_username\)/);
+    expect(vars).toMatch(/distinct from the shared Thinkwork database name/);
     expect(vars).toMatch(
       /cognee_bedrock_model_resource_arns must list explicit/,
     );
@@ -321,6 +323,8 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     expect(cogneeModule).toMatch(
       /db_host\s*=\s*module\.database\.cluster_endpoint/,
     );
+    expect(cogneeModule).toMatch(/db_name\s*=\s*var\.cognee_db_name/);
+    expect(cogneeModule).not.toMatch(/db_name\s*=\s*var\.database_name/);
     expect(cogneeModule).toMatch(
       /db_password_secret_arn\s*=\s*var\.cognee_db_password_secret_arn/,
     );
@@ -379,12 +383,14 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(source).toMatch(/variable "enable_cognee"/);
     expect(source).toMatch(/default\s*=\s*false/);
     expect(source).toMatch(/variable "cognee_image_uri"/);
+    expect(source).toMatch(/variable "cognee_db_name"/);
     expect(source).toMatch(/variable "cognee_db_password_secret_arn"/);
     expect(source).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
     expect(thinkworkModule).toMatch(/enable_cognee\s*=\s*var\.enable_cognee/);
     expect(thinkworkModule).toMatch(
       /cognee_image_uri\s*=\s*var\.cognee_image_uri/,
     );
+    expect(thinkworkModule).toMatch(/cognee_db_name\s*=\s*var\.cognee_db_name/);
     expect(thinkworkModule).toMatch(
       /cognee_db_password_secret_arn\s*=\s*var\.cognee_db_password_secret_arn/,
     );
@@ -398,10 +404,12 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(source).toMatch(/enable_cognee = false/);
     expect(source).toMatch(/variable "enable_cognee"/);
     expect(source).toMatch(/variable "cognee_image_uri"/);
+    expect(source).toMatch(/variable "cognee_db_name"/);
     expect(source).toMatch(/variable "cognee_db_password_secret_arn"/);
     expect(source).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
     expect(source).toMatch(/enable_cognee\s*=\s*var\.enable_cognee/);
     expect(source).toMatch(/cognee_image_uri\s*=\s*var\.cognee_image_uri/);
+    expect(source).toMatch(/cognee_db_name\s*=\s*var\.cognee_db_name/);
     expect(source).toMatch(
       /cognee_db_password_secret_arn\s*=\s*var\.cognee_db_password_secret_arn/,
     );
@@ -416,9 +424,11 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(source).toMatch(/variable "enable_cognee"/);
     expect(source).toMatch(/default\s*=\s*false/);
     expect(source).toMatch(/variable "cognee_image_uri"/);
+    expect(source).toMatch(/variable "cognee_db_name"/);
     expect(source).toMatch(/variable "cognee_db_password_secret_arn"/);
     expect(source).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
     expect(thinkworkModule).toMatch(/enable_cognee\s*=\s*var\.enable_cognee/);
+    expect(thinkworkModule).toMatch(/cognee_db_name\s*=\s*var\.cognee_db_name/);
     expect(thinkworkModule).toMatch(
       /cognee_bedrock_model_resource_arns\s*=\s*var\.cognee_bedrock_model_resource_arns/,
     );
@@ -440,6 +450,7 @@ describe("U4 - Cognee deployment template propagation", () => {
       expect(workflow).toMatch(/-var "enable_cognee=\$/);
       expect(workflow).toMatch(/-var "cognee_image_uri=\$/);
       expect(workflow).toMatch(/-var "cognee_db_username=\$/);
+      expect(workflow).toMatch(/-var "cognee_db_name=\$/);
       expect(workflow).toMatch(/-var "cognee_db_password_secret_arn=\$/);
       expect(workflow).toMatch(/-var "cognee_backend_mode=\$/);
       expect(workflow).toMatch(/-var "cognee_desired_count=\$/);
@@ -465,7 +476,10 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(workflow).toMatch(/COGNEE_DB_PASSWORD_SECRET_ARN=\$secret_arn/);
     expect(workflow).toMatch(/CREATE ROLE %I LOGIN PASSWORD %L/);
     expect(workflow).toMatch(/ALTER ROLE %I LOGIN PASSWORD %L/);
-    expect(workflow).toMatch(/GRANT CONNECT ON DATABASE thinkwork/);
+    expect(workflow).toMatch(/COGNEE_DB_NAME_INPUT/);
+    expect(workflow).toMatch(/CREATE DATABASE %I OWNER %I/);
+    expect(workflow).toMatch(/GRANT CONNECT ON DATABASE :\"cognee_db\"/);
+    expect(workflow).toMatch(/\\connect :\"cognee_db\"/);
     expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);
     expect(workflow).toMatch(
       /GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES/,

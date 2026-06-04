@@ -549,6 +549,7 @@ jobs:
           COGNEE_ENABLED_INPUT: ${{ vars.COGNEE_ENABLED || 'false' }}
           COGNEE_IMAGE_URI_INPUT: ${{ vars.COGNEE_IMAGE_URI || '' }}
           COGNEE_DB_USERNAME_INPUT: ${{ vars.COGNEE_DB_USERNAME || 'thinkwork_cognee' }}
+          COGNEE_DB_NAME_INPUT: ${{ vars.COGNEE_DB_NAME || 'thinkwork_cognee' }}
           COGNEE_DB_PASSWORD_SECRET_ARN_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ARN || '' }}
           COGNEE_DB_PASSWORD_SECRET_ID_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ID || '' }}
           COGNEE_BACKEND_MODE_INPUT: ${{ vars.COGNEE_BACKEND_MODE || 'dogfood' }}
@@ -567,6 +568,7 @@ jobs:
 
           cognee_image_uri="${COGNEE_IMAGE_URI_INPUT:-cognee/cognee@sha256:5ce7e4052b1d16738d1e24476d64847fcb5b1666631b642651e8ccce414046f8}"
           cognee_db_username="${COGNEE_DB_USERNAME_INPUT:-thinkwork_cognee}"
+          cognee_db_name="${COGNEE_DB_NAME_INPUT:-thinkwork_cognee}"
           cognee_backend_mode="${COGNEE_BACKEND_MODE_INPUT:-dogfood}"
           cognee_desired_count="${COGNEE_DESIRED_COUNT_INPUT:-1}"
           cognee_llm_provider="${COGNEE_LLM_PROVIDER_INPUT:-bedrock}"
@@ -582,6 +584,10 @@ jobs:
             echo "::error::COGNEE_DB_USERNAME must be a valid PostgreSQL identifier."
             exit 1
           fi
+          if [[ ! "$cognee_db_name" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || [ "$cognee_db_name" = "thinkwork" ]; then
+            echo "::error::COGNEE_DB_NAME must be a valid PostgreSQL identifier distinct from thinkwork."
+            exit 1
+          fi
           if [ "$cognee_enabled" = "true" ] && { [ "$cognee_llm_provider" = "bedrock" ] || [ "$cognee_embedding_provider" = "bedrock" ]; }; then
             jq -e 'type == "array" and length > 0' >/dev/null <<< "$cognee_bedrock_model_resource_arns"
           fi
@@ -590,6 +596,7 @@ jobs:
             echo "COGNEE_ENABLED=$cognee_enabled"
             echo "COGNEE_IMAGE_URI=$cognee_image_uri"
             echo "COGNEE_DB_USERNAME=$cognee_db_username"
+            echo "COGNEE_DB_NAME=$cognee_db_name"
             echo "COGNEE_DB_PASSWORD_SECRET_ARN=$COGNEE_DB_PASSWORD_SECRET_ARN_INPUT"
             echo "COGNEE_DB_PASSWORD_SECRET_ID=$cognee_db_password_secret_id"
             echo "COGNEE_BACKEND_MODE=$cognee_backend_mode"
@@ -676,6 +683,7 @@ jobs:
           psql "$DATABASE_URL" \
             -v ON_ERROR_STOP=1 \
             -v cognee_user="$COGNEE_DB_USERNAME" \
+            -v cognee_db="$COGNEE_DB_NAME" \
             -v cognee_password="$cognee_password" <<'SQL'
           SELECT format(
             CASE
@@ -687,7 +695,12 @@ jobs:
             :'cognee_password'
           ) \gexec
 
-          GRANT CONNECT ON DATABASE thinkwork TO :"cognee_user";
+          SELECT format('CREATE DATABASE %I OWNER %I', :'cognee_db', :'cognee_user')
+          WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'cognee_db')
+          \gexec
+          SELECT format('ALTER DATABASE %I OWNER TO %I', :'cognee_db', :'cognee_user') \gexec
+          GRANT CONNECT ON DATABASE :"cognee_db" TO :"cognee_user";
+          \connect :"cognee_db"
           GRANT USAGE, CREATE ON SCHEMA public TO :"cognee_user";
           GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES IN SCHEMA public TO :"cognee_user";
           GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO :"cognee_user";
@@ -734,6 +747,7 @@ jobs:
             -var "enable_cognee=$COGNEE_ENABLED" \
             -var "cognee_image_uri=$COGNEE_IMAGE_URI" \
             -var "cognee_db_username=$COGNEE_DB_USERNAME" \
+            -var "cognee_db_name=$COGNEE_DB_NAME" \
             -var "cognee_db_password_secret_arn=$COGNEE_DB_PASSWORD_SECRET_ARN" \
             -var "cognee_backend_mode=$COGNEE_BACKEND_MODE" \
             -var "cognee_desired_count=$COGNEE_DESIRED_COUNT" \
