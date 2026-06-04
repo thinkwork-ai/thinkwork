@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/cognee-kg-u1-contract` /
   `.Codex/worktrees/cognee-kg-u1-contract`
-- Current PR: none yet
+- Current PR: [#2077](https://github.com/thinkwork-ai/thinkwork/pull/2077)
 - Blocker: none
 
 ## Progress Log
@@ -50,3 +50,5 @@ Started: 2026-06-04
   `pnpm --filter @thinkwork/spaces typecheck`;
   `pnpm --filter @thinkwork/admin build`; and `git diff --check`. Admin build
   completed with existing sourcemap/chunk-size warnings only.
+- 2026-06-04: Opened U1 PR
+  [#2077](https://github.com/thinkwork-ai/thinkwork/pull/2077).
