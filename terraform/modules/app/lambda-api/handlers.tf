@@ -10,23 +10,11 @@ locals {
   use_local_zips        = var.lambda_zips_dir != ""
   eval_fanout_queue_url = local.deploy_lambda_handlers ? aws_sqs_queue.eval_fanout[0].url : ""
   runtime               = "nodejs20.x"
-  cognee_env = merge(
-    var.cognee_endpoint != "" ? {
-      COGNEE_ENDPOINT = var.cognee_endpoint
-    } : {},
-    var.cognee_log_group_name != "" ? {
-      COGNEE_LOG_GROUP_NAME = var.cognee_log_group_name
-    } : {},
-    var.cognee_backend_mode != "" ? {
-      COGNEE_BACKEND_MODE = var.cognee_backend_mode
-    } : {},
-    var.cognee_cluster_arn != "" ? {
-      COGNEE_CLUSTER_ARN = var.cognee_cluster_arn
-    } : {},
-    var.cognee_service_name != "" ? {
-      COGNEE_SERVICE_NAME = var.cognee_service_name
-    } : {}
-  )
+  cognee_env = var.cognee_enabled ? {
+    # graphql-http is close to Lambda's 4 KB environment ceiling. Keep Cognee
+    # status in one compact value; stable names are derived in the resolver.
+    COGNEE = "${var.cognee_backend_mode}|${var.cognee_endpoint}"
+  } : {}
 
   # Common environment variables shared by all API handlers
   common_env = merge({

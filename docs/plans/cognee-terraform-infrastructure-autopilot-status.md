@@ -131,6 +131,17 @@ Started: 2026-06-04
   `codex/cognee-db-create-hotfix` to create the dedicated database with the
   admin owner and grant Cognee the schema privileges needed to create its own
   runtime tables.
+- 2026-06-04: Cognee DB creation hotfix PR
+  [#2063](https://github.com/thinkwork-ai/thinkwork/pull/2063) passed checks
+  and squash merged to `main` as
+  `9d788511f11a4d4be59dca2205c42285c44831a7`. Merge-triggered deploy run
+  [26965335450](https://github.com/thinkwork-ai/thinkwork/actions/runs/26965335450)
+  created the dedicated database, updated the ECS task, and Cognee reached
+  steady state with `/health` returning 200. Terraform then failed while
+  updating `thinkwork-dev-api-graphql-http` because separate Cognee status env
+  vars pushed the Lambda environment over AWS's 4KB limit. Started hotfix branch
+  `codex/cognee-lambda-env-status` to compact Cognee status into one env value
+  and derive stable service/log names in the API resolver.
 
 ## Implementation Units
 
@@ -147,7 +158,8 @@ Started: 2026-06-04
 | U6 hotfix. Grant Cognee table reference privileges                     | merged | `codex/cognee-db-references-grant`  | [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) | passed | `360cc0f4caf4db3e64242c5e582b82c1560b1335` |
 | U6 hotfix. Rotate Cognee URL-safe DB passwords                         | merged | `codex/cognee-url-safe-db-password` | [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) | passed | `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066` |
 | U6 hotfix. Isolate Cognee into dedicated database                      | merged | `codex/cognee-db-ownership-hotfix`  | [#2062](https://github.com/thinkwork-ai/thinkwork/pull/2062) | passed | `d212a457ed4fc9d99808945e3c4c782961e7cabb` |
-| U6 hotfix. Create Cognee DB without target-role ownership              | active | `codex/cognee-db-create-hotfix`     | Pending                                                      | local  | Pending                                    |
+| U6 hotfix. Create Cognee DB without target-role ownership              | merged | `codex/cognee-db-create-hotfix`     | [#2063](https://github.com/thinkwork-ai/thinkwork/pull/2063) | passed | `9d788511f11a4d4be59dca2205c42285c44831a7` |
+| U6 hotfix. Compact Cognee Lambda status env                            | active | `codex/cognee-lambda-env-status`    | [#2065](https://github.com/thinkwork-ai/thinkwork/pull/2065) | local  | Pending                                    |
 
 ## CI Failures
 
@@ -166,6 +178,7 @@ Started: 2026-06-04
 - [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) — U6 hotfix. Grant Cognee table reference privileges — squash merged as `360cc0f4caf4db3e64242c5e582b82c1560b1335`.
 - [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) — U6 hotfix. Rotate Cognee URL-safe DB passwords — squash merged as `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066`.
 - [#2062](https://github.com/thinkwork-ai/thinkwork/pull/2062) — U6 hotfix. Isolate Cognee into dedicated database — squash merged as `d212a457ed4fc9d99808945e3c4c782961e7cabb`.
+- [#2063](https://github.com/thinkwork-ai/thinkwork/pull/2063) — U6 hotfix. Create Cognee DB without target-role ownership — squash merged as `9d788511f11a4d4be59dca2205c42285c44831a7`.
 
 ## CI / Deploy Failures
 
@@ -192,9 +205,13 @@ Started: 2026-06-04
   a Thinkwork application table. Fixed by PR #2062.
 - Merge-triggered deploy after PR #2062 failed in Cognee credential prep.
   `CREATE DATABASE ... OWNER thinkwork_cognee` requires the executing Aurora
-  admin role to be a member of `thinkwork_cognee`. Fix is in progress on
-  `codex/cognee-db-create-hotfix` by creating the database without target-role
-  ownership and granting Cognee schema privileges inside that database.
+  admin role to be a member of `thinkwork_cognee`. Fixed by PR #2063.
+- Merge-triggered deploy after PR #2063 brought Cognee ECS to steady state, but
+  Terraform failed while updating `thinkwork-dev-api-graphql-http` because
+  separate Cognee status environment variables pushed the Lambda environment
+  over AWS's 4KB limit. Fix is in progress on
+  `codex/cognee-lambda-env-status` by compacting Cognee status into one env
+  value and deriving stable service/log names in code.
 
 ## Blockers
 
