@@ -28,6 +28,14 @@ const COGNEE_README = resolve(
   REPO_ROOT,
   "terraform/modules/app/cognee/README.md",
 );
+const BUSINESS_ONTOLOGY_OPS_DOC = resolve(
+  REPO_ROOT,
+  "docs/src/content/docs/guides/business-ontology-operations.mdx",
+);
+const BUSINESS_ONTOLOGY_CONCEPT_DOC = resolve(
+  REPO_ROOT,
+  "docs/src/content/docs/concepts/knowledge/business-ontology.mdx",
+);
 const THINKWORK_MAIN = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/main.tf",
@@ -426,5 +434,51 @@ describe("U4 - Cognee deployment template propagation", () => {
         /-var 'cognee_bedrock_model_resource_arns=\[\]'/,
       );
     }
+  });
+});
+
+describe("U5 - Cognee operational handoff guidance", () => {
+  it("documents operator outputs, smoke checks, and rollback in the module README", () => {
+    const source = read(COGNEE_README);
+
+    expect(source).toMatch(/enable_cognee = true/);
+    expect(source).toMatch(/disabled by default/);
+    expect(source).toMatch(/cognee_endpoint/);
+    expect(source).toMatch(/cognee_log_group_name/);
+    expect(source).toMatch(/cognee_backend_mode/);
+    expect(source).toMatch(/health endpoint is reachable/);
+    expect(source).toMatch(/provider,\s+database,\s+graph,\s+vector/i);
+    expect(source).toMatch(/set `enable_cognee = false`/);
+    expect(source).toMatch(/snapshot or export/);
+  });
+
+  it("gives operators a Cognee smoke and troubleshooting checklist", () => {
+    const source = read(BUSINESS_ONTOLOGY_OPS_DOC);
+
+    expect(source).toMatch(/Operate the Cognee substrate/);
+    expect(source).toMatch(
+      /Cognee is an optional Terraform-provisioned substrate/,
+    );
+    expect(source).toMatch(/disabled by default/);
+    expect(source).toMatch(/cognee_endpoint/);
+    expect(source).toMatch(/cognee_log_group_name/);
+    expect(source).toMatch(/cognee_backend_mode/);
+    expect(source).toMatch(/provider,\s+database,\s+graph,\s+vector/i);
+    expect(source).toMatch(
+      /Terraform success is not the same as product readiness/,
+    );
+    expect(source).toMatch(/set `enable_cognee = false`/);
+  });
+
+  it("keeps the concept page clear that Cognee infra does not migrate ontology content", () => {
+    const source = read(BUSINESS_ONTOLOGY_CONCEPT_DOC);
+
+    expect(source).toMatch(/Cognee substrate boundary/);
+    expect(source).toMatch(/enable_cognee = false/);
+    expect(source).toMatch(/enable_cognee = true/);
+    expect(source).toMatch(/migrate retained Hindsight memories/);
+    expect(source).toMatch(/rewrite compiled Wiki or Brain pages/);
+    expect(source).toMatch(/change agent context retrieval/);
+    expect(source).toMatch(/Terraform success means the substrate deployed/);
   });
 });

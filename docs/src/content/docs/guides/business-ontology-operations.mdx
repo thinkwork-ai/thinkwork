@@ -109,6 +109,44 @@ Use this recovery flow:
 
 Do not mutate production rows by hand unless a separate incident response explicitly authorizes it. The normal path is to create a corrected change set or requeue through the API/Lambda path that records a durable job.
 
+## Operate the Cognee substrate
+
+Cognee is an optional Terraform-provisioned substrate for future ontology and knowledge-graph work. It is disabled by default. Enabling Cognee creates infrastructure only; it does not migrate Wiki/Brain content, change agent context, approve ontology definitions, or reprocess tenant pages.
+
+Before enabling Cognee for a stage, set the safe opt-in variables through the normal deployment surface:
+
+- `enable_cognee = true`
+- `cognee_image_uri` pinned to an immutable digest
+- `cognee_db_password_secret_arn` for the dedicated Cognee database user
+- `cognee_bedrock_model_resource_arns` for the selected Bedrock LLM and embedding models
+- `cognee_allowed_internal_cidr_blocks` or `cognee_allowed_internal_security_group_ids` for the intended caller network
+- `cognee_backend_mode` and graph/vector settings; keep dogfood mode at `cognee_desired_count = 1`
+
+Expected cost drivers are the always-on Fargate task, the internal ALB, EFS storage and throughput, CloudWatch logs, Bedrock model calls, and any remote graph/vector stores used in `remote` backend mode.
+
+After apply, inspect these Terraform outputs:
+
+| Output                                       | Use                                                |
+| -------------------------------------------- | -------------------------------------------------- |
+| `cognee_enabled`                             | Confirms the stage is actually opted in.           |
+| `cognee_endpoint`                            | Internal ALB URL for the Cognee API.               |
+| `cognee_log_group_name`                      | CloudWatch logs for startup and provider failures. |
+| `cognee_backend_mode`                        | Confirms dogfood vs. remote graph/vector storage.  |
+| `cognee_cluster_arn` / `cognee_service_name` | ECS service event and health investigation.        |
+| `cognee_storage_file_system_id`              | Terraform-owned EFS data/system volume.            |
+
+Run a post-deploy smoke check before treating the stage as ready:
+
+1. Confirm `cognee_enabled` is `true` and `cognee_backend_mode` matches the rollout plan.
+2. Confirm the internal ALB health check is healthy and `cognee_endpoint` is reachable from the intended caller network or security group.
+3. Check `cognee_log_group_name` for startup errors. Provider, database, graph, vector, and filesystem failures should be loud in logs.
+4. Confirm Cognee reports the configured LLM, embedding, graph, and vector providers.
+5. Confirm a simple provider-backed operation can reach Bedrock or the selected external provider.
+
+Terraform success is not the same as product readiness. It proves the infrastructure graph applied and, when steady-state waiting is enabled, ECS stabilized. It does not prove that provider secrets are populated, that graph/vector data is correct, or that Brain materialization has changed.
+
+To roll back the substrate, set `enable_cognee = false` and apply through the normal pipeline. Snapshot or export persistent data first if it matters: Terraform-owned EFS may be destroyed, while remote graph/vector stores may retain data outside Terraform. Do not delete production graph, vector, or EFS data by hand unless a separate incident response authorizes the cleanup.
+
 ## Rollout guardrails
 
 Keep these rules while expanding the ontology:
