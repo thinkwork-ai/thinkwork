@@ -77,6 +77,7 @@ describe("updateTenantAgent", () => {
           runtime: "STRANDS",
           model: "us.anthropic.claude-sonnet-4-5",
           sandbox: '{"enabled":true}',
+          webExtract: '{"enabled":true}',
           budgetPaused: true,
         },
       },
@@ -93,6 +94,7 @@ describe("updateTenantAgent", () => {
       runtime: "pi",
       model: "us.anthropic.claude-sonnet-4-5",
       sandbox: { enabled: true },
+      web_extract: { enabled: true },
       budget_paused: true,
       budget_paused_reason: "tenant_agent_update",
     });

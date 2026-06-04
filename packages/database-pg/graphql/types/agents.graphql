@@ -44,6 +44,7 @@ type Agent {
   sandbox: AWSJSON
   browser: AWSJSON
   webSearch: AWSJSON
+  webExtract: AWSJSON
   sendEmail: AWSJSON
   contextEngine: AWSJSON
   budgetMonthlyCents: Int
@@ -109,6 +110,7 @@ input UpdateTenantAgentInput {
   sandbox: AWSJSON
   browser: AWSJSON
   webSearch: AWSJSON
+  webExtract: AWSJSON
   sendEmail: AWSJSON
   contextEngine: AWSJSON
   budgetMonthlyCents: Int
