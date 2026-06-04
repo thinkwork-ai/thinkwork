@@ -576,6 +576,15 @@ jobs:
             -var "db_password=${{ secrets.DB_PASSWORD }}" \
             -var "database_engine=aurora-serverless" \
             -var "enable_hindsight=true" \
+            -var "enable_cognee=false" \
+            -var "cognee_image_uri=" \
+            -var "cognee_db_username=thinkwork_cognee" \
+            -var "cognee_db_password_secret_arn=" \
+            -var "cognee_backend_mode=dogfood" \
+            -var "cognee_desired_count=1" \
+            -var "cognee_llm_provider=bedrock" \
+            -var "cognee_embedding_provider=bedrock" \
+            -var 'cognee_bedrock_model_resource_arns=[]' \
             -var "enable_workspace_orchestration=true" \
             -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
             -var "mapbox_public_token=${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}" \

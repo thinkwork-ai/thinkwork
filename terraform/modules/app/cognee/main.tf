@@ -105,8 +105,8 @@ locals {
     { name = "TELEMETRY_DISABLED", value = "true" },
     { name = "REQUIRE_AUTHENTICATION", value = "false" },
     { name = "CORS_ALLOWED_ORIGINS", value = "" },
-    { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.region },
-    { name = "AWS_REGION", value = data.aws_region.current.region },
+    { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
+    { name = "AWS_REGION", value = data.aws_region.current.name },
   ]
 
   optional_environment = concat(
@@ -529,7 +529,7 @@ resource "aws_ecs_task_definition" "cognee" {
       logDriver = "awslogs"
       options = {
         "awslogs-group"         = aws_cloudwatch_log_group.cognee.name
-        "awslogs-region"        = data.aws_region.current.region
+        "awslogs-region"        = data.aws_region.current.name
         "awslogs-stream-prefix" = "cognee"
       }
     }

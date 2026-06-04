@@ -86,6 +86,150 @@ variable "enable_hindsight" {
   default     = false
 }
 
+variable "enable_cognee" {
+  description = "Enable Cognee as an optional ontology/knowledge-graph add-on. Disabled by default."
+  type        = bool
+  default     = false
+}
+
+variable "cognee_image_uri" {
+  description = "Cognee container image URI pinned to an immutable sha256 digest. Required when enable_cognee = true."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_db_username" {
+  description = "Dedicated PostgreSQL username for Cognee metadata storage."
+  type        = string
+  default     = "thinkwork_cognee"
+}
+
+variable "cognee_db_password_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON password field for the dedicated Cognee PostgreSQL user. Required when enable_cognee = true."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_allowed_internal_cidr_blocks" {
+  description = "CIDR blocks allowed to reach the internal Cognee ALB."
+  type        = list(string)
+  default     = []
+}
+
+variable "cognee_allowed_internal_security_group_ids" {
+  description = "Security group IDs allowed to reach the internal Cognee ALB."
+  type        = list(string)
+  default     = []
+}
+
+variable "cognee_backend_mode" {
+  description = "Cognee backend mode. dogfood uses EFS-backed local stores; remote requires graph/vector URLs."
+  type        = string
+  default     = "dogfood"
+}
+
+variable "cognee_desired_count" {
+  description = "Desired Cognee task count. Dogfood mode must stay at 1."
+  type        = number
+  default     = 1
+}
+
+variable "cognee_llm_provider" {
+  description = "Cognee LLM provider."
+  type        = string
+  default     = "bedrock"
+}
+
+variable "cognee_llm_model" {
+  description = "Cognee LLM model."
+  type        = string
+  default     = "bedrock/amazon.nova-lite-v1:0"
+}
+
+variable "cognee_llm_api_key_secret_arn" {
+  description = "Optional Secrets Manager ARN for non-Bedrock Cognee LLM provider API key."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_embedding_provider" {
+  description = "Cognee embedding provider."
+  type        = string
+  default     = "bedrock"
+}
+
+variable "cognee_embedding_model" {
+  description = "Cognee embedding model."
+  type        = string
+  default     = "amazon.titan-embed-text-v2:0"
+}
+
+variable "cognee_embedding_dimensions" {
+  description = "Cognee embedding dimensions."
+  type        = number
+  default     = 1024
+}
+
+variable "cognee_embedding_api_key_secret_arn" {
+  description = "Optional Secrets Manager ARN for non-Bedrock Cognee embedding provider API key."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_vector_db_provider" {
+  description = "Cognee vector store provider."
+  type        = string
+  default     = "lancedb"
+}
+
+variable "cognee_vector_db_url" {
+  description = "Cognee vector store URL. Empty uses the dogfood local default."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_vector_db_key_secret_arn" {
+  description = "Optional Secrets Manager ARN for remote Cognee vector store credentials."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_graph_database_provider" {
+  description = "Cognee graph store provider."
+  type        = string
+  default     = "kuzu"
+}
+
+variable "cognee_graph_database_url" {
+  description = "Cognee graph store URL. Empty uses the dogfood local default."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_graph_database_username" {
+  description = "Optional Cognee graph store username."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_graph_database_password_secret_arn" {
+  description = "Optional Secrets Manager ARN for remote Cognee graph store password."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_bedrock_model_resource_arns" {
+  description = "Explicit Bedrock model ARNs Cognee may invoke when a Bedrock provider is selected."
+  type        = list(string)
+  default     = []
+}
+
+variable "cognee_kms_key_arns" {
+  description = "Optional KMS key ARNs needed to decrypt Cognee-injected secrets."
+  type        = list(string)
+  default     = []
+}
+
 variable "google_oauth_client_id" {
   description = "Google OAuth client ID (optional — leave empty to skip Google login)"
   type        = string
@@ -394,18 +538,42 @@ module "thinkwork" {
   region     = var.region
   account_id = var.account_id
 
-  db_password                    = var.db_password
-  database_engine                = var.database_engine
-  enable_hindsight               = var.enable_hindsight
-  google_oauth_client_id         = var.google_oauth_client_id
-  google_oauth_client_secret     = var.google_oauth_client_secret
-  pre_signup_lambda_zip          = var.pre_signup_lambda_zip
-  lambda_zips_dir                = var.lambda_zips_dir
-  lambda_artifact_bucket         = var.lambda_artifact_bucket
-  lambda_artifact_prefix         = var.lambda_artifact_prefix
-  require_lambda_artifacts       = var.require_lambda_artifacts
-  enable_workspace_orchestration = var.enable_workspace_orchestration
-  api_auth_secret                = var.api_auth_secret
+  db_password                                = var.db_password
+  database_engine                            = var.database_engine
+  enable_hindsight                           = var.enable_hindsight
+  enable_cognee                              = var.enable_cognee
+  cognee_image_uri                           = var.cognee_image_uri
+  cognee_db_username                         = var.cognee_db_username
+  cognee_db_password_secret_arn              = var.cognee_db_password_secret_arn
+  cognee_allowed_internal_cidr_blocks        = var.cognee_allowed_internal_cidr_blocks
+  cognee_allowed_internal_security_group_ids = var.cognee_allowed_internal_security_group_ids
+  cognee_backend_mode                        = var.cognee_backend_mode
+  cognee_desired_count                       = var.cognee_desired_count
+  cognee_llm_provider                        = var.cognee_llm_provider
+  cognee_llm_model                           = var.cognee_llm_model
+  cognee_llm_api_key_secret_arn              = var.cognee_llm_api_key_secret_arn
+  cognee_embedding_provider                  = var.cognee_embedding_provider
+  cognee_embedding_model                     = var.cognee_embedding_model
+  cognee_embedding_dimensions                = var.cognee_embedding_dimensions
+  cognee_embedding_api_key_secret_arn        = var.cognee_embedding_api_key_secret_arn
+  cognee_vector_db_provider                  = var.cognee_vector_db_provider
+  cognee_vector_db_url                       = var.cognee_vector_db_url
+  cognee_vector_db_key_secret_arn            = var.cognee_vector_db_key_secret_arn
+  cognee_graph_database_provider             = var.cognee_graph_database_provider
+  cognee_graph_database_url                  = var.cognee_graph_database_url
+  cognee_graph_database_username             = var.cognee_graph_database_username
+  cognee_graph_database_password_secret_arn  = var.cognee_graph_database_password_secret_arn
+  cognee_bedrock_model_resource_arns         = var.cognee_bedrock_model_resource_arns
+  cognee_kms_key_arns                        = var.cognee_kms_key_arns
+  google_oauth_client_id                     = var.google_oauth_client_id
+  google_oauth_client_secret                 = var.google_oauth_client_secret
+  pre_signup_lambda_zip                      = var.pre_signup_lambda_zip
+  lambda_zips_dir                            = var.lambda_zips_dir
+  lambda_artifact_bucket                     = var.lambda_artifact_bucket
+  lambda_artifact_prefix                     = var.lambda_artifact_prefix
+  require_lambda_artifacts                   = var.require_lambda_artifacts
+  enable_workspace_orchestration             = var.enable_workspace_orchestration
+  api_auth_secret                            = var.api_auth_secret
 
   # Public website custom domain (optional — wired only when www_domain is set)
   www_domain          = var.www_domain
@@ -660,6 +828,21 @@ output "hindsight_enabled" {
 output "hindsight_endpoint" {
   description = "Hindsight API endpoint (null when enable_hindsight = false)"
   value       = module.thinkwork.hindsight_endpoint
+}
+
+output "cognee_enabled" {
+  description = "Whether the Cognee ontology/KG add-on is enabled"
+  value       = module.thinkwork.cognee_enabled
+}
+
+output "cognee_endpoint" {
+  description = "Internal Cognee API endpoint (null when enable_cognee = false)"
+  value       = module.thinkwork.cognee_endpoint
+}
+
+output "cognee_log_group_name" {
+  description = "CloudWatch log group for Cognee (null when enable_cognee = false)"
+  value       = module.thinkwork.cognee_log_group_name
 }
 
 output "agentcore_memory_id" {
