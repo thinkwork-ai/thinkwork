@@ -120,6 +120,17 @@ Started: 2026-06-04
   to create an index on the existing `public.tenants` table. Started hotfix
   branch `codex/cognee-db-ownership-hotfix` to isolate Cognee into a dedicated
   `thinkwork_cognee` database created during deploy credential preparation.
+- 2026-06-04: Dedicated database hotfix PR
+  [#2062](https://github.com/thinkwork-ai/thinkwork/pull/2062) passed checks
+  and squash merged to `main` as
+  `d212a457ed4fc9d99808945e3c4c782961e7cabb`. Merge-triggered deploy run
+  [26964631210](https://github.com/thinkwork-ai/thinkwork/actions/runs/26964631210)
+  failed in `Prepare Cognee database credentials` because the deploy SQL used
+  `CREATE DATABASE ... OWNER thinkwork_cognee`, but the Aurora admin role is
+  not a member of the target Cognee role. Started hotfix branch
+  `codex/cognee-db-create-hotfix` to create the dedicated database with the
+  admin owner and grant Cognee the schema privileges needed to create its own
+  runtime tables.
 
 ## Implementation Units
 
@@ -135,7 +146,8 @@ Started: 2026-06-04
 | U6 hotfix. Stabilize Cognee EFS mount targets                          | merged | `codex/cognee-efs-mount-target-fix` | [#2057](https://github.com/thinkwork-ai/thinkwork/pull/2057) | passed | `e4cc4b82a95451daa701a3a5c76ed79395a39ed5` |
 | U6 hotfix. Grant Cognee table reference privileges                     | merged | `codex/cognee-db-references-grant`  | [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) | passed | `360cc0f4caf4db3e64242c5e582b82c1560b1335` |
 | U6 hotfix. Rotate Cognee URL-safe DB passwords                         | merged | `codex/cognee-url-safe-db-password` | [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) | passed | `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066` |
-| U6 hotfix. Isolate Cognee into dedicated database                      | active | `codex/cognee-db-ownership-hotfix`  | Pending                                                      | local  | Pending                                    |
+| U6 hotfix. Isolate Cognee into dedicated database                      | merged | `codex/cognee-db-ownership-hotfix`  | [#2062](https://github.com/thinkwork-ai/thinkwork/pull/2062) | passed | `d212a457ed4fc9d99808945e3c4c782961e7cabb` |
+| U6 hotfix. Create Cognee DB without target-role ownership              | active | `codex/cognee-db-create-hotfix`     | Pending                                                      | local  | Pending                                    |
 
 ## CI Failures
 
@@ -153,6 +165,7 @@ Started: 2026-06-04
 - [#2057](https://github.com/thinkwork-ai/thinkwork/pull/2057) — U6 hotfix. Stabilize Cognee EFS mount targets — squash merged as `e4cc4b82a95451daa701a3a5c76ed79395a39ed5`.
 - [#2058](https://github.com/thinkwork-ai/thinkwork/pull/2058) — U6 hotfix. Grant Cognee table reference privileges — squash merged as `360cc0f4caf4db3e64242c5e582b82c1560b1335`.
 - [#2060](https://github.com/thinkwork-ai/thinkwork/pull/2060) — U6 hotfix. Rotate Cognee URL-safe DB passwords — squash merged as `24d6672db039fcf6c6c8d2e0c82fc922fe7e9066`.
+- [#2062](https://github.com/thinkwork-ai/thinkwork/pull/2062) — U6 hotfix. Isolate Cognee into dedicated database — squash merged as `d212a457ed4fc9d99808945e3c4c782961e7cabb`.
 
 ## CI / Deploy Failures
 
@@ -176,8 +189,12 @@ Started: 2026-06-04
 - Merge-triggered deploy after PR #2060 passed, but Cognee ECS tasks still
   exited during startup. Cognee migrations were running against the shared
   `thinkwork` database and attempted to alter/index `public.tenants`, which is
-  a Thinkwork application table. Fix is in progress on
-  `codex/cognee-db-ownership-hotfix` by adding a dedicated Cognee database.
+  a Thinkwork application table. Fixed by PR #2062.
+- Merge-triggered deploy after PR #2062 failed in Cognee credential prep.
+  `CREATE DATABASE ... OWNER thinkwork_cognee` requires the executing Aurora
+  admin role to be a member of `thinkwork_cognee`. Fix is in progress on
+  `codex/cognee-db-create-hotfix` by creating the database without target-role
+  ownership and granting Cognee schema privileges inside that database.
 
 ## Blockers
 
