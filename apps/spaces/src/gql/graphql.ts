@@ -7286,6 +7286,189 @@ export type SettingsKnowledgeGraphHealthCheckQuery = {
   };
 };
 
+export type SettingsKnowledgeGraphThreadCandidatesQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  query?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+}>;
+
+export type SettingsKnowledgeGraphThreadCandidatesQuery = {
+  __typename?: "Query";
+  knowledgeGraphThreadCandidates: Array<{
+    __typename?: "KnowledgeGraphThreadCandidate";
+    threadId: string;
+    tenantId: string;
+    title: string;
+    number: number;
+    requesterUserId?: string | null;
+    requesterName?: string | null;
+    spaceId?: string | null;
+    spaceName?: string | null;
+    messageCount: number;
+    lastMessageAt?: any | null;
+    lastIngestRun?: {
+      __typename?: "KnowledgeGraphIngestRun";
+      id: string;
+      status: KnowledgeGraphIngestStatus;
+      entityCount: number;
+      relationshipCount: number;
+      evidenceCount: number;
+      diagnosticCount: number;
+      messageCount: number;
+      durationMs?: number | null;
+      error?: string | null;
+      createdAt: any;
+      startedAt?: any | null;
+      finishedAt?: any | null;
+    } | null;
+  }>;
+};
+
+export type SettingsKnowledgeGraphIngestRunsQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+}>;
+
+export type SettingsKnowledgeGraphIngestRunsQuery = {
+  __typename?: "Query";
+  knowledgeGraphIngestRuns: Array<{
+    __typename?: "KnowledgeGraphIngestRun";
+    id: string;
+    status: KnowledgeGraphIngestStatus;
+    trigger: string;
+    cogneeDatasetName: string;
+    cogneeDatasetId?: string | null;
+    entityCount: number;
+    relationshipCount: number;
+    evidenceCount: number;
+    diagnosticCount: number;
+    messageCount: number;
+    durationMs?: number | null;
+    error?: string | null;
+    createdAt: any;
+    updatedAt: any;
+    startedAt?: any | null;
+    finishedAt?: any | null;
+  }>;
+};
+
+export type SettingsKnowledgeGraphEntitiesQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
+  search?: InputMaybe<Scalars["String"]["input"]>;
+  ontologyType?: InputMaybe<Scalars["String"]["input"]>;
+  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
+  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+}>;
+
+export type SettingsKnowledgeGraphEntitiesQuery = {
+  __typename?: "Query";
+  knowledgeGraphEntities: Array<{
+    __typename?: "KnowledgeGraphEntity";
+    id: string;
+    label: string;
+    normalizedLabel: string;
+    typeLabel?: string | null;
+    ontologyTypeSlug?: string | null;
+    groundingStatus: KnowledgeGraphGroundingStatus;
+    provenanceStatus: KnowledgeGraphProvenanceStatus;
+    summary?: string | null;
+    aliases: Array<string>;
+    relationshipCount: number;
+    evidenceCount: number;
+    lastSeenAt?: any | null;
+    createdAt: any;
+    updatedAt: any;
+  }>;
+};
+
+export type SettingsKnowledgeGraphEntityQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  entityId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsKnowledgeGraphEntityQuery = {
+  __typename?: "Query";
+  knowledgeGraphEntity?: {
+    __typename?: "KnowledgeGraphEntity";
+    id: string;
+    label: string;
+    normalizedLabel: string;
+    typeLabel?: string | null;
+    ontologyTypeSlug?: string | null;
+    groundingStatus: KnowledgeGraphGroundingStatus;
+    provenanceStatus: KnowledgeGraphProvenanceStatus;
+    summary?: string | null;
+    aliases: Array<string>;
+    properties: any;
+    diagnostics: any;
+    relationshipCount: number;
+    evidenceCount: number;
+    lastSeenAt?: any | null;
+    relationships: Array<{
+      __typename?: "KnowledgeGraphRelationship";
+      id: string;
+      sourceEntityId: string;
+      targetEntityId: string;
+      label: string;
+      ontologyTypeSlug?: string | null;
+      groundingStatus: KnowledgeGraphGroundingStatus;
+      provenanceStatus: KnowledgeGraphProvenanceStatus;
+      confidence?: number | null;
+      evidenceCount: number;
+      lastSeenAt?: any | null;
+      evidence: Array<{
+        __typename?: "KnowledgeGraphEvidence";
+        id: string;
+        snippet: string;
+        messageId?: string | null;
+        messageRole?: string | null;
+        messageCreatedAt?: any | null;
+        speakerLabel?: string | null;
+        sourceKind: KnowledgeGraphEvidenceSourceKind;
+        sourceRef?: string | null;
+      }>;
+    }>;
+    evidence: Array<{
+      __typename?: "KnowledgeGraphEvidence";
+      id: string;
+      snippet: string;
+      messageId?: string | null;
+      messageRole?: string | null;
+      messageCreatedAt?: any | null;
+      speakerLabel?: string | null;
+      sourceKind: KnowledgeGraphEvidenceSourceKind;
+      sourceRef?: string | null;
+    }>;
+  } | null;
+};
+
+export type SettingsStartKnowledgeGraphThreadIngestMutationVariables = Exact<{
+  input: StartKnowledgeGraphThreadIngestInput;
+}>;
+
+export type SettingsStartKnowledgeGraphThreadIngestMutation = {
+  __typename?: "Mutation";
+  startKnowledgeGraphThreadIngest: {
+    __typename?: "KnowledgeGraphIngestRun";
+    id: string;
+    status: KnowledgeGraphIngestStatus;
+    threadId: string;
+    entityCount: number;
+    relationshipCount: number;
+    evidenceCount: number;
+    diagnosticCount: number;
+    messageCount: number;
+    durationMs?: number | null;
+    error?: string | null;
+    createdAt: any;
+    startedAt?: any | null;
+    finishedAt?: any | null;
+  };
+};
+
 export type SettingsRenameTenantSlugMutationVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
   newSlug: Scalars["String"]["input"];
@@ -11374,6 +11557,771 @@ export const SettingsKnowledgeGraphHealthCheckDocument = {
 } as unknown as DocumentNode<
   SettingsKnowledgeGraphHealthCheckQuery,
   SettingsKnowledgeGraphHealthCheckQueryVariables
+>;
+export const SettingsKnowledgeGraphThreadCandidatesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphThreadCandidates" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "query" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "knowledgeGraphThreadCandidates" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "query" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "query" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "threadId" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "title" } },
+                { kind: "Field", name: { kind: "Name", value: "number" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "requesterUserId" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "requesterName" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "spaceId" } },
+                { kind: "Field", name: { kind: "Name", value: "spaceName" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "messageCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastMessageAt" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastIngestRun" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "entityCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "relationshipCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidenceCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "diagnosticCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "messageCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "durationMs" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "error" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "createdAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "startedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "finishedAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphThreadCandidatesQuery,
+  SettingsKnowledgeGraphThreadCandidatesQueryVariables
+>;
+export const SettingsKnowledgeGraphIngestRunsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphIngestRuns" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "threadId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "knowledgeGraphIngestRuns" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "threadId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "threadId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "trigger" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeDatasetName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeDatasetId" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "entityCount" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationshipCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "diagnosticCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "messageCount" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "durationMs" } },
+                { kind: "Field", name: { kind: "Name", value: "error" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "startedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "finishedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphIngestRunsQuery,
+  SettingsKnowledgeGraphIngestRunsQueryVariables
+>;
+export const SettingsKnowledgeGraphEntitiesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphEntities" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "threadId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "search" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "ontologyType" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "groundingStatus" },
+          },
+          type: {
+            kind: "NamedType",
+            name: { kind: "Name", value: "KnowledgeGraphGroundingStatus" },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "provenanceStatus" },
+          },
+          type: {
+            kind: "NamedType",
+            name: { kind: "Name", value: "KnowledgeGraphProvenanceStatus" },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "knowledgeGraphEntities" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "threadId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "threadId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "search" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "search" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "ontologyType" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "ontologyType" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "groundingStatus" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "groundingStatus" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "provenanceStatus" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "provenanceStatus" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "label" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "normalizedLabel" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "typeLabel" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "ontologyTypeSlug" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "groundingStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "provenanceStatus" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "summary" } },
+                { kind: "Field", name: { kind: "Name", value: "aliases" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationshipCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceCount" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "lastSeenAt" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphEntitiesQuery,
+  SettingsKnowledgeGraphEntitiesQueryVariables
+>;
+export const SettingsKnowledgeGraphEntityDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphEntity" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "entityId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "knowledgeGraphEntity" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "entityId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "entityId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "label" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "normalizedLabel" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "typeLabel" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "ontologyTypeSlug" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "groundingStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "provenanceStatus" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "summary" } },
+                { kind: "Field", name: { kind: "Name", value: "aliases" } },
+                { kind: "Field", name: { kind: "Name", value: "properties" } },
+                { kind: "Field", name: { kind: "Name", value: "diagnostics" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationshipCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceCount" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "lastSeenAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationships" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sourceEntityId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "targetEntityId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "ontologyTypeSlug" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "groundingStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "provenanceStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "confidence" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidenceCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastSeenAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidence" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "snippet" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "messageId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "messageRole" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "messageCreatedAt" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "speakerLabel" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "sourceKind" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "sourceRef" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidence" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "snippet" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "messageId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "messageRole" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "messageCreatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "speakerLabel" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sourceKind" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sourceRef" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphEntityQuery,
+  SettingsKnowledgeGraphEntityQueryVariables
+>;
+export const SettingsStartKnowledgeGraphThreadIngestDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsStartKnowledgeGraphThreadIngest" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: {
+                kind: "Name",
+                value: "StartKnowledgeGraphThreadIngestInput",
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "startKnowledgeGraphThreadIngest" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "threadId" } },
+                { kind: "Field", name: { kind: "Name", value: "entityCount" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationshipCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "diagnosticCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "messageCount" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "durationMs" } },
+                { kind: "Field", name: { kind: "Name", value: "error" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "startedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "finishedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsStartKnowledgeGraphThreadIngestMutation,
+  SettingsStartKnowledgeGraphThreadIngestMutationVariables
 >;
 export const SettingsRenameTenantSlugDocument = {
   kind: "Document",
