@@ -25,6 +25,7 @@ export * from "./cost-events";
 export * from "./scheduled-jobs";
 export * from "./thread-idle-learning";
 export * from "./knowledge-bases";
+export * from "./knowledge-graph";
 export * from "./email-channel";
 export * from "./thread-dependencies";
 export * from "./thread-participants";

@@ -1325,6 +1325,101 @@ export type KnowledgeGraphDeploymentChange = {
   workflowUrl: Scalars['String']['output'];
 };
 
+export type KnowledgeGraphEntity = {
+  __typename?: 'KnowledgeGraphEntity';
+  aliases: Array<Scalars['String']['output']>;
+  cogneeNodeId: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  diagnostics: Scalars['AWSJSON']['output'];
+  evidence: Array<KnowledgeGraphEvidence>;
+  evidenceCount: Scalars['Int']['output'];
+  groundingStatus: KnowledgeGraphGroundingStatus;
+  id: Scalars['ID']['output'];
+  ingestRunId: Scalars['ID']['output'];
+  label: Scalars['String']['output'];
+  lastSeenAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  normalizedLabel: Scalars['String']['output'];
+  ontologyEntityTypeId?: Maybe<Scalars['ID']['output']>;
+  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
+  properties: Scalars['AWSJSON']['output'];
+  provenanceStatus: KnowledgeGraphProvenanceStatus;
+  relationshipCount: Scalars['Int']['output'];
+  relationships: Array<KnowledgeGraphRelationship>;
+  summary?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  typeLabel?: Maybe<Scalars['String']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type KnowledgeGraphEvidence = {
+  __typename?: 'KnowledgeGraphEvidence';
+  charEnd?: Maybe<Scalars['Int']['output']>;
+  charStart?: Maybe<Scalars['Int']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  entityId?: Maybe<Scalars['ID']['output']>;
+  id: Scalars['ID']['output'];
+  ingestRunId: Scalars['ID']['output'];
+  messageCreatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  messageId?: Maybe<Scalars['ID']['output']>;
+  messageRole?: Maybe<Scalars['String']['output']>;
+  metadata: Scalars['AWSJSON']['output'];
+  observedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  relationshipId?: Maybe<Scalars['ID']['output']>;
+  snippet: Scalars['String']['output'];
+  sourceKind: KnowledgeGraphEvidenceSourceKind;
+  sourceRef?: Maybe<Scalars['String']['output']>;
+  speakerLabel?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+};
+
+export enum KnowledgeGraphEvidenceSourceKind {
+  CogneePayload = 'COGNEE_PAYLOAD',
+  Normalizer = 'NORMALIZER',
+  ThreadMessage = 'THREAD_MESSAGE'
+}
+
+export type KnowledgeGraphGraph = {
+  __typename?: 'KnowledgeGraphGraph';
+  edges: Array<KnowledgeGraphGraphEdge>;
+  nodes: Array<KnowledgeGraphGraphNode>;
+};
+
+export type KnowledgeGraphGraphEdge = {
+  __typename?: 'KnowledgeGraphGraphEdge';
+  evidenceCount: Scalars['Int']['output'];
+  groundingStatus: KnowledgeGraphGroundingStatus;
+  id: Scalars['ID']['output'];
+  label: Scalars['String']['output'];
+  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
+  provenanceStatus: KnowledgeGraphProvenanceStatus;
+  relationshipId: Scalars['ID']['output'];
+  source: Scalars['ID']['output'];
+  target: Scalars['ID']['output'];
+};
+
+export type KnowledgeGraphGraphNode = {
+  __typename?: 'KnowledgeGraphGraphNode';
+  entityId: Scalars['ID']['output'];
+  evidenceCount: Scalars['Int']['output'];
+  groundingStatus: KnowledgeGraphGroundingStatus;
+  id: Scalars['ID']['output'];
+  label: Scalars['String']['output'];
+  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
+  provenanceStatus: KnowledgeGraphProvenanceStatus;
+  relationshipCount: Scalars['Int']['output'];
+  typeLabel?: Maybe<Scalars['String']['output']>;
+};
+
+export enum KnowledgeGraphGroundingStatus {
+  Conflict = 'CONFLICT',
+  Grounded = 'GROUNDED',
+  UnapprovedType = 'UNAPPROVED_TYPE',
+  Ungrounded = 'UNGROUNDED',
+  Unknown = 'UNKNOWN'
+}
+
 export type KnowledgeGraphHealthCheck = {
   __typename?: 'KnowledgeGraphHealthCheck';
   checkedAt: Scalars['AWSDateTime']['output'];
@@ -1333,6 +1428,86 @@ export type KnowledgeGraphHealthCheck = {
   latencyMs: Scalars['Int']['output'];
   message: Scalars['String']['output'];
   statusCode?: Maybe<Scalars['Int']['output']>;
+};
+
+export type KnowledgeGraphIngestRun = {
+  __typename?: 'KnowledgeGraphIngestRun';
+  cogneeDatasetId?: Maybe<Scalars['String']['output']>;
+  cogneeDatasetName: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  diagnosticCount: Scalars['Int']['output'];
+  durationMs?: Maybe<Scalars['Int']['output']>;
+  entityCount: Scalars['Int']['output'];
+  error?: Maybe<Scalars['String']['output']>;
+  evidenceCount: Scalars['Int']['output'];
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  input: Scalars['AWSJSON']['output'];
+  messageCount: Scalars['Int']['output'];
+  metadata: Scalars['AWSJSON']['output'];
+  metrics: Scalars['AWSJSON']['output'];
+  relationshipCount: Scalars['Int']['output'];
+  requestedByUserId?: Maybe<Scalars['ID']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: KnowledgeGraphIngestStatus;
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  trigger: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum KnowledgeGraphIngestStatus {
+  Canceled = 'CANCELED',
+  Failed = 'FAILED',
+  Queued = 'QUEUED',
+  Running = 'RUNNING',
+  StaleNoop = 'STALE_NOOP',
+  Succeeded = 'SUCCEEDED'
+}
+
+export enum KnowledgeGraphProvenanceStatus {
+  Missing = 'MISSING',
+  Strong = 'STRONG',
+  Weak = 'WEAK'
+}
+
+export type KnowledgeGraphRelationship = {
+  __typename?: 'KnowledgeGraphRelationship';
+  cogneeEdgeId?: Maybe<Scalars['String']['output']>;
+  confidence?: Maybe<Scalars['Float']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  diagnostics: Scalars['AWSJSON']['output'];
+  evidence: Array<KnowledgeGraphEvidence>;
+  evidenceCount: Scalars['Int']['output'];
+  groundingStatus: KnowledgeGraphGroundingStatus;
+  id: Scalars['ID']['output'];
+  ingestRunId: Scalars['ID']['output'];
+  label: Scalars['String']['output'];
+  lastSeenAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  ontologyRelationshipTypeId?: Maybe<Scalars['ID']['output']>;
+  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
+  properties: Scalars['AWSJSON']['output'];
+  provenanceStatus: KnowledgeGraphProvenanceStatus;
+  sourceEntityId: Scalars['ID']['output'];
+  targetEntityId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type KnowledgeGraphThreadCandidate = {
+  __typename?: 'KnowledgeGraphThreadCandidate';
+  lastIngestRun?: Maybe<KnowledgeGraphIngestRun>;
+  lastMessageAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  messageCount: Scalars['Int']['output'];
+  number: Scalars['Int']['output'];
+  requesterName?: Maybe<Scalars['String']['output']>;
+  requesterUserId?: Maybe<Scalars['ID']['output']>;
+  spaceId?: Maybe<Scalars['ID']['output']>;
+  spaceName?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
 };
 
 export type LinkedTask = {
@@ -1878,6 +2053,7 @@ export type Mutation = {
   setSpaceTools: Space;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startEvalRun: EvalRun;
+  startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
   startOntologySuggestionScan: OntologySuggestionScanJob;
   startSkillRun: SkillRun;
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
@@ -2669,6 +2845,11 @@ export type MutationStartEvalRunArgs = {
 };
 
 
+export type MutationStartKnowledgeGraphThreadIngestArgs = {
+  input: StartKnowledgeGraphThreadIngestInput;
+};
+
+
 export type MutationStartOntologySuggestionScanArgs = {
   input: StartOntologySuggestionScanInput;
 };
@@ -3295,7 +3476,12 @@ export type Query = {
   inboxItems: Array<InboxItem>;
   knowledgeBase?: Maybe<KnowledgeBase>;
   knowledgeBases: Array<KnowledgeBase>;
+  knowledgeGraphEntities: Array<KnowledgeGraphEntity>;
+  knowledgeGraphEntity?: Maybe<KnowledgeGraphEntity>;
+  knowledgeGraphGraph: KnowledgeGraphGraph;
   knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
+  knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
+  knowledgeGraphThreadCandidates: Array<KnowledgeGraphThreadCandidate>;
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
@@ -3698,6 +3884,48 @@ export type QueryKnowledgeBaseArgs = {
 
 export type QueryKnowledgeBasesArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryKnowledgeGraphEntitiesArgs = {
+  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  ontologyType?: InputMaybe<Scalars['String']['input']>;
+  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
+  search?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryKnowledgeGraphEntityArgs = {
+  entityId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryKnowledgeGraphGraphArgs = {
+  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
+  ontologyType?: InputMaybe<Scalars['String']['input']>;
+  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
+  search?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryKnowledgeGraphIngestRunsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryKnowledgeGraphThreadCandidatesArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  query?: InputMaybe<Scalars['String']['input']>;
+  requesterUserId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -4996,6 +5224,13 @@ export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars['String']['input']>>;
   model?: InputMaybe<Scalars['String']['input']>;
   testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+};
+
+export type StartKnowledgeGraphThreadIngestInput = {
+  force?: InputMaybe<Scalars['Boolean']['input']>;
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  threadId: Scalars['ID']['input'];
 };
 
 export type StartOntologySuggestionScanInput = {
