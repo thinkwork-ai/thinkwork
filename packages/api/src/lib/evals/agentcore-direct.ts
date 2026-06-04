@@ -119,6 +119,7 @@ export function buildEvalAgentCorePayload(input: {
     appsync_api_key: APPSYNC_API_KEY || undefined,
     hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
     web_search_config: runtimeConfig.webSearchConfig,
+    web_extract_config: runtimeConfig.webExtractConfig,
     send_email_config: runtimeConfig.sendEmailConfig || undefined,
     context_engine_enabled: false,
     context_engine_config: undefined,

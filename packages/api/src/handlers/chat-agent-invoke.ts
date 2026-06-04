@@ -45,7 +45,12 @@ import {
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
-import type { EffectiveWorkspacePolicy } from "../lib/workspace-renderer/index.js";
+import {
+  isToolAllowed,
+  type EffectiveWorkspacePolicy,
+} from "../lib/workspace-renderer/index.js";
+import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
+import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
 // Post-AgentCore helpers — previously inline in this file; lifted into
 // the shared chat-finalize lib so chat-agent-finalize (the new HTTP
 // handler) and chat-agent-invoke (this file, for pre-dispatch error
@@ -797,6 +802,13 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // MCP configs already resolved by runtimeConfig.
     const mcpConfigs = runtimeConfig.mcpConfigs;
     let effectiveBlockedTools = runtimeConfig.blockedTools;
+    let effectiveToolPolicy: EffectiveWorkspacePolicy = {
+      blockedTools: runtimeConfig.blockedTools,
+      allowedTools: null,
+      mcpAllowedServers: null,
+      mcpBlockedServers: [],
+      diagnostics: [],
+    };
     let renderedWorkspace: RenderWorkspaceTupleForInvokeResult = {
       rendered: false,
       reason: "not_attempted",
@@ -816,6 +828,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         });
         if (renderedWorkspace.rendered) {
           renderedWorkspacePrefix = renderedWorkspace.renderedPrefix;
+          effectiveToolPolicy =
+            renderedWorkspace.effectivePolicy ?? effectiveToolPolicy;
           effectiveBlockedTools =
             renderedWorkspace.effectivePolicy?.blockedTools ??
             runtimeConfig.blockedTools;
@@ -918,12 +932,21 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       effectiveBlockedTools.includes(toolName);
     const isAnyEffectivelyBlocked = (...toolNames: string[]): boolean =>
       toolNames.some((toolName) => isEffectivelyBlocked(toolName));
+    const isAnyToolAllowed = (...toolNames: string[]): boolean => {
+      if (isAnyEffectivelyBlocked(...toolNames)) return false;
+      return toolNames.some((toolName) =>
+        isToolAllowed(effectiveToolPolicy, toolName),
+      );
+    };
+    const isSkillAllowedByPolicy = (skill: { skillId: string }): boolean => {
+      const aliases = toolPolicyAliases(skill.skillId);
+      if (isAnyEffectivelyBlocked(...aliases)) return false;
+      if (!isBuiltinToolSlug(skill.skillId)) return true;
+      return isAnyToolAllowed(...aliases);
+    };
     const effectiveSkillsConfig =
-      effectiveBlockedTools.length > 0
-        ? skillsConfig.filter(
-            (skill: { skillId: string }) =>
-              !effectiveBlockedTools.includes(skill.skillId),
-          )
+      effectiveBlockedTools.length > 0 || effectiveToolPolicy.allowedTools
+        ? skillsConfig.filter(isSkillAllowedByPolicy)
         : skillsConfig;
     const effectiveMcpPolicy = renderedWorkspace.rendered
       ? (renderedWorkspace.effectivePolicy ?? null)
@@ -1041,21 +1064,24 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       computer_task_id: event.computerTaskId || undefined,
       computer_response_mode: "thread_turn",
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
-      web_search_config: !isAnyEffectivelyBlocked("web-search", "web_search")
+      web_search_config: isAnyToolAllowed(...toolPolicyAliases("web-search"))
         ? runtimeConfig.webSearchConfig
         : undefined,
+      web_extract_config: isAnyToolAllowed(...toolPolicyAliases("web-extract"))
+        ? runtimeConfig.webExtractConfig
+        : undefined,
       send_email_config:
-        runtimeConfig.sendEmailConfig && !isEffectivelyBlocked("send_email")
+        runtimeConfig.sendEmailConfig &&
+        isAnyToolAllowed(...toolPolicyAliases("send_email"))
           ? { ...runtimeConfig.sendEmailConfig, threadId }
           : undefined,
       context_engine_enabled:
         runtimeConfig.contextEngineEnabled &&
-        !isAnyEffectivelyBlocked("query_context", "context_engine")
+        isAnyToolAllowed(...toolPolicyAliases("context_engine"))
           ? true
           : undefined,
-      context_engine_config: !isAnyEffectivelyBlocked(
-        "query_context",
-        "context_engine",
+      context_engine_config: isAnyToolAllowed(
+        ...toolPolicyAliases("context_engine"),
       )
         ? runtimeConfig.contextEngineConfig
         : undefined,
@@ -1075,7 +1101,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         effectiveBlockedTools.length > 0 ? effectiveBlockedTools : undefined,
       browser_automation_enabled:
         runtimeConfig.browserAutomationEnabled &&
-        !isAnyEffectivelyBlocked("browser_automation", "browser")
+        isAnyToolAllowed("browser_automation", "browser")
           ? true
           : undefined,
       turn_context: spaceId

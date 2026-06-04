@@ -11,18 +11,18 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-04-002-feat-firecrawl-web-extraction-plan.md`.
 - Target branch: `main`.
-- Current unit: U2 Add Firecrawl config loading and admin test support.
-- Current branch: `codex/u2-firecrawl-config-test`.
-- Current worktree: `.Codex/worktrees/u2-firecrawl-config-test`.
+- Current unit: U3 Thread Web Extraction through runtime config and policy.
+- Current branch: `codex/u3-firecrawl-runtime-policy`.
+- Current worktree: `.Codex/worktrees/u3-firecrawl-runtime-policy`.
 
-| Unit                                         | Branch                           | PR                                                           | State  | Notes                                                      |
-| -------------------------------------------- | -------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------- |
-| U1 Extend built-in data model and catalog    | `codex/u1-firecrawl-catalog`     | [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051) | Merged | Squash merged as `f3a855ed`; dev migration `0143` applied. |
-| U2 Add Firecrawl config loading and test     | `codex/u2-firecrawl-config-test` | [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052) | Active | Local verification passed; CI pending.                     |
-| U3 Thread runtime config and policy          | TBD                              | TBD                                                          | Todo   | Pending U1-U2.                                             |
-| U4 Register Pi `web_extract` extension       | TBD                              | TBD                                                          | Todo   | Pending U2-U3.                                             |
-| U5 Update Admin, generated clients, and docs | TBD                              | TBD                                                          | Todo   | Pending U1-U3.                                             |
-| U6 Update agent guidance and verification    | TBD                              | TBD                                                          | Todo   | Pending U4-U5.                                             |
+| Unit                                         | Branch                              | PR                                                           | State  | Notes                                                      |
+| -------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------- |
+| U1 Extend built-in data model and catalog    | `codex/u1-firecrawl-catalog`        | [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051) | Merged | Squash merged as `f3a855ed`; dev migration `0143` applied. |
+| U2 Add Firecrawl config loading and test     | `codex/u2-firecrawl-config-test`    | [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052) | Merged | Squash merged as `a0aadc53`; CI passed.                    |
+| U3 Thread runtime config and policy          | `codex/u3-firecrawl-runtime-policy` | [#2054](https://github.com/thinkwork-ai/thinkwork/pull/2054) | Active | Runtime policy plumbing in progress.                       |
+| U4 Register Pi `web_extract` extension       | TBD                                 | TBD                                                          | Todo   | Pending U2-U3.                                             |
+| U5 Update Admin, generated clients, and docs | TBD                                 | TBD                                                          | Todo   | Pending U1-U3.                                             |
+| U6 Update agent guidance and verification    | TBD                                 | TBD                                                          | Todo   | Pending U4-U5.                                             |
 
 ### Progress Log
 
@@ -64,6 +64,21 @@ status: in_progress
   `pnpm dlx prettier --check <changed supported files>`;
   and `git diff --check`.
 - Opened U2 PR [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052).
+- U2 CI passed; squash merged PR
+  [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052) as
+  `a0aadc53`, then removed the U2 worktree and pruned the deleted remote
+  branch.
+- Created isolated U3 worktree
+  `.Codex/worktrees/u3-firecrawl-runtime-policy` from `origin/main`.
+- U3 added `webExtractConfig` runtime resolution, Firecrawl credential gating,
+  Space policy alias handling for built-in runtime names, and `web_extract_config`
+  pass-through for chat, wakeup, eval, and direct invoke surfaces.
+- U3 local verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/builtin-tool-policy-aliases.test.ts src/lib/templates/web-extract-config.test.ts src/lib/__tests__/resolve-agent-runtime-config.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts src/lib/evals/agentcore-direct.test.ts src/graphql/resolvers/spaces/setSpaceTools.mutation.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm dlx prettier --check <changed supported files>`;
+  and `git diff --check`.
+- Opened U3 PR [#2054](https://github.com/thinkwork-ai/thinkwork/pull/2054).
 
 ### CI / Verification
 

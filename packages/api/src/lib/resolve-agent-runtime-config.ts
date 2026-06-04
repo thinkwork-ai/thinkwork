@@ -66,6 +66,7 @@ import { validateTemplateBrowser } from "./templates/browser-config.js";
 import { validateTemplateContextEngine } from "./templates/context-engine-config.js";
 import type { TemplateContextEngineConfig } from "./templates/context-engine-config.js";
 import { validateTemplateSendEmail } from "./templates/send-email-config.js";
+import { validateTemplateWebExtract } from "./templates/web-extract-config.js";
 import { validateTemplateWebSearch } from "./templates/web-search-config.js";
 import {
   constrainTemplateContextEngineConfig,
@@ -75,6 +76,10 @@ import {
   resolveWebSearchConfigFromSkills,
   type WebSearchRuntimeConfig,
 } from "./web-search-config.js";
+import {
+  loadTenantWebExtractConfig,
+  type TenantWebExtractConfig,
+} from "./builtin-tools/web-extract.js";
 import {
   applyRuntimeOverrides,
   type SpaceRuntimeOverrides,
@@ -106,6 +111,8 @@ export interface McpConfig {
 }
 
 export type WebSearchConfig = WebSearchRuntimeConfig;
+
+export type WebExtractConfig = Omit<TenantWebExtractConfig, "secretRef">;
 
 export interface SendEmailConfig {
   agentId: string;
@@ -147,6 +154,7 @@ export interface AgentRuntimeConfig {
   runtimeType: AgentRuntimeType;
   skillsConfig: SkillConfig[];
   webSearchConfig?: WebSearchConfig;
+  webExtractConfig?: WebExtractConfig;
   sendEmailConfig?: SendEmailConfig;
   knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined;
   mcpConfigs: McpConfig[];
@@ -245,6 +253,7 @@ export async function resolveAgentRuntimeConfig(
       sandbox: agents.sandbox,
       browser: agents.browser,
       web_search: agents.web_search,
+      web_extract: agents.web_extract,
       send_email: agents.send_email,
       context_engine: agents.context_engine,
     })
@@ -379,6 +388,17 @@ export async function resolveAgentRuntimeConfig(
       `${logPrefix} Invalid agent webSearch config ignored for agent ${opts.agentId}: ${templateWebSearchResult.error}`,
     );
   }
+  const templateWebExtractResult = validateTemplateWebExtract(
+    agent.web_extract,
+  );
+  const templateWebExtractEnabled = templateWebExtractResult.ok
+    ? templateWebExtractResult.value?.enabled === true
+    : false;
+  if (!templateWebExtractResult.ok) {
+    console.warn(
+      `${logPrefix} Invalid agent webExtract config ignored for agent ${opts.agentId}: ${templateWebExtractResult.error}`,
+    );
+  }
   const templateSendEmailResult = validateTemplateSendEmail(agent.send_email);
   const templateSendEmailEnabled = templateSendEmailResult.ok
     ? templateSendEmailResult.value?.enabled === true
@@ -483,6 +503,12 @@ export async function resolveAgentRuntimeConfig(
   }
 
   const webSearchConfig = resolveWebSearchConfigFromSkills(skillsConfig);
+  const webExtractConfig =
+    templateWebExtractEnabled &&
+    !blockedTools.includes("web-extract") &&
+    !blockedTools.includes("web_extract")
+      ? await loadTenantWebExtractConfig(opts.tenantId)
+      : null;
 
   // --- Knowledge bases -----------------------------------------------------
 
@@ -601,6 +627,14 @@ export async function resolveAgentRuntimeConfig(
     runtimeType: normalizeAgentRuntimeType(agent.runtime),
     skillsConfig,
     webSearchConfig,
+    webExtractConfig: webExtractConfig
+      ? {
+          toolSlug: webExtractConfig.toolSlug,
+          provider: webExtractConfig.provider,
+          apiKey: webExtractConfig.apiKey,
+          config: webExtractConfig.config,
+        }
+      : undefined,
     sendEmailConfig,
     knowledgeBasesConfig,
     mcpConfigs,

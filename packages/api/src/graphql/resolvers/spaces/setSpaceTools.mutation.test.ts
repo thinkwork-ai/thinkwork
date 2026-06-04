@@ -139,7 +139,7 @@ describe("setSpaceTools", () => {
         input: {
           tenantId: "tenant-1",
           spaceId: "space-1",
-          builtInToolSlugs: ["web-search", "web-search"],
+          builtInToolSlugs: ["web-search", "web-extract", "web-search"],
           mcpServerIds: ["mcp-2", "mcp-1"],
         },
       },
@@ -172,8 +172,8 @@ describe("setSpaceTools", () => {
       expect.objectContaining({
         tool_policy: {
           blockedTools: ["send_email"],
-          builtInTools: ["web-search"],
-          allowedTools: ["web-search"],
+          builtInTools: ["web-extract", "web-search"],
+          allowedTools: ["web-extract", "web-search"],
         },
         mcp_policy: {
           blockedServers: ["prod-db"],
@@ -186,7 +186,7 @@ describe("setSpaceTools", () => {
         id: "space-1",
         tenantId: "tenant-1",
         toolPolicy: expect.objectContaining({
-          builtInTools: ["web-search"],
+          builtInTools: ["web-extract", "web-search"],
         }),
       }),
     );

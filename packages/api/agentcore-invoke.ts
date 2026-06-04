@@ -295,6 +295,9 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     if (body.web_search_config) {
       payload.web_search_config = body.web_search_config;
     }
+    if (body.web_extract_config) {
+      payload.web_extract_config = body.web_extract_config;
+    }
     if (body.send_email_config) {
       payload.send_email_config = body.send_email_config;
     }
