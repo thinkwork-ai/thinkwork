@@ -16,6 +16,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { knowledgeBases, tenants } from "@thinkwork/database-pg/schema";
+import { authenticate } from "./src/lib/cognito-auth.js";
+import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth-user.js";
 
 interface APIGatewayProxyEvent {
   headers?: Record<string, string | undefined>;
@@ -50,23 +52,26 @@ const ACCEPTED_EXTENSIONS = new Set([
 ]);
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
+// HTTP API proxy integrations forward OPTIONS to the Lambda, so we answer the
+// CORS preflight ourselves (2xx + headers) or the browser blocks the request.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, x-api-key, x-tenant-id, x-principal-id",
+  "Access-Control-Max-Age": "3600",
+};
+
 function json(statusCode: number, body: unknown): APIGatewayProxyResult {
   return {
     statusCode,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     body: JSON.stringify(body),
   };
 }
 
-function authToken(headers?: Record<string, string | undefined>) {
-  const auth = headers?.authorization || headers?.Authorization;
-  if (!auth) return null;
-  return auth.startsWith("Bearer ")
-    ? auth.slice("Bearer ".length).trim()
-    : null;
+function corsPreflight(): APIGatewayProxyResult {
+  return { statusCode: 204, headers: CORS_HEADERS, body: "" };
 }
 
 function s3Prefix(tenantSlug: string, kbSlug: string): string {
@@ -75,7 +80,7 @@ function s3Prefix(tenantSlug: string, kbSlug: string): string {
 
 async function resolveKb(
   kbId: string,
-): Promise<{ tenantSlug: string; kbSlug: string } | null> {
+): Promise<{ tenantId: string; tenantSlug: string; kbSlug: string } | null> {
   const [kb] = await db
     .select({
       tenant_id: knowledgeBases.tenant_id,
@@ -91,16 +96,27 @@ async function resolveKb(
     .where(eq(tenants.id, kb.tenant_id));
   if (!tenant?.slug) return null;
 
-  return { tenantSlug: tenant.slug, kbSlug: kb.slug };
+  return { tenantId: kb.tenant_id, tenantSlug: tenant.slug, kbSlug: kb.slug };
 }
 
 export async function handler(
   event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> {
-  const expectedSecret = process.env.API_AUTH_SECRET;
-  const token = authToken(event.headers);
-  if (!expectedSecret || !token || token !== expectedSecret) {
+  // Answer the CORS preflight before auth — the HTTP API forwards OPTIONS here.
+  if (event.requestContext?.http?.method === "OPTIONS") {
+    return corsPreflight();
+  }
+
+  // Accept either a Cognito id-token (the Spaces console) or the shared service
+  // secret (internal callers); authenticate() handles both. The previous
+  // secret-only check 401'd every browser request from the console.
+  const auth = await authenticate(event.headers ?? {});
+  if (!auth) {
     return json(401, { ok: false, error: "Unauthorized" });
+  }
+  const { tenantId: callerTenantId } = await resolveCallerFromAuth(auth);
+  if (!callerTenantId) {
+    return json(401, { ok: false, error: "Could not resolve caller tenant" });
   }
 
   if (!BUCKET) {
@@ -122,6 +138,11 @@ export async function handler(
   const resolved = await resolveKb(kbId);
   if (!resolved) {
     return json(404, { ok: false, error: "Knowledge base not found" });
+  }
+  // Tenant isolation: the caller may only touch documents for a KB in their own
+  // tenant (service-secret callers carry no tenant and are trusted).
+  if (auth.authType === "cognito" && resolved.tenantId !== callerTenantId) {
+    return json(403, { ok: false, error: "Forbidden" });
   }
 
   const prefix = s3Prefix(resolved.tenantSlug, resolved.kbSlug);
