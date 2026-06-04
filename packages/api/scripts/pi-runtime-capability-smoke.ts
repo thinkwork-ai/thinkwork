@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 type Capability =
   | "plain"
   | "web_search"
+  | "web_extract"
   | "execute_code"
   | "browser_automation"
   | "hindsight"
@@ -82,6 +83,7 @@ const ALL_CAPABILITIES: Capability[] = [
 const SELECTABLE_CAPABILITIES: Capability[] = [
   ...ALL_CAPABILITIES,
   "browser_automation",
+  "web_extract",
 ];
 
 function usage(exitCode = 2): never {
@@ -421,6 +423,44 @@ function hasWebSearchResult(invocation: Record<string, unknown>): boolean {
   return false;
 }
 
+function hasWebExtractResult(invocation: Record<string, unknown>): boolean {
+  const blob = invocationBlob(invocation);
+  if (
+    /"ok"\s*:\s*true/.test(blob) &&
+    (blob.includes("example domain") || blob.includes("this domain"))
+  ) {
+    return true;
+  }
+
+  for (const key of ["output", "output_preview", "result", "result_preview"]) {
+    const value = invocation[key];
+    if (typeof value !== "string") continue;
+    try {
+      const parsed = JSON.parse(value) as {
+        ok?: unknown;
+        markdown?: unknown;
+        text?: unknown;
+      };
+      const content =
+        `${String(parsed.markdown ?? "")} ${String(parsed.text ?? "")}`.toLowerCase();
+      if (
+        parsed.ok === true &&
+        (content.includes("example domain") || content.includes("this domain"))
+      ) {
+        return true;
+      }
+    } catch {
+      if (
+        /"ok"\s*:\s*true/.test(value.toLowerCase()) &&
+        /example domain|this domain/.test(value.toLowerCase())
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function hasExecuteCodeResult(invocation: Record<string, unknown>): boolean {
   const blob = invocationBlob(invocation);
   return (
@@ -475,6 +515,12 @@ function promptFor(capability: Capability, token: string): string {
         "Use the web_search tool to search the web for the current OpenAI news page title.",
         `After using the tool, reply with ${token} and the title you found.`,
         "Do not answer from memory; use the tool.",
+      ].join(" ");
+    case "web_extract":
+      return [
+        "Use the web_extract tool to read https://example.com/ and extract the page markdown.",
+        `After using the tool, reply with ${token} and the page title plus one phrase from the extracted content.`,
+        "Do not answer from memory and do not use browser_automation unless web_extract fails.",
       ].join(" ");
     case "execute_code":
       return [
@@ -545,6 +591,7 @@ function evaluate(
 
   const patterns: Record<Exclude<Capability, "plain">, RegExp[]> = {
     web_search: [/web[-_ ]?search/, /search/],
+    web_extract: [/web[-_ ]?extract/, /firecrawl/, /extract/],
     execute_code: [/execute_code/, /sandbox/, /code/],
     browser_automation: [/browser_automation/, /agentcore_browser/, /browser/],
     hindsight: [/hindsight/, /memory/, /reflect/, /recall/],
@@ -572,15 +619,17 @@ function evaluate(
   const evidenceOk =
     capability === "web_search"
       ? invocations.some(hasWebSearchResult)
-      : capability === "execute_code"
-        ? invocations.some(hasExecuteCodeResult)
-        : capability === "browser_automation"
-          ? invocations.some(hasBrowserAutomationResult)
-          : capability === "hindsight"
-            ? invocations.some(hasHindsightResult)
-            : capability === "mcp"
-              ? invocations.some(hasMcpResult)
-              : false;
+      : capability === "web_extract"
+        ? invocations.some(hasWebExtractResult)
+        : capability === "execute_code"
+          ? invocations.some(hasExecuteCodeResult)
+          : capability === "browser_automation"
+            ? invocations.some(hasBrowserAutomationResult)
+            : capability === "hindsight"
+              ? invocations.some(hasHindsightResult)
+              : capability === "mcp"
+                ? invocations.some(hasMcpResult)
+                : false;
 
   if (!evidenceOk) {
     return { ...base, reason: `${capability}_result_evidence_missing` };
