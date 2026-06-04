@@ -156,11 +156,13 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     : true;
   const composerSpaces = useMemo(
     () =>
-      // Default Space pinned to the top; the rest sorted alphabetically.
+      // The resolved Default Space pinned to the top; the rest sorted
+      // alphabetically. Pin by id (not isDefaultSpace, which also matches
+      // "General") so only the one true default floats up.
       [...spaces]
         .sort((a, b) => {
-          const aDefault = isDefaultSpace(a);
-          const bDefault = isDefaultSpace(b);
+          const aDefault = a.id === defaultSpaceId;
+          const bDefault = b.id === defaultSpaceId;
           if (aDefault !== bDefault) return aDefault ? -1 : 1;
           return (a.name || a.slug || "Space").localeCompare(
             b.name || b.slug || "Space",
@@ -170,7 +172,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           id: space.id,
           name: space.name || space.slug || "Space",
         })),
-    [spaces],
+    [spaces, defaultSpaceId],
   );
   const mentionTargets = useMemo(
     () => buildNewThreadMentionTargets(mentionTargetData),
