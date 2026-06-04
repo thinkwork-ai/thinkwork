@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/cognee-kg-u2-read-resolvers` /
   `.Codex/worktrees/cognee-kg-u2-read-resolvers`
-- Current PR: not opened
+- Current PR: [#2078](https://github.com/thinkwork-ai/thinkwork/pull/2078)
 - Blocker: none
 
 ## Progress Log
@@ -83,3 +83,5 @@ Started: 2026-06-04
   `pnpm --filter @thinkwork/api test` (398 files passed, 3 skipped; 3523 tests
   passed, 9 skipped). API lint is a no-op because `@thinkwork/api` has no
   `lint` script.
+- 2026-06-04: Opened U2 PR
+  [#2078](https://github.com/thinkwork-ai/thinkwork/pull/2078).
