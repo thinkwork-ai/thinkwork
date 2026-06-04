@@ -137,9 +137,12 @@ export function createWebSearchExtension(
         name: "web_search",
         label: "Web Search",
         description:
-          "Search the web for current information (locations, business hours, " +
-          "current events, prices, schedules, news, definitions). Fast and cheap — " +
-          "prefer this for ordinary factual lookups before browser automation.",
+          "Find current web search results and candidate URLs (locations, " +
+          "business hours, current events, prices, schedules, news, definitions). " +
+          "Fast and cheap; use this for discovery and ordinary factual lookups. " +
+          "When you need to read, summarize, analyze, or quote a known result URL, " +
+          "call `web_extract` next. Use `browser_automation` only for interaction, " +
+          "rendered-state inspection, or extraction fallback.",
         parameters: Type.Object({
           query: Type.String({ description: "Specific search query." }),
           num_results: Type.Optional(

@@ -286,6 +286,21 @@ describe("regenerateWorkspaceMap — two derived AGENTS.md sections", () => {
     expect(dbTableReads).not.toContain("agent_knowledge_bases");
     expect(dbTableReads).not.toContain("routines");
   });
+
+  it("renders web search, extraction, then browser fallback guidance", () => {
+    const section = renderDerivedAgentsMdSections({
+      agentSlug: "acme-daily-digest",
+      workspaceObjectPaths: [],
+      skills: [],
+    })["Skills & Tools"];
+
+    expect(section).toContain("Start with `web_search` for discovery");
+    expect(section).toContain("then `web_extract` for known URLs");
+    expect(section).toContain("Only escalate to `browser_automation`");
+    expect(section).toContain(
+      "scraping content that `web_extract` cannot read",
+    );
+  });
 });
 
 describe("regenerateAgentsMdDerivedSections", () => {

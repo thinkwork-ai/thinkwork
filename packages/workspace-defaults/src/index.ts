@@ -459,10 +459,15 @@ surface. Do not duplicate the host title, \`App\` label, open-full action, refre
 controls, source coverage, evidence, or provenance panels unless the user
 explicitly asks for that content inside the app.
 
-### Web Search
+### Web Research
 
-If web search is available, use it to find current information when your
+Use \`web_search\` to find current information and candidate URLs when your
 training data may be outdated or when the question requires real-time data.
+Use \`web_extract\` to read one known public URL as clean page content after
+search finds a promising result, or when the user gives you a URL to read,
+summarize, analyze, or quote. Use \`browser_automation\` only for pages that need
+interaction, rendered-state inspection, multi-step browsing, or extraction
+fallback. Do not write provider credentials or API keys into workspace files.
 
 ### Calendar
 
@@ -964,7 +969,7 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 21;
+export const DEFAULTS_VERSION = 22;
 
 // ---------------------------------------------------------------------------
 // Aggregator
