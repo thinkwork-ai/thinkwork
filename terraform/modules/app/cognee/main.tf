@@ -101,6 +101,7 @@ locals {
     { name = "SYSTEM_ROOT_DIRECTORY", value = local.system_root_directory },
     { name = "TELEMETRY_DISABLED", value = "true" },
     { name = "REQUIRE_AUTHENTICATION", value = "false" },
+    { name = "ENABLE_BACKEND_ACCESS_CONTROL", value = "false" },
     { name = "CORS_ALLOWED_ORIGINS", value = "" },
     { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
     { name = "AWS_REGION", value = data.aws_region.current.name },

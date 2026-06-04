@@ -10,12 +10,13 @@
  * Live mode requires:
  *   VITE_GRAPHQL_HTTP_URL, GRAPHQL_HTTP_URL, or API_GRAPHQL_URL
  *   API_AUTH_SECRET, THINKWORK_API_SECRET, VITE_GRAPHQL_API_KEY, or GRAPHQL_API_KEY
- *   SMOKE_TENANT_ID and SMOKE_USER_ID, or DATABASE_URL for operator fallback
+ *   SMOKE_TENANT_ID, or DATABASE_URL for tenant fallback
  *
  * Optional live mode:
  *   SMOKE_KG_THREAD_ID       exact thread to ingest
  *   SMOKE_KG_THREAD_QUERY    candidate-thread search when thread id omitted
  *   SMOKE_KG_FORCE=1         force a new ingest request
+ *   SMOKE_KG_AGENT_ID        use admin-skill impersonation with SMOKE_USER_ID
  */
 
 import { execFileSync } from "node:child_process";
@@ -64,12 +65,13 @@ if (!LIVE_ENABLED) {
           requiredLiveEnv: [
             "VITE_GRAPHQL_HTTP_URL or GRAPHQL_HTTP_URL or API_GRAPHQL_URL",
             "API_AUTH_SECRET or THINKWORK_API_SECRET or VITE_GRAPHQL_API_KEY or GRAPHQL_API_KEY",
-            "SMOKE_TENANT_ID and SMOKE_USER_ID, or DATABASE_URL",
+            "SMOKE_TENANT_ID, or DATABASE_URL",
           ],
           optionalLiveEnv: [
             "SMOKE_KG_THREAD_ID",
             "SMOKE_KG_THREAD_QUERY",
             "SMOKE_KG_FORCE=1",
+            "SMOKE_KG_AGENT_ID with SMOKE_USER_ID for admin-skill impersonation auth",
           ],
           verifies: [
             "manual ingest mutation returns an ingest run",
@@ -90,7 +92,7 @@ if (!apiUrl || (!apiSecret && !apiKey)) {
   fail("Missing GraphQL HTTP config or API auth secret/key.");
 }
 
-const identity = resolveOperatorIdentity(env);
+const scope = resolveSmokeScope(env);
 
 try {
   const result = await runLiveSmoke();
@@ -137,8 +139,9 @@ async function runLiveSmoke() {
   }
 
   return {
-    tenantId: identity.tenantId,
-    userId: identity.userId,
+    tenantId: scope.tenantId,
+    userId: scope.userId,
+    authMode: scope.authMode,
     thread,
     run: summarizeRun(terminalRun),
     tableEntityCount: entities.length,
@@ -186,7 +189,7 @@ async function resolveThread() {
       }
     `,
     {
-      tenantId: identity.tenantId,
+      tenantId: scope.tenantId,
       query: first(env.SMOKE_KG_THREAD_QUERY, env.THREAD_QUERY) ?? null,
       limit: 10,
     },
@@ -232,7 +235,7 @@ async function startIngest(threadId) {
     `,
     {
       input: {
-        tenantId: identity.tenantId,
+        tenantId: scope.tenantId,
         threadId,
         force: env.SMOKE_KG_FORCE === "1",
         metadata: JSON.stringify({
@@ -291,7 +294,7 @@ async function readRun(threadId, runId) {
         }
       }
     `,
-    { tenantId: identity.tenantId, threadId, limit: 10 },
+    { tenantId: scope.tenantId, threadId, limit: 10 },
   );
   const runs = data.knowledgeGraphIngestRuns ?? [];
   return runs.find((run) => run.id === runId) ?? runs[0] ?? null;
@@ -319,7 +322,7 @@ async function readEntities(threadId) {
         }
       }
     `,
-    { tenantId: identity.tenantId, threadId, limit: ENTITY_LIMIT },
+    { tenantId: scope.tenantId, threadId, limit: ENTITY_LIMIT },
   );
   return data.knowledgeGraphEntities ?? [];
 }
@@ -348,7 +351,7 @@ async function readGraph(threadId) {
         }
       }
     `,
-    { tenantId: identity.tenantId, threadId },
+    { tenantId: scope.tenantId, threadId },
   );
   return data.knowledgeGraphGraph ?? { nodes: [], edges: [] };
 }
@@ -374,7 +377,7 @@ async function readEntityDetail(entityId) {
         }
       }
     `,
-    { tenantId: identity.tenantId, entityId },
+    { tenantId: scope.tenantId, entityId },
   );
   return data.knowledgeGraphEntity ?? null;
 }
@@ -382,9 +385,12 @@ async function readEntityDetail(entityId) {
 async function gql(query, variables) {
   const headers = {
     "content-type": "application/json",
-    "x-tenant-id": identity.tenantId,
-    "x-principal-id": identity.userId,
+    "x-tenant-id": scope.tenantId,
   };
+  if (scope.authMode === "admin-skill-impersonation") {
+    headers["x-principal-id"] = scope.userId;
+    headers["x-agent-id"] = scope.agentId;
+  }
   if (apiSecret) {
     headers.authorization = `Bearer ${apiSecret}`;
   } else {
@@ -408,16 +414,39 @@ async function gql(query, variables) {
   return body.data;
 }
 
-function resolveOperatorIdentity(source) {
+function resolveSmokeScope(source) {
+  const agentId = first(source.SMOKE_KG_AGENT_ID, source.SMOKE_AGENT_ID);
+  const wantsImpersonation =
+    Boolean(agentId) || source.SMOKE_KG_AUTH_MODE === "impersonation";
   const supplied = {
     tenantId: first(source.SMOKE_TENANT_ID, source.TENANT_ID),
     userId: first(source.SMOKE_USER_ID, source.USER_ID),
   };
-  if (supplied.tenantId && supplied.userId) return supplied;
+  if (supplied.tenantId) {
+    if (!wantsImpersonation) {
+      return {
+        tenantId: supplied.tenantId,
+        userId: supplied.userId ?? null,
+        agentId: null,
+        authMode: "service",
+      };
+    }
+    if (!supplied.userId || !agentId) {
+      fail(
+        "Admin-skill impersonation requires SMOKE_TENANT_ID, SMOKE_USER_ID, and SMOKE_KG_AGENT_ID.",
+      );
+    }
+    return {
+      tenantId: supplied.tenantId,
+      userId: supplied.userId,
+      agentId,
+      authMode: "admin-skill-impersonation",
+    };
+  }
 
   if (!databaseUrl) {
     fail(
-      "Missing operator identity. Set SMOKE_TENANT_ID and SMOKE_USER_ID, or provide DATABASE_URL for fallback.",
+      "Missing tenant scope. Set SMOKE_TENANT_ID, or provide DATABASE_URL for fallback.",
     );
   }
 
@@ -432,11 +461,25 @@ function resolveOperatorIdentity(source) {
   `);
   const [tenantId, userId] = row.split("|");
   if (!tenantId || !userId) {
-    fail(
-      "Could not resolve an operator identity. Set SMOKE_TENANT_ID and SMOKE_USER_ID.",
-    );
+    fail("Could not resolve a tenant scope. Set SMOKE_TENANT_ID.");
   }
-  return { tenantId, userId };
+  if (!wantsImpersonation) {
+    return {
+      tenantId,
+      userId,
+      agentId: null,
+      authMode: "service",
+    };
+  }
+  if (!agentId) {
+    fail("Admin-skill impersonation requires SMOKE_KG_AGENT_ID.");
+  }
+  return {
+    tenantId,
+    userId,
+    agentId,
+    authMode: "admin-skill-impersonation",
+  };
 }
 
 function summarizeRun(run) {
