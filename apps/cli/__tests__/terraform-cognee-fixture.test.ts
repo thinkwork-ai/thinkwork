@@ -463,6 +463,12 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(workflow).toMatch(/ALTER ROLE %I LOGIN PASSWORD %L/);
     expect(workflow).toMatch(/GRANT CONNECT ON DATABASE thinkwork/);
     expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);
+    expect(workflow).toMatch(
+      /GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES/,
+    );
+    expect(workflow).toMatch(
+      /GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES/,
+    );
     expect(workflow).toMatch(/ALTER DEFAULT PRIVILEGES IN SCHEMA public/);
   });
 
