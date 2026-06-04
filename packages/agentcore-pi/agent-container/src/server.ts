@@ -54,6 +54,7 @@ import {
   createSendEmailExtension,
   createSystemPromptExtension,
   createTaskStatusExtension,
+  createWebExtractExtension,
   createWebSearchExtension,
   type AgentToolResult,
   formatWorkspaceSkills,
@@ -581,6 +582,22 @@ export async function buildInvocationResources(
     addExtension(
       createWebSearchExtension({
         webSearchConfig: args.payload.web_search_config as Record<
+          string,
+          unknown
+        >,
+      }),
+    );
+  }
+
+  // Web Extraction (Firecrawl) — tenant/template-configured, arrives as
+  // `web_extract_config`.
+  if (
+    typeof args.payload.web_extract_config === "object" &&
+    args.payload.web_extract_config
+  ) {
+    addExtension(
+      createWebExtractExtension({
+        webExtractConfig: args.payload.web_extract_config as Record<
           string,
           unknown
         >,

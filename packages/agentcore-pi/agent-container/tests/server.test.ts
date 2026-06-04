@@ -143,6 +143,7 @@ describe("handleInvocation — payload validation", () => {
         tenant_slug: "acme",
         turn_context: { spaceSlug: "finance" },
         web_search_config: { provider: "exa", apiKey: "exa-key" },
+        web_extract_config: { provider: "firecrawl", apiKey: "fc-key" },
         context_engine_enabled: true,
       }),
       deps: makeDeps({
@@ -164,6 +165,7 @@ describe("handleInvocation — payload validation", () => {
         "browser_automation",
         "send_email",
         "web_search",
+        "web_extract",
         "query_context",
         "query_memory_context",
         "query_wiki_context",
@@ -1600,6 +1602,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         "browser_automation",
         "send_email",
         "web_search",
+        "web_extract",
         "query_context",
         "query_memory_context",
         "query_wiki_context",
@@ -1712,6 +1715,48 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(bundle.tools.map((tool) => tool.name)).not.toContain(
       "query_context",
     );
+  });
+
+  it("registers web_extract when Web Extraction config is present", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {
+        web_extract_config: { provider: "firecrawl", apiKey: "fc-key" },
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    expect(bundle.extensionToolNames).toContain("web_extract");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain("web_extract");
   });
 
   it("registers workspace_skill as an extension tool when workspace skills exist", async () => {
