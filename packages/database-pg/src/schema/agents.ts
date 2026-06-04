@@ -65,6 +65,8 @@ export const agents = pgTable(
     browser: jsonb("browser"),
     /** Agent Web Search opt-in metadata. */
     web_search: jsonb("web_search").default(sql`'{"enabled": true}'::jsonb`),
+    /** Agent Web Extraction opt-in metadata. */
+    web_extract: jsonb("web_extract").default(sql`'{"enabled": true}'::jsonb`),
     /** Agent Send Email opt-in metadata. */
     send_email: jsonb("send_email").default(sql`'{"enabled": true}'::jsonb`),
     /** Agent Context Engine opt-in metadata. */

@@ -176,6 +176,7 @@ describe("deriveAgentSkills compatibility sync", () => {
   it("ignores built-in tool markers because they are configured outside workspace skills", async () => {
     readWorkspaceMock.mockResolvedValue([
       workspaceEntry("skills/web-search/SKILL.md"),
+      workspaceEntry("skills/web-extract/SKILL.md"),
       workspaceEntry("skills/agent-email-send/SKILL.md"),
     ]);
     pushSelect([]);
@@ -187,6 +188,7 @@ describe("deriveAgentSkills compatibility sync", () => {
     expect(result.removedSlugs).toEqual([]);
     expect(result.agentsMdPathsScanned).toEqual([
       "skills/agent-email-send/SKILL.md",
+      "skills/web-extract/SKILL.md",
       "skills/web-search/SKILL.md",
     ]);
     expect(dbState.transactionInvocations).toBe(0);

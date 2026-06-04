@@ -22,6 +22,7 @@ interface UpdateTenantAgentInput {
   sandbox?: unknown;
   browser?: unknown;
   webSearch?: unknown;
+  webExtract?: unknown;
   sendEmail?: unknown;
   contextEngine?: unknown;
   budgetMonthlyCents?: number | null;
@@ -57,6 +58,8 @@ export async function updateTenantAgent(
   if (i.browser !== undefined) updates.browser = parseJsonInput(i.browser);
   if (i.webSearch !== undefined)
     updates.web_search = parseJsonInput(i.webSearch);
+  if (i.webExtract !== undefined)
+    updates.web_extract = parseJsonInput(i.webExtract);
   if (i.sendEmail !== undefined)
     updates.send_email = parseJsonInput(i.sendEmail);
   if (i.contextEngine !== undefined)

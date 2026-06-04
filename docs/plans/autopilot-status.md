@@ -6,6 +6,65 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Firecrawl Web Extraction - 2026-06-04
+
+- Plan:
+  `docs/plans/2026-06-04-002-feat-firecrawl-web-extraction-plan.md`.
+- Target branch: `main`.
+- Current unit: U1 Extend built-in data model and backend catalog.
+- Current branch: `codex/u1-firecrawl-catalog`.
+- Current worktree: `.Codex/worktrees/u1-firecrawl-catalog`.
+
+| Unit                                         | Branch                       | PR                                                           | State  | Notes                                   |
+| -------------------------------------------- | ---------------------------- | ------------------------------------------------------------ | ------ | --------------------------------------- |
+| U1 Extend built-in data model and catalog    | `codex/u1-firecrawl-catalog` | [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051) | Active | Drift precheck fixed; CI rerun pending. |
+| U2 Add Firecrawl config loading and test     | TBD                          | TBD                                                          | Todo   | Pending U1.                             |
+| U3 Thread runtime config and policy          | TBD                          | TBD                                                          | Todo   | Pending U1-U2.                          |
+| U4 Register Pi `web_extract` extension       | TBD                          | TBD                                                          | Todo   | Pending U2-U3.                          |
+| U5 Update Admin, generated clients, and docs | TBD                          | TBD                                                          | Todo   | Pending U1-U3.                          |
+| U6 Update agent guidance and verification    | TBD                          | TBD                                                          | Todo   | Pending U4-U5.                          |
+
+### Progress Log
+
+- Started autopilot workflow, read `AGENTS.md`, the Firecrawl plan, and
+  relevant prior solution docs about injected built-ins, web content quality,
+  and narrow runtime tool surfaces.
+- Created isolated U1 worktree `.Codex/worktrees/u1-firecrawl-catalog` from
+  `origin/main`.
+- Began U1 implementation with `web-extract` slug/catalog support,
+  `web_extract` agent/template fields, GraphQL/Admin query exposure, and
+  focused tests.
+- U1 local verification passed:
+  `pnpm schema:build`;
+  `pnpm --filter @thinkwork/api test -- src/handlers/skills.builtin-tools.test.ts src/graphql/resolvers/tenant-agent/updateTenantAgent.mutation.test.ts src/__tests__/derive-agent-skills.test.ts`;
+  `pnpm --filter @thinkwork/database-pg typecheck`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/admin build`;
+  `pnpm dlx prettier --check <changed supported files>`;
+  and `git diff --check`.
+- Opened U1 PR [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051).
+- CI migration drift precheck initially failed because the new hand-rolled
+  `0143_add_web_extract_builtin_config.sql` migration had not been applied to
+  dev yet. Applied it to the dev database with
+  `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0143_add_web_extract_builtin_config.sql`;
+  the scoped drift reporter then confirmed both
+  `public.agents.web_extract` and `public.agent_templates.web_extract` are
+  present. Reran the failed GitHub Actions job.
+
+### CI / Verification
+
+- Attempted focused API tests before installing worktree dependencies:
+  `pnpm --filter @thinkwork/api exec vitest run src/handlers/skills.builtin-tools.test.ts src/graphql/resolvers/tenant-agent/updateTenantAgent.mutation.test.ts src/__tests__/derive-agent-skills.test.ts`.
+  This failed because the fresh worktree did not yet have the package-local
+  `vitest` binary.
+- Ran `pnpm install`; workspace dependencies were populated. The optional
+  `canvas` native build reported missing `pkg-config` under Node 25, but pnpm
+  completed successfully.
+
+### Blockers
+
+- None.
+
 ## Remove Legacy Strands AgentCore Runtime - 2026-06-02
 
 - Plan:

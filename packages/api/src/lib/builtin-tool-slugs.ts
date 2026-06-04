@@ -1,5 +1,6 @@
 export const BUILTIN_TOOL_SLUGS = [
   "web-search",
+  "web-extract",
   "agent-email-send",
   "query_erp_customer_context",
   "query_crm_opportunity_context",

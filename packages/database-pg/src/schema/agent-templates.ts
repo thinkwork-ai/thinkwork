@@ -90,6 +90,13 @@ export const agentTemplates = pgTable(
      */
     web_search: jsonb("web_search").default(sql`'{"enabled": true}'::jsonb`),
     /**
+     * Web Extraction opt-in metadata for the tenant-configured Firecrawl-backed
+     * built-in tool. Shape: { enabled: true } | null. Null = the template does
+     * not inject web_extract even when the tenant has a provider/API key
+     * configured.
+     */
+    web_extract: jsonb("web_extract").default(sql`'{"enabled": true}'::jsonb`),
+    /**
      * Send Email opt-in metadata for the platform email-sending built-in tool.
      * Shape: { enabled: true } | null. Null = the template does not register
      * send_email even when the agent email channel is enabled.

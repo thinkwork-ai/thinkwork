@@ -49,6 +49,7 @@ export const TenantAgentQuery = graphql(`
       sandbox
       browser
       webSearch
+      webExtract
       sendEmail
       contextEngine
       humanPairId
@@ -105,6 +106,7 @@ export const UpdateTenantAgentMutation = graphql(`
       adapterType
       budgetMonthlyCents
       sandbox
+      webExtract
       updatedAt
     }
   }

@@ -2224,7 +2224,7 @@ async function mcpListUserServers(
 }
 
 // ---------------------------------------------------------------------------
-// Built-in Tools — tenant-level config for catalog skills (web-search, …)
+// Built-in Tools — tenant-level config for platform-owned built-ins.
 // ---------------------------------------------------------------------------
 
 const BUILTIN_TOOL_CATALOG: Record<
@@ -2234,6 +2234,10 @@ const BUILTIN_TOOL_CATALOG: Record<
   "web-search": {
     providers: ["exa", "serpapi"],
     keyEnvVar: { exa: "EXA_API_KEY", serpapi: "SERPAPI_KEY" },
+  },
+  "web-extract": {
+    providers: ["firecrawl"],
+    keyEnvVar: { firecrawl: "FIRECRAWL_API_KEY" },
   },
 };
 
