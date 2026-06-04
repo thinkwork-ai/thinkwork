@@ -4,7 +4,14 @@
  * files instead of database tables.
  */
 
-import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core.js";
 
@@ -53,12 +60,67 @@ export const pluginUploads = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// skill_catalog — per-tenant index of the S3 skill catalog
+// (plan 2026-06-04-002 U1; migration 0144).
+//
+// A derived read cache, NOT a source of truth: S3 at
+// `tenants/<slug>/skill-catalog/<slug>/` remains authoritative. This table
+// exists so the Skills settings list resolves from one query instead of
+// scanning S3 and reading every file per load. Written by the catalog
+// put/delete/move handlers (write-through) and reconstructable from S3 by the
+// `skill catalog rebuild` command. Unlike the dropped global `skill_catalog`
+// (migration 0131), this is per-tenant, keyed (tenant_id, slug).
+//
+// `content_sha` mirrors `computeCatalogSkillSha` output and is display/
+// freshness-only — reinstall drift checks recompute from S3 and never read it.
+// ---------------------------------------------------------------------------
+
+export const skillCatalog = pgTable(
+  "skill_catalog",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    /** First path segment of the skill folder under skill-catalog/. */
+    slug: text("slug").notNull(),
+    /** From SKILL.md frontmatter `display_name`; null → render falls back to slug. */
+    display_name: text("display_name"),
+    description: text("description"),
+    category: text("category"),
+    icon: text("icon"),
+    tags: text("tags").array(),
+    /** computeCatalogSkillSha() of the skill's catalog files. Display-only. */
+    content_sha: text("content_sha").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_skill_catalog_tenant_slug").on(table.tenant_id, table.slug),
+    index("idx_skill_catalog_tenant").on(table.tenant_id),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
 export const pluginUploadsRelations = relations(pluginUploads, ({ one }) => ({
   tenant: one(tenants, {
     fields: [pluginUploads.tenant_id],
+    references: [tenants.id],
+  }),
+}));
+
+export const skillCatalogRelations = relations(skillCatalog, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [skillCatalog.tenant_id],
     references: [tenants.id],
   }),
 }));
