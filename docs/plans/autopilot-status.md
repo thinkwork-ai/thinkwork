@@ -20,7 +20,7 @@ status: in_progress
 | U1 Extend built-in data model and catalog    | `codex/u1-firecrawl-catalog`        | [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051) | Merged | Squash merged as `f3a855ed`; dev migration `0143` applied. |
 | U2 Add Firecrawl config loading and test     | `codex/u2-firecrawl-config-test`    | [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052) | Merged | Squash merged as `a0aadc53`; CI passed.                    |
 | U3 Thread runtime config and policy          | `codex/u3-firecrawl-runtime-policy` | [#2054](https://github.com/thinkwork-ai/thinkwork/pull/2054) | Merged | Squash merged as `932b7575`; CI passed.                    |
-| U4 Register Pi `web_extract` extension       | `codex/u4-firecrawl-pi-extension`   | TBD                                                          | Active | Implemented locally; pre-PR verification passed.           |
+| U4 Register Pi `web_extract` extension       | `codex/u4-firecrawl-pi-extension`   | [#2056](https://github.com/thinkwork-ai/thinkwork/pull/2056) | Active | PR open; waiting for CI.                                   |
 | U5 Update Admin, generated clients, and docs | TBD                                 | TBD                                                          | Todo   | Pending U1-U3.                                             |
 | U6 Update agent guidance and verification    | TBD                                 | TBD                                                          | Todo   | Pending U4-U5.                                             |
 
@@ -97,6 +97,7 @@ status: in_progress
   `pnpm --filter @thinkwork/api typecheck`;
   `pnpm dlx prettier --check <changed supported files>`;
   and `git diff --check`.
+- Opened U4 PR [#2056](https://github.com/thinkwork-ai/thinkwork/pull/2056).
 
 ### CI / Verification
 
