@@ -56,3 +56,32 @@ export const WikiGraphQuery = gql`
     }
   }
 `;
+
+export const KnowledgeGraphQuery = gql`
+  query KnowledgeGraph($tenantId: ID!, $threadId: ID!) {
+    knowledgeGraphGraph(tenantId: $tenantId, threadId: $threadId) {
+      nodes {
+        id
+        entityId
+        label
+        typeLabel
+        ontologyTypeSlug
+        groundingStatus
+        provenanceStatus
+        relationshipCount
+        evidenceCount
+      }
+      edges {
+        id
+        relationshipId
+        source
+        target
+        label
+        ontologyTypeSlug
+        groundingStatus
+        provenanceStatus
+        evidenceCount
+      }
+    }
+  }
+`;
