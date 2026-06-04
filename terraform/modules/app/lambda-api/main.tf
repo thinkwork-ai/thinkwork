@@ -324,6 +324,34 @@ resource "aws_iam_role_policy_attachment" "lambda_bedrock_knowledge_base" {
   policy_arn = aws_iam_policy.lambda_bedrock_knowledge_base.arn
 }
 
+# graphql-http's Knowledge Graph health check validates the private Cognee
+# service from outside the VPC by reading ECS service steadiness and ALB target
+# health. Keep this as a managed policy: the shared Lambda role is already near
+# AWS's aggregate inline-policy size limit. ELBv2 Describe* actions do not
+# support useful resource scoping.
+resource "aws_iam_policy" "lambda_cognee_health_read" {
+  name        = "thinkwork-${var.stage}-api-cognee-health-read"
+  description = "Read ECS service and ALB target health for Cognee status checks"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ecs:DescribeServices",
+        "elasticloadbalancing:DescribeTargetGroups",
+        "elasticloadbalancing:DescribeTargetHealth",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_cognee_health_read" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.lambda_cognee_health_read.arn
+}
+
 # SES send permissions for the email-send handler. Scoped to any
 # verified identity in this account+region so the email-send Lambda
 # can SendRawEmail from agents.thinkwork.ai (and any other domain
