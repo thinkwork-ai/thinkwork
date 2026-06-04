@@ -103,7 +103,10 @@ import {
   uninstallCatalogSkill,
 } from "./src/lib/catalog-uninstall.js";
 import { computeCatalogSkillShaBySlug } from "./src/lib/catalog-skill-sha.js";
-import { reindexCatalogSkill } from "./src/lib/catalog-index.js";
+import {
+  reindexCatalogSkill,
+  listIndexedSkills,
+} from "./src/lib/catalog-index.js";
 import {
   identityFieldLabel,
   isAgentIdentityField,
@@ -917,6 +920,29 @@ async function handleCatalogList(
       };
       return includeContent ? { ...base, content: file.content } : base;
     }),
+  });
+}
+
+/**
+ * Index-backed per-skill summary for the Skills settings list — one DB query,
+ * no S3 scan or per-file reads (plan U4). Served through the same admin-gated
+ * catalog dispatch as the file list. `tenantId` is caller-derived upstream.
+ */
+async function handleCatalogSummary(
+  tenantId: string,
+): Promise<APIGatewayProxyResult> {
+  const skills = await listIndexedSkills(tenantId);
+  return json(200, {
+    ok: true,
+    skills: skills.map((s) => ({
+      slug: s.slug,
+      displayName: s.display_name,
+      description: s.description,
+      category: s.category,
+      icon: s.icon,
+      tags: s.tags,
+      sha: s.content_sha,
+    })),
   });
 }
 
@@ -2652,6 +2678,11 @@ interface RequestBody {
    * this flag is true.
    */
   includeContent?: boolean;
+  /**
+   * Catalog list only: return the index-backed per-skill summary
+   * (`{ skills: [...] }`) instead of the flat per-file list (plan U4).
+   */
+  summary?: boolean;
   /** For `update-identity-field`: creature | vibe | emoji | avatar. */
   field?: string;
   /** For `update-identity-field`: the new line content. */
@@ -2800,6 +2831,9 @@ export async function handler(
         return await handleGet(deps, body.path);
       }
       case "list":
+        if (deps.target.kind === "catalog" && body.summary === true) {
+          return await handleCatalogSummary(deps.tenantId);
+        }
         return await handleList(deps, body.includeContent === true);
       case "put": {
         if (!body.path || body.content === undefined) {

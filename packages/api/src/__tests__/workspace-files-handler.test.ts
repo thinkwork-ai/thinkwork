@@ -267,12 +267,14 @@ vi.mock("../lib/computers/tasks.js", () => ({
 // Write-through to the skill_catalog index is unit-tested in catalog-index.test.ts;
 // here we mock it to a controllable spy so we can assert the handler fires it on
 // the right catalog mutations and that a failure is non-fatal (U3).
-const { reindexCatalogSkillMock } = vi.hoisted(() => ({
+const { reindexCatalogSkillMock, listIndexedSkillsMock } = vi.hoisted(() => ({
   reindexCatalogSkillMock: vi.fn(),
+  listIndexedSkillsMock: vi.fn(),
 }));
 
 vi.mock("../lib/catalog-index.js", () => ({
   reindexCatalogSkill: reindexCatalogSkillMock,
+  listIndexedSkills: listIndexedSkillsMock,
 }));
 
 // ─── S3 mock ─────────────────────────────────────────────────────────────────
@@ -424,6 +426,8 @@ beforeEach(() => {
   authMockImpl.mockReset();
   reindexCatalogSkillMock.mockReset();
   reindexCatalogSkillMock.mockResolvedValue({ slug: "", action: "upserted" });
+  listIndexedSkillsMock.mockReset();
+  listIndexedSkillsMock.mockResolvedValue([]);
   enqueueComputerTaskMock.mockReset();
   enqueueComputerTaskMock.mockResolvedValue({ id: "computer-task-1" });
   bootstrapAgentWorkspaceMock.mockReset();
@@ -1321,6 +1325,92 @@ Use this for stage-three reviews.
   s3Mock.on(CopyObjectCommand).resolves({});
   s3Mock.on(PutObjectCommand).resolves({});
 }
+
+// ─── 4d. Catalog index-backed summary read (U4) ──────────────────────────────
+
+describe("catalog summary read (U4)", () => {
+  it("serves the per-skill summary from the index in one query (no S3 reads)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    listIndexedSkillsMock.mockResolvedValueOnce([
+      {
+        slug: "crm-dashboard",
+        display_name: "CRM Dashboard",
+        description: "Account health",
+        category: "sales",
+        icon: null,
+        tags: ["sales"],
+        content_sha: "a".repeat(64),
+      },
+      {
+        slug: "renewal-prep",
+        display_name: null,
+        description: null,
+        category: null,
+        icon: null,
+        tags: null,
+        content_sha: "b".repeat(64),
+      },
+    ]);
+
+    const res = await parse(
+      await handler(event({ action: "list", catalog: true, summary: true })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(listIndexedSkillsMock).toHaveBeenCalledTimes(1);
+    // No per-file content reads on the hot path (AE1).
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(res.body.skills).toEqual([
+      {
+        slug: "crm-dashboard",
+        displayName: "CRM Dashboard",
+        description: "Account health",
+        category: "sales",
+        icon: null,
+        tags: ["sales"],
+        sha: "a".repeat(64),
+      },
+      {
+        slug: "renewal-prep",
+        displayName: null,
+        description: null,
+        category: null,
+        icon: null,
+        tags: null,
+        sha: "b".repeat(64),
+      },
+    ]);
+  });
+
+  it("returns an empty summary for an empty index", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    listIndexedSkillsMock.mockResolvedValueOnce([]);
+
+    const res = await parse(
+      await handler(event({ action: "list", catalog: true, summary: true })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.skills).toEqual([]);
+  });
+
+  it("requires tenant admin for the summary read (same gate as the file list)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]);
+
+    const res = await parse(
+      await handler(event({ action: "list", catalog: true, summary: true })),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(listIndexedSkillsMock).not.toHaveBeenCalled();
+  });
+});
 
 // ─── 4c. Catalog write-through to skill_catalog index (U3) ───────────────────
 
