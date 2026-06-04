@@ -544,6 +544,147 @@ jobs:
             -v ON_ERROR_STOP=1 \
             -f ../../../packages/database-pg/drizzle/0096_true_redteam_eval_seed_cleanup.sql
 
+      - name: Resolve Cognee deployment inputs
+        env:
+          COGNEE_ENABLED_INPUT: ${{ vars.COGNEE_ENABLED || 'false' }}
+          COGNEE_IMAGE_URI_INPUT: ${{ vars.COGNEE_IMAGE_URI || '' }}
+          COGNEE_DB_USERNAME_INPUT: ${{ vars.COGNEE_DB_USERNAME || 'thinkwork_cognee' }}
+          COGNEE_DB_PASSWORD_SECRET_ARN_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ARN || '' }}
+          COGNEE_DB_PASSWORD_SECRET_ID_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ID || '' }}
+          COGNEE_BACKEND_MODE_INPUT: ${{ vars.COGNEE_BACKEND_MODE || 'dogfood' }}
+          COGNEE_DESIRED_COUNT_INPUT: ${{ vars.COGNEE_DESIRED_COUNT || '1' }}
+          COGNEE_LLM_PROVIDER_INPUT: ${{ vars.COGNEE_LLM_PROVIDER || 'bedrock' }}
+          COGNEE_EMBEDDING_PROVIDER_INPUT: ${{ vars.COGNEE_EMBEDDING_PROVIDER || 'bedrock' }}
+          COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT: ${{ vars.COGNEE_BEDROCK_MODEL_RESOURCE_ARNS || '' }}
+        run: |
+          set -euo pipefail
+
+          cognee_enabled=$(printf '%s' "$COGNEE_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
+          if [ "$cognee_enabled" != "true" ] && [ "$cognee_enabled" != "false" ]; then
+            echo "::error::COGNEE_ENABLED must be true or false."
+            exit 1
+          fi
+
+          cognee_image_uri="${COGNEE_IMAGE_URI_INPUT:-cognee/cognee@sha256:5ce7e4052b1d16738d1e24476d64847fcb5b1666631b642651e8ccce414046f8}"
+          cognee_db_username="${COGNEE_DB_USERNAME_INPUT:-thinkwork_cognee}"
+          cognee_backend_mode="${COGNEE_BACKEND_MODE_INPUT:-dogfood}"
+          cognee_desired_count="${COGNEE_DESIRED_COUNT_INPUT:-1}"
+          cognee_llm_provider="${COGNEE_LLM_PROVIDER_INPUT:-bedrock}"
+          cognee_embedding_provider="${COGNEE_EMBEDDING_PROVIDER_INPUT:-bedrock}"
+          cognee_bedrock_model_resource_arns="${COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT:-[\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.nova-lite-v1:0\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.titan-embed-text-v2:0\"]}"
+          cognee_db_password_secret_id="${COGNEE_DB_PASSWORD_SECRET_ID_INPUT:-thinkwork/${STAGE}/cognee/db-credentials}"
+
+          if [[ ! "$cognee_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::COGNEE_IMAGE_URI must be pinned to an immutable sha256 digest."
+            exit 1
+          fi
+          if [[ ! "$cognee_db_username" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]]; then
+            echo "::error::COGNEE_DB_USERNAME must be a valid PostgreSQL identifier."
+            exit 1
+          fi
+          if [ "$cognee_enabled" = "true" ] && { [ "$cognee_llm_provider" = "bedrock" ] || [ "$cognee_embedding_provider" = "bedrock" ]; }; then
+            jq -e 'type == "array" and length > 0' >/dev/null <<< "$cognee_bedrock_model_resource_arns"
+          fi
+
+          {
+            echo "COGNEE_ENABLED=$cognee_enabled"
+            echo "COGNEE_IMAGE_URI=$cognee_image_uri"
+            echo "COGNEE_DB_USERNAME=$cognee_db_username"
+            echo "COGNEE_DB_PASSWORD_SECRET_ARN=$COGNEE_DB_PASSWORD_SECRET_ARN_INPUT"
+            echo "COGNEE_DB_PASSWORD_SECRET_ID=$cognee_db_password_secret_id"
+            echo "COGNEE_BACKEND_MODE=$cognee_backend_mode"
+            echo "COGNEE_DESIRED_COUNT=$cognee_desired_count"
+            echo "COGNEE_LLM_PROVIDER=$cognee_llm_provider"
+            echo "COGNEE_EMBEDDING_PROVIDER=$cognee_embedding_provider"
+            echo "COGNEE_BEDROCK_MODEL_RESOURCE_ARNS=$cognee_bedrock_model_resource_arns"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare Cognee database credentials
+        working-directory: terraform/examples/greenfield
+        run: |
+          set -euo pipefail
+          if [ "${COGNEE_ENABLED:-false}" != "true" ]; then
+            echo "Cognee disabled; skipping Cognee database credential preparation."
+            exit 0
+          fi
+          source ../../../scripts/lib/terraform-output.sh
+
+          DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint 2>/dev/null || echo "")
+          DB_SECRET_ARN=$(tf_output_raw db_secret_arn 2>/dev/null || echo "")
+          if [ -z "$DB_ENDPOINT" ] || [ -z "$DB_SECRET_ARN" ]; then
+            echo "::error::Cognee is enabled but existing database outputs are missing. Apply the base stack first."
+            exit 1
+          fi
+
+          secret_selector="${COGNEE_DB_PASSWORD_SECRET_ARN:-$COGNEE_DB_PASSWORD_SECRET_ID}"
+          secret_arn=$(aws secretsmanager describe-secret \
+            --secret-id "$secret_selector" \
+            --query ARN --output text 2>/dev/null || echo "")
+
+          if [ -z "$secret_arn" ] || [ "$secret_arn" = "None" ]; then
+            cognee_password=$(openssl rand -base64 36 | tr -d '\n')
+            echo "::add-mask::$cognee_password"
+            secret_json=$(jq -n \
+              --arg username "$COGNEE_DB_USERNAME" \
+              --arg password "$cognee_password" \
+              '{username: $username, password: $password}')
+            secret_arn=$(aws secretsmanager create-secret \
+              --name "$COGNEE_DB_PASSWORD_SECRET_ID" \
+              --description "Dedicated Cognee PostgreSQL credentials for ${STAGE}" \
+              --secret-string "$secret_json" \
+              --query ARN --output text)
+          else
+            secret_json=$(aws secretsmanager get-secret-value \
+              --secret-id "$secret_arn" \
+              --query SecretString --output text)
+            cognee_password=$(jq -r '.password // empty' <<< "$secret_json")
+            if [ -z "$cognee_password" ] || [ "$cognee_password" = "PLACEHOLDER_SET_VIA_CLI" ]; then
+              cognee_password=$(openssl rand -base64 36 | tr -d '\n')
+              echo "::add-mask::$cognee_password"
+              secret_json=$(jq -n \
+                --arg username "$COGNEE_DB_USERNAME" \
+                --arg password "$cognee_password" \
+                '{username: $username, password: $password}')
+              aws secretsmanager put-secret-value \
+                --secret-id "$secret_arn" \
+                --secret-string "$secret_json" >/dev/null
+            else
+              echo "::add-mask::$cognee_password"
+            fi
+          fi
+
+          admin_password=$(aws secretsmanager get-secret-value \
+            --secret-id "$DB_SECRET_ARN" \
+            --query SecretString --output text | jq -r .password)
+          echo "::add-mask::$admin_password"
+          export DATABASE_URL="postgresql://thinkwork_admin:${admin_password}@${DB_ENDPOINT}:5432/thinkwork?sslmode=require"
+
+          psql "$DATABASE_URL" \
+            -v ON_ERROR_STOP=1 \
+            -v cognee_user="$COGNEE_DB_USERNAME" \
+            -v cognee_password="$cognee_password" <<'SQL'
+          SELECT format(
+            CASE
+              WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'cognee_user')
+                THEN 'ALTER ROLE %I LOGIN PASSWORD %L'
+              ELSE 'CREATE ROLE %I LOGIN PASSWORD %L'
+            END,
+            :'cognee_user',
+            :'cognee_password'
+          ) \gexec
+
+          GRANT CONNECT ON DATABASE thinkwork TO :"cognee_user";
+          GRANT USAGE, CREATE ON SCHEMA public TO :"cognee_user";
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO :"cognee_user";
+          GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO :"cognee_user";
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"cognee_user";
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"cognee_user";
+          SQL
+
+          echo "COGNEE_DB_PASSWORD_SECRET_ARN=$secret_arn" >> "$GITHUB_ENV"
+
       - name: Terraform Apply
         working-directory: terraform/examples/greenfield
         env:
@@ -576,15 +717,15 @@ jobs:
             -var "db_password=${{ secrets.DB_PASSWORD }}" \
             -var "database_engine=aurora-serverless" \
             -var "enable_hindsight=true" \
-            -var "enable_cognee=false" \
-            -var "cognee_image_uri=" \
-            -var "cognee_db_username=thinkwork_cognee" \
-            -var "cognee_db_password_secret_arn=" \
-            -var "cognee_backend_mode=dogfood" \
-            -var "cognee_desired_count=1" \
-            -var "cognee_llm_provider=bedrock" \
-            -var "cognee_embedding_provider=bedrock" \
-            -var 'cognee_bedrock_model_resource_arns=[]' \
+            -var "enable_cognee=$COGNEE_ENABLED" \
+            -var "cognee_image_uri=$COGNEE_IMAGE_URI" \
+            -var "cognee_db_username=$COGNEE_DB_USERNAME" \
+            -var "cognee_db_password_secret_arn=$COGNEE_DB_PASSWORD_SECRET_ARN" \
+            -var "cognee_backend_mode=$COGNEE_BACKEND_MODE" \
+            -var "cognee_desired_count=$COGNEE_DESIRED_COUNT" \
+            -var "cognee_llm_provider=$COGNEE_LLM_PROVIDER" \
+            -var "cognee_embedding_provider=$COGNEE_EMBEDDING_PROVIDER" \
+            -var "cognee_bedrock_model_resource_arns=$COGNEE_BEDROCK_MODEL_RESOURCE_ARNS" \
             -var "enable_workspace_orchestration=true" \
             -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
             -var "mapbox_public_token=${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}" \

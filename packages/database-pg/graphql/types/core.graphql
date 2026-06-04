@@ -124,6 +124,18 @@ type DeploymentStatus {
   agentcoreStatus: String
   hindsightEnabled: Boolean!
   managedMemoryEnabled: Boolean!
+  cogneeEnabled: Boolean!
+  cogneeEndpoint: String
+  cogneeLogGroupName: String
+  cogneeBackendMode: String
+  cogneeClusterArn: String
+  cogneeServiceName: String
+}
+
+type KnowledgeGraphDeploymentChange {
+  desiredEnabled: Boolean!
+  workflowUrl: String!
+  message: String!
 }
 
 # --- Inputs ---
@@ -153,6 +165,10 @@ input UpdateTenantSettingsInput {
   autoCloseThreadMinutes: Int
   maxAgents: Int
   features: AWSJSON
+}
+
+input SetKnowledgeGraphDeploymentInput {
+  enabled: Boolean!
 }
 
 """
@@ -267,6 +283,9 @@ extend type Mutation {
     tenantId: ID!
     input: UpdateTenantSettingsInput!
   ): TenantSettings!
+  setKnowledgeGraphDeployment(
+    input: SetKnowledgeGraphDeploymentInput!
+  ): KnowledgeGraphDeploymentChange!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
   updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!
   "Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey."

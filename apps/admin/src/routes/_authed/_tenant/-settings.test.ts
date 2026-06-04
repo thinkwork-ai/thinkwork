@@ -18,4 +18,14 @@ describe("tenant settings route", () => {
     expect(source).toContain("refetchTenantContext()");
     expect(source).toContain('toast.success("Tenant identifier updated.")');
   });
+
+  it("adds a Knowledge Graph deployment control with disable confirmation", () => {
+    expect(source).toContain("Knowledge Graph");
+    expect(source).toContain("SetKnowledgeGraphDeploymentMutation");
+    expect(source).toContain("Toggle Knowledge Graph infrastructure");
+    expect(source).toContain("Disable Knowledge Graph?");
+    expect(source).toContain("deployment queued");
+    expect(source).toContain("cogneeEndpoint");
+    expect(source).toContain("cogneeLogGroupName");
+  });
 });

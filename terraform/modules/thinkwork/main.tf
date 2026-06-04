@@ -431,6 +431,15 @@ module "api" {
   hindsight_endpoint                            = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                           = module.agentcore_memory.memory_id
   memory_engine                                 = local.resolved_memory_engine
+  cognee_enabled                                = local.cognee_enabled
+  cognee_endpoint                               = local.cognee_enabled ? module.cognee[0].cognee_endpoint : ""
+  cognee_log_group_name                         = local.cognee_enabled ? module.cognee[0].cognee_log_group_name : ""
+  cognee_backend_mode                           = local.cognee_enabled ? module.cognee[0].cognee_backend_mode : ""
+  cognee_cluster_arn                            = local.cognee_enabled ? module.cognee[0].cognee_cluster_arn : ""
+  cognee_service_name                           = local.cognee_enabled ? module.cognee[0].cognee_service_name : ""
+  knowledge_graph_deploy_repository             = "thinkwork-ai/thinkwork"
+  knowledge_graph_deploy_workflow_file          = "deploy.yml"
+  knowledge_graph_deploy_ref                    = "main"
   admin_url                                     = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
   docs_url                                      = "https://${module.docs_site.distribution_domain}"
   www_url                                       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
