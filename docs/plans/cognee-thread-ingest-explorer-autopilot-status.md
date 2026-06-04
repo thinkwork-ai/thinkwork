@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/cognee-kg-smoke-service-auth` /
   `.Codex/worktrees/cognee-kg-smoke-service-auth`
-- Current PR: pending
+- Current PR: [#2086](https://github.com/thinkwork-ai/thinkwork/pull/2086)
 - Blocker: none. Live deployed smoke reached the worker and exposed a Cognee
   `401 Unauthorized`; U9 patches the smoke auth mode and Cognee ECS access
   control, then must merge/deploy through the normal pipeline before rerunning
@@ -275,3 +275,5 @@ SMOKE_USER_ID, or provide DATABASE_URL for fallback.` The copied
   `terraform fmt -check terraform/modules/app/cognee/main.tf`;
   `terraform -chdir=terraform/examples/greenfield validate`;
   and `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`.
+- 2026-06-04: Opened U9 hotfix PR
+  [#2086](https://github.com/thinkwork-ai/thinkwork/pull/2086).
