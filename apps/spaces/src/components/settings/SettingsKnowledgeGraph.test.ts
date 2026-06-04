@@ -16,5 +16,8 @@ describe("SettingsKnowledgeGraph", () => {
     expect(source).toContain("deployment queued");
     expect(source).toContain("cogneeEndpoint");
     expect(source).toContain("cogneeLogGroupName");
+    expect(source).toContain("SettingsKnowledgeGraphHealthCheckQuery");
+    expect(source).toContain("Test connection");
+    expect(source).toContain("knowledgeGraphHealthCheck");
   });
 });

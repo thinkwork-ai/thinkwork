@@ -59,6 +59,7 @@ type Documents = {
   "\n  query SettingsTenantDetail($id: ID!) {\n    tenant(id: $id) {\n      id\n      name\n      slug\n      plan\n      issuePrefix\n      issueCounter\n      settings {\n        id\n        defaultModel\n      }\n      createdAt\n    }\n  }\n": typeof types.SettingsTenantDetailDocument;
   "\n  query SettingsDeploymentStatus {\n    deploymentStatus {\n      stage\n      source\n      region\n      accountId\n      bucketName\n      databaseEndpoint\n      ecrUrl\n      adminUrl\n      docsUrl\n      apiEndpoint\n      appsyncUrl\n      appsyncRealtimeUrl\n      hindsightEndpoint\n      agentcoreStatus\n      hindsightEnabled\n      managedMemoryEnabled\n      cogneeEnabled\n      cogneeEndpoint\n      cogneeLogGroupName\n      cogneeBackendMode\n      cogneeClusterArn\n      cogneeServiceName\n    }\n  }\n": typeof types.SettingsDeploymentStatusDocument;
   "\n  mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {\n    setKnowledgeGraphDeployment(input: { enabled: $enabled }) {\n      desiredEnabled\n      workflowUrl\n      message\n    }\n  }\n": typeof types.SettingsSetKnowledgeGraphDeploymentDocument;
+  "\n  query SettingsKnowledgeGraphHealthCheck {\n    knowledgeGraphHealthCheck {\n      healthy\n      statusCode\n      latencyMs\n      endpoint\n      checkedAt\n      message\n    }\n  }\n": typeof types.SettingsKnowledgeGraphHealthCheckDocument;
   "\n  mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n": typeof types.SettingsRenameTenantSlugDocument;
   "\n  query SettingsTenantFeatures($id: ID!) {\n    tenant(id: $id) {\n      id\n      settings {\n        id\n        features\n      }\n    }\n  }\n": typeof types.SettingsTenantFeaturesDocument;
   "\n  mutation SettingsUpdateTenantArtifactStyle(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      features\n      updatedAt\n    }\n  }\n": typeof types.SettingsUpdateTenantArtifactStyleDocument;
@@ -173,6 +174,8 @@ const documents: Documents = {
     types.SettingsDeploymentStatusDocument,
   "\n  mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {\n    setKnowledgeGraphDeployment(input: { enabled: $enabled }) {\n      desiredEnabled\n      workflowUrl\n      message\n    }\n  }\n":
     types.SettingsSetKnowledgeGraphDeploymentDocument,
+  "\n  query SettingsKnowledgeGraphHealthCheck {\n    knowledgeGraphHealthCheck {\n      healthy\n      statusCode\n      latencyMs\n      endpoint\n      checkedAt\n      message\n    }\n  }\n":
+    types.SettingsKnowledgeGraphHealthCheckDocument,
   "\n  mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n":
     types.SettingsRenameTenantSlugDocument,
   "\n  query SettingsTenantFeatures($id: ID!) {\n    tenant(id: $id) {\n      id\n      settings {\n        id\n        features\n      }\n    }\n  }\n":
@@ -503,6 +506,12 @@ export function graphql(
 export function graphql(
   source: "\n  mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {\n    setKnowledgeGraphDeployment(input: { enabled: $enabled }) {\n      desiredEnabled\n      workflowUrl\n      message\n    }\n  }\n",
 ): (typeof documents)["\n  mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {\n    setKnowledgeGraphDeployment(input: { enabled: $enabled }) {\n      desiredEnabled\n      workflowUrl\n      message\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query SettingsKnowledgeGraphHealthCheck {\n    knowledgeGraphHealthCheck {\n      healthy\n      statusCode\n      latencyMs\n      endpoint\n      checkedAt\n      message\n    }\n  }\n",
+): (typeof documents)["\n  query SettingsKnowledgeGraphHealthCheck {\n    knowledgeGraphHealthCheck {\n      healthy\n      statusCode\n      latencyMs\n      endpoint\n      checkedAt\n      message\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

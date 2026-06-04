@@ -14,9 +14,10 @@ import {
   Button,
   Switch,
 } from "@thinkwork/ui";
-import { Copy } from "lucide-react";
+import { Copy, RefreshCw } from "lucide-react";
 import {
   SettingsDeploymentStatusQuery,
+  SettingsKnowledgeGraphHealthCheckQuery,
   SettingsSetKnowledgeGraphDeploymentMutation,
 } from "@/lib/settings-queries";
 import {
@@ -30,6 +31,11 @@ export function SettingsKnowledgeGraph() {
   const [disableOpen, setDisableOpen] = useState(false);
   const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
   const [result, refetch] = useQuery({ query: SettingsDeploymentStatusQuery });
+  const [healthResult, runHealthCheck] = useQuery({
+    query: SettingsKnowledgeGraphHealthCheckQuery,
+    pause: true,
+    requestPolicy: "network-only",
+  });
   const [deploymentState, setDeployment] = useMutation(
     SettingsSetKnowledgeGraphDeploymentMutation,
   );
@@ -138,6 +144,46 @@ export function SettingsKnowledgeGraph() {
             label="Logs"
             value={status?.cogneeLogGroupName}
           />
+          <SettingsRow
+            label="Connection test"
+            description="Probe the private Cognee /health endpoint through the Thinkwork API."
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!status?.cogneeEnabled || healthResult.fetching}
+              onClick={() => runHealthCheck({ requestPolicy: "network-only" })}
+            >
+              <RefreshCw className="size-4" />
+              Test connection
+            </Button>
+          </SettingsRow>
+          {healthResult.data?.knowledgeGraphHealthCheck ? (
+            <SettingsRow label="Last test">
+              <Badge
+                variant={
+                  healthResult.data.knowledgeGraphHealthCheck.healthy
+                    ? "default"
+                    : "destructive"
+                }
+              >
+                {healthResult.data.knowledgeGraphHealthCheck.healthy
+                  ? "healthy"
+                  : "unhealthy"}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {formatHealthCheck(healthResult.data.knowledgeGraphHealthCheck)}
+              </span>
+            </SettingsRow>
+          ) : healthResult.error ? (
+            <SettingsRow label="Last test">
+              <Badge variant="destructive">unavailable</Badge>
+              <span className="text-sm text-muted-foreground">
+                {healthResult.error.message}
+              </span>
+            </SettingsRow>
+          ) : null}
           {pendingEnabled !== null ? (
             <SettingsRow label="Requested state">
               {pendingEnabled ? "enabled" : "disabled"}
@@ -169,6 +215,15 @@ export function SettingsKnowledgeGraph() {
       </AlertDialog>
     </SettingsPane>
   );
+}
+
+function formatHealthCheck(check: {
+  statusCode?: number | null;
+  latencyMs: number;
+  message: string;
+}) {
+  const status = check.statusCode ? `HTTP ${check.statusCode}` : "no status";
+  return `${status} in ${check.latencyMs} ms. ${check.message}`;
 }
 
 function CopyableSettingsRow({

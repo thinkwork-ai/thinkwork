@@ -138,6 +138,15 @@ type KnowledgeGraphDeploymentChange {
   message: String!
 }
 
+type KnowledgeGraphHealthCheck {
+  healthy: Boolean!
+  statusCode: Int
+  latencyMs: Int!
+  endpoint: String
+  checkedAt: AWSDateTime!
+  message: String!
+}
+
 # --- Inputs ---
 
 input CreateTenantInput {
@@ -234,6 +243,7 @@ extend type Query {
   user(id: ID!): User
   tenantMembers(tenantId: ID!): [TenantMember!]!
   deploymentStatus: DeploymentStatus!
+  knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck!
   """
   Returns the caller's own role on the caller's own tenant.
 

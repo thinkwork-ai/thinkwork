@@ -63,6 +63,19 @@ export const SettingsSetKnowledgeGraphDeploymentMutation = graphql(`
   }
 `);
 
+export const SettingsKnowledgeGraphHealthCheckQuery = graphql(`
+  query SettingsKnowledgeGraphHealthCheck {
+    knowledgeGraphHealthCheck {
+      healthy
+      statusCode
+      latencyMs
+      endpoint
+      checkedAt
+      message
+    }
+  }
+`);
+
 export const SettingsRenameTenantSlugMutation = graphql(`
   mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {
     renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {

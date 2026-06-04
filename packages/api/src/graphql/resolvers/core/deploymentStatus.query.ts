@@ -8,7 +8,7 @@ type CogneeStatus = {
   backendMode: string | null;
 };
 
-function readCogneeStatus(): CogneeStatus {
+export function readCogneeStatus(): CogneeStatus {
   const legacyEndpoint = process.env.COGNEE_ENDPOINT || null;
   const legacyBackendMode = process.env.COGNEE_BACKEND_MODE || null;
   const raw = process.env.COGNEE || process.env.COGNEE_STATUS;
