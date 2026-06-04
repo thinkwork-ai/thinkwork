@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/cognee-kg-u3-ingest-enqueue` /
   `.Codex/worktrees/cognee-kg-u3-ingest-enqueue`
-- Current PR: not opened
+- Current PR: [#2079](https://github.com/thinkwork-ai/thinkwork/pull/2079)
 - Blocker: none
 
 ## Progress Log
@@ -109,3 +109,5 @@ Started: 2026-06-04
   `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf terraform/modules/app/lambda-api/main.tf`;
   `pnpm --filter @thinkwork/api test` (399 files passed, 3 skipped; 3529 tests
   passed, 9 skipped); targeted Prettier check; and `git diff --check`.
+- 2026-06-04: Opened U3 PR
+  [#2079](https://github.com/thinkwork-ai/thinkwork/pull/2079).
