@@ -9,7 +9,7 @@ Started: 2026-06-04
 - State: active
 - Current unit: U4. Propagate Cognee through examples, CLI templates, and CI workflows
 - Current branch/worktree: `codex/u4-cognee-cli-templates` at `.Codex/worktrees/cognee-u4`
-- Current PR: not opened yet
+- Current PR: [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048)
 - Blocker: none
 
 ## Progress Log
@@ -40,16 +40,17 @@ Started: 2026-06-04
 - 2026-06-04: Implemented U4 propagation through the greenfield example, `thinkwork init` generated tfvars/root HCL, enterprise deploy template, CI verify/deploy Terraform var blocks, and fixture tests. Kept Cognee disabled by default across generated and CI surfaces.
 - 2026-06-04: U4 validation caught that `terraform/examples/greenfield` pins AWS provider `~> 5.0` while the Cognee app module used the provider-v6-only `data.aws_region.current.region` attribute. Fixed the app module to use `data.aws_region.current.name` for provider v5 compatibility.
 - 2026-06-04: U4 local verification passed: `terraform fmt terraform/modules/app/cognee/main.tf terraform/examples/greenfield/main.tf apps/cli/src/commands/enterprise/templates/deploy-repo/terraform/main.tf`; `terraform -chdir=terraform/modules/app/cognee init -backend=false && terraform -chdir=terraform/modules/app/cognee validate`; `terraform -chdir=terraform/examples/greenfield init -backend=false && terraform -chdir=terraform/examples/greenfield validate`; `terraform -chdir=terraform/modules/thinkwork init -backend=false && terraform -chdir=terraform/modules/thinkwork validate`; `pnpm install --frozen-lockfile`; `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts __tests__/enterprise-secrets.test.ts`; `pnpm --filter thinkwork-cli typecheck`; `pnpm dlx prettier --check apps/cli/src/commands/init.ts apps/cli/__tests__/terraform-cognee-fixture.test.ts apps/cli/__tests__/enterprise-secrets.test.ts .github/workflows/verify.yml .github/workflows/deploy.yml docs/plans/cognee-terraform-infrastructure-autopilot-status.md`; `git diff --check`. Direct Terraform validation of the enterprise deploy template is not meaningful because it intentionally contains the unreplaced `{{TERRAFORM_MODULE_VERSION}}` registry placeholder; structural tests cover that template.
+- 2026-06-04: Opened U4 PR [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048).
 
 ## Implementation Units
 
-| Unit                                                                   | Status  | Branch                             | PR                                                           | CI      | Merge                                      |
-| ---------------------------------------------------------------------- | ------- | ---------------------------------- | ------------------------------------------------------------ | ------- | ------------------------------------------ |
-| U1. Create the Cognee Terraform app module                             | merged  | `codex/u1-cognee-terraform-module` | [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) | passed  | `30ec4984677de7a0c044bbe8ce745b890271e13a` |
-| U2. Wire Cognee through the composite Thinkwork module                 | merged  | `codex/u2-cognee-thinkwork-wiring` | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | passed  | `c8fa82a705975b53217eb79d09bfd4aeeace819c` |
-| U3. Add Cognee secrets and configuration hygiene                       | merged  | `codex/u3-cognee-secrets-config`   | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed  | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
-| U4. Propagate Cognee through examples, CLI templates, and CI workflows | active  | `codex/u4-cognee-cli-templates`    | pending                                                      | pending | pending                                    |
-| U5. Add operational handoff and smoke-check guidance                   | pending | pending                            | pending                                                      | pending | pending                                    |
+| Unit                                                                   | Status    | Branch                             | PR                                                           | CI      | Merge                                      |
+| ---------------------------------------------------------------------- | --------- | ---------------------------------- | ------------------------------------------------------------ | ------- | ------------------------------------------ |
+| U1. Create the Cognee Terraform app module                             | merged    | `codex/u1-cognee-terraform-module` | [#2045](https://github.com/thinkwork-ai/thinkwork/pull/2045) | passed  | `30ec4984677de7a0c044bbe8ce745b890271e13a` |
+| U2. Wire Cognee through the composite Thinkwork module                 | merged    | `codex/u2-cognee-thinkwork-wiring` | [#2046](https://github.com/thinkwork-ai/thinkwork/pull/2046) | passed  | `c8fa82a705975b53217eb79d09bfd4aeeace819c` |
+| U3. Add Cognee secrets and configuration hygiene                       | merged    | `codex/u3-cognee-secrets-config`   | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed  | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
+| U4. Propagate Cognee through examples, CLI templates, and CI workflows | in review | `codex/u4-cognee-cli-templates`    | [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) | pending | pending                                    |
+| U5. Add operational handoff and smoke-check guidance                   | pending   | pending                            | pending                                                      | pending | pending                                    |
 
 ## CI Failures
 
