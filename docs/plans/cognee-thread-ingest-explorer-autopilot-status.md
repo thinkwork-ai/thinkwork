@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/cognee-kg-final-status` /
   `.Codex/worktrees/cognee-kg-final-status`
-- Current PR: not opened
+- Current PR: [#2085](https://github.com/thinkwork-ai/thinkwork/pull/2085)
 - Blocker: live deployed smoke requires an operator identity. Provide
   `SMOKE_TENANT_ID` and `SMOKE_USER_ID`, or a `DATABASE_URL` that can resolve
   an active tenant owner/admin, then run
