@@ -695,10 +695,9 @@ jobs:
             :'cognee_password'
           ) \gexec
 
-          SELECT format('CREATE DATABASE %I OWNER %I', :'cognee_db', :'cognee_user')
+          SELECT format('CREATE DATABASE %I', :'cognee_db')
           WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'cognee_db')
           \gexec
-          SELECT format('ALTER DATABASE %I OWNER TO %I', :'cognee_db', :'cognee_user') \gexec
           GRANT CONNECT ON DATABASE :"cognee_db" TO :"cognee_user";
           \connect :"cognee_db"
           GRANT USAGE, CREATE ON SCHEMA public TO :"cognee_user";
