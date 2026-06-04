@@ -1280,13 +1280,16 @@ function renderSkillsBody(skills: SkillInfo[]): string {
   lines.push("### Tool selection");
   lines.push("");
   lines.push(
-    "- **Information lookup** — Prefer `web_search` (Exa) for ordinary factual questions: locations, business hours, current events, prices, schedules, news, definitions. It's fast, cheap, and indexed.",
+    "- **Information lookup** — Prefer `web_search` (Exa) for ordinary factual questions and discovery: locations, business hours, current events, prices, schedules, news, definitions, and candidate URLs. It's fast, cheap, and indexed.",
   );
   lines.push(
-    "- **Browser automation** — Use `browser_automation` only when the task genuinely requires interacting with a page: filling forms, clicking through auth flows, scraping JS-rendered content that search engines don't index, or following a multi-step user journey. It is expensive and slow; do not reach for it as a default search tool.",
+    "- **Page reading** — Use `web_extract` (Firecrawl) to read, summarize, analyze, or quote one known public URL as clean page content. This is the normal next step after `web_search` finds a promising result.",
   );
   lines.push(
-    "- **When both are available** — Start with `web_search`. Only escalate to `browser_automation` if the search results are insufficient and you can articulate why navigation is required.",
+    "- **Browser automation** — Use `browser_automation` only when the task genuinely requires interacting with a page: filling forms, clicking through auth flows, rendered-state inspection, scraping content that `web_extract` cannot read, or following a multi-step user journey. It is expensive and slow; do not reach for it as a default search or reading tool.",
+  );
+  lines.push(
+    "- **When web tools are available** — Start with `web_search` for discovery, then `web_extract` for known URLs. Only escalate to `browser_automation` if extraction is insufficient and you can articulate why navigation is required.",
   );
   lines.push(
     "- **Code execution** — Use `execute_code` for Python execution, data analysis, calculations, and validation. Do not simulate code results in chat.",

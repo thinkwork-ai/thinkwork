@@ -11,9 +11,9 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-04-002-feat-firecrawl-web-extraction-plan.md`.
 - Target branch: `main`.
-- Current unit: U5 Update Spaces Built-in Tools, generated clients, and docs.
-- Current branch: `codex/u5-firecrawl-admin-docs`.
-- Current worktree: `.Codex/worktrees/u5-firecrawl-admin-docs`.
+- Current unit: U6 Update agent guidance and verification prompts.
+- Current branch: `codex/u6-firecrawl-agent-guidance`.
+- Current worktree: `.Codex/worktrees/u6-firecrawl-agent-guidance`.
 
 | Unit                                           | Branch                              | PR                                                           | State  | Notes                                                      |
 | ---------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------- |
@@ -21,8 +21,8 @@ status: in_progress
 | U2 Add Firecrawl config loading and test       | `codex/u2-firecrawl-config-test`    | [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052) | Merged | Squash merged as `a0aadc53`; CI passed.                    |
 | U3 Thread runtime config and policy            | `codex/u3-firecrawl-runtime-policy` | [#2054](https://github.com/thinkwork-ai/thinkwork/pull/2054) | Merged | Squash merged as `932b7575`; CI passed.                    |
 | U4 Register Pi `web_extract` extension         | `codex/u4-firecrawl-pi-extension`   | [#2056](https://github.com/thinkwork-ai/thinkwork/pull/2056) | Merged | Squash merged as `996d5103`; CI passed.                    |
-| U5 Update Spaces Built-in Tools, clients, docs | `codex/u5-firecrawl-admin-docs`     | [#2059](https://github.com/thinkwork-ai/thinkwork/pull/2059) | Active | Local verification passed; CI pending.                     |
-| U6 Update agent guidance and verification      | TBD                                 | TBD                                                          | Todo   | Pending U4-U5.                                             |
+| U5 Update Spaces Built-in Tools, clients, docs | `codex/u5-firecrawl-admin-docs`     | [#2059](https://github.com/thinkwork-ai/thinkwork/pull/2059) | Merged | Squash merged as `020d9978`; CI passed.                    |
+| U6 Update agent guidance and verification      | `codex/u6-firecrawl-agent-guidance` | [#2061](https://github.com/thinkwork-ai/thinkwork/pull/2061) | Active | Local verification and CI passed; merge pending.           |
 
 ### Progress Log
 
@@ -129,6 +129,32 @@ status: in_progress
   subtitle, removed the Last tested overview column, and switched the table to
   auto layout so columns fit their visible content instead of fixed widths.
 - Opened U5 PR [#2059](https://github.com/thinkwork-ai/thinkwork/pull/2059).
+- U5 CI passed after rebasing onto the latest `origin/main`; squash merged PR
+  [#2059](https://github.com/thinkwork-ai/thinkwork/pull/2059) as
+  `020d9978`, then removed the U5 worktree and local branch. The remote branch
+  had already been deleted by GitHub after merge.
+- Created isolated U6 worktree `.Codex/worktrees/u6-firecrawl-agent-guidance`
+  from `origin/main`.
+- Implemented U6 agent guidance updates: Pi `web_search` now frames search as
+  discovery and candidate URLs, `browser_automation` now defers normal page
+  reading to `web_extract`, seeded workspace `AGENTS.md`/`TOOLS.md` explain the
+  Web Search -> Web Extraction -> Browser Automation fallback sequence without
+  credentials, generated workspace-map guidance includes the same sequence, and
+  the Pi runtime smoke script explicitly supports `web_extract` while keeping
+  provider-backed smokes opt-in.
+- U6 local verification passed:
+  `pnpm --filter @thinkwork/pi-extensions test -- test/capabilities.test.ts test/web-extract.test.ts`;
+  `pnpm --filter @thinkwork/workspace-defaults test -- src/__tests__/parity.test.ts`;
+  `pnpm --filter @thinkwork/api test -- src/lib/__tests__/workspace-map-generator.test.ts`;
+  `pnpm --filter @thinkwork/pi-extensions typecheck`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/workspace-defaults typecheck`;
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts`;
+  `pnpm dlx prettier --check <changed supported files>`;
+  and `git diff --check`.
+- Opened U6 PR [#2061](https://github.com/thinkwork-ai/thinkwork/pull/2061).
+- U6 CI passed on PR [#2061](https://github.com/thinkwork-ai/thinkwork/pull/2061):
+  CLA, lint, verify, typecheck, and test all green.
 
 ### CI / Verification
 
