@@ -19,13 +19,12 @@ describe("tenant settings route", () => {
     expect(source).toContain('toast.success("Tenant identifier updated.")');
   });
 
-  it("adds a Knowledge Graph deployment control with disable confirmation", () => {
-    expect(source).toContain("Knowledge Graph");
-    expect(source).toContain("SetKnowledgeGraphDeploymentMutation");
-    expect(source).toContain("Toggle Knowledge Graph infrastructure");
-    expect(source).toContain("Disable Knowledge Graph?");
-    expect(source).toContain("deployment queued");
-    expect(source).toContain("cogneeEndpoint");
-    expect(source).toContain("cogneeLogGroupName");
+  it("does not expose the Knowledge Graph deployment control in admin", () => {
+    expect(source).not.toContain("Knowledge Graph");
+    expect(source).not.toContain("SetKnowledgeGraphDeploymentMutation");
+    expect(source).not.toContain("Toggle Knowledge Graph infrastructure");
+    expect(source).not.toContain("Disable Knowledge Graph?");
+    expect(source).not.toContain("cogneeEndpoint");
+    expect(source).not.toContain("cogneeLogGroupName");
   });
 });

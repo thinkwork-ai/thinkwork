@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SETTINGS_NAV_ITEMS, visibleSettingsNavItems } from "./settings-nav";
 
 const LOCAL_WORKSPACE = "/settings/local-workspace";
+const KNOWLEDGE_GRAPH = "/settings/knowledge-graph";
 
 describe("visibleSettingsNavItems", () => {
   it("declares Workspace as a non-operator, non-desktop-gated section", () => {
@@ -41,5 +42,32 @@ describe("visibleSettingsNavItems", () => {
     // Workspace shows for everyone.
     expect(memberWeb.some((i) => i.to === "/settings/users")).toBe(false);
     expect(memberWeb.some((i) => i.to === LOCAL_WORKSPACE)).toBe(true);
+  });
+
+  it("places Knowledge Graph in Spaces settings for operators on web and desktop", () => {
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === KNOWLEDGE_GRAPH);
+    expect(item).toBeDefined();
+    expect(item?.operatorOnly).toBe(true);
+    expect(item?.desktopOnly).toBeFalsy();
+
+    const operatorWeb = visibleSettingsNavItems({
+      isOperator: true,
+      roleResolved: true,
+      isDesktop: false,
+    });
+    const operatorDesktop = visibleSettingsNavItems({
+      isOperator: true,
+      roleResolved: true,
+      isDesktop: true,
+    });
+    const memberWeb = visibleSettingsNavItems({
+      isOperator: false,
+      roleResolved: true,
+      isDesktop: false,
+    });
+
+    expect(operatorWeb.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(true);
+    expect(operatorDesktop.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(true);
+    expect(memberWeb.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(false);
   });
 });
