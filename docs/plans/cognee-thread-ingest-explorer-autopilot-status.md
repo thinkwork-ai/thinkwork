@@ -6,16 +6,16 @@ Started: 2026-06-04
 
 ## Current Status
 
-- State: blocked_on_live_deployed_smoke
-- Current unit: none - implementation units U1-U8 are merged
+- State: in_progress
+- Current unit: U9 hotfix - deployed smoke service auth and Cognee access control
 - Current branch/worktree:
-  `codex/cognee-kg-final-status` /
-  `.Codex/worktrees/cognee-kg-final-status`
-- Current PR: [#2085](https://github.com/thinkwork-ai/thinkwork/pull/2085)
-- Blocker: live deployed smoke requires an operator identity. Provide
-  `SMOKE_TENANT_ID` and `SMOKE_USER_ID`, or a `DATABASE_URL` that can resolve
-  an active tenant owner/admin, then run
-  `SMOKE_ENABLE_KNOWLEDGE_GRAPH=1 node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs`.
+  `codex/cognee-kg-smoke-service-auth` /
+  `.Codex/worktrees/cognee-kg-smoke-service-auth`
+- Current PR: pending
+- Blocker: none. Live deployed smoke reached the worker and exposed a Cognee
+  `401 Unauthorized`; U9 patches the smoke auth mode and Cognee ECS access
+  control, then must merge/deploy through the normal pipeline before rerunning
+  live smoke.
 
 ## Progress Log
 
@@ -254,3 +254,24 @@ SMOKE_USER_ID, or provide DATABASE_URL for fallback.` The copied
   blocker is live deployed smoke execution: the local `apps/spaces/.env` has
   GraphQL endpoint/key values but no operator identity, no `DATABASE_URL`
   fallback, and `~/.thinkwork/config.json` only records default stage `dev`.
+- 2026-06-04: Completion audit after U8 found `main` deployed successfully, but
+  the live smoke script's documented API-key/operator path entered the
+  admin-skill impersonation gate without an `x-agent-id`, causing
+  `Agent identity required for admin-skill operations` before mutation.
+  Started U9 hotfix branch `codex/cognee-kg-smoke-service-auth`.
+- 2026-06-04: U9 updated the smoke script to default live GraphQL calls to
+  tenant-scoped bearer/API-key service auth and reserve admin-skill
+  impersonation for explicit `SMOKE_USER_ID` + `SMOKE_KG_AGENT_ID`.
+- 2026-06-04: U9 live smoke then reached the deployed worker against dev thread
+  `81e6f391-a2d1-45be-98e1-d4fbb7d78878` and failed with Cognee
+  `/api/v1/remember` returning `401 Unauthorized`. Cognee's current
+  self-hosted docs require both `REQUIRE_AUTHENTICATION=false` and
+  `ENABLE_BACKEND_ACCESS_CONTROL=false`; Terraform had only set the former.
+  U9 now sets both on the private Cognee ECS service.
+- 2026-06-04: U9 local verification passed:
+  `node --check scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs`;
+  `node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs` dry-run;
+  `pnpm dlx prettier --check ...`;
+  `terraform fmt -check terraform/modules/app/cognee/main.tf`;
+  `terraform -chdir=terraform/examples/greenfield validate`;
+  and `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`.

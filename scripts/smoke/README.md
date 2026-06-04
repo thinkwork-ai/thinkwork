@@ -80,17 +80,22 @@ reads:
 node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs
 SMOKE_ENABLE_KNOWLEDGE_GRAPH=1 \
   SMOKE_TENANT_ID=<tenant-id> \
-  SMOKE_USER_ID=<operator-user-id> \
   SMOKE_KG_THREAD_ID=<thread-id> \
   node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs
 ```
 
 Live mode requires deployed GraphQL credentials from `apps/spaces/.env` or
 equivalent `VITE_GRAPHQL_HTTP_URL`/`GRAPHQL_HTTP_URL` plus
-`API_AUTH_SECRET`/`THINKWORK_API_SECRET` or an API key. If `SMOKE_KG_THREAD_ID`
-is omitted, the smoke uses `knowledgeGraphThreadCandidates` and optional
-`SMOKE_KG_THREAD_QUERY` to pick a thread with messages. Set `SMOKE_KG_FORCE=1`
-to request a fresh ingest.
+`API_AUTH_SECRET`/`THINKWORK_API_SECRET` or an API key. The default live path
+uses bearer/API-key service auth scoped by `SMOKE_TENANT_ID`; alternatively,
+provide `DATABASE_URL` and the script resolves a tenant from an active
+owner/admin membership row. If `SMOKE_KG_THREAD_ID` is omitted, the smoke uses
+`knowledgeGraphThreadCandidates` and optional `SMOKE_KG_THREAD_QUERY` to pick a
+thread with messages. Set `SMOKE_KG_FORCE=1` to request a fresh ingest.
+
+To exercise the stricter admin-skill impersonation path instead of service
+auth, also set `SMOKE_USER_ID` and `SMOKE_KG_AGENT_ID` for an agent whose
+`thinkwork-admin` assignment allows the Knowledge Graph operation.
 
 Passing live mode means:
 

@@ -67,8 +67,12 @@ ALB. The ALB accepts inbound traffic only from
 `allowed_internal_cidr_blocks`/`allowed_internal_security_group_ids`.
 All-network CIDRs such as `0.0.0.0/0` and `::/0` are rejected.
 
-Direct public/API access, CORS policy, and Cognee-native auth controls are
-deferred to the future Thinkwork API wrapper.
+ThinkWork owns tenant/user authorization at the GraphQL and worker boundaries.
+Because this module exposes Cognee only on a private internal ALB, Cognee-native
+request authentication and backend access control are disabled together
+(`REQUIRE_AUTHENTICATION=false`, `ENABLE_BACKEND_ACCESS_CONTROL=false`) so the
+VPC-attached worker can call the REST API without a Cognee login flow. Do not
+reuse this module shape for an internet-reachable Cognee endpoint.
 
 ## Backend modes
 
