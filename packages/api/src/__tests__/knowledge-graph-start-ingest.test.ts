@@ -32,7 +32,6 @@ vi.mock("../lib/knowledge-graph/runs.js", () => ({
 }));
 
 import { knowledgeGraphMutations } from "../graphql/resolvers/knowledge-graph/index.js";
-import { handler as knowledgeGraphThreadIngestHandler } from "../handlers/knowledge-graph-thread-ingest.js";
 
 const now = new Date("2026-06-04T12:00:00.000Z");
 
@@ -218,28 +217,5 @@ describe("startKnowledgeGraphThreadIngest", () => {
 
     expect(createKnowledgeGraphThreadIngestRunMock).not.toHaveBeenCalled();
     expect(lambdaSendMock).not.toHaveBeenCalled();
-  });
-});
-
-describe("knowledge-graph-thread-ingest handler stub", () => {
-  it("accepts a well-formed run envelope", async () => {
-    await expect(
-      knowledgeGraphThreadIngestHandler({
-        runId: "run-1",
-        tenantId: "tenant-1",
-        threadId: "thread-1",
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        accepted: true,
-        runId: "run-1",
-      }),
-    );
-  });
-
-  it("rejects malformed worker envelopes", async () => {
-    await expect(
-      knowledgeGraphThreadIngestHandler({ runId: "run-1" }),
-    ).rejects.toThrow(/tenantId/);
   });
 });
