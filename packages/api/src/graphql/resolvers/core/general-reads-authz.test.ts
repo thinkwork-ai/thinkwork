@@ -43,6 +43,7 @@ let tenantMembersMod: typeof import("./tenantMembers.query.js");
 
 beforeEach(async () => {
   vi.resetModules();
+  vi.unstubAllEnvs();
   mockRequireAdminOrServiceCaller.mockReset();
   mockRequireTenantMember.mockReset();
   mockResolveCallerTenantId.mockReset();
@@ -73,9 +74,25 @@ describe("deploymentStatus authz", () => {
 
   it("returns the payload for an operator/service caller", async () => {
     mockRequireAdminOrServiceCaller.mockResolvedValueOnce(undefined);
-    const result = await deploymentStatusMod.deploymentStatus(null, {}, service);
+    const result = await deploymentStatusMod.deploymentStatus(
+      null,
+      {},
+      service,
+    );
     expect(result).toMatchObject({ source: "AWS" });
     expect(result).toHaveProperty("accountId");
+  });
+
+  it("derives Cognee enabled state from deployed Cognee details", async () => {
+    mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
+
+    vi.stubEnv("COGNEE_ENDPOINT", "");
+    let result = await deploymentStatusMod.deploymentStatus(null, {}, service);
+    expect(result.cogneeEnabled).toBe(false);
+
+    vi.stubEnv("COGNEE_ENDPOINT", "http://cognee.internal");
+    result = await deploymentStatusMod.deploymentStatus(null, {}, service);
+    expect(result.cogneeEnabled).toBe(true);
   });
 });
 

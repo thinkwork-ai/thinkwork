@@ -70,6 +70,18 @@ Started: 2026-06-04
 - 2026-06-04: Confirmed AWS dev does not currently have
   `thinkwork/dev/github/deploy-token`; this must be created before the deployed
   Settings switch can dispatch workflows from the API.
+- 2026-06-04: U6 PR [#2053](https://github.com/thinkwork-ai/thinkwork/pull/2053)
+  passed GitHub checks and squash merged to `main` as
+  `10b3f6922a8b0ac8b6a54b351a9206b3b2034353`; the merge-triggered deploy run
+  [26957471228](https://github.com/thinkwork-ai/thinkwork/actions/runs/26957471228)
+  failed during Terraform Apply because the GraphQL Lambda environment exceeded
+  Lambda's 4KB limit after adding Knowledge Graph status/default dispatch env
+  vars.
+- 2026-06-04: Started U6 hotfix branch `codex/cognee-env-limit-hotfix` from
+  `origin/main`. The hotfix removes default Knowledge Graph dispatch env vars
+  from Terraform, omits empty Cognee detail env vars, derives `cogneeEnabled`
+  from deployed Cognee details, and adds regression coverage for the lean env
+  wiring.
 
 ## Implementation Units
 
@@ -80,7 +92,8 @@ Started: 2026-06-04
 | U3. Add Cognee secrets and configuration hygiene                       | merged | `codex/u3-cognee-secrets-config`   | [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) | passed | `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4` |
 | U4. Propagate Cognee through examples, CLI templates, and CI workflows | merged | `codex/u4-cognee-cli-templates`    | [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) | passed | `c045ce844ff08580a62403515413c8498d915fc9` |
 | U5. Add operational handoff and smoke-check guidance                   | merged | `codex/u5-cognee-ops-guidance`     | [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) | passed | `32a2f95761c8adcf9ab33be1ff0ace4ad51558b9` |
-| U6. Add Knowledge Graph settings control and deploy activation         | active | `codex/cognee-deploy-enable`       | Not opened                                                   | local  | Pending                                    |
+| U6. Add Knowledge Graph settings control and deploy activation         | merged | `codex/cognee-deploy-enable`       | [#2053](https://github.com/thinkwork-ai/thinkwork/pull/2053) | passed | `10b3f6922a8b0ac8b6a54b351a9206b3b2034353` |
+| U6 hotfix. Keep GraphQL Lambda env under 4KB                           | active | `codex/cognee-env-limit-hotfix`    | Not opened                                                   | local  | Pending                                    |
 
 ## CI Failures
 
@@ -93,6 +106,16 @@ Started: 2026-06-04
 - [#2047](https://github.com/thinkwork-ai/thinkwork/pull/2047) — U3. Add Cognee secrets and configuration hygiene — squash merged as `005326a3fc7dc42a7b5bb10e4efd69bba8fa53e4`.
 - [#2048](https://github.com/thinkwork-ai/thinkwork/pull/2048) — U4. Propagate Cognee through examples, CLI templates, and CI workflows — squash merged as `c045ce844ff08580a62403515413c8498d915fc9`.
 - [#2049](https://github.com/thinkwork-ai/thinkwork/pull/2049) — U5. Add operational handoff and smoke-check guidance — squash merged as `32a2f95761c8adcf9ab33be1ff0ace4ad51558b9`.
+- [#2053](https://github.com/thinkwork-ai/thinkwork/pull/2053) — U6. Add Knowledge Graph settings control and deploy activation — squash merged as `10b3f6922a8b0ac8b6a54b351a9206b3b2034353`.
+
+## CI / Deploy Failures
+
+- Main deploy run
+  [26957471228](https://github.com/thinkwork-ai/thinkwork/actions/runs/26957471228)
+  failed in Terraform Apply while updating
+  `thinkwork-dev-api-graphql-http`: Lambda rejected the environment map for
+  exceeding the 4KB environment-variable limit. Hotfix branch
+  `codex/cognee-env-limit-hotfix` is in progress.
 
 ## Blockers
 

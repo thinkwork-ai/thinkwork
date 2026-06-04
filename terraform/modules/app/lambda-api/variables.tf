@@ -254,30 +254,6 @@ variable "agentcore_pi_function_name" {
   default     = ""
 }
 
-variable "knowledge_graph_github_token_secret_id" {
-  description = "Secrets Manager secret id/name containing a GitHub token that can update Actions variables and dispatch the deploy workflow."
-  type        = string
-  default     = ""
-}
-
-variable "knowledge_graph_deploy_repository" {
-  description = "GitHub repository in owner/name form for Knowledge Graph deploy workflow dispatch."
-  type        = string
-  default     = "thinkwork-ai/thinkwork"
-}
-
-variable "knowledge_graph_deploy_workflow_file" {
-  description = "GitHub Actions workflow file to dispatch after changing the Knowledge Graph deploy variable."
-  type        = string
-  default     = "deploy.yml"
-}
-
-variable "knowledge_graph_deploy_ref" {
-  description = "Git ref used when dispatching the Knowledge Graph deploy workflow."
-  type        = string
-  default     = "main"
-}
-
 variable "agentcore_pi_function_arn" {
   description = "Pi AgentCore Lambda function ARN (used to grant lambda:InvokeFunction)"
   type        = string
