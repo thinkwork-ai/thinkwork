@@ -279,8 +279,10 @@ describe("stub registration (taxonomy smoke test)", () => {
 
     program.exitOverride();
 
+    // `skill catalog` is no longer retired — it is now a live command group
+    // (`skill catalog rebuild`, plan U6). The remaining tenant-skill verbs
+    // stay retired and point users to the admin Skills tab.
     const invocations = [
-      ["skill", "catalog"],
       ["skill", "list"],
       ["skill", "install", "finance-audit-xls"],
       ["skill", "upgrade", "finance-audit-xls"],
