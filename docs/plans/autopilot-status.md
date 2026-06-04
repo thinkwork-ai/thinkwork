@@ -11,9 +11,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-04-002-feat-firecrawl-web-extraction-plan.md`.
 - Target branch: `main`.
-- Current unit: U6 Update agent guidance and verification prompts.
-- Current branch: `codex/u6-firecrawl-agent-guidance`.
-- Current worktree: `.Codex/worktrees/u6-firecrawl-agent-guidance`.
+- Current unit: Complete.
+- Current branch: none.
+- Current worktree: Spaces verification server still running from
+  `.Codex/worktrees/u6-firecrawl-agent-guidance`.
 
 | Unit                                           | Branch                              | PR                                                           | State  | Notes                                                      |
 | ---------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------- |
@@ -22,7 +23,7 @@ status: in_progress
 | U3 Thread runtime config and policy            | `codex/u3-firecrawl-runtime-policy` | [#2054](https://github.com/thinkwork-ai/thinkwork/pull/2054) | Merged | Squash merged as `932b7575`; CI passed.                    |
 | U4 Register Pi `web_extract` extension         | `codex/u4-firecrawl-pi-extension`   | [#2056](https://github.com/thinkwork-ai/thinkwork/pull/2056) | Merged | Squash merged as `996d5103`; CI passed.                    |
 | U5 Update Spaces Built-in Tools, clients, docs | `codex/u5-firecrawl-admin-docs`     | [#2059](https://github.com/thinkwork-ai/thinkwork/pull/2059) | Merged | Squash merged as `020d9978`; CI passed.                    |
-| U6 Update agent guidance and verification      | `codex/u6-firecrawl-agent-guidance` | [#2061](https://github.com/thinkwork-ai/thinkwork/pull/2061) | Active | Local verification and CI passed; merge pending.           |
+| U6 Update agent guidance and verification      | `codex/u6-firecrawl-agent-guidance` | [#2061](https://github.com/thinkwork-ai/thinkwork/pull/2061) | Merged | Squash merged as `0b0d49a`; CI passed.                     |
 
 ### Progress Log
 
@@ -155,6 +156,23 @@ status: in_progress
 - Opened U6 PR [#2061](https://github.com/thinkwork-ai/thinkwork/pull/2061).
 - U6 CI passed on PR [#2061](https://github.com/thinkwork-ai/thinkwork/pull/2061):
   CLA, lint, verify, typecheck, and test all green.
+- U6 squash merged PR
+  [#2061](https://github.com/thinkwork-ai/thinkwork/pull/2061) as
+  `0b0d49a403c32d70f95ae697e3090de860e33baa`.
+- Main deploy run `26964148117` passed after the U6 merge. The deploy pipeline
+  rebuilt and updated the Pi AgentCore runtime, ran Terraform apply, and
+  completed the version-aware workspace-defaults reseed to existing tenants, so
+  no manual S3 workspace mutation was required.
+- Started the merged Spaces app from
+  `.Codex/worktrees/u6-firecrawl-agent-guidance` at
+  `http://127.0.0.1:5175/settings/tools` for post-merge validation. `curl -I`
+  returned `200 OK`, and the Vite-served Settings Tools module includes
+  `Web Extraction`, `firecrawl`, `Agent access`, and `table-auto`.
+- Deployed Pi E2E verification passed in thread `CHAT-1041`
+  (`9009a41d-b792-4f73-a6d8-13983f73afb1`), turn
+  `49711753-cd95-4937-8251-e67d17cc258e`: the persisted `usageJson`
+  contained exactly one `web_extract` invocation, zero browser automation
+  invocations, successful extracted `Example Domain` content, and no turn error.
 
 ### CI / Verification
 
