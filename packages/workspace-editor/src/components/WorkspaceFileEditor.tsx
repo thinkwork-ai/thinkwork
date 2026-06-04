@@ -65,6 +65,9 @@ export interface WorkspaceFileEditorProps<TTarget> {
   /** Draw the outer border + rounded corners around the tree/editor split.
    *  Default true; full-screen hosts can opt out for an edge-to-edge look. */
   bordered?: boolean;
+  /** Replaces the default spinner shown while files load. Hosts pass their
+   *  app-standard loading treatment (e.g. the monospace shimmer). */
+  loadingSlot?: ReactNode;
 }
 
 interface ClipboardItem {
@@ -87,6 +90,7 @@ export function WorkspaceFileEditor<TTarget>({
   readOnly = false,
   className,
   bordered = true,
+  loadingSlot,
 }: WorkspaceFileEditorProps<TTarget>) {
   const stableTarget = useMemo(() => target, [targetKey, target]);
   const [files, setFiles] = useState<string[]>([]);
@@ -607,7 +611,11 @@ export function WorkspaceFileEditor<TTarget>({
       ) : null}
       {loadingFiles && !loadedFilesOnce ? (
         <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading files...
+          {loadingSlot ?? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading files...
+            </>
+          )}
         </div>
       ) : (
         <div
