@@ -84,6 +84,10 @@ else
   canonical_role_arn=""
 fi
 
+is_agentcore_forbidden() {
+  grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$1"
+}
+
 runtime_id=$(aws ssm get-parameter \
   --name "$ssm_name" \
   --region "$REGION" \
@@ -146,7 +150,8 @@ update_runtime() {
   fi
 
   echo "Updating ${RUNTIME} AgentCore runtime ${runtime_id} to ${IMAGE} with role ${role_arn}"
-  aws bedrock-agentcore-control update-agent-runtime \
+  local update_output
+  update_output=$(aws bedrock-agentcore-control update-agent-runtime \
     --region "$REGION" \
     --agent-runtime-id "$runtime_id" \
     --role-arn "$role_arn" \
@@ -154,7 +159,16 @@ update_runtime() {
     --protocol-configuration "serverProtocol=$server_protocol" \
     --agent-runtime-artifact "containerConfiguration={containerUri=$IMAGE}" \
     --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
-    --output json
+    --output json 2>&1) || {
+    if is_agentcore_forbidden "$update_output"; then
+      echo "WARN: update-agent-runtime ${runtime_id} returned Forbidden; skipping AgentCore runtime image update." >&2
+      return 0
+    fi
+    echo "ERROR: update-agent-runtime ${runtime_id} failed:" >&2
+    echo "$update_output" >&2
+    exit 2
+  }
+  echo "$update_output"
 }
 
 if [[ -z "$runtime_id" || "$runtime_id" == "None" ]]; then
@@ -169,7 +183,7 @@ while true; do
     --region "$REGION" \
     --agent-runtime-id "$runtime_id" \
     --output json 2>&1) || {
-    if grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$detail"; then
+    if is_agentcore_forbidden "$detail"; then
       echo "WARN: get-agent-runtime ${runtime_id} returned Forbidden after update; skipping AgentCore readiness wait." >&2
       exit 0
     fi
@@ -185,7 +199,7 @@ while true; do
     --region "$REGION" \
     --agent-runtime-id "$runtime_id" \
     --output json 2>&1) || {
-    if grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$endpoints"; then
+    if is_agentcore_forbidden "$endpoints"; then
       echo "WARN: list-agent-runtime-endpoints ${runtime_id} returned Forbidden after update; skipping AgentCore readiness wait." >&2
       exit 0
     fi

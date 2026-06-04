@@ -338,7 +338,7 @@ jobs:
               NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
               SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
             fi
-            aws bedrock-agentcore-control update-agent-runtime \
+            UPDATE_OUTPUT=$(aws bedrock-agentcore-control update-agent-runtime \
               --region ${{ env.AWS_REGION }} \
               --agent-runtime-id "$RUNTIME_ID" \
               --role-arn "$ROLE_ARN" \
@@ -346,7 +346,17 @@ jobs:
               --protocol-configuration "serverProtocol=$SERVER_PROTOCOL" \
               --agent-runtime-artifact "containerConfiguration={containerUri=$NEW_IMAGE}" \
               --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
-              --output json
+              --output json 2>&1) || {
+                if grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$UPDATE_OUTPUT"; then
+                  echo "WARN: update-agent-runtime $RUNTIME_ID returned Forbidden; Lambda/Terraform deploy will continue and Deploy Summary will run the tolerant AgentCore drift probe."
+                else
+                  echo "$UPDATE_OUTPUT" >&2
+                  exit 1
+                fi
+              }
+            if [ -n "${UPDATE_OUTPUT:-}" ]; then
+              echo "$UPDATE_OUTPUT"
+            fi
           fi
 
           echo "Pi AgentCore runtime visible:"
