@@ -7,11 +7,11 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U3 - Manual Ingest Mutation and Worker Enqueue
+- Current unit: U4 - Cognee Thread Ingest Worker and Normalizer
 - Current branch/worktree:
-  `codex/cognee-kg-u3-ingest-enqueue` /
-  `.Codex/worktrees/cognee-kg-u3-ingest-enqueue`
-- Current PR: [#2079](https://github.com/thinkwork-ai/thinkwork/pull/2079)
+  `codex/cognee-kg-u4-worker` /
+  `.Codex/worktrees/cognee-kg-u4-worker`
+- Current PR: not opened
 - Blocker: none
 
 ## Progress Log
@@ -111,3 +111,25 @@ Started: 2026-06-04
   passed, 9 skipped); targeted Prettier check; and `git diff --check`.
 - 2026-06-04: Opened U3 PR
   [#2079](https://github.com/thinkwork-ai/thinkwork/pull/2079).
+- 2026-06-04: U3 PR
+  [#2079](https://github.com/thinkwork-ai/thinkwork/pull/2079) passed required
+  CI and was squash-merged into `main` at
+  `ff5fd1b802ba43549605f3b292962950af36d614`; deleted the remote branch and
+  removed the local U3 worktree/branch.
+- 2026-06-04: Synced `origin/main` and created isolated U4 worktree
+  `.Codex/worktrees/cognee-kg-u4-worker` on branch
+  `codex/cognee-kg-u4-worker` from `origin/main`.
+- 2026-06-04: Implemented U4 worker processing: replaced the acceptance stub
+  with run loading/running/failure/success orchestration; added transcript
+  rendering from complete thread messages; added approved ontology export as a
+  custom Cognee prompt; isolated Cognee `remember` plus `add`/`cognify`
+  fallback and dataset graph retrieval in a client adapter; normalized Cognee
+  nodes/edges into grounded/diagnostic entities, relationships, and
+  message-level evidence; and added snapshot replacement that preserves run
+  history while replacing the current thread graph rows.
+- 2026-06-04: U4 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/cognee-client.test.ts src/lib/knowledge-graph/thread-transcript.test.ts src/lib/knowledge-graph/normalizer.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts src/__tests__/knowledge-graph-start-ingest.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
+  `pnpm --filter @thinkwork/api test` (403 files passed, 3 skipped; 3535 tests
+  passed, 9 skipped); targeted Prettier check; and `git diff --check`.
