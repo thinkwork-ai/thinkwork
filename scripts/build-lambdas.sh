@@ -487,6 +487,9 @@ build_handler "memory-retain" \
 build_handler "wiki-compile" \
   "$REPO_ROOT/packages/api/src/handlers/wiki-compile.ts"
 
+build_handler "knowledge-graph-thread-ingest" \
+  "$REPO_ROOT/packages/api/src/handlers/knowledge-graph-thread-ingest.ts"
+
 build_handler "ontology-scan" \
   "$REPO_ROOT/packages/api/src/handlers/ontology-scan.ts"
 
