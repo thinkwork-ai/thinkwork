@@ -2928,14 +2928,14 @@ function ActionRow({
           ? Sparkles
           : Bot;
   return (
-    <details className="group/action w-fit text-muted-foreground">
+    <details className="group/action w-full min-w-0 max-w-full text-muted-foreground">
       <summary className="flex cursor-pointer list-none items-center gap-3 text-sm transition-colors hover:text-foreground">
         <Icon className="size-4" />
         {title}
         <ChevronRight className="size-4 transition-transform group-open/action:rotate-90" />
       </summary>
       {detail ? (
-        <pre className="ml-7 mt-2 max-w-2xl whitespace-pre-wrap rounded-lg bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
+        <pre className="ml-7 mt-2 max-w-[calc(100%-1.75rem)] whitespace-pre-wrap break-words rounded-lg bg-muted/30 p-3 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
           {detail}
         </pre>
       ) : null}
@@ -3227,11 +3227,19 @@ export function actionRowsForTurn(
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
+    const detail = toolInvocationDetail(record);
     rows.push({
       title: toolActionTitle(name),
-      detail: toolInvocationDetail(record),
+      detail,
       kind: toolKind(name),
     });
+    if (detail && isTurnFinished(turn.status)) {
+      rows.push({
+        title: "tool invocation completed",
+        detail: toolInvocationCompletionDetail(record),
+        kind: toolKind(name),
+      });
+    }
   }
 
   for (const name of toolsCalled) {
@@ -3329,6 +3337,11 @@ function actionRowForAgentCorePhases(usage: Record<string, unknown>) {
     detail: lines.join("\n"),
     kind: "thinking" as const,
   };
+}
+
+function isTurnFinished(status: unknown) {
+  const normalized = stringValue(status)?.toLowerCase();
+  return normalized !== "running" && normalized !== "queued";
 }
 
 function formatWorkspaceDiagnostics(
@@ -3512,25 +3525,41 @@ function actionRowForEvent(event: TaskThreadEvent) {
 }
 
 function eventDetail(event: TaskThreadEvent, payload: Record<string, unknown>) {
+  const inputPreview =
+    stringValue(payload.input_preview) || stringValue(payload.inputPreview);
+  const outputPreview =
+    stringValue(payload.output_preview) || stringValue(payload.outputPreview);
   const detail = {
     ...(event.createdAt ? { createdAt: event.createdAt } : {}),
     ...(event.level ? { level: event.level } : {}),
     ...sanitizeEventPayload(payload),
   };
-  return Object.keys(detail).length
-    ? JSON.stringify(detail, null, 2)
-    : undefined;
+  const parts = [
+    Object.keys(detail).length ? JSON.stringify(detail, null, 2) : null,
+    inputPreview ? `Input: ${formatToolPreview(inputPreview)}` : null,
+    outputPreview ? `Output: ${formatToolPreview(outputPreview)}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join("\n\n") : undefined;
 }
 
 function sanitizeEventPayload(payload: Record<string, unknown>) {
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(payload)) {
+    if (isPreviewPayloadKey(key)) continue;
     sanitized[sanitizeEventPayloadKey(key)] = sanitizeEventPayloadValue(value);
   }
   return sanitized;
 }
 
+function isPreviewPayloadKey(key: string) {
+  return ["input_preview", "inputPreview", "output_preview", "outputPreview"]
+    .map((candidate) => candidate.toLowerCase())
+    .includes(key.toLowerCase());
+}
+
 function sanitizeEventPayloadValue(value: unknown): unknown {
+  const decoded = decodeJsonString(value);
+  if (decoded !== value) return sanitizeEventPayloadValue(decoded);
   if (Array.isArray(value)) return value.map(sanitizeEventPayloadValue);
   if (value && typeof value === "object") {
     return sanitizeEventPayload(value as Record<string, unknown>);
@@ -3721,11 +3750,108 @@ function toolInvocationDetail(record: Record<string, unknown>) {
   const outputPreview = stringValue(record.output_preview);
   const status = stringValue(record.status);
   const parts = [
-    inputPreview ? `Input: ${inputPreview}` : null,
-    outputPreview ? `Output: ${outputPreview}` : null,
+    inputPreview ? `Input: ${formatToolPreview(inputPreview)}` : null,
+    outputPreview ? `Output: ${formatToolPreview(outputPreview)}` : null,
     status ? `Status: ${status}` : null,
   ].filter(Boolean);
   return parts.length ? parts.join("\n\n") : JSON.stringify(record, null, 2);
+}
+
+function toolInvocationCompletionDetail(record: Record<string, unknown>) {
+  const metadata = sanitizeToolInvocationMetadata(record);
+  const previewDetail = toolInvocationDetail(record);
+  const parts = [
+    Object.keys(metadata).length ? JSON.stringify(metadata, null, 2) : null,
+    previewDetail,
+  ].filter(Boolean);
+  return parts.length ? parts.join("\n\n") : previewDetail;
+}
+
+function sanitizeToolInvocationMetadata(record: Record<string, unknown>) {
+  const metadata: Record<string, unknown> = {};
+  for (const key of [
+    "createdAt",
+    "created_at",
+    "id",
+    "tool_name",
+    "toolName",
+    "name",
+    "status",
+    "is_error",
+    "isError",
+    "runtime",
+    "started_at",
+    "startedAt",
+    "finished_at",
+    "finishedAt",
+  ]) {
+    if (record[key] === undefined || isPreviewPayloadKey(key)) continue;
+    metadata[key] = sanitizeEventPayloadValue(record[key]);
+  }
+  return metadata;
+}
+
+function formatToolPreview(value: string) {
+  const decoded = decodeNestedJsonStrings(value);
+  if (decoded !== value) return JSON.stringify(decoded, null, 2);
+  return formatPartialJsonPreview(value);
+}
+
+function decodeNestedJsonStrings(value: unknown): unknown {
+  const decoded = decodeJsonString(value);
+  if (decoded !== value) return decodeNestedJsonStrings(decoded);
+  if (Array.isArray(value)) return value.map(decodeNestedJsonStrings);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, child]) => [
+        key,
+        decodeNestedJsonStrings(child),
+      ]),
+    );
+  }
+  return value;
+}
+
+function decodeJsonString(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed || !["{", "["].includes(trimmed[0])) return value;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && (typeof parsed === "object" || Array.isArray(parsed))
+      ? parsed
+      : value;
+  } catch {
+    return value;
+  }
+}
+
+function formatPartialJsonPreview(value: string) {
+  const unescaped = unescapeJsonPreviewFragments(value);
+  if (unescaped === value) return value;
+  return unescaped
+    .replace(/([{\[])/g, "$1\n  ")
+    .replace(/([}\]])/g, "\n$1")
+    .replace(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/g, ",\n  ")
+    .replace(/\n[ \t]*\n/g, "\n")
+    .trim();
+}
+
+function unescapeJsonPreviewFragments(value: string) {
+  if (!/[\\][\\"nrt]/.test(value)) return value;
+  let unescaped = value;
+  for (let i = 0; i < 4; i += 1) {
+    const next = unescaped
+      .replace(/\\\\/g, "\\")
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\"/g, '"');
+    if (next === unescaped) break;
+    unescaped = next;
+  }
+  return unescaped;
 }
 
 function parseRecord(value: unknown): Record<string, unknown> {
