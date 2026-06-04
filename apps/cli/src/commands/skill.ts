@@ -11,12 +11,94 @@
  */
 
 import { Command } from "commander";
+import { confirm } from "@inquirer/prompts";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { resolveAuth } from "../lib/resolve-auth.js";
 import { getApiEndpoint } from "../aws-discovery.js";
 import { buildPluginZip, PluginZipError } from "../lib/plugin-zip.js";
 import { pushPluginZip } from "../lib/plugin-push.js";
+import { getGqlClient, gqlMutate } from "../lib/gql-client.js";
+import { graphql } from "../gql/index.js";
+import { isJsonMode, printJson } from "../lib/output.js";
 import { printError, printSuccess, printWarning } from "../ui.js";
+
+const RebuildSkillCatalogIndexDoc = graphql(`
+  mutation CliRebuildSkillCatalogIndex(
+    $tenantId: ID
+    $all: Boolean
+    $dryRun: Boolean
+  ) {
+    rebuildSkillCatalogIndex(tenantId: $tenantId, all: $all, dryRun: $dryRun) {
+      tenantId
+      tenantSlug
+      skillsInS3
+      rowsUpserted
+      rowsSkipped
+      rowsDeleted
+      dryRun
+    }
+  }
+`);
+
+interface CatalogRebuildOptions {
+  stage?: string;
+  region?: string;
+  tenant?: string;
+  all?: boolean;
+  dryRun?: boolean;
+  yes?: boolean;
+}
+
+async function runCatalogRebuild(opts: CatalogRebuildOptions): Promise<void> {
+  const region = opts.region ?? "us-east-1";
+  const stage = await resolveStage({ flag: opts.stage, region });
+  const all = opts.all === true;
+  const dryRun = opts.dryRun === true;
+
+  if (all && !opts.tenant) {
+    // no-op: --all ignores --tenant
+  }
+  if (!all && !opts.tenant) {
+    printWarning(
+      "No --tenant given; rebuilding the caller's own tenant. Use --all (platform operator) to rebuild every tenant.",
+    );
+  }
+
+  if (all && !dryRun && !opts.yes) {
+    const ok = await confirm({
+      message: `Rebuild the skill catalog index for ALL tenants on stage "${stage}"?`,
+      default: false,
+    });
+    if (!ok) {
+      printWarning("Aborted.");
+      return;
+    }
+  }
+
+  const { client } = await getGqlClient({ stage, region });
+  const data = await gqlMutate(client, RebuildSkillCatalogIndexDoc, {
+    tenantId: opts.tenant ?? null,
+    all,
+    dryRun,
+  });
+
+  const results = data.rebuildSkillCatalogIndex;
+  if (isJsonMode()) {
+    printJson(results);
+    return;
+  }
+
+  for (const r of results) {
+    printSuccess(
+      `${r.tenantSlug}: ${r.skillsInS3} in S3 → ` +
+        `${r.rowsUpserted} upserted, ${r.rowsSkipped} skipped, ${r.rowsDeleted} deleted` +
+        (r.dryRun ? " (dry run — no writes)" : ""),
+    );
+  }
+  if (results.length === 0) {
+    printWarning("No tenants processed.");
+  }
+}
 
 function retiredVerb(verb: string, hint: string): never {
   printError(
@@ -32,21 +114,24 @@ export function registerSkillCommand(program: Command): void {
     .alias("skills")
     .description("Push custom skill plugins; old catalog verbs are retired.");
 
-  skill
+  const catalog = skill
     .command("catalog")
+    .description("Skill catalog index maintenance (operator/admin).");
+
+  catalog
+    .command("rebuild")
     .description(
-      "Retired — browse workspace skill catalog folders in the admin Skills tab.",
+      "Reconcile the skill_catalog index from S3 (backfill / drift recovery).",
     )
     .option("-s, --stage <name>", "Deployment stage")
-    .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--search <q>", "Filter by keyword")
-    .option("--tag <t>", "Filter by category")
-    .action(() =>
-      retiredVerb(
-        "catalog",
-        "catalog skills now live in each agent's admin Skills tab.",
-      ),
-    );
+    .option("-r, --region <name>", "AWS region")
+    .option("-t, --tenant <id>", "Tenant ID (defaults to the caller's tenant)")
+    .option("--all", "Rebuild every tenant (requires platform operator)")
+    .option("--dry-run", "Report the counts without writing")
+    .option("-y, --yes", "Skip the confirmation prompt for --all")
+    .action(async (opts: CatalogRebuildOptions) => {
+      await runCatalogRebuild(opts);
+    });
 
   skill
     .command("list")

@@ -1,0 +1,35 @@
+"""
+Per-tenant skill catalog index maintenance.
+
+The skill_catalog table is a derived read cache of the S3 skill catalog,
+kept fresh by write-through on catalog put/delete. This mutation reconciles
+it from S3 wholesale — used for the launch backfill and operator-invoked
+drift recovery. Powers `thinkwork skill catalog rebuild`.
+"""
+type SkillCatalogRebuildResult {
+  tenantId: ID!
+  tenantSlug: String!
+  "Skills present in the tenant's S3 catalog at rebuild time."
+  skillsInS3: Int!
+  "Rows inserted or updated (SKILL.md-backed skills)."
+  rowsUpserted: Int!
+  "Skills skipped because their folder had no SKILL.md (partial/mid-upload)."
+  rowsSkipped: Int!
+  "Stale rows removed (slugs no longer in S3)."
+  rowsDeleted: Int!
+  dryRun: Boolean!
+}
+
+extend type Mutation {
+  """
+  Reconcile the skill_catalog index from the S3 catalog. For one tenant
+  (`tenantId`, defaults to the caller's tenant; requires tenant admin), or
+  every tenant (`all: true`, requires platform-operator). `dryRun` reports
+  the counts it would write without mutating. Returns one result per tenant.
+  """
+  rebuildSkillCatalogIndex(
+    tenantId: ID
+    all: Boolean = false
+    dryRun: Boolean = false
+  ): [SkillCatalogRebuildResult!]!
+}
