@@ -11,18 +11,18 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-04-002-feat-firecrawl-web-extraction-plan.md`.
 - Target branch: `main`.
-- Current unit: U1 Extend built-in data model and backend catalog.
-- Current branch: `codex/u1-firecrawl-catalog`.
-- Current worktree: `.Codex/worktrees/u1-firecrawl-catalog`.
+- Current unit: U2 Add Firecrawl config loading and admin test support.
+- Current branch: `codex/u2-firecrawl-config-test`.
+- Current worktree: `.Codex/worktrees/u2-firecrawl-config-test`.
 
-| Unit                                         | Branch                       | PR                                                           | State  | Notes                                   |
-| -------------------------------------------- | ---------------------------- | ------------------------------------------------------------ | ------ | --------------------------------------- |
-| U1 Extend built-in data model and catalog    | `codex/u1-firecrawl-catalog` | [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051) | Active | Drift precheck fixed; CI rerun pending. |
-| U2 Add Firecrawl config loading and test     | TBD                          | TBD                                                          | Todo   | Pending U1.                             |
-| U3 Thread runtime config and policy          | TBD                          | TBD                                                          | Todo   | Pending U1-U2.                          |
-| U4 Register Pi `web_extract` extension       | TBD                          | TBD                                                          | Todo   | Pending U2-U3.                          |
-| U5 Update Admin, generated clients, and docs | TBD                          | TBD                                                          | Todo   | Pending U1-U3.                          |
-| U6 Update agent guidance and verification    | TBD                          | TBD                                                          | Todo   | Pending U4-U5.                          |
+| Unit                                         | Branch                           | PR                                                           | State  | Notes                                                      |
+| -------------------------------------------- | -------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------- |
+| U1 Extend built-in data model and catalog    | `codex/u1-firecrawl-catalog`     | [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051) | Merged | Squash merged as `f3a855ed`; dev migration `0143` applied. |
+| U2 Add Firecrawl config loading and test     | `codex/u2-firecrawl-config-test` | [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052) | Active | Local verification passed; CI pending.                     |
+| U3 Thread runtime config and policy          | TBD                              | TBD                                                          | Todo   | Pending U1-U2.                                             |
+| U4 Register Pi `web_extract` extension       | TBD                              | TBD                                                          | Todo   | Pending U2-U3.                                             |
+| U5 Update Admin, generated clients, and docs | TBD                              | TBD                                                          | Todo   | Pending U1-U3.                                             |
+| U6 Update agent guidance and verification    | TBD                              | TBD                                                          | Todo   | Pending U4-U5.                                             |
 
 ### Progress Log
 
@@ -50,6 +50,20 @@ status: in_progress
   the scoped drift reporter then confirmed both
   `public.agents.web_extract` and `public.agent_templates.web_extract` are
   present. Reran the failed GitHub Actions job.
+- U1 CI passed after rebasing onto the latest `origin/main`; squash merged PR
+  [#2051](https://github.com/thinkwork-ai/thinkwork/pull/2051) as `f3a855ed`,
+  then removed the U1 worktree and pruned the deleted remote branch.
+- Created isolated U2 worktree `.Codex/worktrees/u2-firecrawl-config-test`
+  from `origin/main`.
+- U2 added `loadTenantWebExtractConfig` and a Firecrawl `/v2/scrape` Admin
+  test helper, then wired `POST /api/skills/builtin-tools/web-extract/test`
+  through the existing built-in test endpoint.
+- U2 local verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/builtin-tools/web-extract.test.ts src/handlers/skills.builtin-tools.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm dlx prettier --check <changed supported files>`;
+  and `git diff --check`.
+- Opened U2 PR [#2052](https://github.com/thinkwork-ai/thinkwork/pull/2052).
 
 ### CI / Verification
 

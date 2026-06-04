@@ -1,28 +1,41 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
-const { dbState, resetDbState, secretsSend, requireTenantMembershipMock } =
-  vi.hoisted(() => {
-    type DbState = {
-      selectQueue: unknown[][];
-      insertValues: unknown[];
-    };
-    const dbState: DbState = {
-      selectQueue: [],
-      insertValues: [],
-    };
-    return {
-      dbState,
-      resetDbState: () => {
-        dbState.selectQueue = [];
-        dbState.insertValues = [];
-      },
-      secretsSend: vi.fn(() => Promise.resolve({})),
-      requireTenantMembershipMock: vi.fn(() =>
-        Promise.resolve({ ok: true, userId: "user-1" }),
-      ),
-    };
-  });
+const {
+  dbState,
+  resetDbState,
+  secretsSend,
+  requireTenantMembershipMock,
+  runFirecrawlScrapeMock,
+} = vi.hoisted(() => {
+  type DbState = {
+    selectQueue: unknown[][];
+    insertValues: unknown[];
+  };
+  const dbState: DbState = {
+    selectQueue: [],
+    insertValues: [],
+  };
+  return {
+    dbState,
+    resetDbState: () => {
+      dbState.selectQueue = [];
+      dbState.insertValues = [];
+    },
+    secretsSend: vi.fn(() => Promise.resolve({})),
+    requireTenantMembershipMock: vi.fn(() =>
+      Promise.resolve({ ok: true, userId: "user-1" }),
+    ),
+    runFirecrawlScrapeMock: vi.fn(() =>
+      Promise.resolve({
+        url: "https://example.com/",
+        title: "Example",
+        markdown: "# Example",
+        metadata: { title: "Example" },
+      }),
+    ),
+  };
+});
 
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
@@ -131,6 +144,10 @@ vi.mock("../lib/builtin-tools/web-search.js", async () => {
   };
 });
 
+vi.mock("../lib/builtin-tools/web-extract.js", () => ({
+  runFirecrawlScrape: runFirecrawlScrapeMock,
+}));
+
 function event(
   path: string,
   method: string,
@@ -163,6 +180,7 @@ describe("built-in tools handler", () => {
     resetDbState();
     secretsSend.mockClear();
     requireTenantMembershipMock.mockClear();
+    runFirecrawlScrapeMock.mockClear();
   });
 
   it("configures Firecrawl-backed Web Extraction as a credentialed built-in", async () => {
@@ -208,5 +226,29 @@ describe("built-in tools handler", () => {
       "provider must be one of firecrawl",
     );
     expect(dbState.insertValues).toEqual([]);
+  });
+
+  it("tests Firecrawl-backed Web Extraction with a supplied API key", async () => {
+    const { handler } = await import("./skills.js");
+
+    const res = await handler(
+      event("/api/skills/builtin-tools/web-extract/test", "POST", {
+        provider: "firecrawl",
+        apiKey: "fc-test-key",
+        url: "https://example.com/docs",
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body as string)).toEqual({
+      ok: true,
+      provider: "firecrawl",
+      resultCount: 1,
+    });
+    expect(runFirecrawlScrapeMock).toHaveBeenCalledWith({
+      provider: "firecrawl",
+      apiKey: "fc-test-key",
+      url: "https://example.com/docs",
+    });
   });
 });

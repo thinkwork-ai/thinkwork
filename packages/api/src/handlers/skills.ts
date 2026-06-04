@@ -49,6 +49,7 @@ import {
   resolveBuiltinToolApiKey,
   runWebSearch,
 } from "../lib/builtin-tools/web-search.js";
+import { runFirecrawlScrape } from "../lib/builtin-tools/web-extract.js";
 
 export { loadTenantBuiltinTools };
 
@@ -2411,6 +2412,7 @@ async function builtinToolsTest(
   const body = (event.body ? JSON.parse(event.body) : {}) as {
     provider?: string;
     apiKey?: string;
+    url?: string;
   };
 
   let provider = body.provider;
@@ -2437,11 +2439,28 @@ async function builtinToolsTest(
   if (!apiKey)
     return error("apiKey is required (and no stored secret was found)", 400);
 
-  if (slug !== "web-search") {
-    return error(`Test not implemented for tool '${slug}'`, 400);
-  }
-
   try {
+    if (slug === "web-extract") {
+      if (provider !== "firecrawl") {
+        return error("provider must be firecrawl", 400);
+      }
+      const result = await runFirecrawlScrape({
+        provider: "firecrawl",
+        apiKey,
+        url: body.url || "https://example.com/",
+      });
+      await markBuiltinToolTested(tenantId, slug);
+      return json({
+        ok: true,
+        provider,
+        resultCount: result.markdown ? 1 : 0,
+      });
+    }
+
+    if (slug !== "web-search") {
+      return error(`Test not implemented for tool '${slug}'`, 400);
+    }
+
     if (provider === "exa") {
       const results = await runWebSearch({
         provider: "exa",
