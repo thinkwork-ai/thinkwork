@@ -40,6 +40,17 @@ const THINKWORK_OUTPUTS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/outputs.tf",
 );
+const GREENFIELD_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/examples/greenfield/main.tf",
+);
+const INIT_COMMAND = resolve(REPO_ROOT, "apps/cli/src/commands/init.ts");
+const ENTERPRISE_TEMPLATE_MAIN = resolve(
+  REPO_ROOT,
+  "apps/cli/src/commands/enterprise/templates/deploy-repo/terraform/main.tf",
+);
+const VERIFY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/verify.yml");
+const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -343,5 +354,77 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     expect(outputs).toMatch(/output "cognee_storage_file_system_id"/);
     expect(outputs).toMatch(/local\.cognee_enabled \? module\.cognee\[0\]/);
     expect(outputs).toMatch(/: null/);
+  });
+});
+
+describe("U4 - Cognee deployment template propagation", () => {
+  it("adds safe disabled Cognee defaults to the greenfield example", () => {
+    const source = read(GREENFIELD_MAIN);
+    const thinkworkModule = firstNestedBlock(source, 'module "thinkwork"');
+
+    expect(source).toMatch(/variable "enable_cognee"/);
+    expect(source).toMatch(/default\s*=\s*false/);
+    expect(source).toMatch(/variable "cognee_image_uri"/);
+    expect(source).toMatch(/variable "cognee_db_password_secret_arn"/);
+    expect(source).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
+    expect(thinkworkModule).toMatch(/enable_cognee\s*=\s*var\.enable_cognee/);
+    expect(thinkworkModule).toMatch(
+      /cognee_image_uri\s*=\s*var\.cognee_image_uri/,
+    );
+    expect(thinkworkModule).toMatch(
+      /cognee_db_password_secret_arn\s*=\s*var\.cognee_db_password_secret_arn/,
+    );
+    expect(source).toMatch(/output "cognee_enabled"/);
+    expect(source).toMatch(/output "cognee_endpoint"/);
+  });
+
+  it("generates init tfvars and wrapper HCL with Cognee disabled by default", () => {
+    const source = read(INIT_COMMAND);
+
+    expect(source).toMatch(/enable_cognee = false/);
+    expect(source).toMatch(/variable "enable_cognee"/);
+    expect(source).toMatch(/variable "cognee_image_uri"/);
+    expect(source).toMatch(/variable "cognee_db_password_secret_arn"/);
+    expect(source).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
+    expect(source).toMatch(/enable_cognee\s*=\s*var\.enable_cognee/);
+    expect(source).toMatch(/cognee_image_uri\s*=\s*var\.cognee_image_uri/);
+    expect(source).toMatch(
+      /cognee_db_password_secret_arn\s*=\s*var\.cognee_db_password_secret_arn/,
+    );
+    expect(source).toMatch(/output "cognee_enabled"/);
+    expect(source).toMatch(/output "cognee_endpoint"/);
+  });
+
+  it("exposes safe Cognee defaults in the enterprise deploy template", () => {
+    const source = read(ENTERPRISE_TEMPLATE_MAIN);
+    const thinkworkModule = firstNestedBlock(source, 'module "thinkwork"');
+
+    expect(source).toMatch(/variable "enable_cognee"/);
+    expect(source).toMatch(/default\s*=\s*false/);
+    expect(source).toMatch(/variable "cognee_image_uri"/);
+    expect(source).toMatch(/variable "cognee_db_password_secret_arn"/);
+    expect(source).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
+    expect(thinkworkModule).toMatch(/enable_cognee\s*=\s*var\.enable_cognee/);
+    expect(thinkworkModule).toMatch(
+      /cognee_bedrock_model_resource_arns\s*=\s*var\.cognee_bedrock_model_resource_arns/,
+    );
+    expect(source).toMatch(/output "cognee_enabled"/);
+    expect(source).toMatch(/output "cognee_endpoint"/);
+  });
+
+  it("keeps CI Terraform runs explicitly opted out of Cognee", () => {
+    for (const workflow of [read(VERIFY_WORKFLOW), read(DEPLOY_WORKFLOW)]) {
+      expect(workflow).toMatch(/-var "enable_cognee=false"/);
+      expect(workflow).toMatch(/-var "cognee_image_uri="/);
+      expect(workflow).toMatch(/-var "cognee_db_username=thinkwork_cognee"/);
+      expect(workflow).toMatch(/-var "cognee_db_password_secret_arn="/);
+      expect(workflow).toMatch(/-var "cognee_backend_mode=dogfood"/);
+      expect(workflow).toMatch(/-var "cognee_desired_count=1"/);
+      expect(workflow).toMatch(/-var "cognee_llm_provider=bedrock"/);
+      expect(workflow).toMatch(/-var "cognee_embedding_provider=bedrock"/);
+      expect(workflow).toMatch(
+        /-var 'cognee_bedrock_model_resource_arns=\[\]'/,
+      );
+    }
   });
 });
