@@ -86,13 +86,23 @@ describe("deploymentStatus authz", () => {
   it("derives Cognee enabled state from deployed Cognee details", async () => {
     mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
 
-    vi.stubEnv("COGNEE_ENDPOINT", "");
     let result = await deploymentStatusMod.deploymentStatus(null, {}, service);
     expect(result.cogneeEnabled).toBe(false);
 
-    vi.stubEnv("COGNEE_ENDPOINT", "http://cognee.internal");
+    vi.stubEnv("COGNEE", "dogfood|http://cognee.internal");
+    vi.stubEnv("STAGE", "dev");
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
     result = await deploymentStatusMod.deploymentStatus(null, {}, service);
     expect(result.cogneeEnabled).toBe(true);
+    expect(result).toMatchObject({
+      cogneeEndpoint: "http://cognee.internal",
+      cogneeBackendMode: "dogfood",
+      cogneeLogGroupName: "/thinkwork/dev/cognee",
+      cogneeClusterArn:
+        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-cognee-cluster",
+      cogneeServiceName: "thinkwork-dev-cognee",
+    });
   });
 });
 

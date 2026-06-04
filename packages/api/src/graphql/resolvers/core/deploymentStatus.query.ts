@@ -2,6 +2,67 @@ import type { GraphQLContext } from "../../context.js";
 import { requireAdminOrServiceCaller } from "./authz.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
 
+type CogneeStatus = {
+  enabled: boolean;
+  endpoint: string | null;
+  backendMode: string | null;
+};
+
+function readCogneeStatus(): CogneeStatus {
+  const legacyEndpoint = process.env.COGNEE_ENDPOINT || null;
+  const legacyBackendMode = process.env.COGNEE_BACKEND_MODE || null;
+  const raw = process.env.COGNEE || process.env.COGNEE_STATUS;
+
+  if (!raw) {
+    return {
+      enabled: Boolean(
+        legacyEndpoint ||
+        process.env.COGNEE_SERVICE_NAME ||
+        process.env.COGNEE_LOG_GROUP_NAME,
+      ),
+      endpoint: legacyEndpoint,
+      backendMode: legacyBackendMode,
+    };
+  }
+
+  const separatorIndex = raw.indexOf("|");
+  if (separatorIndex >= 0) {
+    const backend = raw.slice(0, separatorIndex).trim();
+    const endpoint = raw.slice(separatorIndex + 1).trim();
+    return {
+      enabled: true,
+      endpoint: endpoint || legacyEndpoint,
+      backendMode: backend || legacyBackendMode,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      endpoint?: unknown;
+      backend?: unknown;
+    };
+    const endpoint =
+      typeof parsed.endpoint === "string" && parsed.endpoint.trim()
+        ? parsed.endpoint
+        : legacyEndpoint;
+    const backendMode =
+      typeof parsed.backend === "string" && parsed.backend.trim()
+        ? parsed.backend
+        : legacyBackendMode;
+    return {
+      enabled: true,
+      endpoint,
+      backendMode,
+    };
+  } catch {
+    return {
+      enabled: raw === "true" || Boolean(legacyEndpoint),
+      endpoint: legacyEndpoint,
+      backendMode: legacyBackendMode,
+    };
+  }
+}
+
 /**
  * deploymentStatus — reports deployment infrastructure details from Lambda
  * environment variables. No DB access, no live AWS API calls.
@@ -23,11 +84,24 @@ export const deploymentStatus = async (
     tenantId ?? "",
     "deployment_status:read",
   );
+  const stage = process.env.STAGE || "unknown";
+  const region = process.env.AWS_REGION || "us-east-1";
+  const accountId = process.env.AWS_ACCOUNT_ID || null;
+  const cognee = readCogneeStatus();
+  const cogneeServiceName =
+    process.env.COGNEE_SERVICE_NAME ||
+    (cognee.enabled ? `thinkwork-${stage}-cognee` : null);
+  const cogneeClusterArn =
+    process.env.COGNEE_CLUSTER_ARN ||
+    (cognee.enabled && accountId
+      ? `arn:aws:ecs:${region}:${accountId}:cluster/thinkwork-${stage}-cognee-cluster`
+      : null);
+
   return {
-    stage: process.env.STAGE || "unknown",
+    stage,
     source: "AWS",
-    region: process.env.AWS_REGION || "us-east-1",
-    accountId: process.env.AWS_ACCOUNT_ID || null,
+    region,
+    accountId,
     bucketName: process.env.BUCKET_NAME || null,
     databaseEndpoint: process.env.DATABASE_HOST || null,
     ecrUrl: process.env.ECR_REPOSITORY_URL || null,
@@ -42,15 +116,13 @@ export const deploymentStatus = async (
       : "not deployed",
     hindsightEnabled: !!process.env.HINDSIGHT_ENDPOINT,
     managedMemoryEnabled: !!process.env.AGENTCORE_MEMORY_ID,
-    cogneeEnabled: Boolean(
-      process.env.COGNEE_ENDPOINT ||
-      process.env.COGNEE_SERVICE_NAME ||
-      process.env.COGNEE_LOG_GROUP_NAME,
-    ),
-    cogneeEndpoint: process.env.COGNEE_ENDPOINT || null,
-    cogneeLogGroupName: process.env.COGNEE_LOG_GROUP_NAME || null,
-    cogneeBackendMode: process.env.COGNEE_BACKEND_MODE || null,
-    cogneeClusterArn: process.env.COGNEE_CLUSTER_ARN || null,
-    cogneeServiceName: process.env.COGNEE_SERVICE_NAME || null,
+    cogneeEnabled: cognee.enabled,
+    cogneeEndpoint: cognee.endpoint,
+    cogneeLogGroupName:
+      process.env.COGNEE_LOG_GROUP_NAME ||
+      (cognee.enabled ? `/thinkwork/${stage}/cognee` : null),
+    cogneeBackendMode: cognee.backendMode,
+    cogneeClusterArn,
+    cogneeServiceName,
   };
 };

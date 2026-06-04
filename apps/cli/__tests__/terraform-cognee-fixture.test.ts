@@ -495,7 +495,11 @@ describe("U4 - Cognee deployment template propagation", () => {
   it("keeps Knowledge Graph deploy dispatch defaults out of the GraphQL Lambda env", () => {
     const source = read(LAMBDA_API_HANDLERS);
 
-    expect(source).toMatch(/cognee_env = merge/);
+    expect(source).toMatch(
+      /COGNEE = "\$\{var\.cognee_backend_mode\}\|\$\{var\.cognee_endpoint\}"/,
+    );
+    expect(source).not.toMatch(/COGNEE_ENDPOINT = var\.cognee_endpoint/);
+    expect(source).not.toMatch(/COGNEE_CLUSTER_ARN = var\.cognee_cluster_arn/);
     expect(source).not.toMatch(/KNOWLEDGE_GRAPH_DEPLOY_REPOSITORY/);
     expect(source).not.toMatch(/KNOWLEDGE_GRAPH_DEPLOY_WORKFLOW_FILE/);
     expect(source).not.toMatch(/KNOWLEDGE_GRAPH_DEPLOY_REF/);
