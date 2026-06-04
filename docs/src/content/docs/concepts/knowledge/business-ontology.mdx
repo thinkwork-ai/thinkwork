@@ -75,6 +75,28 @@ This is how approved ontology changes affect both future and past Brain material
 
 The current owner-scoped compiled wiki remains compatible with existing page/link behavior. The business ontology adds a tenant-shared Brain substrate on top of those memories; it does not turn every wiki link into an RDF triple or force every agent page to share a global slug.
 
+## Cognee substrate boundary
+
+ThinkWork can optionally provision Cognee as an AWS-native ontology and knowledge-graph substrate. This is infrastructure, not an automatic product migration.
+
+When `enable_cognee = false`, existing tenants do not get Cognee resources and the ontology loop continues to use the current approved-definition and reprocess-job path. When `enable_cognee = true`, Terraform creates an internal ECS/Fargate service, internal ALB, EFS-backed dogfood storage or remote graph/vector configuration, CloudWatch logs, IAM, and Secrets Manager wiring for provider credentials.
+
+That substrate does not by itself:
+
+- migrate retained Hindsight memories;
+- rewrite compiled Wiki or Brain pages;
+- approve or apply ontology change sets;
+- change agent context retrieval;
+- expose Cognee directly to end users.
+
+Operators should treat Cognee as the backing substrate for future ontology/KG capabilities. The product contract still requires approved definitions, tenant-scoped reprocess jobs, provenance, and agent-facing retrieval APIs before Cognee output becomes Brain context.
+
+<Aside type="note">
+  Terraform success means the substrate deployed. It does not prove that Cognee
+  can reach every provider, graph store, vector store, or database, and it does
+  not mean any tenant ontology has changed.
+</Aside>
+
 ## Standards mapping stance
 
 ThinkWork stores standards mappings as metadata, not as the canonical product model.

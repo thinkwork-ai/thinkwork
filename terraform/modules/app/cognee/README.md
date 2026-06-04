@@ -18,6 +18,43 @@ When the parent module enables Cognee, this module provisions:
 - Task/execution IAM roles, including explicit Bedrock invoke permissions and
   Secrets Manager access for ECS secret injection.
 
+## Enablement checklist
+
+Cognee is disabled by default at the composite module, greenfield example,
+CLI-generated root, enterprise deploy template, and CI workflow surfaces. Existing
+deployments should not expect Cognee resources until `enable_cognee = true` is
+set explicitly.
+
+Before enabling it, prepare these operator-owned inputs:
+
+- `cognee_image_uri` pinned to an immutable `@sha256:` digest.
+- `cognee_db_password_secret_arn` for the dedicated `cognee_db_username`
+  database user. Do not reuse the shared Thinkwork admin database secret.
+- `cognee_bedrock_model_resource_arns` for the selected Bedrock LLM and
+  embedding models, or non-Bedrock provider secret ARNs when using external
+  providers.
+- `cognee_allowed_internal_cidr_blocks` or
+  `cognee_allowed_internal_security_group_ids` for the callers allowed to reach
+  the internal ALB.
+- `cognee_backend_mode`, `cognee_desired_count`, and graph/vector configuration.
+  Keep dogfood mode at one task; use remote stores before scaling out.
+
+After apply, inspect these outputs instead of reconstructing resource names:
+
+- `cognee_enabled`
+- `cognee_endpoint`
+- `cognee_log_group_name`
+- `cognee_backend_mode`
+- `cognee_cluster_arn`
+- `cognee_service_name`
+- `cognee_security_group_id`
+- `cognee_storage_file_system_id`
+
+Terraform proves that the infrastructure graph is syntactically valid and that
+ECS reached steady state when `wait_for_steady_state = true`. It does not prove
+that Cognee can serve ontology work, that provider credentials are populated, or
+that any Wiki/Brain content has migrated.
+
 ## Phase-1 network contract
 
 The ALB is internal-only (`internal = true`). ECS tasks run in the existing
@@ -94,16 +131,42 @@ because the task can access customer knowledge stores, secrets, and Bedrock.
 Terraform validation proves syntax and dependencies, not runtime readiness.
 After enabling Cognee in a stage, operators should verify:
 
-- The internal ALB health check is healthy.
+- `cognee_enabled` is `true`, `cognee_backend_mode` matches the intended mode,
+  and `cognee_endpoint` is an internal ALB URL.
+- The internal ALB health check is healthy and the health endpoint is reachable
+  from the intended caller network or security group.
 - Terraform waited for ECS steady state, or operators manually confirmed the
   service is stable if `wait_for_steady_state = false` was used.
-- CloudWatch logs show Cognee booting without provider, database, graph, vector,
-  or filesystem errors.
+- `cognee_log_group_name` points to logs where Cognee boots without provider,
+  database, graph, vector, or filesystem errors.
+- Cognee reports the configured LLM, embedding, graph, and vector providers.
 - Cognee can call the selected LLM/embedding provider.
 - Cognee can reach the configured relational, vector, and graph stores.
+
+If startup fails, start with the ECS service events and the Cognee CloudWatch log
+group. Provider failures usually indicate missing Bedrock ARNs, missing
+Secrets Manager values, or unsupported provider/credential plumbing. Database,
+graph, and vector failures usually indicate connectivity, URL, secret, or
+backend-mode mismatches.
+
+## Rollback
+
+To disable the substrate, set `enable_cognee = false` and apply through the
+normal deploy pipeline. That removes the ECS service, internal ALB, security
+groups, and Terraform-owned storage/secrets for the module. It does not roll back
+or rewrite approved ontology definitions, Brain pages, Wiki content, or agent
+context. Those product migrations are owned by later application-level work.
+
+For a failed rollout where data should be preserved, scale or disable callers
+first, snapshot/export EFS or remote graph/vector stores as appropriate, and then
+apply the Terraform change. Do not manually mutate production resources outside
+the normal incident/deploy process.
 
 ## Cleanup
 
 EFS stores persistent Cognee data/system files. Destroying the module may delete
-that storage if Terraform owns it. Treat production data cleanup as an operator
-decision and snapshot/export before destructive changes.
+that storage if Terraform owns it. Remote graph/vector stores may retain data
+outside Terraform entirely. Treat production data cleanup as an operator
+decision: snapshot or export before destructive changes, and document whether the
+data belongs to the Terraform-owned EFS volume, an operator-managed remote store,
+or both.
