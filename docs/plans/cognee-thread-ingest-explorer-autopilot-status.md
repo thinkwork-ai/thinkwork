@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/cognee-kg-u8-smoke` /
   `.Codex/worktrees/cognee-kg-u8-smoke`
-- Current PR: not opened
+- Current PR: [#2084](https://github.com/thinkwork-ai/thinkwork/pull/2084)
 - Blocker: none
 
 ## Progress Log
@@ -234,10 +234,11 @@ Started: 2026-06-04
   `http://127.0.0.1:5177/` plus
   `http://127.0.0.1:5177/settings/knowledge-graph`.
 - 2026-06-04: U8 live deployed smoke did not mutate anything because the local
-  environment lacks an operator identity. `SMOKE_ENABLE_KNOWLEDGE_GRAPH=1 node
-scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs` exited before GraphQL
-  calls with: `Missing operator identity. Set SMOKE_TENANT_ID and
+  environment lacks an operator identity. The live command exited before
+  GraphQL calls with: `Missing operator identity. Set SMOKE_TENANT_ID and
 SMOKE_USER_ID, or provide DATABASE_URL for fallback.` The copied
   `apps/spaces/.env` has GraphQL endpoint/key values but no
-  `SMOKE_TENANT_ID`, `SMOKE_USER_ID`, or `DATABASE_URL`; `~/.thinkwork/config.json`
-  only records default stage `dev`.
+  `SMOKE_TENANT_ID`, `SMOKE_USER_ID`, or `DATABASE_URL`;
+  `~/.thinkwork/config.json` only records default stage `dev`.
+- 2026-06-04: Opened U8 PR
+  [#2084](https://github.com/thinkwork-ai/thinkwork/pull/2084).
