@@ -108,8 +108,10 @@ import {
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
 import { SkillMenu, type SkillOption } from "@/components/spaces/SkillMenu";
-import { useComposerSkillPins } from "@/components/workbench/useComposerSkillPins";
-import { SkillPinChips } from "@/components/workbench/SkillPinChips";
+import {
+  extractPinnedSkillSlugs,
+  useComposerSkillPins,
+} from "@/components/workbench/useComposerSkillPins";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
@@ -2419,11 +2421,10 @@ function FollowUpComposer({
         files,
         submittedMentions,
         effectiveAgentEnabled,
-        skillPins.pins.map((pin) => pin.slug),
+        extractPinnedSkillSlugs(content, skillCatalog),
       );
       composer.clear();
       setMentions([]);
-      skillPins.clearPins();
     } catch (err) {
       composer.setError(err instanceof Error ? err.message : "Failed to send");
     } finally {
@@ -2550,13 +2551,6 @@ function FollowUpComposer({
             <PromptInputAttachments>
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
-            {skillPins.pins.length > 0 ? (
-              <SkillPinChips
-                pins={skillPins.pins}
-                onRemove={skillPins.removePin}
-                className="px-3 pt-2"
-              />
-            ) : null}
             <PromptInputTextarea
               ref={textareaRef}
               aria-label="Follow up"

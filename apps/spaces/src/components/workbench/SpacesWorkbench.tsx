@@ -70,6 +70,7 @@ interface NewThreadMentionTargetsData {
     isDefaultAgent?: boolean | null;
     avatarUrl?: string | null;
     role?: string | null;
+    email?: string | null;
   }>;
 }
 
@@ -458,6 +459,7 @@ function buildNewThreadMentionTargets(
     isDefaultAgent: target.isDefaultAgent ?? undefined,
     avatarUrl: target.avatarUrl,
     role: target.role,
+    email: target.email,
   }));
 
   return targets.sort((a, b) => {

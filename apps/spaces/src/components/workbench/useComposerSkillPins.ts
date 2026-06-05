@@ -6,20 +6,40 @@ import {
   type SkillOption,
 } from "@/components/spaces/SkillMenu";
 
-export interface SkillPin {
-  slug: string;
-  displayName: string;
+/**
+ * Extract force-pinned skill slugs from composer text (plan 2026-06-04-004
+ * U5/U6). Skills are inline `/slug` tokens — the same model as `@`-mentions —
+ * not chips. On submit we scan the text for `/slug` tokens that match a real
+ * catalog slug, so a user can type `/crm-dashboard` directly or pick from the
+ * popup, and deleting the text removes the pin.
+ */
+export function extractPinnedSkillSlugs(
+  value: string,
+  catalog: SkillOption[],
+): string[] {
+  const known = new Set(catalog.map((skill) => skill.slug));
+  const seen = new Set<string>();
+  const slugs: string[] = [];
+  for (const match of value.matchAll(/(?:^|\s)\/([\w.'-]+)/gu)) {
+    const slug = match[1];
+    if (slug && known.has(slug) && !seen.has(slug)) {
+      seen.add(slug);
+      slugs.push(slug);
+    }
+  }
+  return slugs;
 }
 
 /**
- * Composer state for force-pinned skills (plan 2026-06-04-004 U5/U6). Mirrors
- * the `@`-mention machinery in the composers, but a committed skill becomes a
- * removable chip (per-message, like an attachment) rather than inline text. The
- * `/query` token is stripped from the draft on commit.
+ * Composer state for the `/skill` force-pin popup (plan 2026-06-04-004 U5/U6).
+ * Mirrors the `@`-mention machinery: a slash query opens a filtered popup, and
+ * committing a skill inserts an inline `/slug` token into the draft. Pins are
+ * read back out of the text on submit via {@link extractPinnedSkillSlugs} —
+ * there are no chips.
  *
  * `handleKeyDown` returns true when it consumed the event, so the composer can
- * chain it after the mention handler (the two menus never open at once — `@` vs
- * `/`).
+ * chain it after the mention handler (the two menus never open at once — `@`
+ * vs `/`).
  */
 export function useComposerSkillPins(params: {
   value: string;
@@ -27,7 +47,6 @@ export function useComposerSkillPins(params: {
   catalog: SkillOption[];
 }) {
   const { value, onChange, catalog } = params;
-  const [pins, setPins] = useState<SkillPin[]>([]);
   const slashQuery = useMemo(() => currentSlashQuery(value), [value]);
   const options = useMemo(
     () => (slashQuery === null ? [] : filterSkillCatalog(catalog, slashQuery)),
@@ -44,37 +63,19 @@ export function useComposerSkillPins(params: {
 
   const selectSkill = useCallback(
     (skill: SkillOption) => {
-      // Strip the `/query` token at the cursor — the pin becomes a chip, not
-      // inline text. Token length is "/" (1) + the partial query.
+      // Replace the `/query` token at the cursor with the canonical `/slug`
+      // inline token (mirrors selectMention's `@name` insertion).
+      const replacement = `/${skill.slug} `;
       const query = slashQuery ?? "";
       const prefix = value.slice(0, value.length - query.length - 1);
-      onChange(prefix);
-      setPins((current) =>
-        current.some((pin) => pin.slug === skill.slug)
-          ? current
-          : [
-              ...current,
-              {
-                slug: skill.slug,
-                displayName: skill.displayName?.trim() || skill.slug,
-              },
-            ],
-      );
+      onChange(`${prefix}${replacement}`);
       setDismissed(true);
     },
     [slashQuery, value, onChange],
   );
 
-  const removePin = useCallback(
-    (slug: string) =>
-      setPins((current) => current.filter((pin) => pin.slug !== slug)),
-    [],
-  );
-
-  const clearPins = useCallback(() => setPins([]), []);
-
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    (event: KeyboardEvent<HTMLElement>): boolean => {
       if (!menuOpen) return false;
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -106,15 +107,11 @@ export function useComposerSkillPins(params: {
   );
 
   return {
-    pins,
-    setPins,
     slashQuery,
     options,
     activeIndex,
     menuOpen,
     selectSkill,
-    removePin,
-    clearPins,
     handleKeyDown,
   };
 }
