@@ -629,3 +629,14 @@ operation`. ECS logs showed the precise cause:
   `packages/database-pg/drizzle/0146_knowledge_graph_source_scope.sql` to dev,
   and verified with
   `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0146_knowledge_graph_source_scope.sql`.
+- 2026-06-05: PR [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103)
+  third CI attempt failed the monorepo `test` workflow in
+  `packages/api/src/__tests__/knowledge-graph-resolvers.test.ts` because the
+  resolver fixtures still used the pre-source-scope row shape. Updated those
+  fixtures to include graph `source_kind/source_ref/source_label` and the new
+  evidence `evidence_source_kind/evidence_source_ref` fields. Local fix
+  verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts`;
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts src/lib/knowledge-graph/wiki-source.test.ts src/lib/knowledge-graph/brain-source.test.ts src/__tests__/knowledge-graph-start-ingest.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/runs.test.ts src/lib/knowledge-graph/normalizer.test.ts src/lib/knowledge-graph/cognee-client.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`;
+  and `git diff --check`.
