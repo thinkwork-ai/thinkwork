@@ -13,6 +13,7 @@ import {
   type DispatchMessageAttachment,
   resolveDispatchMessageAttachments,
 } from "../thread-attachments/message-attachment-refs.js";
+import { resolveDispatchPinnedSkills } from "../skills/message-pinned-skills.js";
 
 export interface DefaultAgentTurnWakeup {
   tenantId: string;
@@ -69,6 +70,13 @@ export interface DefaultAgentChatInvoke {
    * wakeup-processor path).
    */
   messageAttachments?: DispatchMessageAttachment[];
+  /**
+   * Force-pinned skill slugs the USER message references. Resolved from
+   * `messages.metadata.skills` and forwarded to chat-agent-invoke, which applies
+   * the blocklist guardrail and turns them into the ephemeral `pinned_skills`
+   * payload branch for the Pi runtime (U3/U4). Raw (unfiltered) here.
+   */
+  pinnedSkills?: string[];
 }
 
 export interface DefaultAgentChatExecutor {
@@ -84,11 +92,21 @@ export type DispatchMessageAttachmentResolver = (input: {
 const defaultAttachmentResolver: DispatchMessageAttachmentResolver = (input) =>
   resolveDispatchMessageAttachments({ db: getDb(), ...input });
 
+export type DispatchPinnedSkillsResolver = (input: {
+  tenantId: string;
+  threadId: string;
+  messageId: string;
+}) => Promise<string[]>;
+
+const defaultPinnedSkillsResolver: DispatchPinnedSkillsResolver = (input) =>
+  resolveDispatchPinnedSkills({ db: getDb(), ...input });
+
 export async function dispatchDefaultAgentChatTurn(
   input: DispatchDefaultAgentTurnInput,
   repository: DefaultAgentRoutingRepository = new DrizzleDefaultAgentRoutingRepository(),
   executor: DefaultAgentChatExecutor = defaultChatExecutor,
   resolveAttachments: DispatchMessageAttachmentResolver = defaultAttachmentResolver,
+  resolvePinnedSkills: DispatchPinnedSkillsResolver = defaultPinnedSkillsResolver,
 ) {
   const defaultAgent = await repository.loadDefaultAgent({
     tenantId: input.tenantId,
@@ -119,6 +137,22 @@ export async function dispatchDefaultAgentChatTurn(
     );
   }
 
+  // Resolve force-pinned skills the message references (composer slash-command).
+  // Raw slugs only — chat-agent-invoke applies the blocklist guardrail.
+  let pinnedSkills: string[] = [];
+  try {
+    pinnedSkills = await resolvePinnedSkills({
+      tenantId: input.tenantId,
+      threadId: input.threadId,
+      messageId: input.messageId,
+    });
+  } catch (err) {
+    console.error(
+      "[default-agent-routing] Failed to resolve pinned skills for dispatch:",
+      err,
+    );
+  }
+
   const directInvoked = await executor.invokeChatAgent({
     tenantId: input.tenantId,
     threadId: input.threadId,
@@ -126,6 +160,7 @@ export async function dispatchDefaultAgentChatTurn(
     messageId: input.messageId,
     userMessage: input.content ?? "",
     ...(messageAttachments.length > 0 ? { messageAttachments } : {}),
+    ...(pinnedSkills.length > 0 ? { pinnedSkills } : {}),
   });
   if (directInvoked) {
     return {

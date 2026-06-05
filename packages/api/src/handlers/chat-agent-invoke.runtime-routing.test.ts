@@ -58,6 +58,8 @@ vi.mock("@aws-sdk/client-lambda", () => ({
 vi.mock("../lib/resolve-agent-runtime-config.js", () => ({
   AgentNotFoundError: mocks.FakeAgentNotFoundError,
   resolveAgentRuntimeConfig: mocks.resolveAgentRuntimeConfig,
+  tenantCatalogSkillS3Key: (tenantSlug: string, skillId: string) =>
+    `tenants/${tenantSlug}/skill-catalog/${skillId}`,
 }));
 
 vi.mock("../lib/sandbox-preflight.js", () => ({

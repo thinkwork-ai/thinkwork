@@ -211,7 +211,7 @@ describe("SpacesComposer", () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
-    expect(onSubmit).toHaveBeenCalledWith([], [], true);
+    expect(onSubmit).toHaveBeenCalledWith([], [], true, []);
   });
 
   it("passes agent opt-out through submit", async () => {
@@ -228,7 +228,7 @@ describe("SpacesComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
 
     await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith([], [], false);
+      expect(onSubmit).toHaveBeenCalledWith([], [], false, []);
     });
   });
 

@@ -484,6 +484,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         true,
+        [],
       ),
     );
   });
@@ -3188,7 +3189,13 @@ describe("TaskThreadView", () => {
       // (empty when no attachments) alongside the text. The route
       // uploads files before sendMessage and embeds attachmentId refs
       // in metadata.attachments.
-      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", [], [], true);
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "Add detail",
+        [],
+        [],
+        true,
+        [],
+      );
     });
   });
 
@@ -3222,6 +3229,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
+        [],
       );
     });
     expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
@@ -3237,6 +3245,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
+        [],
       );
     });
   });
@@ -3419,6 +3428,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
+        [],
       );
     });
   });
@@ -3491,6 +3501,7 @@ describe("TaskThreadView", () => {
           },
         ],
         false,
+        [],
       );
     });
   });
@@ -3626,6 +3637,7 @@ describe("TaskThreadView", () => {
           },
         ],
         true,
+        [],
       );
     });
   });

@@ -40,7 +40,9 @@ import {
 import {
   AgentNotFoundError,
   resolveAgentRuntimeConfig,
+  tenantCatalogSkillS3Key,
 } from "../lib/resolve-agent-runtime-config.js";
+import { buildPinnedSkillConfigs } from "../lib/skills/message-pinned-skills.js";
 import {
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
@@ -133,6 +135,15 @@ interface InvokeEvent {
    * invoke payload as `message_attachments` (snake_case for Python).
    */
   messageAttachments?: InvokeAttachment[];
+  /**
+   * Force-pinned skill slugs the composer slash-command attached to this
+   * message (plan 2026-06-04-004). Raw slugs resolved from
+   * `messages.metadata.skills` by the dispatch caller. Filtered through the
+   * same tool policy as installed skills, then forwarded to AgentCore as the
+   * ephemeral `pinned_skills` branch (skillId + catalog s3Key) so the runtime
+   * can load + emphasize them for this turn without a permanent install.
+   */
+  pinnedSkills?: string[];
   /**
    * Mobile Pi background handoff reuses the durable local thread_turn row so
    * AgentCore finalizes the same logical turn instead of creating a second one.
@@ -948,6 +959,28 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       effectiveBlockedTools.length > 0 || effectiveToolPolicy.allowedTools
         ? skillsConfig.filter(isSkillAllowedByPolicy)
         : skillsConfig;
+
+    // Force-pinned skills (composer slash-command, plan 2026-06-04-004 U3).
+    // Build an ephemeral config branch carrying the catalog s3Key for each
+    // pinned slug, then drop any the tool policy blocks — reusing the SAME
+    // `isSkillAllowedByPolicy` guardrail as installed skills so an operator pin
+    // can never override an admin blocklist (KD4). Kept SEPARATE from
+    // `effectiveSkillsConfig` so the runtime can both load uninstalled pins and
+    // emphasize all of them, without mutating the resolved/installed set.
+    const pinnedSkillSlugs = Array.isArray(event.pinnedSkills)
+      ? event.pinnedSkills
+      : [];
+    const pinnedSkillsConfig = buildPinnedSkillConfigs({
+      slugs: pinnedSkillSlugs,
+      tenantSlug: tenantSlug || "",
+      catalogS3Key: tenantCatalogSkillS3Key,
+      isAllowed: isSkillAllowedByPolicy,
+    });
+    if (pinnedSkillSlugs.length > 0) {
+      console.log(
+        `[chat-agent-invoke] pinned skills requested=${pinnedSkillSlugs.length} allowed=${pinnedSkillsConfig.length}`,
+      );
+    }
     const effectiveMcpPolicy = renderedWorkspace.rendered
       ? (renderedWorkspace.effectivePolicy ?? null)
       : null;
@@ -1091,6 +1124,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       budget_paused: runtimeConfig.budgetPaused,
       skills:
         effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
+      // Ephemeral force-pinned skills (plan 2026-06-04-004 U3/U4). Separate from
+      // `skills` so the runtime loads + emphasizes them for this turn without a
+      // permanent install. Already policy-filtered above (KD4).
+      pinned_skills:
+        pinnedSkillsConfig.length > 0 ? pinnedSkillsConfig : undefined,
       knowledge_bases: knowledgeBasesConfig,
       trigger_channel: "chat",
       guardrail_config: guardrailPayload || undefined,

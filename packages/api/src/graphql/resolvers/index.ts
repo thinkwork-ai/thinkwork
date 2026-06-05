@@ -40,7 +40,10 @@ import {
 } from "./evaluations/index.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
-import { skillCatalogMutations } from "./skill-catalog/index.js";
+import {
+  skillCatalogMutations,
+  skillCatalogQueries,
+} from "./skill-catalog/index.js";
 import { runtimeQueries } from "./runtime/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 import { brainQueries, brainMutations } from "./brain/index.js";
@@ -92,6 +95,7 @@ export const queryResolvers: Record<string, any> = {
   ...evaluationsQueries,
   ...wikiQueries,
   ...skillRunsQueries,
+  ...skillCatalogQueries,
   ...runtimeQueries,
   ...workspaceQueries,
   ...brainQueries,
