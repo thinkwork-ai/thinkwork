@@ -88,6 +88,11 @@ type Documents = {
     "\n  query SettingsCostTimeSeries($tenantId: ID!, $days: Int) {\n    costTimeSeries(tenantId: $tenantId, days: $days) {\n      day\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      eventCount\n    }\n  }\n": typeof types.SettingsCostTimeSeriesDocument,
     "\n  query SettingsRoutines($tenantId: ID!) {\n    routines(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      lastRunAt\n      engine\n      createdAt\n    }\n  }\n": typeof types.SettingsRoutinesDocument,
     "\n  query SettingsWebhooks($tenantId: ID!) {\n    webhooks(tenantId: $tenantId) {\n      id\n      name\n      description\n      targetType\n      enabled\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n": typeof types.SettingsWebhooksDocument,
+    "\n  query SettingsWebhook($id: ID!) {\n    webhook(id: $id) {\n      id\n      name\n      description\n      token\n      targetType\n      prompt\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n": typeof types.SettingsWebhookDocument,
+    "\n  query SettingsWebhookDeliveries($webhookId: ID!, $limit: Int) {\n    webhookDeliveries(webhookId: $webhookId, limit: $limit) {\n      id\n      receivedAt\n      providerName\n      normalizedKind\n      signatureStatus\n      resolutionStatus\n      statusCode\n      threadCreated\n    }\n  }\n": typeof types.SettingsWebhookDeliveriesDocument,
+    "\n  mutation SettingsUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      description\n      prompt\n      enabled\n      rateLimit\n    }\n  }\n": typeof types.SettingsUpdateWebhookDocument,
+    "\n  mutation SettingsDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n": typeof types.SettingsDeleteWebhookDocument,
+    "\n  mutation SettingsRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n": typeof types.SettingsRegenerateWebhookTokenDocument,
     "\n  query TenantSkillCatalog($agentId: ID) {\n    tenantSkillCatalog(agentId: $agentId) {\n      slug\n      displayName\n      description\n      icon\n      installed\n    }\n  }\n": typeof types.TenantSkillCatalogDocument,
 };
 const documents: Documents = {
@@ -165,6 +170,11 @@ const documents: Documents = {
     "\n  query SettingsCostTimeSeries($tenantId: ID!, $days: Int) {\n    costTimeSeries(tenantId: $tenantId, days: $days) {\n      day\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      eventCount\n    }\n  }\n": types.SettingsCostTimeSeriesDocument,
     "\n  query SettingsRoutines($tenantId: ID!) {\n    routines(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      lastRunAt\n      engine\n      createdAt\n    }\n  }\n": types.SettingsRoutinesDocument,
     "\n  query SettingsWebhooks($tenantId: ID!) {\n    webhooks(tenantId: $tenantId) {\n      id\n      name\n      description\n      targetType\n      enabled\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n": types.SettingsWebhooksDocument,
+    "\n  query SettingsWebhook($id: ID!) {\n    webhook(id: $id) {\n      id\n      name\n      description\n      token\n      targetType\n      prompt\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n": types.SettingsWebhookDocument,
+    "\n  query SettingsWebhookDeliveries($webhookId: ID!, $limit: Int) {\n    webhookDeliveries(webhookId: $webhookId, limit: $limit) {\n      id\n      receivedAt\n      providerName\n      normalizedKind\n      signatureStatus\n      resolutionStatus\n      statusCode\n      threadCreated\n    }\n  }\n": types.SettingsWebhookDeliveriesDocument,
+    "\n  mutation SettingsUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      description\n      prompt\n      enabled\n      rateLimit\n    }\n  }\n": types.SettingsUpdateWebhookDocument,
+    "\n  mutation SettingsDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n": types.SettingsDeleteWebhookDocument,
+    "\n  mutation SettingsRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n": types.SettingsRegenerateWebhookTokenDocument,
     "\n  query TenantSkillCatalog($agentId: ID) {\n    tenantSkillCatalog(agentId: $agentId) {\n      slug\n      displayName\n      description\n      icon\n      installed\n    }\n  }\n": types.TenantSkillCatalogDocument,
 };
 
@@ -478,6 +488,26 @@ export function graphql(source: "\n  query SettingsRoutines($tenantId: ID!) {\n 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query SettingsWebhooks($tenantId: ID!) {\n    webhooks(tenantId: $tenantId) {\n      id\n      name\n      description\n      targetType\n      enabled\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query SettingsWebhooks($tenantId: ID!) {\n    webhooks(tenantId: $tenantId) {\n      id\n      name\n      description\n      targetType\n      enabled\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SettingsWebhook($id: ID!) {\n    webhook(id: $id) {\n      id\n      name\n      description\n      token\n      targetType\n      prompt\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query SettingsWebhook($id: ID!) {\n    webhook(id: $id) {\n      id\n      name\n      description\n      token\n      targetType\n      prompt\n      enabled\n      rateLimit\n      invocationCount\n      lastInvokedAt\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SettingsWebhookDeliveries($webhookId: ID!, $limit: Int) {\n    webhookDeliveries(webhookId: $webhookId, limit: $limit) {\n      id\n      receivedAt\n      providerName\n      normalizedKind\n      signatureStatus\n      resolutionStatus\n      statusCode\n      threadCreated\n    }\n  }\n"): (typeof documents)["\n  query SettingsWebhookDeliveries($webhookId: ID!, $limit: Int) {\n    webhookDeliveries(webhookId: $webhookId, limit: $limit) {\n      id\n      receivedAt\n      providerName\n      normalizedKind\n      signatureStatus\n      resolutionStatus\n      statusCode\n      threadCreated\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SettingsUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      description\n      prompt\n      enabled\n      rateLimit\n    }\n  }\n"): (typeof documents)["\n  mutation SettingsUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      id\n      name\n      description\n      prompt\n      enabled\n      rateLimit\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SettingsDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n"): (typeof documents)["\n  mutation SettingsDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SettingsRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n"): (typeof documents)["\n  mutation SettingsRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

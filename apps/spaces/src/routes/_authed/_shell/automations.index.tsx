@@ -20,9 +20,9 @@ import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import {
-  ScheduledJobFormDialog,
+  ScheduledJobForm,
   type ScheduledJobFormData,
-} from "@/components/scheduled-jobs/ScheduledJobFormDialog";
+} from "@/components/scheduled-jobs/ScheduledJobForm";
 import {
   estimateNextRun,
   formatSchedule,
@@ -196,16 +196,12 @@ function jobColumns(runningIds: Set<string>): ColumnDef<ScheduledJobRow>[] {
 }
 
 function AddJobButton({
-  tenantId,
   agentId,
-  onCreated,
+  onAdd,
 }: {
-  tenantId: string;
   agentId: string | null;
-  onCreated: () => void;
+  onAdd: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   if (!agentId) {
     return (
       <TooltipProvider>
@@ -230,32 +226,15 @@ function AddJobButton({
     );
   }
 
-  async function handleSubmit(data: ScheduledJobFormData) {
-    await apiFetch("/api/scheduled-jobs", tenantId, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-    onCreated();
-  }
-
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="text-muted-foreground"
-        onClick={() => setOpen(true)}
-      >
-        <Plus className="h-4 w-4 mr-1" /> Add Job
-      </Button>
-      <ScheduledJobFormDialog
-        open={open}
-        onOpenChange={setOpen}
-        mode="create"
-        agentId={agentId}
-        onSubmit={handleSubmit}
-      />
-    </>
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-muted-foreground"
+      onClick={onAdd}
+    >
+      <Plus className="h-4 w-4 mr-1" /> Add Job
+    </Button>
   );
 }
 
@@ -263,6 +242,7 @@ function AutomationsPage() {
   const { tenantId, userId } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
   const [jobs, setJobs] = useState<ScheduledJobRow[]>([]);
   const [runs, setRuns] = useState<ThreadTurnRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -341,8 +321,32 @@ function AutomationsPage() {
 
   usePageHeaderActions({ title: "Automations" });
 
+  async function handleCreate(data: ScheduledJobFormData) {
+    if (!tenantId) return;
+    await apiFetch("/api/scheduled-jobs", tenantId, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    await fetchData();
+    setCreating(false);
+  }
+
   if (!tenantId || loading) {
     return <PageSkeleton />;
+  }
+
+  // Full-page create replaces the list (no modal). agentId fires the job.
+  if (creating && agentId) {
+    return (
+      <main className="h-full w-full overflow-y-auto bg-background">
+        <ScheduledJobForm
+          mode="create"
+          agentId={agentId}
+          onSubmit={handleCreate}
+          onCancel={() => setCreating(false)}
+        />
+      </main>
+    );
   }
 
   if (myJobs.length === 0 && !error) {
@@ -360,11 +364,7 @@ function AutomationsPage() {
                 aria-label="Search jobs"
               />
             </label>
-            <AddJobButton
-              tenantId={tenantId}
-              agentId={agentId}
-              onCreated={fetchData}
-            />
+            <AddJobButton agentId={agentId} onAdd={() => setCreating(true)} />
           </header>
           <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-dashed p-12 text-center">
             <p className="text-base font-medium">No automations yet</p>
@@ -391,11 +391,7 @@ function AutomationsPage() {
               aria-label="Search jobs"
             />
           </label>
-          <AddJobButton
-            tenantId={tenantId}
-            agentId={agentId}
-            onCreated={fetchData}
-          />
+          <AddJobButton agentId={agentId} onAdd={() => setCreating(true)} />
         </header>
         {error && <p className="shrink-0 text-sm text-destructive">{error}</p>}
 

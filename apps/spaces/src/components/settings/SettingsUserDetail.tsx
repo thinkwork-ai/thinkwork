@@ -25,6 +25,7 @@ import {
 import {
   SettingsPageTitle,
   SettingsPane,
+  SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 
@@ -211,92 +212,93 @@ function ProfileSection({
 
   return (
     <SettingsSection label="Profile">
-      <div className="space-y-4 p-4">
-        <Labeled label="User ID">
+      <SettingsRow
+        label="User ID"
+        description="Unique identifier for this member."
+      >
+        <div className="w-72">
           <CopyableId value={userId} />
-        </Labeled>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Labeled label="Name">
-            <Input
-              value={form.name}
-              onChange={(e) => set("name")(e.target.value)}
-            />
-          </Labeled>
-          <Labeled label="Role">
-            <div className="flex items-center gap-3">
-              <Select
-                value={currentRole}
-                onValueChange={onRoleChange}
-                disabled={isSelf || roleState.fetching}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {roleState.fetching ? (
-                <span className="text-sm text-muted-foreground">Saving…</span>
-              ) : roleErrorMsg ? (
-                <span className="text-sm text-destructive">{roleErrorMsg}</span>
-              ) : null}
-            </div>
-          </Labeled>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Labeled label="Title">
-            <Input
-              value={form.title}
-              onChange={(e) => set("title")(e.target.value)}
-            />
-          </Labeled>
-          <Labeled label="Timezone">
-            <Input
-              value={form.timezone}
-              onChange={(e) => set("timezone")(e.target.value)}
-            />
-          </Labeled>
-        </div>
-        <Labeled label="Notes">
-          <Textarea
-            rows={3}
-            value={form.notes}
-            onChange={(e) => set("notes")(e.target.value)}
-          />
-        </Labeled>
-        <div className="flex items-center justify-end gap-3 pt-1">
-          {saved ? (
-            <span className="text-sm text-muted-foreground">Saved</span>
-          ) : null}
-          {errorMsg ? (
-            <span className="text-sm text-destructive">{errorMsg}</span>
-          ) : null}
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
+      </SettingsRow>
+      <SettingsRow
+        label="Name"
+        description="Display name shown across the workspace."
+      >
+        <Input
+          className="w-72"
+          value={form.name}
+          onChange={(e) => set("name")(e.target.value)}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="Role"
+        description="Permission level within this tenant."
+      >
+        {roleState.fetching ? (
+          <span className="text-sm text-muted-foreground">Saving…</span>
+        ) : roleErrorMsg ? (
+          <span className="text-sm text-destructive">{roleErrorMsg}</span>
+        ) : null}
+        <Select
+          value={currentRole}
+          onValueChange={onRoleChange}
+          disabled={isSelf || roleState.fetching}
+        >
+          <SelectTrigger className="w-72">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {roleOptions.map((r) => (
+              <SelectItem key={r} value={r}>
+                {r}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </SettingsRow>
+      <SettingsRow
+        label="Title"
+        description="Job title or role at the company."
+      >
+        <Input
+          className="w-72"
+          value={form.title}
+          onChange={(e) => set("title")(e.target.value)}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="Timezone"
+        description="Used to localize dates and times for this user."
+      >
+        <Input
+          className="w-72"
+          value={form.timezone}
+          onChange={(e) => set("timezone")(e.target.value)}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="Notes"
+        description="Freeform notes about this member, visible to operators."
+      >
+        <Textarea
+          className="w-72"
+          rows={3}
+          value={form.notes}
+          onChange={(e) => set("notes")(e.target.value)}
+        />
+      </SettingsRow>
+      <div className="flex items-center justify-end gap-3 px-4 py-3.5">
+        {saved ? (
+          <span className="text-sm text-muted-foreground">Saved</span>
+        ) : null}
+        {errorMsg ? (
+          <span className="text-sm text-destructive">{errorMsg}</span>
+        ) : null}
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
       </div>
     </SettingsSection>
-  );
-}
-
-function Labeled({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">{label}</label>
-      {children}
-    </div>
   );
 }
 

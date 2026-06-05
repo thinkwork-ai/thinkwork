@@ -15,11 +15,24 @@ import { visibleSettingsNavItems } from "@/components/settings/settings-nav";
 const itemClassName =
   "flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm text-sidebar-foreground/85 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring [&_svg]:size-4 [&_svg]:shrink-0";
 
-export function SettingsSidebar() {
+export function SettingsSidebar({
+  onNavigate,
+  forceWebChrome = false,
+}: {
+  /** Called when a nav target is chosen — lets the mobile Sheet close itself. */
+  onNavigate?: () => void;
+  /**
+   * Force the web-style brand header even on desktop. Used when the sidebar is
+   * rendered inside a Sheet overlay, where the OS traffic-light band and drag
+   * strip don't apply.
+   */
+  forceWebChrome?: boolean;
+} = {}) {
   const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isDesktop = isDesktopBuild();
+  const showDesktopChrome = isDesktop && !forceWebChrome;
 
   // Hide operator items until the role is known, to avoid a flash of operator
   // content for members.
@@ -30,11 +43,17 @@ export function SettingsSidebar() {
   });
 
   return (
-    <aside className="tw-vibrancy-panel flex h-svh w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <aside
+      className={cn(
+        "tw-vibrancy-panel flex h-svh flex-col border-r border-sidebar-border bg-sidebar",
+        // Docked: fixed-width column. In the Sheet overlay: fill the sheet.
+        forceWebChrome ? "w-full" : "w-72 shrink-0",
+      )}
+    >
       {/* Web carries the brand header from the chat shell; desktop relies on
           its own window chrome. Padding mirrors the shell SidebarHeader
           (p-2 + pb-3, inner brand px-1) so the logo aligns across surfaces. */}
-      {isDesktop ? (
+      {showDesktopChrome ? (
         // Reserve the macOS traffic-light band (mirrors SpacesSidebar's top
         // strip: same height, pl-20, draggable) and carry the back/forward
         // history controls here, next to the lights — mirroring the main nav.
@@ -74,7 +93,10 @@ export function SettingsSidebar() {
         <button
           type="button"
           className={cn(itemClassName, "mb-2 text-sidebar-foreground/65")}
-          onClick={() => navigate({ to: getSettingsReturnTo() })}
+          onClick={() => {
+            onNavigate?.();
+            navigate({ to: getSettingsReturnTo() });
+          }}
         >
           <ArrowLeft />
           <span>Back to app</span>
@@ -86,6 +108,7 @@ export function SettingsSidebar() {
               <Link
                 key={item.to}
                 to={item.to}
+                onClick={() => onNavigate?.()}
                 className={cn(
                   itemClassName,
                   active &&

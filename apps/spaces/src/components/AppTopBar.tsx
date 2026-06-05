@@ -1,10 +1,18 @@
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Button, ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
+import {
+  Button,
+  ToggleGroup,
+  ToggleGroupItem,
+  useSidebar,
+} from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
 
 export function AppTopBar() {
   const { actions } = usePageHeader();
+  // On narrow screens a floating hamburger (rendered by the shell) sits at the
+  // top-left, so pad the header content past it to avoid overlap.
+  const { isMobile } = useSidebar();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -29,7 +37,9 @@ export function AppTopBar() {
   };
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-4">
+    <header
+      className={`flex h-12 shrink-0 items-center gap-2 border-b border-border pr-4 ${isMobile ? "pl-14" : "pl-4"}`}
+    >
       {actions ? (
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {actions.backHref ? (

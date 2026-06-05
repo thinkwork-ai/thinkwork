@@ -1,6 +1,12 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
-import { SidebarInset, SidebarProvider, useSidebar } from "@thinkwork/ui";
+import { Menu } from "lucide-react";
+import {
+  Button,
+  SidebarInset,
+  SidebarProvider,
+  useSidebar,
+} from "@thinkwork/ui";
 import { AppTopBar } from "@/components/AppTopBar";
 import { DesktopApplicationHeader } from "@/components/DesktopApplicationHeader";
 import { SpacesSidebar } from "@/components/SpacesSidebar";
@@ -71,8 +77,33 @@ function ShellLayout() {
         width={sidebarWidth}
         onWidthChange={setSidebarWidth}
       />
+      {/* The desktop header renders its own collapsed-chrome trigger; the web
+          build's top bar can be hidden entirely (e.g. /new), so it needs a
+          header-independent floating trigger to reopen the nav sheet. */}
+      {isDesktop ? null : <MobileSidebarTrigger />}
       <div className="flex h-full min-h-0 w-full">{shellChrome}</div>
     </SidebarProvider>
+  );
+}
+
+function MobileSidebarTrigger() {
+  const { isMobile, openMobile, toggleSidebar } = useSidebar();
+
+  // Only on narrow screens, and hidden while the sheet itself is open.
+  if (!isMobile || openMobile) return null;
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Open navigation"
+      onClick={toggleSidebar}
+      className="absolute left-2 top-2 z-50 size-8 bg-background/70 backdrop-blur hover:bg-accent"
+    >
+      <Menu className="size-4" />
+      <span className="sr-only">Open navigation</span>
+    </Button>
   );
 }
 
@@ -87,11 +118,11 @@ function SidebarResizeHandle({
   width: number;
   onWidthChange: (width: number) => void;
 }) {
-  const { open } = useSidebar();
+  const { open, isMobile } = useSidebar();
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!open) return;
+      if (!open || isMobile) return;
 
       event.currentTarget.setPointerCapture(event.pointerId);
       const startX = event.clientX;
@@ -116,10 +147,12 @@ function SidebarResizeHandle({
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp, { once: true });
     },
-    [onWidthChange, open, width],
+    [onWidthChange, open, isMobile, width],
   );
 
-  if (!open) return null;
+  // On narrow screens the sidebar collapses into a Sheet overlay, so there is
+  // no docked panel to resize — hide the drag border entirely.
+  if (!open || isMobile) return null;
 
   return (
     <div
