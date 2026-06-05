@@ -14,8 +14,11 @@ import {
   Button,
   Switch,
 } from "@thinkwork/ui";
-import { ExternalLink } from "lucide-react";
-import type { SettingsDeploymentStatusQuery } from "@/gql/graphql";
+import { ExternalLink, PauseCircle, Play, Trash2 } from "lucide-react";
+import {
+  ManagedApplicationDeploymentAction,
+  type SettingsDeploymentStatusQuery,
+} from "@/gql/graphql";
 import { SettingsSetManagedApplicationDeploymentMutation } from "@/lib/settings-queries";
 import {
   SettingsRow,
@@ -23,6 +26,7 @@ import {
 } from "@/components/settings/SettingsContent";
 
 type ManagedAppKey = "cognee" | "twenty";
+type ManagedAppAction = ManagedApplicationDeploymentAction;
 type DeploymentStatus = SettingsDeploymentStatusQuery["deploymentStatus"];
 type ManagedApplication =
   SettingsDeploymentStatusQuery["deploymentStatus"]["managedApplications"][number];
@@ -86,9 +90,12 @@ export function ManagedApplicationsSection({
   const [pendingEnabled, setPendingEnabled] = useState<
     Partial<Record<ManagedAppKey, boolean>>
   >({});
+  const [pendingAction, setPendingAction] = useState<
+    Partial<Record<ManagedAppKey, ManagedAppAction>>
+  >({});
   const [confirm, setConfirm] = useState<{
     key: ManagedAppKey;
-    enabled: boolean;
+    action: ManagedAppAction;
   } | null>(null);
   const [deploymentState, setManagedDeployment] = useMutation(
     SettingsSetManagedApplicationDeploymentMutation,
@@ -99,14 +106,21 @@ export function ManagedApplicationsSection({
     appFromDeployment(deployment, "twenty"),
   ];
 
-  async function requestDeployment(key: ManagedAppKey, enabled: boolean) {
-    const result = await setManagedDeployment({ key, enabled });
+  async function requestDeployment(
+    key: ManagedAppKey,
+    action: ManagedAppAction,
+  ) {
+    const result = await setManagedDeployment({ key, action });
     if (result.error) {
       toast.error(`Could not update ${appLabel(key)}: ${result.error.message}`);
       return;
     }
 
-    setPendingEnabled((current) => ({ ...current, [key]: enabled }));
+    setPendingEnabled((current) => ({
+      ...current,
+      [key]: action === ManagedApplicationDeploymentAction.Enable,
+    }));
+    setPendingAction((current) => ({ ...current, [key]: action }));
     setConfirm(null);
     toast.success(
       result.data?.setManagedApplicationDeployment.message ??
@@ -125,9 +139,15 @@ export function ManagedApplicationsSection({
         apps.map((app) => {
           const key = app.key as ManagedAppKey;
           const desiredEnabled = pendingEnabled[key] ?? app.runtimeEnabled;
+          const activeQueuedAction =
+            pendingAction[key] &&
+            !managedActionSatisfied(app, pendingAction[key])
+              ? pendingAction[key]
+              : undefined;
           const queued =
-            pendingEnabled[key] !== undefined &&
-            pendingEnabled[key] !== app.runtimeEnabled;
+            activeQueuedAction !== undefined ||
+            (pendingEnabled[key] !== undefined &&
+              pendingEnabled[key] !== app.runtimeEnabled);
           const disabled = loading || deploymentState.fetching || !deployment;
 
           return (
@@ -153,18 +173,32 @@ export function ManagedApplicationsSection({
                   </a>
                 </Button>
               ) : null}
-              <Switch
-                checked={desiredEnabled}
-                disabled={disabled}
-                aria-label={`Toggle ${app.displayName}`}
-                onCheckedChange={(checked) => {
-                  if (key === "twenty" || !checked) {
-                    setConfirm({ key, enabled: checked });
-                    return;
+              {key === "twenty" ? (
+                <TwentyLifecycleControls
+                  app={app}
+                  disabled={disabled}
+                  queuedAction={
+                    key === "twenty" ? activeQueuedAction : undefined
                   }
-                  void requestDeployment(key, checked);
-                }}
-              />
+                  onAction={(action) => setConfirm({ key, action })}
+                />
+              ) : (
+                <Switch
+                  checked={desiredEnabled}
+                  disabled={disabled}
+                  aria-label={`Toggle ${app.displayName}`}
+                  onCheckedChange={(checked) => {
+                    const action = checked
+                      ? ManagedApplicationDeploymentAction.Enable
+                      : ManagedApplicationDeploymentAction.Destroy;
+                    if (!checked) {
+                      setConfirm({ key, action });
+                      return;
+                    }
+                    void requestDeployment(key, action);
+                  }}
+                />
+              )}
             </SettingsRow>
           );
         })
@@ -187,19 +221,62 @@ export function ManagedApplicationsSection({
               disabled={deploymentState.fetching || !confirm}
               onClick={() => {
                 if (!confirm) return;
-                void requestDeployment(confirm.key, confirm.enabled);
+                void requestDeployment(confirm.key, confirm.action);
               }}
             >
-              {confirm?.enabled
-                ? "Enable"
-                : confirm?.key === "twenty"
-                  ? "Park"
-                  : "Disable"}
+              {confirmActionLabel(confirm)}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </SettingsSection>
+  );
+}
+
+function TwentyLifecycleControls({
+  app,
+  disabled,
+  queuedAction,
+  onAction,
+}: {
+  app: ManagedApplication;
+  disabled: boolean;
+  queuedAction?: ManagedAppAction;
+  onAction: (action: ManagedAppAction) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        type="button"
+        variant={app.runtimeEnabled ? "secondary" : "default"}
+        size="sm"
+        disabled={disabled || app.runtimeEnabled || queuedAction !== undefined}
+        onClick={() => onAction(ManagedApplicationDeploymentAction.Enable)}
+      >
+        <Play className="size-4" />
+        Deploy
+      </Button>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled={disabled || !app.runtimeEnabled || queuedAction !== undefined}
+        onClick={() => onAction(ManagedApplicationDeploymentAction.Park)}
+      >
+        <PauseCircle className="size-4" />
+        Park
+      </Button>
+      <Button
+        type="button"
+        variant="destructive"
+        size="sm"
+        disabled={disabled || !app.provisioned || queuedAction !== undefined}
+        onClick={() => onAction(ManagedApplicationDeploymentAction.Destroy)}
+      >
+        <Trash2 className="size-4" />
+        Destroy
+      </Button>
+    </div>
   );
 }
 
@@ -228,28 +305,71 @@ function appLabel(key: ManagedAppKey): string {
   return key === "twenty" ? "Twenty CRM" : "Cognee";
 }
 
+function managedActionSatisfied(
+  app: ManagedApplication,
+  action: ManagedAppAction,
+): boolean {
+  if (action === ManagedApplicationDeploymentAction.Enable) {
+    return app.runtimeEnabled;
+  }
+  if (action === ManagedApplicationDeploymentAction.Park) {
+    return app.provisioned && !app.runtimeEnabled;
+  }
+  return !app.provisioned && !app.runtimeEnabled;
+}
+
 function confirmTitle(
-  confirm: { key: ManagedAppKey; enabled: boolean } | null,
+  confirm: { key: ManagedAppKey; action: ManagedAppAction } | null,
 ): string {
   if (!confirm) return "Update managed application?";
   if (confirm.key === "twenty") {
-    return confirm.enabled ? "Enable Twenty CRM?" : "Park Twenty CRM?";
+    if (confirm.action === ManagedApplicationDeploymentAction.Enable) {
+      return "Deploy Twenty CRM?";
+    }
+    if (confirm.action === ManagedApplicationDeploymentAction.Park) {
+      return "Park Twenty CRM?";
+    }
+    return "Destroy Twenty CRM and delete data?";
   }
-  return confirm.enabled ? "Enable Cognee?" : "Disable Cognee?";
+  return confirm.action === ManagedApplicationDeploymentAction.Enable
+    ? "Enable Cognee?"
+    : "Disable Cognee?";
 }
 
 function confirmDescription(
-  confirm: { key: ManagedAppKey; enabled: boolean } | null,
+  confirm: { key: ManagedAppKey; action: ManagedAppAction } | null,
 ): string {
   if (!confirm) return "";
-  if (confirm.key === "twenty" && confirm.enabled) {
+  if (
+    confirm.key === "twenty" &&
+    confirm.action === ManagedApplicationDeploymentAction.Enable
+  ) {
     return "This queues the deploy workflow. CRM settings remain hidden until deployment status reports Twenty CRM running.";
   }
-  if (confirm.key === "twenty") {
+  if (
+    confirm.key === "twenty" &&
+    confirm.action === ManagedApplicationDeploymentAction.Park
+  ) {
     return "This queues the deploy workflow to stop the CRM runtime while retaining the dedicated database, secrets, files, and re-enable path.";
   }
-  if (confirm.enabled) {
+  if (confirm.key === "twenty") {
+    return "This queues a destructive deploy workflow that removes the Twenty runtime, storage, cache, app secrets, and dedicated database. This cannot be undone from ThinkWork.";
+  }
+  if (confirm.action === ManagedApplicationDeploymentAction.Enable) {
     return "This queues the deploy workflow to provision the Cognee Knowledge Graph service.";
   }
   return "This queues a Terraform deployment that removes the Cognee service for the current stage. Export graph data first if it needs to be retained.";
+}
+
+function confirmActionLabel(
+  confirm: { key: ManagedAppKey; action: ManagedAppAction } | null,
+): string {
+  if (!confirm) return "Continue";
+  if (confirm.action === ManagedApplicationDeploymentAction.Enable) {
+    return "Deploy";
+  }
+  if (confirm.action === ManagedApplicationDeploymentAction.Park) {
+    return "Park";
+  }
+  return confirm.key === "twenty" ? "Destroy and delete data" : "Disable";
 }

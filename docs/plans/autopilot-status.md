@@ -6,6 +6,59 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Twenty CRM Lifecycle Actions - 2026-06-05
+
+- Plan:
+  `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`.
+- Target branch: `main`.
+- Current unit: Follow-up lifecycle completion.
+- Current branch: `codex/twenty-crm-lifecycle-actions`.
+- Current worktree: `.Codex/worktrees/twenty-crm-lifecycle-actions`.
+- Status: active.
+
+| Unit                                       | Branch                               | PR                                                           | State  | Notes                                                                                                             |
+| ------------------------------------------ | ------------------------------------ | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------- |
+| Deploy, park, and destructive cleanup flow | `codex/twenty-crm-lifecycle-actions` | [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) | Active | Adds explicit Deploy, Park, and Destroy actions; Destroy removes retained Twenty DB/role/secrets after Terraform. |
+
+### Progress Log
+
+- Confirmed desktop canary `desktop-v0.1.0-canary.107` was released from
+  `ee33bbcc`, but it only covers Deploy/Park and does not expose a destructive
+  data cleanup action.
+- Created isolated worktree
+  `.Codex/worktrees/twenty-crm-lifecycle-actions` from `origin/main`.
+- Added `ManagedApplicationDeploymentAction` with `ENABLE`, `PARK`, and
+  `DESTROY`; kept the legacy `enabled` input as a compatibility fallback.
+- Updated Spaces Managed Applications UI so Twenty exposes separate Deploy,
+  Park, and Destroy buttons. Park retains data; Destroy has separate
+  destructive confirmation copy.
+- Updated the deploy and verify workflows to parse `TWENTY_DESTROY_DATA`.
+  Deploy now drops the dedicated Twenty database and role and deletes Twenty
+  Secrets Manager entries only after Terraform teardown is requested.
+- Added stale-secret-ARN fallback in deploy prep so a future Deploy can recover
+  cleanly after a prior destructive Destroy.
+
+### CI / Verification
+
+- `pnpm schema:build` passed.
+- Codegen passed for `@thinkwork/spaces`, `thinkwork-cli`, `@thinkwork/admin`,
+  and `@thinkwork/mobile`.
+- `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts src/__tests__/graphql-contract.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/ManagedApplicationsSection.test.tsx`
+  passed.
+- `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/spaces typecheck` passed.
+- `pnpm --filter @thinkwork/spaces build` passed with existing sourcemap and
+  chunk-size warnings.
+- Workflow YAML parse and `git diff --check` passed.
+
+### Blockers
+
+- None.
+
 ## Spaces Settings Activity - 2026-06-05
 
 - Plan:

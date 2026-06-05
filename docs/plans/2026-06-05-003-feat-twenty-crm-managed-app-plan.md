@@ -17,9 +17,11 @@ only after deployed status reports Twenty as running.
 
 The implementation should mirror Cognee's optional-add-on pattern where it
 fits, but CRM data needs a safer lifecycle. A first enable should create and
-start Twenty. A later disable should park runtime capacity while retaining the
-dedicated database, app secrets, ElastiCache configuration, file storage, and
-the re-enable path. There is no destructive delete path in v1.
+start Twenty. A later park action should stop runtime capacity while retaining
+the dedicated database, app secrets, ElastiCache configuration, file storage,
+and the re-enable path. A separate destructive cleanup action removes the
+runtime substrate plus the dedicated database and secrets when an operator
+explicitly chooses to delete CRM data.
 
 ---
 
@@ -83,7 +85,8 @@ app, AE4 disable preserves data, AE5 native Twenty first-user setup.
   is acceptable where it prevents Cognee/Twenty duplication.
 - No separate Aurora/Postgres instance unless implementation discovers a hard
   Twenty constraint that blocks a dedicated database on the existing instance.
-- No destructive delete path for CRM data from the settings toggle.
+- No ambiguous destructive delete path from the runtime toggle; deleting CRM
+  data requires an explicit Destroy action.
 
 ### Deferred to Follow-Up Work
 

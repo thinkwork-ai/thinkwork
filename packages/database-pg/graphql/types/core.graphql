@@ -181,6 +181,7 @@ type KnowledgeGraphHealthCheck {
 
 type ManagedApplicationDeploymentChange {
   key: String!
+  action: String!
   desiredEnabled: Boolean!
   provisioned: Boolean!
   runtimeEnabled: Boolean!
@@ -233,7 +234,14 @@ input SetKnowledgeGraphDeploymentInput {
 
 input SetManagedApplicationDeploymentInput {
   key: String!
-  enabled: Boolean!
+  enabled: Boolean
+  action: ManagedApplicationDeploymentAction
+}
+
+enum ManagedApplicationDeploymentAction {
+  ENABLE
+  PARK
+  DESTROY
 }
 
 """

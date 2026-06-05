@@ -1665,8 +1665,15 @@ export type ManagedApplicationDeployment = {
   url?: Maybe<Scalars["String"]["output"]>;
 };
 
+export enum ManagedApplicationDeploymentAction {
+  Destroy = "DESTROY",
+  Enable = "ENABLE",
+  Park = "PARK",
+}
+
 export type ManagedApplicationDeploymentChange = {
   __typename?: "ManagedApplicationDeploymentChange";
+  action: Scalars["String"]["output"];
   desiredEnabled: Scalars["Boolean"]["output"];
   key: Scalars["String"]["output"];
   message: Scalars["String"]["output"];
@@ -4762,7 +4769,8 @@ export type SetKnowledgeGraphDeploymentInput = {
 };
 
 export type SetManagedApplicationDeploymentInput = {
-  enabled: Scalars["Boolean"]["input"];
+  action?: InputMaybe<ManagedApplicationDeploymentAction>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
   key: Scalars["String"]["input"];
 };
 
@@ -7490,7 +7498,7 @@ export type SettingsSetKnowledgeGraphDeploymentMutation = {
 
 export type SettingsSetManagedApplicationDeploymentMutationVariables = Exact<{
   key: Scalars["String"]["input"];
-  enabled: Scalars["Boolean"]["input"];
+  action: ManagedApplicationDeploymentAction;
 }>;
 
 export type SettingsSetManagedApplicationDeploymentMutation = {
@@ -7498,6 +7506,7 @@ export type SettingsSetManagedApplicationDeploymentMutation = {
   setManagedApplicationDeployment: {
     __typename?: "ManagedApplicationDeploymentChange";
     key: string;
+    action: string;
     desiredEnabled: boolean;
     provisioned: boolean;
     runtimeEnabled: boolean;
@@ -12165,13 +12174,16 @@ export const SettingsSetManagedApplicationDeploymentDocument = {
           kind: "VariableDefinition",
           variable: {
             kind: "Variable",
-            name: { kind: "Name", value: "enabled" },
+            name: { kind: "Name", value: "action" },
           },
           type: {
             kind: "NonNullType",
             type: {
               kind: "NamedType",
-              name: { kind: "Name", value: "Boolean" },
+              name: {
+                kind: "Name",
+                value: "ManagedApplicationDeploymentAction",
+              },
             },
           },
         },
@@ -12199,10 +12211,10 @@ export const SettingsSetManagedApplicationDeploymentDocument = {
                     },
                     {
                       kind: "ObjectField",
-                      name: { kind: "Name", value: "enabled" },
+                      name: { kind: "Name", value: "action" },
                       value: {
                         kind: "Variable",
-                        name: { kind: "Name", value: "enabled" },
+                        name: { kind: "Name", value: "action" },
                       },
                     },
                   ],
@@ -12213,6 +12225,7 @@ export const SettingsSetManagedApplicationDeploymentDocument = {
               kind: "SelectionSet",
               selections: [
                 { kind: "Field", name: { kind: "Name", value: "key" } },
+                { kind: "Field", name: { kind: "Name", value: "action" } },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "desiredEnabled" },

@@ -25,6 +25,9 @@ database_engine = "rds-postgres"
 #   the deployment workflow has created the dedicated database URL secret and
 #   encryption-key secret. Later disable should leave twenty_provisioned=true
 #   and set twenty_runtime_enabled=false so CRM data/storage/cache are retained.
+#   Full cleanup should set both booleans false through the Managed
+#   Applications Destroy action so the deploy workflow can also drop the
+#   dedicated database and delete Twenty secrets after Terraform teardown.
 #
 # twenty_provisioned                = false
 # twenty_runtime_enabled            = false

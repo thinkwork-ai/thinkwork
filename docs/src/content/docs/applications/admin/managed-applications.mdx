@@ -28,14 +28,21 @@ see deployment controls, and app-specific settings pages remain hidden until
 deployment status reports the runtime as enabled.
 
 <Aside type="note">
-  A toggle queues the deploy workflow. It does not mutate production
-  infrastructure directly from the UI.
+  Managed application actions queue the deploy workflow. They do not mutate
+  production infrastructure directly from the UI.
 </Aside>
 
 ## Lifecycle
 
-ThinkWork tracks Twenty with separate retained infrastructure and runtime
-states:
+ThinkWork exposes three Twenty lifecycle actions:
+
+| Action  | Effect                                                                  |
+| ------- | ----------------------------------------------------------------------- |
+| Deploy  | Provisions retained infrastructure and starts the server/worker runtime |
+| Park    | Stops runtime capacity while retaining CRM data and app secrets         |
+| Destroy | Removes runtime infrastructure, retained storage/cache, secrets, and DB |
+
+The deployed status still resolves to the retained/runtime state:
 
 | Provisioned | Runtime enabled | Meaning                                                 |
 | ----------- | --------------- | ------------------------------------------------------- |
@@ -45,8 +52,12 @@ states:
 
 Parking Twenty stops the server and worker runtime capacity while retaining the
 dedicated database, Secrets Manager values, persistent file storage, cache
-configuration, DNS path, and re-enable path. V1 intentionally has no destructive
-delete action for CRM data.
+configuration, DNS path, and re-enable path.
+
+Destroying Twenty is intentionally separate from parking. It queues a
+destructive deploy that tears down the Twenty infrastructure and then removes
+the dedicated Twenty database, database role, and Twenty Secrets Manager
+entries. Use it only when CRM data is no longer needed.
 
 Cognee follows the existing optional Knowledge Graph lifecycle. Its deploy
 control now lives in Managed Applications; the Knowledge Graph settings page is

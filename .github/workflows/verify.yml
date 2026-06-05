@@ -211,6 +211,7 @@ jobs:
           COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT: ${{ vars.COGNEE_BEDROCK_MODEL_RESOURCE_ARNS || '' }}
           TWENTY_PROVISIONED_INPUT: ${{ vars.TWENTY_PROVISIONED || 'false' }}
           TWENTY_RUNTIME_ENABLED_INPUT: ${{ vars.TWENTY_RUNTIME_ENABLED || 'false' }}
+          TWENTY_DESTROY_DATA_INPUT: ${{ vars.TWENTY_DESTROY_DATA || 'false' }}
           TWENTY_IMAGE_URI_INPUT: ${{ vars.TWENTY_IMAGE_URI || '' }}
           TWENTY_DB_USERNAME_INPUT: ${{ vars.TWENTY_DB_USERNAME || 'thinkwork_twenty' }}
           TWENTY_DB_NAME_INPUT: ${{ vars.TWENTY_DB_NAME || 'thinkwork_twenty' }}
@@ -243,16 +244,20 @@ jobs:
           cognee_bedrock_model_resource_arns="${COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT:-[\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.nova-lite-v1:0\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.titan-embed-text-v2:0\"]}"
           twenty_provisioned=$(printf '%s' "$TWENTY_PROVISIONED_INPUT" | tr '[:upper:]' '[:lower:]')
           twenty_runtime_enabled=$(printf '%s' "$TWENTY_RUNTIME_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
-          if [ "$twenty_provisioned" != "true" ] && [ "$twenty_provisioned" != "false" ]; then
-            echo "::error::TWENTY_PROVISIONED must be true or false."
-            exit 1
-          fi
-          if [ "$twenty_runtime_enabled" != "true" ] && [ "$twenty_runtime_enabled" != "false" ]; then
-            echo "::error::TWENTY_RUNTIME_ENABLED must be true or false."
-            exit 1
-          fi
+          twenty_destroy_data=$(printf '%s' "$TWENTY_DESTROY_DATA_INPUT" | tr '[:upper:]' '[:lower:]')
+          for value_name in twenty_provisioned twenty_runtime_enabled twenty_destroy_data; do
+            value="${!value_name}"
+            if [ "$value" != "true" ] && [ "$value" != "false" ]; then
+              echo "::error::${value_name^^} must be true or false."
+              exit 1
+            fi
+          done
           if [ "$twenty_runtime_enabled" = "true" ] && [ "$twenty_provisioned" != "true" ]; then
             echo "::error::TWENTY_RUNTIME_ENABLED=true requires TWENTY_PROVISIONED=true."
+            exit 1
+          fi
+          if [ "$twenty_destroy_data" = "true" ] && { [ "$twenty_provisioned" = "true" ] || [ "$twenty_runtime_enabled" = "true" ]; }; then
+            echo "::error::TWENTY_DESTROY_DATA=true requires TWENTY_PROVISIONED=false and TWENTY_RUNTIME_ENABLED=false."
             exit 1
           fi
           twenty_image_uri="${TWENTY_IMAGE_URI_INPUT:-}"
