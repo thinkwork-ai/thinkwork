@@ -8339,20 +8339,22 @@ export type CostSummaryQuery = {
   };
 };
 
-export type CostByAgentQueryVariables = Exact<{
+export type CostByUserQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
   from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
   to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
 }>;
 
-export type CostByAgentQuery = {
+export type CostByUserQuery = {
   __typename?: "Query";
-  costByAgent: Array<{
-    __typename?: "AgentCostSummary";
-    agentId?: string | null;
-    agentName: string;
+  costByUser: Array<{
+    __typename?: "UserCostSummary";
+    userId?: string | null;
+    userName: string;
+    userEmail?: string | null;
     totalUsd: number;
     eventCount: number;
+    isSystem: boolean;
   }>;
 };
 
@@ -8408,6 +8410,7 @@ export type BudgetStatusQuery = {
       id: string;
       tenantId: string;
       agentId?: string | null;
+      userId?: string | null;
       scope: string;
       period: string;
       limitUsd: number;
@@ -16877,13 +16880,13 @@ export const CostSummaryDocument = {
     },
   ],
 } as unknown as DocumentNode<CostSummaryQuery, CostSummaryQueryVariables>;
-export const CostByAgentDocument = {
+export const CostByUserDocument = {
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "query",
-      name: { kind: "Name", value: "CostByAgent" },
+      name: { kind: "Name", value: "CostByUser" },
       variableDefinitions: [
         {
           kind: "VariableDefinition",
@@ -16918,7 +16921,7 @@ export const CostByAgentDocument = {
         selections: [
           {
             kind: "Field",
-            name: { kind: "Name", value: "costByAgent" },
+            name: { kind: "Name", value: "costByUser" },
             arguments: [
               {
                 kind: "Argument",
@@ -16948,10 +16951,12 @@ export const CostByAgentDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                { kind: "Field", name: { kind: "Name", value: "agentId" } },
-                { kind: "Field", name: { kind: "Name", value: "agentName" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                { kind: "Field", name: { kind: "Name", value: "userName" } },
+                { kind: "Field", name: { kind: "Name", value: "userEmail" } },
                 { kind: "Field", name: { kind: "Name", value: "totalUsd" } },
                 { kind: "Field", name: { kind: "Name", value: "eventCount" } },
+                { kind: "Field", name: { kind: "Name", value: "isSystem" } },
               ],
             },
           },
@@ -16959,7 +16964,7 @@ export const CostByAgentDocument = {
       },
     },
   ],
-} as unknown as DocumentNode<CostByAgentQuery, CostByAgentQueryVariables>;
+} as unknown as DocumentNode<CostByUserQuery, CostByUserQueryVariables>;
 export const CostByModelDocument = {
   kind: "Document",
   definitions: [
@@ -17165,6 +17170,10 @@ export const BudgetStatusDocument = {
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "agentId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "userId" },
                       },
                       { kind: "Field", name: { kind: "Name", value: "scope" } },
                       {

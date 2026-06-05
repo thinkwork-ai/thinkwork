@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "urql";
-import { Bot, BrainCircuit } from "lucide-react";
+import { BrainCircuit, UserRound } from "lucide-react";
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
 import {
   ChartContainer,
@@ -18,10 +18,11 @@ import {
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
 import {
-  SettingsCostByAgentQuery,
+  SettingsBudgetStatusQuery,
   SettingsCostByModelQuery,
   SettingsCostSummaryQuery,
   SettingsCostTimeSeriesQuery,
+  SettingsCostByUserQuery,
   SettingsModelCatalogQuery,
 } from "@/lib/settings-queries";
 import {
@@ -60,8 +61,9 @@ export function SettingsAnalytics() {
   const vars = { variables: { tenantId: tenantId ?? "" }, pause: !tenantId };
 
   const [summaryR] = useQuery({ query: SettingsCostSummaryQuery, ...vars });
-  const [agentR] = useQuery({ query: SettingsCostByAgentQuery, ...vars });
+  const [userR] = useQuery({ query: SettingsCostByUserQuery, ...vars });
   const [modelR] = useQuery({ query: SettingsCostByModelQuery, ...vars });
+  const [budgetR] = useQuery({ query: SettingsBudgetStatusQuery, ...vars });
   const [seriesR] = useQuery({
     query: SettingsCostTimeSeriesQuery,
     variables: { tenantId: tenantId ?? "", days: 30 },
@@ -123,7 +125,10 @@ export function SettingsAnalytics() {
       <TrendCard series={seriesR.data?.costTimeSeries ?? []} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <CostByAgentCard rows={agentR.data?.costByAgent ?? []} />
+        <CostByUserCard
+          rows={userR.data?.costByUser ?? []}
+          budgets={budgetR.data?.budgetStatus ?? []}
+        />
         <CostByModelCard
           rows={modelR.data?.costByModel ?? []}
           displayNames={displayNames}
@@ -198,57 +203,99 @@ function TrendCard({ series }: { series: SeriesPoint[] }) {
   );
 }
 
-function CostByAgentCard({
+type UserCostRow = {
+  userId?: string | null;
+  userName: string;
+  userEmail?: string | null;
+  totalUsd: number;
+  eventCount: number;
+  isSystem: boolean;
+};
+
+type BudgetStatusRow = {
+  policy: {
+    userId?: string | null;
+    scope: string;
+    limitUsd: number;
+  };
+  percentUsed: number;
+  status: string;
+};
+
+function CostByUserCard({
   rows,
+  budgets,
 }: {
-  rows: {
-    agentId?: string | null;
-    agentName: string;
-    totalUsd: number;
-    eventCount: number;
-  }[];
+  rows: UserCostRow[];
+  budgets: BudgetStatusRow[];
 }) {
   const sorted = [...rows].sort((a, b) => b.totalUsd - a.totalUsd);
   const total = sorted.reduce((s, r) => s + r.totalUsd, 0);
+  const userBudgetMap = new Map(
+    budgets
+      .filter((b) => b.policy.scope === "user" && b.policy.userId)
+      .map((b) => [b.policy.userId!, b]),
+  );
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <h2 className="mb-3 flex items-center gap-2 text-base font-medium">
-        <Bot className="size-4 text-muted-foreground" />
-        Cost by Agent
+        <UserRound className="size-4 text-muted-foreground" />
+        Cost by User
       </h2>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Agent</TableHead>
+            <TableHead>User</TableHead>
             <TableHead className="text-right">Events</TableHead>
+            <TableHead>Budget</TableHead>
             <TableHead className="text-right">Cost</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {sorted.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={3} className="text-muted-foreground">
+              <TableCell colSpan={4} className="text-muted-foreground">
                 No cost data yet.
               </TableCell>
             </TableRow>
           ) : (
-            sorted.map((r) => (
-              <TableRow key={r.agentId ?? r.agentName}>
-                <TableCell className="font-medium">{r.agentName}</TableCell>
-                <TableCell className="text-right tabular-nums text-muted-foreground">
-                  {r.eventCount}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatUsd(r.totalUsd)}
-                </TableCell>
-              </TableRow>
-            ))
+            sorted.map((r) => {
+              const budget = r.userId ? userBudgetMap.get(r.userId) : null;
+              return (
+                <TableRow key={r.userId ?? "system"}>
+                  <TableCell>
+                    <div className="font-medium">{r.userName}</div>
+                    {!r.isSystem && r.userEmail ? (
+                      <div className="text-xs text-muted-foreground">
+                        {r.userEmail}
+                      </div>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {r.eventCount}
+                  </TableCell>
+                  <TableCell>
+                    {budget ? (
+                      <BudgetProgress budget={budget} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {r.isSystem ? "Not assigned" : "No budget"}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatUsd(r.totalUsd)}
+                  </TableCell>
+                </TableRow>
+              );
+            })
           )}
         </TableBody>
         {sorted.length > 0 ? (
           <TableFooter>
             <TableRow>
               <TableCell className="font-semibold">Total</TableCell>
+              <TableCell />
               <TableCell />
               <TableCell className="text-right font-semibold tabular-nums">
                 {formatUsd(total)}
@@ -257,6 +304,29 @@ function CostByAgentCard({
           </TableFooter>
         ) : null}
       </Table>
+    </div>
+  );
+}
+
+function BudgetProgress({ budget }: { budget: BudgetStatusRow }) {
+  const percent = Math.min(100, Math.max(0, budget.percentUsed));
+  const barClass =
+    budget.status === "exceeded"
+      ? "bg-red-500"
+      : budget.status === "warning"
+        ? "bg-yellow-500"
+        : "bg-primary";
+  return (
+    <div className="min-w-32">
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full ${barClass}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+        {percent.toFixed(0)}% of {formatUsd(budget.policy.limitUsd, 0)}
+      </div>
     </div>
   );
 }
