@@ -7,9 +7,8 @@ Started: 2026-06-04
 ## Current Status
 
 - State: follow_up_in_progress
-- Current unit: post-release thread detail sheet and isolated ontology entity
-  follow-up
-- Current branch/worktree: `codex/kg-thread-sheet-detail` in
+- Current unit: raw Cognee drop diagnostics for empty approved graphs
+- Current branch/worktree: `codex/kg-raw-drop-diagnostics` in
   `.Codex/worktrees/kg-local-latest`
 - Current PR: none
 - Blocker: none.
@@ -519,3 +518,26 @@ operation`. ECS logs showed the precise cause:
   chunk warnings only.
 - 2026-06-05: Opened follow-up PR
   [#2098](https://github.com/thinkwork-ai/thinkwork/pull/2098).
+- 2026-06-05: Started follow-up branch `codex/kg-raw-drop-diagnostics` after
+  the deployed Bunkhouse smoke showed Cognee returning a raw graph
+  (`39` nodes, `116` edges) while the approved ThinkWork ontology graph stayed
+  empty. Root-cause signal: normalization correctly preserved the
+  ontology-only gate, but every non-structural Cognee node had an unapproved
+  type, so all relationships became orphaned after node filtering.
+- 2026-06-05: Implemented bounded raw-drop diagnostics in normalizer metrics:
+  sampled dropped Cognee nodes now include label, raw type, drop reason, and
+  property keys; sampled dropped Cognee edges now include relationship label,
+  raw type, endpoint labels/ids, drop reason, and property keys. Updated
+  Spaces GraphQL operations/codegen to request run `metrics`, and added a
+  thread detail diagnostics panel that explains empty approved graph output
+  and shows compact dropped-node/link samples without horizontal scroll.
+- 2026-06-05: Local diagnostics follow-up verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/normalizer.test.ts`;
+  `pnpm --filter @thinkwork/api exec vitest run src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/normalizer.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
+  `pnpm --filter @thinkwork/spaces build`;
+  targeted Prettier check; and `git diff --check`. Spaces build completed
+  with the existing sourcemap and large chunk warnings only.
