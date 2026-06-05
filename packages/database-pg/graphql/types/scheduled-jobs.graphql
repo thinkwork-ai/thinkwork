@@ -15,6 +15,9 @@ type ScheduledJob {
   scheduleExpression: String
   timezone: String!
   enabled: Boolean!
+  budgetPaused: Boolean!
+  budgetPausedAt: AWSDateTime
+  budgetPausedReason: String
   ebScheduleName: String
   lastRunAt: AWSDateTime
   nextRunAt: AWSDateTime
