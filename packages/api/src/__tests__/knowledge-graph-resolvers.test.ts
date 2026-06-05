@@ -316,6 +316,7 @@ describe("knowledge graph read resolvers", () => {
       "GROUP BY tenant_id, normalized_label",
     );
     expect(renderSql(entityQuery)).toContain("'canonicalEntity'");
+    expect(renderSql(entityQuery)).toContain("to_jsonb(aliases)");
   });
 
   it("keeps source-scoped entity rows separate for ingest detail views", async () => {
