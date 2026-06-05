@@ -76,10 +76,12 @@ const transcript = [
   },
 ];
 const ontology = {
-  mechanism: "custom_prompt" as const,
+  mechanism: "cognee_owl_ontology" as const,
   entityTypes: [],
   relationshipTypes: [],
   customPrompt: "Extract",
+  ontologyKey: "thinkwork_tenant_abc123",
+  ontologyOwlXml: "<rdf:RDF></rdf:RDF>",
 };
 
 beforeEach(() => {
@@ -121,6 +123,8 @@ describe("knowledge-graph-thread-ingest handler", () => {
     });
     expect(ingestThreadMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        tenantId: run.tenant_id,
+        threadId: run.thread_id,
         datasetName: run.cognee_dataset_name,
         ontology,
       }),
@@ -131,7 +135,7 @@ describe("knowledge-graph-thread-ingest handler", () => {
         run,
         cogneeDatasetId: "11111111-1111-4111-8111-111111111111",
         ingestMode: "remember",
-        ontologyMechanism: "custom_prompt",
+        ontologyMechanism: "cognee_owl_ontology",
       }),
     );
   });

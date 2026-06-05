@@ -64,10 +64,13 @@ export class CogneeClient {
   }
 
   async ingestThread(args: {
+    tenantId: string;
+    threadId: string;
     datasetName: string;
     transcript: string;
     ontology: KnowledgeGraphOntologyExport;
   }): Promise<CogneeIngestResult> {
+    await this.ensureOntology(args.ontology);
     if (this.mode === "add_cognify") {
       return this.addAndCognify(args);
     }
@@ -88,6 +91,8 @@ export class CogneeClient {
   }
 
   private async remember(args: {
+    tenantId: string;
+    threadId: string;
     datasetName: string;
     transcript: string;
     ontology: KnowledgeGraphOntologyExport;
@@ -106,6 +111,8 @@ export class CogneeClient {
   }
 
   private async addAndCognify(args: {
+    tenantId: string;
+    threadId: string;
     datasetName: string;
     transcript: string;
     ontology: KnowledgeGraphOntologyExport;
@@ -119,8 +126,11 @@ export class CogneeClient {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         datasets: [args.datasetName],
-        runInBackground: false,
-        customPrompt: args.ontology.customPrompt,
+        run_in_background: false,
+        custom_prompt: args.ontology.customPrompt,
+        ...(args.ontology.ontologyKey
+          ? { ontology_key: [args.ontology.ontologyKey] }
+          : {}),
       }),
     });
     return {
@@ -129,6 +139,38 @@ export class CogneeClient {
       mode: "add_cognify",
       raw: { add: addRaw, cognify: cognifyRaw },
     };
+  }
+
+  private async ensureOntology(
+    ontology: KnowledgeGraphOntologyExport,
+  ): Promise<void> {
+    if (!ontology.ontologyKey || !ontology.ontologyOwlXml) return;
+    const existing = await this.requestJson("/api/v1/ontologies", {
+      method: "GET",
+    });
+    if (hasOntologyKey(existing, ontology.ontologyKey)) return;
+
+    const form = new FormData();
+    form.append("ontology_key", ontology.ontologyKey);
+    form.append(
+      "ontology_file",
+      new Blob([ontology.ontologyOwlXml], { type: "application/xml" }),
+      `${ontology.ontologyKey}.owl`,
+    );
+    form.append(
+      "description",
+      "ThinkWork approved ontology export for thread graph extraction",
+    );
+
+    try {
+      await this.requestJson("/api/v1/ontologies", {
+        method: "POST",
+        body: form,
+      });
+    } catch (err) {
+      if (isDuplicateOntologyError(err, ontology.ontologyKey)) return;
+      throw err;
+    }
   }
 
   private async requestJson(path: string, init: RequestInit): Promise<unknown> {
@@ -151,6 +193,8 @@ export class CogneeClient {
 }
 
 function buildTranscriptForm(args: {
+  tenantId: string;
+  threadId: string;
   datasetName: string;
   transcript: string;
   ontology: KnowledgeGraphOntologyExport;
@@ -163,9 +207,22 @@ function buildTranscriptForm(args: {
   );
   form.append("datasetName", args.datasetName);
   form.append("run_in_background", "false");
-  form.append("content_type", "text/markdown");
+  for (const nodeSet of buildThreadNodeSets(args.tenantId, args.threadId)) {
+    form.append("node_set", nodeSet);
+  }
+  if (args.ontology.ontologyKey) {
+    form.append("ontology_key", args.ontology.ontologyKey);
+  }
   form.append("custom_prompt", args.ontology.customPrompt);
   return form;
+}
+
+function buildThreadNodeSets(tenantId: string, threadId: string): string[] {
+  return [
+    "thinkwork_threads",
+    `tenant_${tenantId.replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase()}`,
+    `thread_${threadId.replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase()}`,
+  ];
 }
 
 function parseGraphPayload(payload: unknown): CogneeGraphPayload {
@@ -219,6 +276,23 @@ function extractDatasetId(payload: unknown): string | null {
 function isUnsupportedRememberError(err: unknown): boolean {
   const message = (err as Error)?.message ?? "";
   return /\b(404|405|501)\b/.test(message);
+}
+
+function isDuplicateOntologyError(err: unknown, ontologyKey: string): boolean {
+  const message = (err as Error)?.message ?? "";
+  return (
+    /\b400\b/.test(message) &&
+    message.includes("already exists") &&
+    message.includes(ontologyKey)
+  );
+}
+
+function hasOntologyKey(payload: unknown, ontologyKey: string): boolean {
+  return Boolean(
+    payload &&
+    typeof payload === "object" &&
+    Object.prototype.hasOwnProperty.call(payload, ontologyKey),
+  );
 }
 
 function looksLikeUuid(value: unknown): value is string {
