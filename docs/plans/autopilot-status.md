@@ -44,6 +44,38 @@ status: in_progress
 - Local dev server is running from this worktree at
   `http://localhost:5174/settings/knowledge-graph`.
 
+## User Cost Attribution and Budgets - 2026-06-05
+
+- Plan:
+  `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md`.
+- Target branch: `main`.
+- Current unit: U1, Extend the cost and budget data model.
+- Current branch: `codex/user-cost-u1`.
+- Current worktree: `.Codex/worktrees/user-cost-u1`.
+- Status: in progress.
+
+| Unit                                 | Branch               | PR  | State       | Notes                                                                                                   |
+| ------------------------------------ | -------------------- | --- | ----------- | ------------------------------------------------------------------------------------------------------- |
+| U1 Extend cost and budget data model | `codex/user-cost-u1` | TBD | In progress | Uses `0148_user_cost_attribution.sql` because `origin/main` already contains migrations through `0147`. |
+
+### Progress Log
+
+- Created U1 worktree from `origin/main`.
+- Read migration drift guidance in `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md`.
+- Added nullable user ownership columns for cost events and budget policies, explicit scheduled-job budget pause state, user cost GraphQL fields, manual migration and rollback files, and focused migration/schema tests.
+- Local verification so far:
+  `pnpm --filter @thinkwork/database-pg exec vitest run migration-0148.test.ts` passed;
+  `pnpm --filter @thinkwork/database-pg test` passed;
+  `pnpm --filter @thinkwork/database-pg typecheck` passed;
+  `pnpm --filter @thinkwork/api typecheck` passed;
+  `pnpm schema:build` passed;
+  `pnpm dlx prettier --check <changed supported files>` passed;
+  `git diff --check` passed.
+
+### CI / PR
+
+- No PR opened yet.
+
 ### Blockers
 
 - None.

@@ -57,6 +57,9 @@ export const scheduledJobs = pgTable(
     schedule_expression: text("schedule_expression"), // rate(5 minutes) | cron(...) | at(...) — nullable for non-timer jobs
     timezone: text("timezone").notNull().default("UTC"),
     enabled: boolean("enabled").notNull().default(true),
+    budget_paused: boolean("budget_paused").notNull().default(false),
+    budget_paused_at: timestamp("budget_paused_at", { withTimezone: true }),
+    budget_paused_reason: text("budget_paused_reason"),
     eb_schedule_name: text("eb_schedule_name"), // tracks EventBridge resource
     last_run_at: timestamp("last_run_at", { withTimezone: true }),
     next_run_at: timestamp("next_run_at", { withTimezone: true }),
@@ -79,6 +82,10 @@ export const scheduledJobs = pgTable(
     index("idx_scheduled_jobs_computer").on(table.tenant_id, table.computer_id),
     index("idx_scheduled_jobs_routine").on(table.routine_id),
     index("idx_scheduled_jobs_enabled").on(table.tenant_id, table.enabled),
+    index("idx_scheduled_jobs_budget_paused").on(
+      table.tenant_id,
+      table.budget_paused,
+    ),
   ],
 );
 

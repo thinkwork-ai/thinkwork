@@ -105,6 +105,9 @@ type CostRecordedEvent {
   tenantId: ID!
   agentId: ID
   agentName: String
+  userId: ID
+  userName: String
+  userEmail: String
   eventType: String!
   amountUsd: Float!
   model: String
@@ -227,6 +230,9 @@ extend type Mutation {
     tenantId: ID!
     agentId: ID
     agentName: String
+    userId: ID
+    userName: String
+    userEmail: String
     eventType: String!
     amountUsd: Float!
     model: String
