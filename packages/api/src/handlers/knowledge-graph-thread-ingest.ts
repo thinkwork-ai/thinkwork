@@ -34,7 +34,10 @@ export interface KnowledgeGraphThreadIngestResult {
 
 interface KnowledgeGraphThreadIngestDeps {
   db?: Database;
-  cogneeClient?: Pick<CogneeClient, "ingestDocument" | "fetchDatasetGraph">;
+  cogneeClient?: Pick<
+    CogneeClient,
+    "ingestDocument" | "waitForDatasetIndexing" | "fetchDatasetGraph"
+  >;
 }
 
 export async function handler(
@@ -95,6 +98,7 @@ export async function processKnowledgeGraphThreadIngest(
         "Cognee ingest did not return a dataset id for graph retrieval",
       );
     }
+    const indexing = await client.waitForDatasetIndexing(ingest.datasetId);
     const graph = await client.fetchDatasetGraph(ingest.datasetId);
     const snapshot = normalizeCogneeGraph({
       graph,
@@ -116,6 +120,15 @@ export async function processKnowledgeGraphThreadIngest(
         sourcePacketCount: source.packetCount,
         skippedSourceCount: source.skippedCount,
         sourceDiagnostics: source.diagnostics,
+        cogneePipelineRunId: ingest.pipelineRunId,
+        cogneeIndexStatus: indexing.status,
+        cogneeIndexRawStatus: indexing.rawStatus,
+        cogneeIndexAttempts: indexing.attempts,
+        cogneeIndexElapsedMs: indexing.elapsedMs,
+        cogneeIndexSamples: indexing.samples.map((sample) => ({
+          status: sample.status,
+          rawStatus: sample.rawStatus,
+        })),
       },
     });
 
@@ -131,6 +144,11 @@ export async function processKnowledgeGraphThreadIngest(
         relationshipCount: snapshot.relationships.length,
         evidenceCount: snapshot.evidence.length,
         ingestMode: ingest.mode,
+        cogneePipelineRunId: ingest.pipelineRunId,
+        cogneeIndexStatus: indexing.status,
+        cogneeIndexRawStatus: indexing.rawStatus,
+        cogneeIndexAttempts: indexing.attempts,
+        cogneeIndexElapsedMs: indexing.elapsedMs,
       },
     };
   } catch (err) {

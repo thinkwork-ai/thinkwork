@@ -7,9 +7,10 @@ Started: 2026-06-04
 ## Current Status
 
 - State: follow_up_in_progress
-- Current unit: raw Cognee drop diagnostics for empty approved graphs
-- Current branch/worktree: `codex/kg-raw-drop-diagnostics` in
-  `.Codex/worktrees/kg-local-latest`
+- Current unit: background Cognee source indexing plus ontology definitions
+  visibility
+- Current branch/worktree: `codex/kg-cognee-background-ingest` in
+  `.Codex/worktrees/kg-cognee-background-ingest`
 - Current PR: none
 - Blocker: none.
 
@@ -258,6 +259,36 @@ SMOKE_USER_ID, or provide DATABASE_URL for fallback.` The copied
 - 2026-06-04: U9 updated the smoke script to default live GraphQL calls to
   tenant-scoped bearer/API-key service auth and reserve admin-skill
   impersonation for explicit `SMOKE_USER_ID` + `SMOKE_KG_AGENT_ID`.
+- 2026-06-05: Follow-up source ingest unit merged as PR
+  [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103), squash commit
+  `9965e8eb2ec6275995acb7b489aa1831ac32fcb5`. The merge deployed
+  successfully via GitHub Actions run
+  `27019379209`.
+- 2026-06-05: Post-deploy dry-run wiki and brain smokes passed. Forced live
+  wiki smokes against tenant `0015953e-aa13-4cab-8398-2e70f73dda63`, owner
+  `0488f468-4071-70b0-e0a4-a639373999a0`, created runs
+  `569fd3e9-23bf-4693-af99-fb1f9dd919d7` and
+  `d5a6f4c7-a772-4d47-b9fb-0ed7c40acbe5`; both failed because Cognee
+  `/api/v1/remember` returned `504 Gateway Time-out`. Cognee service logs
+  showed raw graph extraction started (including one run with 61 nodes and 188
+  edges) before Bedrock embedding throttling caused the pipeline to fail.
+- 2026-06-05: Started follow-up branch
+  `codex/kg-cognee-background-ingest` to stop relying on synchronous Cognee
+  graph builds. Implemented `run_in_background=true` for Cognee graph indexing,
+  dataset-status polling, persisted indexing status metrics, and a cleaner
+  Knowledge Graph UI split between `Data` and `Definitions`.
+- 2026-06-05: Added Knowledge Graph `Definitions` mode that exposes approved
+  ontology entities, relationships, and external mappings from the same
+  `ontologyDefinitions` contract used by Admin Ontology. Mappings are shown as
+  reference vocabulary alignment, not as observed customer graph relationships.
+- 2026-06-05: Follow-up local verification passed:
+  `pnpm --filter @thinkwork/spaces codegen`;
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/cognee-client.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/spaces build`; and `git diff --check`.
+  The Spaces build completed with existing sourcemap and chunk-size warnings.
 - 2026-06-04: U9 live smoke then reached the deployed worker against dev thread
   `81e6f391-a2d1-45be-98e1-d4fbb7d78878` and failed with Cognee
   `/api/v1/remember` returning `401 Unauthorized`. Cognee's current
@@ -640,3 +671,48 @@ operation`. ECS logs showed the precise cause:
   `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts src/lib/knowledge-graph/wiki-source.test.ts src/lib/knowledge-graph/brain-source.test.ts src/__tests__/knowledge-graph-start-ingest.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/runs.test.ts src/lib/knowledge-graph/normalizer.test.ts src/lib/knowledge-graph/cognee-client.test.ts`;
   `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`;
   and `git diff --check`.
+- 2026-06-05: PR [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103)
+  passed required CI and was squash-merged into `main` at
+  `9965e8eb2ec6275995acb7b489aa1831ac32fcb5`. The branch was deleted and
+  `origin/main` was synced before the next follow-up.
+- 2026-06-05: Post-merge source smoke found the source-aware API deployed but
+  live Cognee indexing remained unreliable under synchronous request timing:
+  wiki/brain dry-runs passed, and live Bunkhouse-style source attempts showed
+  Cognee beginning graph extraction before returning timeout/throttling
+  failures. This established the next follow-up: use Cognee's background
+  indexing status endpoint before fetching dataset graphs, and make ontology
+  definitions visible separately from graph data.
+- 2026-06-05: Started follow-up branch
+  `codex/kg-cognee-background-ingest` in isolated worktree
+  `.Codex/worktrees/kg-cognee-background-ingest`. Implemented background
+  Cognee indexing for `remember`/`cognify`, captured pipeline/indexing status
+  metrics on runs, added ontology Definitions mode in Settings > Knowledge
+  Graph, and moved the `Data`/`Definitions` mode toggle to the upper-right
+  page-title action area after browser feedback.
+- 2026-06-05: Background-indexing follow-up local verification passed after
+  rebasing onto `origin/main` (`5ca22f6a`):
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/cognee-client.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
+  targeted Prettier check;
+  `git diff --check`;
+  and `curl -I http://localhost:5174/settings/knowledge-graph` returned
+  `200 OK`.
+- 2026-06-05: Opened follow-up PR
+  [#2105](https://github.com/thinkwork-ai/thinkwork/pull/2105). Initial CI
+  passed Supply Chain, Lint, Typecheck, and Test on head
+  `45984ce2a39b3916fe71969f3d77572b3a472b63`.
+- 2026-06-05: User browser validation showed the data view still looked like
+  an operator diagnostics screen and source actions were unclear. Simplified
+  the primary data toolbar to search, Table/Graph, and explicit `Ingest Wiki`
+  / `Ingest Brain` actions; removed the visible Type, Grounding, and
+  Provenance filters for now.
+- 2026-06-05: Pre-deploy live wiki and brain source smokes against current
+  `main` confirmed the data blocker this follow-up is meant to fix: both
+  deployed source runs reached the worker and then failed in Cognee
+  `/api/v1/remember` with `504 Gateway Time-out` before graph fetch. Example
+  run ids: wiki `1b09e78b-bd04-43a4-ad22-5db35e627249`, brain
+  `b499dd6f-7366-4e97-a0f5-1969a2e05f31`. The next live smoke must run after
+  #2105 deploys so the worker uses background indexing.

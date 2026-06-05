@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   fetchDatasetGraphMock,
   ingestDocumentMock,
+  waitForDatasetIndexingMock,
   loadApprovedOntologyExportMock,
   loadKnowledgeGraphIngestRunMock,
   loadThreadTranscriptMock,
@@ -12,6 +13,7 @@ const {
 } = vi.hoisted(() => ({
   fetchDatasetGraphMock: vi.fn(),
   ingestDocumentMock: vi.fn(),
+  waitForDatasetIndexingMock: vi.fn(),
   loadApprovedOntologyExportMock: vi.fn(),
   loadKnowledgeGraphIngestRunMock: vi.fn(),
   loadThreadTranscriptMock: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock("../lib/knowledge-graph/cognee-client.js", () => ({
   CogneeClient: vi.fn(() => ({
     fetchDatasetGraph: fetchDatasetGraphMock,
     ingestDocument: ingestDocumentMock,
+    waitForDatasetIndexing: waitForDatasetIndexingMock,
   })),
 }));
 
@@ -99,7 +102,26 @@ beforeEach(() => {
     datasetId: "11111111-1111-4111-8111-111111111111",
     datasetName: run.cognee_dataset_name,
     mode: "remember",
+    pipelineRunId: "22222222-2222-4222-8222-222222222222",
     raw: {},
+  });
+  waitForDatasetIndexingMock.mockReset().mockResolvedValue({
+    status: "completed",
+    rawStatus: "DATASET_PROCESSING_COMPLETED",
+    attempts: 2,
+    elapsedMs: 5000,
+    samples: [
+      {
+        status: "running",
+        rawStatus: "DATASET_PROCESSING_STARTED",
+        raw: {},
+      },
+      {
+        status: "completed",
+        rawStatus: "DATASET_PROCESSING_COMPLETED",
+        raw: {},
+      },
+    ],
   });
   fetchDatasetGraphMock.mockReset().mockResolvedValue({
     nodes: [{ id: "acme", label: "Acme", type: "Company", properties: {} }],
@@ -134,6 +156,9 @@ describe("knowledge-graph-thread-ingest handler", () => {
         ontology,
       }),
     );
+    expect(waitForDatasetIndexingMock).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+    );
     expect(replaceKnowledgeGraphSnapshotMock).toHaveBeenCalledWith(
       expect.objectContaining({
         db,
@@ -141,6 +166,13 @@ describe("knowledge-graph-thread-ingest handler", () => {
         cogneeDatasetId: "11111111-1111-4111-8111-111111111111",
         ingestMode: "remember",
         ontologyMechanism: "cognee_owl_ontology",
+        sourceMetrics: expect.objectContaining({
+          cogneePipelineRunId: "22222222-2222-4222-8222-222222222222",
+          cogneeIndexStatus: "completed",
+          cogneeIndexRawStatus: "DATASET_PROCESSING_COMPLETED",
+          cogneeIndexAttempts: 2,
+          cogneeIndexElapsedMs: 5000,
+        }),
       }),
     );
   });
@@ -150,6 +182,7 @@ describe("knowledge-graph-thread-ingest handler", () => {
       datasetId: null,
       datasetName: run.cognee_dataset_name,
       mode: "remember",
+      pipelineRunId: null,
       raw: {},
     });
 
