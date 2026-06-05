@@ -40,6 +40,9 @@ function run(overrides: Record<string, unknown> = {}) {
     id: "run-1",
     tenant_id: "tenant-1",
     thread_id: "thread-1",
+    source_kind: "thread",
+    source_ref: "thread-1",
+    source_label: null,
     requested_by_user_id: "user-1",
     status: "queued",
     trigger: "manual",
@@ -142,6 +145,8 @@ describe("startKnowledgeGraphThreadIngest", () => {
       runId: "run-1",
       tenantId: "tenant-1",
       threadId: "thread-1",
+      sourceKind: "thread",
+      sourceRef: "thread-1",
       requestedByUserId: "user-1",
     });
     expect(result).toEqual(

@@ -16,18 +16,27 @@ export async function loadKnowledgeGraphIngestRun(args: {
   db: Database;
   runId: string;
   tenantId: string;
-  threadId: string;
+  threadId?: string | null;
+  sourceKind?: string | null;
+  sourceRef?: string | null;
 }): Promise<KnowledgeGraphIngestRunRow | null> {
+  const predicates = [
+    eq(knowledgeGraphIngestRuns.id, args.runId),
+    eq(knowledgeGraphIngestRuns.tenant_id, args.tenantId),
+  ];
+  if (args.threadId) {
+    predicates.push(eq(knowledgeGraphIngestRuns.thread_id, args.threadId));
+  }
+  if (args.sourceKind) {
+    predicates.push(eq(knowledgeGraphIngestRuns.source_kind, args.sourceKind));
+  }
+  if (args.sourceRef) {
+    predicates.push(eq(knowledgeGraphIngestRuns.source_ref, args.sourceRef));
+  }
   const [row] = await args.db
     .select()
     .from(knowledgeGraphIngestRuns)
-    .where(
-      and(
-        eq(knowledgeGraphIngestRuns.id, args.runId),
-        eq(knowledgeGraphIngestRuns.tenant_id, args.tenantId),
-        eq(knowledgeGraphIngestRuns.thread_id, args.threadId),
-      ),
-    )
+    .where(and(...predicates))
     .limit(1);
   return (row as KnowledgeGraphIngestRunRow | undefined) ?? null;
 }
@@ -81,6 +90,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
   startedAt: Date;
   ingestMode: string;
   ontologyMechanism: string;
+  sourceMetrics?: Record<string, unknown>;
 }): Promise<void> {
   const finishedAt = new Date();
   await args.db.transaction(async (tx) => {
@@ -89,7 +99,8 @@ export async function replaceKnowledgeGraphSnapshot(args: {
       .where(
         and(
           eq(knowledgeGraphEvidence.tenant_id, args.run.tenant_id),
-          eq(knowledgeGraphEvidence.thread_id, args.run.thread_id),
+          eq(knowledgeGraphEvidence.source_kind, args.run.source_kind),
+          eq(knowledgeGraphEvidence.source_ref, args.run.source_ref),
         ),
       );
     await tx
@@ -97,7 +108,8 @@ export async function replaceKnowledgeGraphSnapshot(args: {
       .where(
         and(
           eq(knowledgeGraphRelationships.tenant_id, args.run.tenant_id),
-          eq(knowledgeGraphRelationships.thread_id, args.run.thread_id),
+          eq(knowledgeGraphRelationships.source_kind, args.run.source_kind),
+          eq(knowledgeGraphRelationships.source_ref, args.run.source_ref),
         ),
       );
     await tx
@@ -105,7 +117,8 @@ export async function replaceKnowledgeGraphSnapshot(args: {
       .where(
         and(
           eq(knowledgeGraphEntities.tenant_id, args.run.tenant_id),
-          eq(knowledgeGraphEntities.thread_id, args.run.thread_id),
+          eq(knowledgeGraphEntities.source_kind, args.run.source_kind),
+          eq(knowledgeGraphEntities.source_ref, args.run.source_ref),
         ),
       );
 
@@ -116,6 +129,8 @@ export async function replaceKnowledgeGraphSnapshot(args: {
             args.snapshot.entities.map((entity) => ({
               tenant_id: args.run.tenant_id,
               thread_id: args.run.thread_id,
+              source_kind: args.run.source_kind,
+              source_ref: args.run.source_ref,
               ingest_run_id: args.run.id,
               cognee_node_id: entity.cogneeNodeId,
               label: entity.label,
@@ -156,6 +171,8 @@ export async function replaceKnowledgeGraphSnapshot(args: {
             args.snapshot.relationships.map((relationship) => ({
               tenant_id: args.run.tenant_id,
               thread_id: args.run.thread_id,
+              source_kind: args.run.source_kind,
+              source_ref: args.run.source_ref,
               ingest_run_id: args.run.id,
               cognee_edge_id: relationship.cogneeEdgeId,
               source_entity_id: entityIdByTempId.get(
@@ -230,6 +247,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
         evidence_count: evidenceRows.length,
         diagnostic_count: diagnosticCount,
         metrics: {
+          ...(args.sourceMetrics ?? {}),
           ...args.snapshot.metrics,
           ingestMode: args.ingestMode,
           ontologyMechanism: args.ontologyMechanism,
@@ -249,6 +267,8 @@ function toEvidenceRow(args: {
   return {
     tenant_id: args.run.tenant_id,
     thread_id: args.run.thread_id,
+    source_kind: args.run.source_kind,
+    source_ref: args.run.source_ref,
     ingest_run_id: args.run.id,
     entity_id: args.evidence.entityTempId
       ? args.entityIdByTempId.get(args.evidence.entityTempId)
@@ -263,8 +283,8 @@ function toEvidenceRow(args: {
     snippet: args.evidence.snippet,
     char_start: args.evidence.charStart,
     char_end: args.evidence.charEnd,
-    source_kind: args.evidence.sourceKind,
-    source_ref: args.evidence.sourceRef,
+    evidence_source_kind: args.evidence.sourceKind,
+    evidence_source_ref: args.evidence.sourceRef,
     metadata: args.evidence.metadata,
     observed_at: args.evidence.observedAt,
   };

@@ -7,6 +7,12 @@ enum KnowledgeGraphIngestStatus {
   STALE_NOOP
 }
 
+enum KnowledgeGraphSourceKind {
+  THREAD
+  WIKI
+  BRAIN
+}
+
 enum KnowledgeGraphGroundingStatus {
   GROUNDED
   UNAPPROVED_TYPE
@@ -23,6 +29,10 @@ enum KnowledgeGraphProvenanceStatus {
 
 enum KnowledgeGraphEvidenceSourceKind {
   THREAD_MESSAGE
+  WIKI_PAGE
+  WIKI_SECTION
+  BRAIN_PAGE
+  BRAIN_SECTION
   COGNEE_PAYLOAD
   NORMALIZER
 }
@@ -30,7 +40,10 @@ enum KnowledgeGraphEvidenceSourceKind {
 type KnowledgeGraphIngestRun {
   id: ID!
   tenantId: ID!
-  threadId: ID!
+  threadId: ID
+  sourceKind: KnowledgeGraphSourceKind!
+  sourceRef: String!
+  sourceLabel: String
   requestedByUserId: ID
   status: KnowledgeGraphIngestStatus!
   trigger: String!
@@ -55,7 +68,9 @@ type KnowledgeGraphIngestRun {
 type KnowledgeGraphEntity {
   id: ID!
   tenantId: ID!
-  threadId: ID!
+  threadId: ID
+  sourceKind: KnowledgeGraphSourceKind!
+  sourceRef: String!
   ingestRunId: ID!
   cogneeNodeId: String!
   label: String!
@@ -81,7 +96,9 @@ type KnowledgeGraphEntity {
 type KnowledgeGraphRelationship {
   id: ID!
   tenantId: ID!
-  threadId: ID!
+  threadId: ID
+  sourceKind: KnowledgeGraphSourceKind!
+  sourceRef: String!
   ingestRunId: ID!
   cogneeEdgeId: String
   sourceEntityId: ID!
@@ -104,7 +121,9 @@ type KnowledgeGraphRelationship {
 type KnowledgeGraphEvidence {
   id: ID!
   tenantId: ID!
-  threadId: ID!
+  threadId: ID
+  sourceKind: KnowledgeGraphSourceKind!
+  sourceRef: String!
   ingestRunId: ID!
   entityId: ID
   relationshipId: ID
@@ -115,8 +134,8 @@ type KnowledgeGraphEvidence {
   snippet: String!
   charStart: Int
   charEnd: Int
-  sourceKind: KnowledgeGraphEvidenceSourceKind!
-  sourceRef: String
+  evidenceSourceKind: KnowledgeGraphEvidenceSourceKind!
+  evidenceSourceRef: String
   metadata: AWSJSON!
   observedAt: AWSDateTime
   createdAt: AWSDateTime!
@@ -172,6 +191,18 @@ input StartKnowledgeGraphThreadIngestInput {
   metadata: AWSJSON
 }
 
+input StartKnowledgeGraphIngestInput {
+  tenantId: ID
+  sourceKind: KnowledgeGraphSourceKind!
+  threadId: ID
+  sourceRef: String
+  sourceLabel: String
+  ownerUserId: ID
+  pageIds: [ID!]
+  force: Boolean = false
+  metadata: AWSJSON
+}
+
 extend type Query {
   knowledgeGraphThreadCandidates(
     tenantId: ID
@@ -182,11 +213,15 @@ extend type Query {
   knowledgeGraphIngestRuns(
     tenantId: ID
     threadId: ID
+    sourceKind: KnowledgeGraphSourceKind
+    sourceRef: String
     limit: Int = 25
   ): [KnowledgeGraphIngestRun!]!
   knowledgeGraphEntities(
     tenantId: ID
     threadId: ID
+    sourceKind: KnowledgeGraphSourceKind
+    sourceRef: String
     runId: ID
     search: String
     ontologyType: String
@@ -197,6 +232,8 @@ extend type Query {
   knowledgeGraphGraph(
     tenantId: ID
     threadId: ID
+    sourceKind: KnowledgeGraphSourceKind
+    sourceRef: String
     runId: ID
     search: String
     ontologyType: String
@@ -207,6 +244,9 @@ extend type Query {
 }
 
 extend type Mutation {
+  startKnowledgeGraphIngest(
+    input: StartKnowledgeGraphIngestInput!
+  ): KnowledgeGraphIngestRun!
   startKnowledgeGraphThreadIngest(
     input: StartKnowledgeGraphThreadIngestInput!
   ): KnowledgeGraphIngestRun!

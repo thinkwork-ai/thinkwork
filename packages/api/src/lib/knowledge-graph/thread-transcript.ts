@@ -10,6 +10,14 @@ export interface ThreadTranscriptMessage {
   text: string;
   createdAt: Date;
   ordinal: number;
+  evidenceSourceKind?:
+    | "thread_message"
+    | "wiki_page"
+    | "wiki_section"
+    | "brain_page"
+    | "brain_section";
+  evidenceSourceRef?: string | null;
+  evidenceMetadata?: Record<string, unknown>;
 }
 
 interface MessageRow {

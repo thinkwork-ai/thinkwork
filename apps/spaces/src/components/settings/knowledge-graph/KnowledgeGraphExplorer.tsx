@@ -1,7 +1,15 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, RefreshCw, Search, X } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Brain,
+  Loader2,
+  RefreshCw,
+  Search,
+  X,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Badge,
@@ -24,11 +32,14 @@ import {
 import {
   KnowledgeGraphGroundingStatus,
   KnowledgeGraphProvenanceStatus,
+  KnowledgeGraphSourceKind,
   type SettingsKnowledgeGraphEntitiesQuery as SettingsKnowledgeGraphEntitiesData,
   type SettingsKnowledgeGraphThreadCandidatesQuery as SettingsKnowledgeGraphThreadCandidatesData,
 } from "@/gql/graphql";
 import {
   SettingsKnowledgeGraphEntitiesQuery,
+  SettingsKnowledgeGraphSourceIngestCapabilityQuery,
+  SettingsStartKnowledgeGraphIngestMutation,
   SettingsKnowledgeGraphThreadCandidatesQuery,
   SettingsStartKnowledgeGraphThreadIngestMutation,
 } from "@/lib/settings-queries";
@@ -161,8 +172,19 @@ export function KnowledgeGraphExplorer({
     pause: !effectiveTenantId || !selectedRun,
   });
 
+  const [sourceCapabilityResult] = useQuery({
+    query: SettingsKnowledgeGraphSourceIngestCapabilityQuery,
+    pause: !effectiveTenantId,
+  });
+  const sourceIngestSupported =
+    sourceCapabilityResult.data?.__type?.name ===
+    "StartKnowledgeGraphIngestInput";
+
   const [ingestState, startIngest] = useMutation(
     SettingsStartKnowledgeGraphThreadIngestMutation,
+  );
+  const [sourceIngestState, startSourceIngest] = useMutation(
+    SettingsStartKnowledgeGraphIngestMutation,
   );
 
   const rows = entityResult.data?.knowledgeGraphEntities ?? [];
@@ -271,6 +293,37 @@ export function KnowledgeGraphExplorer({
 
     toast.success("Knowledge Graph ingest queued");
     const run = result.data?.startKnowledgeGraphThreadIngest;
+    if (run) {
+      setSelectedRun(run as IngestRun);
+    }
+    refetchEntities({ requestPolicy: "network-only" });
+    refetchThreads({ requestPolicy: "network-only" });
+    graphRef.current?.refetch();
+  }
+
+  async function ingestSource(sourceKind: KnowledgeGraphSourceKind) {
+    if (!effectiveTenantId) return;
+    if (!sourceIngestSupported) {
+      toast.warning(
+        "Wiki and Brain ingest will be available after API deploy.",
+      );
+      return;
+    }
+    const result = await startSourceIngest({
+      input: {
+        tenantId: effectiveTenantId,
+        sourceKind,
+        force: true,
+      },
+    });
+    if (result.error) {
+      toast.error(
+        `Could not start ${sourceKind.toLowerCase()} ingest: ${result.error.message}`,
+      );
+      return;
+    }
+    toast.success(`${sourceKind.toLowerCase()} Knowledge Graph ingest queued`);
+    const run = result.data?.startKnowledgeGraphIngest;
     if (run) {
       setSelectedRun(run as IngestRun);
     }
@@ -394,6 +447,46 @@ export function KnowledgeGraphExplorer({
             Graph
           </ToggleGroupItem>
         </ToggleGroup>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={sourceIngestState.fetching || !sourceIngestSupported}
+          title={
+            sourceIngestSupported
+              ? "Ingest wiki source"
+              : "Available after API deploy"
+          }
+          onClick={() => void ingestSource(KnowledgeGraphSourceKind.Wiki)}
+        >
+          {sourceIngestState.fetching ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <BookOpen className="size-4" />
+          )}
+          Wiki
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={sourceIngestState.fetching || !sourceIngestSupported}
+          title={
+            sourceIngestSupported
+              ? "Ingest Company Brain source"
+              : "Available after API deploy"
+          }
+          onClick={() => void ingestSource(KnowledgeGraphSourceKind.Brain)}
+        >
+          {sourceIngestState.fetching ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Brain className="size-4" />
+          )}
+          Brain
+        </Button>
       </div>
 
       <div className="min-h-0 flex-1">

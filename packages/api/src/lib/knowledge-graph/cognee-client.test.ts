@@ -92,7 +92,7 @@ describe("CogneeClient", () => {
       "run_in_background",
     ]);
     expect((rememberBody as FormData).getAll("node_set")).toEqual([
-      "thinkwork_threads",
+      "thinkwork_thread",
       "tenant_tenant_1",
       "thread_thread_1",
     ]);

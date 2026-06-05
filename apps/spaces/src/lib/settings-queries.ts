@@ -76,6 +76,14 @@ export const SettingsKnowledgeGraphHealthCheckQuery = graphql(`
   }
 `);
 
+export const SettingsKnowledgeGraphSourceIngestCapabilityQuery = graphql(`
+  query SettingsKnowledgeGraphSourceIngestCapability {
+    __type(name: "StartKnowledgeGraphIngestInput") {
+      name
+    }
+  }
+`);
+
 export const SettingsKnowledgeGraphThreadCandidatesQuery = graphql(`
   query SettingsKnowledgeGraphThreadCandidates(
     $tenantId: ID!
@@ -224,8 +232,6 @@ export const SettingsKnowledgeGraphEntityQuery = graphql(`
           messageRole
           messageCreatedAt
           speakerLabel
-          sourceKind
-          sourceRef
         }
       }
       evidence {
@@ -235,9 +241,33 @@ export const SettingsKnowledgeGraphEntityQuery = graphql(`
         messageRole
         messageCreatedAt
         speakerLabel
-        sourceKind
-        sourceRef
       }
+    }
+  }
+`);
+
+export const SettingsStartKnowledgeGraphIngestMutation = graphql(`
+  mutation SettingsStartKnowledgeGraphIngest(
+    $input: StartKnowledgeGraphIngestInput!
+  ) {
+    startKnowledgeGraphIngest(input: $input) {
+      id
+      status
+      threadId
+      sourceKind
+      sourceRef
+      sourceLabel
+      entityCount
+      relationshipCount
+      evidenceCount
+      diagnosticCount
+      messageCount
+      metrics
+      durationMs
+      error
+      createdAt
+      startedAt
+      finishedAt
     }
   }
 `);

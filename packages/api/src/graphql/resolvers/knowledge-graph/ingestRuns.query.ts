@@ -6,6 +6,7 @@ import {
 } from "./auth.js";
 import {
   serializeIngestRun,
+  toDbEnum,
   type KnowledgeGraphIngestRunRow,
 } from "./mappers.js";
 
@@ -14,6 +15,8 @@ export async function knowledgeGraphIngestRuns(
   args: {
     tenantId?: string | null;
     threadId?: string | null;
+    sourceKind?: string | null;
+    sourceRef?: string | null;
     limit?: number | null;
   },
   ctx: GraphQLContext,
@@ -34,11 +37,20 @@ export async function knowledgeGraphIngestRuns(
   const threadFilter = args.threadId
     ? sql`AND thread_id = ${args.threadId}`
     : sql``;
+  const sourceKind = toDbEnum(args.sourceKind);
+  const sourceKindFilter = sourceKind
+    ? sql`AND source_kind = ${sourceKind}`
+    : sql``;
+  const sourceRefFilter = args.sourceRef
+    ? sql`AND source_ref = ${args.sourceRef}`
+    : sql``;
   const result = await ctx.db.execute(sql`
     SELECT *
       FROM knowledge_graph_ingest_runs
      WHERE tenant_id = ${scope.tenantId}
        ${threadFilter}
+       ${sourceKindFilter}
+       ${sourceRefFilter}
      ORDER BY created_at DESC
      LIMIT ${limit}
   `);

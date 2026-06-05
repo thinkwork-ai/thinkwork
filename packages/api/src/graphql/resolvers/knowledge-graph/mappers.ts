@@ -3,6 +3,7 @@ import type {
   KnowledgeGraphGroundingStatus,
   KnowledgeGraphIngestStatus,
   KnowledgeGraphProvenanceStatus,
+  KnowledgeGraphSourceKind,
 } from "@thinkwork/database-pg/schema";
 
 type Dateish = Date | string | null | undefined;
@@ -10,7 +11,10 @@ type Dateish = Date | string | null | undefined;
 export interface KnowledgeGraphIngestRunRow {
   id: string;
   tenant_id: string;
-  thread_id: string;
+  thread_id: string | null;
+  source_kind: KnowledgeGraphSourceKind | string;
+  source_ref: string;
+  source_label: string | null;
   requested_by_user_id: string | null;
   status: KnowledgeGraphIngestStatus | string;
   trigger: string;
@@ -35,7 +39,9 @@ export interface KnowledgeGraphIngestRunRow {
 export interface KnowledgeGraphEntityRow {
   id: string;
   tenant_id: string;
-  thread_id: string;
+  thread_id: string | null;
+  source_kind: KnowledgeGraphSourceKind | string;
+  source_ref: string;
   ingest_run_id: string;
   cognee_node_id: string;
   label: string;
@@ -59,7 +65,9 @@ export interface KnowledgeGraphEntityRow {
 export interface KnowledgeGraphRelationshipRow {
   id: string;
   tenant_id: string;
-  thread_id: string;
+  thread_id: string | null;
+  source_kind: KnowledgeGraphSourceKind | string;
+  source_ref: string;
   ingest_run_id: string;
   cognee_edge_id: string | null;
   source_entity_id: string;
@@ -81,7 +89,9 @@ export interface KnowledgeGraphRelationshipRow {
 export interface KnowledgeGraphEvidenceRow {
   id: string;
   tenant_id: string;
-  thread_id: string;
+  thread_id: string | null;
+  source_kind: KnowledgeGraphSourceKind | string;
+  source_ref: string;
   ingest_run_id: string;
   entity_id: string | null;
   relationship_id: string | null;
@@ -92,8 +102,8 @@ export interface KnowledgeGraphEvidenceRow {
   snippet: string;
   char_start: number | null;
   char_end: number | null;
-  source_kind: KnowledgeGraphEvidenceSourceKind | string;
-  source_ref: string | null;
+  evidence_source_kind: KnowledgeGraphEvidenceSourceKind | string;
+  evidence_source_ref: string | null;
   metadata: unknown;
   observed_at: Dateish;
   created_at: Dateish;
@@ -104,6 +114,9 @@ export function serializeIngestRun(row: KnowledgeGraphIngestRunRow) {
     id: row.id,
     tenantId: row.tenant_id,
     threadId: row.thread_id,
+    sourceKind: toGraphqlEnum(row.source_kind),
+    sourceRef: row.source_ref,
+    sourceLabel: row.source_label,
     requestedByUserId: row.requested_by_user_id,
     status: toGraphqlEnum(row.status),
     trigger: row.trigger,
@@ -134,6 +147,8 @@ export function serializeEntity(
     id: row.id,
     tenantId: row.tenant_id,
     threadId: row.thread_id,
+    sourceKind: toGraphqlEnum(row.source_kind),
+    sourceRef: row.source_ref,
     ingestRunId: row.ingest_run_id,
     cogneeNodeId: row.cognee_node_id,
     label: row.label,
@@ -165,6 +180,8 @@ export function serializeRelationship(
     id: row.id,
     tenantId: row.tenant_id,
     threadId: row.thread_id,
+    sourceKind: toGraphqlEnum(row.source_kind),
+    sourceRef: row.source_ref,
     ingestRunId: row.ingest_run_id,
     cogneeEdgeId: row.cognee_edge_id,
     sourceEntityId: row.source_entity_id,
@@ -193,6 +210,8 @@ export function serializeEvidence(row: KnowledgeGraphEvidenceRow) {
     id: row.id,
     tenantId: row.tenant_id,
     threadId: row.thread_id,
+    sourceKind: toGraphqlEnum(row.source_kind),
+    sourceRef: row.source_ref,
     ingestRunId: row.ingest_run_id,
     entityId: row.entity_id,
     relationshipId: row.relationship_id,
@@ -203,8 +222,8 @@ export function serializeEvidence(row: KnowledgeGraphEvidenceRow) {
     snippet: row.snippet,
     charStart: row.char_start,
     charEnd: row.char_end,
-    sourceKind: toGraphqlEnum(row.source_kind),
-    sourceRef: row.source_ref,
+    evidenceSourceKind: toGraphqlEnum(row.evidence_source_kind),
+    evidenceSourceRef: row.evidence_source_ref,
     metadata: jsonScalar(row.metadata),
     observedAt: toIso(row.observed_at),
     createdAt: toIso(row.created_at),

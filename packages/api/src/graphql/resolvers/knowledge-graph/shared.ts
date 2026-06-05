@@ -17,6 +17,8 @@ const MAX_ENTITY_LIMIT = 500;
 export interface EntityFilterArgs {
   tenantId?: string | null;
   threadId?: string | null;
+  sourceKind?: string | null;
+  sourceRef?: string | null;
   runId?: string | null;
   search?: string | null;
   ontologyType?: string | null;
@@ -47,6 +49,13 @@ export async function loadFilteredEntities(
   ];
   if (args.threadId) {
     conditions.push(sql`thread_id = ${args.threadId}`);
+  }
+  const sourceKind = toDbEnum(args.sourceKind);
+  if (sourceKind) {
+    conditions.push(sql`source_kind = ${sourceKind}`);
+  }
+  if (args.sourceRef) {
+    conditions.push(sql`source_ref = ${args.sourceRef}`);
   }
   if (args.runId) {
     conditions.push(sql`ingest_run_id = ${args.runId}`);

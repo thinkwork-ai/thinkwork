@@ -1,7 +1,9 @@
 export interface KnowledgeGraphThreadIngestWorkerPayload {
   runId: string;
   tenantId: string;
-  threadId: string;
+  threadId?: string;
+  sourceKind?: "thread" | "wiki" | "brain";
+  sourceRef?: string;
   requestedByUserId: string | null;
 }
 
@@ -66,8 +68,9 @@ async function resolveLambdaDeps(deps: InvokeWorkerDeps) {
   if (deps.lambdaClient && deps.InvokeCommand) {
     return { client: deps.lambdaClient, InvokeCommand: deps.InvokeCommand };
   }
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   return {
     client: deps.lambdaClient ?? new LambdaClient({}),
     InvokeCommand: deps.InvokeCommand ?? InvokeCommand,
