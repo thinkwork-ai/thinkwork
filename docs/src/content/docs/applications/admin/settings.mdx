@@ -3,7 +3,7 @@ title: Admin — Settings
 description: Tenant configuration, plan information, deployment status, and copyable resource URLs. Most of the page is read-only; configuration that isn't a toggle lives in Terraform.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 The Settings page is the canonical read-out of the tenant's configuration and the underlying deployment. Most of it is **read-only** — configuration lives in Terraform and the admin app reflects what's actually deployed, rather than offering a separate configuration store that could drift from the real state.
 
@@ -14,16 +14,21 @@ The Settings page is the canonical read-out of the tenant's configuration and th
 
 The page is a stack of four cards: Organization, Configuration, Deployment, and Resources & URLs.
 
+Optional infrastructure toggles such as Cognee and Twenty CRM live in
+[Managed Applications](/applications/admin/managed-applications/) inside
+Spaces/Desktop Settings -> General. The Settings page remains a read-only
+deployment readout.
+
 ## Organization
 
-| Field | Notes |
-|---|---|
-| Name | Tenant display name |
-| Slug | URL-safe identifier |
-| Plan | Subscription tier (if applicable) |
-| Issue prefix | Prefix for tenant-scoped sequential ids |
+| Field         | Notes                                                                |
+| ------------- | -------------------------------------------------------------------- |
+| Name          | Tenant display name                                                  |
+| Slug          | URL-safe identifier                                                  |
+| Plan          | Subscription tier (if applicable)                                    |
+| Issue prefix  | Prefix for tenant-scoped sequential ids                              |
 | Issue counter | Monotonic counter used for thread numbers and similar sequential ids |
-| Created at | When the tenant was first provisioned |
+| Created at    | When the tenant was first provisioned                                |
 
 All of these are read-only. Renaming a tenant or changing its slug is a Terraform + CLI operation, not a UI operation.
 
@@ -31,13 +36,13 @@ All of these are read-only. Renaming a tenant or changing its slug is a Terrafor
 
 This section is conditional — it only renders if the tenant row's `settings` field is populated. When present, it carries tenant-wide defaults:
 
-| Field | Notes |
-|---|---|
-| Default model | Falls back to this when an agent template doesn't specify its own |
-| Monthly budget | Tenant-wide spend cap for month-to-date |
+| Field              | Notes                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| Default model      | Falls back to this when an agent template doesn't specify its own                                   |
+| Monthly budget     | Tenant-wide spend cap for month-to-date                                                             |
 | Auto-close threads | After N minutes of inactivity, threads auto-close (prevents forever-open threads from accumulating) |
-| Max agents | Hard cap on the number of agents the tenant can have |
-| Feature flags | JSON object with any tenant-level feature flags (e.g. `enable_hindsight`, `enable_voice_dictation`) |
+| Max agents         | Hard cap on the number of agents the tenant can have                                                |
+| Feature flags      | JSON object with any tenant-level feature flags (e.g. `enable_hindsight`, `enable_voice_dictation`) |
 
 Like Organization, this is read-only. Changes go through Terraform.
 
@@ -45,18 +50,21 @@ Like Organization, this is read-only. Changes go through Terraform.
 
 The Deployment card is where operators check "what's actually deployed and is it healthy?"
 
-| Field | Notes |
-|---|---|
-| Stage | `dev`, `staging`, or `prod` |
-| Source | Terraform module version or internal deployment marker |
-| Region | AWS region |
-| Account ID | AWS account id |
-| AgentCore status | Managed / Disabled / Self-hosted — with a status badge |
-| Managed memory | Enabled / Disabled |
-| Hindsight | Enabled / Disabled — the optional long-term memory add-on |
+| Field            | Notes                                                     |
+| ---------------- | --------------------------------------------------------- |
+| Stage            | `dev`, `staging`, or `prod`                               |
+| Source           | Terraform module version or internal deployment marker    |
+| Region           | AWS region                                                |
+| Account ID       | AWS account id                                            |
+| AgentCore status | Managed / Disabled / Self-hosted — with a status badge    |
+| Managed memory   | Enabled / Disabled                                        |
+| Hindsight        | Enabled / Disabled — the optional long-term memory add-on |
 
 <Aside type="note">
-`DeploymentStatusQuery` typically reads from cached deployment metadata (stack exports or a `deployment_metadata` table), not from a live `describe-stack` call. If the deployment has shifted in ways the admin doesn't know about, the Settings page can lag reality until the cache is refreshed.
+  `DeploymentStatusQuery` typically reads from cached deployment metadata (stack
+  exports or a `deployment_metadata` table), not from a live `describe-stack`
+  call. If the deployment has shifted in ways the admin doesn't know about, the
+  Settings page can lag reality until the cache is refreshed.
 </Aside>
 
 ## Resources & URLs
@@ -77,10 +85,10 @@ Every row has a copy button that yanks the value to the clipboard. The rows are 
 
 ## GraphQL queries
 
-| Query | Purpose |
-|---|---|
-| `TenantDetailQuery($id)` | Tenant identity + settings |
-| `DeploymentStatusQuery` | Deployment metadata and service health |
+| Query                    | Purpose                                |
+| ------------------------ | -------------------------------------- |
+| `TenantDetailQuery($id)` | Tenant identity + settings             |
+| `DeploymentStatusQuery`  | Deployment metadata and service health |
 
 Both queries run on page mount and are cached by urql. Refreshing the page re-fetches.
 
@@ -92,19 +100,19 @@ Both queries run on page mount and are cached by urql. Refreshing the page re-fe
 
 ## What's editable vs what isn't
 
-| Field | Editable in admin? |
-|---|---|
-| Tenant name | No — Terraform |
-| Slug | No — Terraform |
-| Plan | No — billing system |
-| Issue counter | No — backend-managed |
-| Default model | No — Terraform or tenant-config API |
-| Monthly budget | No — Terraform |
-| Auto-close threads | No — Terraform |
-| Max agents | No — Terraform |
-| Feature flags | No — Terraform |
-| Deployment stage / region | No — Terraform + redeploy |
-| Resource URLs | No — derived from deployment |
+| Field                     | Editable in admin?                  |
+| ------------------------- | ----------------------------------- |
+| Tenant name               | No — Terraform                      |
+| Slug                      | No — Terraform                      |
+| Plan                      | No — billing system                 |
+| Issue counter             | No — backend-managed                |
+| Default model             | No — Terraform or tenant-config API |
+| Monthly budget            | No — Terraform                      |
+| Auto-close threads        | No — Terraform                      |
+| Max agents                | No — Terraform                      |
+| Feature flags             | No — Terraform                      |
+| Deployment stage / region | No — Terraform + redeploy           |
+| Resource URLs             | No — derived from deployment        |
 
 The deliberately heavy use of "No — Terraform" is the design philosophy: tenant configuration is code, code is reviewed, and the admin app reflects the reviewed state. Ad-hoc runtime configuration drift is actively avoided.
 
@@ -141,6 +149,7 @@ The deliberately heavy use of "No — Terraform" is the design philosophy: tenan
 ## Related pages
 
 - [Humans](/applications/admin/humans/) — tenant member management (the mutable counterpart to this page)
+- [Managed Applications](/applications/admin/managed-applications/) — optional Cognee and Twenty CRM deployment controls
 - [Deploy Configuration](/deploy/configuration/) — the Terraform reference for every field on this page
 - [CLI](/applications/cli/) — the tool used to change Terraform-backed settings and redeploy
 - [Architecture](/architecture/) — how the tenant fits into the three-tier deployment model

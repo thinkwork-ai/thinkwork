@@ -29,6 +29,7 @@ This kit fills the gap.
 | `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                               |
 | `spaces-runbook-smoke.mjs`                | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
 | `knowledge-graph-thread-ingest-smoke.mjs` | Cognee Knowledge Graph smoke. Dry-run reports required live-mode configuration; live mode starts a manual thread ingest, polls the run, and verifies table/graph/detail GraphQL reads from the normalized snapshot.                         |
+| `twenty-managed-app-smoke.mjs`            | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                    |
 
 ## Quick start — run the full smoke suite
 
@@ -70,6 +71,32 @@ All shell scripts are `bash` (tested on macOS 3.x / Linux 5.x). Require
 script resolves the API URL via `terraform output -raw api_endpoint`
 from `terraform/examples/greenfield`, so `terraform init` must have
 been run there first (usually the deploy workflow handles this).
+
+## Twenty managed-app smoke
+
+The Twenty CRM smoke is read-only and dry-run by default:
+
+```sh
+node scripts/smoke/twenty-managed-app-smoke.mjs
+
+SMOKE_ENABLE_TWENTY_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  node scripts/smoke/twenty-managed-app-smoke.mjs
+```
+
+Live mode reads `terraform/examples/greenfield` outputs unless
+`SMOKE_TERRAFORM_DIR` points elsewhere. `SMOKE_TWENTY_URL` can supply the
+public URL directly when Terraform outputs are unavailable. GraphQL deployment
+status and managed-app health are checked when API credentials are available
+from `apps/spaces/.env` or equivalent `VITE_GRAPHQL_HTTP_URL` plus
+`API_AUTH_SECRET`/`THINKWORK_API_SECRET` or an API key.
+
+Passing live mode means:
+
+- unprovisioned Twenty stages skip with an explicit message;
+- parked Twenty stages skip with an explicit retained-runtime message;
+- running Twenty stages expose an HTTPS URL;
+- the public `https://.../healthz` endpoint returns a successful response.
 
 ## Knowledge Graph thread ingest smoke
 

@@ -45,6 +45,8 @@ Desktop is for end users inside a ThinkWork tenant who want Spaces as their prim
 
 Operators still configure tenant-level settings in the [Admin Web App](/applications/admin/). Personal mobile workflows, push notifications, and user-scoped integration setup still live in the [Mobile App](/applications/mobile/).
 
+Operator-only Spaces Settings also include [Managed Applications](/applications/admin/managed-applications/), where optional deployed applications such as Cognee Knowledge Graph and Twenty CRM can be queued through the normal deploy workflow. App-specific settings pages appear only after deployment status reports that runtime as running.
+
 ## Thread notifications
 
 Desktop raises a native macOS notification when a new message lands in a thread you participate in — including when a teammate **`@`-mentions you into a brand-new thread** you haven't opened yet. Notifications fire while the app is running or in the background, and are a desktop-only feature (the web and mobile apps don't show them).
@@ -152,6 +154,7 @@ Desktop uses separate app identities for stable, canary, and development builds.
 - **macOS is the supported Desktop target today.** The app architecture is Electron-based, but public install guidance should stay macOS-first until Windows or Linux release artifacts are intentionally shipped.
 - **Desktop follows Spaces releases.** A web-only Spaces deployment does not update the packaged app until a Desktop build is released.
 - **No local-only backend.** Desktop talks to the same deployed ThinkWork stack as Web Spaces and Mobile.
+- **Managed Applications are operator-only.** Cognee and CRM settings are hidden from members and remain hidden until deployment status reports the managed runtime as enabled.
 
 ## Relationship to other apps
 
@@ -166,6 +169,7 @@ Desktop uses separate app identities for stable, canary, and development builds.
 
 - [Spaces Guide](/guides/spaces/) - practical guide to working in Spaces
 - [Applications](/applications/) - the full map of ThinkWork application surfaces
+- [Managed Applications](/applications/admin/managed-applications/) - optional app deployment controls in Spaces Settings
 - [Mobile App](/applications/mobile/) - the end-user mobile client
 - [Admin Web App](/applications/admin/) - the operator-facing control plane
 - [Threads](/concepts/threads/) - the durable work record shared by web, desktop, and mobile
