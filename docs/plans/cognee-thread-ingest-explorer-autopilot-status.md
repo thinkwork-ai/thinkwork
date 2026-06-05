@@ -620,3 +620,12 @@ operation`. ECS logs showed the precise cause:
   Local fix verification passed:
   `pnpm --filter @thinkwork/database-pg exec vitest run __tests__/knowledge-graph-schema.test.ts`
   and `pnpm --filter @thinkwork/database-pg test`.
+- 2026-06-05: PR [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103)
+  second CI attempt failed the dev migration drift precheck because the new
+  hand-rolled migration `0146_knowledge_graph_source_scope.sql` was not yet
+  applied to the dev database. First local apply attempt failed before mutation
+  because AWS CLI had no region configured. Re-ran with
+  `AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1`, applied
+  `packages/database-pg/drizzle/0146_knowledge_graph_source_scope.sql` to dev,
+  and verified with
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0146_knowledge_graph_source_scope.sql`.
