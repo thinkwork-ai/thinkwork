@@ -42,7 +42,7 @@ const ontology = {
 };
 
 describe("normalizeCogneeGraph", () => {
-  it("grounds approved ontology types and preserves diagnostic unknowns", () => {
+  it("keeps only approved ontology triples from Cognee graph output", () => {
     const snapshot = normalizeCogneeGraph({
       transcript,
       ontology,
@@ -54,7 +54,30 @@ describe("normalizeCogneeGraph", () => {
             type: "Company",
             properties: { aliases: ["Acme Inc."], summary: "Customer" },
           },
-          { id: "delta", label: "Delta", type: "Partner", properties: {} },
+          {
+            id: "delta",
+            label: "Delta",
+            type: "Entity",
+            properties: { is_a: { name: "Company" }, ontology_valid: true },
+          },
+          {
+            id: "chunk-1",
+            label: "DocumentChunk_c12056",
+            type: "DocumentChunk",
+            properties: {},
+          },
+          {
+            id: "beta",
+            label: "Beta",
+            type: "Partner",
+            properties: { ontology_valid: false },
+          },
+          {
+            id: "solo",
+            label: "Solo",
+            type: "Company",
+            properties: { ontology_valid: true },
+          },
         ],
         edges: [
           {
@@ -63,6 +86,27 @@ describe("normalizeCogneeGraph", () => {
             target: "delta",
             label: "Uses",
             properties: { confidence: 0.8 },
+          },
+          {
+            id: "edge-structural",
+            source: "chunk-1",
+            target: "acme",
+            label: "contains",
+            properties: {},
+          },
+          {
+            id: "edge-unapproved-type",
+            source: "acme",
+            target: "beta",
+            label: "Uses",
+            properties: {},
+          },
+          {
+            id: "edge-unapproved-relationship",
+            source: "acme",
+            target: "delta",
+            label: "Acquired",
+            properties: {},
           },
           {
             id: "edge-orphan",
@@ -76,19 +120,20 @@ describe("normalizeCogneeGraph", () => {
     });
 
     expect(snapshot.entities).toHaveLength(2);
-    expect(snapshot.entities[0]).toEqual(
+    expect(snapshot.entities).toEqual([
       expect.objectContaining({
+        label: "Acme",
         groundingStatus: "grounded",
         provenanceStatus: "strong",
         ontologyEntityTypeId: "entity-type-company",
       }),
-    );
-    expect(snapshot.entities[1]).toEqual(
       expect.objectContaining({
-        groundingStatus: "unapproved_type",
+        label: "Delta",
+        groundingStatus: "grounded",
         provenanceStatus: "strong",
+        ontologyEntityTypeId: "entity-type-company",
       }),
-    );
+    ]);
     expect(snapshot.relationships).toEqual([
       expect.objectContaining({
         groundingStatus: "grounded",
@@ -99,9 +144,16 @@ describe("normalizeCogneeGraph", () => {
     ]);
     expect(snapshot.evidence).toHaveLength(3);
     expect(snapshot.metrics).toEqual({
-      cogneeNodeCount: 2,
-      cogneeEdgeCount: 2,
-      droppedEdgeCount: 1,
+      cogneeNodeCount: 5,
+      cogneeEdgeCount: 5,
+      droppedNodeCount: 3,
+      droppedEdgeCount: 4,
+      structuralNodeCount: 1,
+      unapprovedNodeCount: 1,
+      isolatedNodeCount: 1,
+      unapprovedRelationshipCount: 1,
+      incompatibleRelationshipCount: 0,
+      orphanRelationshipCount: 3,
     });
   });
 });

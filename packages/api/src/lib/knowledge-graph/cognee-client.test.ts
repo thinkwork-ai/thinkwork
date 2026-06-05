@@ -18,6 +18,14 @@ function response(status: number, body: unknown) {
   } as Response;
 }
 
+function textResponse(status: number, body: string) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => body,
+  } as Response;
+}
+
 describe("CogneeClient", () => {
   it("uses remember and fetches a dataset graph", async () => {
     const fetchFn = vi
@@ -141,5 +149,88 @@ describe("CogneeClient", () => {
       custom_prompt: ontology.customPrompt,
       ontology_key: [ontology.ontologyKey],
     });
+  });
+
+  it("preserves Cognee ontology metadata from graph payloads", async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      response(200, {
+        nodes: [
+          {
+            id: "n1",
+            label: "Acme",
+            type: "Entity",
+            is_a: { name: "Company" },
+            ontology_valid: true,
+          },
+        ],
+        edges: [
+          {
+            id: "e1",
+            source: "n1",
+            target: "n1",
+            relationship_type: "Uses",
+            ontology_valid: true,
+          },
+        ],
+      }),
+    );
+    const client = new CogneeClient({
+      endpoint: "http://cognee.local",
+      fetchFn,
+      retryDelayMs: 0,
+    });
+
+    const graph = await client.fetchDatasetGraph(
+      "11111111-1111-4111-8111-111111111111",
+    );
+
+    expect(graph.nodes).toEqual([
+      expect.objectContaining({
+        id: "n1",
+        label: "Acme",
+        type: "Entity",
+        properties: {
+          is_a: { name: "Company" },
+          ontology_valid: true,
+        },
+      }),
+    ]);
+    expect(graph.edges).toEqual([
+      expect.objectContaining({
+        id: "e1",
+        label: "Uses",
+        type: "Uses",
+        properties: { relationship_type: "Uses", ontology_valid: true },
+      }),
+    ]);
+  });
+
+  it("summarizes Cognee HTML errors without leaking markup", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        textResponse(
+          503,
+          "<html><head><title>503 Service Temporarily Unavailable</title></head><body></body></html>",
+        ),
+      );
+    const client = new CogneeClient({
+      endpoint: "http://cognee.local",
+      fetchFn,
+      retryAttempts: 1,
+      retryDelayMs: 0,
+    });
+
+    await expect(
+      client.ingestThread({
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        datasetName: "thinkwork:t:thread:x",
+        transcript: "Acme",
+        ontology,
+      }),
+    ).rejects.toThrow(
+      "Cognee /api/v1/ontologies failed with 503: 503 Service Temporarily Unavailable",
+    );
   });
 });
