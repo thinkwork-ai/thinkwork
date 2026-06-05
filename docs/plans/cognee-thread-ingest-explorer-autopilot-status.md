@@ -739,3 +739,26 @@ operation`. ECS logs showed the precise cause:
   `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`;
   `git diff --check`; and `curl -I
 http://localhost:5174/settings/knowledge-graph` returned `200 OK`.
+- 2026-06-05: PR [#2107](https://github.com/thinkwork-ai/thinkwork/pull/2107)
+  passed required CI and was squash-merged into `main` at
+  `5fc83a08aaf305e7fcfc9a97be6a52ef3a219624`. Post-terraform smoke first
+  failed on run `4870bf6b-9e0a-4c6d-9cc5-8ff511aa8e23` with PostgreSQL
+  `column reference "source_kind" is ambiguous`, traced to the source-scope
+  relationship trigger function from migration `0146`.
+- 2026-06-05: Started repair branch `codex/kg-source-fallback-sql-fix` from
+  `origin/main`. Added manual migration
+  `0147_knowledge_graph_scope_trigger_qualification.sql` to replace the
+  Knowledge Graph relationship/evidence scope guard functions with qualified
+  column references and non-conflicting local variable names. First apply
+  attempt failed before mutation due to local `psql` using a socket; second
+  failed before mutation because the Lambda URL's `sslmode=no-verify` is not
+  accepted by local `psql`; third apply normalized to `sslmode=require` and
+  succeeded. Scoped drift verification passed:
+  `DATABASE_URL=... bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0147_knowledge_graph_scope_trigger_qualification.sql`.
+- 2026-06-05: Forced post-fix source smokes succeeded and produced visible KG
+  data: wiki run `577decd1-0c1d-4070-bf95-586a46c32089` persisted 20
+  entities, 19 relationships, and 39 evidence rows; brain run
+  `49d7566a-d34e-471a-b24b-03eca1b4127e` persisted 20 entities, 3
+  relationships, and 23 evidence rows. Both smokes still show Cognee returning
+  structural-only raw graph payloads, while the ontology-approved source
+  fallback now makes the graph usable.
