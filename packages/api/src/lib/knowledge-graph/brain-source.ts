@@ -15,6 +15,7 @@ import {
   renderPacketDocument,
   type KnowledgeGraphSourceBundle,
   type KnowledgeGraphSourcePacket,
+  type KnowledgeGraphSourceRelationshipPacket,
 } from "./source-adapters.js";
 
 const DEFAULT_SOURCE_LIMIT = 20;
@@ -61,6 +62,8 @@ export async function loadBrainKnowledgeGraphSource(args: {
       sourceLabel: args.sourceLabel,
       document: "",
       evidence: [],
+      packets: [],
+      relationships: [],
       packetCount: 0,
       skippedCount: 0,
       diagnostics: { requestedPageIds },
@@ -121,11 +124,17 @@ export async function loadBrainKnowledgeGraphSource(args: {
   const approvedTypes = new Set(
     args.ontology.entityTypes.map((type) => normalizeOntologySlug(type.slug)),
   );
+  const approvedRelationships = new Set(
+    args.ontology.relationshipTypes.map((type) =>
+      normalizeOntologySlug(type.slug),
+    ),
+  );
   const aliasesByPage = groupBy(aliases, (row) => row.pageId);
   const sectionsByPage = groupBy(sections, (row) => row.pageId);
   const sourcesBySection = groupBy(sources, (row) => row.sectionId);
   const pagesById = new Map(pages.map((page) => [page.id, page]));
   const packets: KnowledgeGraphSourcePacket[] = [];
+  const relationships: KnowledgeGraphSourceRelationshipPacket[] = [];
   const evidence: KnowledgeGraphSourceBundle["evidence"] = [];
   let ordinal = 0;
 
@@ -173,7 +182,13 @@ export async function loadBrainKnowledgeGraphSource(args: {
       entityTypeSlug: page.entitySubtype,
       trustedOntologyType,
       text: packetText,
-      metadata: { pageId: page.id, type: page.type, slug: page.slug },
+      metadata: {
+        pageId: page.id,
+        type: page.type,
+        slug: page.slug,
+        summary: page.summary,
+        aliases: pageAliases,
+      },
     });
     evidence.push({
       id: page.id,
@@ -211,6 +226,27 @@ export async function loadBrainKnowledgeGraphSource(args: {
     }
   }
 
+  for (const link of links) {
+    const target = pagesById.get(link.toPageId);
+    const relationshipTypeSlug = link.kind ?? null;
+    relationships.push({
+      id: `${link.fromPageId}:${link.kind}:${link.toPageId}`,
+      fromPacketId: link.fromPageId,
+      toPacketId: link.toPageId,
+      relationshipTypeSlug,
+      trustedOntologyType: relationshipTypeSlug
+        ? approvedRelationships.has(normalizeOntologySlug(relationshipTypeSlug))
+        : false,
+      label: relationshipTypeSlug ?? "related",
+      context: link.context ?? null,
+      metadata: {
+        fromPageId: link.fromPageId,
+        toPageId: link.toPageId,
+        targetTitle: target?.title ?? null,
+      },
+    });
+  }
+
   return {
     sourceKind: "brain",
     sourceRef: args.sourceRef,
@@ -220,6 +256,8 @@ export async function loadBrainKnowledgeGraphSource(args: {
       packets,
     }),
     evidence,
+    packets,
+    relationships,
     packetCount: packets.length,
     skippedCount: Math.max(0, requestedPageIds.length - packets.length),
     diagnostics: {
