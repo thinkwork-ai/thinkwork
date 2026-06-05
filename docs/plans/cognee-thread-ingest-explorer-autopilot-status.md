@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/kg-entity-uuid-filter-fix` /
   `.Codex/worktrees/kg-entity-uuid-filter-fix`
-- Current PR: not opened yet
+- Current PR: [#2092](https://github.com/thinkwork-ai/thinkwork/pull/2092)
 - Blocker: none. U14 merged and deployed successfully; live smoke progressed
   past `knowledgeGraphGraph`, then exposed the same Drizzle array-cast pattern
   in `knowledgeGraphEntity`.
@@ -430,3 +430,5 @@ operation`. ECS logs showed the precise cause:
   `canvas` native build failure under Node 25 because `pkg-config` is
   unavailable, but pnpm completed and the targeted API tests and typecheck ran
   successfully.
+- 2026-06-05: Opened U15 PR
+  [#2092](https://github.com/thinkwork-ai/thinkwork/pull/2092).
