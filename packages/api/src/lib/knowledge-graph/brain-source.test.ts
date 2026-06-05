@@ -64,6 +64,18 @@ describe("loadBrainKnowledgeGraphSource", () => {
     });
 
     expect(bundle.packetCount).toBe(1);
+    expect(bundle.packets).toMatchObject([
+      {
+        id: "brain-1",
+        title: "Bunkhouse",
+        entityTypeSlug: "customer",
+        trustedOntologyType: true,
+        metadata: {
+          summary: "Hospitality customer",
+          aliases: ["bunkhouse hotels"],
+        },
+      },
+    ]);
     expect(bundle.document).toContain("ontology_type_slug: customer");
     expect(bundle.document).toContain("facet_type: operational");
     expect(bundle.document).toContain("citations: crm_opportunity:opp-1");

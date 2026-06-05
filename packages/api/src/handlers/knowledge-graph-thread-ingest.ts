@@ -4,6 +4,7 @@ import { CogneeClient } from "../lib/knowledge-graph/cognee-client.js";
 import { loadBrainKnowledgeGraphSource } from "../lib/knowledge-graph/brain-source.js";
 import { normalizeCogneeGraph } from "../lib/knowledge-graph/normalizer.js";
 import { loadApprovedOntologyExport } from "../lib/knowledge-graph/ontology-export.js";
+import { applySourceDeclaredFallback } from "../lib/knowledge-graph/source-fallback.js";
 import {
   loadKnowledgeGraphIngestRun,
   markKnowledgeGraphRunFailed,
@@ -100,9 +101,14 @@ export async function processKnowledgeGraphThreadIngest(
     }
     const indexing = await client.waitForDatasetIndexing(ingest.datasetId);
     const graph = await client.fetchDatasetGraph(ingest.datasetId);
-    const snapshot = normalizeCogneeGraph({
+    const normalizedSnapshot = normalizeCogneeGraph({
       graph,
       transcript: source.evidence,
+      ontology,
+    });
+    const snapshot = applySourceDeclaredFallback({
+      snapshot: normalizedSnapshot,
+      source,
       ontology,
     });
     await replaceKnowledgeGraphSnapshot({
@@ -118,6 +124,7 @@ export async function processKnowledgeGraphThreadIngest(
         sourceRef: run.source_ref,
         sourceLabel: run.source_label,
         sourcePacketCount: source.packetCount,
+        sourceRelationshipCount: source.relationships.length,
         skippedSourceCount: source.skippedCount,
         sourceDiagnostics: source.diagnostics,
         cogneePipelineRunId: ingest.pipelineRunId,
@@ -139,6 +146,7 @@ export async function processKnowledgeGraphThreadIngest(
       metrics: {
         sourceKind: run.source_kind,
         sourcePacketCount: source.packetCount,
+        sourceRelationshipCount: source.relationships.length,
         skippedSourceCount: source.skippedCount,
         entityCount: snapshot.entities.length,
         relationshipCount: snapshot.relationships.length,
@@ -213,6 +221,8 @@ async function loadSourceBundle(args: {
       sourceLabel: args.run.source_label ?? "Thread transcript",
       document: renderThreadTranscript(transcript),
       evidence: transcript,
+      packets: [],
+      relationships: [],
       packetCount: transcript.length,
       skippedCount: 0,
       diagnostics: {},

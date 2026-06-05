@@ -3,8 +3,6 @@ import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
   ArrowLeft,
-  BookOpen,
-  Brain,
   Database,
   GitBranch,
   Loader2,
@@ -35,7 +33,6 @@ import {
 import {
   KnowledgeGraphGroundingStatus,
   KnowledgeGraphProvenanceStatus,
-  KnowledgeGraphSourceKind,
   type SettingsKnowledgeGraphEntitiesQuery as SettingsKnowledgeGraphEntitiesData,
   type SettingsKnowledgeGraphOntologyQuery as SettingsKnowledgeGraphOntologyData,
   type SettingsKnowledgeGraphThreadCandidatesQuery as SettingsKnowledgeGraphThreadCandidatesData,
@@ -43,8 +40,6 @@ import {
 import {
   SettingsKnowledgeGraphEntitiesQuery,
   SettingsKnowledgeGraphOntologyQuery,
-  SettingsKnowledgeGraphSourceIngestCapabilityQuery,
-  SettingsStartKnowledgeGraphIngestMutation,
   SettingsKnowledgeGraphThreadCandidatesQuery,
   SettingsStartKnowledgeGraphThreadIngestMutation,
 } from "@/lib/settings-queries";
@@ -180,21 +175,9 @@ export function KnowledgeGraphExplorer({
     pause: !effectiveTenantId || !selectedRun,
   });
 
-  const [sourceCapabilityResult] = useQuery({
-    query: SettingsKnowledgeGraphSourceIngestCapabilityQuery,
-    pause: !effectiveTenantId,
-  });
-  const sourceIngestSupported =
-    sourceCapabilityResult.data?.__type?.name ===
-    "StartKnowledgeGraphIngestInput";
-
   const [ingestState, startIngest] = useMutation(
     SettingsStartKnowledgeGraphThreadIngestMutation,
   );
-  const [sourceIngestState, startSourceIngest] = useMutation(
-    SettingsStartKnowledgeGraphIngestMutation,
-  );
-
   const rows = entityResult.data?.knowledgeGraphEntities ?? [];
   const loadingEntities = entityResult.fetching && !entityResult.data;
 
@@ -297,37 +280,6 @@ export function KnowledgeGraphExplorer({
     graphRef.current?.refetch();
   }
 
-  async function ingestSource(sourceKind: KnowledgeGraphSourceKind) {
-    if (!effectiveTenantId) return;
-    if (!sourceIngestSupported) {
-      toast.warning(
-        "Wiki and Brain ingest will be available after API deploy.",
-      );
-      return;
-    }
-    const result = await startSourceIngest({
-      input: {
-        tenantId: effectiveTenantId,
-        sourceKind,
-        force: true,
-      },
-    });
-    if (result.error) {
-      toast.error(
-        `Could not start ${sourceKind.toLowerCase()} ingest: ${result.error.message}`,
-      );
-      return;
-    }
-    toast.success(`${sourceKind.toLowerCase()} Knowledge Graph ingest queued`);
-    const run = result.data?.startKnowledgeGraphIngest;
-    if (run) {
-      setSelectedRun(run as IngestRun);
-    }
-    refetchEntities({ requestPolicy: "network-only" });
-    refetchThreads({ requestPolicy: "network-only" });
-    graphRef.current?.refetch();
-  }
-
   function openEntity(
     entityId: string,
     title: string,
@@ -405,50 +357,6 @@ export function KnowledgeGraphExplorer({
                 Graph
               </ToggleGroupItem>
             </ToggleGroup>
-          </>
-        ) : null}
-
-        {mode === "data" ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={sourceIngestState.fetching || !sourceIngestSupported}
-              title={
-                sourceIngestSupported
-                  ? "Ingest wiki source"
-                  : "Available after API deploy"
-              }
-              onClick={() => void ingestSource(KnowledgeGraphSourceKind.Wiki)}
-            >
-              {sourceIngestState.fetching ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <BookOpen className="size-4" />
-              )}
-              Ingest Wiki
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={sourceIngestState.fetching || !sourceIngestSupported}
-              title={
-                sourceIngestSupported
-                  ? "Ingest Company Brain source"
-                  : "Available after API deploy"
-              }
-              onClick={() => void ingestSource(KnowledgeGraphSourceKind.Brain)}
-            >
-              {sourceIngestState.fetching ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Brain className="size-4" />
-              )}
-              Ingest Brain
-            </Button>
           </>
         ) : null}
       </div>

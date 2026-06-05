@@ -716,3 +716,26 @@ operation`. ECS logs showed the precise cause:
   run ids: wiki `1b09e78b-bd04-43a4-ad22-5db35e627249`, brain
   `b499dd6f-7366-4e97-a0f5-1969a2e05f31`. The next live smoke must run after
   #2105 deploys so the worker uses background indexing.
+- 2026-06-05: PR [#2105](https://github.com/thinkwork-ai/thinkwork/pull/2105)
+  passed required CI, was squash-merged into `main` at
+  `70e1a686ec784008856d3546a05454a8b3fa28e6`, and deployed successfully.
+  Post-deploy wiki/brain source smokes no longer timed out, but Cognee returned
+  only structural graph nodes (`TextSummary`, `DocumentChunk`, `NodeSet`) and
+  structural edges. The ontology-only gate correctly dropped those nodes, so
+  the persisted graph remained empty despite source packet counts and Cognee
+  graph payload counts being non-zero.
+- 2026-06-05: Started urgent demo-data follow-up branch
+  `codex/kg-source-declared-fallback` in isolated worktree
+  `.Codex/worktrees/kg-source-declared-fallback`. Implemented an
+  ontology-preserving fallback that persists trusted Wiki/Brain source packets
+  as grounded Knowledge Graph entities, plus approved Wiki/Brain page links as
+  relationships, only when Cognee returns no approved entities. Also simplified
+  the Settings > Knowledge Graph data toolbar by removing Type/Grounding/
+  Provenance filters and the confusing Wiki/Brain source action buttons.
+- 2026-06-05: Demo-data follow-up local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/source-fallback.test.ts src/lib/knowledge-graph/wiki-source.test.ts src/lib/knowledge-graph/brain-source.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`;
+  `git diff --check`; and `curl -I
+http://localhost:5174/settings/knowledge-graph` returned `200 OK`.

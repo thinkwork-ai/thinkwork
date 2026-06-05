@@ -64,6 +64,18 @@ describe("loadWikiKnowledgeGraphSource", () => {
     });
 
     expect(bundle.packetCount).toBe(1);
+    expect(bundle.packets).toMatchObject([
+      {
+        id: "page-1",
+        title: "Acme",
+        entityTypeSlug: "company",
+        trustedOntologyType: true,
+        metadata: {
+          summary: "Customer account",
+          aliases: ["acme corp"],
+        },
+      },
+    ]);
     expect(bundle.document).toContain("ontology_type_slug: company");
     expect(bundle.document).toContain("aliases: acme corp");
     expect(bundle.document).toContain("citations: memory_unit:memory-1");

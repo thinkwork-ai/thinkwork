@@ -10,12 +10,25 @@ export interface KnowledgeGraphSourcePacket {
   metadata: Record<string, unknown>;
 }
 
+export interface KnowledgeGraphSourceRelationshipPacket {
+  id: string;
+  fromPacketId: string;
+  toPacketId: string;
+  relationshipTypeSlug: string | null;
+  trustedOntologyType: boolean;
+  label: string;
+  context: string | null;
+  metadata: Record<string, unknown>;
+}
+
 export interface KnowledgeGraphSourceBundle {
   sourceKind: KnowledgeGraphSourceKind;
   sourceRef: string;
   sourceLabel: string;
   document: string;
   evidence: ThreadTranscriptMessage[];
+  packets: KnowledgeGraphSourcePacket[];
+  relationships: KnowledgeGraphSourceRelationshipPacket[];
   packetCount: number;
   skippedCount: number;
   diagnostics: Record<string, unknown>;
