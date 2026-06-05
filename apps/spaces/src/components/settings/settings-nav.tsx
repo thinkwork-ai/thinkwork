@@ -6,6 +6,7 @@ import {
   BriefcaseBusiness,
   Clock,
   FolderTree,
+  History,
   NotebookText,
   Repeat,
   Settings as SettingsIcon,
@@ -73,6 +74,12 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "MCP Servers",
     to: "/settings/mcp-servers",
     icon: ModelContextProtocol,
+    operatorOnly: true,
+  },
+  {
+    label: "Activity",
+    to: "/settings/activity",
+    icon: History,
     operatorOnly: true,
   },
   {
@@ -168,6 +175,7 @@ export function visibleSettingsNavItems(opts: {
 export interface SettingsCrumb {
   label: string;
   href?: string;
+  search?: Record<string, unknown>;
 }
 
 /**

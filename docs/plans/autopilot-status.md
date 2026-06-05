@@ -6,6 +6,59 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Spaces Settings Activity - 2026-06-05
+
+- Plan:
+  `docs/plans/2026-06-05-004-feat-spaces-settings-activity-plan.md`.
+- Target branch: `main`.
+- Current unit: U1-U5 grouped implementation. The units are tightly coupled:
+  splitting them would merge a visible Activity Settings page before its table,
+  date breadcrumbs, and Settings-hosted thread detail route were complete.
+- Current branch: `codex/spaces-settings-activity`.
+- Current worktree: `.Codex/worktrees/spaces-settings-activity`.
+
+| Unit group                                      | Branch                           | PR                                                           | State     | Notes                                             |
+| ----------------------------------------------- | -------------------------------- | ------------------------------------------------------------ | --------- | ------------------------------------------------- |
+| U1-U5 Settings Activity, breadcrumbs, detail QA | `codex/spaces-settings-activity` | [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) | CI passed | Local verification and required PR checks passed. |
+
+### Progress Log
+
+- Started autopilot workflow, read `AGENTS.md`, the Spaces Settings Activity
+  plan, the origin requirements doc, and relevant prior solution docs about
+  Spaces urql document-cache invalidation and Settings/admin-to-Spaces ports.
+- Created isolated worktree `.Codex/worktrees/spaces-settings-activity` from
+  `origin/main` on branch `codex/spaces-settings-activity`.
+- Copied the locally-authored requirements and plan docs into the worktree so
+  the implementation PR carries its source context.
+- Implemented the Settings Activity route, operator nav entry, Activity
+  chart/table, inline date-filter controls, Settings-hosted thread detail route,
+  query-preserving Activity/date breadcrumbs, and shared thread-detail
+  breadcrumb support.
+- Regenerated `apps/spaces/src/routeTree.gen.ts` through the Spaces Vite build.
+
+### CI / Verification
+
+- `pnpm install` populated the worktree dependencies. The optional `canvas`
+  native build reported missing `pkg-config` under local Node 25, but pnpm
+  completed successfully.
+- `pnpm --filter @thinkwork/spaces test -- src/lib/settings-activity.test.ts src/components/settings/settings-nav.test.ts src/components/settings/SettingsHeaderBar.test.tsx src/components/settings/SettingsActivity.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx`
+  passed.
+- `pnpm --filter @thinkwork/spaces typecheck` passed.
+- `pnpm --filter @thinkwork/spaces build` passed.
+- `pnpm --filter @thinkwork/spaces test` passed: 118 test files, 848 tests.
+- `git diff --check` passed.
+- Opened PR [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130).
+- PR [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) CI passed:
+  CLA, lint, verify, typecheck, and test all green.
+- `pnpm format:check` could not run because the root package script references
+  `prettier`, but the root package does not currently declare a local
+  `prettier` dependency. `pnpm exec prettier --version` fails with
+  `Command "prettier" not found`.
+
+### Blockers
+
+- None.
+
 ## Knowledge Graph Demo Relationship Density - 2026-06-05
 
 - Plan: Follow-up to Knowledge Graph duplicate canonicalization and ontology
