@@ -63,18 +63,29 @@ status: in_progress
 - Created U1 worktree from `origin/main`.
 - Read migration drift guidance in `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md`.
 - Added nullable user ownership columns for cost events and budget policies, explicit scheduled-job budget pause state, user cost GraphQL fields, manual migration and rollback files, and focused migration/schema tests.
+- Compound review found migration lock-safety and generated-client drift issues. Fixed by switching the migration to `ON_ERROR_STOP`, session timeouts, `NOT VALID` constraints, batched cost-event backfill, and concurrent indexes; regenerated CLI/Admin/Spaces/Mobile GraphQL clients; added scheduled-job budget pause fields to GraphQL; and added the checked-in plan/deployment checklist.
+- Applied the revised `0148_user_cost_attribution.sql` migration to dev. It backfilled 0 additional rows on the second run, added `budget_policies_scope_shape_check`, and the scoped drift reporter passed.
 - Local verification so far:
   `pnpm --filter @thinkwork/database-pg exec vitest run migration-0148.test.ts` passed;
   `pnpm --filter @thinkwork/database-pg test` passed;
   `pnpm --filter @thinkwork/database-pg typecheck` passed;
   `pnpm --filter @thinkwork/api typecheck` passed;
+  `pnpm --filter thinkwork-cli typecheck` passed;
+  `pnpm --filter @thinkwork/spaces typecheck` passed;
+  `pnpm --filter @thinkwork/admin build` passed;
+  `pnpm --filter @thinkwork/mobile test` passed;
   `pnpm schema:build` passed;
-  `pnpm dlx prettier --check <changed supported files>` passed;
+  codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/spaces`, and `@thinkwork/mobile`;
+  `node node_modules/.pnpm/prettier@3.8.2/node_modules/prettier/bin/prettier.cjs --check <changed supported files>` passed;
   `git diff --check` passed.
 
 ### CI / PR
 
 - Opened [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112).
+- Initial CI Migration Drift Precheck failed before the migration was applied to dev. Applied the migration to dev and reran; the drift check passed. Subsequent code changes will rerun CI.
+- Rebasing onto `origin/main` after PR #2113 merged produced a status-ledger
+  conflict only; preserved both workstream entries, reran the focused migration
+  test and database typecheck, and pushed the rebased branch.
 
 ### Blockers
 

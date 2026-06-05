@@ -37,16 +37,6 @@ type AgentCostSummary {
   eventCount: Int!
 }
 
-type UserCostSummary {
-  userId: ID
-  userName: String
-  userEmail: String
-  label: String!
-  totalUsd: Float!
-  eventCount: Int!
-  isUnattributed: Boolean!
-}
-
 type ModelCostSummary {
   model: String!
   totalUsd: Float!
@@ -90,7 +80,6 @@ type BudgetStatus {
 input UpsertBudgetPolicyInput {
   scope: String!
   agentId: ID
-  userId: ID
   limitUsd: Float!
   actionOnExceed: String
   period: String

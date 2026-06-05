@@ -13,6 +13,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
@@ -102,6 +103,14 @@ export const budgetPolicies = pgTable(
     index("idx_budget_policies_tenant").on(table.tenant_id),
     index("idx_budget_policies_agent").on(table.agent_id),
     index("idx_budget_policies_user").on(table.tenant_id, table.user_id),
+    check(
+      "budget_policies_scope_shape_check",
+      sql`(
+        (${table.scope} = 'tenant' AND ${table.agent_id} IS NULL AND ${table.user_id} IS NULL)
+        OR (${table.scope} = 'agent' AND ${table.agent_id} IS NOT NULL AND ${table.user_id} IS NULL)
+        OR (${table.scope} = 'user' AND ${table.agent_id} IS NULL AND ${table.user_id} IS NOT NULL)
+      )`,
+    ),
   ],
 );
 
