@@ -62,6 +62,28 @@ async function walk(dir: string): Promise<string[]> {
   return found;
 }
 
+/**
+ * Build a WorkspaceSkill from raw SKILL.md content (plan 2026-06-04-004 U4).
+ * Used for ephemeral force-pinned skills fetched from the tenant catalog at
+ * turn time, which never touch the workspace tree. `skillPath` is a marker, not
+ * a real filesystem path — the content is supplied directly.
+ */
+export function buildWorkspaceSkillFromContent(
+  slug: string,
+  content: string,
+): WorkspaceSkill {
+  return {
+    slug,
+    name:
+      frontmatterValue(content, "display_name") ??
+      frontmatterValue(content, "name") ??
+      slug,
+    description: frontmatterValue(content, "description") ?? "",
+    skillPath: `<pinned:${slug}>`,
+    content,
+  };
+}
+
 export async function discoverWorkspaceSkills(
   workspaceDir: string,
 ): Promise<WorkspaceSkill[]> {
