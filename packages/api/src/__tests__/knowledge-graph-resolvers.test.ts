@@ -335,6 +335,11 @@ describe("knowledge graph read resolvers", () => {
         ],
       }),
     );
+    const evidenceQuery = ctx.db.execute.mock.calls[2]?.[0];
+    expect(renderSql(evidenceQuery)).toMatch(
+      /relationship_id IN \(\$\d+::uuid\)/,
+    );
+    expect(renderSql(evidenceQuery)).not.toContain("::uuid[]");
   });
 
   it("returns empty graph data when the selected thread is not visible", async () => {
