@@ -4,6 +4,7 @@ import { SETTINGS_NAV_ITEMS, visibleSettingsNavItems } from "./settings-nav";
 const LOCAL_WORKSPACE = "/settings/local-workspace";
 const KNOWLEDGE_GRAPH = "/settings/knowledge-graph";
 const KNOWLEDGE_BASES = "/settings/knowledge-bases";
+const CRM = "/settings/crm";
 
 describe("visibleSettingsNavItems", () => {
   it("declares Workspace as a non-operator, non-desktop-gated section", () => {
@@ -45,31 +46,56 @@ describe("visibleSettingsNavItems", () => {
     expect(memberWeb.some((i) => i.to === LOCAL_WORKSPACE)).toBe(true);
   });
 
-  it("places Knowledge Graph in Spaces settings for operators on web and desktop", () => {
+  it("shows Knowledge Graph only after Cognee is runtime-enabled", () => {
     const item = SETTINGS_NAV_ITEMS.find((i) => i.to === KNOWLEDGE_GRAPH);
     expect(item).toBeDefined();
     expect(item?.operatorOnly).toBe(true);
     expect(item?.desktopOnly).toBeFalsy();
+    expect(item?.managedAppKey).toBe("cognee");
 
     const operatorWeb = visibleSettingsNavItems({
       isOperator: true,
       roleResolved: true,
       isDesktop: false,
     });
-    const operatorDesktop = visibleSettingsNavItems({
+    const operatorWithCognee = visibleSettingsNavItems({
       isOperator: true,
       roleResolved: true,
       isDesktop: true,
+      managedApplications: { cognee: true },
     });
     const memberWeb = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
       isDesktop: false,
+      managedApplications: { cognee: true },
     });
 
-    expect(operatorWeb.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(true);
-    expect(operatorDesktop.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(true);
+    expect(operatorWeb.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(false);
+    expect(operatorWithCognee.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(true);
     expect(memberWeb.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(false);
+  });
+
+  it("shows CRM only after Twenty CRM runtime is enabled", () => {
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === CRM);
+    expect(item).toBeDefined();
+    expect(item?.operatorOnly).toBe(true);
+    expect(item?.managedAppKey).toBe("twenty");
+
+    const operatorWithoutTwenty = visibleSettingsNavItems({
+      isOperator: true,
+      roleResolved: true,
+      isDesktop: false,
+    });
+    const operatorWithTwenty = visibleSettingsNavItems({
+      isOperator: true,
+      roleResolved: true,
+      isDesktop: false,
+      managedApplications: { twenty: true },
+    });
+
+    expect(operatorWithoutTwenty.some((i) => i.to === CRM)).toBe(false);
+    expect(operatorWithTwenty.some((i) => i.to === CRM)).toBe(true);
   });
 
   it("pins General first and alphabetises the rest by label", () => {

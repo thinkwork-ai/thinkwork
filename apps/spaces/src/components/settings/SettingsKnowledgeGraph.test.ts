@@ -30,14 +30,13 @@ describe("SettingsKnowledgeGraph", () => {
     expect(source).toContain("Inspect Cognee entities");
   });
 
-  it("keeps the Cognee deployment control available in the config panel", () => {
+  it("keeps service health in the config panel but leaves deploy control in General", () => {
     expect(configSource).toContain("KnowledgeGraphConfigPanel");
-    expect(configSource).toContain(
+    expect(configSource).not.toContain(
       "SettingsSetKnowledgeGraphDeploymentMutation",
     );
-    expect(configSource).toContain("Toggle Knowledge Graph infrastructure");
-    expect(configSource).toContain("Disable Knowledge Graph?");
-    expect(configSource).toContain("deployment queued");
+    expect(configSource).not.toContain("Toggle Knowledge Graph infrastructure");
+    expect(configSource).toContain("Managed application state");
     expect(configSource).toContain("cogneeEndpoint");
     expect(configSource).toContain("cogneeLogGroupName");
     expect(configSource).toContain("SettingsKnowledgeGraphHealthCheckQuery");

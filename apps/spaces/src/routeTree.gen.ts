@@ -24,6 +24,7 @@ import { Route as AuthedSettingsMemoryRouteImport } from "./routes/_authed/setti
 import { Route as AuthedSettingsLocalWorkspaceRouteImport } from "./routes/_authed/settings.local-workspace";
 import { Route as AuthedSettingsKnowledgeGraphRouteImport } from "./routes/_authed/settings.knowledge-graph";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
+import { Route as AuthedSettingsCrmRouteImport } from "./routes/_authed/settings.crm";
 import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
 import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/settings.analytics";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
@@ -148,6 +149,11 @@ const AuthedSettingsKnowledgeGraphRoute =
 const AuthedSettingsGeneralRoute = AuthedSettingsGeneralRouteImport.update({
   id: "/general",
   path: "/general",
+  getParentRoute: () => AuthedSettingsRoute,
+} as any);
+const AuthedSettingsCrmRoute = AuthedSettingsCrmRouteImport.update({
+  id: "/crm",
+  path: "/crm",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
 const AuthedSettingsArtifactsRoute = AuthedSettingsArtifactsRouteImport.update({
@@ -450,6 +456,7 @@ export interface FileRoutesByFullPath {
   "/new": typeof AuthedShellNewRoute;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
+  "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
@@ -510,6 +517,7 @@ export interface FileRoutesByTo {
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/new": typeof AuthedShellNewRoute;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
+  "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
@@ -578,6 +586,7 @@ export interface FileRoutesById {
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
+  "/_authed/settings/crm": typeof AuthedSettingsCrmRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/_authed/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
@@ -645,6 +654,7 @@ export interface FileRouteTypes {
     | "/new"
     | "/settings/analytics"
     | "/settings/artifacts"
+    | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
     | "/settings/local-workspace"
@@ -705,6 +715,7 @@ export interface FileRouteTypes {
     | "/auth/desktop-callback"
     | "/new"
     | "/settings/analytics"
+    | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
     | "/settings/local-workspace"
@@ -772,6 +783,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/new"
     | "/_authed/settings/analytics"
     | "/_authed/settings/artifacts"
+    | "/_authed/settings/crm"
     | "/_authed/settings/general"
     | "/_authed/settings/knowledge-graph"
     | "/_authed/settings/local-workspace"
@@ -939,6 +951,13 @@ declare module "@tanstack/react-router" {
       path: "/general";
       fullPath: "/settings/general";
       preLoaderRoute: typeof AuthedSettingsGeneralRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/crm": {
+      id: "/_authed/settings/crm";
+      path: "/crm";
+      fullPath: "/settings/crm";
+      preLoaderRoute: typeof AuthedSettingsCrmRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/artifacts": {
@@ -1422,6 +1441,7 @@ const AuthedSettingsArtifactsRouteWithChildren =
 interface AuthedSettingsRouteChildren {
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
   AuthedSettingsArtifactsRoute: typeof AuthedSettingsArtifactsRouteWithChildren;
+  AuthedSettingsCrmRoute: typeof AuthedSettingsCrmRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsKnowledgeGraphRoute: typeof AuthedSettingsKnowledgeGraphRoute;
   AuthedSettingsLocalWorkspaceRoute: typeof AuthedSettingsLocalWorkspaceRoute;
@@ -1457,6 +1477,7 @@ interface AuthedSettingsRouteChildren {
 const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAnalyticsRoute: AuthedSettingsAnalyticsRoute,
   AuthedSettingsArtifactsRoute: AuthedSettingsArtifactsRouteWithChildren,
+  AuthedSettingsCrmRoute: AuthedSettingsCrmRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsKnowledgeGraphRoute: AuthedSettingsKnowledgeGraphRoute,
   AuthedSettingsLocalWorkspaceRoute: AuthedSettingsLocalWorkspaceRoute,
