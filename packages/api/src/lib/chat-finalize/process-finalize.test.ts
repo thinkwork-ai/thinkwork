@@ -4,6 +4,18 @@ const mocks = vi.hoisted(() => ({
   updateSets: [] as unknown[],
   updateReturning: [] as Array<unknown[]>,
   reconcileChangedFiles: vi.fn(),
+  recordCostEvents: vi.fn(),
+  checkBudgetAndPause: vi.fn(),
+  notifyCostRecorded: vi.fn(),
+  notifyThreadTurnUpdate: vi.fn(),
+  notifyThreadUpdate: vi.fn(),
+  insertAssistantMessage: vi.fn(),
+  notifyNewMessage: vi.fn(),
+  markComputerTaskFailedFromFinalize: vi.fn(),
+  sendTurnCompletedPush: vi.fn(),
+  sendThreadReplyEmail: vi.fn(),
+  refreshCustomerOnboardingGoalFolderSafely: vi.fn(),
+  recordGuardrailBlock: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -29,6 +41,49 @@ vi.mock("./reconcile.js", async (importOriginal) => {
   };
 });
 
+vi.mock("../cost-recording.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../cost-recording.js")>();
+  return {
+    ...actual,
+    recordCostEvents: mocks.recordCostEvents,
+    checkBudgetAndPause: mocks.checkBudgetAndPause,
+    notifyCostRecorded: mocks.notifyCostRecorded,
+  };
+});
+
+vi.mock("./notify.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./notify.js")>();
+  return {
+    ...actual,
+    insertAssistantMessage: mocks.insertAssistantMessage,
+    markComputerTaskFailedFromFinalize:
+      mocks.markComputerTaskFailedFromFinalize,
+    notifyNewMessage: mocks.notifyNewMessage,
+    notifyThreadTurnUpdate: mocks.notifyThreadTurnUpdate,
+  };
+});
+
+vi.mock("../../graphql/notify.js", () => ({
+  notifyThreadUpdate: mocks.notifyThreadUpdate,
+}));
+
+vi.mock("../push-notifications.js", () => ({
+  sendTurnCompletedPush: mocks.sendTurnCompletedPush,
+}));
+
+vi.mock("../email/thread-reply.js", () => ({
+  sendThreadReplyEmail: mocks.sendThreadReplyEmail,
+}));
+
+vi.mock("../spaces/customer-onboarding-goal-md.js", () => ({
+  refreshCustomerOnboardingGoalFolderSafely:
+    mocks.refreshCustomerOnboardingGoalFolderSafely,
+}));
+
+vi.mock("./record-guardrail-block.js", () => ({
+  recordGuardrailBlock: mocks.recordGuardrailBlock,
+}));
+
 import {
   capturedSystemPromptFromFinalizePayload,
   diagnosticsFromFinalizePayload,
@@ -44,6 +99,7 @@ const THREAD_ID = "33333333-3333-3333-3333-333333333333";
 const TURN_ID = "44444444-4444-4444-4444-444444444444";
 
 beforeEach(() => {
+  vi.clearAllMocks();
   mocks.updateSets = [];
   mocks.updateReturning = [
     [
@@ -59,6 +115,18 @@ beforeEach(() => {
     status: "no_changes",
     files: [],
   });
+  mocks.recordCostEvents.mockResolvedValue({ totalUsd: 1.23 });
+  mocks.checkBudgetAndPause.mockResolvedValue(undefined);
+  mocks.notifyCostRecorded.mockResolvedValue(undefined);
+  mocks.notifyThreadTurnUpdate.mockResolvedValue(undefined);
+  mocks.notifyThreadUpdate.mockResolvedValue(undefined);
+  mocks.insertAssistantMessage.mockResolvedValue({ id: "msg-1" });
+  mocks.notifyNewMessage.mockResolvedValue(undefined);
+  mocks.markComputerTaskFailedFromFinalize.mockResolvedValue(undefined);
+  mocks.sendTurnCompletedPush.mockResolvedValue(undefined);
+  mocks.sendThreadReplyEmail.mockResolvedValue(undefined);
+  mocks.refreshCustomerOnboardingGoalFolderSafely.mockResolvedValue(undefined);
+  mocks.recordGuardrailBlock.mockResolvedValue(undefined);
 });
 
 describe("capturedSystemPromptFromFinalizePayload", () => {
@@ -198,6 +266,59 @@ describe("isHiddenDesktopDelegation", () => {
 });
 
 describe("processFinalize reconcile seam", () => {
+  it("passes the runtime cost owner user id to cost recording and subscriptions", async () => {
+    mocks.updateReturning = [
+      [
+        {
+          id: TURN_ID,
+          runtimeType: "pi",
+          contextSnapshot: {
+            desktop_managed_delegation: { visibility: "hidden" },
+          },
+        },
+      ],
+    ];
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        cost_owner_user_id: "55555555-5555-5555-5555-555555555555",
+        duration_ms: 25,
+        status: "completed",
+        response: { content: "done" },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 100,
+          output_tokens: 10,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true, messageId: null });
+
+    expect(mocks.recordCostEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        agentId: AGENT_ID,
+        userId: "55555555-5555-5555-5555-555555555555",
+      }),
+    );
+    expect(mocks.checkBudgetAndPause).toHaveBeenCalledWith(
+      TENANT_ID,
+      AGENT_ID,
+      "55555555-5555-5555-5555-555555555555",
+    );
+    expect(mocks.notifyCostRecorded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        agentId: AGENT_ID,
+        userId: "55555555-5555-5555-5555-555555555555",
+        amountUsd: 1.23,
+      }),
+    );
+  });
+
   it("re-enters reconcile on retry when the U4 non-empty diff stub throws", async () => {
     mocks.updateReturning = [
       [

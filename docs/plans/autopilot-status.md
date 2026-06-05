@@ -49,15 +49,16 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md`.
 - Target branch: `main`.
-- Current unit: U2, Create user attribution and budget enforcement helpers.
-- Current branch: `codex/user-cost-u2`.
-- Current worktree: `.Codex/worktrees/user-cost-u2`.
+- Current unit: U3, Propagate user ownership through runtime and background cost paths.
+- Current branch: `codex/user-cost-u3`.
+- Current worktree: `.Codex/worktrees/user-cost-u3`.
 - Status: in progress.
 
 | Unit                                                   | Branch               | PR                                                           | State       | Notes                                                                             |
 | ------------------------------------------------------ | -------------------- | ------------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------- |
 | U1 Extend cost and budget data model                   | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | Merged      | Squash merged as `35cbe18d`; dev migration `0148` applied and drift check passed. |
-| U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | TBD                                                          | In progress | Adds reusable API helpers before runtime propagation in U3.                       |
+| U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | [#2115](https://github.com/thinkwork-ai/thinkwork/pull/2115) | Merged      | Squash merged as `3a5a6d3`; reusable cost owner and user-budget helpers landed.   |
+| U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | In progress | Foreground chat, wakeups, finalize, job-trigger, and monthly reset propagation.   |
 
 ### Progress Log
 
@@ -109,6 +110,28 @@ status: in_progress
   advanced. Rebasing onto `origin/main` was conflict-free; the focused
   user-budget/cost tests, API typecheck, and `git diff --check` passed before
   the force-with-lease push.
+- U2 CI passed after the rebase; PR #2115 was squash merged as `3a5a6d3`, the
+  remote branch was deleted, and the local U2 worktree/branch were removed.
+- Created U3 worktree from merged `origin/main`.
+- U3 propagates the resolved cost owner into chat invoke finalize payloads,
+  `processFinalize` cost/Hindsight/tool-cost recording, wakeup processor cost
+  and notifications, and scheduled job-trigger user-budget preflight checks.
+- U3 adds a foreground user budget gate before chat runtime dispatch and a
+  wakeup user budget gate before AgentCore invocation. Over-budget foreground
+  turns fail cleanly with an assistant-visible budget message; user-owned
+  scheduled work is marked `budget_paused` without flipping admin-managed
+  `enabled` state.
+- U3 extends the monthly budget reset cron to clear scheduled-job budget pause
+  fields alongside legacy agent budget pause fields.
+- U3 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/handlers/chat-agent-invoke.identity.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts src/lib/chat-finalize/process-finalize.test.ts src/handlers/wakeup-processor.system-prompt.test.ts src/handlers/crons/budget-reset.test.ts`;
+  `pnpm --filter @thinkwork/lambda exec vitest run __tests__/job-trigger.skill-run.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/lambda typecheck`;
+  `pnpm --filter @thinkwork/api test`;
+  `pnpm --filter @thinkwork/lambda test`;
+  `node node_modules/.pnpm/prettier@3.8.2/node_modules/prettier/bin/prettier.cjs --write <changed supported files>`;
+  and `git diff --check`.
 
 ### Blockers
 

@@ -104,6 +104,7 @@ export async function processFinalize(
     agent_id: agentId,
     thread_id: threadId,
     trace_id: traceId,
+    cost_owner_user_id: costOwnerUserId = null,
     user_message: userMessage = "",
     agent_model: agentModel = null,
     runtime_type: payloadRuntimeType = null,
@@ -255,6 +256,7 @@ export async function processFinalize(
     const costResult = await recordCostEvents({
       tenantId,
       agentId,
+      userId: costOwnerUserId,
       requestId: turnId,
       model: usage.model || agentModel || null,
       inputTokens: usage.inputTokens,
@@ -268,13 +270,14 @@ export async function processFinalize(
       bedrockRequestIds,
       runtimeType,
     });
-    await checkBudgetAndPause(tenantId, agentId);
+    await checkBudgetAndPause(tenantId, agentId, costOwnerUserId);
 
     if (costResult.totalUsd > 0) {
       await notifyCostRecorded({
         tenantId,
         agentId,
         agentName: agentName ?? "",
+        userId: costOwnerUserId,
         eventType: "invocation",
         amountUsd: costResult.totalUsd,
         model: usage.model || agentModel || null,
@@ -293,6 +296,7 @@ export async function processFinalize(
         await recordHindsightCost({
           tenantId,
           agentId,
+          userId: costOwnerUserId,
           bankId: agentSlug ?? "",
           phase: entry.phase,
           model: entry.model,
@@ -325,6 +329,7 @@ export async function processFinalize(
           .values({
             tenant_id: tenantId,
             agent_id: agentId,
+            user_id: costOwnerUserId || undefined,
             thread_id: threadId || undefined,
             request_id: crypto.randomUUID(),
             event_type: String(tc.event_type || "tool_cost"),

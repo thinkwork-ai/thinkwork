@@ -7,7 +7,7 @@
 
 import { eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { agents } from "@thinkwork/database-pg/schema";
+import { agents, scheduledJobs } from "@thinkwork/database-pg/schema";
 
 const db = getDb();
 
@@ -29,6 +29,18 @@ export async function handler(): Promise<{ reset: boolean; count: number }> {
     .where(eq(agents.budget_paused, true))
     .returning({ id: agents.id });
 
-  console.log(`[budget-reset] Unpaused ${result.length} agents`);
-  return { reset: true, count: result.length };
+  const scheduledResult = await db
+    .update(scheduledJobs)
+    .set({
+      budget_paused: false,
+      budget_paused_at: null,
+      budget_paused_reason: null,
+    })
+    .where(eq(scheduledJobs.budget_paused, true))
+    .returning({ id: scheduledJobs.id });
+
+  console.log(
+    `[budget-reset] Unpaused ${result.length} agents and ${scheduledResult.length} scheduled jobs`,
+  );
+  return { reset: true, count: result.length + scheduledResult.length };
 }
