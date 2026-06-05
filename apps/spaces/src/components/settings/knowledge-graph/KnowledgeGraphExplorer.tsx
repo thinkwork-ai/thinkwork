@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Search, X } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Search, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Badge,
@@ -56,7 +56,9 @@ export function KnowledgeGraphExplorer({
   const effectiveTenantId = tenantId ?? null;
   const [view, setView] = useState<ExplorerView>("table");
   const [threadQuery, setThreadQuery] = useState("");
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [selectedThread, setSelectedThread] = useState<ThreadCandidate | null>(
+    null,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [ontologyType, setOntologyType] = useState("");
@@ -79,25 +81,12 @@ export function KnowledgeGraphExplorer({
     variables: {
       tenantId: effectiveTenantId ?? "",
       query: threadQuery.trim() || null,
-      limit: 12,
+      limit: 50,
     },
     pause: !effectiveTenantId,
   });
 
   const candidates = threadResult.data?.knowledgeGraphThreadCandidates ?? [];
-
-  useEffect(() => {
-    if (!selectedThreadId && candidates.length > 0) {
-      setSelectedThreadId(candidates[0]!.threadId);
-    }
-  }, [candidates, selectedThreadId]);
-
-  const selectedThread = useMemo(
-    () =>
-      candidates.find((candidate) => candidate.threadId === selectedThreadId) ??
-      null,
-    [candidates, selectedThreadId],
-  );
 
   const groundingFilter = groundingStatus
     ? (groundingStatus as KnowledgeGraphGroundingStatus)
@@ -233,7 +222,7 @@ export function KnowledgeGraphExplorer({
 
   async function ingestThread(thread: ThreadCandidate) {
     if (!effectiveTenantId) return;
-    setSelectedThreadId(thread.threadId);
+    setSelectedThread(thread);
     const result = await startIngest({
       input: {
         tenantId: effectiveTenantId,
@@ -418,23 +407,24 @@ export function KnowledgeGraphExplorer({
         <SheetContent className="flex flex-col gap-4 sm:max-w-3xl">
           <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
             <SheetTitle>
-              {selectedRun ? "Ingest Results" : "Thread Ingest"}
+              {selectedThread ? "Thread Detail" : "Thread Ingest"}
             </SheetTitle>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
-            {selectedRun ? (
-              <IngestResultView
+            {selectedThread ? (
+              <ThreadIngestDetailView
                 tenantId={effectiveTenantId}
-                run={selectedRun}
-                thread={
-                  candidates.find(
-                    (candidate) => candidate.threadId === selectedRun.threadId,
-                  ) ?? selectedThread
-                }
+                run={selectedRun ?? selectedThread.lastIngestRun ?? null}
+                thread={selectedThread}
                 entities={runEntityResult.data?.knowledgeGraphEntities ?? []}
                 fetching={runEntityResult.fetching}
                 error={runEntityResult.error?.message ?? null}
-                onBack={() => setSelectedRun(null)}
+                ingesting={ingestState.fetching}
+                onBack={() => {
+                  setSelectedThread(null);
+                  setSelectedRun(null);
+                }}
+                onIngest={() => void ingestThread(selectedThread)}
                 onEntityClick={(entity) => openEntity(entity.id, entity.label)}
               />
             ) : (
@@ -442,18 +432,12 @@ export function KnowledgeGraphExplorer({
                 <KnowledgeGraphIngestControls
                   query={threadQuery}
                   candidates={candidates}
-                  selectedThreadId={selectedThreadId}
                   fetching={threadResult.fetching && !threadResult.data}
                   error={threadResult.error?.message ?? null}
-                  ingesting={ingestState.fetching}
                   onQueryChange={setThreadQuery}
-                  onSelectThread={(thread: ThreadCandidate) =>
-                    setSelectedThreadId(thread.threadId)
-                  }
-                  onIngestThread={(thread) => void ingestThread(thread)}
-                  onOpenRun={(run, thread) => {
-                    setSelectedThreadId(thread.threadId);
-                    setSelectedRun(run);
+                  onSelectThread={(thread: ThreadCandidate) => {
+                    setSelectedThread(thread);
+                    setSelectedRun(thread.lastIngestRun ?? null);
                   }}
                 />
               </div>
@@ -488,23 +472,27 @@ export function KnowledgeGraphExplorer({
   );
 }
 
-function IngestResultView({
+function ThreadIngestDetailView({
   tenantId,
   run,
   thread,
   entities,
   fetching,
   error,
+  ingesting,
   onBack,
+  onIngest,
   onEntityClick,
 }: {
   tenantId: string;
-  run: IngestRun;
-  thread: ThreadCandidate | null;
+  run: IngestRun | null;
+  thread: ThreadCandidate;
   entities: EntityRow[];
   fetching: boolean;
   error?: string | null;
+  ingesting: boolean;
   onBack: () => void;
+  onIngest: () => void;
   onEntityClick: (entity: Pick<EntityRow, "id" | "label">) => void;
 }) {
   const columns: ColumnDef<EntityRow>[] = [
@@ -555,44 +543,67 @@ function IngestResultView({
 
   return (
     <div className="grid gap-4">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="w-fit px-0"
-        onClick={onBack}
-      >
-        <ArrowLeft className="size-4" />
-        Threads
-      </Button>
+      <div className="flex items-start justify-between gap-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-fit px-0"
+          onClick={onBack}
+        >
+          <ArrowLeft className="size-4" />
+          Threads
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="shrink-0"
+          disabled={ingesting}
+          onClick={onIngest}
+        >
+          {ingesting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <RefreshCw className="size-4" />
+          )}
+          Ingest thread
+        </Button>
+      </div>
 
       <div className="rounded-md border border-border bg-card p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={runStatusVariant(run.status)}>
-            {formatRunStatus(run.status)}
-          </Badge>
+          {run ? (
+            <Badge variant={runStatusVariant(run.status)}>
+              {formatRunStatus(run.status)}
+            </Badge>
+          ) : (
+            <Badge variant="secondary">not ingested</Badge>
+          )}
           <span className="min-w-0 truncate text-sm font-medium">
-            {thread ? `#${thread.number} ${thread.title}` : run.threadId}
+            #{thread.number} {thread.title}
           </span>
-          {run.durationMs != null ? (
+          {run?.durationMs != null ? (
             <span className="ml-auto text-xs text-muted-foreground">
               {run.durationMs} ms
             </span>
           ) : null}
         </div>
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span>{run.entityCount} entities</span>
-          <span>{run.relationshipCount} links</span>
-          <span>{run.evidenceCount} evidence</span>
-          <span>{run.messageCount} messages</span>
+          <span>{run?.entityCount ?? 0} entities</span>
+          <span>{run?.relationshipCount ?? 0} links</span>
+          <span>{run?.evidenceCount ?? 0} evidence</span>
+          <span>{run?.messageCount ?? thread.messageCount} messages</span>
         </div>
-        {run.error ? (
+        {run?.error ? (
           <p className="mt-2 text-sm text-destructive">{run.error}</p>
         ) : null}
       </div>
 
       <div className="min-h-48">
-        {fetching && entities.length === 0 ? (
+        {!run ? (
+          <EmptyState text="This thread has not been ingested yet." />
+        ) : fetching && entities.length === 0 ? (
           <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Loading results...
           </div>
@@ -603,7 +614,7 @@ function IngestResultView({
             columns={columns}
             data={entities}
             onRowClick={onEntityClick}
-            pageSize={8}
+            pageSize={0}
             allowHorizontalScroll={false}
             tableClassName="table-fixed"
             emptyState="No known ontology entities were stored for this ingest."
@@ -611,19 +622,21 @@ function IngestResultView({
         )}
       </div>
 
-      <div className="h-80 overflow-hidden rounded-lg border border-border">
-        <KnowledgeGraph
-          tenantId={tenantId}
-          threadId={null}
-          runId={run.id}
-          onNodeClick={(node: KnowledgeGraphNode) => {
-            onEntityClick({ id: node.entityId, label: node.label });
-          }}
-          emptyFallback={
-            <EmptyState text="No known ontology graph was stored for this ingest." />
-          }
-        />
-      </div>
+      {run ? (
+        <div className="h-80 overflow-hidden rounded-lg border border-border">
+          <KnowledgeGraph
+            tenantId={tenantId}
+            threadId={null}
+            runId={run.id}
+            onNodeClick={(node: KnowledgeGraphNode) => {
+              onEntityClick({ id: node.entityId, label: node.label });
+            }}
+            emptyFallback={
+              <EmptyState text="No known ontology graph was stored for this ingest." />
+            }
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
