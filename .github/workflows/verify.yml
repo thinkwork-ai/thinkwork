@@ -209,6 +209,17 @@ jobs:
           COGNEE_LLM_PROVIDER_INPUT: ${{ vars.COGNEE_LLM_PROVIDER || 'bedrock' }}
           COGNEE_EMBEDDING_PROVIDER_INPUT: ${{ vars.COGNEE_EMBEDDING_PROVIDER || 'bedrock' }}
           COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT: ${{ vars.COGNEE_BEDROCK_MODEL_RESOURCE_ARNS || '' }}
+          TWENTY_PROVISIONED_INPUT: ${{ vars.TWENTY_PROVISIONED || 'false' }}
+          TWENTY_RUNTIME_ENABLED_INPUT: ${{ vars.TWENTY_RUNTIME_ENABLED || 'false' }}
+          TWENTY_IMAGE_URI_INPUT: ${{ vars.TWENTY_IMAGE_URI || '' }}
+          TWENTY_DB_USERNAME_INPUT: ${{ vars.TWENTY_DB_USERNAME || 'thinkwork_twenty' }}
+          TWENTY_DB_NAME_INPUT: ${{ vars.TWENTY_DB_NAME || 'thinkwork_twenty' }}
+          TWENTY_DB_URL_SECRET_ARN_INPUT: ${{ vars.TWENTY_DB_URL_SECRET_ARN || '' }}
+          TWENTY_DB_URL_SECRET_ID_INPUT: ${{ vars.TWENTY_DB_URL_SECRET_ID || '' }}
+          TWENTY_ENCRYPTION_KEY_SECRET_ARN_INPUT: ${{ vars.TWENTY_ENCRYPTION_KEY_SECRET_ARN || '' }}
+          TWENTY_ENCRYPTION_KEY_SECRET_ID_INPUT: ${{ vars.TWENTY_ENCRYPTION_KEY_SECRET_ID || '' }}
+          TWENTY_PUBLIC_URL_INPUT: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_CERTIFICATE_ARN_INPUT: ${{ vars.TWENTY_CERTIFICATE_ARN || '' }}
         run: |
           # -detailed-exitcode: 0=no changes, 1=error, 2=changes detected.
           # We treat 2 (drift) as a soft signal and write a summary instead
@@ -230,6 +241,29 @@ jobs:
           cognee_llm_provider="${COGNEE_LLM_PROVIDER_INPUT:-bedrock}"
           cognee_embedding_provider="${COGNEE_EMBEDDING_PROVIDER_INPUT:-bedrock}"
           cognee_bedrock_model_resource_arns="${COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT:-[\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.nova-lite-v1:0\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.titan-embed-text-v2:0\"]}"
+          twenty_provisioned=$(printf '%s' "$TWENTY_PROVISIONED_INPUT" | tr '[:upper:]' '[:lower:]')
+          twenty_runtime_enabled=$(printf '%s' "$TWENTY_RUNTIME_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
+          if [ "$twenty_provisioned" != "true" ] && [ "$twenty_provisioned" != "false" ]; then
+            echo "::error::TWENTY_PROVISIONED must be true or false."
+            exit 1
+          fi
+          if [ "$twenty_runtime_enabled" != "true" ] && [ "$twenty_runtime_enabled" != "false" ]; then
+            echo "::error::TWENTY_RUNTIME_ENABLED must be true or false."
+            exit 1
+          fi
+          if [ "$twenty_runtime_enabled" = "true" ] && [ "$twenty_provisioned" != "true" ]; then
+            echo "::error::TWENTY_RUNTIME_ENABLED=true requires TWENTY_PROVISIONED=true."
+            exit 1
+          fi
+          twenty_image_uri="${TWENTY_IMAGE_URI_INPUT:-}"
+          twenty_db_username="${TWENTY_DB_USERNAME_INPUT:-thinkwork_twenty}"
+          twenty_db_name="${TWENTY_DB_NAME_INPUT:-thinkwork_twenty}"
+          twenty_db_url_secret_id="${TWENTY_DB_URL_SECRET_ID_INPUT:-thinkwork/${STAGE}/twenty/db-url}"
+          twenty_db_url_secret_arn="$TWENTY_DB_URL_SECRET_ARN_INPUT"
+          twenty_encryption_key_secret_id="${TWENTY_ENCRYPTION_KEY_SECRET_ID_INPUT:-thinkwork/${STAGE}/twenty/encryption-key}"
+          twenty_encryption_key_secret_arn="$TWENTY_ENCRYPTION_KEY_SECRET_ARN_INPUT"
+          twenty_public_url="${TWENTY_PUBLIC_URL_INPUT:-}"
+          twenty_certificate_arn="${TWENTY_CERTIFICATE_ARN_INPUT:-}"
 
           if [ "$cognee_enabled" = "true" ] && [ -z "$cognee_db_password_secret_arn" ]; then
             cognee_db_password_secret_arn=$(aws secretsmanager describe-secret \
@@ -238,6 +272,38 @@ jobs:
             if [ -z "$cognee_db_password_secret_arn" ] || [ "$cognee_db_password_secret_arn" = "None" ]; then
               echo "::error::COGNEE_ENABLED=true but the Cognee DB secret does not exist yet. Run the deploy workflow once to create it."
               exit 1
+            fi
+          fi
+          if [ "$twenty_provisioned" = "true" ]; then
+            if [[ ! "$twenty_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::TWENTY_IMAGE_URI must be pinned to an immutable sha256 digest when TWENTY_PROVISIONED=true."
+              exit 1
+            fi
+            if [[ ! "$twenty_db_username" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]]; then
+              echo "::error::TWENTY_DB_USERNAME must be a valid PostgreSQL identifier."
+              exit 1
+            fi
+            if [[ ! "$twenty_db_name" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || [ "$twenty_db_name" = "thinkwork" ]; then
+              echo "::error::TWENTY_DB_NAME must be a valid PostgreSQL identifier distinct from thinkwork."
+              exit 1
+            fi
+            if [ -z "$twenty_db_url_secret_arn" ]; then
+              twenty_db_url_secret_arn=$(aws secretsmanager describe-secret \
+                --secret-id "$twenty_db_url_secret_id" \
+                --query ARN --output text 2>/dev/null || echo "")
+              if [ -z "$twenty_db_url_secret_arn" ] || [ "$twenty_db_url_secret_arn" = "None" ]; then
+                echo "::error::TWENTY_PROVISIONED=true but the Twenty DB URL secret does not exist yet. Run the deploy workflow once to create it."
+                exit 1
+              fi
+            fi
+            if [ -z "$twenty_encryption_key_secret_arn" ]; then
+              twenty_encryption_key_secret_arn=$(aws secretsmanager describe-secret \
+                --secret-id "$twenty_encryption_key_secret_id" \
+                --query ARN --output text 2>/dev/null || echo "")
+              if [ -z "$twenty_encryption_key_secret_arn" ] || [ "$twenty_encryption_key_secret_arn" = "None" ]; then
+                echo "::error::TWENTY_PROVISIONED=true but the Twenty encryption key secret does not exist yet. Run the deploy workflow once to create it."
+                exit 1
+              fi
             fi
           fi
 
@@ -262,6 +328,15 @@ jobs:
             -var "cognee_llm_provider=$cognee_llm_provider" \
             -var "cognee_embedding_provider=$cognee_embedding_provider" \
             -var "cognee_bedrock_model_resource_arns=$cognee_bedrock_model_resource_arns" \
+            -var "twenty_provisioned=$twenty_provisioned" \
+            -var "twenty_runtime_enabled=$twenty_runtime_enabled" \
+            -var "twenty_image_uri=$twenty_image_uri" \
+            -var "twenty_db_username=$twenty_db_username" \
+            -var "twenty_db_name=$twenty_db_name" \
+            -var "twenty_db_url_secret_arn=$twenty_db_url_secret_arn" \
+            -var "twenty_encryption_key_secret_arn=$twenty_encryption_key_secret_arn" \
+            -var "twenty_public_url=$twenty_public_url" \
+            -var "twenty_certificate_arn=$twenty_certificate_arn" \
             -var "enable_workspace_orchestration=true" \
             -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
             -var "mapbox_public_token=${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}" \
