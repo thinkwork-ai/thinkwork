@@ -88,6 +88,7 @@ export interface KnowledgeGraphHandle {
 interface KnowledgeGraphProps {
   tenantId: string;
   threadId: string | null;
+  runId?: string | null;
   onNodeClick?: (
     node: KnowledgeGraphNode,
     connectedEdges: KnowledgeGraphConnectedEdge[],
@@ -236,6 +237,7 @@ export const KnowledgeGraph = forwardRef<
   {
     tenantId,
     threadId,
+    runId,
     onNodeClick,
     onTypesLoaded,
     searchQuery,
@@ -254,8 +256,8 @@ export const KnowledgeGraph = forwardRef<
 
   const [result, reexecute] = useQuery({
     query: KnowledgeGraphQuery,
-    variables: { tenantId, threadId },
-    pause: !tenantId || !threadId,
+    variables: { tenantId, threadId, runId: runId ?? null },
+    pause: !tenantId,
   });
 
   const graphData = useMemo(
@@ -493,24 +495,12 @@ export const KnowledgeGraph = forwardRef<
     cameraInitRef.current = true;
   }, [dims, graphData]);
 
-  const anyFetching = !!threadId && result.fetching && !result.data;
+  const anyFetching = result.fetching && !result.data;
   if (anyFetching) {
     return (
       loadingFallback ?? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
           Loading graph...
-        </div>
-      )
-    );
-  }
-
-  if (!threadId) {
-    return (
-      emptyFallback ?? (
-        <div className="flex flex-col items-center gap-2 py-16 text-center">
-          <p className="text-sm text-muted-foreground">
-            Select a thread to inspect its Cognee graph.
-          </p>
         </div>
       )
     );
@@ -538,7 +528,7 @@ export const KnowledgeGraph = forwardRef<
       emptyFallback ?? (
         <div className="flex flex-col items-center gap-2 py-16 text-center">
           <p className="text-sm text-muted-foreground max-w-sm">
-            No Cognee entities have been captured for this thread yet.
+            No known ontology entities have been captured yet.
           </p>
         </div>
       )

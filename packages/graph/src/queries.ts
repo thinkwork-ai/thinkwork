@@ -58,8 +58,12 @@ export const WikiGraphQuery = gql`
 `;
 
 export const KnowledgeGraphQuery = gql`
-  query KnowledgeGraph($tenantId: ID!, $threadId: ID!) {
-    knowledgeGraphGraph(tenantId: $tenantId, threadId: $threadId) {
+  query KnowledgeGraph($tenantId: ID!, $threadId: ID, $runId: ID) {
+    knowledgeGraphGraph(
+      tenantId: $tenantId
+      threadId: $threadId
+      runId: $runId
+    ) {
       nodes {
         id
         entityId

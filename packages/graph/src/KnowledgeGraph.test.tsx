@@ -264,9 +264,9 @@ describe("KnowledgeGraph", () => {
     };
     rerender(<KnowledgeGraph tenantId="tenant-1" threadId={null} />);
     expect(
-      screen.getByText("Select a thread to inspect its Cognee graph."),
+      await screen.findByText("Knowledge graph could not load."),
     ).toBeTruthy();
-    expect(screen.queryByText("stale thread error")).toBeNull();
+    expect(screen.getByText("stale thread error")).toBeTruthy();
 
     urqlState.result = {
       fetching: false,

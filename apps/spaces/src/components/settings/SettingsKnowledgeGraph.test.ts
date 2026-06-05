@@ -21,7 +21,10 @@ describe("SettingsKnowledgeGraph", () => {
     expect(source).toContain("KnowledgeGraphConfigPanel");
     expect(source).toContain("showConfig ? (");
     expect(source).toContain("<KnowledgeGraphConfigPanel />");
-    expect(source).toContain("<KnowledgeGraphExplorer />");
+    expect(source).toContain("<KnowledgeGraphExplorer");
+    expect(source).toContain("threadSheetOpen={threadSheetOpen}");
+    expect(source).toContain("onThreadSheetOpenChange={setThreadSheetOpen}");
+    expect(source).toContain("Open thread ingest");
     expect(source).toContain("Show Knowledge Graph configuration");
     expect(source).toContain("Show Knowledge Graph Explorer");
     expect(source).toContain("Inspect Cognee entities");

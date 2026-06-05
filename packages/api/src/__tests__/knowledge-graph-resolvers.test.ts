@@ -264,6 +264,12 @@ describe("knowledge graph read resolvers", () => {
         evidence: [],
       }),
     ]);
+    const entityQuery = ctx.db.execute.mock.calls[0]?.[0];
+    expect(renderSql(entityQuery)).toContain(
+      "ontology_entity_type_id IS NOT NULL",
+    );
+    expect(renderSql(entityQuery)).toContain("ontology_type_slug IS NOT NULL");
+    expect(renderSql(entityQuery)).toContain("grounding_status = 'grounded'");
   });
 
   it("builds a graph from the same filtered entity set", async () => {
@@ -293,6 +299,15 @@ describe("knowledge graph read resolvers", () => {
     const relationshipQuery = ctx.db.execute.mock.calls[1]?.[0];
     expect(renderSql(relationshipQuery)).toMatch(
       /source_entity_id IN \(\$\d+::uuid, \$\d+::uuid\)/,
+    );
+    expect(renderSql(relationshipQuery)).toContain(
+      "ontology_relationship_type_id IS NOT NULL",
+    );
+    expect(renderSql(relationshipQuery)).toContain(
+      "ontology_type_slug IS NOT NULL",
+    );
+    expect(renderSql(relationshipQuery)).toContain(
+      "grounding_status = 'grounded'",
     );
     expect(renderSql(relationshipQuery)).not.toContain("::uuid[]");
   });
