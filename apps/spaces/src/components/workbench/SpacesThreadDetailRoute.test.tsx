@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { serializeEditor } from "./SkillTokenInput";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
@@ -28,6 +29,13 @@ import {
   clearPendingThreadStart,
   setPendingThreadStart,
 } from "@/lib/pending-thread-starts";
+
+// Follow-up composer is a contenteditable token field, not a <textarea>.
+function setFollowUpText(value: string) {
+  const el = screen.getByLabelText("Follow up");
+  el.textContent = value;
+  fireEvent.input(el);
+}
 
 const routerLocationStateMock = vi.hoisted(() => ({
   state: {} as Record<string, unknown>,
@@ -762,14 +770,17 @@ describe("SpacesThreadDetailRoute", () => {
         screen.getByRole("button", { name: "Update Get contract signed" }),
       );
 
-      expect(screen.getByLabelText("Follow up")).toHaveProperty(
-        "value",
+      expect(serializeEditor(screen.getByLabelText("Follow up"))).toBe(
         "Get contract signed: ",
       );
+      // The composer ends up focused even though the first focus attempt was
+      // suppressed (disabled→enabled retry) — the point of this test. The
+      // contenteditable token field focuses via the editor handle, so we assert
+      // the end state (focused + prefilled) rather than the textarea-era
+      // focus-call count.
       await waitFor(() => {
         expect(document.activeElement).toBe(screen.getByLabelText("Follow up"));
       });
-      expect(focusAttempts).toBeGreaterThan(1);
     } finally {
       focusSpy.mockRestore();
     }
@@ -809,9 +820,7 @@ describe("SpacesThreadDetailRoute", () => {
     renderHeaderAction();
     fireEvent.click(screen.getByRole("button", { name: "Open thread info" }));
     fireEvent.click(screen.getByRole("button", { name: `Update ${title}` }));
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: `${title}: done` },
-    });
+    setFollowUpText(`${title}: done`);
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -995,9 +1004,7 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "For the human collaborators only" },
-    });
+    setFollowUpText("For the human collaborators only");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -1027,9 +1034,7 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "Visible to collaborators only" },
-    });
+    setFollowUpText("Visible to collaborators only");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -1052,9 +1057,7 @@ describe("SpacesThreadDetailRoute", () => {
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "Ask the agent for help" },
-    });
+    setFollowUpText("Ask the agent for help");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -1077,11 +1080,11 @@ describe("SpacesThreadDetailRoute", () => {
       },
     };
 
-    const { rerender } = render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    const { rerender } = render(
+      <SpacesThreadDetailRoute threadId="thread-1" />,
+    );
 
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "What's my wife's name?" },
-    });
+    setFollowUpText("What's my wife's name?");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -1189,9 +1192,7 @@ describe("SpacesThreadDetailRoute", () => {
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "Run this through AgentCore" },
-    });
+    setFollowUpText("Run this through AgentCore");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -1236,9 +1237,7 @@ describe("SpacesThreadDetailRoute", () => {
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "DocuSign is complete" },
-    });
+    setFollowUpText("DocuSign is complete");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
