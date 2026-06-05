@@ -83,6 +83,10 @@ import {
   loadWorkspaceSkillConfigs,
 } from "../lib/resolve-agent-runtime-config.js";
 import {
+  filterBlockedSkills,
+  resolveDispatchPinnedSkills,
+} from "../lib/skills/message-pinned-skills.js";
+import {
   prependThreadProgressPromptBlock,
   readThreadProgressMarkdown,
 } from "../lib/thread-progress/storage.js";
@@ -1718,6 +1722,36 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           thread_attachments_manifest:
             attachmentContext.threadAttachmentManifest,
         });
+      }
+
+      // Force-pinned skills parity with the direct chat-agent-invoke path
+      // (plan 2026-06-04-004 U3). The wakeup fallback re-resolves
+      // `messages.metadata.skills` for the same user message and builds the
+      // ephemeral `pinned_skills` branch, dropping any blocked slug (KD4) using
+      // the resolved blocked_tools for this turn.
+      try {
+        const pinnedSlugs = filterBlockedSkills(
+          await resolveDispatchPinnedSkills({
+            db,
+            tenantId: wakeup.tenant_id,
+            threadId: runThreadId,
+            messageId,
+          }),
+          effectiveBlockedTools,
+        );
+        if (pinnedSlugs.length > 0 && tenantSlug) {
+          Object.assign(agentCorePayload, {
+            pinned_skills: pinnedSlugs.map((slug) => ({
+              skillId: slug,
+              s3Key: tenantCatalogSkillS3Key(tenantSlug, slug),
+            })),
+          });
+        }
+      } catch (err) {
+        console.error(
+          "[wakeup-processor] Failed to resolve pinned skills:",
+          err,
+        );
       }
     }
 

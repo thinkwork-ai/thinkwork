@@ -105,3 +105,38 @@ export function filterBlockedSkills(
   const blocked = new Set(blockedTools);
   return slugs.filter((slug) => !blocked.has(slug));
 }
+
+/** Ephemeral pinned-skill config branch forwarded to the runtime as `pinned_skills`. */
+export interface PinnedSkillConfig {
+  skillId: string;
+  s3Key: string;
+}
+
+/**
+ * Build the ephemeral `pinned_skills` config branch (plan 2026-06-04-004 U3):
+ * map each pinned slug to its tenant catalog s3Key, dedupe, and drop any the
+ * tool policy disallows. `isAllowed` is the SAME guardrail installed skills
+ * pass through, so an operator pin can never override an admin blocklist (KD4).
+ * Returns [] when the tenant slug is missing (no catalog path can be built).
+ */
+export function buildPinnedSkillConfigs(input: {
+  slugs: string[];
+  tenantSlug: string;
+  catalogS3Key: (tenantSlug: string, slug: string) => string;
+  isAllowed?: (config: PinnedSkillConfig) => boolean;
+}): PinnedSkillConfig[] {
+  if (!input.tenantSlug) return [];
+  const seen = new Set<string>();
+  const configs: PinnedSkillConfig[] = [];
+  for (const slug of input.slugs) {
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    const config: PinnedSkillConfig = {
+      skillId: slug,
+      s3Key: input.catalogS3Key(input.tenantSlug, slug),
+    };
+    if (input.isAllowed && !input.isAllowed(config)) continue;
+    configs.push(config);
+  }
+  return configs;
+}

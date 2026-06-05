@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_PINNED_SKILLS,
+  buildPinnedSkillConfigs,
   filterBlockedSkills,
   parsePinnedSkillSlugs,
   resolveDispatchPinnedSkills,
 } from "./message-pinned-skills.js";
+
+const catalogS3Key = (tenantSlug: string, slug: string) =>
+  `tenants/${tenantSlug}/skill-catalog/${slug}`;
 
 describe("parsePinnedSkillSlugs", () => {
   it("parses { slug } entries from jsonb metadata", () => {
@@ -74,6 +78,58 @@ describe("filterBlockedSkills (KD4)", () => {
     expect(filterBlockedSkills(["a", "b"], [])).toEqual(["a", "b"]);
     expect(filterBlockedSkills(["a", "b"], null)).toEqual(["a", "b"]);
     expect(filterBlockedSkills(["a", "b"], undefined)).toEqual(["a", "b"]);
+  });
+});
+
+describe("buildPinnedSkillConfigs (U3)", () => {
+  it("maps each slug to its tenant catalog s3Key", () => {
+    expect(
+      buildPinnedSkillConfigs({
+        slugs: ["crm-dashboard"],
+        tenantSlug: "acme",
+        catalogS3Key,
+      }),
+    ).toEqual([
+      {
+        skillId: "crm-dashboard",
+        s3Key: "tenants/acme/skill-catalog/crm-dashboard",
+      },
+    ]);
+  });
+
+  it("returns [] for empty slugs (payload field omitted upstream)", () => {
+    expect(
+      buildPinnedSkillConfigs({ slugs: [], tenantSlug: "acme", catalogS3Key }),
+    ).toEqual([]);
+  });
+
+  it("returns [] when the tenant slug is missing", () => {
+    expect(
+      buildPinnedSkillConfigs({
+        slugs: ["crm-dashboard"],
+        tenantSlug: "",
+        catalogS3Key,
+      }),
+    ).toEqual([]);
+  });
+
+  it("dedupes repeated slugs", () => {
+    const res = buildPinnedSkillConfigs({
+      slugs: ["a", "a", "b"],
+      tenantSlug: "acme",
+      catalogS3Key,
+    });
+    expect(res.map((c) => c.skillId)).toEqual(["a", "b"]);
+  });
+
+  it("drops configs the policy disallows (KD4 — pin cannot override blocklist)", () => {
+    const res = buildPinnedSkillConfigs({
+      slugs: ["crm-dashboard", "danger-skill"],
+      tenantSlug: "acme",
+      catalogS3Key,
+      isAllowed: (c) => c.skillId !== "danger-skill",
+    });
+    expect(res.map((c) => c.skillId)).toEqual(["crm-dashboard"]);
   });
 });
 

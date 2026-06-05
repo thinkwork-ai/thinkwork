@@ -215,7 +215,10 @@ const DEFAULT_SKILLS: ReadonlyArray<{ skillId: string }> = [
   { skillId: "workspace-memory" },
 ];
 
-function tenantCatalogSkillS3Key(tenantSlug: string, skillId: string): string {
+export function tenantCatalogSkillS3Key(
+  tenantSlug: string,
+  skillId: string,
+): string {
   return `tenants/${tenantSlug}/skill-catalog/${skillId}`;
 }
 
