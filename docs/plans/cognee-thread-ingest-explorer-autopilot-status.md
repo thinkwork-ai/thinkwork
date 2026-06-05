@@ -610,3 +610,13 @@ operation`. ECS logs showed the precise cause:
   only; admin/mobile package filters still do not expose typecheck scripts.
 - 2026-06-05: Opened source-ingest follow-up PR
   [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103).
+- 2026-06-05: PR [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103)
+  first CI attempt failed the `test` workflow in
+  `packages/database-pg/__tests__/knowledge-graph-schema.test.ts` because the
+  schema assertions still expected non-null thread-only rows and the old
+  evidence `source_kind` semantics. Updated the schema test to assert nullable
+  `thread_id`, graph `source_kind/source_ref`, evidence
+  `evidence_source_kind/evidence_source_ref`, and migration `0146` markers.
+  Local fix verification passed:
+  `pnpm --filter @thinkwork/database-pg exec vitest run __tests__/knowledge-graph-schema.test.ts`
+  and `pnpm --filter @thinkwork/database-pg test`.
