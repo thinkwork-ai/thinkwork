@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/cognee-kg-remember-content-type` /
   `.Codex/worktrees/cognee-kg-remember-content-type`
-- Current PR: pending
+- Current PR: [#2087](https://github.com/thinkwork-ai/thinkwork/pull/2087)
 - Blocker: none. U9 merged and deployed, which fixed Cognee authentication.
   Live deployed smoke now reaches Cognee. U10 updates thread ingest to use
   Cognee's ontology-guided ingest path: export approved ThinkWork ontology rows
@@ -303,4 +303,8 @@ operation`. ECS logs showed the precise cause:
   top-level `content_type=text/markdown` field.
 - 2026-06-05: U10 local verification passed:
   `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/ontology-export.test.ts src/lib/knowledge-graph/cognee-client.test.ts src/lib/knowledge-graph/normalizer.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts`;
-  and `pnpm --filter @thinkwork/api typecheck`.
+  `pnpm --filter @thinkwork/api typecheck`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`; targeted
+  Prettier check; and `git diff --check`.
+- 2026-06-05: Opened U10 PR
+  [#2087](https://github.com/thinkwork-ai/thinkwork/pull/2087).
