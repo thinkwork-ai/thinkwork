@@ -97,9 +97,11 @@ describe("GraphQL Schema Contract", () => {
       // Costs
       "costSummary",
       "costByAgent",
+      "costByUser",
       "costByModel",
       "budgetPolicies",
       "budgetStatus",
+      "userBudgetStatus",
       "agentBudgetStatus",
       // Knowledge
       "knowledgeBases",
@@ -402,6 +404,11 @@ describe("GraphQL Schema Contract", () => {
       "createInboxItem",
       "approveInboxItem",
       "rejectInboxItem",
+      // Costs
+      "upsertBudgetPolicy",
+      "deleteBudgetPolicy",
+      "unpauseAgent",
+      "unpauseUserBudget",
     ];
 
     for (const m of expectedMutations) {

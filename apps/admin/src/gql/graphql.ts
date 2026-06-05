@@ -2111,6 +2111,7 @@ export type Mutation = {
   uninstallSlackWorkspace: SlackWorkspace;
   unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
+  unpauseUserBudget: Scalars["Int"]["output"];
   unpinThread: Scalars["Boolean"]["output"];
   unregisterPushToken: Scalars["Boolean"]["output"];
   updateArtifact: Artifact;
@@ -2812,6 +2813,11 @@ export type MutationUnpauseAgentArgs = {
   agentId: Scalars["ID"]["input"];
 };
 
+export type MutationUnpauseUserBudgetArgs = {
+  tenantId: Scalars["ID"]["input"];
+  userId: Scalars["ID"]["input"];
+};
+
 export type MutationUnpinThreadArgs = {
   tenantId: Scalars["ID"]["input"];
   threadId: Scalars["ID"]["input"];
@@ -3341,6 +3347,7 @@ export type Query = {
   concurrencySnapshot: ConcurrencySnapshot;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
+  costByUser: Array<UserCostSummary>;
   costSummary: CostSummary;
   costTimeSeries: Array<DailyCostPoint>;
   customerOnboardingSpace?: Maybe<Space>;
@@ -3469,6 +3476,7 @@ export type Query = {
   turnInvocationLogs: Array<ModelInvocation>;
   unreadThreadCount: Scalars["Int"]["output"];
   user?: Maybe<User>;
+  userBudgetStatus?: Maybe<BudgetStatus>;
   userQuickActions: Array<UserQuickAction>;
   webhook?: Maybe<Webhook>;
   /**
@@ -3653,6 +3661,12 @@ export type QueryCostByAgentArgs = {
 };
 
 export type QueryCostByModelArgs = {
+  from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+};
+
+export type QueryCostByUserArgs = {
   from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
   tenantId: Scalars["ID"]["input"];
   to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
@@ -4148,6 +4162,11 @@ export type QueryUnreadThreadCountArgs = {
 
 export type QueryUserArgs = {
   id: Scalars["ID"]["input"];
+};
+
+export type QueryUserBudgetStatusArgs = {
+  tenantId: Scalars["ID"]["input"];
+  userId: Scalars["ID"]["input"];
 };
 
 export type QueryUserQuickActionsArgs = {
@@ -6020,6 +6039,7 @@ export type UpsertBudgetPolicyInput = {
   limitUsd: Scalars["Float"]["input"];
   period?: InputMaybe<Scalars["String"]["input"]>;
   scope: Scalars["String"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type User = {
@@ -6033,6 +6053,16 @@ export type User = {
   profile?: Maybe<UserProfile>;
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type UserCostSummary = {
+  __typename?: "UserCostSummary";
+  eventCount: Scalars["Int"]["output"];
+  isSystem: Scalars["Boolean"]["output"];
+  totalUsd: Scalars["Float"]["output"];
+  userEmail?: Maybe<Scalars["String"]["output"]>;
+  userId?: Maybe<Scalars["ID"]["output"]>;
+  userName: Scalars["String"]["output"];
 };
 
 export type UserProfile = {
