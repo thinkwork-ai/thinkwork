@@ -7,11 +7,14 @@ import {
   PromptInputFooter,
   PromptInputSpeechButton,
   PromptInputSubmit,
-  PromptInputTextarea,
   PromptInputTools,
   usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import {
+  SkillTokenInput,
+  type SkillTokenInputHandle,
+} from "@/components/workbench/SkillTokenInput";
 import { IconPaperclip, IconPlanet } from "@tabler/icons-react";
 import {
   useEffect,
@@ -36,8 +39,10 @@ import {
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
 import { SkillMenu, type SkillOption } from "@/components/spaces/SkillMenu";
-import { useComposerSkillPins } from "@/components/workbench/useComposerSkillPins";
-import { SkillPinChips } from "@/components/workbench/SkillPinChips";
+import {
+  extractPinnedSkillSlugs,
+  useComposerSkillPins,
+} from "@/components/workbench/useComposerSkillPins";
 import { toast } from "sonner";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { cn } from "@/lib/utils";
@@ -115,7 +120,7 @@ export function SpacesComposer({
     onChange,
     catalog: skillCatalog,
   });
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<SkillTokenInputHandle | null>(null);
   const spacePickerColorClass = selectedSpaceIsDefault
     ? "text-muted-foreground hover:text-foreground"
     : "text-foreground hover:text-foreground/80";
@@ -179,8 +184,8 @@ export function SpacesComposer({
   const isComposerDisabled = disabled || isSubmitting;
   useEffect(() => {
     function focusComposerInput() {
-      const input = document.querySelector<HTMLTextAreaElement>(
-        'textarea[aria-label="Send message"]',
+      const input = document.querySelector<HTMLElement>(
+        '[aria-label="Send message"]',
       );
       input?.focus();
     }
@@ -217,10 +222,9 @@ export function SpacesComposer({
       files,
       submittedMentions,
       effectiveAgentEnabled,
-      skillPins.pins.map((pin) => pin.slug),
+      extractPinnedSkillSlugs(value, skillCatalog),
     );
     setMentions([]);
-    skillPins.clearPins();
     // Fresh draft after send: drop the manual override so the next new thread
     // starts from the derived default again.
     agentOverriddenRef.current = false;
@@ -248,7 +252,7 @@ export function SpacesComposer({
     ]);
   }
 
-  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
     // `@` and `/` menus are mutually exclusive (different trigger chars). When
     // the mention menu isn't open, let the skill-pin menu handle navigation.
     if (!mentionMenuOpen) {
@@ -333,18 +337,13 @@ export function SpacesComposer({
             <PromptInputAttachments>
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
-            {skillPins.pins.length > 0 ? (
-              <SkillPinChips
-                pins={skillPins.pins}
-                onRemove={skillPins.removePin}
-                className="px-3 pt-2"
-              />
-            ) : null}
-            <PromptInputTextarea
+            <SkillTokenInput
               ref={textareaRef}
               aria-label="Send message"
               value={value}
-              onChange={(event) => onChange(event.target.value)}
+              onChange={onChange}
+              catalog={skillCatalog}
+              mentions={mentions}
               onKeyDown={handleComposerKeyDown}
               placeholder="Type @ to mention or / to pin a skill"
               disabled={isComposerDisabled}
@@ -424,7 +423,9 @@ export function SpacesComposer({
             </PromptInputTools>
             <div className="flex items-center gap-1">
               <PromptInputSpeechButton
-                textareaRef={textareaRef}
+                textareaRef={
+                  textareaRef as React.RefObject<HTMLTextAreaElement | null>
+                }
                 onTranscriptionChange={onChange}
                 aria-label="Voice input"
                 title="Voice input"

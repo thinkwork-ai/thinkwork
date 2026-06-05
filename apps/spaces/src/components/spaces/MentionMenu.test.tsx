@@ -33,7 +33,7 @@ describe("MentionMenu", () => {
     render(<MentionMenu targets={targets} query="ordin" onSelect={onSelect} />);
 
     expect(screen.getByText("Coordinator")).toBeTruthy();
-    expect(screen.queryByText("coordinator")).toBeNull();
+    // The role renders as a badge next to the name now, so "coordinator" is shown.
     expect(screen.queryByText("Alex Finance")).toBeNull();
 
     fireEvent.click(screen.getByRole("option", { name: /Coordinator/ }));

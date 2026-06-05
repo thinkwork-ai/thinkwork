@@ -1,6 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { useComposerSkillPins } from "./useComposerSkillPins";
+import {
+  extractPinnedSkillSlugs,
+  useComposerSkillPins,
+} from "./useComposerSkillPins";
 import type { SkillOption } from "@/components/spaces/SkillMenu";
 
 const catalog: SkillOption[] = [
@@ -18,6 +21,46 @@ function setup(initialValue: string) {
   return { ...view, onChange };
 }
 
+describe("extractPinnedSkillSlugs", () => {
+  it("pulls inline /slug tokens that match a catalog slug", () => {
+    expect(
+      extractPinnedSkillSlugs("hey /crm-dashboard pull the account", catalog),
+    ).toEqual(["crm-dashboard"]);
+  });
+
+  it("matches a token at the very start of the text", () => {
+    expect(extractPinnedSkillSlugs("/invoice-parser", catalog)).toEqual([
+      "invoice-parser",
+    ]);
+  });
+
+  it("ignores /tokens that are not catalog slugs (paths, unknown)", () => {
+    expect(extractPinnedSkillSlugs("see /Users/eric/file", catalog)).toEqual(
+      [],
+    );
+    expect(extractPinnedSkillSlugs("/not-a-skill", catalog)).toEqual([]);
+  });
+
+  it("does not match a slash mid-token (urls)", () => {
+    expect(
+      extractPinnedSkillSlugs("https://x.com/crm-dashboard", catalog),
+    ).toEqual([]);
+  });
+
+  it("dedupes repeated tokens", () => {
+    expect(
+      extractPinnedSkillSlugs(
+        "/crm-dashboard and again /crm-dashboard",
+        catalog,
+      ),
+    ).toEqual(["crm-dashboard"]);
+  });
+
+  it("returns [] for an empty catalog", () => {
+    expect(extractPinnedSkillSlugs("/crm-dashboard", [])).toEqual([]);
+  });
+});
+
 describe("useComposerSkillPins", () => {
   it("opens the menu while a slash query matches the catalog", () => {
     const { result } = setup("/cr");
@@ -32,48 +75,13 @@ describe("useComposerSkillPins", () => {
     expect(result.current.menuOpen).toBe(false);
   });
 
-  it("selecting a skill strips the /query token and adds a pin", () => {
+  it("selecting a skill replaces the /query with an inline /slug token", () => {
     const { result, onChange } = setup("find me /cr");
     act(() => result.current.selectSkill(catalog[0]!));
-    expect(onChange).toHaveBeenCalledWith("find me ");
-    expect(result.current.pins).toEqual([
-      { slug: "crm-dashboard", displayName: "CRM Dashboard" },
-    ]);
+    expect(onChange).toHaveBeenCalledWith("find me /crm-dashboard ");
   });
 
-  it("dedupes a skill already pinned", () => {
-    const { result } = setup("/cr");
-    act(() => result.current.selectSkill(catalog[0]!));
-    act(() => result.current.selectSkill(catalog[0]!));
-    expect(result.current.pins).toHaveLength(1);
-  });
-
-  it("removePin and clearPins drop pins", () => {
-    const { result } = setup("/cr");
-    act(() => result.current.selectSkill(catalog[0]!));
-    act(() => result.current.selectSkill(catalog[1]!));
-    expect(result.current.pins).toHaveLength(2);
-    act(() => result.current.removePin("crm-dashboard"));
-    expect(result.current.pins.map((p) => p.slug)).toEqual(["invoice-parser"]);
-    act(() => result.current.clearPins());
-    expect(result.current.pins).toEqual([]);
-  });
-
-  it("Escape closes the menu; the event is consumed", () => {
-    const { result } = setup("/cr");
-    const preventDefault = vi.fn();
-    let handled = false;
-    act(() => {
-      handled = result.current.handleKeyDown({
-        key: "Escape",
-        preventDefault,
-      } as never);
-    });
-    expect(handled).toBe(true);
-    expect(result.current.menuOpen).toBe(false);
-  });
-
-  it("Enter commits the active option", () => {
+  it("Enter commits the active option as inline text", () => {
     const { result, onChange } = setup("/cr");
     act(() => {
       result.current.handleKeyDown({
@@ -81,8 +89,20 @@ describe("useComposerSkillPins", () => {
         preventDefault: vi.fn(),
       } as never);
     });
-    expect(onChange).toHaveBeenCalledWith("");
-    expect(result.current.pins.map((p) => p.slug)).toEqual(["crm-dashboard"]);
+    expect(onChange).toHaveBeenCalledWith("/crm-dashboard ");
+  });
+
+  it("Escape closes the menu; the event is consumed", () => {
+    const { result } = setup("/cr");
+    let handled = false;
+    act(() => {
+      handled = result.current.handleKeyDown({
+        key: "Escape",
+        preventDefault: vi.fn(),
+      } as never);
+    });
+    expect(handled).toBe(true);
+    expect(result.current.menuOpen).toBe(false);
   });
 
   it("handleKeyDown returns false when the menu is closed (lets mention nav run)", () => {

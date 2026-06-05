@@ -82,14 +82,14 @@ export function SkillMenu({
             role="option"
             aria-selected={isActive}
             className={cn(
-              "h-auto w-full justify-start gap-2 rounded-sm px-2.5 py-2 text-left",
+              "h-auto w-full items-start justify-start gap-2 rounded-sm px-2.5 py-2 text-left",
               isActive && "bg-accent text-accent-foreground",
             )}
             onClick={() => onSelect(skill)}
           >
             <Sparkles
               className={cn(
-                "size-4 shrink-0 text-[#54a9ff]",
+                "mt-0.5 size-4 shrink-0 text-[#54a9ff]",
                 isActive && "text-accent-foreground",
               )}
             />
