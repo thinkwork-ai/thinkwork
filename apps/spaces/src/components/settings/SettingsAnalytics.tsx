@@ -246,9 +246,9 @@ function CostByUserCard({
         <TableHeader>
           <TableRow>
             <TableHead>User</TableHead>
-            <TableHead className="text-right">Events</TableHead>
-            <TableHead>Budget</TableHead>
-            <TableHead className="text-right">Cost</TableHead>
+            <TableHead className="w-20 text-center">Events</TableHead>
+            <TableHead className="w-24">Budget</TableHead>
+            <TableHead className="w-20 text-right">Cost</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -263,27 +263,29 @@ function CostByUserCard({
               const budget = r.userId ? userBudgetMap.get(r.userId) : null;
               return (
                 <TableRow key={r.userId ?? "system"}>
-                  <TableCell>
-                    <div className="font-medium">{r.userName}</div>
+                  <TableCell className="min-w-0">
+                    <div className="truncate font-medium">
+                      {r.isSystem ? "System" : r.userName}
+                    </div>
                     {!r.isSystem && r.userEmail ? (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="truncate text-xs text-muted-foreground">
                         {r.userEmail}
                       </div>
                     ) : null}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                  <TableCell className="w-20 text-center tabular-nums text-muted-foreground">
                     {r.eventCount}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="w-24">
                     {budget ? (
                       <BudgetProgress budget={budget} />
                     ) : (
                       <span className="text-xs text-muted-foreground">
-                        {r.isSystem ? "Not assigned" : "No budget"}
+                        Unlimited
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="w-20 text-right tabular-nums">
                     {formatUsd(r.totalUsd)}
                   </TableCell>
                 </TableRow>
@@ -317,14 +319,14 @@ function BudgetProgress({ budget }: { budget: BudgetStatusRow }) {
         ? "bg-yellow-500"
         : "bg-primary";
   return (
-    <div className="min-w-32">
+    <div className="w-24">
       <div className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div
           className={`h-full ${barClass}`}
           style={{ width: `${percent}%` }}
         />
       </div>
-      <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+      <div className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
         {percent.toFixed(0)}% of {formatUsd(budget.policy.limitUsd, 0)}
       </div>
     </div>

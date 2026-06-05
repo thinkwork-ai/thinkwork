@@ -1,20 +1,44 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { updateMemberMock, tenant, queryDocs, members } = vi.hoisted(() => ({
+const {
+  deleteBudgetMock,
+  updateMemberMock,
+  updateProfileMock,
+  updateUserMock,
+  upsertBudgetMock,
+  tenant,
+  queryDocs,
+  members,
+  userBudgetStatus,
+} = vi.hoisted(() => ({
+  deleteBudgetMock: vi.fn(),
   updateMemberMock: vi.fn(),
+  updateProfileMock: vi.fn(),
+  updateUserMock: vi.fn(),
+  upsertBudgetMock: vi.fn(),
   tenant: {
     tenantId: "tenant-1",
     userId: "caller-1",
     role: "owner" as string,
   },
   queryDocs: {
+    SettingsDeleteBudgetPolicyMutation: Symbol("deleteBudget"),
     SettingsTenantMembersQuery: Symbol("members"),
+    SettingsUserBudgetStatusQuery: Symbol("userBudgetStatus"),
+    SettingsUpsertBudgetPolicyMutation: Symbol("upsertBudget"),
     SettingsUpdateUserMutation: Symbol("updateUser"),
     SettingsUpdateUserProfileMutation: Symbol("updateProfile"),
     SettingsUpdateTenantMemberMutation: Symbol("updateMember"),
   },
   members: [] as unknown[],
+  userBudgetStatus: { current: null as unknown },
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -22,13 +46,29 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("urql", () => ({
-  useQuery: () => [
-    { data: { tenantMembers: members }, fetching: false },
-    vi.fn(),
-  ],
+  useQuery: ({ query }: { query: unknown }) => {
+    if (query === queryDocs.SettingsUserBudgetStatusQuery) {
+      return [
+        {
+          data: { userBudgetStatus: userBudgetStatus.current },
+          fetching: false,
+        },
+        vi.fn(),
+      ];
+    }
+    return [{ data: { tenantMembers: members }, fetching: false }, vi.fn()];
+  },
   useMutation: (doc: unknown) => {
     if (doc === queryDocs.SettingsUpdateTenantMemberMutation)
       return [{ fetching: false }, updateMemberMock];
+    if (doc === queryDocs.SettingsUpdateUserMutation)
+      return [{ fetching: false }, updateUserMock];
+    if (doc === queryDocs.SettingsUpdateUserProfileMutation)
+      return [{ fetching: false }, updateProfileMock];
+    if (doc === queryDocs.SettingsUpsertBudgetPolicyMutation)
+      return [{ fetching: false }, upsertBudgetMock];
+    if (doc === queryDocs.SettingsDeleteBudgetPolicyMutation)
+      return [{ fetching: false }, deleteBudgetMock];
     return [{ fetching: false }, vi.fn()];
   },
 }));
@@ -59,8 +99,17 @@ function seedMember(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  deleteBudgetMock.mockReset();
   updateMemberMock.mockReset();
+  updateProfileMock.mockReset();
+  updateUserMock.mockReset();
+  upsertBudgetMock.mockReset();
+  deleteBudgetMock.mockResolvedValue({ error: null });
   updateMemberMock.mockResolvedValue({ error: null });
+  updateProfileMock.mockResolvedValue({ error: null });
+  updateUserMock.mockResolvedValue({ error: null });
+  upsertBudgetMock.mockResolvedValue({ error: null });
+  userBudgetStatus.current = null;
   tenant.userId = "caller-1";
   tenant.role = "owner";
 });
@@ -87,5 +136,70 @@ describe("SettingsUserDetail role merge", () => {
     seedMember();
     render(<SettingsUserDetail />);
     expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("requires a positive numeric budget before saving", () => {
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: /enable user budget/i }),
+    );
+    fireEvent.change(screen.getByPlaceholderText("0.00"), {
+      target: { value: "not money" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByText("Budget must be a positive number.")).toBeTruthy();
+    expect(upsertBudgetMock).not.toHaveBeenCalled();
+    expect(updateUserMock).not.toHaveBeenCalled();
+  });
+
+  it("upserts a monthly user budget from the profile form", async () => {
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: /enable user budget/i }),
+    );
+    fireEvent.change(screen.getByPlaceholderText("0.00"), {
+      target: { value: "42.50" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(upsertBudgetMock).toHaveBeenCalled());
+    expect(upsertBudgetMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      input: {
+        scope: "user",
+        userId: "user-9",
+        agentId: null,
+        limitUsd: 42.5,
+        period: "monthly",
+        actionOnExceed: "PAUSE",
+      },
+    });
+  });
+
+  it("uses Unlimited by deleting the existing user budget policy", async () => {
+    userBudgetStatus.current = {
+      policy: { id: "budget-1", limitUsd: 25 },
+      spentUsd: 5,
+      remainingUsd: 20,
+      percentUsed: 20,
+      status: "ok",
+    };
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    expect(screen.getByDisplayValue("25")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("switch", { name: /enable user budget/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(deleteBudgetMock).toHaveBeenCalled());
+    expect(deleteBudgetMock).toHaveBeenCalledWith({ id: "budget-1" });
+    expect(upsertBudgetMock).not.toHaveBeenCalled();
   });
 });
