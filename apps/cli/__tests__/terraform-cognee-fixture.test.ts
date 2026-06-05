@@ -28,6 +28,7 @@ const COGNEE_README = resolve(
   REPO_ROOT,
   "terraform/modules/app/cognee/README.md",
 );
+const COGNEE_DOCKERFILE = resolve(REPO_ROOT, "packages/cognee/Dockerfile");
 const BUSINESS_ONTOLOGY_OPS_DOC = resolve(
   REPO_ROOT,
   "docs/src/content/docs/guides/business-ontology-operations.mdx",
@@ -457,6 +458,29 @@ describe("U4 - Cognee deployment template propagation", () => {
       expect(workflow).toMatch(/-var "cognee_llm_provider=\$/);
       expect(workflow).toMatch(/-var "cognee_embedding_provider=\$/);
     }
+  });
+
+  it("builds a pinned Cognee image with Bedrock runtime dependencies for deploy", () => {
+    const dockerfile = read(COGNEE_DOCKERFILE);
+    const deployWorkflow = read(DEPLOY_WORKFLOW);
+
+    expect(dockerfile).toMatch(
+      /ARG COGNEE_BASE_IMAGE=cognee\/cognee@sha256:5ce7e4052b1d/,
+    );
+    expect(dockerfile).toMatch(/\/app\/\.venv\/bin\/python -m pip install/);
+    expect(dockerfile).toMatch(/"boto3>=1\.34\.0"/);
+    expect(dockerfile).not.toMatch(/cognee\/cognee:main/);
+
+    expect(deployWorkflow).toMatch(/'packages\/cognee\/\*\*'/);
+    expect(deployWorkflow).toMatch(/Build and push Cognee Bedrock image/);
+    expect(deployWorkflow).toMatch(/file: packages\/cognee\/Dockerfile/);
+    expect(deployWorkflow).toMatch(/github\.sha }}-cognee/);
+    expect(deployWorkflow).toMatch(/COGNEE_BUILT_IMAGE_DIGEST/);
+    expect(deployWorkflow).toMatch(/COGNEE_BUILT_IMAGE_REPOSITORY/);
+    expect(deployWorkflow).toMatch(/COGNEE_IMAGE_URI_INPUT/);
+    expect(deployWorkflow).toMatch(
+      /cognee_image_uri="\$\{COGNEE_BUILT_IMAGE_REPOSITORY\}@\$\{COGNEE_BUILT_IMAGE_DIGEST\}"/,
+    );
   });
 
   it("prepares the Cognee DB secret and role before Terraform apply when enabled", () => {

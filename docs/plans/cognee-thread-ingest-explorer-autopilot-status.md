@@ -7,17 +7,16 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U10 - Cognee ontology-guided ingest best practices
+- Current unit: U11 - Cognee Bedrock image dependency hotfix
 - Current branch/worktree:
-  `codex/cognee-kg-remember-content-type` /
-  `.Codex/worktrees/cognee-kg-remember-content-type`
-- Current PR: [#2087](https://github.com/thinkwork-ai/thinkwork/pull/2087)
-- Blocker: none. U9 merged and deployed, which fixed Cognee authentication.
-  Live deployed smoke now reaches Cognee. U10 updates thread ingest to use
-  Cognee's ontology-guided ingest path: export approved ThinkWork ontology rows
-  as OWL, upload/sync them to Cognee, pass `ontology_key`, and tag thread data
-  with NodeSets while preserving ThinkWork's normalized snapshot/evidence
-  layer.
+  `codex/cognee-bedrock-boto3-image` /
+  `.Codex/worktrees/cognee-bedrock-boto3-image`
+- Current PR: [#2088](https://github.com/thinkwork-ai/thinkwork/pull/2088)
+- Blocker: none. U10 merged and deployed. Live deployed smoke now reaches
+  Cognee's ontology-guided extraction path, but the upstream Cognee container
+  image fails during LiteLLM Bedrock extraction because `boto3` is missing from
+  `/app/.venv`. U11 builds a pinned Cognee image with the missing Bedrock
+  runtime dependency and wires deploy to use its immutable ECR digest.
 
 ## Progress Log
 
@@ -308,3 +307,28 @@ operation`. ECS logs showed the precise cause:
   Prettier check; and `git diff --check`.
 - 2026-06-05: Opened U10 PR
   [#2087](https://github.com/thinkwork-ai/thinkwork/pull/2087).
+- 2026-06-05: U10 PR
+  [#2087](https://github.com/thinkwork-ai/thinkwork/pull/2087) passed required
+  CI and was squash-merged into `main` at
+  `88fd71c85398d85ee65b5dff8ca5bcf9a35cfe72`; the merge-triggered dev deploy
+  completed successfully.
+- 2026-06-05: Post-U10 live deployed smoke against dev thread
+  `81e6f391-a2d1-45be-98e1-d4fbb7d78878` reached Cognee extraction and failed
+  run `146b01c7-d27b-42ea-8245-cf0b0341cd96` with `/api/v1/remember`
+  returning `409 An error occurred during remember`. ECS logs showed the root
+  cause from LiteLLM's Bedrock Converse adapter:
+  `ModuleNotFoundError: No module named 'boto3'`.
+- 2026-06-05: Started U11 hotfix branch
+  `codex/cognee-bedrock-boto3-image` from `origin/main`.
+- 2026-06-05: U11 adds `packages/cognee/Dockerfile` based on the reviewed
+  pinned Cognee digest and installs `boto3` into `/app/.venv`; deploy now builds
+  and pushes that Cognee Bedrock image to ECR when Cognee is enabled and no
+  explicit `COGNEE_IMAGE_URI` override is set, then passes the built digest to
+  Terraform.
+- 2026-06-05: U11 local verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts`;
+  targeted Prettier check; and `git diff --check`. Local Docker is unavailable
+  in this desktop environment, so the Cognee image build will be verified by the
+  deploy workflow.
+- 2026-06-05: Opened U11 PR
+  [#2088](https://github.com/thinkwork-ai/thinkwork/pull/2088).
