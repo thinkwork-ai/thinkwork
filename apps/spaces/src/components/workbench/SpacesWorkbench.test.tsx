@@ -7,6 +7,13 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNavigate } from "@tanstack/react-router";
+
+// The composer is a contenteditable token field — set text + fire `input`.
+function setComposerText(value: string) {
+  const el = screen.getByLabelText("Send message");
+  el.textContent = value;
+  fireEvent.input(el);
+}
 import { useMutation, useQuery } from "urql";
 import {
   CreateThreadMutation,
@@ -164,9 +171,7 @@ describe("SpacesWorkbench", () => {
   it("sends the first message of a new thread through managed AgentCore", async () => {
     render(<SpacesWorkbench />);
 
-    fireEvent.change(screen.getByLabelText("Send message"), {
-      target: { value: "Use local tools" },
-    });
+    setComposerText("Use local tools");
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
     await waitFor(() => {
@@ -216,9 +221,7 @@ describe("SpacesWorkbench", () => {
 
     render(<SpacesWorkbench />);
 
-    fireEvent.change(screen.getByLabelText("Send message"), {
-      target: { value: "Fast route please" },
-    });
+    setComposerText("Fast route please");
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
     await waitFor(() => {

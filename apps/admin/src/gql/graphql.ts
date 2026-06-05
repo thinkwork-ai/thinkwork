@@ -3701,6 +3701,7 @@ export type QueryKnowledgeGraphEntitiesArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   ontologyType?: InputMaybe<Scalars["String"]["input"]>;
   provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
+  runId?: InputMaybe<Scalars["ID"]["input"]>;
   search?: InputMaybe<Scalars["String"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -3715,6 +3716,7 @@ export type QueryKnowledgeGraphGraphArgs = {
   groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
   ontologyType?: InputMaybe<Scalars["String"]["input"]>;
   provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
+  runId?: InputMaybe<Scalars["ID"]["input"]>;
   search?: InputMaybe<Scalars["String"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadId?: InputMaybe<Scalars["ID"]["input"]>;

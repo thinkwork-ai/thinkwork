@@ -168,6 +168,7 @@ export const NewThreadMentionTargetsQuery = gql`
       isDefaultAgent
       avatarUrl
       role
+      email
     }
   }
 `;
@@ -648,6 +649,7 @@ export const ThreadMentionTargetsQuery = gql`
       isDefaultAgent
       avatarUrl
       role
+      email
     }
   }
 `;

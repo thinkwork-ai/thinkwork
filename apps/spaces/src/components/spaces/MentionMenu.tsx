@@ -11,6 +11,8 @@ export interface MentionTarget {
   isDefaultAgent?: boolean;
   avatarUrl?: string | null;
   role?: string | null;
+  /** Secondary row in the picker (users). Populated once the backend field ships. */
+  email?: string | null;
 }
 
 interface MentionMenuProps {
@@ -128,21 +130,31 @@ export function MentionMenu({
             role="option"
             aria-selected={isActive}
             className={cn(
-              "h-auto w-full justify-start gap-2 rounded-sm px-2.5 py-2 text-left",
+              "h-auto w-full items-start justify-start gap-2 rounded-sm px-2.5 py-2 text-left",
               isActive && "bg-accent text-accent-foreground",
             )}
             onClick={() => onSelect(target)}
           >
             <Icon
               className={cn(
-                "size-4 shrink-0 text-muted-foreground",
+                "mt-0.5 size-4 shrink-0 text-[#54a9ff]",
                 isActive && "text-accent-foreground",
               )}
             />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm">
-                {target.displayName}
+              <span className="flex items-center gap-1.5">
+                <span className="truncate text-sm">{target.displayName}</span>
+                {target.role ? (
+                  <span className="shrink-0 rounded-sm bg-muted px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {target.role}
+                  </span>
+                ) : null}
               </span>
+              {target.email ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {target.email}
+                </span>
+              ) : null}
             </span>
           </Button>
         );

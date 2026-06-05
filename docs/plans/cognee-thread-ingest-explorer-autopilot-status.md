@@ -6,9 +6,10 @@ Started: 2026-06-04
 
 ## Current Status
 
-- State: completed
-- Current unit: complete
-- Current branch/worktree: none
+- State: follow_up_in_progress
+- Current unit: raw Cognee drop diagnostics for empty approved graphs
+- Current branch/worktree: `codex/kg-raw-drop-diagnostics` in
+  `.Codex/worktrees/kg-local-latest`
 - Current PR: none
 - Blocker: none.
 
@@ -448,3 +449,97 @@ operation`. ECS logs showed the precise cause:
   and follow-up hotfix units are merged to `main`; required PR CI and
   merge-triggered deploys passed; live deployed smoke passed; no blockers
   remain.
+- 2026-06-05: Started post-release local follow-up from `origin/main` at
+  `.Codex/worktrees/kg-local-latest` after browser validation showed Cognee
+  structural nodes and the ingest drawer still used the old horizontal thread
+  card layout. Root-cause review found Cognee's raw graph includes pipeline
+  artifacts (`DocumentChunk`, `NodeSet`, `TextDocument`) and that the product
+  graph should only expose approved ontology entity and relationship triples.
+- 2026-06-05: Implemented ontology-only read behavior and a run-scoped UX
+  pivot: entity and graph resolvers now support tenant-wide reads when
+  `threadId` is omitted and run-scoped reads via `runId`, while hard-filtering
+  the main graph/table to rows with approved ontology type IDs/slugs and
+  grounded relationships. The main Knowledge Graph now queries all tenant
+  known ontology entities; the thread ingest controls live in a side sheet
+  behind the header messages icon; the sheet uses a no-horizontal-scroll data
+  table; ingest status is a clickable badge that opens per-run results; and the
+  run result view shows both a result entity table and graph scoped to that
+  ingest run.
+- 2026-06-05: Local follow-up verification passed:
+  `pnpm schema:build`;
+  `pnpm --filter @thinkwork/spaces codegen`;
+  `pnpm --filter @thinkwork/mobile codegen`;
+  `pnpm --dir apps/cli codegen`;
+  `pnpm --filter @thinkwork/admin codegen`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx`;
+  `pnpm --filter @thinkwork/graph exec vitest run src/KnowledgeGraph.test.tsx`;
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-schema.test.ts src/__tests__/knowledge-graph-resolvers.test.ts src/lib/knowledge-graph/runs.test.ts src/lib/knowledge-graph/normalizer.test.ts src/lib/knowledge-graph/cognee-client.test.ts`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/graph typecheck`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `bash scripts/build-lambdas.sh graphql-http`;
+  `pnpm --filter thinkwork-cli typecheck`;
+  `pnpm --filter @thinkwork/spaces build`;
+  and `curl -I http://127.0.0.1:5174/settings/knowledge-graph` returned
+  `200 OK`. The in-app browser connector was not exposed in this tool context,
+  so final authenticated visual validation remains in the user's browser.
+  Admin and mobile package filters do not currently expose `typecheck` scripts.
+- 2026-06-05: Opened follow-up PR
+  [#2097](https://github.com/thinkwork-ai/thinkwork/pull/2097). Initial CI
+  passed CLA, lint, verify, and typecheck, then failed the full test workflow
+  because `SettingsKnowledgeGraph.test.ts` still asserted the old
+  self-closing `<KnowledgeGraphExplorer />` source shape. Updated the test to
+  assert the new thread-ingest sheet props and header action wiring; local
+  verification passed:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsKnowledgeGraph.test.ts src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx`;
+  `pnpm --filter @thinkwork/spaces typecheck`.
+- 2026-06-05: Started follow-up branch
+  `codex/kg-thread-sheet-detail` after browser validation showed the side
+  sheet thread table was unreadable and the main graph was still empty after
+  successful ingests. Root-cause review found the normalizer kept only
+  ontology-approved entities that participated in approved relationships, so a
+  successful Cognee run could persist zero visible product rows when it found
+  entity candidates but no relationship edge that matched the approved
+  ontology. Implemented a compact no-pagination thread table with only title
+  and icon status; row click opens thread detail; the detail sheet owns the
+  ingest action; and grounded approved entities now persist even when isolated.
+  Focused local verification passed:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx`;
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/normalizer.test.ts`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
+  `pnpm --filter @thinkwork/spaces build`;
+  targeted Prettier check;
+  `git diff --check`;
+  `curl -I http://127.0.0.1:5174/settings/knowledge-graph`; and
+  `pnpm --filter @thinkwork/api exec vitest run src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/normalizer.test.ts`.
+  The Spaces production build completed with the existing sourcemap and large
+  chunk warnings only.
+- 2026-06-05: Opened follow-up PR
+  [#2098](https://github.com/thinkwork-ai/thinkwork/pull/2098).
+- 2026-06-05: Started follow-up branch `codex/kg-raw-drop-diagnostics` after
+  the deployed Bunkhouse smoke showed Cognee returning a raw graph
+  (`39` nodes, `116` edges) while the approved ThinkWork ontology graph stayed
+  empty. Root-cause signal: normalization correctly preserved the
+  ontology-only gate, but every non-structural Cognee node had an unapproved
+  type, so all relationships became orphaned after node filtering.
+- 2026-06-05: Implemented bounded raw-drop diagnostics in normalizer metrics:
+  sampled dropped Cognee nodes now include label, raw type, drop reason, and
+  property keys; sampled dropped Cognee edges now include relationship label,
+  raw type, endpoint labels/ids, drop reason, and property keys. Updated
+  Spaces GraphQL operations/codegen to request run `metrics`, and added a
+  thread detail diagnostics panel that explains empty approved graph output
+  and shows compact dropped-node/link samples without horizontal scroll.
+- 2026-06-05: Local diagnostics follow-up verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/normalizer.test.ts`;
+  `pnpm --filter @thinkwork/api exec vitest run src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/normalizer.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
+  `pnpm --filter @thinkwork/spaces build`;
+  targeted Prettier check; and `git diff --check`. Spaces build completed
+  with the existing sourcemap and large chunk warnings only.
+- 2026-06-05: Opened diagnostics follow-up PR
+  [#2100](https://github.com/thinkwork-ai/thinkwork/pull/2100).

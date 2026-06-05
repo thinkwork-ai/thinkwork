@@ -16,6 +16,10 @@ const ingestSource = readFileSync(
   ),
   "utf8",
 );
+const settingsSource = readFileSync(
+  resolve(process.cwd(), "src/components/settings/SettingsKnowledgeGraph.tsx"),
+  "utf8",
+);
 const sheetSource = readFileSync(
   resolve(
     process.cwd(),
@@ -29,18 +33,17 @@ describe("KnowledgeGraphExplorer", () => {
     expect(explorerSource).toContain(
       "SettingsKnowledgeGraphThreadCandidatesQuery",
     );
-    expect(explorerSource).toContain("SettingsKnowledgeGraphIngestRunsQuery");
     expect(explorerSource).toContain("SettingsKnowledgeGraphEntitiesQuery");
     expect(explorerSource).toContain(
       "SettingsStartKnowledgeGraphThreadIngestMutation",
     );
     expect(explorerSource).toContain("startIngest");
-    expect(explorerSource).toContain("refetchRuns");
     expect(explorerSource).toContain("graphRef.current?.refetch()");
   });
 
-  it("keeps table and graph on the same thread and filter state", () => {
-    expect(explorerSource).toContain("selectedThreadId");
+  it("keeps the main table and graph on tenant-wide ontology filters", () => {
+    expect(explorerSource).toContain("threadId: null");
+    expect(explorerSource).toContain("runId: null");
     expect(explorerSource).toContain("activeSearch");
     expect(explorerSource).toContain("ontologyType");
     expect(explorerSource).toContain("groundingStatus");
@@ -63,9 +66,29 @@ describe("KnowledgeGraphExplorer", () => {
   });
 
   it("exposes thread search, selection, and manual ingest controls", () => {
+    expect(settingsSource).toContain("IconMessages");
+    expect(settingsSource).toContain("Open thread ingest");
+    expect(explorerSource).toContain("threadSheetOpen");
+    expect(explorerSource).toContain("Thread Ingest");
+    expect(explorerSource).toContain("Thread Detail");
+    expect(explorerSource).toContain("ThreadIngestDetailView");
+    expect(explorerSource).toContain("Ingest thread");
+    expect(explorerSource).toContain("Ontology gate diagnostics");
+    expect(explorerSource).toContain("droppedNodeSamples");
+    expect(explorerSource).toContain("droppedEdgeSamples");
+    expect(explorerSource).toContain("runId={run.id}");
+    expect(explorerSource).toContain("run.metrics");
     expect(ingestSource).toContain("Search threads");
-    expect(ingestSource).toContain("Ingest now");
+    expect(ingestSource).toContain("DataTable");
+    expect(ingestSource).toContain("pageSize={0}");
+    expect(ingestSource).toContain("hideHeader");
+    expect(ingestSource).toContain("CheckCircle2");
+    expect(ingestSource).toContain("XCircle");
+    expect(ingestSource).toContain("Clock3");
+    expect(ingestSource).toContain("Status");
     expect(ingestSource).toContain("onSelectThread");
     expect(ingestSource).toContain("lastIngestRun");
+    expect(ingestSource).not.toContain("onIngestThread");
+    expect(ingestSource).not.toContain("Messages");
   });
 });

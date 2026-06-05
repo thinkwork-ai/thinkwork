@@ -75,8 +75,35 @@ export interface NormalizedKnowledgeGraphSnapshot {
     unapprovedRelationshipCount: number;
     incompatibleRelationshipCount: number;
     orphanRelationshipCount: number;
+    droppedNodeSamples: DroppedNodeSample[];
+    droppedEdgeSamples: DroppedEdgeSample[];
   };
 }
+
+export interface DroppedNodeSample {
+  id: string;
+  label: string;
+  rawType: string | null;
+  dropReason: "structural_node" | "unapproved_entity_type";
+  propertyKeys: string[];
+}
+
+export interface DroppedEdgeSample {
+  id: string | null;
+  label: string;
+  rawType: string | null;
+  sourceId: string;
+  sourceLabel: string | null;
+  targetId: string;
+  targetLabel: string | null;
+  dropReason:
+    | "orphan_endpoint"
+    | "unapproved_relationship_type"
+    | "incompatible_endpoint";
+  propertyKeys: string[];
+}
+
+const MAX_DROP_SAMPLES = 12;
 
 export function normalizeCogneeGraph(args: {
   graph: CogneeGraphPayload;
@@ -87,9 +114,13 @@ export function normalizeCogneeGraph(args: {
   const relationshipTypes = buildRelationshipTypeIndex(
     args.ontology.relationshipTypes,
   );
+  const rawNodeById = new Map(
+    args.graph.nodes.map((node) => [node.id, node] as const),
+  );
   const entityEvidence = new Map<string, NormalizedKnowledgeGraphEvidence>();
   const entities: NormalizedKnowledgeGraphEntity[] = [];
   const entityByTempId = new Map<string, NormalizedKnowledgeGraphEntity>();
+  const droppedNodeSamples: DroppedNodeSample[] = [];
   let structuralNodeCount = 0;
   let unapprovedNodeCount = 0;
   for (const node of dedupeNodes(args.graph.nodes)) {
@@ -99,8 +130,16 @@ export function normalizeCogneeGraph(args: {
     if (!ontologyType) {
       if (isStructuralCogneeNodeType(typeLabel)) {
         structuralNodeCount += 1;
+        addDroppedNodeSample(droppedNodeSamples, node, {
+          rawType: typeLabel,
+          dropReason: "structural_node",
+        });
       } else {
         unapprovedNodeCount += 1;
+        addDroppedNodeSample(droppedNodeSamples, node, {
+          rawType: typeLabel,
+          dropReason: "unapproved_entity_type",
+        });
       }
       continue;
     }
@@ -155,12 +194,16 @@ export function normalizeCogneeGraph(args: {
   let incompatibleRelationshipCount = 0;
   let orphanRelationshipCount = 0;
   const relationships: NormalizedKnowledgeGraphRelationship[] = [];
+  const droppedEdgeSamples: DroppedEdgeSample[] = [];
   for (const edge of dedupeEdges(args.graph.edges)) {
     const source = entityByTempId.get(edge.source);
     const target = entityByTempId.get(edge.target);
     if (!source || !target) {
       droppedEdgeCount += 1;
       orphanRelationshipCount += 1;
+      addDroppedEdgeSample(droppedEdgeSamples, edge, rawNodeById, {
+        dropReason: "orphan_endpoint",
+      });
       continue;
     }
     const relationshipType = findRelationshipType(
@@ -170,11 +213,17 @@ export function normalizeCogneeGraph(args: {
     if (!relationshipType) {
       droppedEdgeCount += 1;
       unapprovedRelationshipCount += 1;
+      addDroppedEdgeSample(droppedEdgeSamples, edge, rawNodeById, {
+        dropReason: "unapproved_relationship_type",
+      });
       continue;
     }
     if (!relationshipEndpointsAllowed(relationshipType, source, target)) {
       droppedEdgeCount += 1;
       incompatibleRelationshipCount += 1;
+      addDroppedEdgeSample(droppedEdgeSamples, edge, rawNodeById, {
+        dropReason: "incompatible_endpoint",
+      });
       continue;
     }
     const evidence = findEvidence(args.transcript, [
@@ -220,27 +269,21 @@ export function normalizeCogneeGraph(args: {
     connectedEntityIds.add(relationship.sourceTempId);
     connectedEntityIds.add(relationship.targetTempId);
   }
-  const connectedEntities = entities.filter((entity) =>
-    connectedEntityIds.has(entity.tempId),
-  );
-  const isolatedNodeCount = entities.length - connectedEntities.length;
+  const isolatedNodeCount = entities.filter(
+    (entity) => !connectedEntityIds.has(entity.tempId),
+  ).length;
 
   return {
-    entities: connectedEntities,
+    entities,
     relationships,
     evidence: [
-      ...Array.from(entityEvidence.values()).filter(
-        (evidence) =>
-          evidence.entityTempId &&
-          connectedEntityIds.has(evidence.entityTempId),
-      ),
+      ...Array.from(entityEvidence.values()),
       ...Array.from(relationshipEvidence.values()),
     ],
     metrics: {
       cogneeNodeCount: args.graph.nodes.length,
       cogneeEdgeCount: args.graph.edges.length,
-      droppedNodeCount:
-        structuralNodeCount + unapprovedNodeCount + isolatedNodeCount,
+      droppedNodeCount: structuralNodeCount + unapprovedNodeCount,
       droppedEdgeCount,
       structuralNodeCount,
       unapprovedNodeCount,
@@ -248,6 +291,8 @@ export function normalizeCogneeGraph(args: {
       unapprovedRelationshipCount,
       incompatibleRelationshipCount,
       orphanRelationshipCount,
+      droppedNodeSamples,
+      droppedEdgeSamples,
     },
   };
 }
@@ -431,4 +476,47 @@ function readConfidence(
 ) {
   const value = properties?.confidence;
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function addDroppedNodeSample(
+  samples: DroppedNodeSample[],
+  node: CogneeGraphNode,
+  args: Pick<DroppedNodeSample, "rawType" | "dropReason">,
+): void {
+  if (samples.length >= MAX_DROP_SAMPLES) return;
+  samples.push({
+    id: node.id,
+    label: node.label.trim() || node.id,
+    rawType: args.rawType,
+    dropReason: args.dropReason,
+    propertyKeys: readPropertyKeys(node.properties),
+  });
+}
+
+function addDroppedEdgeSample(
+  samples: DroppedEdgeSample[],
+  edge: CogneeGraphEdge,
+  rawNodeById: Map<string, CogneeGraphNode>,
+  args: Pick<DroppedEdgeSample, "dropReason">,
+): void {
+  if (samples.length >= MAX_DROP_SAMPLES) return;
+  const source = rawNodeById.get(edge.source);
+  const target = rawNodeById.get(edge.target);
+  samples.push({
+    id: edge.id ?? null,
+    label: edge.label,
+    rawType: edge.type ?? null,
+    sourceId: edge.source,
+    sourceLabel: source?.label?.trim() || null,
+    targetId: edge.target,
+    targetLabel: target?.label?.trim() || null,
+    dropReason: args.dropReason,
+    propertyKeys: readPropertyKeys(edge.properties),
+  });
+}
+
+function readPropertyKeys(
+  properties: Record<string, unknown> | null | undefined,
+): string[] {
+  return properties ? Object.keys(properties).sort().slice(0, 12) : [];
 }

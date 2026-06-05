@@ -16,7 +16,8 @@ const MAX_ENTITY_LIMIT = 500;
 
 export interface EntityFilterArgs {
   tenantId?: string | null;
-  threadId: string;
+  threadId?: string | null;
+  runId?: string | null;
   search?: string | null;
   ontologyType?: string | null;
   groundingStatus?: string | null;
@@ -31,14 +32,25 @@ export async function loadFilteredEntities(
   options: { limit?: number | null } = {},
 ) {
   const scope = await resolveKnowledgeGraphScope(ctx, args, operationName);
-  if (!(await assertCanReadKnowledgeGraphThread(ctx, scope, args.threadId))) {
+  if (
+    args.threadId &&
+    !(await assertCanReadKnowledgeGraphThread(ctx, scope, args.threadId))
+  ) {
     return [];
   }
 
   const conditions: SQL[] = [
     sql`tenant_id = ${scope.tenantId}`,
-    sql`thread_id = ${args.threadId}`,
+    sql`ontology_entity_type_id IS NOT NULL`,
+    sql`ontology_type_slug IS NOT NULL`,
+    sql`grounding_status = 'grounded'`,
   ];
+  if (args.threadId) {
+    conditions.push(sql`thread_id = ${args.threadId}`);
+  }
+  if (args.runId) {
+    conditions.push(sql`ingest_run_id = ${args.runId}`);
+  }
   const search = normalizeSearch(args.search);
   if (search) {
     conditions.push(sql`(

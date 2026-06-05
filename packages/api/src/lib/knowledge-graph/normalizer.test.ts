@@ -42,7 +42,7 @@ const ontology = {
 };
 
 describe("normalizeCogneeGraph", () => {
-  it("keeps only approved ontology triples from Cognee graph output", () => {
+  it("keeps approved ontology entities and triples from Cognee graph output", () => {
     const snapshot = normalizeCogneeGraph({
       transcript,
       ontology,
@@ -119,7 +119,7 @@ describe("normalizeCogneeGraph", () => {
       },
     });
 
-    expect(snapshot.entities).toHaveLength(2);
+    expect(snapshot.entities).toHaveLength(3);
     expect(snapshot.entities).toEqual([
       expect.objectContaining({
         label: "Acme",
@@ -131,6 +131,12 @@ describe("normalizeCogneeGraph", () => {
         label: "Delta",
         groundingStatus: "grounded",
         provenanceStatus: "strong",
+        ontologyEntityTypeId: "entity-type-company",
+      }),
+      expect.objectContaining({
+        label: "Solo",
+        groundingStatus: "grounded",
+        provenanceStatus: "missing",
         ontologyEntityTypeId: "entity-type-company",
       }),
     ]);
@@ -146,7 +152,7 @@ describe("normalizeCogneeGraph", () => {
     expect(snapshot.metrics).toEqual({
       cogneeNodeCount: 5,
       cogneeEdgeCount: 5,
-      droppedNodeCount: 3,
+      droppedNodeCount: 2,
       droppedEdgeCount: 4,
       structuralNodeCount: 1,
       unapprovedNodeCount: 1,
@@ -154,6 +160,68 @@ describe("normalizeCogneeGraph", () => {
       unapprovedRelationshipCount: 1,
       incompatibleRelationshipCount: 0,
       orphanRelationshipCount: 3,
+      droppedNodeSamples: [
+        {
+          id: "chunk-1",
+          label: "DocumentChunk_c12056",
+          rawType: "DocumentChunk",
+          dropReason: "structural_node",
+          propertyKeys: [],
+        },
+        {
+          id: "beta",
+          label: "Beta",
+          rawType: "Partner",
+          dropReason: "unapproved_entity_type",
+          propertyKeys: ["ontology_valid"],
+        },
+      ],
+      droppedEdgeSamples: [
+        {
+          id: "edge-structural",
+          label: "contains",
+          rawType: null,
+          sourceId: "chunk-1",
+          sourceLabel: "DocumentChunk_c12056",
+          targetId: "acme",
+          targetLabel: "Acme",
+          dropReason: "orphan_endpoint",
+          propertyKeys: [],
+        },
+        {
+          id: "edge-unapproved-type",
+          label: "Uses",
+          rawType: null,
+          sourceId: "acme",
+          sourceLabel: "Acme",
+          targetId: "beta",
+          targetLabel: "Beta",
+          dropReason: "orphan_endpoint",
+          propertyKeys: [],
+        },
+        {
+          id: "edge-unapproved-relationship",
+          label: "Acquired",
+          rawType: null,
+          sourceId: "acme",
+          sourceLabel: "Acme",
+          targetId: "delta",
+          targetLabel: "Delta",
+          dropReason: "unapproved_relationship_type",
+          propertyKeys: [],
+        },
+        {
+          id: "edge-orphan",
+          label: "Uses",
+          rawType: null,
+          sourceId: "acme",
+          sourceLabel: "Acme",
+          targetId: "missing",
+          targetLabel: null,
+          dropReason: "orphan_endpoint",
+          propertyKeys: [],
+        },
+      ],
     });
   });
 });

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import {
   knowledgeGraphIngestRuns,
@@ -37,15 +38,21 @@ export async function createKnowledgeGraphThreadIngestRun(
     );
   }
 
+  const runId = randomUUID();
   const [inserted] = await args.db
     .insert(knowledgeGraphIngestRuns)
     .values({
+      id: runId,
       tenant_id: args.tenantId,
       thread_id: args.threadId,
       requested_by_user_id: args.requestedByUserId,
       status: "queued",
       trigger: "manual",
-      cognee_dataset_name: buildCogneeDatasetName(args.tenantId, args.threadId),
+      cognee_dataset_name: buildCogneeDatasetName(
+        args.tenantId,
+        args.threadId,
+        runId,
+      ),
       message_count: messageCount,
       input: {
         force: args.force === true,
@@ -110,8 +117,10 @@ export async function markKnowledgeGraphRunInvokeFailed(args: {
 export function buildCogneeDatasetName(
   tenantId: string,
   threadId: string,
+  runId?: string | null,
 ): string {
-  return `thinkwork:${tenantId}:thread:${threadId}`;
+  const base = `thinkwork:${tenantId}:thread:${threadId}`;
+  return runId ? `${base}:run:${runId}` : base;
 }
 
 async function countThreadMessages(
