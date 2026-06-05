@@ -467,7 +467,7 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(dockerfile).toMatch(
       /ARG COGNEE_BASE_IMAGE=cognee\/cognee@sha256:5ce7e4052b1d/,
     );
-    expect(dockerfile).toMatch(/python -m pip install/);
+    expect(dockerfile).toMatch(/\/usr\/local\/bin\/python -m pip install/);
     expect(dockerfile).toMatch(
       /--target \/app\/\.venv\/lib\/python3\.12\/site-packages/,
     );

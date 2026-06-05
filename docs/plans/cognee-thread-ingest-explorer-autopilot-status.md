@@ -7,15 +7,15 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U12 - Cognee uv venv dependency install hotfix
+- Current unit: U13 - Cognee system Python dependency install hotfix
 - Current branch/worktree:
-  `codex/cognee-bedrock-uv-boto3` /
-  `.Codex/worktrees/cognee-bedrock-uv-boto3`
-- Current PR: [#2089](https://github.com/thinkwork-ai/thinkwork/pull/2089)
-- Blocker: none. U11 merged and the merge-triggered deploy proved the new image
-  build path runs, but the Cognee base image's uv-built `/app/.venv` omits pip.
-  U12 installs `boto3` into the venv site-packages path using the system Python
-  pip that remains in the final Cognee image.
+  `codex/cognee-bedrock-system-python` /
+  `.Codex/worktrees/cognee-bedrock-system-python`
+- Current PR: [#2090](https://github.com/thinkwork-ai/thinkwork/pull/2090)
+- Blocker: none. U12 merged and its deploy proved the target site-packages
+  approach is right, but Cognee's `PATH` resolves bare `python` to the no-pip
+  venv interpreter. U13 calls `/usr/local/bin/python` explicitly while still
+  installing `boto3` into the Cognee venv import path.
 
 ## Progress Log
 
@@ -352,3 +352,24 @@ operation`. ECS logs showed the precise cause:
   unavailable, so the image layer will be verified by the deploy workflow.
 - 2026-06-05: Opened U12 PR
   [#2089](https://github.com/thinkwork-ai/thinkwork/pull/2089).
+- 2026-06-05: U12 PR
+  [#2089](https://github.com/thinkwork-ai/thinkwork/pull/2089) passed required
+  CI and was squash-merged into `main` at
+  `d71396276d211a99bfa83aad6a698812eb7fd880`; the remote branch was deleted.
+- 2026-06-05: U12 merge-triggered deploy run
+  [26989206584](https://github.com/thinkwork-ai/thinkwork/actions/runs/26989206584)
+  failed in `Terraform Apply` while building the Cognee image before Terraform
+  mutations. Docker build logs showed that the bare `python -m pip` command
+  still resolved to `/app/.venv/bin/python`, whose venv intentionally omits
+  `pip`.
+- 2026-06-05: Started U13 hotfix branch
+  `codex/cognee-bedrock-system-python` from `origin/main`.
+- 2026-06-05: U13 updates `packages/cognee/Dockerfile` to call
+  `/usr/local/bin/python -m pip` explicitly, avoiding Cognee's venv-first
+  `PATH` while still targeting `/app/.venv/lib/python3.12/site-packages`.
+- 2026-06-05: U13 local verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts`;
+  targeted Prettier check; and `git diff --check`. Local Docker remains
+  unavailable, so the image layer will be verified by the deploy workflow.
+- 2026-06-05: Opened U13 PR
+  [#2090](https://github.com/thinkwork-ai/thinkwork/pull/2090).
