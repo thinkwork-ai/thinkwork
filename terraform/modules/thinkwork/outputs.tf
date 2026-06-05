@@ -192,6 +192,71 @@ output "cognee_storage_file_system_id" {
   value       = local.cognee_enabled ? module.cognee[0].cognee_storage_file_system_id : null
 }
 
+output "twenty_provisioned" {
+  description = "Whether the Twenty CRM retained managed-app substrate is provisioned"
+  value       = local.twenty_provisioned
+}
+
+output "twenty_runtime_enabled" {
+  description = "Whether the Twenty CRM server/worker runtime is enabled"
+  value       = local.twenty_runtime_enabled
+}
+
+output "twenty_url" {
+  description = "Public Twenty CRM URL (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_url : null
+}
+
+output "twenty_alb_dns_name" {
+  description = "Public ALB DNS name for Twenty CRM (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_alb_dns_name : null
+}
+
+output "twenty_alb_arn" {
+  description = "Public ALB ARN for Twenty CRM (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_alb_arn : null
+}
+
+output "twenty_target_group_arn" {
+  description = "Target group ARN for Twenty CRM server (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_target_group_arn : null
+}
+
+output "twenty_cluster_arn" {
+  description = "ECS cluster ARN for Twenty CRM (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_cluster_arn : null
+}
+
+output "twenty_server_service_name" {
+  description = "ECS service name for the Twenty server (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_server_service_name : null
+}
+
+output "twenty_worker_service_name" {
+  description = "ECS service name for the Twenty worker (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_worker_service_name : null
+}
+
+output "twenty_server_log_group_name" {
+  description = "CloudWatch log group for the Twenty server (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_server_log_group_name : null
+}
+
+output "twenty_worker_log_group_name" {
+  description = "CloudWatch log group for the Twenty worker (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_worker_log_group_name : null
+}
+
+output "twenty_cache_endpoint" {
+  description = "ElastiCache primary endpoint for Twenty CRM (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_cache_endpoint : null
+}
+
+output "twenty_storage_file_system_id" {
+  description = "EFS file system ID backing Twenty CRM local storage (null when twenty_provisioned = false)"
+  value       = local.twenty_provisioned ? module.twenty[0].twenty_storage_file_system_id : null
+}
+
 # Admin static site
 output "admin_distribution_id" {
   description = "CloudFront distribution ID for the admin app"

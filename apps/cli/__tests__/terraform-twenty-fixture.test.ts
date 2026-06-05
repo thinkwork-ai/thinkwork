@@ -27,6 +27,46 @@ const TWENTY_README = resolve(
   REPO_ROOT,
   "terraform/modules/app/twenty/README.md",
 );
+const THINKWORK_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/modules/thinkwork/main.tf",
+);
+const THINKWORK_VARS = resolve(
+  REPO_ROOT,
+  "terraform/modules/thinkwork/variables.tf",
+);
+const THINKWORK_OUTPUTS = resolve(
+  REPO_ROOT,
+  "terraform/modules/thinkwork/outputs.tf",
+);
+const LAMBDA_API_HANDLERS = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/lambda-api/handlers.tf",
+);
+const LAMBDA_API_VARS = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/lambda-api/variables.tf",
+);
+const WWW_DNS_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/www-dns/main.tf",
+);
+const WWW_DNS_VARS = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/www-dns/variables.tf",
+);
+const WWW_DNS_OUTPUTS = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/www-dns/outputs.tf",
+);
+const GREENFIELD_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/examples/greenfield/main.tf",
+);
+const GREENFIELD_TFVARS_EXAMPLE = resolve(
+  REPO_ROOT,
+  "terraform/examples/greenfield/terraform.tfvars.example",
+);
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -226,5 +266,155 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(readme).toMatch(/parks the ECS server and worker/);
     expect(readme).toMatch(/retaining the database secret references/);
     expect(readme).toMatch(/Destroying retained CRM data is intentionally/);
+  });
+
+  it("exposes composite module inputs for provisioned and parked Twenty states", () => {
+    const vars = read(THINKWORK_VARS);
+
+    expect(vars).toMatch(/variable "twenty_provisioned"/);
+    expect(vars).toMatch(/variable "twenty_runtime_enabled"/);
+    expect(vars).toMatch(/variable "twenty_image_uri"/);
+    expect(vars).toMatch(/twenty_image_uri must be empty or pinned/);
+    expect(vars).toMatch(/variable "twenty_db_username"/);
+    expect(vars).toMatch(/default\s*=\s*"thinkwork_twenty"/);
+    expect(vars).toMatch(/variable "twenty_db_name"/);
+    expect(vars).toMatch(
+      /twenty_db_name must be a valid PostgreSQL identifier/,
+    );
+    expect(vars).toMatch(/variable "twenty_db_url_secret_arn"/);
+    expect(vars).toMatch(/variable "twenty_encryption_key_secret_arn"/);
+    expect(vars).toMatch(/variable "twenty_cache_engine"/);
+    expect(vars).toMatch(/twenty_cache_engine must be valkey or redis/);
+  });
+
+  it("wires the Twenty module behind retained provisioned state", () => {
+    const source = read(THINKWORK_MAIN);
+    const twentyModule = firstNestedBlock(source, 'module "twenty"');
+    const guardrails = firstNestedBlock(
+      source,
+      'resource "terraform_data" "twenty_configuration_guardrails"',
+    );
+    const runtimeStateGuardrails = firstNestedBlock(
+      source,
+      'resource "terraform_data" "twenty_runtime_state_guardrails"',
+    );
+
+    expect(source).toMatch(/twenty_provisioned\s*=\s*var\.twenty_provisioned/);
+    expect(source).toMatch(
+      /twenty_runtime_enabled\s*=\s*var\.twenty_provisioned && var\.twenty_runtime_enabled/,
+    );
+    expect(source).toMatch(/twenty_domain.*crm\.\$\{var\.www_domain\}/);
+    expect(twentyModule).toMatch(
+      /count\s*=\s*local\.twenty_provisioned \? 1 : 0/,
+    );
+    expect(twentyModule).toMatch(/source\s*=\s*"\.\.\/app\/twenty"/);
+    expect(twentyModule).toMatch(
+      /subnet_ids\s*=\s*module\.vpc\.public_subnet_ids/,
+    );
+    expect(twentyModule).toMatch(
+      /cache_subnet_ids\s*=\s*module\.vpc\.private_subnet_ids/,
+    );
+    expect(twentyModule).toMatch(
+      /storage_subnet_ids\s*=\s*module\.vpc\.private_subnet_ids/,
+    );
+    expect(twentyModule).toMatch(
+      /runtime_enabled\s*=\s*local\.twenty_runtime_enabled/,
+    );
+    expect(twentyModule).toMatch(
+      /db_url_secret_arn\s*=\s*var\.twenty_db_url_secret_arn/,
+    );
+    expect(twentyModule).toMatch(
+      /encryption_key_secret_arn\s*=\s*var\.twenty_encryption_key_secret_arn/,
+    );
+    expect(guardrails).toMatch(/twenty_provisioned requires twenty_image_uri/);
+    expect(guardrails).toMatch(
+      /twenty_provisioned requires twenty_db_url_secret_arn/,
+    );
+    expect(guardrails).toMatch(
+      /twenty_provisioned requires twenty_encryption_key_secret_arn/,
+    );
+    expect(guardrails).toMatch(
+      /twenty_runtime_enabled requires twenty_provisioned/,
+    );
+    expect(guardrails).toMatch(/twenty_db_name must be distinct/);
+    expect(runtimeStateGuardrails).toMatch(
+      /var\.twenty_runtime_enabled && !var\.twenty_provisioned \? 1 : 0/,
+    );
+    expect(runtimeStateGuardrails).toMatch(
+      /twenty_runtime_enabled requires twenty_provisioned/,
+    );
+  });
+
+  it("passes compact Twenty deployment status into graphql-http env", () => {
+    const handlers = read(LAMBDA_API_HANDLERS);
+    const vars = read(LAMBDA_API_VARS);
+
+    expect(vars).toMatch(/variable "twenty_provisioned"/);
+    expect(vars).toMatch(/variable "twenty_runtime_enabled"/);
+    expect(vars).toMatch(/variable "twenty_url"/);
+    expect(vars).toMatch(/variable "twenty_server_service_name"/);
+    expect(vars).toMatch(/variable "twenty_worker_service_name"/);
+    expect(handlers).toMatch(/twenty_env = var\.twenty_provisioned \? {/);
+    expect(handlers).toMatch(
+      /TWENTY = "\$\{var\.twenty_provisioned \? "1" : "0"\}/,
+    );
+    expect(handlers).toMatch(/local\.cognee_env, local\.twenty_env/);
+    expect(handlers).not.toMatch(/TWENTY_URL\s*=/);
+  });
+
+  it("adds crm.<domain> DNS and certificate SAN support", () => {
+    const source = read(WWW_DNS_MAIN);
+    const vars = read(WWW_DNS_VARS);
+    const outputs = read(WWW_DNS_OUTPUTS);
+    const crmRecord = firstNestedBlock(
+      source,
+      'resource "cloudflare_record" "crm"',
+    );
+
+    expect(vars).toMatch(/variable "include_crm"/);
+    expect(vars).toMatch(/variable "crm_alb_dns_name"/);
+    expect(source).toMatch(/crm\s*=\s*"crm\.\$\{var\.domain\}"/);
+    expect(source).toMatch(/var\.include_crm \? \[local\.crm\] : \[\]/);
+    expect(source).toMatch(
+      /create_crm_record\s*=\s*var\.include_crm && var\.crm_alb_dns_name != ""/,
+    );
+    expect(crmRecord).toMatch(/name\s*=\s*local\.crm/);
+    expect(crmRecord).toMatch(/content\s*=\s*var\.crm_alb_dns_name/);
+    expect(crmRecord).toMatch(/proxied\s*=\s*false/);
+    expect(outputs).toMatch(/output "crm_custom_domain_name"/);
+  });
+
+  it("keeps greenfield Twenty variables, module wiring, DNS, and outputs aligned", () => {
+    const source = read(GREENFIELD_MAIN);
+    const tfvars = read(GREENFIELD_TFVARS_EXAMPLE);
+    const thinkworkModule = firstNestedBlock(source, 'module "thinkwork"');
+    const wwwDnsModule = firstNestedBlock(source, 'module "www_dns"');
+
+    expect(source).toMatch(/variable "twenty_provisioned"/);
+    expect(source).toMatch(/variable "twenty_runtime_enabled"/);
+    expect(source).toMatch(
+      /crm_domain\s*=\s*var\.www_domain != "" \? "crm\.\$\{var\.www_domain\}"/,
+    );
+    expect(thinkworkModule).toMatch(
+      /twenty_provisioned\s*=\s*var\.twenty_provisioned/,
+    );
+    expect(thinkworkModule).toMatch(
+      /twenty_runtime_enabled\s*=\s*var\.twenty_runtime_enabled/,
+    );
+    expect(thinkworkModule).toMatch(
+      /twenty_public_url\s*=\s*local\.twenty_url/,
+    );
+    expect(thinkworkModule).toMatch(
+      /twenty_certificate_arn\s*=\s*var\.twenty_certificate_arn/,
+    );
+    expect(wwwDnsModule).toMatch(/include_crm\s*=\s*var\.twenty_provisioned/);
+    expect(wwwDnsModule).toMatch(
+      /crm_alb_dns_name\s*=\s*module\.thinkwork\.twenty_alb_dns_name/,
+    );
+    expect(source).toMatch(/output "twenty_provisioned"/);
+    expect(source).toMatch(/output "twenty_url"/);
+    expect(tfvars).toMatch(/twenty_provisioned\s*=\s*false/);
+    expect(tfvars).toMatch(/twenty_runtime_enabled\s*=\s*false/);
+    expect(tfvars).toMatch(/empty derives https:\/\/crm\.<www_domain>/);
   });
 });

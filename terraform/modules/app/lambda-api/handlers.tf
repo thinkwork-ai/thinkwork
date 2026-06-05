@@ -15,6 +15,11 @@ locals {
     # status in one compact value; stable names are derived in the resolver.
     COGNEE = "${var.cognee_backend_mode}|${var.cognee_endpoint}"
   } : {}
+  twenty_env = var.twenty_provisioned ? {
+    # Keep Twenty managed-app status compact for graphql-http. The resolver
+    # expands this into provisioned/runtime/url/service details.
+    TWENTY = "${var.twenty_provisioned ? "1" : "0"}|${var.twenty_runtime_enabled ? "1" : "0"}|${var.twenty_url}|${var.twenty_cluster_arn}|${var.twenty_server_service_name}|${var.twenty_worker_service_name}|${var.twenty_server_log_group_name}|${var.twenty_worker_log_group_name}|${var.twenty_alb_arn}|${var.twenty_target_group_arn}"
+  } : {}
 
   # Common environment variables shared by all API handlers
   common_env = merge({
@@ -91,7 +96,7 @@ locals {
     # hello@agents.thinkwork.ai (the already-verified SES inbound domain);
     # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.
     STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
-  }, local.cognee_env)
+  }, local.cognee_env, local.twenty_env)
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
