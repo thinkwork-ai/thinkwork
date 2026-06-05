@@ -99,6 +99,7 @@ export const SettingsKnowledgeGraphThreadCandidatesQuery = graphql(`
       lastMessageAt
       lastIngestRun {
         id
+        threadId
         status
         entityCount
         relationshipCount
@@ -118,7 +119,7 @@ export const SettingsKnowledgeGraphThreadCandidatesQuery = graphql(`
 export const SettingsKnowledgeGraphIngestRunsQuery = graphql(`
   query SettingsKnowledgeGraphIngestRuns(
     $tenantId: ID!
-    $threadId: ID!
+    $threadId: ID
     $limit: Int
   ) {
     knowledgeGraphIngestRuns(
@@ -127,6 +128,7 @@ export const SettingsKnowledgeGraphIngestRunsQuery = graphql(`
       limit: $limit
     ) {
       id
+      threadId
       status
       trigger
       cogneeDatasetName
@@ -149,7 +151,8 @@ export const SettingsKnowledgeGraphIngestRunsQuery = graphql(`
 export const SettingsKnowledgeGraphEntitiesQuery = graphql(`
   query SettingsKnowledgeGraphEntities(
     $tenantId: ID!
-    $threadId: ID!
+    $threadId: ID
+    $runId: ID
     $search: String
     $ontologyType: String
     $groundingStatus: KnowledgeGraphGroundingStatus
@@ -159,6 +162,7 @@ export const SettingsKnowledgeGraphEntitiesQuery = graphql(`
     knowledgeGraphEntities(
       tenantId: $tenantId
       threadId: $threadId
+      runId: $runId
       search: $search
       ontologyType: $ontologyType
       groundingStatus: $groundingStatus

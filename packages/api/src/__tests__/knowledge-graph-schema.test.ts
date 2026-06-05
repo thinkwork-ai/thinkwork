@@ -121,6 +121,7 @@ describe("Knowledge Graph GraphQL contract", () => {
       expect.arrayContaining([
         "tenantId",
         "threadId",
+        "runId",
         "search",
         "ontologyType",
         "groundingStatus",

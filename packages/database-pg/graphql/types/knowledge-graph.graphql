@@ -187,6 +187,7 @@ extend type Query {
   knowledgeGraphEntities(
     tenantId: ID
     threadId: ID
+    runId: ID
     search: String
     ontologyType: String
     groundingStatus: KnowledgeGraphGroundingStatus
@@ -196,6 +197,7 @@ extend type Query {
   knowledgeGraphGraph(
     tenantId: ID
     threadId: ID
+    runId: ID
     search: String
     ontologyType: String
     groundingStatus: KnowledgeGraphGroundingStatus

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import { loadFilteredEntities, type EntityFilterArgs } from "./shared.js";
 import {
@@ -26,13 +27,25 @@ export async function knowledgeGraphGraph(
     return sql`${entityId}::uuid`;
   });
 
+  const conditions: SQL[] = [
+    sql`tenant_id = ${entities[0].tenantId}`,
+    sql`ontology_relationship_type_id IS NOT NULL`,
+    sql`ontology_type_slug IS NOT NULL`,
+    sql`grounding_status = 'grounded'`,
+    sql`source_entity_id IN (${sql.join(entityIdFilters, sql`, `)})`,
+    sql`target_entity_id IN (${sql.join(entityIdFilters, sql`, `)})`,
+  ];
+  if (args.threadId) {
+    conditions.push(sql`thread_id = ${args.threadId}`);
+  }
+  if (args.runId) {
+    conditions.push(sql`ingest_run_id = ${args.runId}`);
+  }
+
   const result = await ctx.db.execute(sql`
     SELECT *
       FROM knowledge_graph_relationships
-     WHERE tenant_id = ${entities[0].tenantId}
-       AND thread_id = ${args.threadId}
-       AND source_entity_id IN (${sql.join(entityIdFilters, sql`, `)})
-       AND target_entity_id IN (${sql.join(entityIdFilters, sql`, `)})
+     WHERE ${sql.join(conditions, sql` AND `)}
      ORDER BY evidence_count DESC, label ASC
   `);
   const rows = ((
