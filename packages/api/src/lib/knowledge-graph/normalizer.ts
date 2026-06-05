@@ -67,7 +67,14 @@ export interface NormalizedKnowledgeGraphSnapshot {
   metrics: {
     cogneeNodeCount: number;
     cogneeEdgeCount: number;
+    droppedNodeCount: number;
     droppedEdgeCount: number;
+    structuralNodeCount: number;
+    unapprovedNodeCount: number;
+    isolatedNodeCount: number;
+    unapprovedRelationshipCount: number;
+    incompatibleRelationshipCount: number;
+    orphanRelationshipCount: number;
   };
 }
 
@@ -81,10 +88,22 @@ export function normalizeCogneeGraph(args: {
     args.ontology.relationshipTypes,
   );
   const entityEvidence = new Map<string, NormalizedKnowledgeGraphEvidence>();
-  const entities = dedupeNodes(args.graph.nodes).map((node) => {
+  const entities: NormalizedKnowledgeGraphEntity[] = [];
+  const entityByTempId = new Map<string, NormalizedKnowledgeGraphEntity>();
+  let structuralNodeCount = 0;
+  let unapprovedNodeCount = 0;
+  for (const node of dedupeNodes(args.graph.nodes)) {
     const label = node.label.trim();
     const typeLabel = coerceTypeLabel(node);
     const ontologyType = findEntityType(entityTypes, typeLabel);
+    if (!ontologyType) {
+      if (isStructuralCogneeNodeType(typeLabel)) {
+        structuralNodeCount += 1;
+      } else {
+        unapprovedNodeCount += 1;
+      }
+      continue;
+    }
     const evidence = findEvidence(args.transcript, [label, typeLabel ?? ""]);
     const provenanceStatus = evidence ? "strong" : "missing";
     const tempId = node.id;
@@ -104,19 +123,15 @@ export function normalizeCogneeGraph(args: {
         observedAt: evidence.message.createdAt,
       });
     }
-    return {
+    const entity = {
       tempId,
       cogneeNodeId: node.id,
       label,
       normalizedLabel: normalizeLabel(label),
       typeLabel,
-      ontologyEntityTypeId: ontologyType?.id ?? null,
-      ontologyTypeSlug: ontologyType?.slug ?? (typeLabel ? null : null),
-      groundingStatus: ontologyType
-        ? "grounded"
-        : typeLabel
-          ? "unapproved_type"
-          : "unknown",
+      ontologyEntityTypeId: ontologyType.id,
+      ontologyTypeSlug: ontologyType.slug,
+      groundingStatus: "grounded",
       provenanceStatus,
       summary:
         typeof node.properties?.summary === "string"
@@ -124,36 +139,44 @@ export function normalizeCogneeGraph(args: {
           : null,
       aliases: readStringArray(node.properties?.aliases),
       properties: node.properties ?? {},
-      diagnostics: ontologyType
-        ? {}
-        : {
-            reason: typeLabel
-              ? "unapproved_entity_type"
-              : "missing_entity_type",
-            typeLabel,
-          },
+      diagnostics: {},
       lastSeenAt: evidence?.message.createdAt ?? null,
     } satisfies NormalizedKnowledgeGraphEntity;
-  });
+    entities.push(entity);
+    entityByTempId.set(entity.tempId, entity);
+  }
 
-  const entityIds = new Set(entities.map((entity) => entity.tempId));
   const relationshipEvidence = new Map<
     string,
     NormalizedKnowledgeGraphEvidence
   >();
   let droppedEdgeCount = 0;
+  let unapprovedRelationshipCount = 0;
+  let incompatibleRelationshipCount = 0;
+  let orphanRelationshipCount = 0;
   const relationships: NormalizedKnowledgeGraphRelationship[] = [];
   for (const edge of dedupeEdges(args.graph.edges)) {
-    if (!entityIds.has(edge.source) || !entityIds.has(edge.target)) {
+    const source = entityByTempId.get(edge.source);
+    const target = entityByTempId.get(edge.target);
+    if (!source || !target) {
       droppedEdgeCount += 1;
+      orphanRelationshipCount += 1;
       continue;
     }
     const relationshipType = findRelationshipType(
       relationshipTypes,
       edge.type ?? edge.label,
     );
-    const source = entities.find((entity) => entity.tempId === edge.source)!;
-    const target = entities.find((entity) => entity.tempId === edge.target)!;
+    if (!relationshipType) {
+      droppedEdgeCount += 1;
+      unapprovedRelationshipCount += 1;
+      continue;
+    }
+    if (!relationshipEndpointsAllowed(relationshipType, source, target)) {
+      droppedEdgeCount += 1;
+      incompatibleRelationshipCount += 1;
+      continue;
+    }
     const evidence = findEvidence(args.transcript, [
       source.label,
       target.label,
@@ -182,34 +205,49 @@ export function normalizeCogneeGraph(args: {
       sourceTempId: edge.source,
       targetTempId: edge.target,
       label: edge.label,
-      ontologyRelationshipTypeId: relationshipType?.id ?? null,
-      ontologyTypeSlug: relationshipType?.slug ?? null,
-      groundingStatus: relationshipType
-        ? "grounded"
-        : edge.label
-          ? "unapproved_type"
-          : "unknown",
+      ontologyRelationshipTypeId: relationshipType.id,
+      ontologyTypeSlug: relationshipType.slug,
+      groundingStatus: "grounded",
       provenanceStatus: evidence ? "strong" : "missing",
       confidence: readConfidence(edge.properties),
       properties: edge.properties ?? {},
-      diagnostics: relationshipType
-        ? {}
-        : { reason: "unapproved_relationship_type", label: edge.label },
+      diagnostics: {},
       lastSeenAt: evidence?.message.createdAt ?? null,
     });
   }
+  const connectedEntityIds = new Set<string>();
+  for (const relationship of relationships) {
+    connectedEntityIds.add(relationship.sourceTempId);
+    connectedEntityIds.add(relationship.targetTempId);
+  }
+  const connectedEntities = entities.filter((entity) =>
+    connectedEntityIds.has(entity.tempId),
+  );
+  const isolatedNodeCount = entities.length - connectedEntities.length;
 
   return {
-    entities,
+    entities: connectedEntities,
     relationships,
     evidence: [
-      ...Array.from(entityEvidence.values()),
+      ...Array.from(entityEvidence.values()).filter(
+        (evidence) =>
+          evidence.entityTempId &&
+          connectedEntityIds.has(evidence.entityTempId),
+      ),
       ...Array.from(relationshipEvidence.values()),
     ],
     metrics: {
       cogneeNodeCount: args.graph.nodes.length,
       cogneeEdgeCount: args.graph.edges.length,
+      droppedNodeCount:
+        structuralNodeCount + unapprovedNodeCount + isolatedNodeCount,
       droppedEdgeCount,
+      structuralNodeCount,
+      unapprovedNodeCount,
+      isolatedNodeCount,
+      unapprovedRelationshipCount,
+      incompatibleRelationshipCount,
+      orphanRelationshipCount,
     },
   };
 }
@@ -271,8 +309,72 @@ function findRelationshipType(
 
 function coerceTypeLabel(node: CogneeGraphNode): string | null {
   return (
+    readNestedTypeLabel(node.properties) ??
     node.type ??
     (typeof node.properties?.type === "string" ? node.properties.type : null)
+  );
+}
+
+function readNestedTypeLabel(
+  properties: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!properties) return null;
+  for (const key of [
+    "is_a",
+    "isA",
+    "ontology_type",
+    "ontologyType",
+    "entity_type",
+    "entityType",
+  ]) {
+    const value = properties[key];
+    if (typeof value === "string") return value;
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const record = value as Record<string, unknown>;
+    for (const nestedKey of ["slug", "name", "label", "type"]) {
+      if (typeof record[nestedKey] === "string") return record[nestedKey];
+    }
+  }
+  return null;
+}
+
+function isStructuralCogneeNodeType(typeLabel: string | null): boolean {
+  if (!typeLabel) return false;
+  return STRUCTURAL_COGNEE_NODE_TYPES.has(normalizeOntologySlug(typeLabel));
+}
+
+const STRUCTURAL_COGNEE_NODE_TYPES = new Set([
+  "data",
+  "data_point",
+  "datapoint",
+  "document",
+  "document_chunk",
+  "documentchunk",
+  "node_set",
+  "nodeset",
+  "text_document",
+  "textdocument",
+  "text_summary",
+  "textsummary",
+]);
+
+function relationshipEndpointsAllowed(
+  relationshipType: OntologyRelationshipDefinition,
+  source: NormalizedKnowledgeGraphEntity,
+  target: NormalizedKnowledgeGraphEntity,
+): boolean {
+  return (
+    slugAllowed(relationshipType.sourceTypeSlugs, source.ontologyTypeSlug) &&
+    slugAllowed(relationshipType.targetTypeSlugs, target.ontologyTypeSlug)
+  );
+}
+
+function slugAllowed(allowedSlugs: string[], actualSlug: string | null) {
+  if (!allowedSlugs.length) return true;
+  if (!actualSlug) return false;
+  const normalizedActual = normalizeOntologySlug(actualSlug);
+  return allowedSlugs.some(
+    (allowedSlug) => normalizeOntologySlug(allowedSlug) === normalizedActual,
   );
 }
 

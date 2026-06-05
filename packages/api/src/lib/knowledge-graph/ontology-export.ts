@@ -132,7 +132,9 @@ export function renderOntologyPrompt(
   return [
     "Extract a read-only knowledge graph from this ThinkWork thread.",
     "Use the attached Cognee ontology as the primary schema constraint when it is present.",
-    "Prefer these approved entity types; keep unknown types visible as diagnostics rather than inventing ontology changes.",
+    "Only extract facts whose entity types and relationship types appear in the approved ontology below.",
+    "Ignore document chunks, documents, text summaries, node sets, pipeline metadata, and any unknown or unapproved types.",
+    "Do not invent new entity types or relationship types.",
     "Approved entity types:",
     entityLines.length ? entityLines.join("\n") : "- none configured",
     "Approved relationship types:",
