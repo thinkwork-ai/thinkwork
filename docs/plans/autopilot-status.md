@@ -58,7 +58,7 @@ status: in_progress
 | ------------------------------------------------------ | -------------------- | ------------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------- |
 | U1 Extend cost and budget data model                   | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | Merged      | Squash merged as `35cbe18d`; dev migration `0148` applied and drift check passed. |
 | U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | [#2115](https://github.com/thinkwork-ai/thinkwork/pull/2115) | Merged      | Squash merged as `3a5a6d3`; reusable cost owner and user-budget helpers landed.   |
-| U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | TBD                                                          | In progress | Foreground chat, wakeups, finalize, job-trigger, and monthly reset propagation.   |
+| U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | In progress | Foreground chat, wakeups, finalize, job-trigger, and monthly reset propagation.   |
 
 ### Progress Log
 
