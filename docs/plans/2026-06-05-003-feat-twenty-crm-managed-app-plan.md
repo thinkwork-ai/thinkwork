@@ -1,7 +1,7 @@
 ---
 title: "feat: Add Twenty CRM as a managed application"
 type: feat
-status: active
+status: completed
 date: 2026-06-05
 origin: docs/brainstorms/2026-06-05-twenty-crm-managed-application-requirements.md
 ---

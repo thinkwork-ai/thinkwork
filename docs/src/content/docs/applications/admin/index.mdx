@@ -61,23 +61,24 @@ The admin sub-pages mirror the admin app's own sidebar — **Work**, **Platform*
 - [Artifacts](/applications/admin/artifacts/) — thread-generated reports, plans, notes, and digests
 - [Humans](/applications/admin/humans/) — tenant user management and invites
 - [Settings](/applications/admin/settings/) — tenant configuration and read-only deployment metadata
+- [Managed Applications](/applications/admin/managed-applications/) — operator-owned optional applications such as Cognee and Twenty CRM
 
 ## What lives in the admin app vs the mobile app
 
 The rule of thumb: **the admin app configures the tenant; the mobile app is where end users do the work.**
 
-| Capability                                                                  | Where  |
-| --------------------------------------------------------------------------- | ------ |
-| Configure the tenant platform agent or a Space                              | Admin  |
-| Register an agent template for reusable authoring infrastructure            | Admin  |
-| Connect your personal Google account to an agent                            | Mobile |
-| Register a tenant-level MCP server (URL, transport, auth type)              | Admin  |
-| Grant your personal OAuth token to that MCP server                          | Mobile |
-| Configure guardrails, budgets, Space settings, and audit retention          | Admin  |
-| Chat with an agent, review threads, act on external tasks                   | Mobile |
-| Upload knowledge-base documents or inspect Memory                          | Admin  |
-| Register a webhook with a signing secret                                    | Admin  |
-| See a push notification when you're assigned a task                         | Mobile |
+| Capability                                                         | Where  |
+| ------------------------------------------------------------------ | ------ |
+| Configure the tenant platform agent or a Space                     | Admin  |
+| Register an agent template for reusable authoring infrastructure   | Admin  |
+| Connect your personal Google account to an agent                   | Mobile |
+| Register a tenant-level MCP server (URL, transport, auth type)     | Admin  |
+| Grant your personal OAuth token to that MCP server                 | Mobile |
+| Configure guardrails, budgets, Space settings, and audit retention | Admin  |
+| Chat with an agent, review threads, act on external tasks          | Mobile |
+| Upload knowledge-base documents or inspect Memory                  | Admin  |
+| Register a webhook with a signing secret                           | Admin  |
+| See a push notification when you're assigned a task                | Mobile |
 
 When in doubt: tenant-level → admin, user-level → mobile.
 
@@ -85,6 +86,7 @@ When in doubt: tenant-level → admin, user-level → mobile.
 
 - [Mobile App](/applications/mobile/) — the end-user client
 - [CLI](/applications/cli/) — the `thinkwork-cli` deploy and management tool
+- [Managed Applications](/applications/admin/managed-applications/) — optional app deployment controls exposed through Spaces Settings
 - [Architecture](/architecture/) — how the admin app fits into the three-tier deployment model
 - [Spaces](/concepts/spaces/) — the contextual workroom model
 - [Integrations](/concepts/integrations) — the OSS integration foundation for MCP, OAuth, webhooks, and premium modules

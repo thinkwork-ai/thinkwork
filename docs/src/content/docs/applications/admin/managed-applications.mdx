@@ -1,0 +1,114 @@
+---
+title: Managed Applications
+description: Operator controls for optional ThinkWork-managed applications such as Cognee Knowledge Graph and Twenty CRM.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Managed Applications are optional applications that ThinkWork provisions and
+operates inside the same AWS deployment. They are not end-user connector
+settings. They are infrastructure controls for operators who can change the
+stage deployment through the normal GitHub Actions and Terraform pipeline.
+
+**Surface:** Spaces/Desktop Settings -> General -> Managed Applications  
+**Primary files:** `apps/spaces/src/components/settings/ManagedApplicationsSection.tsx`,
+`packages/api/src/graphql/resolvers/core/managedApplications.ts`
+
+## What Lives Here
+
+The first managed applications are:
+
+| Application | Purpose                                      | Settings page appears when               |
+| ----------- | -------------------------------------------- | ---------------------------------------- |
+| Cognee      | Knowledge Graph substrate for ontology work  | Deployment status reports Cognee running |
+| Twenty CRM  | Self-hosted CRM runtime managed by ThinkWork | Deployment status reports Twenty running |
+
+The Managed Applications section is visible only to operators. Members do not
+see deployment controls, and app-specific settings pages remain hidden until
+deployment status reports the runtime as enabled.
+
+<Aside type="note">
+  A toggle queues the deploy workflow. It does not mutate production
+  infrastructure directly from the UI.
+</Aside>
+
+## Lifecycle
+
+ThinkWork tracks Twenty with separate retained infrastructure and runtime
+states:
+
+| Provisioned | Runtime enabled | Meaning                                                 |
+| ----------- | --------------- | ------------------------------------------------------- |
+| false       | false           | Never enabled; no Twenty resources exist                |
+| true        | true            | CRM is running and the CRM settings page is visible     |
+| true        | false           | CRM runtime is parked; retained resources stay in place |
+
+Parking Twenty stops the server and worker runtime capacity while retaining the
+dedicated database, Secrets Manager values, persistent file storage, cache
+configuration, DNS path, and re-enable path. V1 intentionally has no destructive
+delete action for CRM data.
+
+Cognee follows the existing optional Knowledge Graph lifecycle. Its deploy
+control now lives in Managed Applications; the Knowledge Graph settings page is
+for operational details and health once Cognee is running.
+
+## Twenty CRM V1
+
+Twenty CRM v1 is a deployable managed app, not a custom ThinkWork CRM product.
+When enabled, Terraform provisions:
+
+- public HTTPS access at the managed CRM host;
+- ECS/Fargate server and worker services;
+- a dedicated Twenty database and role on the existing Aurora/Postgres
+  instance;
+- ElastiCache Valkey/Redis-compatible cache;
+- persistent file storage and CloudWatch logs;
+- Secrets Manager entries for the database URL and Twenty encryption key.
+
+The CRM settings page shows the public URL, stage, region, service names, log
+groups, load balancer/target group identifiers, and a `/healthz` connection
+test.
+
+## First Admin Setup
+
+Twenty v1 uses Twenty's native first-user setup. After the runtime is deployed,
+open the CRM URL from Settings -> CRM and complete Twenty's first workspace
+admin flow there.
+
+ThinkWork does not pre-seed CRM users, invites, or workspaces in v1.
+
+## Deferred Follow-Up
+
+ThinkWork SSO/Cognito/Google integration for Twenty is documented as follow-up
+work after the smallest deployable release. The CRM settings page should show
+that SSO is deferred rather than exposing inactive SSO controls.
+
+Other deferred work includes CRM connector tools, MCP integration, agent
+read/write access to CRM data, and a first-class CRM extension inside
+ThinkWork.
+
+## Deployment Verification
+
+After the deploy workflow finishes, run the managed-app smoke from the repo
+root:
+
+```sh
+node scripts/smoke/twenty-managed-app-smoke.mjs
+
+SMOKE_ENABLE_TWENTY_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  node scripts/smoke/twenty-managed-app-smoke.mjs
+```
+
+Dry-run mode prints the live-mode requirements and exits successfully. Live
+mode reads Terraform outputs and, when GraphQL credentials are available,
+deployment status. If Twenty is not provisioned, the smoke skips with a clear
+message. If Twenty is running, it requires an HTTPS URL and probes the public
+`/healthz` endpoint.
+
+## Related Pages
+
+- [Admin — Settings](/applications/admin/settings/) — read-only deployment metadata
+- [Desktop App](/applications/desktop/) — installed Spaces app that hosts Settings
+- [Business Ontology Operations](/guides/business-ontology-operations/) — Cognee substrate guidance
+- [Deploy Configuration](/deploy/configuration/) — Terraform configuration reference
