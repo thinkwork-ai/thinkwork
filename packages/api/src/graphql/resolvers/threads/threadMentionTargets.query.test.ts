@@ -45,6 +45,7 @@ describe("threadMentionTargets", () => {
         isDefaultAgent: true,
         avatarUrl: "https://example.com/a.png",
         role: "coordinator",
+        email: null,
       },
       {
         id: "user:u1",
@@ -55,6 +56,7 @@ describe("threadMentionTargets", () => {
         isDefaultAgent: false,
         avatarUrl: undefined,
         role: "finance",
+        email: null,
       },
     ]);
   });
