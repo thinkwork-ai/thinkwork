@@ -542,6 +542,76 @@ describe("GraphQL Schema Contract", () => {
     });
   });
 
+  describe("Managed applications contract", () => {
+    const schema = buildSchema(loadFullSchema());
+
+    it("exposes managed application deployment status and health checks", () => {
+      const query = schema.getQueryType() as any;
+      const deploymentStatus = schema.getType("DeploymentStatus") as any;
+      const managedApp = schema.getType("ManagedApplicationDeployment") as any;
+      const health = schema.getType("ManagedApplicationHealthCheck") as any;
+
+      expect(query.getFields().deploymentStatus.type.toString()).toBe(
+        "DeploymentStatus!",
+      );
+      expect(
+        query.getFields().managedApplicationHealthCheck.type.toString(),
+      ).toBe("ManagedApplicationHealthCheck!");
+      expect(
+        query
+          .getFields()
+          .managedApplicationHealthCheck.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([["key", "String!"]]);
+
+      expect(
+        deploymentStatus.getFields().managedApplications.type.toString(),
+      ).toBe("[ManagedApplicationDeployment!]!");
+      expect(
+        deploymentStatus.getFields().twentyProvisioned.type.toString(),
+      ).toBe("Boolean!");
+      expect(
+        deploymentStatus.getFields().twentyRuntimeEnabled.type.toString(),
+      ).toBe("Boolean!");
+      expect(managedApp.getFields().key.type.toString()).toBe("String!");
+      expect(managedApp.getFields().status.type.toString()).toBe("String!");
+      expect(managedApp.getFields().runtimeEnabled.type.toString()).toBe(
+        "Boolean!",
+      );
+      expect(health.getFields().key.type.toString()).toBe("String!");
+    });
+
+    it("exposes platform-operator managed application deploy mutation", () => {
+      const mutation = schema.getMutationType() as any;
+      const input = schema.getType(
+        "SetManagedApplicationDeploymentInput",
+      ) as any;
+      const change = schema.getType(
+        "ManagedApplicationDeploymentChange",
+      ) as any;
+
+      expect(
+        mutation.getFields().setManagedApplicationDeployment.type.toString(),
+      ).toBe("ManagedApplicationDeploymentChange!");
+      expect(
+        mutation
+          .getFields()
+          .setManagedApplicationDeployment.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([["input", "SetManagedApplicationDeploymentInput!"]]);
+      expect(input.getFields().key.type.toString()).toBe("String!");
+      expect(input.getFields().enabled.type.toString()).toBe("Boolean!");
+      expect(change.getFields().provisioned.type.toString()).toBe("Boolean!");
+      expect(change.getFields().runtimeEnabled.type.toString()).toBe(
+        "Boolean!",
+      );
+    });
+  });
+
   describe("terraform schema is subscription-only subset", () => {
     const tfSchema = buildSchema(loadTfSchema());
 
