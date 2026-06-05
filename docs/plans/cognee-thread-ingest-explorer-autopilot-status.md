@@ -7,8 +7,9 @@ Started: 2026-06-04
 ## Current Status
 
 - State: follow_up_in_progress
-- Current unit: post-release ontology-only graph UX follow-up
-- Current branch/worktree: detached verification worktree
+- Current unit: post-release thread detail sheet and isolated ontology entity
+  follow-up
+- Current branch/worktree: `codex/kg-thread-sheet-detail` in
   `.Codex/worktrees/kg-local-latest`
 - Current PR: none
 - Blocker: none.
@@ -493,3 +494,28 @@ operation`. ECS logs showed the precise cause:
   verification passed:
   `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsKnowledgeGraph.test.ts src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx`;
   `pnpm --filter @thinkwork/spaces typecheck`.
+- 2026-06-05: Started follow-up branch
+  `codex/kg-thread-sheet-detail` after browser validation showed the side
+  sheet thread table was unreadable and the main graph was still empty after
+  successful ingests. Root-cause review found the normalizer kept only
+  ontology-approved entities that participated in approved relationships, so a
+  successful Cognee run could persist zero visible product rows when it found
+  entity candidates but no relationship edge that matched the approved
+  ontology. Implemented a compact no-pagination thread table with only title
+  and icon status; row click opens thread detail; the detail sheet owns the
+  ingest action; and grounded approved entities now persist even when isolated.
+  Focused local verification passed:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx`;
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/normalizer.test.ts`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
+  `pnpm --filter @thinkwork/spaces build`;
+  targeted Prettier check;
+  `git diff --check`;
+  `curl -I http://127.0.0.1:5174/settings/knowledge-graph`; and
+  `pnpm --filter @thinkwork/api exec vitest run src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/normalizer.test.ts`.
+  The Spaces production build completed with the existing sourcemap and large
+  chunk warnings only.
+- 2026-06-05: Opened follow-up PR
+  [#2098](https://github.com/thinkwork-ai/thinkwork/pull/2098).

@@ -1,6 +1,12 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
-import { RefreshCw, Search } from "lucide-react";
+import { DataTable, Input } from "@thinkwork/ui";
+import {
+  CheckCircle2,
+  Clock3,
+  Search,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import type { SettingsKnowledgeGraphThreadCandidatesQuery } from "@/gql/graphql";
 
 type Candidate =
@@ -12,22 +18,15 @@ export function KnowledgeGraphIngestControls({
   candidates,
   fetching,
   error,
-  ingesting,
   onQueryChange,
   onSelectThread,
-  onIngestThread,
-  onOpenRun,
 }: {
   query: string;
   candidates: Candidate[];
-  selectedThreadId: string | null;
   fetching: boolean;
   error?: string | null;
-  ingesting: boolean;
   onQueryChange: (value: string) => void;
   onSelectThread: (thread: Candidate) => void;
-  onIngestThread: (thread: Candidate) => void;
-  onOpenRun: (run: IngestRun, thread: Candidate) => void;
 }) {
   const columns: ColumnDef<Candidate>[] = [
     {
@@ -38,81 +37,17 @@ export function KnowledgeGraphIngestControls({
           <span className="block truncate text-sm font-medium">
             #{row.original.number} {row.original.title}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-            {row.original.requesterName ?? "Unknown requester"}
-          </span>
-        </span>
-      ),
-    },
-    {
-      accessorKey: "messageCount",
-      header: "Messages",
-      size: 86,
-      cell: ({ row }) => (
-        <span className="block px-2 text-sm text-muted-foreground">
-          {row.original.messageCount}
         </span>
       ),
     },
     {
       id: "status",
       header: "Status",
-      size: 128,
+      size: 48,
       cell: ({ row }) => {
         const run = row.original.lastIngestRun;
-        if (!run) {
-          return (
-            <span className="px-2">
-              <Badge variant="secondary" className="font-normal">
-                Not ingested
-              </Badge>
-            </span>
-          );
-        }
-        return (
-          <span className="px-2">
-            <button
-              type="button"
-              className="rounded-full"
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenRun(run, row.original);
-              }}
-              aria-label={`Open ingest ${formatStatus(run.status)}`}
-            >
-              <Badge
-                variant={statusVariant(run.status)}
-                className="font-normal"
-              >
-                {formatStatus(run.status)}
-              </Badge>
-            </button>
-          </span>
-        );
+        return <StatusIcon run={run ?? null} />;
       },
-    },
-    {
-      id: "action",
-      header: "",
-      size: 88,
-      cell: ({ row }) => (
-        <span className="flex justify-end px-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs"
-            disabled={ingesting}
-            onClick={(event) => {
-              event.stopPropagation();
-              onIngestThread(row.original);
-            }}
-          >
-            <RefreshCw className="size-3.5" />
-            Ingest
-          </Button>
-        </span>
-      ),
     },
   ];
 
@@ -138,7 +73,8 @@ export function KnowledgeGraphIngestControls({
         columns={columns}
         data={candidates}
         onRowClick={onSelectThread}
-        pageSize={8}
+        pageSize={0}
+        hideHeader
         allowHorizontalScroll={false}
         tableClassName="table-fixed"
         emptyState={
@@ -151,14 +87,39 @@ export function KnowledgeGraphIngestControls({
   );
 }
 
-function formatStatus(status: string) {
-  return status.toLowerCase().replace(/_/g, " ");
+function StatusIcon({ run }: { run: IngestRun | null }) {
+  const status = run?.status ?? "NOT_INGESTED";
+  const { Icon, className, label } = statusIcon(status);
+  return (
+    <span className="flex h-10 items-center justify-center px-2">
+      <Icon className={`size-4 ${className}`} aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
+  );
 }
 
-function statusVariant(
-  status: string,
-): "default" | "secondary" | "destructive" {
-  if (status === "FAILED") return "destructive";
-  if (status === "SUCCEEDED") return "default";
-  return "secondary";
+function statusIcon(status: string): {
+  Icon: LucideIcon;
+  className: string;
+  label: string;
+} {
+  if (status === "SUCCEEDED") {
+    return {
+      Icon: CheckCircle2,
+      className: "text-emerald-500",
+      label: "Ingest succeeded",
+    };
+  }
+  if (status === "FAILED") {
+    return {
+      Icon: XCircle,
+      className: "text-destructive",
+      label: "Ingest failed",
+    };
+  }
+  return {
+    Icon: Clock3,
+    className: "text-muted-foreground",
+    label: status === "NOT_INGESTED" ? "Not ingested" : "Ingest pending",
+  };
 }

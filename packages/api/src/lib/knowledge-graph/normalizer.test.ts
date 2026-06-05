@@ -42,7 +42,7 @@ const ontology = {
 };
 
 describe("normalizeCogneeGraph", () => {
-  it("keeps only approved ontology triples from Cognee graph output", () => {
+  it("keeps approved ontology entities and triples from Cognee graph output", () => {
     const snapshot = normalizeCogneeGraph({
       transcript,
       ontology,
@@ -119,7 +119,7 @@ describe("normalizeCogneeGraph", () => {
       },
     });
 
-    expect(snapshot.entities).toHaveLength(2);
+    expect(snapshot.entities).toHaveLength(3);
     expect(snapshot.entities).toEqual([
       expect.objectContaining({
         label: "Acme",
@@ -131,6 +131,12 @@ describe("normalizeCogneeGraph", () => {
         label: "Delta",
         groundingStatus: "grounded",
         provenanceStatus: "strong",
+        ontologyEntityTypeId: "entity-type-company",
+      }),
+      expect.objectContaining({
+        label: "Solo",
+        groundingStatus: "grounded",
+        provenanceStatus: "missing",
         ontologyEntityTypeId: "entity-type-company",
       }),
     ]);
@@ -146,7 +152,7 @@ describe("normalizeCogneeGraph", () => {
     expect(snapshot.metrics).toEqual({
       cogneeNodeCount: 5,
       cogneeEdgeCount: 5,
-      droppedNodeCount: 3,
+      droppedNodeCount: 2,
       droppedEdgeCount: 4,
       structuralNodeCount: 1,
       unapprovedNodeCount: 1,

@@ -220,27 +220,21 @@ export function normalizeCogneeGraph(args: {
     connectedEntityIds.add(relationship.sourceTempId);
     connectedEntityIds.add(relationship.targetTempId);
   }
-  const connectedEntities = entities.filter((entity) =>
-    connectedEntityIds.has(entity.tempId),
-  );
-  const isolatedNodeCount = entities.length - connectedEntities.length;
+  const isolatedNodeCount = entities.filter(
+    (entity) => !connectedEntityIds.has(entity.tempId),
+  ).length;
 
   return {
-    entities: connectedEntities,
+    entities,
     relationships,
     evidence: [
-      ...Array.from(entityEvidence.values()).filter(
-        (evidence) =>
-          evidence.entityTempId &&
-          connectedEntityIds.has(evidence.entityTempId),
-      ),
+      ...Array.from(entityEvidence.values()),
       ...Array.from(relationshipEvidence.values()),
     ],
     metrics: {
       cogneeNodeCount: args.graph.nodes.length,
       cogneeEdgeCount: args.graph.edges.length,
-      droppedNodeCount:
-        structuralNodeCount + unapprovedNodeCount + isolatedNodeCount,
+      droppedNodeCount: structuralNodeCount + unapprovedNodeCount,
       droppedEdgeCount,
       structuralNodeCount,
       unapprovedNodeCount,
