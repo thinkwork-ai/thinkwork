@@ -608,3 +608,5 @@ operation`. ECS logs showed the precise cause:
   and `curl -I http://localhost:5174/settings/knowledge-graph` returned
   `200 OK`. Spaces build completed with existing sourcemap and chunk warnings
   only; admin/mobile package filters still do not expose typecheck scripts.
+- 2026-06-05: Opened source-ingest follow-up PR
+  [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103).
