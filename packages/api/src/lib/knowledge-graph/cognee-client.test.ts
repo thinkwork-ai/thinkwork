@@ -99,6 +99,7 @@ describe("CogneeClient", () => {
     expect((rememberBody as FormData).get("ontology_key")).toBe(
       ontology.ontologyKey,
     );
+    expect((rememberBody as FormData).get("run_in_background")).toBe("true");
     expect(graph.nodes).toEqual([
       {
         id: "n1",
@@ -145,10 +146,52 @@ describe("CogneeClient", () => {
     ]);
     expect(JSON.parse(String(fetchFn.mock.calls[3]?.[1]?.body))).toEqual({
       datasets: ["thinkwork:t:thread:x"],
-      run_in_background: false,
+      run_in_background: true,
       custom_prompt: ontology.customPrompt,
       ontology_key: [ontology.ontologyKey],
     });
+  });
+
+  it("polls dataset status until Cognee indexing completes", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response(200, {
+          "11111111-1111-4111-8111-111111111111": "DATASET_PROCESSING_STARTED",
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(200, {
+          "11111111-1111-4111-8111-111111111111":
+            "DATASET_PROCESSING_COMPLETED",
+        }),
+      );
+
+    vi.stubEnv("COGNEE_INDEX_POLL_MS", "1");
+    try {
+      const client = new CogneeClient({
+        endpoint: "http://cognee.local",
+        fetchFn,
+        retryDelayMs: 0,
+      });
+      const status = await client.waitForDatasetIndexing(
+        "11111111-1111-4111-8111-111111111111",
+      );
+
+      expect(status).toEqual(
+        expect.objectContaining({
+          status: "completed",
+          rawStatus: "DATASET_PROCESSING_COMPLETED",
+          attempts: 2,
+        }),
+      );
+      expect(status.samples.map((sample) => sample.status)).toEqual([
+        "running",
+        "completed",
+      ]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("preserves Cognee ontology metadata from graph payloads", async () => {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { IconMessages } from "@tabler/icons-react";
-import { Button } from "@thinkwork/ui";
+import { Button, ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
 import { Info, Network } from "lucide-react";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -10,6 +10,9 @@ import { KnowledgeGraphExplorer } from "./knowledge-graph/KnowledgeGraphExplorer
 export function SettingsKnowledgeGraph() {
   const [showConfig, setShowConfig] = useState(false);
   const [threadSheetOpen, setThreadSheetOpen] = useState(false);
+  const [explorerMode, setExplorerMode] = useState<"data" | "definitions">(
+    "data",
+  );
 
   usePageHeaderActions({
     title: "Knowledge Graph",
@@ -58,12 +61,32 @@ export function SettingsKnowledgeGraph() {
             ? "Cognee infrastructure for ontology and graph retrieval."
             : "Inspect Cognee entities, relationships, diagnostics, and message evidence."
         }
+        actions={
+          showConfig ? null : (
+            <ToggleGroup
+              type="single"
+              value={explorerMode}
+              onValueChange={(value) =>
+                value && setExplorerMode(value as "data" | "definitions")
+              }
+              variant="outline"
+            >
+              <ToggleGroupItem value="data" className="px-3 text-xs">
+                Data
+              </ToggleGroupItem>
+              <ToggleGroupItem value="definitions" className="px-3 text-xs">
+                Definitions
+              </ToggleGroupItem>
+            </ToggleGroup>
+          )
+        }
       />
       <div className="min-h-0 flex-1">
         {showConfig ? (
           <KnowledgeGraphConfigPanel />
         ) : (
           <KnowledgeGraphExplorer
+            mode={explorerMode}
             threadSheetOpen={threadSheetOpen}
             onThreadSheetOpenChange={setThreadSheetOpen}
           />

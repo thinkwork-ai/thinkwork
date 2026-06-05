@@ -25,7 +25,28 @@ export interface CogneeIngestResult {
   datasetId: string | null;
   datasetName: string;
   mode: "remember" | "add_cognify";
+  pipelineRunId: string | null;
   raw: unknown;
+}
+
+export type CogneeDatasetStatus =
+  | "completed"
+  | "errored"
+  | "running"
+  | "unknown";
+
+export interface CogneeDatasetStatusSnapshot {
+  status: CogneeDatasetStatus;
+  rawStatus: string | null;
+  raw: unknown;
+}
+
+export interface CogneeDatasetWaitResult {
+  status: CogneeDatasetStatus;
+  rawStatus: string | null;
+  attempts: number;
+  elapsedMs: number;
+  samples: CogneeDatasetStatusSnapshot[];
 }
 
 export interface CogneeDocumentIngestArgs {
@@ -53,6 +74,8 @@ export class CogneeClient {
   private readonly mode: "remember" | "add_cognify";
   private readonly retryAttempts: number;
   private readonly retryDelayMs: number;
+  private readonly indexPollMs: number;
+  private readonly indexTimeoutMs: number;
 
   constructor(
     opts: {
@@ -81,6 +104,11 @@ export class CogneeClient {
     this.retryDelayMs =
       opts.retryDelayMs ??
       readPositiveIntEnv("COGNEE_HTTP_RETRY_DELAY_MS", 250);
+    this.indexPollMs = readPositiveIntEnv("COGNEE_INDEX_POLL_MS", 5_000);
+    this.indexTimeoutMs = readPositiveIntEnv(
+      "COGNEE_INDEX_TIMEOUT_MS",
+      240_000,
+    );
   }
 
   async ingestThread(args: {
@@ -125,6 +153,53 @@ export class CogneeClient {
     return parseGraphPayload(payload);
   }
 
+  async waitForDatasetIndexing(
+    datasetId: string,
+  ): Promise<CogneeDatasetWaitResult> {
+    const started = Date.now();
+    const samples: CogneeDatasetStatusSnapshot[] = [];
+    let attempts = 0;
+
+    for (;;) {
+      attempts += 1;
+      const snapshot = await this.fetchDatasetStatus(datasetId);
+      samples.push(snapshot);
+
+      if (snapshot.status === "completed") {
+        return {
+          status: "completed",
+          rawStatus: snapshot.rawStatus,
+          attempts,
+          elapsedMs: Date.now() - started,
+          samples: compactStatusSamples(samples),
+        };
+      }
+      if (snapshot.status === "errored") {
+        throw new CogneeClientError(
+          `Cognee dataset ${datasetId} indexing failed with status ${snapshot.rawStatus ?? "errored"}`,
+        );
+      }
+      if (Date.now() - started >= this.indexTimeoutMs) {
+        throw new CogneeClientError(
+          `Cognee dataset ${datasetId} indexing did not complete within ${this.indexTimeoutMs}ms; latest status ${snapshot.rawStatus ?? "unknown"}`,
+        );
+      }
+
+      await sleep(this.indexPollMs);
+    }
+  }
+
+  async fetchDatasetStatus(
+    datasetId: string,
+  ): Promise<CogneeDatasetStatusSnapshot> {
+    const payload = await this.requestJson(
+      `/api/v1/datasets/status?dataset=${encodeURIComponent(datasetId)}`,
+      { method: "GET" },
+      { retryTransient: true },
+    );
+    return parseDatasetStatus(payload, datasetId);
+  }
+
   private async remember(args: {
     tenantId: string;
     sourceKind: "thread" | "wiki" | "brain";
@@ -135,7 +210,7 @@ export class CogneeClient {
     ontology: KnowledgeGraphOntologyExport;
     customPrompt?: string | null;
   }): Promise<CogneeIngestResult> {
-    const body = buildDocumentForm(args);
+    const body = buildDocumentForm(args, { runInBackground: true });
     const raw = await this.requestJson("/api/v1/remember", {
       method: "POST",
       body,
@@ -144,6 +219,7 @@ export class CogneeClient {
       datasetId: extractDatasetId(raw),
       datasetName: args.datasetName,
       mode: "remember",
+      pipelineRunId: extractPipelineRunId(raw),
       raw,
     };
   }
@@ -160,14 +236,14 @@ export class CogneeClient {
   }): Promise<CogneeIngestResult> {
     const addRaw = await this.requestJson("/api/v1/add", {
       method: "POST",
-      body: buildDocumentForm(args),
+      body: buildDocumentForm(args, { runInBackground: false }),
     });
     const cognifyRaw = await this.requestJson("/api/v1/cognify", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         datasets: [args.datasetName],
-        run_in_background: false,
+        run_in_background: true,
         custom_prompt: buildCustomPrompt(args),
         ...(args.ontology.ontologyKey
           ? { ontology_key: [args.ontology.ontologyKey] }
@@ -178,6 +254,7 @@ export class CogneeClient {
       datasetId: extractDatasetId(cognifyRaw) ?? extractDatasetId(addRaw),
       datasetName: args.datasetName,
       mode: "add_cognify",
+      pipelineRunId: extractPipelineRunId(cognifyRaw),
       raw: { add: addRaw, cognify: cognifyRaw },
     };
   }
@@ -261,16 +338,19 @@ export class CogneeClient {
   }
 }
 
-function buildDocumentForm(args: {
-  tenantId: string;
-  sourceKind: "thread" | "wiki" | "brain";
-  sourceRef: string;
-  datasetName: string;
-  document: string;
-  filename: string;
-  ontology: KnowledgeGraphOntologyExport;
-  customPrompt?: string | null;
-}): FormData {
+function buildDocumentForm(
+  args: {
+    tenantId: string;
+    sourceKind: "thread" | "wiki" | "brain";
+    sourceRef: string;
+    datasetName: string;
+    document: string;
+    filename: string;
+    ontology: KnowledgeGraphOntologyExport;
+    customPrompt?: string | null;
+  },
+  opts: { runInBackground: boolean },
+): FormData {
   const form = new FormData();
   form.append(
     "data",
@@ -278,7 +358,7 @@ function buildDocumentForm(args: {
     args.filename,
   );
   form.append("datasetName", args.datasetName);
-  form.append("run_in_background", "false");
+  form.append("run_in_background", opts.runInBackground ? "true" : "false");
   for (const nodeSet of buildNodeSets(
     args.tenantId,
     args.sourceKind,
@@ -408,6 +488,106 @@ function extractDatasetId(payload: unknown): string | null {
   return visit(payload);
 }
 
+function extractPipelineRunId(payload: unknown): string | null {
+  const seen = new Set<unknown>();
+  const visit = (value: unknown): string | null => {
+    if (!value || typeof value !== "object" || seen.has(value)) return null;
+    seen.add(value);
+    const record = value as Record<string, unknown>;
+    for (const key of ["pipeline_run_id", "pipelineRunId", "run_id", "runId"]) {
+      if (typeof record[key] === "string" && looksLikeUuid(record[key])) {
+        return record[key];
+      }
+    }
+    for (const nested of Object.values(record)) {
+      const found = visit(nested);
+      if (found) return found;
+    }
+    return null;
+  };
+  return visit(payload);
+}
+
+function parseDatasetStatus(
+  payload: unknown,
+  datasetId: string,
+): CogneeDatasetStatusSnapshot {
+  const rawStatus =
+    findDatasetStatusString(payload, datasetId) ?? findStatusString(payload);
+  return {
+    status: normalizeDatasetStatus(rawStatus),
+    rawStatus,
+    raw: payload,
+  };
+}
+
+function findDatasetStatusString(
+  payload: unknown,
+  datasetId: string,
+): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const datasetValue = record[datasetId];
+  if (typeof datasetValue === "string") return datasetValue;
+  if (datasetValue && typeof datasetValue === "object") {
+    return findStatusString(datasetValue);
+  }
+  return null;
+}
+
+function findStatusString(payload: unknown): string | null {
+  const seen = new Set<unknown>();
+  const visit = (value: unknown): string | null => {
+    if (!value || typeof value !== "object" || seen.has(value)) return null;
+    seen.add(value);
+    const record = value as Record<string, unknown>;
+    for (const key of ["status", "pipeline_status", "run_status"]) {
+      if (typeof record[key] === "string" && record[key].trim()) {
+        return record[key];
+      }
+    }
+    for (const nested of Object.values(record)) {
+      if (typeof nested === "string" && /PROCESSING|PIPELINE/i.test(nested)) {
+        return nested;
+      }
+      const found = visit(nested);
+      if (found) return found;
+    }
+    return null;
+  };
+  return typeof payload === "string" ? payload : visit(payload);
+}
+
+function normalizeDatasetStatus(status: string | null): CogneeDatasetStatus {
+  if (!status) return "unknown";
+  const normalized = status.toUpperCase();
+  if (/COMPLETED|ALREADY_COMPLETED|SUCCESS|SUCCEEDED/.test(normalized)) {
+    return "completed";
+  }
+  if (/ERRORED|ERROR|FAILED|FAILURE/.test(normalized)) return "errored";
+  if (/INITIATED|STARTED|RUNNING|PROCESSING|QUEUED|YIELD/.test(normalized)) {
+    return "running";
+  }
+  return "unknown";
+}
+
+function compactStatusSamples(
+  samples: CogneeDatasetStatusSnapshot[],
+): CogneeDatasetStatusSnapshot[] {
+  const compacted: CogneeDatasetStatusSnapshot[] = [];
+  for (const sample of samples) {
+    const previous = compacted[compacted.length - 1];
+    if (
+      previous?.status === sample.status &&
+      previous.rawStatus === sample.rawStatus
+    ) {
+      continue;
+    }
+    compacted.push(sample);
+  }
+  return compacted.slice(-8);
+}
+
 function isUnsupportedRememberError(err: unknown): boolean {
   const message = (err as Error)?.message ?? "";
   return /\b(404|405|501)\b/.test(message);
@@ -425,8 +605,8 @@ function isDuplicateOntologyError(err: unknown, ontologyKey: string): boolean {
 function hasOntologyKey(payload: unknown, ontologyKey: string): boolean {
   return Boolean(
     payload &&
-      typeof payload === "object" &&
-      Object.prototype.hasOwnProperty.call(payload, ontologyKey),
+    typeof payload === "object" &&
+    Object.prototype.hasOwnProperty.call(payload, ontologyKey),
   );
 }
 

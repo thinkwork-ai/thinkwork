@@ -76,6 +76,61 @@ export const SettingsKnowledgeGraphHealthCheckQuery = graphql(`
   }
 `);
 
+export const SettingsKnowledgeGraphOntologyQuery = graphql(`
+  query SettingsKnowledgeGraphOntology($tenantId: ID!) {
+    ontologyDefinitions(tenantId: $tenantId) {
+      activeVersion {
+        id
+        versionNumber
+        status
+        activatedAt
+      }
+      entityTypes {
+        id
+        slug
+        name
+        description
+        broadType
+        aliases
+        lifecycleStatus
+        externalMappings {
+          id
+          mappingKind
+          vocabulary
+          externalUri
+          externalLabel
+        }
+      }
+      relationshipTypes {
+        id
+        slug
+        name
+        description
+        sourceTypeSlugs
+        targetTypeSlugs
+        aliases
+        lifecycleStatus
+        externalMappings {
+          id
+          mappingKind
+          vocabulary
+          externalUri
+          externalLabel
+        }
+      }
+      externalMappings {
+        id
+        subjectKind
+        subjectId
+        mappingKind
+        vocabulary
+        externalUri
+        externalLabel
+      }
+    }
+  }
+`);
+
 export const SettingsKnowledgeGraphSourceIngestCapabilityQuery = graphql(`
   query SettingsKnowledgeGraphSourceIngestCapability {
     __type(name: "StartKnowledgeGraphIngestInput") {

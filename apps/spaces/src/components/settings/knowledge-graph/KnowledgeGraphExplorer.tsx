@@ -5,7 +5,10 @@ import {
   ArrowLeft,
   BookOpen,
   Brain,
+  Database,
+  GitBranch,
   Loader2,
+  MapIcon,
   RefreshCw,
   Search,
   X,
@@ -34,10 +37,12 @@ import {
   KnowledgeGraphProvenanceStatus,
   KnowledgeGraphSourceKind,
   type SettingsKnowledgeGraphEntitiesQuery as SettingsKnowledgeGraphEntitiesData,
+  type SettingsKnowledgeGraphOntologyQuery as SettingsKnowledgeGraphOntologyData,
   type SettingsKnowledgeGraphThreadCandidatesQuery as SettingsKnowledgeGraphThreadCandidatesData,
 } from "@/gql/graphql";
 import {
   SettingsKnowledgeGraphEntitiesQuery,
+  SettingsKnowledgeGraphOntologyQuery,
   SettingsKnowledgeGraphSourceIngestCapabilityQuery,
   SettingsStartKnowledgeGraphIngestMutation,
   SettingsKnowledgeGraphThreadCandidatesQuery,
@@ -48,8 +53,12 @@ import { KnowledgeGraphEntitySheet } from "./KnowledgeGraphEntitySheet";
 import { KnowledgeGraphIngestControls } from "./KnowledgeGraphIngestControls";
 
 type ExplorerView = "table" | "graph";
+type ExplorerMode = "data" | "definitions";
+type OntologyView = "entities" | "relationships" | "mappings";
 type EntityRow =
   SettingsKnowledgeGraphEntitiesData["knowledgeGraphEntities"][number];
+type OntologyDefinitions =
+  SettingsKnowledgeGraphOntologyData["ontologyDefinitions"];
 type ThreadCandidate =
   SettingsKnowledgeGraphThreadCandidatesData["knowledgeGraphThreadCandidates"][number];
 type IngestRun = NonNullable<ThreadCandidate["lastIngestRun"]>;
@@ -91,24 +100,24 @@ interface DroppedEdgeSample {
 }
 
 export function KnowledgeGraphExplorer({
+  mode,
   threadSheetOpen,
   onThreadSheetOpenChange,
 }: {
+  mode: ExplorerMode;
   threadSheetOpen: boolean;
   onThreadSheetOpenChange: (open: boolean) => void;
 }) {
   const { tenantId } = useTenant();
   const effectiveTenantId = tenantId ?? null;
   const [view, setView] = useState<ExplorerView>("table");
+  const [ontologyView, setOntologyView] = useState<OntologyView>("entities");
   const [threadQuery, setThreadQuery] = useState("");
   const [selectedThread, setSelectedThread] = useState<ThreadCandidate | null>(
     null,
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
-  const [ontologyType, setOntologyType] = useState("");
-  const [groundingStatus, setGroundingStatus] = useState("");
-  const [provenanceStatus, setProvenanceStatus] = useState("");
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedEntityTitle, setSelectedEntityTitle] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -133,27 +142,26 @@ export function KnowledgeGraphExplorer({
 
   const candidates = threadResult.data?.knowledgeGraphThreadCandidates ?? [];
 
-  const groundingFilter = groundingStatus
-    ? (groundingStatus as KnowledgeGraphGroundingStatus)
-    : null;
-  const provenanceFilter = provenanceStatus
-    ? (provenanceStatus as KnowledgeGraphProvenanceStatus)
-    : null;
-
   const entityVariables = {
     tenantId: effectiveTenantId ?? "",
     threadId: null,
     runId: null,
     search: activeSearch || null,
-    ontologyType: ontologyType || null,
-    groundingStatus: groundingFilter,
-    provenanceStatus: provenanceFilter,
+    ontologyType: null,
+    groundingStatus: null,
+    provenanceStatus: null,
     limit: 500,
   };
 
   const [entityResult, refetchEntities] = useQuery({
     query: SettingsKnowledgeGraphEntitiesQuery,
     variables: entityVariables,
+    pause: !effectiveTenantId,
+  });
+
+  const [ontologyResult] = useQuery({
+    query: SettingsKnowledgeGraphOntologyQuery,
+    variables: { tenantId: effectiveTenantId ?? "" },
     pause: !effectiveTenantId,
   });
 
@@ -189,18 +197,6 @@ export function KnowledgeGraphExplorer({
 
   const rows = entityResult.data?.knowledgeGraphEntities ?? [];
   const loadingEntities = entityResult.fetching && !entityResult.data;
-
-  const typeOptions = useMemo(() => {
-    const bySlug = new Map<string, string>();
-    for (const row of rows) {
-      const slug = row.ontologyTypeSlug ?? row.typeLabel ?? "";
-      if (!slug) continue;
-      bySlug.set(slug, row.typeLabel ?? slug);
-    }
-    return Array.from(bySlug.entries()).sort((a, b) =>
-      a[1].localeCompare(b[1]),
-    );
-  }, [rows]);
 
   const columns: ColumnDef<EntityRow>[] = useMemo(
     () => [
@@ -367,166 +363,139 @@ export function KnowledgeGraphExplorer({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex shrink-0 flex-wrap items-center gap-3">
-        <div className="relative w-fit min-w-56 max-w-full">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search entities..."
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            onKeyDown={(event) =>
-              event.key === "Enter" && setActiveSearch(searchQuery.trim())
-            }
-            className="pl-9"
-          />
-          {searchQuery ? (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery("");
-                setActiveSearch("");
-              }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="Clear entity search"
+        {mode === "data" ? (
+          <>
+            <div className="relative w-fit min-w-56 max-w-full">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search entities..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={(event) =>
+                  event.key === "Enter" && setActiveSearch(searchQuery.trim())
+                }
+                className="pl-9"
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setActiveSearch("");
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear entity search"
+                >
+                  <X className="size-3.5" />
+                </button>
+              ) : null}
+            </div>
+
+            <ToggleGroup
+              type="single"
+              value={view}
+              onValueChange={(value) => value && setView(value as ExplorerView)}
+              variant="outline"
+              className="ml-auto"
             >
-              <X className="size-3.5" />
-            </button>
-          ) : null}
-        </div>
+              <ToggleGroupItem value="table" className="px-3 text-xs">
+                Table
+              </ToggleGroupItem>
+              <ToggleGroupItem value="graph" className="px-3 text-xs">
+                Graph
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </>
+        ) : null}
 
-        <select
-          value={ontologyType}
-          onChange={(event) => setOntologyType(event.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          aria-label="Ontology type"
-        >
-          <option value="">All types</option>
-          {typeOptions.map(([slug, label]) => (
-            <option key={slug} value={slug}>
-              {label}
-            </option>
-          ))}
-        </select>
+        {mode === "data" ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={sourceIngestState.fetching || !sourceIngestSupported}
+              title={
+                sourceIngestSupported
+                  ? "Ingest wiki source"
+                  : "Available after API deploy"
+              }
+              onClick={() => void ingestSource(KnowledgeGraphSourceKind.Wiki)}
+            >
+              {sourceIngestState.fetching ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <BookOpen className="size-4" />
+              )}
+              Ingest Wiki
+            </Button>
 
-        <select
-          value={groundingStatus}
-          onChange={(event) => setGroundingStatus(event.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          aria-label="Grounding status"
-        >
-          <option value="">All grounding</option>
-          <option value={KnowledgeGraphGroundingStatus.Grounded}>
-            Grounded
-          </option>
-        </select>
-
-        <select
-          value={provenanceStatus}
-          onChange={(event) => setProvenanceStatus(event.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          aria-label="Provenance status"
-        >
-          <option value="">All provenance</option>
-          <option value={KnowledgeGraphProvenanceStatus.Strong}>Strong</option>
-          <option value={KnowledgeGraphProvenanceStatus.Weak}>Weak</option>
-          <option value={KnowledgeGraphProvenanceStatus.Missing}>
-            Missing
-          </option>
-        </select>
-
-        <ToggleGroup
-          type="single"
-          value={view}
-          onValueChange={(value) => value && setView(value as ExplorerView)}
-          variant="outline"
-          className="ml-auto"
-        >
-          <ToggleGroupItem value="table" className="px-3 text-xs">
-            Table
-          </ToggleGroupItem>
-          <ToggleGroupItem value="graph" className="px-3 text-xs">
-            Graph
-          </ToggleGroupItem>
-        </ToggleGroup>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={sourceIngestState.fetching || !sourceIngestSupported}
-          title={
-            sourceIngestSupported
-              ? "Ingest wiki source"
-              : "Available after API deploy"
-          }
-          onClick={() => void ingestSource(KnowledgeGraphSourceKind.Wiki)}
-        >
-          {sourceIngestState.fetching ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <BookOpen className="size-4" />
-          )}
-          Wiki
-        </Button>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={sourceIngestState.fetching || !sourceIngestSupported}
-          title={
-            sourceIngestSupported
-              ? "Ingest Company Brain source"
-              : "Available after API deploy"
-          }
-          onClick={() => void ingestSource(KnowledgeGraphSourceKind.Brain)}
-        >
-          {sourceIngestState.fetching ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Brain className="size-4" />
-          )}
-          Brain
-        </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={sourceIngestState.fetching || !sourceIngestSupported}
+              title={
+                sourceIngestSupported
+                  ? "Ingest Company Brain source"
+                  : "Available after API deploy"
+              }
+              onClick={() => void ingestSource(KnowledgeGraphSourceKind.Brain)}
+            >
+              {sourceIngestState.fetching ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Brain className="size-4" />
+              )}
+              Ingest Brain
+            </Button>
+          </>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1">
-        {view === "graph" ? (
-          <div className="relative h-full overflow-hidden rounded-lg border border-border">
-            <KnowledgeGraph
-              ref={graphRef}
-              tenantId={effectiveTenantId}
-              threadId={null}
-              searchQuery={activeSearch || undefined}
-              typeFilter={ontologyType ? [ontologyType] : undefined}
-              groundingStatusFilter={
-                groundingFilter ? [groundingFilter] : undefined
-              }
-              provenanceStatusFilter={
-                provenanceFilter ? [provenanceFilter] : undefined
-              }
-              onNodeClick={(node: KnowledgeGraphNode, edges) => {
-                openEntity(node.entityId, node.label, edges);
-              }}
-            />
-          </div>
-        ) : loadingEntities ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Loading entities...
-          </div>
-        ) : entityResult.error ? (
-          <EmptyState text={entityResult.error.message} destructive />
-        ) : rows.length === 0 ? (
-          <EmptyState text="No known ontology entities match this filter set." />
-        ) : (
-          <DataTable
-            columns={columns}
-            data={rows}
-            onRowClick={(row) => openEntity(row.id, row.label)}
-            scrollable
-            allowHorizontalScroll={false}
-            pageSize={25}
-            tableClassName="table-fixed"
+        {mode === "definitions" ? (
+          <OntologyContractPanel
+            definitions={ontologyResult.data?.ontologyDefinitions ?? null}
+            fetching={ontologyResult.fetching && !ontologyResult.data}
+            error={ontologyResult.error?.message ?? null}
+            view={ontologyView}
+            onViewChange={setOntologyView}
           />
+        ) : (
+          <>
+            {view === "graph" ? (
+              <div className="relative h-full overflow-hidden rounded-lg border border-border">
+                <KnowledgeGraph
+                  ref={graphRef}
+                  tenantId={effectiveTenantId}
+                  threadId={null}
+                  searchQuery={activeSearch || undefined}
+                  onNodeClick={(node: KnowledgeGraphNode, edges) => {
+                    openEntity(node.entityId, node.label, edges);
+                  }}
+                />
+              </div>
+            ) : loadingEntities ? (
+              <div className="flex h-full items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Loading entities...
+              </div>
+            ) : entityResult.error ? (
+              <EmptyState text={entityResult.error.message} destructive />
+            ) : rows.length === 0 ? (
+              <EmptyState text="No known ontology entities yet." />
+            ) : (
+              <DataTable
+                columns={columns}
+                data={rows}
+                onRowClick={(row) => openEntity(row.id, row.label)}
+                scrollable
+                allowHorizontalScroll={false}
+                pageSize={25}
+                tableClassName="table-fixed"
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -595,6 +564,209 @@ export function KnowledgeGraphExplorer({
           ) : null}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+function OntologyContractPanel({
+  definitions,
+  fetching,
+  error,
+  view,
+  onViewChange,
+}: {
+  definitions: OntologyDefinitions | null;
+  fetching: boolean;
+  error?: string | null;
+  view: OntologyView;
+  onViewChange: (view: OntologyView) => void;
+}) {
+  const entityTypes = definitions?.entityTypes ?? [];
+  const relationshipTypes = definitions?.relationshipTypes ?? [];
+  const mappings = definitions?.externalMappings ?? [];
+  const subjectLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const entity of entityTypes) {
+      labels.set(`entity_type:${entity.id}`, entity.name);
+    }
+    for (const relationship of relationshipTypes) {
+      labels.set(`relationship_type:${relationship.id}`, relationship.name);
+    }
+    return labels;
+  }, [entityTypes, relationshipTypes]);
+
+  return (
+    <aside className="flex min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-border/70 pb-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Database className="size-4 text-muted-foreground" />
+              Ontology Definitions
+            </div>
+          </div>
+          {definitions?.activeVersion ? (
+            <Badge variant="outline" className="shrink-0 font-normal">
+              v{definitions.activeVersion.versionNumber}
+            </Badge>
+          ) : null}
+
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(value) =>
+              value && onViewChange(value as OntologyView)
+            }
+            variant="outline"
+            className="ml-auto"
+          >
+            <ToggleGroupItem value="entities" className="gap-1 px-2 text-xs">
+              <Database className="size-3.5" />
+              Entities ({entityTypes.length})
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="relationships"
+              className="gap-1 px-2 text-xs"
+            >
+              <GitBranch className="size-3.5" />
+              Links ({relationshipTypes.length})
+            </ToggleGroupItem>
+            <ToggleGroupItem value="mappings" className="gap-1 px-2 text-xs">
+              <MapIcon className="size-3.5" />
+              Maps ({mappings.length})
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+        {fetching ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> Loading ontology...
+          </div>
+        ) : error ? (
+          <EmptyState text={error} destructive />
+        ) : view === "entities" ? (
+          <OntologyEntityList rows={entityTypes} />
+        ) : view === "relationships" ? (
+          <OntologyRelationshipList rows={relationshipTypes} />
+        ) : (
+          <OntologyMappingList rows={mappings} subjectLabels={subjectLabels} />
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function OntologyEntityList({
+  rows,
+}: {
+  rows: NonNullable<OntologyDefinitions>["entityTypes"];
+}) {
+  if (!rows.length) {
+    return <EmptyState text="No approved ontology entities are defined." />;
+  }
+  return (
+    <div className="divide-y divide-border/70">
+      {rows.map((entity) => (
+        <div key={entity.id} className="grid min-w-0 gap-1 px-1 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-medium">
+              {entity.name}
+            </span>
+            <Badge variant="outline" className="ml-auto shrink-0 font-normal">
+              {entity.broadType}
+            </Badge>
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            {entity.description || entity.slug}
+          </div>
+          <OntologyAliasLine values={entity.aliases} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OntologyRelationshipList({
+  rows,
+}: {
+  rows: NonNullable<OntologyDefinitions>["relationshipTypes"];
+}) {
+  if (!rows.length) {
+    return (
+      <EmptyState text="No approved ontology relationships are defined." />
+    );
+  }
+  return (
+    <div className="divide-y divide-border/70">
+      {rows.map((relationship) => (
+        <div key={relationship.id} className="grid min-w-0 gap-1 px-1 py-2">
+          <div className="min-w-0 truncate text-sm font-medium">
+            {relationship.name}
+          </div>
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 text-xs text-muted-foreground">
+            <span className="truncate">
+              {relationship.sourceTypeSlugs.join(", ") || "any"}
+            </span>
+            <GitBranch className="size-3 shrink-0" />
+            <span className="truncate">
+              {relationship.targetTypeSlugs.join(", ") || "any"}
+            </span>
+          </div>
+          <OntologyAliasLine values={relationship.aliases} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OntologyMappingList({
+  rows,
+  subjectLabels,
+}: {
+  rows: NonNullable<OntologyDefinitions>["externalMappings"];
+  subjectLabels: Map<string, string>;
+}) {
+  if (!rows.length) {
+    return <EmptyState text="No external vocabulary mappings are defined." />;
+  }
+  return (
+    <div className="divide-y divide-border/70">
+      {rows.map((mapping) => {
+        const subject =
+          subjectLabels.get(`${mapping.subjectKind}:${mapping.subjectId}`) ??
+          mapping.subjectKind.replace(/_/g, " ");
+        return (
+          <div key={mapping.id} className="grid min-w-0 gap-1 px-1 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="min-w-0 truncate text-sm font-medium">
+                {subject}
+              </span>
+              <Badge variant="outline" className="ml-auto shrink-0 font-normal">
+                {formatEnum(mapping.mappingKind)}
+              </Badge>
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              {mapping.vocabulary}
+              {mapping.externalLabel ? ` · ${mapping.externalLabel}` : ""}
+            </div>
+            <div className="truncate font-mono text-[11px] text-muted-foreground">
+              {mapping.externalUri}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function OntologyAliasLine({ values }: { values: string[] }) {
+  if (!values.length) return null;
+  return (
+    <div className="truncate text-xs text-muted-foreground">
+      Aliases: {values.slice(0, 4).join(", ")}
+      {values.length > 4 ? ` +${values.length - 4}` : ""}
     </div>
   );
 }
@@ -1011,6 +1183,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function formatDropReason(value: string) {
   return value.replace(/_/g, " ");
+}
+
+function formatEnum(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function TrustBadge({
