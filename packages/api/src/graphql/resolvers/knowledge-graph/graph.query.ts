@@ -198,6 +198,7 @@ async function loadCanonicalTenantGraph(
       max(updated_at) AS updated_at
     FROM relationship_edges
     GROUP BY
+      tenant_id,
       canonical_source_entity_id,
       canonical_target_entity_id,
       ontology_relationship_type_id,

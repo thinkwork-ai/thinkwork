@@ -413,6 +413,7 @@ describe("knowledge graph read resolvers", () => {
     expect(renderSql(relationshipQuery)).toContain(
       "canonical_source_entity_id",
     );
+    expect(renderSql(relationshipQuery)).toContain("GROUP BY\n      tenant_id");
     expect(renderSql(relationshipQuery)).toContain("'canonicalRelationship'");
   });
 
