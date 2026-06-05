@@ -19,6 +19,7 @@ import {
 } from "./source-adapters.js";
 
 const DEFAULT_SOURCE_LIMIT = 20;
+const MAX_SOURCE_PACKETS = 50;
 
 export async function loadWikiKnowledgeGraphSource(args: {
   db: Database;
@@ -32,7 +33,7 @@ export async function loadWikiKnowledgeGraphSource(args: {
 }): Promise<KnowledgeGraphSourceBundle> {
   const requestedPageIds = [...new Set(args.pageIds ?? [])].filter(Boolean);
   const limit = Math.max(1, Math.min(args.limit ?? DEFAULT_SOURCE_LIMIT, 50));
-  const pages = await args.db
+  const initialPages = await args.db
     .select({
       id: wikiPages.id,
       type: wikiPages.type,
@@ -57,12 +58,55 @@ export async function loadWikiKnowledgeGraphSource(args: {
     .orderBy(desc(wikiPages.updated_at))
     .limit(limit);
 
-  if (pages.length === 0) {
+  if (initialPages.length === 0) {
     return emptyBundle("wiki", args.sourceRef, args.sourceLabel, {
       requestedPageIds,
     });
   }
 
+  const initialPageIds = initialPages.map((page) => page.id);
+  const initialLinks = await args.db
+    .select({
+      fromPageId: wikiPageLinks.from_page_id,
+      toPageId: wikiPageLinks.to_page_id,
+      kind: wikiPageLinks.kind,
+      context: wikiPageLinks.context,
+    })
+    .from(wikiPageLinks)
+    .where(inArray(wikiPageLinks.from_page_id, initialPageIds));
+  const initialPageIdSet = new Set(initialPageIds);
+  const linkedTargetPageIds = [
+    ...new Set(
+      initialLinks
+        .map((link) => link.toPageId)
+        .filter((pageId) => !initialPageIdSet.has(pageId)),
+    ),
+  ].slice(0, Math.max(0, MAX_SOURCE_PACKETS - initialPages.length));
+  const linkedTargetPages = linkedTargetPageIds.length
+    ? await args.db
+        .select({
+          id: wikiPages.id,
+          type: wikiPages.type,
+          entitySubtype: wikiPages.entity_subtype,
+          slug: wikiPages.slug,
+          title: wikiPages.title,
+          summary: wikiPages.summary,
+          bodyMd: wikiPages.body_md,
+          updatedAt: wikiPages.updated_at,
+        })
+        .from(wikiPages)
+        .where(
+          and(
+            eq(wikiPages.tenant_id, args.tenantId),
+            eq(wikiPages.owner_id, args.ownerUserId),
+            eq(wikiPages.status, "active"),
+            inArray(wikiPages.id, linkedTargetPageIds),
+          ),
+        )
+        .orderBy(desc(wikiPages.updated_at))
+        .limit(Math.max(1, MAX_SOURCE_PACKETS - initialPages.length))
+    : [];
+  const pages = [...initialPages, ...linkedTargetPages];
   const pageIds = pages.map((page) => page.id);
   const [aliases, sections, links, sources] = await Promise.all([
     args.db
@@ -253,6 +297,8 @@ export async function loadWikiKnowledgeGraphSource(args: {
       untrustedPacketCount: packets.filter(
         (packet) => !packet.trustedOntologyType,
       ).length,
+      expandedLinkedPageCount: linkedTargetPages.length,
+      expandedLinkedPageIds: linkedTargetPages.map((page) => page.id),
     },
   };
 }

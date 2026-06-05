@@ -16,6 +16,26 @@ describe("loadBrainKnowledgeGraphSource", () => {
           updatedAt: new Date("2026-06-04T12:00:00.000Z"),
         },
       ],
+      [
+        {
+          fromPageId: "brain-1",
+          toPageId: "brain-2",
+          kind: "located_in",
+          context: "Expansion market",
+        },
+      ],
+      [
+        {
+          id: "brain-2",
+          type: "entity",
+          entitySubtype: "place",
+          slug: "mexico-city",
+          title: "Mexico City",
+          summary: "Expansion market",
+          bodyMd: "Mexico City is the expansion market.",
+          updatedAt: new Date("2026-06-04T11:00:00.000Z"),
+        },
+      ],
       [{ pageId: "brain-1", alias: "bunkhouse hotels" }],
       [
         {
@@ -29,7 +49,14 @@ describe("loadBrainKnowledgeGraphSource", () => {
           aggregation: { facet_type: "operational" },
         },
       ],
-      [],
+      [
+        {
+          fromPageId: "brain-1",
+          toPageId: "brain-2",
+          kind: "located_in",
+          context: "Expansion market",
+        },
+      ],
       [
         {
           sectionId: "facet-1",
@@ -55,15 +82,32 @@ describe("loadBrainKnowledgeGraphSource", () => {
             description: null,
             aliases: [],
           },
+          {
+            id: "type-2",
+            slug: "place",
+            name: "Place",
+            description: null,
+            aliases: [],
+          },
         ],
-        relationshipTypes: [],
+        relationshipTypes: [
+          {
+            id: "rel-1",
+            slug: "located_in",
+            name: "Located in",
+            description: null,
+            aliases: [],
+            sourceTypeSlugs: ["customer"],
+            targetTypeSlugs: ["place"],
+          },
+        ],
         customPrompt: "Extract",
         ontologyKey: null,
         ontologyOwlXml: null,
       },
     });
 
-    expect(bundle.packetCount).toBe(1);
+    expect(bundle.packetCount).toBe(2);
     expect(bundle.packets).toMatchObject([
       {
         id: "brain-1",
@@ -75,15 +119,35 @@ describe("loadBrainKnowledgeGraphSource", () => {
           aliases: ["bunkhouse hotels"],
         },
       },
+      {
+        id: "brain-2",
+        title: "Mexico City",
+        entityTypeSlug: "place",
+        trustedOntologyType: true,
+      },
+    ]);
+    expect(bundle.relationships).toMatchObject([
+      {
+        fromPacketId: "brain-1",
+        toPacketId: "brain-2",
+        relationshipTypeSlug: "located_in",
+        trustedOntologyType: true,
+      },
     ]);
     expect(bundle.document).toContain("ontology_type_slug: customer");
+    expect(bundle.document).toContain("ontology_type_slug: place");
     expect(bundle.document).toContain("facet_type: operational");
     expect(bundle.document).toContain("citations: crm_opportunity:opp-1");
     expect(bundle.evidence.map((item) => item.evidenceSourceKind)).toEqual([
       "brain_page",
       "brain_section",
+      "brain_page",
     ]);
-    expect(bundle.diagnostics).toMatchObject({ untrustedPacketCount: 0 });
+    expect(bundle.diagnostics).toMatchObject({
+      untrustedPacketCount: 0,
+      expandedLinkedPageCount: 1,
+      expandedLinkedPageIds: ["brain-2"],
+    });
   });
 });
 
@@ -102,11 +166,11 @@ function fakeQuery(result: unknown[], index: number): any {
     from: () => query,
     innerJoin: () => query,
     where: () => {
-      if ([2, 4, 5].includes(index)) return Promise.resolve(result);
+      if ([2, 4, 6, 7].includes(index)) return Promise.resolve(result);
       return query;
     },
     orderBy: () => {
-      if (index === 3) return Promise.resolve(result);
+      if (index === 5) return Promise.resolve(result);
       return query;
     },
     limit: () => Promise.resolve(result),

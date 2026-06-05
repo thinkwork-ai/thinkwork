@@ -6,6 +6,48 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Knowledge Graph Demo Relationship Density - 2026-06-05
+
+- Plan: Follow-up to Knowledge Graph duplicate canonicalization and ontology
+  demo readiness.
+- Target branch: `main`.
+- Current unit: Increase trusted source relationship density for demo graph.
+- Current branch: `codex/kg-demo-relationships`.
+- Current worktree: `.Codex/worktrees/kg-demo-relationships`.
+
+| Unit                                            | Branch                        | PR  | State  | Notes                                                                                  |
+| ----------------------------------------------- | ----------------------------- | --- | ------ | -------------------------------------------------------------------------------------- |
+| Expand trusted Wiki/Brain linked target packets | `codex/kg-demo-relationships` | TBD | Active | Source loaders now include one-hop linked target pages before ontology-gated fallback. |
+
+### Progress Log
+
+- Confirmed deployed duplicate canonicalization is live and `app.thinkwork.ai`
+  responds at `/settings/knowledge-graph`.
+- Inspected dev KG persistence: tenant-wide rows currently contain 28
+  canonical entities and 19 canonical edges, but the Brain source has only 3
+  persisted relationship rows.
+- Implemented one-hop linked target page expansion for trusted Wiki and Brain
+  source bundles so ontology-approved relationships have both endpoints
+  available before normalization/fallback.
+- Dry-run against dev Company Brain data showed the patched loader would
+  increase the Brain source bundle to 23 packets and 16 persisted
+  ontology-approved relationships after endpoint checks.
+
+### CI / Verification
+
+- `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/brain-source.test.ts src/lib/knowledge-graph/wiki-source.test.ts src/lib/knowledge-graph/source-fallback.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/admin build`
+- `bash scripts/build-lambdas.sh graphql-http`
+- `pnpm dlx prettier --check packages/api/src/lib/knowledge-graph/brain-source.ts packages/api/src/lib/knowledge-graph/wiki-source.ts packages/api/src/lib/knowledge-graph/brain-source.test.ts packages/api/src/lib/knowledge-graph/wiki-source.test.ts`
+- `git diff --check`
+- Local dev server is running from this worktree at
+  `http://localhost:5174/settings/knowledge-graph`.
+
+### Blockers
+
+- None.
+
 ## Firecrawl Web Extraction - 2026-06-04
 
 - Plan:
