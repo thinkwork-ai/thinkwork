@@ -284,6 +284,55 @@ describe("knowledge graph read resolvers", () => {
     expect(renderSql(entityQuery)).toContain("grounding_status = 'grounded'");
   });
 
+  it("collapses tenant-wide entity rows into canonical ontology entities", async () => {
+    const ctx = ctxWithRows([
+      [
+        entity({
+          id: "wiki-entity",
+          source_kind: "wiki",
+          source_ref: "owner:user",
+          relationship_count: 4,
+          evidence_count: 1,
+        }),
+      ],
+    ]);
+
+    const rows = await knowledgeGraphQueries.knowledgeGraphEntities(
+      null,
+      { tenantId: "tenant-1" },
+      ctx,
+    );
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        id: "wiki-entity",
+        sourceKind: "WIKI",
+        relationshipCount: 4,
+      }),
+    ]);
+    const entityQuery = ctx.db.execute.mock.calls[0]?.[0];
+    expect(renderSql(entityQuery)).toContain("WITH filtered_entities AS");
+    expect(renderSql(entityQuery)).toContain(
+      "GROUP BY tenant_id, normalized_label",
+    );
+    expect(renderSql(entityQuery)).toContain("'canonicalEntity'");
+  });
+
+  it("keeps source-scoped entity rows separate for ingest detail views", async () => {
+    const ctx = ctxWithRows([[entity({ source_kind: "wiki" })]]);
+
+    await knowledgeGraphQueries.knowledgeGraphEntities(
+      null,
+      { tenantId: "tenant-1", sourceKind: "WIKI", sourceRef: "owner:user" },
+      ctx,
+    );
+
+    const entityQuery = ctx.db.execute.mock.calls[0]?.[0];
+    expect(renderSql(entityQuery)).not.toContain("WITH filtered_entities AS");
+    expect(renderSql(entityQuery)).toContain("source_kind =");
+    expect(renderSql(entityQuery)).toContain("source_ref =");
+  });
+
   it("builds a graph from the same filtered entity set", async () => {
     const ctx = ctxWithRows([
       [entity(), entity({ id: "entity-2" })],
@@ -322,6 +371,48 @@ describe("knowledge graph read resolvers", () => {
       "grounding_status = 'grounded'",
     );
     expect(renderSql(relationshipQuery)).not.toContain("::uuid[]");
+  });
+
+  it("canonicalizes tenant-wide graph edges across source snapshots", async () => {
+    const ctx = ctxWithRows([
+      [
+        entity({ id: "canonical-source", relationship_count: 2 }),
+        entity({ id: "canonical-target", normalized_label: "target" }),
+      ],
+      [
+        relationship({
+          id: "canonical-relationship",
+          source_entity_id: "canonical-source",
+          target_entity_id: "canonical-target",
+          evidence_count: 2,
+        }),
+      ],
+    ]);
+
+    const graph = await knowledgeGraphQueries.knowledgeGraphGraph(
+      null,
+      { tenantId: "tenant-1" },
+      ctx,
+    );
+
+    expect(graph.nodes.map((node: any) => node.entityId)).toEqual([
+      "canonical-source",
+      "canonical-target",
+    ]);
+    expect(graph.edges).toEqual([
+      expect.objectContaining({
+        relationshipId: "canonical-relationship",
+        source: "canonical-source",
+        target: "canonical-target",
+        evidenceCount: 2,
+      }),
+    ]);
+    const relationshipQuery = ctx.db.execute.mock.calls[1]?.[0];
+    expect(renderSql(relationshipQuery)).toContain("canonical_entities AS");
+    expect(renderSql(relationshipQuery)).toContain(
+      "canonical_source_entity_id",
+    );
+    expect(renderSql(relationshipQuery)).toContain("'canonicalRelationship'");
   });
 
   it("returns entity details with relationships and source evidence", async () => {
