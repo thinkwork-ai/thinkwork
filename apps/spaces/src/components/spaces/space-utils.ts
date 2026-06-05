@@ -30,11 +30,18 @@ export function isDefaultSpace(space: SpaceLabelFields): boolean {
 }
 
 /**
+ * The crumb label for the default (or missing) space. Centralised so the thread
+ * list header can recognise it and fall back to a plain "Thread List" title
+ * instead of "<DEFAULT_SPACE_LABEL> · Threads".
+ */
+export const DEFAULT_SPACE_LABEL = "Chats";
+
+/**
  * The label used for a space in navigation chrome. Default (and missing) spaces
  * surface as "Chats" — matching the sidebar's generic section — while named
  * spaces use their human name (falling back to slug).
  */
 export function spaceCrumbLabel(space?: SpaceLabelFields | null): string {
-  if (!space || isDefaultSpace(space)) return "Chats";
+  if (!space || isDefaultSpace(space)) return DEFAULT_SPACE_LABEL;
   return space.name || space.slug || "Space";
 }
