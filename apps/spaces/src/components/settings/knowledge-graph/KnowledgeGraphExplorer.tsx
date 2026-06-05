@@ -6,7 +6,6 @@ import {
   Database,
   GitBranch,
   Loader2,
-  MapIcon,
   RefreshCw,
   Search,
   X,
@@ -515,19 +514,16 @@ function OntologyContractPanel({
             variant="outline"
             className="ml-auto"
           >
-            <ToggleGroupItem value="entities" className="gap-1 px-2 text-xs">
-              <Database className="size-3.5" />
+            <ToggleGroupItem value="entities" className="px-3 text-xs">
               Entities ({entityTypes.length})
             </ToggleGroupItem>
             <ToggleGroupItem
               value="relationships"
-              className="gap-1 px-2 text-xs"
+              className="px-3 text-xs"
             >
-              <GitBranch className="size-3.5" />
               Links ({relationshipTypes.length})
             </ToggleGroupItem>
-            <ToggleGroupItem value="mappings" className="gap-1 px-2 text-xs">
-              <MapIcon className="size-3.5" />
+            <ToggleGroupItem value="mappings" className="px-3 text-xs">
               Maps ({mappings.length})
             </ToggleGroupItem>
           </ToggleGroup>
