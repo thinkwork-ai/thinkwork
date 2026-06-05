@@ -1212,7 +1212,8 @@ thinkwork artifact get <id> [--raw]
 
 ```bash
 thinkwork cost summary [--from] [--to]
-thinkwork cost by-agent [--sort cost|requests]
+thinkwork cost by-user [--from] [--to]
+thinkwork cost by-agent [--from] [--to] # legacy audit context
 thinkwork cost by-model
 thinkwork cost series [--days]
 ```
@@ -1221,7 +1222,8 @@ thinkwork cost series [--days]
 
 ```bash
 thinkwork budget list | status
-thinkwork budget upsert --limit-usd <n> [--scope tenant|agent] [--agent] [--window] [--action PAUSE|ALERT]
+thinkwork budget upsert --scope tenant --limit-usd <n> [--period monthly] [--action PAUSE|ALERT]
+thinkwork budget upsert --scope user --user <id> --limit-usd <n> [--period monthly] [--action PAUSE|ALERT]
 thinkwork budget delete <id>
 ```
 

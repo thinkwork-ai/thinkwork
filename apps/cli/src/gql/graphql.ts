@@ -6492,6 +6492,7 @@ export type CliBudgetPoliciesQuery = {
     id: string;
     scope: string;
     agentId?: string | null;
+    userId?: string | null;
     period: string;
     limitUsd: number;
     actionOnExceed: string;
@@ -6516,6 +6517,7 @@ export type CliBudgetStatusQuery = {
       id: string;
       scope: string;
       agentId?: string | null;
+      userId?: string | null;
       period: string;
       limitUsd: number;
     };
@@ -6534,6 +6536,7 @@ export type CliUpsertBudgetPolicyMutation = {
     id: string;
     scope: string;
     agentId?: string | null;
+    userId?: string | null;
     limitUsd: number;
     period: string;
     actionOnExceed: string;
@@ -6584,6 +6587,25 @@ export type CliCostByAgentQuery = {
     agentName: string;
     totalUsd: number;
     eventCount: number;
+  }>;
+};
+
+export type CliCostByUserQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+}>;
+
+export type CliCostByUserQuery = {
+  __typename?: "Query";
+  costByUser: Array<{
+    __typename?: "UserCostSummary";
+    userId?: string | null;
+    userName: string;
+    userEmail?: string | null;
+    totalUsd: number;
+    eventCount: number;
+    isSystem: boolean;
   }>;
 };
 
@@ -9157,6 +9179,7 @@ export const CliBudgetPoliciesDocument = {
                 { kind: "Field", name: { kind: "Name", value: "id" } },
                 { kind: "Field", name: { kind: "Name", value: "scope" } },
                 { kind: "Field", name: { kind: "Name", value: "agentId" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
                 { kind: "Field", name: { kind: "Name", value: "period" } },
                 { kind: "Field", name: { kind: "Name", value: "limitUsd" } },
                 {
@@ -9225,6 +9248,10 @@ export const CliBudgetStatusDocument = {
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "agentId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "userId" },
                       },
                       {
                         kind: "Field",
@@ -9319,6 +9346,7 @@ export const CliUpsertBudgetPolicyDocument = {
                 { kind: "Field", name: { kind: "Name", value: "id" } },
                 { kind: "Field", name: { kind: "Name", value: "scope" } },
                 { kind: "Field", name: { kind: "Name", value: "agentId" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
                 { kind: "Field", name: { kind: "Name", value: "limitUsd" } },
                 { kind: "Field", name: { kind: "Name", value: "period" } },
                 {
@@ -9554,6 +9582,91 @@ export const CliCostByAgentDocument = {
     },
   ],
 } as unknown as DocumentNode<CliCostByAgentQuery, CliCostByAgentQueryVariables>;
+export const CliCostByUserDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliCostByUser" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "from" } },
+          type: {
+            kind: "NamedType",
+            name: { kind: "Name", value: "AWSDateTime" },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "to" } },
+          type: {
+            kind: "NamedType",
+            name: { kind: "Name", value: "AWSDateTime" },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "costByUser" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "from" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "from" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "to" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "to" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                { kind: "Field", name: { kind: "Name", value: "userName" } },
+                { kind: "Field", name: { kind: "Name", value: "userEmail" } },
+                { kind: "Field", name: { kind: "Name", value: "totalUsd" } },
+                { kind: "Field", name: { kind: "Name", value: "eventCount" } },
+                { kind: "Field", name: { kind: "Name", value: "isSystem" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<CliCostByUserQuery, CliCostByUserQueryVariables>;
 export const CliCostByModelDocument = {
   kind: "Document",
   definitions: [
