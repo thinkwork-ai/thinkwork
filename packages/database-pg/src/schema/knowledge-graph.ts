@@ -2,9 +2,9 @@
  * Cognee-derived Knowledge Graph tables.
  *
  * Phase II keeps Cognee out of runtime retrieval and stores a normalized,
- * tenant-scoped graph snapshot in Aurora. The rows here are derived from one
- * manual thread ingest run and preserve the evidence needed for operator
- * inspection before any future agent-facing retrieval path exists.
+ * tenant-scoped graph snapshot in Aurora. Rows are scoped by source kind/ref
+ * so thread transcripts, wiki pages, and Company Brain pages can share the
+ * same ontology-gated normalization pipeline.
  */
 
 import {
@@ -37,6 +37,14 @@ export const KNOWLEDGE_GRAPH_INGEST_STATUSES = [
 export type KnowledgeGraphIngestStatus =
   (typeof KNOWLEDGE_GRAPH_INGEST_STATUSES)[number];
 
+export const KNOWLEDGE_GRAPH_SOURCE_KINDS = [
+  "thread",
+  "wiki",
+  "brain",
+] as const;
+export type KnowledgeGraphSourceKind =
+  (typeof KNOWLEDGE_GRAPH_SOURCE_KINDS)[number];
+
 export const KNOWLEDGE_GRAPH_GROUNDING_STATUSES = [
   "grounded",
   "unapproved_type",
@@ -57,6 +65,10 @@ export type KnowledgeGraphProvenanceStatus =
 
 export const KNOWLEDGE_GRAPH_EVIDENCE_SOURCE_KINDS = [
   "thread_message",
+  "wiki_page",
+  "wiki_section",
+  "brain_page",
+  "brain_section",
   "cognee_payload",
   "normalizer",
 ] as const;
@@ -72,9 +84,12 @@ export const knowledgeGraphIngestRuns = pgTable(
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id, { onDelete: "cascade" })
       .notNull(),
-    thread_id: uuid("thread_id")
-      .references(() => threads.id, { onDelete: "cascade" })
-      .notNull(),
+    thread_id: uuid("thread_id").references(() => threads.id, {
+      onDelete: "cascade",
+    }),
+    source_kind: text("source_kind").notNull().default("thread"),
+    source_ref: text("source_ref").notNull(),
+    source_label: text("source_label"),
     requested_by_user_id: uuid("requested_by_user_id").references(
       () => users.id,
       { onDelete: "set null" },
@@ -108,6 +123,12 @@ export const knowledgeGraphIngestRuns = pgTable(
       table.thread_id,
       table.created_at,
     ),
+    index("idx_kg_ingest_runs_tenant_source_created").on(
+      table.tenant_id,
+      table.source_kind,
+      table.source_ref,
+      table.created_at,
+    ),
     index("idx_kg_ingest_runs_tenant_status").on(table.tenant_id, table.status),
     index("idx_kg_ingest_runs_requested_by").on(
       table.tenant_id,
@@ -116,6 +137,11 @@ export const knowledgeGraphIngestRuns = pgTable(
     ),
     uniqueIndex("uq_kg_ingest_runs_active_thread")
       .on(table.tenant_id, table.thread_id)
+      .where(
+        sql`${table.thread_id} IS NOT NULL AND ${table.status} IN ('queued','running')`,
+      ),
+    uniqueIndex("uq_kg_ingest_runs_active_source")
+      .on(table.tenant_id, table.source_kind, table.source_ref)
       .where(sql`${table.status} IN ('queued','running')`),
     check(
       "knowledge_graph_ingest_runs_status_allowed",
@@ -124,6 +150,14 @@ export const knowledgeGraphIngestRuns = pgTable(
     check(
       "knowledge_graph_ingest_runs_trigger_allowed",
       sql`${table.trigger} IN ('manual')`,
+    ),
+    check(
+      "knowledge_graph_ingest_runs_source_kind_allowed",
+      sql`${table.source_kind} IN ('thread','wiki','brain')`,
+    ),
+    check(
+      "knowledge_graph_ingest_runs_thread_scope_required",
+      sql`${table.source_kind} != 'thread' OR ${table.thread_id} IS NOT NULL`,
     ),
   ],
 );
@@ -137,9 +171,11 @@ export const knowledgeGraphEntities = pgTable(
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id, { onDelete: "cascade" })
       .notNull(),
-    thread_id: uuid("thread_id")
-      .references(() => threads.id, { onDelete: "cascade" })
-      .notNull(),
+    thread_id: uuid("thread_id").references(() => threads.id, {
+      onDelete: "cascade",
+    }),
+    source_kind: text("source_kind").notNull().default("thread"),
+    source_ref: text("source_ref").notNull(),
     ingest_run_id: uuid("ingest_run_id")
       .references(() => knowledgeGraphIngestRuns.id, { onDelete: "cascade" })
       .notNull(),
@@ -181,6 +217,12 @@ export const knowledgeGraphEntities = pgTable(
       table.thread_id,
       table.normalized_label,
     ),
+    index("idx_kg_entities_tenant_source_label").on(
+      table.tenant_id,
+      table.source_kind,
+      table.source_ref,
+      table.normalized_label,
+    ),
     index("idx_kg_entities_tenant_thread_type").on(
       table.tenant_id,
       table.thread_id,
@@ -204,6 +246,10 @@ export const knowledgeGraphEntities = pgTable(
       "knowledge_graph_entities_provenance_allowed",
       sql`${table.provenance_status} IN ('strong','weak','missing')`,
     ),
+    check(
+      "knowledge_graph_entities_source_kind_allowed",
+      sql`${table.source_kind} IN ('thread','wiki','brain')`,
+    ),
   ],
 );
 
@@ -216,9 +262,11 @@ export const knowledgeGraphRelationships = pgTable(
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id, { onDelete: "cascade" })
       .notNull(),
-    thread_id: uuid("thread_id")
-      .references(() => threads.id, { onDelete: "cascade" })
-      .notNull(),
+    thread_id: uuid("thread_id").references(() => threads.id, {
+      onDelete: "cascade",
+    }),
+    source_kind: text("source_kind").notNull().default("thread"),
+    source_ref: text("source_ref").notNull(),
     ingest_run_id: uuid("ingest_run_id")
       .references(() => knowledgeGraphIngestRuns.id, { onDelete: "cascade" })
       .notNull(),
@@ -271,6 +319,12 @@ export const knowledgeGraphRelationships = pgTable(
       table.thread_id,
       table.ontology_type_slug,
     ),
+    index("idx_kg_relationships_tenant_source_type").on(
+      table.tenant_id,
+      table.source_kind,
+      table.source_ref,
+      table.ontology_type_slug,
+    ),
     index("idx_kg_relationships_tenant_thread_trust").on(
       table.tenant_id,
       table.thread_id,
@@ -285,6 +339,10 @@ export const knowledgeGraphRelationships = pgTable(
       "knowledge_graph_relationships_provenance_allowed",
       sql`${table.provenance_status} IN ('strong','weak','missing')`,
     ),
+    check(
+      "knowledge_graph_relationships_source_kind_allowed",
+      sql`${table.source_kind} IN ('thread','wiki','brain')`,
+    ),
   ],
 );
 
@@ -297,9 +355,11 @@ export const knowledgeGraphEvidence = pgTable(
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id, { onDelete: "cascade" })
       .notNull(),
-    thread_id: uuid("thread_id")
-      .references(() => threads.id, { onDelete: "cascade" })
-      .notNull(),
+    thread_id: uuid("thread_id").references(() => threads.id, {
+      onDelete: "cascade",
+    }),
+    source_kind: text("source_kind").notNull().default("thread"),
+    source_ref: text("source_ref").notNull(),
     ingest_run_id: uuid("ingest_run_id")
       .references(() => knowledgeGraphIngestRuns.id, { onDelete: "cascade" })
       .notNull(),
@@ -322,8 +382,10 @@ export const knowledgeGraphEvidence = pgTable(
     snippet: text("snippet").notNull(),
     char_start: integer("char_start"),
     char_end: integer("char_end"),
-    source_kind: text("source_kind").notNull().default("thread_message"),
-    source_ref: text("source_ref"),
+    evidence_source_kind: text("evidence_source_kind")
+      .notNull()
+      .default("thread_message"),
+    evidence_source_ref: text("evidence_source_ref"),
     metadata: jsonb("metadata").notNull().default({}),
     observed_at: timestamp("observed_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true })
@@ -336,11 +398,20 @@ export const knowledgeGraphEvidence = pgTable(
       table.thread_id,
       table.message_id,
     ),
+    index("idx_kg_evidence_tenant_source").on(
+      table.tenant_id,
+      table.source_kind,
+      table.source_ref,
+    ),
     index("idx_kg_evidence_entity").on(table.entity_id),
     index("idx_kg_evidence_relationship").on(table.relationship_id),
     check(
       "knowledge_graph_evidence_source_kind_allowed",
-      sql`${table.source_kind} IN ('thread_message','cognee_payload','normalizer')`,
+      sql`${table.source_kind} IN ('thread','wiki','brain')`,
+    ),
+    check(
+      "knowledge_graph_evidence_evidence_source_kind_allowed",
+      sql`${table.evidence_source_kind} IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','cognee_payload','normalizer')`,
     ),
     check(
       "knowledge_graph_evidence_subject_required",

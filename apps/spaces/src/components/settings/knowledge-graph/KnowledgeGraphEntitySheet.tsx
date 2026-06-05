@@ -176,7 +176,7 @@ export function KnowledgeGraphEntitySheet({
                     >
                       <p className="text-sm leading-relaxed">{item.snippet}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {item.speakerLabel ?? item.messageRole ?? "Message"}
+                        {item.speakerLabel ?? "Source evidence"}
                         {item.messageCreatedAt
                           ? ` · ${formatDate(item.messageCreatedAt)}`
                           : ""}
@@ -187,7 +187,7 @@ export function KnowledgeGraphEntitySheet({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No direct message evidence captured for this entity.
+                  No direct source evidence captured for this entity.
                 </p>
               )}
             </section>

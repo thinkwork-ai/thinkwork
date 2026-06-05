@@ -35,6 +35,7 @@ export async function knowledgeGraphEntity(
   ).rows ?? [])[0];
   if (!entity) return null;
   if (
+    entity.thread_id &&
     !(await assertCanReadKnowledgeGraphThread(ctx, scope, entity.thread_id))
   ) {
     return null;
@@ -44,7 +45,8 @@ export async function knowledgeGraphEntity(
     SELECT *
       FROM knowledge_graph_relationships
      WHERE tenant_id = ${scope.tenantId}
-       AND thread_id = ${entity.thread_id}
+       AND source_kind = ${entity.source_kind}
+       AND source_ref = ${entity.source_ref}
        AND (source_entity_id = ${entity.id} OR target_entity_id = ${entity.id})
      ORDER BY evidence_count DESC, label ASC
   `);
@@ -64,7 +66,8 @@ export async function knowledgeGraphEntity(
     SELECT *
       FROM knowledge_graph_evidence
      WHERE tenant_id = ${scope.tenantId}
-       AND thread_id = ${entity.thread_id}
+       AND source_kind = ${entity.source_kind}
+       AND source_ref = ${entity.source_ref}
        AND (
          entity_id = ${entity.id}
          ${relationshipEvidenceFilter}

@@ -54,7 +54,14 @@ export interface NormalizedKnowledgeGraphEvidence {
   snippet: string;
   charStart: number | null;
   charEnd: number | null;
-  sourceKind: "thread_message" | "cognee_payload" | "normalizer";
+  sourceKind:
+    | "thread_message"
+    | "wiki_page"
+    | "wiki_section"
+    | "brain_page"
+    | "brain_section"
+    | "cognee_payload"
+    | "normalizer";
   sourceRef: string | null;
   metadata: Record<string, unknown>;
   observedAt: Date | null;
@@ -149,16 +156,19 @@ export function normalizeCogneeGraph(args: {
     if (evidence) {
       entityEvidence.set(tempId, {
         entityTempId: tempId,
-        messageId: evidence.message.id,
+        messageId: messageIdForEvidence(evidence.message),
         messageRole: evidence.message.role,
         messageCreatedAt: evidence.message.createdAt,
         speakerLabel: evidence.message.speakerLabel,
         snippet: evidence.snippet,
         charStart: evidence.charStart,
         charEnd: evidence.charEnd,
-        sourceKind: "thread_message",
-        sourceRef: evidence.message.id,
-        metadata: { match: evidence.match },
+        sourceKind: evidenceSourceKind(evidence.message),
+        sourceRef: evidenceSourceRef(evidence.message),
+        metadata: {
+          ...evidence.message.evidenceMetadata,
+          match: evidence.match,
+        },
         observedAt: evidence.message.createdAt,
       });
     }
@@ -235,16 +245,19 @@ export function normalizeCogneeGraph(args: {
     if (evidence) {
       relationshipEvidence.set(tempId, {
         relationshipTempId: tempId,
-        messageId: evidence.message.id,
+        messageId: messageIdForEvidence(evidence.message),
         messageRole: evidence.message.role,
         messageCreatedAt: evidence.message.createdAt,
         speakerLabel: evidence.message.speakerLabel,
         snippet: evidence.snippet,
         charStart: evidence.charStart,
         charEnd: evidence.charEnd,
-        sourceKind: "thread_message",
-        sourceRef: evidence.message.id,
-        metadata: { match: evidence.match },
+        sourceKind: evidenceSourceKind(evidence.message),
+        sourceRef: evidenceSourceRef(evidence.message),
+        metadata: {
+          ...evidence.message.evidenceMetadata,
+          match: evidence.match,
+        },
         observedAt: evidence.message.createdAt,
       });
     }
@@ -295,6 +308,20 @@ export function normalizeCogneeGraph(args: {
       droppedEdgeSamples,
     },
   };
+}
+
+function evidenceSourceKind(
+  message: ThreadTranscriptMessage,
+): NormalizedKnowledgeGraphEvidence["sourceKind"] {
+  return message.evidenceSourceKind ?? "thread_message";
+}
+
+function evidenceSourceRef(message: ThreadTranscriptMessage): string {
+  return message.evidenceSourceRef ?? message.id;
+}
+
+function messageIdForEvidence(message: ThreadTranscriptMessage): string | null {
+  return evidenceSourceKind(message) === "thread_message" ? message.id : null;
 }
 
 function dedupeNodes(nodes: CogneeGraphNode[]): CogneeGraphNode[] {

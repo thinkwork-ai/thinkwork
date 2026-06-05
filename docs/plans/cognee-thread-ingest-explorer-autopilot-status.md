@@ -543,3 +543,100 @@ operation`. ECS logs showed the precise cause:
   with the existing sourcemap and large chunk warnings only.
 - 2026-06-05: Opened diagnostics follow-up PR
   [#2100](https://github.com/thinkwork-ai/thinkwork/pull/2100).
+- 2026-06-05: Started source-ingest follow-up branch
+  `codex/kg-wiki-brain-ingest` in isolated worktree
+  `.Codex/worktrees/kg-wiki-brain-ingest` from `origin/main` after planning
+  a wiki/company-brain validation path for Cognee. The goal is to preserve the
+  ontology-only graph gate while feeding Cognee ontology-shaped data from
+  already structured wiki and brain pages.
+- 2026-06-05: Implemented source-aware Knowledge Graph runs and snapshots:
+  runs, entities, relationships, and evidence now carry `source_kind` and
+  `source_ref`, with thread ids nullable for non-thread sources. Added the
+  forward migration
+  `packages/database-pg/drizzle/0146_knowledge_graph_source_scope.sql`,
+  the `startKnowledgeGraphIngest` GraphQL mutation, source-scoped run/table/
+  graph filters, and preserved the existing thread ingest mutation.
+- 2026-06-05: Added wiki and brain source adapters that render bounded
+  ontology-shaped packets from active compiled wiki pages and tenant brain
+  pages, including aliases, subtype hints, sections/facets, links, citations,
+  and source evidence metadata. The worker now loads thread/wiki/brain bundles,
+  calls Cognee v1 `remember`, normalizes through the existing ontology gate,
+  and records source packet counts plus Cognee/normalizer diagnostics.
+- 2026-06-05: Updated Spaces Knowledge Graph with Wiki and Brain source-ingest
+  actions, source-aware run handling, and entity evidence display. Local
+  browser validation against the currently deployed API initially exposed a
+  schema-version error because the page sent new `sourceKind/sourceRef` query
+  args before the backend deploy existed; fixed the default page path to remain
+  compatible with the deployed schema and added introspection gating so Wiki
+  and Brain buttons enable only after the API schema supports source ingest.
+- 2026-06-05: Added dry-run-safe deployed smoke entrypoints
+  `scripts/smoke/knowledge-graph-wiki-ingest-smoke.mjs` and
+  `scripts/smoke/knowledge-graph-brain-ingest-smoke.mjs`, backed by a shared
+  source-smoke helper. Live mode starts a source-aware ingest, polls
+  source-scoped run history, reads table/graph/detail output, and fails on an
+  empty approved graph unless `SMOKE_KG_ALLOW_EMPTY=1` is set for diagnostics.
+- 2026-06-05: Source-ingest local verification so far passed:
+  `node scripts/smoke/knowledge-graph-wiki-ingest-smoke.mjs`;
+  `node scripts/smoke/knowledge-graph-brain-ingest-smoke.mjs`;
+  `pnpm --filter @thinkwork/spaces codegen`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/graph typecheck`;
+  and
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`.
+  The local dev server remains available at
+  `http://localhost:5174/settings/knowledge-graph`; authenticated browser
+  validation should hard-refresh the tab after the schema-compatibility fix.
+- 2026-06-05: Completed source-ingest local verification before PR:
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/database-pg typecheck`;
+  `pnpm --filter @thinkwork/graph typecheck`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter thinkwork-cli typecheck`;
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/wiki-source.test.ts src/lib/knowledge-graph/brain-source.test.ts src/__tests__/knowledge-graph-start-ingest.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/runs.test.ts src/lib/knowledge-graph/normalizer.test.ts src/lib/knowledge-graph/cognee-client.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`;
+  `bash scripts/build-lambdas.sh graphql-http`;
+  `pnpm schema:build`;
+  `pnpm --filter @thinkwork/admin codegen`;
+  `pnpm --filter @thinkwork/mobile codegen`;
+  `pnpm --dir apps/cli codegen`;
+  `pnpm --filter @thinkwork/spaces codegen`;
+  `pnpm --filter @thinkwork/spaces build`;
+  source smoke dry-runs;
+  targeted Prettier check for hand-authored files;
+  `git diff --check`;
+  and `curl -I http://localhost:5174/settings/knowledge-graph` returned
+  `200 OK`. Spaces build completed with existing sourcemap and chunk warnings
+  only; admin/mobile package filters still do not expose typecheck scripts.
+- 2026-06-05: Opened source-ingest follow-up PR
+  [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103).
+- 2026-06-05: PR [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103)
+  first CI attempt failed the `test` workflow in
+  `packages/database-pg/__tests__/knowledge-graph-schema.test.ts` because the
+  schema assertions still expected non-null thread-only rows and the old
+  evidence `source_kind` semantics. Updated the schema test to assert nullable
+  `thread_id`, graph `source_kind/source_ref`, evidence
+  `evidence_source_kind/evidence_source_ref`, and migration `0146` markers.
+  Local fix verification passed:
+  `pnpm --filter @thinkwork/database-pg exec vitest run __tests__/knowledge-graph-schema.test.ts`
+  and `pnpm --filter @thinkwork/database-pg test`.
+- 2026-06-05: PR [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103)
+  second CI attempt failed the dev migration drift precheck because the new
+  hand-rolled migration `0146_knowledge_graph_source_scope.sql` was not yet
+  applied to the dev database. First local apply attempt failed before mutation
+  because AWS CLI had no region configured. Re-ran with
+  `AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1`, applied
+  `packages/database-pg/drizzle/0146_knowledge_graph_source_scope.sql` to dev,
+  and verified with
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0146_knowledge_graph_source_scope.sql`.
+- 2026-06-05: PR [#2103](https://github.com/thinkwork-ai/thinkwork/pull/2103)
+  third CI attempt failed the monorepo `test` workflow in
+  `packages/api/src/__tests__/knowledge-graph-resolvers.test.ts` because the
+  resolver fixtures still used the pre-source-scope row shape. Updated those
+  fixtures to include graph `source_kind/source_ref/source_label` and the new
+  evidence `evidence_source_kind/evidence_source_ref` fields. Local fix
+  verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts`;
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts src/lib/knowledge-graph/wiki-source.test.ts src/lib/knowledge-graph/brain-source.test.ts src/__tests__/knowledge-graph-start-ingest.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/runs.test.ts src/lib/knowledge-graph/normalizer.test.ts src/lib/knowledge-graph/cognee-client.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`;
+  and `git diff --check`.

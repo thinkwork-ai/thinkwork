@@ -4,6 +4,7 @@ import type { GraphQLContext } from "../../context.js";
 import { loadFilteredEntities, type EntityFilterArgs } from "./shared.js";
 import {
   serializeRelationship,
+  toDbEnum,
   toGraphqlEnum,
   type KnowledgeGraphRelationshipRow,
 } from "./mappers.js";
@@ -37,6 +38,13 @@ export async function knowledgeGraphGraph(
   ];
   if (args.threadId) {
     conditions.push(sql`thread_id = ${args.threadId}`);
+  }
+  const sourceKind = toDbEnum(args.sourceKind);
+  if (sourceKind) {
+    conditions.push(sql`source_kind = ${sourceKind}`);
+  }
+  if (args.sourceRef) {
+    conditions.push(sql`source_ref = ${args.sourceRef}`);
   }
   if (args.runId) {
     conditions.push(sql`ingest_run_id = ${args.runId}`);

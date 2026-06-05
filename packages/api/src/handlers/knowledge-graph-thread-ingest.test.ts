@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   fetchDatasetGraphMock,
-  ingestThreadMock,
+  ingestDocumentMock,
   loadApprovedOntologyExportMock,
   loadKnowledgeGraphIngestRunMock,
   loadThreadTranscriptMock,
@@ -11,7 +11,7 @@ const {
   replaceKnowledgeGraphSnapshotMock,
 } = vi.hoisted(() => ({
   fetchDatasetGraphMock: vi.fn(),
-  ingestThreadMock: vi.fn(),
+  ingestDocumentMock: vi.fn(),
   loadApprovedOntologyExportMock: vi.fn(),
   loadKnowledgeGraphIngestRunMock: vi.fn(),
   loadThreadTranscriptMock: vi.fn(),
@@ -23,7 +23,7 @@ const {
 vi.mock("../lib/knowledge-graph/cognee-client.js", () => ({
   CogneeClient: vi.fn(() => ({
     fetchDatasetGraph: fetchDatasetGraphMock,
-    ingestThread: ingestThreadMock,
+    ingestDocument: ingestDocumentMock,
   })),
 }));
 
@@ -61,7 +61,11 @@ const run = {
   id: "run-1",
   tenant_id: "tenant-1",
   thread_id: "thread-1",
+  source_kind: "thread",
+  source_ref: "thread-1",
+  source_label: null,
   cognee_dataset_name: "thinkwork:tenant-1:thread:thread-1",
+  input: { source: "thread", threadId: "thread-1" },
 };
 const transcript = [
   {
@@ -91,7 +95,7 @@ beforeEach(() => {
   replaceKnowledgeGraphSnapshotMock.mockReset().mockResolvedValue(undefined);
   loadThreadTranscriptMock.mockReset().mockResolvedValue(transcript);
   loadApprovedOntologyExportMock.mockReset().mockResolvedValue(ontology);
-  ingestThreadMock.mockReset().mockResolvedValue({
+  ingestDocumentMock.mockReset().mockResolvedValue({
     datasetId: "11111111-1111-4111-8111-111111111111",
     datasetName: run.cognee_dataset_name,
     mode: "remember",
@@ -121,10 +125,11 @@ describe("knowledge-graph-thread-ingest handler", () => {
       db,
       runId: "run-1",
     });
-    expect(ingestThreadMock).toHaveBeenCalledWith(
+    expect(ingestDocumentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: run.tenant_id,
-        threadId: run.thread_id,
+        sourceKind: "thread",
+        sourceRef: run.source_ref,
         datasetName: run.cognee_dataset_name,
         ontology,
       }),
@@ -141,7 +146,7 @@ describe("knowledge-graph-thread-ingest handler", () => {
   });
 
   it("marks the run failed when Cognee returns no dataset id", async () => {
-    ingestThreadMock.mockResolvedValueOnce({
+    ingestDocumentMock.mockResolvedValueOnce({
       datasetId: null,
       datasetName: run.cognee_dataset_name,
       mode: "remember",

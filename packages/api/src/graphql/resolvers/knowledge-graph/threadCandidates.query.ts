@@ -23,6 +23,9 @@ interface ThreadCandidateRow {
   run_id: string | null;
   run_tenant_id: string | null;
   run_thread_id: string | null;
+  source_kind: string | null;
+  source_ref: string | null;
+  source_label: string | null;
   requested_by_user_id: string | null;
   status: string | null;
   trigger: string | null;
@@ -78,6 +81,7 @@ export async function knowledgeGraphThreadCandidates(
       SELECT DISTINCT ON (thread_id) *
         FROM knowledge_graph_ingest_runs
        WHERE tenant_id = ${scope.tenantId}
+         AND source_kind = 'thread'
        ORDER BY thread_id, created_at DESC
     )
     SELECT
@@ -94,6 +98,9 @@ export async function knowledgeGraphThreadCandidates(
       lr.id AS run_id,
       lr.tenant_id AS run_tenant_id,
       lr.thread_id AS run_thread_id,
+      lr.source_kind,
+      lr.source_ref,
+      lr.source_label,
       lr.requested_by_user_id,
       lr.status,
       lr.trigger,
@@ -140,6 +147,9 @@ export async function knowledgeGraphThreadCandidates(
       lr.id,
       lr.tenant_id,
       lr.thread_id,
+      lr.source_kind,
+      lr.source_ref,
+      lr.source_label,
       lr.requested_by_user_id,
       lr.status,
       lr.trigger,
@@ -183,6 +193,9 @@ export async function knowledgeGraphThreadCandidates(
           id: row.run_id,
           tenant_id: row.run_tenant_id!,
           thread_id: row.run_thread_id!,
+          source_kind: row.source_kind!,
+          source_ref: row.source_ref!,
+          source_label: row.source_label,
           requested_by_user_id: row.requested_by_user_id,
           status: row.status!,
           trigger: row.trigger!,

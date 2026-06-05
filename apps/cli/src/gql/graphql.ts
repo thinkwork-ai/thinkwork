@@ -1345,9 +1345,11 @@ export type KnowledgeGraphEntity = {
   provenanceStatus: KnowledgeGraphProvenanceStatus;
   relationshipCount: Scalars['Int']['output'];
   relationships: Array<KnowledgeGraphRelationship>;
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceRef: Scalars['String']['output'];
   summary?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
   typeLabel?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
 };
@@ -1358,6 +1360,8 @@ export type KnowledgeGraphEvidence = {
   charStart?: Maybe<Scalars['Int']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   entityId?: Maybe<Scalars['ID']['output']>;
+  evidenceSourceKind: KnowledgeGraphEvidenceSourceKind;
+  evidenceSourceRef?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   ingestRunId: Scalars['ID']['output'];
   messageCreatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
@@ -1367,17 +1371,21 @@ export type KnowledgeGraphEvidence = {
   observedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   relationshipId?: Maybe<Scalars['ID']['output']>;
   snippet: Scalars['String']['output'];
-  sourceKind: KnowledgeGraphEvidenceSourceKind;
-  sourceRef?: Maybe<Scalars['String']['output']>;
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceRef: Scalars['String']['output'];
   speakerLabel?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
 };
 
 export enum KnowledgeGraphEvidenceSourceKind {
+  BrainPage = 'BRAIN_PAGE',
+  BrainSection = 'BRAIN_SECTION',
   CogneePayload = 'COGNEE_PAYLOAD',
   Normalizer = 'NORMALIZER',
-  ThreadMessage = 'THREAD_MESSAGE'
+  ThreadMessage = 'THREAD_MESSAGE',
+  WikiPage = 'WIKI_PAGE',
+  WikiSection = 'WIKI_SECTION'
 }
 
 export type KnowledgeGraphGraph = {
@@ -1448,10 +1456,13 @@ export type KnowledgeGraphIngestRun = {
   metrics: Scalars['AWSJSON']['output'];
   relationshipCount: Scalars['Int']['output'];
   requestedByUserId?: Maybe<Scalars['ID']['output']>;
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceLabel?: Maybe<Scalars['String']['output']>;
+  sourceRef: Scalars['String']['output'];
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: KnowledgeGraphIngestStatus;
   tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
   trigger: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
@@ -1489,11 +1500,19 @@ export type KnowledgeGraphRelationship = {
   properties: Scalars['AWSJSON']['output'];
   provenanceStatus: KnowledgeGraphProvenanceStatus;
   sourceEntityId: Scalars['ID']['output'];
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceRef: Scalars['String']['output'];
   targetEntityId: Scalars['ID']['output'];
   tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
 };
+
+export enum KnowledgeGraphSourceKind {
+  Brain = 'BRAIN',
+  Thread = 'THREAD',
+  Wiki = 'WIKI'
+}
 
 export type KnowledgeGraphThreadCandidate = {
   __typename?: 'KnowledgeGraphThreadCandidate';
@@ -2053,6 +2072,7 @@ export type Mutation = {
   setSpaceTools: Space;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startEvalRun: EvalRun;
+  startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
   startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
   startOntologySuggestionScan: OntologySuggestionScanJob;
   startSkillRun: SkillRun;
@@ -2845,6 +2865,11 @@ export type MutationStartEvalRunArgs = {
 };
 
 
+export type MutationStartKnowledgeGraphIngestArgs = {
+  input: StartKnowledgeGraphIngestInput;
+};
+
+
 export type MutationStartKnowledgeGraphThreadIngestArgs = {
   input: StartKnowledgeGraphThreadIngestInput;
 };
@@ -3556,6 +3581,14 @@ export type Query = {
   tenantEntityPage?: Maybe<TenantEntityPage>;
   tenantMembers: Array<TenantMember>;
   tenantMentionTargets: Array<ThreadMentionTarget>;
+  /**
+   * List the caller-tenant's skill catalog (the derived skill_catalog index) for
+   * composer/skill pickers. When `agentId` is provided, entries are annotated
+   * with `installed` and skills blocked on that agent (agent.blocked_tools) are
+   * omitted — the popup never offers a blocked skill. The authoritative blocklist
+   * guardrail is also enforced server-side at dispatch.
+   */
+  tenantSkillCatalog: Array<SkillCatalogEntry>;
   tenantToolInventory: TenantToolInventory;
   testKnowledgeBaseRetrieval: KnowledgeBaseRetrievalResult;
   thread?: Maybe<Thread>;
@@ -3894,6 +3927,8 @@ export type QueryKnowledgeGraphEntitiesArgs = {
   provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
   runId?: InputMaybe<Scalars['ID']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
+  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
+  sourceRef?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   threadId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -3911,6 +3946,8 @@ export type QueryKnowledgeGraphGraphArgs = {
   provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
   runId?: InputMaybe<Scalars['ID']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
+  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
+  sourceRef?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   threadId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -3918,6 +3955,8 @@ export type QueryKnowledgeGraphGraphArgs = {
 
 export type QueryKnowledgeGraphIngestRunsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
+  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
+  sourceRef?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   threadId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -4210,6 +4249,11 @@ export type QueryTenantMembersArgs = {
 
 export type QueryTenantMentionTargetsArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryTenantSkillCatalogArgs = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -4918,6 +4962,26 @@ export type SetSpaceToolsInput = {
 };
 
 /**
+ * One entry in a tenant's skill catalog, read from the derived skill_catalog
+ * index. Powers pickers like the composer slash-command (force-pin a skill onto
+ * a message). The `installed` flag is annotated relative to the `agentId`
+ * argument; skills blocked on that agent are omitted from results entirely.
+ */
+export type SkillCatalogEntry = {
+  __typename?: 'SkillCatalogEntry';
+  category?: Maybe<Scalars['String']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  /** From SKILL.md frontmatter display_name; null → render falls back to slug. */
+  displayName?: Maybe<Scalars['String']['output']>;
+  icon?: Maybe<Scalars['String']['output']>;
+  /** True when this skill is installed on the agent named by `agentId`. */
+  installed: Scalars['Boolean']['output'];
+  /** Folder slug under skill-catalog/. Stable identifier used to pin the skill. */
+  slug: Scalars['String']['output'];
+  tags?: Maybe<Array<Scalars['String']['output']>>;
+};
+
+/**
  * Per-tenant skill catalog index maintenance.
  *
  * The skill_catalog table is a derived read cache of the S3 skill catalog,
@@ -5226,6 +5290,18 @@ export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars['String']['input']>>;
   model?: InputMaybe<Scalars['String']['input']>;
   testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+};
+
+export type StartKnowledgeGraphIngestInput = {
+  force?: InputMaybe<Scalars['Boolean']['input']>;
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  ownerUserId?: InputMaybe<Scalars['ID']['input']>;
+  pageIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceLabel?: InputMaybe<Scalars['String']['input']>;
+  sourceRef?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 export type StartKnowledgeGraphThreadIngestInput = {
@@ -5770,6 +5846,8 @@ export type ThreadMentionTarget = {
   aliases: Array<Scalars['String']['output']>;
   avatarUrl?: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
+  /** User email — shown as the picker's secondary row. Null for agents. */
+  email?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   isDefaultAgent: Scalars['Boolean']['output'];
   role?: Maybe<Scalars['String']['output']>;

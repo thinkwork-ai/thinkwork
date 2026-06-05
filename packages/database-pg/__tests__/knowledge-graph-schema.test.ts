@@ -10,6 +10,7 @@ import {
   KNOWLEDGE_GRAPH_GROUNDING_STATUSES,
   KNOWLEDGE_GRAPH_INGEST_STATUSES,
   KNOWLEDGE_GRAPH_PROVENANCE_STATUSES,
+  KNOWLEDGE_GRAPH_SOURCE_KINDS,
   knowledgeGraphEntities,
   knowledgeGraphEvidence,
   knowledgeGraphIngestRuns,
@@ -21,6 +22,10 @@ const migration0145 = readFileSync(
   join(HERE, "..", "drizzle", "0145_knowledge_graph_thread_ingest.sql"),
   "utf-8",
 );
+const migration0146 = readFileSync(
+  join(HERE, "..", "drizzle", "0146_knowledge_graph_source_scope.sql"),
+  "utf-8",
+);
 
 describe("Knowledge Graph schema", () => {
   it("defines tenant-scoped ingest runs with the manual run ledger fields", () => {
@@ -30,7 +35,11 @@ describe("Knowledge Graph schema", () => {
 
     const columns = getTableColumns(knowledgeGraphIngestRuns);
     expect(columns.tenant_id.notNull).toBe(true);
-    expect(columns.thread_id.notNull).toBe(true);
+    expect(columns.thread_id.notNull).toBe(false);
+    expect(columns.source_kind.notNull).toBe(true);
+    expect(columns.source_kind.default).toBe("thread");
+    expect(columns.source_ref.notNull).toBe(true);
+    expect(columns.source_label.notNull).toBe(false);
     expect(columns.requested_by_user_id.notNull).toBe(false);
     expect(columns.status.default).toBe("queued");
     expect(columns.trigger.default).toBe("manual");
@@ -64,6 +73,9 @@ describe("Knowledge Graph schema", () => {
 
     const entityColumns = getTableColumns(knowledgeGraphEntities);
     expect(entityColumns.ingest_run_id.notNull).toBe(true);
+    expect(entityColumns.thread_id.notNull).toBe(false);
+    expect(entityColumns.source_kind.default).toBe("thread");
+    expect(entityColumns.source_ref.notNull).toBe(true);
     expect(entityColumns.cognee_node_id.notNull).toBe(true);
     expect(entityColumns.normalized_label.notNull).toBe(true);
     expect(entityColumns.aliases.notNull).toBe(true);
@@ -71,19 +83,27 @@ describe("Knowledge Graph schema", () => {
     expect(entityColumns.provenance_status.default).toBe("missing");
 
     const relationshipColumns = getTableColumns(knowledgeGraphRelationships);
+    expect(relationshipColumns.thread_id.notNull).toBe(false);
+    expect(relationshipColumns.source_kind.default).toBe("thread");
+    expect(relationshipColumns.source_ref.notNull).toBe(true);
     expect(relationshipColumns.source_entity_id.notNull).toBe(true);
     expect(relationshipColumns.target_entity_id.notNull).toBe(true);
     expect(relationshipColumns.confidence.notNull).toBe(false);
 
     const evidenceColumns = getTableColumns(knowledgeGraphEvidence);
+    expect(evidenceColumns.thread_id.notNull).toBe(false);
+    expect(evidenceColumns.source_kind.default).toBe("thread");
+    expect(evidenceColumns.source_ref.notNull).toBe(true);
     expect(evidenceColumns.entity_id.notNull).toBe(false);
     expect(evidenceColumns.relationship_id.notNull).toBe(false);
     expect(evidenceColumns.message_id.notNull).toBe(false);
     expect(evidenceColumns.snippet.notNull).toBe(true);
-    expect(evidenceColumns.source_kind.default).toBe("thread_message");
+    expect(evidenceColumns.evidence_source_kind.default).toBe("thread_message");
+    expect(evidenceColumns.evidence_source_ref.notNull).toBe(false);
   });
 
   it("keeps trust and provenance status values explicit", () => {
+    expect(KNOWLEDGE_GRAPH_SOURCE_KINDS).toEqual(["thread", "wiki", "brain"]);
     expect(KNOWLEDGE_GRAPH_GROUNDING_STATUSES).toEqual([
       "grounded",
       "unapproved_type",
@@ -98,6 +118,10 @@ describe("Knowledge Graph schema", () => {
     ]);
     expect(KNOWLEDGE_GRAPH_EVIDENCE_SOURCE_KINDS).toEqual([
       "thread_message",
+      "wiki_page",
+      "wiki_section",
+      "brain_page",
+      "brain_section",
       "cognee_payload",
       "normalizer",
     ]);
@@ -133,6 +157,45 @@ describe("Knowledge Graph schema", () => {
       );
       expect(migration0145).toContain(indexName);
     }
+  });
+
+  it("declares source-scope migration markers for wiki and brain ingest", () => {
+    for (const marker of [
+      "public.knowledge_graph_ingest_runs.source_kind",
+      "public.knowledge_graph_ingest_runs.source_ref",
+      "public.knowledge_graph_ingest_runs.source_label",
+      "public.knowledge_graph_entities.source_kind",
+      "public.knowledge_graph_entities.source_ref",
+      "public.knowledge_graph_relationships.source_kind",
+      "public.knowledge_graph_relationships.source_ref",
+      "public.knowledge_graph_evidence.source_kind",
+      "public.knowledge_graph_evidence.source_ref",
+      "public.knowledge_graph_evidence.evidence_source_kind",
+      "public.knowledge_graph_evidence.evidence_source_ref",
+    ]) {
+      expect(migration0146).toMatch(
+        new RegExp(`--\\s*creates-column:\\s*${marker}\\b`),
+      );
+    }
+
+    for (const marker of [
+      "public.idx_kg_ingest_runs_tenant_source_created",
+      "public.uq_kg_ingest_runs_active_source",
+      "public.idx_kg_entities_tenant_source_label",
+      "public.idx_kg_relationships_tenant_source_type",
+      "public.idx_kg_evidence_tenant_source",
+    ]) {
+      expect(migration0146).toMatch(
+        new RegExp(`--\\s*creates:\\s*${marker}\\b`),
+      );
+      expect(migration0146).toContain(marker.replace("public.", ""));
+    }
+
+    expect(migration0146).toContain("ALTER COLUMN thread_id DROP NOT NULL");
+    expect(migration0146).toContain("source_kind IN ('thread','wiki','brain')");
+    expect(migration0146).toContain(
+      "evidence_source_kind IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','cognee_payload','normalizer')",
+    );
   });
 
   it("guards derived graph rows against cross-tenant and cross-thread links", () => {

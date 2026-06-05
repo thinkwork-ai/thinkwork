@@ -28,6 +28,17 @@ export interface CogneeIngestResult {
   raw: unknown;
 }
 
+export interface CogneeDocumentIngestArgs {
+  tenantId: string;
+  sourceKind: "thread" | "wiki" | "brain";
+  sourceRef: string;
+  datasetName: string;
+  document: string;
+  filename: string;
+  ontology: KnowledgeGraphOntologyExport;
+  customPrompt?: string | null;
+}
+
 export class CogneeClientError extends Error {
   constructor(message: string) {
     super(message);
@@ -79,6 +90,20 @@ export class CogneeClient {
     transcript: string;
     ontology: KnowledgeGraphOntologyExport;
   }): Promise<CogneeIngestResult> {
+    return this.ingestDocument({
+      tenantId: args.tenantId,
+      sourceKind: "thread",
+      sourceRef: args.threadId,
+      datasetName: args.datasetName,
+      document: args.transcript,
+      filename: "thinkwork-thread.md",
+      ontology: args.ontology,
+    });
+  }
+
+  async ingestDocument(
+    args: CogneeDocumentIngestArgs,
+  ): Promise<CogneeIngestResult> {
     await this.ensureOntology(args.ontology);
     if (this.mode === "add_cognify") {
       return this.addAndCognify(args);
@@ -102,12 +127,15 @@ export class CogneeClient {
 
   private async remember(args: {
     tenantId: string;
-    threadId: string;
+    sourceKind: "thread" | "wiki" | "brain";
+    sourceRef: string;
     datasetName: string;
-    transcript: string;
+    document: string;
+    filename: string;
     ontology: KnowledgeGraphOntologyExport;
+    customPrompt?: string | null;
   }): Promise<CogneeIngestResult> {
-    const body = buildTranscriptForm(args);
+    const body = buildDocumentForm(args);
     const raw = await this.requestJson("/api/v1/remember", {
       method: "POST",
       body,
@@ -122,14 +150,17 @@ export class CogneeClient {
 
   private async addAndCognify(args: {
     tenantId: string;
-    threadId: string;
+    sourceKind: "thread" | "wiki" | "brain";
+    sourceRef: string;
     datasetName: string;
-    transcript: string;
+    document: string;
+    filename: string;
     ontology: KnowledgeGraphOntologyExport;
+    customPrompt?: string | null;
   }): Promise<CogneeIngestResult> {
     const addRaw = await this.requestJson("/api/v1/add", {
       method: "POST",
-      body: buildTranscriptForm(args),
+      body: buildDocumentForm(args),
     });
     const cognifyRaw = await this.requestJson("/api/v1/cognify", {
       method: "POST",
@@ -137,7 +168,7 @@ export class CogneeClient {
       body: JSON.stringify({
         datasets: [args.datasetName],
         run_in_background: false,
-        custom_prompt: args.ontology.customPrompt,
+        custom_prompt: buildCustomPrompt(args),
         ...(args.ontology.ontologyKey
           ? { ontology_key: [args.ontology.ontologyKey] }
           : {}),
@@ -230,37 +261,68 @@ export class CogneeClient {
   }
 }
 
-function buildTranscriptForm(args: {
+function buildDocumentForm(args: {
   tenantId: string;
-  threadId: string;
+  sourceKind: "thread" | "wiki" | "brain";
+  sourceRef: string;
   datasetName: string;
-  transcript: string;
+  document: string;
+  filename: string;
   ontology: KnowledgeGraphOntologyExport;
+  customPrompt?: string | null;
 }): FormData {
   const form = new FormData();
   form.append(
     "data",
-    new Blob([args.transcript], { type: "text/markdown" }),
-    "thinkwork-thread.md",
+    new Blob([args.document], { type: "text/markdown" }),
+    args.filename,
   );
   form.append("datasetName", args.datasetName);
   form.append("run_in_background", "false");
-  for (const nodeSet of buildThreadNodeSets(args.tenantId, args.threadId)) {
+  for (const nodeSet of buildNodeSets(
+    args.tenantId,
+    args.sourceKind,
+    args.sourceRef,
+  )) {
     form.append("node_set", nodeSet);
   }
   if (args.ontology.ontologyKey) {
     form.append("ontology_key", args.ontology.ontologyKey);
   }
-  form.append("custom_prompt", args.ontology.customPrompt);
+  form.append("custom_prompt", buildCustomPrompt(args));
   return form;
 }
 
-function buildThreadNodeSets(tenantId: string, threadId: string): string[] {
+function buildNodeSets(
+  tenantId: string,
+  sourceKind: "thread" | "wiki" | "brain",
+  sourceRef: string,
+): string[] {
   return [
-    "thinkwork_threads",
+    `thinkwork_${sourceKind}`,
     `tenant_${tenantId.replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase()}`,
-    `thread_${threadId.replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase()}`,
+    `${sourceKind}_${sourceRef.replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase()}`,
   ];
+}
+
+function buildCustomPrompt(args: {
+  sourceKind: "thread" | "wiki" | "brain";
+  ontology: KnowledgeGraphOntologyExport;
+  customPrompt?: string | null;
+}): string {
+  const sourcePrompt =
+    args.sourceKind === "thread"
+      ? ""
+      : [
+          "",
+          "Source packet instructions:",
+          "- Prefer declared entity titles and ontology_type_slug fields over invented generic labels.",
+          "- Preserve source_packet, citation, page, and section identifiers in properties.",
+          "- Treat relationship_hint lines as candidate relationships only when the label matches the approved ontology.",
+        ].join("\n");
+  return [args.ontology.customPrompt, args.customPrompt, sourcePrompt]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function parseGraphPayload(payload: unknown): CogneeGraphPayload {
@@ -363,8 +425,8 @@ function isDuplicateOntologyError(err: unknown, ontologyKey: string): boolean {
 function hasOntologyKey(payload: unknown, ontologyKey: string): boolean {
   return Boolean(
     payload &&
-    typeof payload === "object" &&
-    Object.prototype.hasOwnProperty.call(payload, ontologyKey),
+      typeof payload === "object" &&
+      Object.prototype.hasOwnProperty.call(payload, ontologyKey),
   );
 }
 
