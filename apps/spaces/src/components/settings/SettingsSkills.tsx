@@ -62,6 +62,7 @@ export function SettingsSkills() {
   return (
     <SettingsTablePane
       title="Skill Library"
+      description="Browse, install, and manage the skills your agents can use."
       loading={!skills && !error}
       toolbar={
         error ? (

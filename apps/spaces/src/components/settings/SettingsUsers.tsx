@@ -149,7 +149,10 @@ export function SettingsUsers() {
   if (result.error) {
     return (
       <SettingsPane className="max-w-none">
-        <SettingsHeader title="Users" />
+        <SettingsHeader
+          title="Users"
+          description="Invite teammates and manage their roles and access."
+        />
         <div className="flex items-center justify-between rounded-xl border border-border p-6">
           <span className="text-sm text-muted-foreground">
             Couldn’t load members.
@@ -169,6 +172,7 @@ export function SettingsUsers() {
   return (
     <SettingsTablePane
       title="Users"
+      description="Invite teammates and manage their roles and access."
       loading={result.fetching && !result.data}
       actions={
         <button

@@ -72,16 +72,24 @@ describe("visibleSettingsNavItems", () => {
     expect(memberWeb.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(false);
   });
 
-  it("places Knowledge Graph above Knowledge Bases", () => {
+  it("pins General first and alphabetises the rest by label", () => {
+    // General is the only fixed entry; every other section sorts by label so the
+    // growing operator list stays scannable. "Knowledge Bases" therefore sorts
+    // above "Knowledge Graph" (B < G).
+    expect(SETTINGS_NAV_ITEMS[0]?.to).toBe("/settings/general");
+
+    const rest = SETTINGS_NAV_ITEMS.slice(1).map((i) => i.label);
+    const sorted = [...rest].sort((a, b) => a.localeCompare(b));
+    expect(rest).toEqual(sorted);
+
     const graphIndex = SETTINGS_NAV_ITEMS.findIndex(
       (i) => i.to === KNOWLEDGE_GRAPH,
     );
     const basesIndex = SETTINGS_NAV_ITEMS.findIndex(
       (i) => i.to === KNOWLEDGE_BASES,
     );
-
-    expect(graphIndex).toBeGreaterThanOrEqual(0);
     expect(basesIndex).toBeGreaterThanOrEqual(0);
-    expect(graphIndex).toBeLessThan(basesIndex);
+    expect(graphIndex).toBeGreaterThanOrEqual(0);
+    expect(basesIndex).toBeLessThan(graphIndex);
   });
 });

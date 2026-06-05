@@ -793,7 +793,7 @@ export function ChatSidebar() {
               No threads yet
             </p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-1">
               {pinnedError ? (
                 <p className="px-2 py-1 text-xs text-destructive">
                   {pinnedError.message}
@@ -808,14 +808,16 @@ export function ChatSidebar() {
                 onReorder={reorderPinnedThreads}
               />
               <ThreadListSection
-                label="Chats"
+                label="Threads"
                 sectionId="chats"
                 threads={genericThreads}
                 selectedThreadId={selectedThreadId}
                 defaultOpen
                 locallyReadThreadIds={locallyReadThreadIds}
                 scopeSpaceId={defaultSpaceId}
-                scopeSpaceName="Chats"
+                // No scopeSpaceName for the default space: its Thread list
+                // header should read just "Thread List", not "Chats · Threads".
+                // Named Space sections still pass their label for "<Name> · Threads".
                 onActivate={activateThread}
                 onPin={pinThread}
                 onMarkSectionRead={markSectionThreadsRead}
@@ -1195,7 +1197,7 @@ function ThreadListSection({
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/thread-section">
-      <div className="group/section-row flex w-full items-center gap-0">
+      <div className="group/section-row flex w-full items-center gap-0 pr-0.5">
         <CollapsibleTrigger asChild>
           <SidebarGroupLabel
             asChild
@@ -1216,7 +1218,7 @@ function ThreadListSection({
           title="New thread"
           className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
         >
-          <SquarePen className="size-3.5" />
+          <SquarePen className="size-3" />
         </Link>
         <SectionHeaderControls
           sectionId={sectionId}
@@ -1257,7 +1259,7 @@ function ThreadListSection({
               {hiddenCount > 0 ? (
                 <button
                   type="button"
-                  className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
+                  className="ml-auto block w-fit px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
                   onClick={() =>
                     setVisibleCount((count) =>
                       Math.min(
@@ -1549,7 +1551,7 @@ function SpaceThreadSection({
       defaultOpen={isActiveSpace || threads.length > 0}
       className="group/space"
     >
-      <div className="group/section-row flex w-full items-center gap-0">
+      <div className="group/section-row flex w-full items-center gap-0 pr-0.5">
         <CollapsibleTrigger asChild>
           <SidebarGroupLabel
             asChild
@@ -1573,7 +1575,7 @@ function SpaceThreadSection({
           title="New thread"
           className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
         >
-          <SquarePen className="size-3.5" />
+          <SquarePen className="size-3" />
         </Link>
         <SectionHeaderControls
           sectionId={sectionId}
@@ -1623,7 +1625,7 @@ function SpaceThreadSection({
               {hiddenCount > 0 ? (
                 <button
                   type="button"
-                  className="px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
+                  className="ml-auto block w-fit px-2 pt-1 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80"
                   onClick={() =>
                     setVisibleCount((count) =>
                       Math.min(

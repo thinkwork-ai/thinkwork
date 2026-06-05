@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Clock, Pause, Play, Zap } from "lucide-react";
+import { Clock, Pause, Play } from "lucide-react";
 import { Badge, DataTable, Input } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { apiFetch } from "@/lib/api-fetch";
@@ -74,14 +74,15 @@ export function SettingsAutomations() {
       },
       {
         id: "type",
-        header: "Type",
+        header: () => <div className="text-center">Type</div>,
         size: 130,
         cell: ({ row }) => (
-          <Badge variant="secondary" className="gap-1 text-xs">
-            <Zap className="h-3.5 w-3.5" />
-            {JOB_TYPE_LABELS[row.original.trigger_type] ??
-              row.original.trigger_type}
-          </Badge>
+          <div className="flex justify-center">
+            <Badge variant="secondary" className="text-xs">
+              {JOB_TYPE_LABELS[row.original.trigger_type] ??
+                row.original.trigger_type}
+            </Badge>
+          </div>
         ),
       },
       {
@@ -142,6 +143,7 @@ export function SettingsAutomations() {
   return (
     <SettingsTablePane
       title="Automations"
+      description="Schedule recurring agent jobs and review their run history."
       loading={!jobs && !error}
       toolbar={
         error ? (

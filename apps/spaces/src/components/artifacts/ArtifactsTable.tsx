@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge, DataTable } from "@thinkwork/ui";
-import { formatShortDateTime, shortModel } from "@/lib/app-artifacts";
+import { formatShortDateTime } from "@/lib/app-artifacts";
 import type { ArtifactItem } from "./artifacts-filtering";
 
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
@@ -43,31 +43,6 @@ export function ArtifactsTable({
             <Badge variant="outline" className="uppercase tracking-wide">
               {row.original.kind}
             </Badge>
-          </span>
-        ),
-      },
-      {
-        accessorKey: "modelId",
-        header: "Model",
-        size: 160,
-        cell: ({ row }) => (
-          <span
-            className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
-            title={row.original.modelId ?? undefined}
-          >
-            <span className="truncate">{shortModel(row.original.modelId)}</span>
-          </span>
-        ),
-      },
-      {
-        accessorKey: "stdlibVersion",
-        header: "Stdlib",
-        size: 100,
-        cell: ({ row }) => (
-          <span
-            className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
-          >
-            {row.original.stdlibVersion ?? "—"}
           </span>
         ),
       },

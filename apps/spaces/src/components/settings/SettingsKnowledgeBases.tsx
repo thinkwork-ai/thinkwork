@@ -107,6 +107,7 @@ export function SettingsKnowledgeBases() {
     <>
       <SettingsTablePane
         title="Knowledge Bases"
+        description="Manage the knowledge bases your agents can search and cite."
         loading={result.fetching && !result.data}
         toolbar={
           <Input

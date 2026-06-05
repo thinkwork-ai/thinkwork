@@ -84,6 +84,7 @@ export function SettingsWebhooks() {
   return (
     <SettingsTablePane
       title="Webhooks"
+      description="Trigger agent work from external events with inbound webhooks."
       loading={result.fetching && !result.data}
       toolbar={
         <Input
