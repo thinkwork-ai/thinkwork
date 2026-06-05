@@ -65,6 +65,18 @@ const SAMPLE_JOB = {
   created_at: new Date().toISOString(),
 };
 
+// Row actions now live as icon buttons in the page header (published via
+// usePageHeaderActions), not in the component body. Render the captured action
+// element so tests can click Edit/Enable/Trigger/Delete.
+function renderHeaderAction() {
+  const action = (
+    pageHeaderActionsMock.mock.calls.at(-1)?.[0] as
+      | { action?: React.ReactNode }
+      | undefined
+  )?.action;
+  return render(<>{action}</>);
+}
+
 beforeEach(() => {
   navigateMock.mockReset();
   apiFetchMock.mockReset();
@@ -147,6 +159,7 @@ describe("apps/spaces scheduled-job detail route", () => {
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: /Retry/ })).toBeTruthy();
     // Header controls remain enabled — partial failure does not collapse the page
+    renderHeaderAction();
     expect(screen.getByRole("button", { name: /Disable/i })).toBeTruthy();
   });
 
@@ -170,6 +183,7 @@ describe("apps/spaces scheduled-job detail route", () => {
       expect(screen.getByText(/Find weekend things/)).toBeTruthy(),
     );
 
+    renderHeaderAction();
     const before = apiFetchMock.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /Disable/i }));
 
@@ -208,7 +222,8 @@ describe("apps/spaces scheduled-job detail route", () => {
       expect(screen.getByText(/Find weekend things/)).toBeTruthy(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Trigger Now/ }));
+    renderHeaderAction();
+    fireEvent.click(screen.getByRole("button", { name: /trigger now/i }));
 
     await waitFor(() => {
       const fireCall = apiFetchMock.mock.calls.find(

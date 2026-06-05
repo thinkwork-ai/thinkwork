@@ -175,7 +175,7 @@ export function SettingsRow({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3.5 last:border-b-0">
+    <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3.5 last:border-b-0">
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground">{label}</p>
         {description ? (

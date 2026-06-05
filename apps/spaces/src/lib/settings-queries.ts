@@ -641,3 +641,64 @@ export const SettingsWebhooksQuery = graphql(`
     }
   }
 `);
+
+export const SettingsWebhookQuery = graphql(`
+  query SettingsWebhook($id: ID!) {
+    webhook(id: $id) {
+      id
+      name
+      description
+      token
+      targetType
+      prompt
+      enabled
+      rateLimit
+      invocationCount
+      lastInvokedAt
+      createdAt
+    }
+  }
+`);
+
+export const SettingsWebhookDeliveriesQuery = graphql(`
+  query SettingsWebhookDeliveries($webhookId: ID!, $limit: Int) {
+    webhookDeliveries(webhookId: $webhookId, limit: $limit) {
+      id
+      receivedAt
+      providerName
+      normalizedKind
+      signatureStatus
+      resolutionStatus
+      statusCode
+      threadCreated
+    }
+  }
+`);
+
+export const SettingsUpdateWebhookMutation = graphql(`
+  mutation SettingsUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {
+    updateWebhook(id: $id, input: $input) {
+      id
+      name
+      description
+      prompt
+      enabled
+      rateLimit
+    }
+  }
+`);
+
+export const SettingsDeleteWebhookMutation = graphql(`
+  mutation SettingsDeleteWebhook($id: ID!) {
+    deleteWebhook(id: $id)
+  }
+`);
+
+export const SettingsRegenerateWebhookTokenMutation = graphql(`
+  mutation SettingsRegenerateWebhookToken($id: ID!) {
+    regenerateWebhookToken(id: $id) {
+      id
+      token
+    }
+  }
+`);

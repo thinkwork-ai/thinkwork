@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
 import { Badge, DataTable, Input } from "@thinkwork/ui";
@@ -24,6 +25,7 @@ function relativeTime(value: unknown): string {
 
 export function SettingsWebhooks() {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [result] = useQuery({
     query: SettingsWebhooksQuery,
@@ -100,6 +102,12 @@ export function SettingsWebhooks() {
         data={rows}
         filterValue={search}
         filterColumn="name"
+        onRowClick={(row) =>
+          navigate({
+            to: "/settings/webhooks/$webhookId",
+            params: { webhookId: row.id },
+          })
+        }
         scrollable
         allowHorizontalScroll={false}
         pageSize={25}

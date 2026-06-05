@@ -16,11 +16,6 @@ import {
   Badge,
   Button,
   DataTable,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
   Input,
   Label,
   Select,
@@ -28,6 +23,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
   Switch,
 } from "@thinkwork/ui";
 import { toast } from "sonner";
@@ -637,15 +637,18 @@ function ConfigureBuiltinToolDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full gap-4 overflow-y-auto p-6 sm:max-w-lg"
+      >
+        <SheetHeader className="p-0">
+          <SheetTitle className="flex items-center gap-2">
             <Wrench className="h-5 w-5" />
             {row.name}
-          </DialogTitle>
-          <DialogDescription>{row.description}</DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>{row.description}</SheetDescription>
+        </SheetHeader>
 
         <div className="space-y-4">
           <div className="space-y-1">
@@ -784,8 +787,8 @@ function ConfigureBuiltinToolDialog({
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -804,10 +807,13 @@ function PolicyGatedInfoDialog({
   const isContextEngine = row.slug === "context-engine";
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full gap-4 overflow-y-auto p-6 sm:max-w-lg"
+      >
+        <SheetHeader className="p-0">
+          <SheetTitle className="flex items-center gap-2">
             {isContextEngine ? (
               <BrainCircuit className="h-5 w-5" />
             ) : isEmail ? (
@@ -816,9 +822,9 @@ function PolicyGatedInfoDialog({
               <Wrench className="h-5 w-5" />
             )}
             {row.name}
-          </DialogTitle>
-          <DialogDescription>{row.description}</DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>{row.description}</SheetDescription>
+        </SheetHeader>
         <div className="space-y-4">
           <div className="space-y-1">
             <Label>Provider</Label>
@@ -909,7 +915,7 @@ function PolicyGatedInfoDialog({
             </div>
           ) : null}
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -29,10 +29,11 @@ import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import {
-  ScheduledJobFormDialog,
+  ScheduledJobForm,
   type ScheduledJobFormData,
-} from "@/components/scheduled-jobs/ScheduledJobFormDialog";
+} from "@/components/scheduled-jobs/ScheduledJobForm";
 import {
   JOB_TYPE_LABELS,
   formatSchedule,
@@ -211,6 +212,85 @@ export function ScheduledJobDetail({
       : `${formatSchedule(job.schedule_expression)} · ${job.timezone}`
     : undefined;
 
+  // Row actions live as icon buttons in the page header (matching the other
+  // settings detail pages), not as an in-body toolbar.
+  const headerActions = job ? (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title="Edit"
+        aria-label="Edit"
+        disabled={pendingAction !== null || !agentId}
+        onClick={() => setEditOpen(true)}
+      >
+        <Pencil className="size-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title={job.enabled ? "Disable" : "Enable"}
+        aria-label={job.enabled ? "Disable" : "Enable"}
+        disabled={pendingAction !== null}
+        onClick={handleToggle}
+      >
+        {pendingAction === "toggle" ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : job.enabled ? (
+          <Pause className="size-4" />
+        ) : (
+          <Play className="size-4" />
+        )}
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title="Trigger now"
+        aria-label="Trigger now"
+        disabled={pendingAction !== null || !job.enabled}
+        onClick={handleFire}
+      >
+        {pendingAction === "fire" ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Zap className="size-4" />
+        )}
+      </Button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Delete"
+            aria-label="Delete"
+            className="text-destructive hover:text-destructive"
+            disabled={pendingAction !== null}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this job?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {job.name} will stop firing and the EventBridge schedule will be
+              removed. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  ) : undefined;
+
   usePageHeaderActions({
     title: job?.name ?? "Scheduled Job",
     subtitle: headerSubtitle,
@@ -219,6 +299,8 @@ export function ScheduledJobDetail({
       { label: "Automations", href: backHref },
       { label: job?.name ?? "Scheduled Job" },
     ],
+    action: headerActions,
+    actionKey: job ? `job-actions:${job.id}` : undefined,
   });
 
   if (jobLoading || !tenantId) {
@@ -241,93 +323,42 @@ export function ScheduledJobDetail({
     );
   }
 
-  return (
-    <main className="flex h-full w-full flex-col overflow-hidden bg-background">
-      <div className="shrink-0 border-b border-border bg-background px-4 pb-4 pt-4 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground">
-              {job.name}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {job.description ||
-                JOB_TYPE_LABELS[job.trigger_type] ||
-                job.trigger_type}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pendingAction !== null || !agentId}
-              onClick={() => setEditOpen(true)}
-            >
-              <Pencil className="mr-1 h-4 w-4" /> Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pendingAction !== null}
-              onClick={handleToggle}
-            >
-              {pendingAction === "toggle" ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : job.enabled ? (
-                <>
-                  <Pause className="mr-1 h-4 w-4" /> Disable
-                </>
-              ) : (
-                <>
-                  <Play className="mr-1 h-4 w-4" /> Enable
-                </>
-              )}
-            </Button>
-            <Button
-              size="sm"
-              disabled={pendingAction !== null || !job.enabled}
-              onClick={handleFire}
-            >
-              {pendingAction === "fire" ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Zap className="mr-1 h-4 w-4" />
-              )}
-              Trigger Now
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={pendingAction !== null}
-                >
-                  <Trash2 className="mr-1 h-4 w-4" /> Delete
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete this job?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {job.name} will stop firing and the EventBridge schedule
-                    will be removed. This cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleDelete}
-                    className="bg-destructive text-white hover:bg-destructive/90"
-                  >
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        </div>
-      </div>
+  // Full-page edit replaces the read view (no modal). agentId is required to
+  // fire the job; the Edit button is disabled until it resolves.
+  if (editOpen && agentId) {
+    return (
+      <main className="h-full w-full overflow-y-auto bg-background">
+        <ScheduledJobForm
+          mode="edit"
+          agentId={agentId}
+          initial={{
+            name: job.name,
+            schedule_type: job.schedule_type ?? "rate",
+            schedule_expression: job.schedule_expression ?? "rate(5 minutes)",
+            timezone: job.timezone,
+            prompt: job.prompt ?? undefined,
+          }}
+          onSubmit={async (data) => {
+            await handleEditSubmit(data);
+            setEditOpen(false);
+          }}
+          onCancel={() => setEditOpen(false)}
+        />
+      </main>
+    );
+  }
 
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-6">
+  return (
+    <main className="h-full w-full overflow-y-auto bg-background">
+      <div className="w-full space-y-6 px-4 py-6 sm:px-6">
+        <SettingsPageTitle
+          title={job.name}
+          badge={
+            <Badge variant={job.enabled ? "secondary" : "outline"}>
+              {job.enabled ? "Enabled" : "Disabled"}
+            </Badge>
+          }
+        />
         {actionError && (
           <p className="text-sm text-destructive">{actionError}</p>
         )}
@@ -462,23 +493,6 @@ export function ScheduledJobDetail({
         }}
         renderResponse={(text) => <Response>{text}</Response>}
       />
-
-      {agentId && (
-        <ScheduledJobFormDialog
-          open={editOpen}
-          onOpenChange={setEditOpen}
-          mode="edit"
-          agentId={agentId}
-          initial={{
-            name: job.name,
-            schedule_type: job.schedule_type ?? "rate",
-            schedule_expression: job.schedule_expression ?? "rate(5 minutes)",
-            timezone: job.timezone,
-            prompt: job.prompt ?? undefined,
-          }}
-          onSubmit={handleEditSubmit}
-        />
-      )}
     </main>
   );
 }

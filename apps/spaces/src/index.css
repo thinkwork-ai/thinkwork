@@ -100,6 +100,43 @@
   display: none;
 }
 
+/* Streamdown wraps tables in an outer card plus a top-right control bar
+   (copy / download / fullscreen). De-card it like the code block above and
+   float the controls up to the top-right so they sit on the row of the
+   heading that precedes the table, revealed on hover — matching the
+   surrounding message chrome. The -2.25rem lift bottom-aligns the controls
+   with streamdown's `text-2xl mb-2` heading above the `mt-3` table. */
+.ai-response [data-streamdown="table-wrapper"] {
+  position: relative;
+  margin-block: 0.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  gap: 0.375rem;
+}
+.ai-response [data-streamdown="table-wrapper"] > div:first-child {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translateY(-2.25rem);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.ai-response [data-streamdown="table-wrapper"]:hover > div:first-child,
+.ai-response [data-streamdown="table-wrapper"]:focus-within > div:first-child {
+  opacity: 1;
+}
+.ai-response [data-streamdown="table-wrapper"] > div:first-child button {
+  height: 1.5rem;
+  width: 1.5rem;
+  padding: 0;
+}
+.ai-response [data-streamdown="table-wrapper"] > div:first-child svg {
+  height: 0.875rem;
+  width: 0.875rem;
+}
+
 /*
  * macOS sidebar vibrancy. The window is created with the NSVisualEffectView
  * "sidebar" material (apps/desktop window.ts). For the material to show, the
