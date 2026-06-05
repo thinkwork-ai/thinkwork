@@ -54,7 +54,10 @@ export function SettingsGeneral() {
 
   return (
     <SettingsPane>
-      <SettingsHeader title="General" />
+      <SettingsHeader
+        title="General"
+        description="Configure agent runtime, default model, appearance, and deployment."
+      />
 
       {showOperator ? <AgentConfigSection /> : null}
 

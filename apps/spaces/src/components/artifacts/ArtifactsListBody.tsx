@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
@@ -44,6 +50,12 @@ export interface ArtifactsListBodyProps {
    * builder so the detail stays inside the Settings shell.
    */
   detailPathFor?: (id: string) => string;
+  /**
+   * Optional page header (title + description) rendered above the toolbar.
+   * The Settings embed passes a `SettingsPageTitle` so Artifacts matches the
+   * other settings pages; the main shell leaves it unset (breadcrumb only).
+   */
+  headerSlot?: ReactNode;
 }
 
 export function ArtifactsListBody({
@@ -53,6 +65,7 @@ export function ArtifactsListBody({
   isOperator: isOperatorProp,
   roleResolved: roleResolvedProp,
   detailPathFor = computerArtifactRoute,
+  headerSlot,
 }: ArtifactsListBodyProps = {}) {
   if (itemsProp) {
     return (
@@ -62,10 +75,16 @@ export function ArtifactsListBody({
         errorMessage={errorMessageProp}
         showUserFilter={(roleResolvedProp ?? true) && !!isOperatorProp}
         detailPathFor={detailPathFor}
+        headerSlot={headerSlot}
       />
     );
   }
-  return <LiveArtifactsListBody detailPathFor={detailPathFor} />;
+  return (
+    <LiveArtifactsListBody
+      detailPathFor={detailPathFor}
+      headerSlot={headerSlot}
+    />
+  );
 }
 
 // Test-seam path: holds the filter input state locally so the affordance is
@@ -76,12 +95,14 @@ function StaticArtifactsListBody({
   errorMessage,
   showUserFilter,
   detailPathFor,
+  headerSlot,
 }: {
   items: ArtifactItem[];
   fetching: boolean;
   errorMessage?: string;
   showUserFilter: boolean;
   detailPathFor: (id: string) => string;
+  headerSlot?: ReactNode;
 }) {
   const [userIdFilter, setUserIdFilter] = useState("");
   return (
@@ -94,14 +115,17 @@ function StaticArtifactsListBody({
       onUserIdFilterChange={setUserIdFilter}
       filterActive={false}
       detailPathFor={detailPathFor}
+      headerSlot={headerSlot}
     />
   );
 }
 
 function LiveArtifactsListBody({
   detailPathFor,
+  headerSlot,
 }: {
   detailPathFor: (id: string) => string;
+  headerSlot?: ReactNode;
 }) {
   // Operator state lives in the live-data layer (not the presentational
   // toolbar) because the user-ID filter switches which query runs. Gate on
@@ -155,6 +179,7 @@ function LiveArtifactsListBody({
       onUserIdFilterChange={setUserIdFilter}
       filterActive={filterActive}
       detailPathFor={detailPathFor}
+      headerSlot={headerSlot}
     />
   );
 }
@@ -168,6 +193,7 @@ function ArtifactsListBodyView({
   onUserIdFilterChange,
   filterActive,
   detailPathFor,
+  headerSlot,
 }: {
   items: ArtifactItem[];
   fetching: boolean;
@@ -177,6 +203,7 @@ function ArtifactsListBodyView({
   onUserIdFilterChange: (value: string) => void;
   filterActive: boolean;
   detailPathFor: (id: string) => string;
+  headerSlot?: ReactNode;
 }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -216,6 +243,7 @@ function ArtifactsListBodyView({
 
   return (
     <div className="flex h-full min-w-0 flex-col">
+      {headerSlot ? <div className="px-6 pt-6">{headerSlot}</div> : null}
       <ArtifactsToolbar
         search={search}
         onSearchChange={setSearch}
@@ -228,7 +256,7 @@ function ArtifactsListBodyView({
         userIdFilter={userIdFilter}
         onUserIdFilterChange={onUserIdFilterChange}
       />
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-4">
         {showLoadingShell ? (
           <div
             className="flex flex-1 items-center justify-center px-6 py-12 text-sm text-muted-foreground"

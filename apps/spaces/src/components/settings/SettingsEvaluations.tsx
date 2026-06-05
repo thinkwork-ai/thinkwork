@@ -454,7 +454,10 @@ export function SettingsEvaluations() {
 
   return (
     <SettingsPane className="max-w-none">
-      <SettingsPageTitle title="Evaluations" />
+      <SettingsPageTitle
+        title="Evaluations"
+        description="Author test cases and review automated evaluation runs."
+      />
       <div className="space-y-6">
         {/* Summary metric cards */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 *:data-[slot=card]:shadow-xs dark:*:data-[slot=card]:bg-card">

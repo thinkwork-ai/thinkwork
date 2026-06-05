@@ -3,6 +3,7 @@ import {
   AppWindow,
   BookOpen,
   Brain,
+  Clock,
   FolderTree,
   NotebookText,
   Repeat,
@@ -12,7 +13,6 @@ import {
   Users,
   Webhook,
   Wrench,
-  Zap,
 } from "lucide-react";
 import {
   IconChartBar,
@@ -34,7 +34,7 @@ export interface SettingsNavItem {
 
 // General first (visible to all), then operator-only sections. Appearance is
 // folded into General as a "Color mode" control rather than a nav item.
-export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
+const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { label: "General", to: "/settings/general", icon: SettingsIcon },
   {
     label: "Spaces",
@@ -100,7 +100,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   {
     label: "Automations",
     to: "/settings/automations",
-    icon: Zap,
+    icon: Clock,
     operatorOnly: true,
   },
   {
@@ -121,6 +121,16 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     icon: IconChartBar,
     operatorOnly: true,
   },
+];
+
+// "General" stays pinned at the top; the remaining sections are alphabetised by
+// label so the growing operator list stays scannable. Sorting at export keeps
+// the source list above free-form — new items can be added in any order.
+export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
+  ...RAW_SETTINGS_NAV_ITEMS.filter((item) => item.label === "General"),
+  ...RAW_SETTINGS_NAV_ITEMS.filter((item) => item.label !== "General").sort(
+    (a, b) => a.label.localeCompare(b.label),
+  ),
 ];
 
 /**
