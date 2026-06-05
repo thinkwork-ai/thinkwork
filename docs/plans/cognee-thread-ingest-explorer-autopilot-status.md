@@ -7,15 +7,14 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U13 - Cognee system Python dependency install hotfix
+- Current unit: U14 - Knowledge graph relationship UUID filter hotfix
 - Current branch/worktree:
-  `codex/cognee-bedrock-system-python` /
-  `.Codex/worktrees/cognee-bedrock-system-python`
-- Current PR: [#2090](https://github.com/thinkwork-ai/thinkwork/pull/2090)
-- Blocker: none. U12 merged and its deploy proved the target site-packages
-  approach is right, but Cognee's `PATH` resolves bare `python` to the no-pip
-  venv interpreter. U13 calls `/usr/local/bin/python` explicitly while still
-  installing `boto3` into the Cognee venv import path.
+  `codex/kg-graph-uuid-filter-fix` /
+  `.Codex/worktrees/kg-graph-uuid-filter-fix`
+- Current PR: [#2091](https://github.com/thinkwork-ai/thinkwork/pull/2091)
+- Blocker: none. U13 merged and deployed successfully; live smoke proved
+  Cognee ingestion now succeeds, then exposed a GraphQL read-path SQL cast bug
+  in `knowledgeGraphGraph`.
 
 ## Progress Log
 
@@ -373,3 +372,34 @@ operation`. ECS logs showed the precise cause:
   unavailable, so the image layer will be verified by the deploy workflow.
 - 2026-06-05: Opened U13 PR
   [#2090](https://github.com/thinkwork-ai/thinkwork/pull/2090).
+- 2026-06-05: U13 PR
+  [#2090](https://github.com/thinkwork-ai/thinkwork/pull/2090) passed required
+  CI and was squash-merged into `main` at
+  `3f32708e0aef89d6576062c1592111be580d8a7f`; the remote branch was deleted.
+- 2026-06-05: U13 merge-triggered deploy run
+  [26989630000](https://github.com/thinkwork-ai/thinkwork/actions/runs/26989630000)
+  passed end to end. The deploy workflow built and pushed the custom Cognee
+  Bedrock image, applied Terraform, deployed admin/docs, and completed the
+  deploy summary checks.
+- 2026-06-05: Post-U13 live deployed smoke against dev thread
+  `81e6f391-a2d1-45be-98e1-d4fbb7d78878` proved the Cognee path is healthy:
+  Cognee uploaded/loaded the ThinkWork ontology, `/api/v1/remember` returned
+  200, and Cognee logs showed `6 nodes and 8 edges`. The smoke then failed on
+  GraphQL `knowledgeGraphGraph` with `cannot cast type record to uuid[]`,
+  exposing a relationship filter SQL bug in the read resolver.
+- 2026-06-05: Started U14 hotfix branch
+  `codex/kg-graph-uuid-filter-fix` from `origin/main`.
+- 2026-06-05: U14 replaces the graph resolver's `ANY(${ids}::uuid[])`
+  relationship filters with parameterized UUID `IN (...)` lists and adds a
+  regression assertion that renders the Drizzle SQL and rejects the invalid
+  `::uuid[]` array cast.
+- 2026-06-05: U14 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api lint`
+  (no lint script present); and targeted Prettier check via
+  `pnpm dlx prettier@3.8.2 --check ...`. The fresh worktree dependency install
+  logged a local optional `canvas` native build failure under Node 25 because
+  `pkg-config` is unavailable, but pnpm completed and the targeted API tests
+  and typecheck ran successfully.
+- 2026-06-05: Opened U14 PR
+  [#2091](https://github.com/thinkwork-ai/thinkwork/pull/2091).
