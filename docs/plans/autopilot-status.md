@@ -61,7 +61,7 @@ status: in_progress
 | U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | [#2115](https://github.com/thinkwork-ai/thinkwork/pull/2115) | Merged      | Squash merged as `3a5a6d3`; reusable cost owner and user-budget helpers landed.   |
 | U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | Merged      | Squash merged as `d045346f`; runtime paths propagate user ownership and gates.    |
 | U4 Add user-first GraphQL cost and budget APIs         | `codex/user-cost-u4` | [#2118](https://github.com/thinkwork-ai/thinkwork/pull/2118) | Merged      | Squash merged as `b92e6585`; user-first cost and budget GraphQL APIs landed.      |
-| U5 Update Settings/Admin analytics user cost surfaces  | `codex/user-cost-u5` | TBD                                                          | In progress | Replaces agent chargeback tables with user cost and user budget reporting.        |
+| U5 Update Settings/Admin analytics user cost surfaces  | `codex/user-cost-u5` | [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121) | In progress | Replaces agent chargeback tables with user cost and user budget reporting.        |
 
 ### Progress Log
 
@@ -181,6 +181,7 @@ __tests__/migration-0148.test.ts` and
   Prettier;
   `curl -I --max-time 10 http://localhost:5174/settings/analytics` returned
   `200 OK` from the Spaces dev server; and `git diff --check` passed.
+- Opened U5 PR [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121).
 
 ### Blockers
 
