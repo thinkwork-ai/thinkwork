@@ -7512,3 +7512,44 @@ None.
 ## Blockers
 
 None.
+
+# Twenty CRM Managed Application Autopilot - 2026-06-05
+
+## Run Scope
+
+- Plan: `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`
+- Origin requirements: `docs/brainstorms/2026-06-05-twenty-crm-managed-application-requirements.md`
+- Autopilot contract: one isolated branch/worktree per implementation unit,
+  one PR per unit unless grouping is required, CI pass before squash merge,
+  delete branch/worktree after merge, then sync from `origin/main`.
+
+## Progress Log
+
+- 2026-06-05T19:50:40Z: Started U1 on branch
+  `codex/twenty-crm-u1-terraform` in worktree
+  `.Codex/worktrees/twenty-crm-u1-terraform`.
+- Read `AGENTS.md`, the Twenty CRM plan, Cognee Terraform module patterns,
+  Cognee fixture tests, and prior solution/plan notes referenced by the plan.
+- Copied the untracked Twenty CRM plan and brainstorm requirement docs into the
+  U1 branch so the implementation PR carries the source specification forward.
+- Implemented initial `terraform/modules/app/twenty` with public HTTPS ALB,
+  ECS/Fargate server and worker services, EFS storage, ElastiCache
+  Valkey/Redis OSS, Secrets Manager indirection, and runtime parking through
+  desired-count zero.
+- Added `apps/cli/__tests__/terraform-twenty-fixture.test.ts` structural
+  coverage for public HTTPS, retained storage/cache, parked runtime semantics,
+  secret indirection, guardrails, and operational outputs.
+- Local review pass found one production-runtime polish item and added
+  `NODE_ENV=production` to the Twenty task environment. Compound sub-agent
+  review was not used because the available `spawn_agent` tool is explicitly
+  restricted to user-requested sub-agent/delegation work.
+
+## Unit Status
+
+| Unit                             | Branch                          | PR      | Status      | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Notes                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------- | ------------------------------- | ------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 - Twenty Terraform app module | `codex/twenty-crm-u1-terraform` | Pending | In progress | `terraform -chdir=terraform/modules/app/twenty fmt -check` passed; `terraform -chdir=terraform/modules/app/twenty init -backend=false && terraform -chdir=terraform/modules/app/twenty validate` passed with AWS provider deprecation warnings for `data.aws_region.current.name`; `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts` passed; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter thinkwork-cli test` passed (54 files, 363 tests); `pnpm dlx prettier@3.8.2 --check ...` passed; `git diff --check` passed. | `pnpm install` exited successfully but logged an optional `canvas` native build failure under Node 25 because `pkg-config`/pixman were unavailable after the prebuilt binary 404. `pnpm --filter thinkwork-cli test -- --runInBand` failed because that flag is not supported by this package's Vitest command; reran the package's normal `pnpm --filter thinkwork-cli test`, which passed. |
+
+## Open Blockers
+
+None.
