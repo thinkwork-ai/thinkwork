@@ -22,14 +22,17 @@ export async function knowledgeGraphGraph(
   if (entityIds.size === 0) {
     return { nodes: [], edges: [] };
   }
+  const entityIdFilters = Array.from(entityIds).map((entityId) => {
+    return sql`${entityId}::uuid`;
+  });
 
   const result = await ctx.db.execute(sql`
     SELECT *
       FROM knowledge_graph_relationships
      WHERE tenant_id = ${entities[0].tenantId}
        AND thread_id = ${args.threadId}
-       AND source_entity_id = ANY(${Array.from(entityIds)}::uuid[])
-       AND target_entity_id = ANY(${Array.from(entityIds)}::uuid[])
+       AND source_entity_id IN (${sql.join(entityIdFilters, sql`, `)})
+       AND target_entity_id IN (${sql.join(entityIdFilters, sql`, `)})
      ORDER BY evidence_count DESC, label ASC
   `);
   const rows = ((

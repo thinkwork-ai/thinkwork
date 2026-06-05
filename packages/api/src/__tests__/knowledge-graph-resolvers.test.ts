@@ -36,6 +36,22 @@ function ctxWithRows(rowSets: unknown[][]) {
   } as any;
 }
 
+function renderSql(query: unknown) {
+  return (
+    query as {
+      toQuery(args: {
+        escapeName(name: string): string;
+        escapeParam(index: number): string;
+        escapeString(value: string): string;
+      }): { sql: string };
+    }
+  ).toQuery({
+    escapeName: (name) => `"${name}"`,
+    escapeParam: (index) => `$${index + 1}`,
+    escapeString: (value) => `'${value}'`,
+  }).sql;
+}
+
 function ingestRun(overrides: Record<string, unknown> = {}) {
   return {
     id: "run-1",
@@ -274,6 +290,11 @@ describe("knowledge graph read resolvers", () => {
         provenanceStatus: "WEAK",
       }),
     ]);
+    const relationshipQuery = ctx.db.execute.mock.calls[1]?.[0];
+    expect(renderSql(relationshipQuery)).toMatch(
+      /source_entity_id IN \(\$\d+::uuid, \$\d+::uuid\)/,
+    );
+    expect(renderSql(relationshipQuery)).not.toContain("::uuid[]");
   });
 
   it("returns entity details with relationships and source evidence", async () => {
