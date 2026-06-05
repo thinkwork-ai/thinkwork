@@ -61,8 +61,11 @@ describe("ManagedApplicationsSection", () => {
   it("uses retained-data semantics for Twenty disable", () => {
     expect(source).toContain("Park Twenty CRM?");
     expect(source).toContain("retaining the dedicated database");
+    expect(source).toContain("Destroy Twenty CRM and delete data?");
+    expect(source).toContain("dedicated database. This cannot be undone");
     expect(source).toContain("CRM settings remain hidden");
     expect(queries).toContain("setManagedApplicationDeployment");
+    expect(queries).toContain("$action: ManagedApplicationDeploymentAction!");
     expect(queries).toContain("managedApplications {");
   });
 
@@ -74,16 +77,41 @@ describe("ManagedApplicationsSection", () => {
       />,
     );
 
-    fireEvent.click(screen.getByLabelText("Toggle Twenty CRM"));
+    fireEvent.click(screen.getAllByText("Park")[0]);
     expect(screen.getByText("Park Twenty CRM?")).toBeTruthy();
     expect(screen.getByText(/retaining the dedicated database/)).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Park"));
+    const parkActions = screen.getAllByText("Park");
+    fireEvent.click(parkActions[parkActions.length - 1]);
 
     await waitFor(() =>
       expect(setDeploymentMock).toHaveBeenCalledWith({
         key: "twenty",
-        enabled: false,
+        action: "PARK",
+      }),
+    );
+  });
+
+  it("confirms destructive Twenty cleanup separately from parking", async () => {
+    render(
+      <ManagedApplicationsSection
+        deployment={deploymentWithTwentyEnabled}
+        loading={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Destroy"));
+    expect(
+      screen.getByText("Destroy Twenty CRM and delete data?"),
+    ).toBeTruthy();
+    expect(screen.getByText(/cannot be undone/)).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Destroy and delete data"));
+
+    await waitFor(() =>
+      expect(setDeploymentMock).toHaveBeenCalledWith({
+        key: "twenty",
+        action: "DESTROY",
       }),
     );
   });

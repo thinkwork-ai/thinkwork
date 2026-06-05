@@ -117,17 +117,19 @@ describe("setManagedApplicationDeployment", () => {
       .fn()
       .mockResolvedValueOnce(response(204))
       .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
       .mockResolvedValueOnce(response(204));
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await managedMod.setManagedApplicationDeployment(
       null,
-      { input: { key: "twenty", enabled: true } },
+      { input: { key: "twenty", action: "ENABLE" } },
       operatorCtx,
     );
 
     expect(result).toMatchObject({
       key: "twenty",
+      action: "ENABLE",
       desiredEnabled: true,
       provisioned: true,
       runtimeEnabled: true,
@@ -154,6 +156,17 @@ describe("setManagedApplicationDeployment", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_DESTROY_DATA",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          name: "TWENTY_DESTROY_DATA",
+          value: "false",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
       "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/workflows/deploy.yml/dispatches",
       expect.objectContaining({
         method: "POST",
@@ -168,6 +181,7 @@ describe("setManagedApplicationDeployment", () => {
       .fn()
       .mockResolvedValueOnce(response(204))
       .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
       .mockResolvedValueOnce(response(204));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -179,6 +193,7 @@ describe("setManagedApplicationDeployment", () => {
 
     expect(result).toMatchObject({
       key: "twenty",
+      action: "PARK",
       desiredEnabled: false,
       provisioned: true,
       runtimeEnabled: false,
@@ -199,6 +214,66 @@ describe("setManagedApplicationDeployment", () => {
           name: "TWENTY_RUNTIME_ENABLED",
           value: "false",
         }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_DESTROY_DATA",
+      expect.objectContaining({
+        body: JSON.stringify({
+          name: "TWENTY_DESTROY_DATA",
+          value: "false",
+        }),
+      }),
+    );
+  });
+
+  it("destroys Twenty runtime and retained data when explicitly requested", async () => {
+    mockSend.mockResolvedValueOnce({ SecretString: "plain-token" });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await managedMod.setManagedApplicationDeployment(
+      null,
+      { input: { key: "twenty", action: "DESTROY" } },
+      operatorCtx,
+    );
+
+    expect(result).toMatchObject({
+      key: "twenty",
+      action: "DESTROY",
+      desiredEnabled: false,
+      provisioned: false,
+      runtimeEnabled: false,
+    });
+    expect(result.message).toMatch(/destructive cleanup/i);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_PROVISIONED",
+      expect.objectContaining({
+        body: JSON.stringify({ name: "TWENTY_PROVISIONED", value: "false" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_RUNTIME_ENABLED",
+      expect.objectContaining({
+        body: JSON.stringify({
+          name: "TWENTY_RUNTIME_ENABLED",
+          value: "false",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_DESTROY_DATA",
+      expect.objectContaining({
+        body: JSON.stringify({ name: "TWENTY_DESTROY_DATA", value: "true" }),
       }),
     );
   });

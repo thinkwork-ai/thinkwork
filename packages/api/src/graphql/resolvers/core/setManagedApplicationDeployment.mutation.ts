@@ -17,6 +17,8 @@ type DeploymentVariable = {
   value: string;
 };
 
+type DeploymentAction = "ENABLE" | "PARK" | "DESTROY";
+
 export const setManagedApplicationDeployment = async (
   _parent: any,
   args: any,
@@ -31,10 +33,10 @@ export const setManagedApplicationDeployment = async (
     });
   }
 
-  const desiredEnabled = Boolean(args.input?.enabled);
+  const action = resolveDeploymentAction(key, args.input);
   const config = deploymentControlConfig();
   const token = await readGithubToken(config.tokenSecretId);
-  const variables = deploymentVariablesFor(key, desiredEnabled);
+  const variables = deploymentVariablesFor(key, action);
 
   for (const variable of variables) {
     await upsertGithubActionsVariable({
@@ -52,58 +54,102 @@ export const setManagedApplicationDeployment = async (
     ref: config.ref,
   });
 
-  const state = deploymentStateFor(key, desiredEnabled);
+  const state = deploymentStateFor(key, action);
   return {
     key,
-    desiredEnabled,
+    action,
+    desiredEnabled: state.runtimeEnabled,
     provisioned: state.provisioned,
     runtimeEnabled: state.runtimeEnabled,
     workflowUrl: `https://github.com/${config.repository}/actions/workflows/${config.workflowFile}`,
-    message: deploymentMessageFor(key, desiredEnabled),
+    message: deploymentMessageFor(key, action),
   };
 };
 
+function resolveDeploymentAction(
+  key: ManagedApplicationKey,
+  input: any,
+): DeploymentAction {
+  const rawAction =
+    typeof input?.action === "string" ? input.action.toUpperCase() : null;
+  const action =
+    rawAction === "ENABLE" || rawAction === "PARK" || rawAction === "DESTROY"
+      ? rawAction
+      : null;
+
+  if (action) {
+    if (key === "cognee" && action === "PARK") {
+      throw new GraphQLError("Cognee does not support parked runtime state", {
+        extensions: { code: "BAD_USER_INPUT" },
+      });
+    }
+    return action;
+  }
+
+  if (typeof input?.enabled === "boolean") {
+    if (input.enabled) return "ENABLE";
+    return key === "twenty" ? "PARK" : "DESTROY";
+  }
+
+  throw new GraphQLError("Managed application action is required", {
+    extensions: { code: "BAD_USER_INPUT" },
+  });
+}
+
 function deploymentVariablesFor(
   key: ManagedApplicationKey,
-  desiredEnabled: boolean,
+  action: DeploymentAction,
 ): DeploymentVariable[] {
   if (key === "cognee") {
     return [
       {
         name: "COGNEE_ENABLED",
-        value: desiredEnabled ? "true" : "false",
+        value: action === "ENABLE" ? "true" : "false",
       },
     ];
   }
 
+  const enable = action === "ENABLE";
+  const park = action === "PARK";
   return [
-    { name: "TWENTY_PROVISIONED", value: "true" },
+    { name: "TWENTY_PROVISIONED", value: enable || park ? "true" : "false" },
     {
       name: "TWENTY_RUNTIME_ENABLED",
-      value: desiredEnabled ? "true" : "false",
+      value: enable ? "true" : "false",
+    },
+    {
+      name: "TWENTY_DESTROY_DATA",
+      value: action === "DESTROY" ? "true" : "false",
     },
   ];
 }
 
 function deploymentStateFor(
   key: ManagedApplicationKey,
-  desiredEnabled: boolean,
+  action: DeploymentAction,
 ): { provisioned: boolean; runtimeEnabled: boolean } {
   if (key === "cognee") {
-    return { provisioned: desiredEnabled, runtimeEnabled: desiredEnabled };
+    const enabled = action === "ENABLE";
+    return { provisioned: enabled, runtimeEnabled: enabled };
   }
-  return { provisioned: true, runtimeEnabled: desiredEnabled };
+  return {
+    provisioned: action === "ENABLE" || action === "PARK",
+    runtimeEnabled: action === "ENABLE",
+  };
 }
 
 function deploymentMessageFor(
   key: ManagedApplicationKey,
-  desiredEnabled: boolean,
+  action: DeploymentAction,
 ): string {
   if (key === "cognee") {
-    return `Knowledge Graph ${desiredEnabled ? "enable" : "disable"} deployment queued.`;
+    return `Knowledge Graph ${action === "ENABLE" ? "enable" : "disable"} deployment queued.`;
   }
-  if (desiredEnabled) {
+  if (action === "ENABLE") {
     return "Twenty CRM enable deployment queued.";
+  }
+  if (action === "DESTROY") {
+    return "Twenty CRM destructive cleanup queued; runtime, storage, cache, secrets, and the dedicated database will be removed.";
   }
   return "Twenty CRM runtime park deployment queued; CRM data and app secrets will be retained.";
 }

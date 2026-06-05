@@ -603,8 +603,13 @@ describe("GraphQL Schema Contract", () => {
             arg.type.toString(),
           ]),
       ).toEqual([["input", "SetManagedApplicationDeploymentInput!"]]);
+      expect(schema.getType("ManagedApplicationDeploymentAction")).toBeTruthy();
       expect(input.getFields().key.type.toString()).toBe("String!");
-      expect(input.getFields().enabled.type.toString()).toBe("Boolean!");
+      expect(input.getFields().enabled.type.toString()).toBe("Boolean");
+      expect(input.getFields().action.type.toString()).toBe(
+        "ManagedApplicationDeploymentAction",
+      );
+      expect(change.getFields().action.type.toString()).toBe("String!");
       expect(change.getFields().provisioned.type.toString()).toBe("Boolean!");
       expect(change.getFields().runtimeEnabled.type.toString()).toBe(
         "Boolean!",

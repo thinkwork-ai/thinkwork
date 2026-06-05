@@ -474,6 +474,11 @@ describe("U1 - Twenty Terraform app module", () => {
       expect(workflow).toMatch(/vars\.TWENTY_PROVISIONED \|\| 'false'/);
       expect(workflow).toMatch(/TWENTY_RUNTIME_ENABLED_INPUT/);
       expect(workflow).toMatch(/vars\.TWENTY_RUNTIME_ENABLED \|\| 'false'/);
+      expect(workflow).toMatch(/TWENTY_DESTROY_DATA_INPUT/);
+      expect(workflow).toMatch(/vars\.TWENTY_DESTROY_DATA \|\| 'false'/);
+      expect(workflow).toMatch(
+        /TWENTY_DESTROY_DATA=true requires TWENTY_PROVISIONED=false and TWENTY_RUNTIME_ENABLED=false/,
+      );
       expect(workflow).toMatch(/TWENTY_IMAGE_URI_INPUT/);
       expect(workflow).toMatch(/TWENTY_DB_USERNAME_INPUT/);
       expect(workflow).toMatch(/TWENTY_DB_NAME_INPUT/);
@@ -504,6 +509,7 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(workflow).toMatch(/ENCRYPTION_KEY/);
     expect(workflow).toMatch(/aws secretsmanager create-secret/);
     expect(workflow).toMatch(/aws secretsmanager put-secret-value/);
+    expect(workflow).toMatch(/retrying by stable secret name/);
     expect(workflow).toMatch(/TWENTY_DB_URL_SECRET_ARN=\$db_secret_arn/);
     expect(workflow).toMatch(
       /TWENTY_ENCRYPTION_KEY_SECRET_ARN=\$encryption_secret_arn/,
@@ -516,6 +522,20 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(workflow).toMatch(/GRANT CONNECT ON DATABASE :\"twenty_db\"/);
     expect(workflow).toMatch(/\\connect :\"twenty_db\"/);
     expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);
+  });
+
+  it("destroys Twenty retained database and secrets only after Terraform teardown is requested", () => {
+    const workflow = read(DEPLOY_WORKFLOW);
+
+    expect(workflow).toMatch(/Destroy Twenty CRM retained data/);
+    expect(workflow).toMatch(
+      /if \[ "\$\{TWENTY_DESTROY_DATA:-false\}" != "true" \]/,
+    );
+    expect(workflow).toMatch(/Refusing destructive cleanup while Twenty CRM/);
+    expect(workflow).toMatch(/DROP DATABASE IF EXISTS %I/);
+    expect(workflow).toMatch(/DROP ROLE IF EXISTS %I/);
+    expect(workflow).toMatch(/aws secretsmanager delete-secret/);
+    expect(workflow).toMatch(/--force-delete-without-recovery/);
   });
 
   it("keeps verify read-only and fails enabled Twenty plans without deploy-prepared secrets", () => {

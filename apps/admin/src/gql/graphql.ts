@@ -1665,8 +1665,15 @@ export type ManagedApplicationDeployment = {
   url?: Maybe<Scalars["String"]["output"]>;
 };
 
+export enum ManagedApplicationDeploymentAction {
+  Destroy = "DESTROY",
+  Enable = "ENABLE",
+  Park = "PARK",
+}
+
 export type ManagedApplicationDeploymentChange = {
   __typename?: "ManagedApplicationDeploymentChange";
+  action: Scalars["String"]["output"];
   desiredEnabled: Scalars["Boolean"]["output"];
   key: Scalars["String"]["output"];
   message: Scalars["String"]["output"];
@@ -4762,7 +4769,8 @@ export type SetKnowledgeGraphDeploymentInput = {
 };
 
 export type SetManagedApplicationDeploymentInput = {
-  enabled: Scalars["Boolean"]["input"];
+  action?: InputMaybe<ManagedApplicationDeploymentAction>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
   key: Scalars["String"]["input"];
 };
 

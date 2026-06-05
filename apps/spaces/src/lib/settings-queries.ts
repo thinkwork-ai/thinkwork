@@ -96,10 +96,11 @@ export const SettingsSetKnowledgeGraphDeploymentMutation = graphql(`
 export const SettingsSetManagedApplicationDeploymentMutation = graphql(`
   mutation SettingsSetManagedApplicationDeployment(
     $key: String!
-    $enabled: Boolean!
+    $action: ManagedApplicationDeploymentAction!
   ) {
-    setManagedApplicationDeployment(input: { key: $key, enabled: $enabled }) {
+    setManagedApplicationDeployment(input: { key: $key, action: $action }) {
       key
+      action
       desiredEnabled
       provisioned
       runtimeEnabled
