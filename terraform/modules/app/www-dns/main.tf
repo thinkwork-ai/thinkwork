@@ -12,6 +12,7 @@
 #   6. Optional admin.<domain> CNAME → admin CloudFront distribution.
 #   7. Optional app.<domain> CNAME → end-user app CloudFront distribution.
 #   8. Optional computer.<domain> → app.<domain> 301 compatibility redirect.
+#   9. Optional crm.<domain> CNAME → Twenty CRM public ALB.
 #
 # Cloudflare records MUST be DNS-only (grey cloud). CloudFront terminates TLS
 # with the ACM cert and needs the real Host header.
@@ -39,6 +40,7 @@ locals {
   computer = "computer.${var.domain}"
   sandbox  = "sandbox.${var.domain}"
   api      = "api.${var.domain}"
+  crm      = "crm.${var.domain}"
   name_id  = replace(var.domain, ".", "-")
 
   # ACM SANs: always include www, conditionally include docs, admin, computer,
@@ -55,6 +57,7 @@ locals {
     var.include_app ? [local.app] : [],
     var.include_computer ? [local.computer] : [],
     var.include_api ? [local.api] : [],
+    var.include_crm ? [local.crm] : [],
   )
 
   # Existing CNAME records stay gated on non-empty targets because their target
@@ -67,6 +70,7 @@ locals {
   create_app_record      = var.include_app
   create_computer_record = var.include_computer
   create_api_record      = var.include_api && var.api_gateway_id != ""
+  create_crm_record      = var.include_crm && var.crm_alb_dns_name != ""
 }
 
 ################################################################################
@@ -372,4 +376,20 @@ resource "cloudflare_record" "api" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} api → API Gateway v2 regional domain"
+}
+
+################################################################################
+# crm.<domain> → Twenty CRM public ALB (optional)
+################################################################################
+
+resource "cloudflare_record" "crm" {
+  count = local.create_crm_record ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = local.crm
+  content = var.crm_alb_dns_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${var.stage} crm → Twenty CRM public ALB"
 }

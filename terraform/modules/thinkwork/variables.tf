@@ -359,6 +359,152 @@ variable "cognee_kms_key_arns" {
   default     = []
 }
 
+variable "twenty_provisioned" {
+  description = "Provision the retained Twenty CRM managed-app substrate. Runtime can be parked independently with twenty_runtime_enabled."
+  type        = bool
+  default     = false
+}
+
+variable "twenty_runtime_enabled" {
+  description = "Run Twenty CRM server/worker tasks when the retained substrate is provisioned. Set false to park runtime while retaining data resources."
+  type        = bool
+  default     = false
+}
+
+variable "twenty_image_uri" {
+  description = "Twenty CRM container image URI pinned to an immutable sha256 digest. Required when twenty_provisioned = true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.twenty_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.twenty_image_uri))
+    error_message = "twenty_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "twenty_db_username" {
+  description = "Dedicated PostgreSQL username for Twenty CRM. Do not use the shared Aurora admin/master user."
+  type        = string
+  default     = "thinkwork_twenty"
+
+  validation {
+    condition     = !contains(["postgres", "thinkwork_admin", "rdsadmin"], lower(var.twenty_db_username))
+    error_message = "twenty_db_username must be a dedicated least-privilege Twenty database user."
+  }
+}
+
+variable "twenty_db_name" {
+  description = "Dedicated PostgreSQL database name for Twenty CRM. Do not use the shared Thinkwork application database."
+  type        = string
+  default     = "thinkwork_twenty"
+
+  validation {
+    condition     = var.twenty_db_name != var.database_name && can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.twenty_db_name))
+    error_message = "twenty_db_name must be a valid PostgreSQL identifier distinct from the shared Thinkwork database name."
+  }
+}
+
+variable "twenty_db_url_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON PG_DATABASE_URL field for the dedicated Twenty database. Required when twenty_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_encryption_key_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON ENCRYPTION_KEY field for Twenty. Required when twenty_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_fallback_encryption_key_secret_arn" {
+  description = "Optional Secrets Manager ARN containing a JSON FALLBACK_ENCRYPTION_KEY field during Twenty key rotation."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_app_secret_arn" {
+  description = "Optional Secrets Manager ARN containing a JSON APP_SECRET field for legacy Twenty compatibility."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_domain" {
+  description = "Public hostname for Twenty CRM. Leave empty to derive crm.<www_domain> when www_domain is set."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_public_url" {
+  description = "Public HTTPS URL for Twenty CRM. Leave empty to derive https://<twenty_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_certificate_arn" {
+  description = "ACM certificate ARN for the Twenty public ALB. Leave empty to reuse www_certificate_arn."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_server_desired_count" {
+  description = "Desired Twenty server task count when twenty_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "twenty_worker_desired_count" {
+  description = "Desired Twenty worker task count when twenty_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "twenty_cache_engine" {
+  description = "ElastiCache engine for Twenty. Prefer valkey; redis is available as a compatibility fallback."
+  type        = string
+  default     = "valkey"
+
+  validation {
+    condition     = contains(["valkey", "redis"], var.twenty_cache_engine)
+    error_message = "twenty_cache_engine must be valkey or redis."
+  }
+}
+
+variable "twenty_cache_engine_version" {
+  description = "ElastiCache engine version for Twenty."
+  type        = string
+  default     = "8.0"
+}
+
+variable "twenty_cache_parameter_group_family" {
+  description = "ElastiCache parameter group family matching twenty_cache_engine/twenty_cache_engine_version."
+  type        = string
+  default     = "valkey8"
+}
+
+variable "twenty_cache_node_type" {
+  description = "ElastiCache node type for the Twenty queue/cache."
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "twenty_cache_num_cache_clusters" {
+  description = "Number of cache nodes in the Twenty replication group. Use 1 for the smallest v1 deployment."
+  type        = number
+  default     = 1
+}
+
+variable "twenty_allowed_public_cidr_blocks" {
+  description = "CIDR blocks allowed to reach the public Twenty HTTPS ALB."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "twenty_kms_key_arns" {
+  description = "Optional KMS key ARNs needed to decrypt Twenty-injected secrets."
+  type        = list(string)
+  default     = []
+}
+
 variable "agentcore_memory_id" {
   description = "Optional pre-existing AgentCore Memory resource ID. When set, the agentcore-memory module skips provisioning and reuses this ID. Leave empty to auto-provision."
   type        = string

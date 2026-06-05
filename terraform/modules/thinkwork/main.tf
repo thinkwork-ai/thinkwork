@@ -23,8 +23,13 @@ locals {
   # Hindsight is an optional add-on. Preferred toggle: var.enable_hindsight.
   # For one release we also honor the legacy var.memory_engine == "hindsight"
   # so existing tfvars keep working.
-  hindsight_enabled = var.enable_hindsight || var.memory_engine == "hindsight"
-  cognee_enabled    = var.enable_cognee
+  hindsight_enabled      = var.enable_hindsight || var.memory_engine == "hindsight"
+  cognee_enabled         = var.enable_cognee
+  twenty_provisioned     = var.twenty_provisioned
+  twenty_runtime_enabled = var.twenty_provisioned && var.twenty_runtime_enabled
+  twenty_domain          = var.twenty_domain != "" ? var.twenty_domain : (var.www_domain != "" ? "crm.${var.www_domain}" : "")
+  twenty_public_url      = var.twenty_public_url != "" ? var.twenty_public_url : (local.twenty_domain != "" ? "https://${local.twenty_domain}" : "")
+  twenty_certificate_arn = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : var.www_certificate_arn
   cognee_worker_subnet_ids = (
     length(module.vpc.private_subnet_ids) > 0
     ? module.vpc.private_subnet_ids
@@ -158,6 +163,91 @@ resource "terraform_data" "cognee_configuration_guardrails" {
         length(var.cognee_bedrock_model_resource_arns) > 0
       )
       error_message = "Bedrock Cognee providers require explicit cognee_bedrock_model_resource_arns."
+    }
+  }
+}
+
+resource "terraform_data" "twenty_configuration_guardrails" {
+  count = local.twenty_provisioned ? 1 : 0
+
+  input = {
+    twenty_runtime_enabled           = local.twenty_runtime_enabled
+    twenty_image_uri                 = var.twenty_image_uri
+    twenty_db_name                   = var.twenty_db_name
+    twenty_db_username               = var.twenty_db_username
+    twenty_db_url_secret_arn         = var.twenty_db_url_secret_arn
+    twenty_encryption_key_secret_arn = var.twenty_encryption_key_secret_arn
+    twenty_public_url                = local.twenty_public_url
+    twenty_certificate_arn           = local.twenty_certificate_arn
+    public_subnet_count              = length(module.vpc.public_subnet_ids)
+    cache_subnet_count               = length(module.vpc.private_subnet_ids)
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.twenty_image_uri != ""
+      error_message = "twenty_provisioned requires twenty_image_uri pinned to an immutable digest."
+    }
+
+    precondition {
+      condition     = var.twenty_db_url_secret_arn != ""
+      error_message = "twenty_provisioned requires twenty_db_url_secret_arn for a dedicated Twenty database URL."
+    }
+
+    precondition {
+      condition     = var.twenty_encryption_key_secret_arn != ""
+      error_message = "twenty_provisioned requires twenty_encryption_key_secret_arn for Twenty ENCRYPTION_KEY."
+    }
+
+    precondition {
+      condition     = var.twenty_db_url_secret_arn != module.database.graphql_db_secret_arn
+      error_message = "twenty_provisioned requires a dedicated Twenty database URL secret, not the shared Thinkwork admin database secret."
+    }
+
+    precondition {
+      condition     = var.twenty_db_name != var.database_name
+      error_message = "twenty_db_name must be distinct from the shared Thinkwork database name."
+    }
+
+    precondition {
+      condition     = local.twenty_public_url != ""
+      error_message = "twenty_provisioned requires twenty_public_url or a www_domain-derived crm.<domain> URL."
+    }
+
+    precondition {
+      condition     = local.twenty_certificate_arn != ""
+      error_message = "twenty_provisioned requires twenty_certificate_arn or www_certificate_arn."
+    }
+
+    precondition {
+      condition     = length(module.vpc.public_subnet_ids) > 0
+      error_message = "twenty_provisioned requires at least one public subnet for the public ALB and phase-1 task egress pattern."
+    }
+
+    precondition {
+      condition     = length(module.vpc.private_subnet_ids) > 0
+      error_message = "twenty_provisioned requires at least one private subnet for ElastiCache."
+    }
+
+    precondition {
+      condition     = !var.twenty_runtime_enabled || var.twenty_provisioned
+      error_message = "twenty_runtime_enabled requires twenty_provisioned = true."
+    }
+  }
+}
+
+resource "terraform_data" "twenty_runtime_state_guardrails" {
+  count = var.twenty_runtime_enabled && !var.twenty_provisioned ? 1 : 0
+
+  input = {
+    twenty_provisioned     = var.twenty_provisioned
+    twenty_runtime_enabled = var.twenty_runtime_enabled
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.twenty_runtime_enabled || var.twenty_provisioned
+      error_message = "twenty_runtime_enabled requires twenty_provisioned = true."
     }
   }
 }
@@ -473,6 +563,16 @@ module "api" {
   cognee_service_name                           = local.cognee_enabled ? module.cognee[0].cognee_service_name : ""
   cognee_worker_subnet_ids                      = local.cognee_enabled ? local.cognee_worker_subnet_ids : []
   cognee_worker_security_group_ids              = local.cognee_enabled ? [aws_security_group.cognee_worker[0].id] : []
+  twenty_provisioned                            = local.twenty_provisioned
+  twenty_runtime_enabled                        = local.twenty_runtime_enabled
+  twenty_url                                    = local.twenty_provisioned ? module.twenty[0].twenty_url : ""
+  twenty_alb_arn                                = local.twenty_provisioned ? module.twenty[0].twenty_alb_arn : ""
+  twenty_target_group_arn                       = local.twenty_provisioned ? module.twenty[0].twenty_target_group_arn : ""
+  twenty_cluster_arn                            = local.twenty_provisioned ? module.twenty[0].twenty_cluster_arn : ""
+  twenty_server_service_name                    = local.twenty_provisioned ? module.twenty[0].twenty_server_service_name : ""
+  twenty_worker_service_name                    = local.twenty_provisioned ? module.twenty[0].twenty_worker_service_name : ""
+  twenty_server_log_group_name                  = local.twenty_provisioned ? module.twenty[0].twenty_server_log_group_name : ""
+  twenty_worker_log_group_name                  = local.twenty_provisioned ? module.twenty[0].twenty_worker_log_group_name : ""
   admin_url                                     = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
   docs_url                                      = "https://${module.docs_site.distribution_domain}"
   www_url                                       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
@@ -699,6 +799,40 @@ module "cognee" {
   kms_key_arns                = var.cognee_kms_key_arns
 
   depends_on = [terraform_data.cognee_configuration_guardrails]
+}
+
+module "twenty" {
+  count  = local.twenty_provisioned ? 1 : 0
+  source = "../app/twenty"
+
+  stage                = var.stage
+  vpc_id               = module.vpc.vpc_id
+  subnet_ids           = module.vpc.public_subnet_ids
+  cache_subnet_ids     = module.vpc.private_subnet_ids
+  storage_subnet_ids   = module.vpc.private_subnet_ids
+  db_security_group_id = module.database.db_security_group_id
+  public_url           = local.twenty_public_url
+  certificate_arn      = local.twenty_certificate_arn
+  image_uri            = var.twenty_image_uri
+
+  runtime_enabled      = local.twenty_runtime_enabled
+  server_desired_count = var.twenty_server_desired_count
+  worker_desired_count = var.twenty_worker_desired_count
+
+  db_url_secret_arn                  = var.twenty_db_url_secret_arn
+  encryption_key_secret_arn          = var.twenty_encryption_key_secret_arn
+  fallback_encryption_key_secret_arn = var.twenty_fallback_encryption_key_secret_arn
+  app_secret_arn                     = var.twenty_app_secret_arn
+
+  cache_engine                 = var.twenty_cache_engine
+  cache_engine_version         = var.twenty_cache_engine_version
+  cache_parameter_group_family = var.twenty_cache_parameter_group_family
+  cache_node_type              = var.twenty_cache_node_type
+  cache_num_cache_clusters     = var.twenty_cache_num_cache_clusters
+  allowed_public_cidr_blocks   = var.twenty_allowed_public_cidr_blocks
+  kms_key_arns                 = var.twenty_kms_key_arns
+
+  depends_on = [terraform_data.twenty_configuration_guardrails]
 }
 
 module "ses" {
