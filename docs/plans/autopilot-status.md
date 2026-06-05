@@ -49,14 +49,15 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md`.
 - Target branch: `main`.
-- Current unit: U1, Extend the cost and budget data model.
-- Current branch: `codex/user-cost-u1`.
-- Current worktree: `.Codex/worktrees/user-cost-u1`.
+- Current unit: U2, Create user attribution and budget enforcement helpers.
+- Current branch: `codex/user-cost-u2`.
+- Current worktree: `.Codex/worktrees/user-cost-u2`.
 - Status: in progress.
 
-| Unit                                 | Branch               | PR                                                           | State     | Notes                                                                                                   |
-| ------------------------------------ | -------------------- | ------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------- |
-| U1 Extend cost and budget data model | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | In review | Uses `0148_user_cost_attribution.sql` because `origin/main` already contains migrations through `0147`. |
+| Unit                                                   | Branch               | PR                                                           | State       | Notes                                                                             |
+| ------------------------------------------------------ | -------------------- | ------------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------- |
+| U1 Extend cost and budget data model                   | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | Merged      | Squash merged as `35cbe18d`; dev migration `0148` applied and drift check passed. |
+| U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | TBD                                                          | In progress | Adds reusable API helpers before runtime propagation in U3.                       |
 
 ### Progress Log
 
@@ -86,6 +87,28 @@ status: in_progress
 - Rebasing onto `origin/main` after PR #2113 merged produced a status-ledger
   conflict only; preserved both workstream entries, reran the focused migration
   test and database typecheck, and pushed the rebased branch.
+- U1 CI passed, PR #2112 was squash merged as `35cbe18d`, the remote branch was
+  deleted, and the local U1 worktree/branch were removed.
+- Created U2 worktree from merged `origin/main`.
+- U2 added `RecordCostParams.userId` / Hindsight `userId` cost attribution,
+  optional user fields for `notifyCostRecorded`, and
+  `user-budget-enforcement` helpers for tenant-owned user validation,
+  month-to-date user budget status, scheduled-job owner resolution, and
+  budget-pausing user-owned scheduled work.
+- Tightened cost writers so supplied user owners are recorded only when the
+  user belongs to the cost event tenant; invalid or cross-tenant user IDs remain
+  tenant spend without user attribution.
+- U2 local verification so far:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/user-budget-enforcement.test.ts src/__tests__/cost-recording.test.ts src/lib/chat-finalize/process-finalize.test.ts` passed;
+  `pnpm --filter @thinkwork/lambda exec vitest run __tests__/job-trigger.skill-run.test.ts` passed;
+  `pnpm --filter @thinkwork/api typecheck` passed;
+  `pnpm --filter @thinkwork/api test` passed;
+  `node node_modules/.pnpm/prettier@3.8.2/node_modules/prettier/bin/prettier.cjs --write <changed supported files>` completed;
+  `git diff --check` passed.
+- U2 CI passed on the first push, but the branch went `BEHIND` after `main`
+  advanced. Rebasing onto `origin/main` was conflict-free; the focused
+  user-budget/cost tests, API typecheck, and `git diff --check` passed before
+  the force-with-lease push.
 
 ### Blockers
 
