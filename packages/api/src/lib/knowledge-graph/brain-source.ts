@@ -19,6 +19,7 @@ import {
 } from "./source-adapters.js";
 
 const DEFAULT_SOURCE_LIMIT = 20;
+const MAX_SOURCE_PACKETS = 50;
 
 export async function loadBrainKnowledgeGraphSource(args: {
   db: Database;
@@ -31,7 +32,7 @@ export async function loadBrainKnowledgeGraphSource(args: {
 }): Promise<KnowledgeGraphSourceBundle> {
   const requestedPageIds = [...new Set(args.pageIds ?? [])].filter(Boolean);
   const limit = Math.max(1, Math.min(args.limit ?? DEFAULT_SOURCE_LIMIT, 50));
-  const pages = await args.db
+  const initialPages = await args.db
     .select({
       id: tenantEntityPages.id,
       type: tenantEntityPages.type,
@@ -55,7 +56,7 @@ export async function loadBrainKnowledgeGraphSource(args: {
     .orderBy(desc(tenantEntityPages.updated_at))
     .limit(limit);
 
-  if (pages.length === 0) {
+  if (initialPages.length === 0) {
     return {
       sourceKind: "brain",
       sourceRef: args.sourceRef,
@@ -70,6 +71,48 @@ export async function loadBrainKnowledgeGraphSource(args: {
     };
   }
 
+  const initialPageIds = initialPages.map((page) => page.id);
+  const initialLinks = await args.db
+    .select({
+      fromPageId: tenantEntityPageLinks.from_page_id,
+      toPageId: tenantEntityPageLinks.to_page_id,
+      kind: tenantEntityPageLinks.kind,
+      context: tenantEntityPageLinks.context,
+    })
+    .from(tenantEntityPageLinks)
+    .where(inArray(tenantEntityPageLinks.from_page_id, initialPageIds));
+  const initialPageIdSet = new Set(initialPageIds);
+  const linkedTargetPageIds = [
+    ...new Set(
+      initialLinks
+        .map((link) => link.toPageId)
+        .filter((pageId) => !initialPageIdSet.has(pageId)),
+    ),
+  ].slice(0, Math.max(0, MAX_SOURCE_PACKETS - initialPages.length));
+  const linkedTargetPages = linkedTargetPageIds.length
+    ? await args.db
+        .select({
+          id: tenantEntityPages.id,
+          type: tenantEntityPages.type,
+          entitySubtype: tenantEntityPages.entity_subtype,
+          slug: tenantEntityPages.slug,
+          title: tenantEntityPages.title,
+          summary: tenantEntityPages.summary,
+          bodyMd: tenantEntityPages.body_md,
+          updatedAt: tenantEntityPages.updated_at,
+        })
+        .from(tenantEntityPages)
+        .where(
+          and(
+            eq(tenantEntityPages.tenant_id, args.tenantId),
+            eq(tenantEntityPages.status, "active"),
+            inArray(tenantEntityPages.id, linkedTargetPageIds),
+          ),
+        )
+        .orderBy(desc(tenantEntityPages.updated_at))
+        .limit(Math.max(1, MAX_SOURCE_PACKETS - initialPages.length))
+    : [];
+  const pages = [...initialPages, ...linkedTargetPages];
   const pageIds = pages.map((page) => page.id);
   const [aliases, sections, links, sources] = await Promise.all([
     args.db
@@ -266,6 +309,8 @@ export async function loadBrainKnowledgeGraphSource(args: {
       untrustedPacketCount: packets.filter(
         (packet) => !packet.trustedOntologyType,
       ).length,
+      expandedLinkedPageCount: linkedTargetPages.length,
+      expandedLinkedPageIds: linkedTargetPages.map((page) => page.id),
     },
   };
 }
