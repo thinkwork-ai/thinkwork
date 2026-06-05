@@ -15,9 +15,9 @@ status: in_progress
 - Current branch: `codex/kg-demo-relationships`.
 - Current worktree: `.Codex/worktrees/kg-demo-relationships`.
 
-| Unit                                            | Branch                        | PR  | State  | Notes                                                                                  |
-| ----------------------------------------------- | ----------------------------- | --- | ------ | -------------------------------------------------------------------------------------- |
-| Expand trusted Wiki/Brain linked target packets | `codex/kg-demo-relationships` | TBD | Active | Source loaders now include one-hop linked target pages before ontology-gated fallback. |
+| Unit                                            | Branch                        | PR                                                           | State  | Notes                                                                                  |
+| ----------------------------------------------- | ----------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
+| Expand trusted Wiki/Brain linked target packets | `codex/kg-demo-relationships` | [#2113](https://github.com/thinkwork-ai/thinkwork/pull/2113) | Active | Source loaders now include one-hop linked target pages before ontology-gated fallback. |
 
 ### Progress Log
 
