@@ -7981,6 +7981,63 @@ export type SettingsUpdateUserProfileMutation = {
   };
 };
 
+export type SettingsUserBudgetStatusQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  userId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsUserBudgetStatusQuery = {
+  __typename?: "Query";
+  userBudgetStatus?: {
+    __typename?: "BudgetStatus";
+    spentUsd: number;
+    remainingUsd: number;
+    percentUsed: number;
+    status: string;
+    policy: {
+      __typename?: "BudgetPolicy";
+      id: string;
+      tenantId: string;
+      userId?: string | null;
+      scope: string;
+      period: string;
+      limitUsd: number;
+      actionOnExceed: string;
+      enabled: boolean;
+    };
+  } | null;
+};
+
+export type SettingsUpsertBudgetPolicyMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  input: UpsertBudgetPolicyInput;
+}>;
+
+export type SettingsUpsertBudgetPolicyMutation = {
+  __typename?: "Mutation";
+  upsertBudgetPolicy: {
+    __typename?: "BudgetPolicy";
+    id: string;
+    tenantId: string;
+    userId?: string | null;
+    scope: string;
+    period: string;
+    limitUsd: number;
+    actionOnExceed: string;
+    enabled: boolean;
+    updatedAt: any;
+  };
+};
+
+export type SettingsDeleteBudgetPolicyMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SettingsDeleteBudgetPolicyMutation = {
+  __typename?: "Mutation";
+  deleteBudgetPolicy: boolean;
+};
+
 export type SettingsUpdateTenantMemberMutationVariables = Exact<{
   id: Scalars["ID"]["input"];
   input: UpdateTenantMemberInput;
@@ -13885,6 +13942,243 @@ export const SettingsUpdateUserProfileDocument = {
 } as unknown as DocumentNode<
   SettingsUpdateUserProfileMutation,
   SettingsUpdateUserProfileMutationVariables
+>;
+export const SettingsUserBudgetStatusDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsUserBudgetStatus" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "userId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "userBudgetStatus" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "userId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "userId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "policy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "tenantId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "userId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "scope" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "period" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "limitUsd" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "actionOnExceed" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "spentUsd" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "remainingUsd" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "percentUsed" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUserBudgetStatusQuery,
+  SettingsUserBudgetStatusQueryVariables
+>;
+export const SettingsUpsertBudgetPolicyDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsUpsertBudgetPolicy" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpsertBudgetPolicyInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "upsertBudgetPolicy" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                { kind: "Field", name: { kind: "Name", value: "scope" } },
+                { kind: "Field", name: { kind: "Name", value: "period" } },
+                { kind: "Field", name: { kind: "Name", value: "limitUsd" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "actionOnExceed" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUpsertBudgetPolicyMutation,
+  SettingsUpsertBudgetPolicyMutationVariables
+>;
+export const SettingsDeleteBudgetPolicyDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsDeleteBudgetPolicy" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "deleteBudgetPolicy" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsDeleteBudgetPolicyMutation,
+  SettingsDeleteBudgetPolicyMutationVariables
 >;
 export const SettingsUpdateTenantMemberDocument = {
   kind: "Document",

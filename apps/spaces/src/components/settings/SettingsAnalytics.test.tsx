@@ -18,11 +18,15 @@ describe("SettingsAnalytics user cost reporting", () => {
     expect(componentSource).not.toContain("CostByAgent");
   });
 
-  it("shows identity, unattributed spend, and user budget state", () => {
+  it("shows identity, system spend, and user budget state", () => {
     expect(componentSource).toContain("userEmail");
     expect(componentSource).toContain("isSystem");
     expect(componentSource).toContain('r.userId ?? "system"');
-    expect(componentSource).toContain("Not assigned");
+    expect(componentSource).toContain('r.isSystem ? "System" : r.userName');
+    expect(componentSource).not.toContain("System / unattributed");
+    expect(componentSource).not.toContain("Not assigned");
+    expect(componentSource).not.toContain("No budget");
+    expect(componentSource).toContain("Unlimited");
     expect(componentSource).toContain("BudgetProgress");
   });
 

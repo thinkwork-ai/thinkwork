@@ -528,6 +528,52 @@ export const SettingsUpdateUserProfileMutation = graphql(`
   }
 `);
 
+export const SettingsUserBudgetStatusQuery = graphql(`
+  query SettingsUserBudgetStatus($tenantId: ID!, $userId: ID!) {
+    userBudgetStatus(tenantId: $tenantId, userId: $userId) {
+      policy {
+        id
+        tenantId
+        userId
+        scope
+        period
+        limitUsd
+        actionOnExceed
+        enabled
+      }
+      spentUsd
+      remainingUsd
+      percentUsed
+      status
+    }
+  }
+`);
+
+export const SettingsUpsertBudgetPolicyMutation = graphql(`
+  mutation SettingsUpsertBudgetPolicy(
+    $tenantId: ID!
+    $input: UpsertBudgetPolicyInput!
+  ) {
+    upsertBudgetPolicy(tenantId: $tenantId, input: $input) {
+      id
+      tenantId
+      userId
+      scope
+      period
+      limitUsd
+      actionOnExceed
+      enabled
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsDeleteBudgetPolicyMutation = graphql(`
+  mutation SettingsDeleteBudgetPolicy($id: ID!) {
+    deleteBudgetPolicy(id: $id)
+  }
+`);
+
 export const SettingsUpdateTenantMemberMutation = graphql(`
   mutation SettingsUpdateTenantMember(
     $id: ID!
