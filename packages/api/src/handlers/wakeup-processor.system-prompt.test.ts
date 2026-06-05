@@ -68,6 +68,9 @@ describe("wakeup processor system prompt capture", () => {
       "current_user_email: currentUserEmail || undefined",
     );
     expect(source).toContain("current_user_name: currentUserName || undefined");
+    expect(source).toContain("checkUserBudgetAndPauseWork");
+    expect(source).toContain("userId: costOwnerUserId ?? null");
+    expect(source).toContain("user_id: costOwnerUserId || undefined");
     expect(source.indexOf("turn_context: runSpaceId")).toBeGreaterThan(-1);
   });
 

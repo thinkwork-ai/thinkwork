@@ -25,6 +25,8 @@ export interface FinalizePayload {
   thread_id: string;
   /** Optional W3C trace ID for cost/observability bookkeeping. */
   trace_id?: string;
+  /** Stable cost owner resolved before runtime dispatch. */
+  cost_owner_user_id?: string | null;
   /** Original user message text (kept short for guardrail-block snapshot). */
   user_message?: string;
   /** Optional model id reported by the runtime (drives cost lookup). */

@@ -65,6 +65,7 @@ import {
   notifyThreadTurnUpdate,
 } from "../lib/chat-finalize/notify.js";
 import { logAgentCorePhase } from "../lib/agentcore-phase-log.js";
+import { checkUserBudgetAndPauseWork } from "../lib/user-budget-enforcement.js";
 
 /**
  * Extract or generate a trace ID for correlating CloudWatch/X-Ray traces.
@@ -756,6 +757,60 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       }
     }
 
+    if (currentUserId) {
+      const budgetStatus = await checkUserBudgetAndPauseWork({
+        tenantId,
+        userId: currentUserId,
+      });
+      if (budgetStatus.overBudget) {
+        const message =
+          budgetStatus.pauseReason ??
+          "User budget exceeded; this turn was not dispatched.";
+        console.log(
+          `[chat-agent-invoke] User ${currentUserId} is over budget, skipping dispatch`,
+        );
+        logAgentCorePhase({
+          source: "chat-agent-invoke",
+          phase: "api.budget_gate",
+          status: "failed",
+          traceId,
+          tenantId,
+          agentId,
+          threadId,
+          threadTurnId: turnId,
+          runtimeType,
+          detail: "user_budget_exceeded",
+        });
+        if (turnId) {
+          await markThreadTurnSetupFailed({
+            turnId,
+            tenantId,
+            threadId,
+            agentId,
+            message,
+          });
+        }
+        const errMsg = await insertAssistantMessage(
+          threadId,
+          tenantId,
+          agentId,
+          message,
+        );
+        if (errMsg) {
+          await notifyNewMessage({
+            messageId: errMsg.id,
+            threadId,
+            tenantId,
+            role: "assistant",
+            content: message,
+            senderType: "agent",
+            senderId: agentId,
+          });
+        }
+        return { ok: false, threadTurnId: turnId };
+      }
+    }
+
     // 2c. Load prior conversation history for this thread from Aurora.
     // The runtime container no longer has a working source of session memory
     // (AgentCore Memory was retired in PRD-41B Phase 3 — store_turn became a
@@ -1186,6 +1241,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       activity_callback_secret:
         THINKWORK_API_SECRET && turnId ? THINKWORK_API_SECRET : undefined,
       thread_turn_id: turnId || undefined,
+      cost_owner_user_id: currentUserId || undefined,
     } as Record<string, unknown>;
 
     if (sandboxPreflight && currentUserId) {
