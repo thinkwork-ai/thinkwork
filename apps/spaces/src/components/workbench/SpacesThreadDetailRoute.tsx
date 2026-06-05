@@ -71,6 +71,11 @@ interface SpacesThreadDetailRouteProps {
   threadId: string;
   backHref?: string;
   documentTitlePrefix?: string;
+  breadcrumbParents?: Array<{
+    label: string;
+    href?: string;
+    search?: Record<string, unknown>;
+  }>;
 }
 
 interface OptimisticAttachmentPreview {
@@ -279,6 +284,7 @@ export function SpacesThreadDetailRoute({
   threadId,
   backHref,
   documentTitlePrefix = "Thread",
+  breadcrumbParents,
 }: SpacesThreadDetailRouteProps) {
   const { tenantId, userId } = useTenant();
   const [optimisticMessage, setOptimisticMessage] =
@@ -1165,16 +1171,18 @@ export function SpacesThreadDetailRoute({
   // titleContent (see AppTopBar/DesktopApplicationHeader). Degrades to the
   // title-only header when the thread has no resolved space yet (R4).
   const spaceLabel = spaceCrumbLabel(routeThread?.space ?? null);
-  const spaceBreadcrumbs = routeThread?.spaceId
-    ? [
-        {
-          label: spaceLabel,
-          href: "/threads",
-          search: { spaceId: routeThread.spaceId, spaceName: spaceLabel },
-        },
-        { label: threadTitle },
-      ]
-    : undefined;
+  const spaceBreadcrumbs = breadcrumbParents
+    ? [...breadcrumbParents, { label: threadTitle }]
+    : routeThread?.spaceId
+      ? [
+          {
+            label: spaceLabel,
+            href: "/threads",
+            search: { spaceId: routeThread.spaceId, spaceName: spaceLabel },
+          },
+          { label: threadTitle },
+        ]
+      : undefined;
 
   usePageHeaderActions({
     backHref,

@@ -65,6 +65,7 @@ export function SettingsHeaderBar() {
               ) : (
                 <Link
                   to={crumb.href}
+                  search={crumb.search}
                   className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {crumb.label}

@@ -385,6 +385,36 @@ describe("SpacesThreadDetailRoute", () => {
     );
   });
 
+  it("uses supplied Settings Activity breadcrumbs for hosted thread detail", () => {
+    render(
+      <SpacesThreadDetailRoute
+        threadId="thread-1"
+        breadcrumbParents={[
+          { label: "Activity", href: "/settings/activity" },
+          {
+            label: "May 31",
+            href: "/settings/activity",
+            search: { day: "2026-05-31" },
+          },
+        ]}
+      />,
+    );
+
+    expect(usePageHeaderActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        breadcrumbs: [
+          { label: "Activity", href: "/settings/activity" },
+          {
+            label: "May 31",
+            href: "/settings/activity",
+            search: { day: "2026-05-31" },
+          },
+          { label: "Route streaming thread" },
+        ],
+      }),
+    );
+  });
+
   it("registers an artifact side-panel header action when the thread has artifacts", () => {
     threadData = {
       thread: {
