@@ -5,7 +5,6 @@ import {
   Brain,
   FolderTree,
   NotebookText,
-  Plug,
   Repeat,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -20,6 +19,7 @@ import {
   IconPlanet,
   IconTopologyStar3,
 } from "@tabler/icons-react";
+import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
 export interface SettingsNavItem {
   label: string;
@@ -55,7 +55,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
-    label: "Skills",
+    label: "Skill Library",
     to: "/settings/skills",
     icon: Sparkles,
     operatorOnly: true,
@@ -69,7 +69,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   {
     label: "MCP Servers",
     to: "/settings/mcp-servers",
-    icon: Plug,
+    icon: ModelContextProtocol,
     operatorOnly: true,
   },
   {

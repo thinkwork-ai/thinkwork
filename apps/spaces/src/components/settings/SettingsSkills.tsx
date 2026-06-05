@@ -61,7 +61,7 @@ export function SettingsSkills() {
 
   return (
     <SettingsTablePane
-      title="Skills"
+      title="Skill Library"
       loading={!skills && !error}
       toolbar={
         error ? (
