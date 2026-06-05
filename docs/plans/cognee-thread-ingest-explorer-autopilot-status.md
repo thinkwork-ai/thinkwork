@@ -6,15 +6,11 @@ Started: 2026-06-04
 
 ## Current Status
 
-- State: in_progress
-- Current unit: U15 - Knowledge graph entity evidence UUID filter hotfix
-- Current branch/worktree:
-  `codex/kg-entity-uuid-filter-fix` /
-  `.Codex/worktrees/kg-entity-uuid-filter-fix`
-- Current PR: [#2092](https://github.com/thinkwork-ai/thinkwork/pull/2092)
-- Blocker: none. U14 merged and deployed successfully; live smoke progressed
-  past `knowledgeGraphGraph`, then exposed the same Drizzle array-cast pattern
-  in `knowledgeGraphEntity`.
+- State: completed
+- Current unit: complete
+- Current branch/worktree: none
+- Current PR: none
+- Blocker: none.
 
 ## Progress Log
 
@@ -432,3 +428,23 @@ operation`. ECS logs showed the precise cause:
   successfully.
 - 2026-06-05: Opened U15 PR
   [#2092](https://github.com/thinkwork-ai/thinkwork/pull/2092).
+- 2026-06-05: U15 PR
+  [#2092](https://github.com/thinkwork-ai/thinkwork/pull/2092) passed required
+  CI and was squash-merged into `main` at
+  `9347a42d39a7a4ad5360c9c753733eb27c6a35d0`; the remote branch was deleted.
+- 2026-06-05: U15 merge-triggered deploy run
+  [26991098610](https://github.com/thinkwork-ai/thinkwork/actions/runs/26991098610)
+  passed end to end. The workflow rebuilt and deployed the Pi container,
+  rebuilt and pushed the custom Cognee Bedrock image, applied Terraform,
+  deployed admin/docs, updated AgentCore runtimes, and completed deploy summary
+  checks.
+- 2026-06-05: Final live deployed smoke against dev thread
+  `81e6f391-a2d1-45be-98e1-d4fbb7d78878` passed with forced ingest run
+  `d5b47869-102b-46a0-95f7-c77d37ce99f2`: Cognee returned dataset
+  `thinkwork:0015953e-aa13-4cab-8398-2e70f73dda63:thread:81e6f391-a2d1-45be-98e1-d4fbb7d78878`,
+  `6` entities, `8` relationships, graph node/edge reads, and a successful
+  entity detail read.
+- 2026-06-05: Autopilot implementation is complete. All implementation units
+  and follow-up hotfix units are merged to `main`; required PR CI and
+  merge-triggered deploys passed; live deployed smoke passed; no blockers
+  remain.
