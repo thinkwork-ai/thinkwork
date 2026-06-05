@@ -67,6 +67,7 @@ jobs:
               - '.github/workflows/deploy.yml'
             terraform:
               - 'terraform/**'
+              - 'packages/cognee/**'
             workspace_defaults:
               - 'packages/workspace-defaults/files/**'
               # Customer Onboarding Space source files are seeded by the same
@@ -410,6 +411,29 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+        if: ${{ vars.COGNEE_ENABLED == 'true' && vars.COGNEE_IMAGE_URI == '' }}
+
+      - uses: docker/setup-buildx-action@v3
+        if: ${{ vars.COGNEE_ENABLED == 'true' && vars.COGNEE_IMAGE_URI == '' }}
+
+      - name: Build and push Cognee Bedrock image
+        id: cognee_image
+        if: ${{ vars.COGNEE_ENABLED == 'true' && vars.COGNEE_IMAGE_URI == '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/cognee/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-cognee
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:cognee-latest
+          cache-from: type=gha,scope=cognee
+          cache-to: type=gha,scope=cognee,mode=max
+          provenance: false
+
       - uses: hashicorp/setup-terraform@v3
 
       - uses: actions/download-artifact@v4
@@ -568,6 +592,8 @@ jobs:
           COGNEE_LLM_PROVIDER_INPUT: ${{ vars.COGNEE_LLM_PROVIDER || 'bedrock' }}
           COGNEE_EMBEDDING_PROVIDER_INPUT: ${{ vars.COGNEE_EMBEDDING_PROVIDER || 'bedrock' }}
           COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT: ${{ vars.COGNEE_BEDROCK_MODEL_RESOURCE_ARNS || '' }}
+          COGNEE_BUILT_IMAGE_DIGEST: ${{ steps.cognee_image.outputs.digest || '' }}
+          COGNEE_BUILT_IMAGE_REPOSITORY: ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore
         run: |
           set -euo pipefail
 
@@ -577,7 +603,13 @@ jobs:
             exit 1
           fi
 
-          cognee_image_uri="${COGNEE_IMAGE_URI_INPUT:-cognee/cognee@sha256:5ce7e4052b1d16738d1e24476d64847fcb5b1666631b642651e8ccce414046f8}"
+          if [ -n "$COGNEE_IMAGE_URI_INPUT" ]; then
+            cognee_image_uri="$COGNEE_IMAGE_URI_INPUT"
+          elif [ -n "${COGNEE_BUILT_IMAGE_DIGEST:-}" ] && [ -n "${COGNEE_BUILT_IMAGE_REPOSITORY:-}" ]; then
+            cognee_image_uri="${COGNEE_BUILT_IMAGE_REPOSITORY}@${COGNEE_BUILT_IMAGE_DIGEST}"
+          else
+            cognee_image_uri="cognee/cognee@sha256:5ce7e4052b1d16738d1e24476d64847fcb5b1666631b642651e8ccce414046f8"
+          fi
           cognee_db_username="${COGNEE_DB_USERNAME_INPUT:-thinkwork_cognee}"
           cognee_db_name="${COGNEE_DB_NAME_INPUT:-thinkwork_cognee}"
           cognee_backend_mode="${COGNEE_BACKEND_MODE_INPUT:-dogfood}"
