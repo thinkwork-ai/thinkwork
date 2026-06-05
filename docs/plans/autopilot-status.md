@@ -54,9 +54,9 @@ status: in_progress
 - Current worktree: `.Codex/worktrees/user-cost-u1`.
 - Status: in progress.
 
-| Unit                                 | Branch               | PR  | State       | Notes                                                                                                   |
-| ------------------------------------ | -------------------- | --- | ----------- | ------------------------------------------------------------------------------------------------------- |
-| U1 Extend cost and budget data model | `codex/user-cost-u1` | TBD | In progress | Uses `0148_user_cost_attribution.sql` because `origin/main` already contains migrations through `0147`. |
+| Unit                                 | Branch               | PR                                                           | State     | Notes                                                                                                   |
+| ------------------------------------ | -------------------- | ------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------- |
+| U1 Extend cost and budget data model | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | In review | Uses `0148_user_cost_attribution.sql` because `origin/main` already contains migrations through `0147`. |
 
 ### Progress Log
 
@@ -74,7 +74,7 @@ status: in_progress
 
 ### CI / PR
 
-- No PR opened yet.
+- Opened [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112).
 
 ### Blockers
 
