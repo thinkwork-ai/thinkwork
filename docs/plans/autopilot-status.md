@@ -62,7 +62,7 @@ status: in_progress
 | U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | Merged      | Squash merged as `d045346f`; runtime paths propagate user ownership and gates.    |
 | U4 Add user-first GraphQL cost and budget APIs         | `codex/user-cost-u4` | [#2118](https://github.com/thinkwork-ai/thinkwork/pull/2118) | Merged      | Squash merged as `b92e6585`; user-first cost and budget GraphQL APIs landed.      |
 | U5 Update Settings/Admin analytics user cost surfaces  | `codex/user-cost-u5` | [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121) | Merged      | Squash merged as `8b14d9bd`; user analytics and budget reporting landed.          |
-| U6 Update CLI reporting, codegen, docs, compatibility  | `codex/user-cost-u6` | TBD                                                          | In progress | Adds CLI user cost reporting, user budget policy flags, and updated docs.         |
+| U6 Update CLI reporting, codegen, docs, compatibility  | `codex/user-cost-u6` | [#2123](https://github.com/thinkwork-ai/thinkwork/pull/2123) | In progress | Adds CLI user cost reporting, user budget policy flags, and updated docs.         |
 
 ### Progress Log
 
@@ -201,6 +201,7 @@ __tests__/migration-0148.test.ts` and
   `pnpm --filter thinkwork-cli build`;
   `pnpm --filter @thinkwork/docs build`;
   and `git diff --check`.
+- Opened U6 PR [#2123](https://github.com/thinkwork-ai/thinkwork/pull/2123).
 
 ### Blockers
 
