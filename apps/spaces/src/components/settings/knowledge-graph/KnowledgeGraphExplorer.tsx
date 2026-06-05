@@ -45,6 +45,40 @@ type IngestRun = NonNullable<ThreadCandidate["lastIngestRun"]>;
 
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
 
+interface DropDiagnostics {
+  cogneeNodeCount: number;
+  cogneeEdgeCount: number;
+  droppedNodeCount: number;
+  droppedEdgeCount: number;
+  structuralNodeCount: number;
+  unapprovedNodeCount: number;
+  orphanRelationshipCount: number;
+  unapprovedRelationshipCount: number;
+  incompatibleRelationshipCount: number;
+  droppedNodeSamples: DroppedNodeSample[];
+  droppedEdgeSamples: DroppedEdgeSample[];
+}
+
+interface DroppedNodeSample {
+  id: string;
+  label: string;
+  rawType: string | null;
+  dropReason: string;
+  propertyKeys: string[];
+}
+
+interface DroppedEdgeSample {
+  id: string | null;
+  label: string;
+  rawType: string | null;
+  sourceId: string;
+  sourceLabel: string | null;
+  targetId: string;
+  targetLabel: string | null;
+  dropReason: string;
+  propertyKeys: string[];
+}
+
 export function KnowledgeGraphExplorer({
   threadSheetOpen,
   onThreadSheetOpenChange,
@@ -623,6 +657,16 @@ function ThreadIngestDetailView({
       </div>
 
       {run ? (
+        <>
+          {shouldShowDropDiagnostics(run, entities) ? (
+            <IngestDropDiagnostics
+              metrics={parseDropDiagnostics(run.metrics)}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {run ? (
         <div className="h-80 overflow-hidden rounded-lg border border-border">
           <KnowledgeGraph
             tenantId={tenantId}
@@ -639,6 +683,241 @@ function ThreadIngestDetailView({
       ) : null}
     </div>
   );
+}
+
+function shouldShowDropDiagnostics(run: IngestRun, entities: EntityRow[]) {
+  const metrics = parseDropDiagnostics(run.metrics);
+  return run.entityCount === 0 && entities.length === 0 && metrics !== null;
+}
+
+function IngestDropDiagnostics({
+  metrics,
+}: {
+  metrics: DropDiagnostics | null;
+}) {
+  if (!metrics) return null;
+
+  const hasRawGraph =
+    metrics.cogneeNodeCount > 0 || metrics.cogneeEdgeCount > 0;
+  const nodeRows = metrics.droppedNodeSamples;
+  const edgeRows = metrics.droppedEdgeSamples;
+
+  return (
+    <div className="grid gap-3 rounded-md border border-border bg-card p-3">
+      <div className="grid gap-1">
+        <p className="text-sm font-medium">Ontology gate diagnostics</p>
+        <p className="text-xs leading-5 text-muted-foreground">
+          {hasRawGraph
+            ? `Cognee returned ${metrics.cogneeNodeCount} raw nodes and ${metrics.cogneeEdgeCount} raw links, but none became approved ThinkWork ontology entities.`
+            : "Cognee did not return a raw graph for this ingest."}
+        </p>
+      </div>
+
+      {hasRawGraph ? (
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+          <MetricPill
+            label="Unapproved nodes"
+            value={metrics.unapprovedNodeCount}
+          />
+          <MetricPill
+            label="Structural nodes"
+            value={metrics.structuralNodeCount}
+          />
+          <MetricPill
+            label="Orphan links"
+            value={metrics.orphanRelationshipCount}
+          />
+          <MetricPill
+            label="Rejected links"
+            value={
+              metrics.unapprovedRelationshipCount +
+              metrics.incompatibleRelationshipCount
+            }
+          />
+        </div>
+      ) : null}
+
+      {nodeRows.length ? (
+        <DiagnosticSampleTable
+          title="Dropped nodes"
+          rows={nodeRows.map((node) => ({
+            id: node.id,
+            primary: node.label,
+            secondary: node.rawType ?? "unknown type",
+            reason: formatDropReason(node.dropReason),
+            properties: node.propertyKeys.join(", "),
+          }))}
+        />
+      ) : null}
+
+      {edgeRows.length ? (
+        <DiagnosticSampleTable
+          title="Dropped links"
+          rows={edgeRows.map((edge) => ({
+            id: edge.id ?? `${edge.sourceId}-${edge.targetId}-${edge.label}`,
+            primary: `${edge.sourceLabel ?? edge.sourceId} -> ${
+              edge.targetLabel ?? edge.targetId
+            }`,
+            secondary: edge.rawType ?? edge.label,
+            reason: formatDropReason(edge.dropReason),
+            properties: edge.propertyKeys.join(", "),
+          }))}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function MetricPill({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0 rounded-md border border-border/70 px-2 py-1">
+      <div className="truncate text-muted-foreground">{label}</div>
+      <div className="font-medium tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function DiagnosticSampleTable({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: {
+    id: string;
+    primary: string;
+    secondary: string;
+    reason: string;
+    properties: string;
+  }[];
+}) {
+  return (
+    <div className="min-w-0 overflow-hidden rounded-md border border-border/70">
+      <div className="border-b border-border/70 px-2 py-1.5 text-xs font-medium">
+        {title}
+      </div>
+      <div className="divide-y divide-border/70">
+        {rows.map((row) => (
+          <div
+            key={row.id}
+            className="grid min-w-0 grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)] gap-2 px-2 py-2 text-xs"
+          >
+            <div className="min-w-0">
+              <div className="truncate font-medium">{row.primary}</div>
+              <div className="truncate text-muted-foreground">
+                {row.properties || "no properties"}
+              </div>
+            </div>
+            <div className="min-w-0 truncate text-muted-foreground">
+              {row.secondary}
+            </div>
+            <div className="min-w-0 truncate">{row.reason}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function parseDropDiagnostics(value: unknown): DropDiagnostics | null {
+  const record = parseJsonRecord(value);
+  if (!record) return null;
+  const metrics = {
+    cogneeNodeCount: readMetricNumber(record.cogneeNodeCount),
+    cogneeEdgeCount: readMetricNumber(record.cogneeEdgeCount),
+    droppedNodeCount: readMetricNumber(record.droppedNodeCount),
+    droppedEdgeCount: readMetricNumber(record.droppedEdgeCount),
+    structuralNodeCount: readMetricNumber(record.structuralNodeCount),
+    unapprovedNodeCount: readMetricNumber(record.unapprovedNodeCount),
+    orphanRelationshipCount: readMetricNumber(record.orphanRelationshipCount),
+    unapprovedRelationshipCount: readMetricNumber(
+      record.unapprovedRelationshipCount,
+    ),
+    incompatibleRelationshipCount: readMetricNumber(
+      record.incompatibleRelationshipCount,
+    ),
+    droppedNodeSamples: readDroppedNodeSamples(record.droppedNodeSamples),
+    droppedEdgeSamples: readDroppedEdgeSamples(record.droppedEdgeSamples),
+  } satisfies DropDiagnostics;
+
+  if (
+    metrics.cogneeNodeCount === 0 &&
+    metrics.cogneeEdgeCount === 0 &&
+    metrics.droppedNodeCount === 0 &&
+    metrics.droppedEdgeCount === 0
+  ) {
+    return null;
+  }
+  return metrics;
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return isRecord(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return isRecord(value) ? value : null;
+}
+
+function readDroppedNodeSamples(value: unknown): DroppedNodeSample[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isRecord)
+    .slice(0, 12)
+    .map((node) => ({
+      id: readString(node.id, "unknown-node"),
+      label: readString(node.label, "Unknown node"),
+      rawType: readNullableString(node.rawType),
+      dropReason: readString(node.dropReason, "unknown"),
+      propertyKeys: readStringArray(node.propertyKeys),
+    }));
+}
+
+function readDroppedEdgeSamples(value: unknown): DroppedEdgeSample[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isRecord)
+    .slice(0, 12)
+    .map((edge) => ({
+      id: readNullableString(edge.id),
+      label: readString(edge.label, "unknown link"),
+      rawType: readNullableString(edge.rawType),
+      sourceId: readString(edge.sourceId, "unknown-source"),
+      sourceLabel: readNullableString(edge.sourceLabel),
+      targetId: readString(edge.targetId, "unknown-target"),
+      targetLabel: readNullableString(edge.targetLabel),
+      dropReason: readString(edge.dropReason, "unknown"),
+      propertyKeys: readStringArray(edge.propertyKeys),
+    }));
+}
+
+function readMetricNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function readString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function readNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function formatDropReason(value: string) {
+  return value.replace(/_/g, " ");
 }
 
 function TrustBadge({

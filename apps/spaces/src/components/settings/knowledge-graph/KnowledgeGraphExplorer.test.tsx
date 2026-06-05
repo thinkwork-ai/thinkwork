@@ -73,7 +73,11 @@ describe("KnowledgeGraphExplorer", () => {
     expect(explorerSource).toContain("Thread Detail");
     expect(explorerSource).toContain("ThreadIngestDetailView");
     expect(explorerSource).toContain("Ingest thread");
+    expect(explorerSource).toContain("Ontology gate diagnostics");
+    expect(explorerSource).toContain("droppedNodeSamples");
+    expect(explorerSource).toContain("droppedEdgeSamples");
     expect(explorerSource).toContain("runId={run.id}");
+    expect(explorerSource).toContain("run.metrics");
     expect(ingestSource).toContain("Search threads");
     expect(ingestSource).toContain("DataTable");
     expect(ingestSource).toContain("pageSize={0}");

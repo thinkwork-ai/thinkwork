@@ -106,6 +106,7 @@ export const SettingsKnowledgeGraphThreadCandidatesQuery = graphql(`
         evidenceCount
         diagnosticCount
         messageCount
+        metrics
         durationMs
         error
         createdAt
@@ -138,6 +139,7 @@ export const SettingsKnowledgeGraphIngestRunsQuery = graphql(`
       evidenceCount
       diagnosticCount
       messageCount
+      metrics
       durationMs
       error
       createdAt
@@ -253,6 +255,7 @@ export const SettingsStartKnowledgeGraphThreadIngestMutation = graphql(`
       evidenceCount
       diagnosticCount
       messageCount
+      metrics
       durationMs
       error
       createdAt
