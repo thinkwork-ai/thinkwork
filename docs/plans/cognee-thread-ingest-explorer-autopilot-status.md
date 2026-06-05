@@ -11,7 +11,7 @@ Started: 2026-06-04
 - Current branch/worktree:
   `codex/kg-graph-uuid-filter-fix` /
   `.Codex/worktrees/kg-graph-uuid-filter-fix`
-- Current PR: pending
+- Current PR: [#2091](https://github.com/thinkwork-ai/thinkwork/pull/2091)
 - Blocker: none. U13 merged and deployed successfully; live smoke proved
   Cognee ingestion now succeeds, then exposed a GraphQL read-path SQL cast bug
   in `knowledgeGraphGraph`.
@@ -401,3 +401,5 @@ operation`. ECS logs showed the precise cause:
   logged a local optional `canvas` native build failure under Node 25 because
   `pkg-config` is unavailable, but pnpm completed and the targeted API tests
   and typecheck ran successfully.
+- 2026-06-05: Opened U14 PR
+  [#2091](https://github.com/thinkwork-ai/thinkwork/pull/2091).
