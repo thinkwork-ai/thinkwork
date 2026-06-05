@@ -35,6 +35,9 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
+import { SkillMenu, type SkillOption } from "@/components/spaces/SkillMenu";
+import { useComposerSkillPins } from "@/components/workbench/useComposerSkillPins";
+import { SkillPinChips } from "@/components/workbench/SkillPinChips";
 import { toast } from "sonner";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { cn } from "@/lib/utils";
@@ -64,8 +67,11 @@ interface SpacesComposerProps {
     files: File[],
     mentions: SpacesComposerMention[],
     agentRequested: boolean,
+    pinnedSkills: string[],
   ) => void;
   mentionTargets?: MentionTarget[];
+  /** Tenant skill catalog for the `/skill` force-pin popup. */
+  skillCatalog?: SkillOption[];
   spaces?: SpacesComposerSpaceOption[];
   selectedSpaceId?: string | null;
   selectedSpaceIsDefault?: boolean;
@@ -94,6 +100,7 @@ export function SpacesComposer({
   onChange,
   onSubmit,
   mentionTargets = [],
+  skillCatalog = [],
   spaces = [],
   selectedSpaceId,
   selectedSpaceIsDefault = true,
@@ -103,6 +110,11 @@ export function SpacesComposer({
   error,
 }: SpacesComposerProps) {
   const [mentions, setMentions] = useState<SpacesComposerMention[]>([]);
+  const skillPins = useComposerSkillPins({
+    value,
+    onChange,
+    catalog: skillCatalog,
+  });
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const spacePickerColorClass = selectedSpaceIsDefault
     ? "text-muted-foreground hover:text-foreground"
@@ -201,8 +213,14 @@ export function SpacesComposer({
     const submittedMentions = mentions.filter((mention) =>
       value.includes(mention.rawText),
     );
-    onSubmit(files, submittedMentions, effectiveAgentEnabled);
+    onSubmit(
+      files,
+      submittedMentions,
+      effectiveAgentEnabled,
+      skillPins.pins.map((pin) => pin.slug),
+    );
     setMentions([]);
+    skillPins.clearPins();
     // Fresh draft after send: drop the manual override so the next new thread
     // starts from the derived default again.
     agentOverriddenRef.current = false;
@@ -231,7 +249,12 @@ export function SpacesComposer({
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (!mentionMenuOpen) return;
+    // `@` and `/` menus are mutually exclusive (different trigger chars). When
+    // the mention menu isn't open, let the skill-pin menu handle navigation.
+    if (!mentionMenuOpen) {
+      skillPins.handleKeyDown(event);
+      return;
+    }
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -279,6 +302,15 @@ export function SpacesComposer({
             onSelect={selectMention}
           />
         ) : null}
+        {!mentionMenuOpen && skillPins.menuOpen ? (
+          <SkillMenu
+            options={skillPins.options}
+            query={skillPins.slashQuery ?? ""}
+            activeIndex={skillPins.activeIndex}
+            placement="bottom"
+            onSelect={skillPins.selectSkill}
+          />
+        ) : null}
         <PromptInput
           // One consistent "normal" look in every state — same visible border
           // whether empty, filled, or focused, no dim fill, and no focus ring.
@@ -301,13 +333,20 @@ export function SpacesComposer({
             <PromptInputAttachments>
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
+            {skillPins.pins.length > 0 ? (
+              <SkillPinChips
+                pins={skillPins.pins}
+                onRemove={skillPins.removePin}
+                className="px-3 pt-2"
+              />
+            ) : null}
             <PromptInputTextarea
               ref={textareaRef}
               aria-label="Send message"
               value={value}
               onChange={(event) => onChange(event.target.value)}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type @ to mention a person or agent"
+              placeholder="Type @ to mention or / to pin a skill"
               disabled={isComposerDisabled}
               autoFocus
             />

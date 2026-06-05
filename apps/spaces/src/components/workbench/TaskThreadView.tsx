@@ -107,6 +107,9 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
+import { SkillMenu, type SkillOption } from "@/components/spaces/SkillMenu";
+import { useComposerSkillPins } from "@/components/workbench/useComposerSkillPins";
+import { SkillPinChips } from "@/components/workbench/SkillPinChips";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
@@ -190,12 +193,14 @@ interface TaskThreadViewProps {
   runbookQueues?: RunbookQueueData[];
   isSending?: boolean;
   mentionTargets?: MentionTarget[];
+  skillCatalog?: SkillOption[];
   currentUser?: CurrentUserIdentity | null;
   onSendFollowUp?: (
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
+    pinnedSkills?: string[],
   ) => Promise<void> | void;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
@@ -318,6 +323,7 @@ export function TaskThreadView({
   runbookQueues = [],
   isSending = false,
   mentionTargets = [],
+  skillCatalog = [],
   currentUser,
   onSendFollowUp,
   artifactPanelState,
@@ -491,6 +497,7 @@ export function TaskThreadView({
               disabled={!onSendFollowUp || isSending}
               isSending={isSending}
               mentionTargets={mentionTargets}
+              skillCatalog={skillCatalog}
               threadMessages={thread.messages}
               currentUserId={currentUser?.id ?? null}
               prefill={composerPrefill}
@@ -2235,6 +2242,7 @@ function FollowUpComposer({
   disabled,
   isSending,
   mentionTargets,
+  skillCatalog = [],
   threadMessages,
   currentUserId,
   prefill,
@@ -2245,6 +2253,7 @@ function FollowUpComposer({
   disabled?: boolean;
   isSending?: boolean;
   mentionTargets: MentionTarget[];
+  skillCatalog?: SkillOption[];
   threadMessages?: TaskThreadMessage[];
   currentUserId?: string | null;
   prefill?: { text: string; token: number } | null;
@@ -2253,11 +2262,17 @@ function FollowUpComposer({
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
+    pinnedSkills?: string[],
   ) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
+  const skillPins = useComposerSkillPins({
+    value: composer.text,
+    onChange: composer.setText,
+    catalog: skillCatalog,
+  });
   const agentDefaultOn = useMemo(
     () =>
       deriveAgentDefault({
@@ -2399,9 +2414,16 @@ function FollowUpComposer({
       const submittedMentions = mentions.filter((mention) =>
         content.includes(mention.rawText),
       );
-      await onSubmit(content, files, submittedMentions, effectiveAgentEnabled);
+      await onSubmit(
+        content,
+        files,
+        submittedMentions,
+        effectiveAgentEnabled,
+        skillPins.pins.map((pin) => pin.slug),
+      );
       composer.clear();
       setMentions([]);
+      skillPins.clearPins();
     } catch (err) {
       composer.setError(err instanceof Error ? err.message : "Failed to send");
     } finally {
@@ -2445,7 +2467,12 @@ function FollowUpComposer({
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (!mentionMenuOpen) return;
+    // `@` and `/` menus are mutually exclusive. When the mention menu isn't
+    // open, hand navigation to the skill-pin menu.
+    if (!mentionMenuOpen) {
+      skillPins.handleKeyDown(event);
+      return;
+    }
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -2496,6 +2523,15 @@ function FollowUpComposer({
             onSelect={selectMention}
           />
         ) : null}
+        {!mentionMenuOpen && skillPins.menuOpen ? (
+          <SkillMenu
+            options={skillPins.options}
+            query={skillPins.slashQuery ?? ""}
+            activeIndex={skillPins.activeIndex}
+            placement="top"
+            onSelect={skillPins.selectSkill}
+          />
+        ) : null}
         <PromptInput
           className={cn(
             "text-white motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:!ring-0 [&_[data-slot=input-group]]:focus-within:border-white/10 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
@@ -2514,6 +2550,13 @@ function FollowUpComposer({
             <PromptInputAttachments>
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
+            {skillPins.pins.length > 0 ? (
+              <SkillPinChips
+                pins={skillPins.pins}
+                onRemove={skillPins.removePin}
+                className="px-3 pt-2"
+              />
+            ) : null}
             <PromptInputTextarea
               ref={textareaRef}
               aria-label="Follow up"
