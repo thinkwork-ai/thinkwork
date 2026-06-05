@@ -49,16 +49,17 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md`.
 - Target branch: `main`.
-- Current unit: U3, Propagate user ownership through runtime and background cost paths.
-- Current branch: `codex/user-cost-u3`.
-- Current worktree: `.Codex/worktrees/user-cost-u3`.
+- Current unit: U4, Add user-first GraphQL cost and budget APIs.
+- Current branch: `codex/user-cost-u4`.
+- Current worktree: `.Codex/worktrees/user-cost-u4`.
 - Status: in progress.
 
 | Unit                                                   | Branch               | PR                                                           | State       | Notes                                                                             |
 | ------------------------------------------------------ | -------------------- | ------------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------- |
 | U1 Extend cost and budget data model                   | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | Merged      | Squash merged as `35cbe18d`; dev migration `0148` applied and drift check passed. |
 | U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | [#2115](https://github.com/thinkwork-ai/thinkwork/pull/2115) | Merged      | Squash merged as `3a5a6d3`; reusable cost owner and user-budget helpers landed.   |
-| U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | In progress | Foreground chat, wakeups, finalize, job-trigger, and monthly reset propagation.   |
+| U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | Merged      | Squash merged as `d045346f`; runtime paths propagate user ownership and gates.    |
+| U4 Add user-first GraphQL cost and budget APIs         | `codex/user-cost-u4` | TBD                                                          | In progress | Adds costByUser, user budget status/policy support, and user budget unpause APIs. |
 
 ### Progress Log
 
@@ -132,6 +133,33 @@ status: in_progress
   `pnpm --filter @thinkwork/lambda test`;
   `node node_modules/.pnpm/prettier@3.8.2/node_modules/prettier/bin/prettier.cjs --write <changed supported files>`;
   and `git diff --check`.
+- U3 PR #2117 CI passed after a clean rebase onto `origin/main`; it was squash
+  merged as `d045346f`, the remote branch was deleted, and the local U3
+  worktree/branch were removed.
+- Created U4 worktree from merged `origin/main`.
+- U4 adds user-first GraphQL APIs for cost reporting and budget controls:
+  `costByUser`, `userBudgetStatus`, user-scoped `upsertBudgetPolicy`, and
+  `unpauseUserBudget`.
+- U4 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/costs/costByUser.query.test.ts src/graphql/resolvers/costs/budgetStatus.query.test.ts src/graphql/resolvers/costs/upsertBudgetPolicy.mutation.test.ts src/graphql/resolvers/costs/userBudgetStatus.query.test.ts src/graphql/resolvers/costs/unpauseUserBudget.mutation.test.ts src/__tests__/graphql-contract.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter thinkwork-cli typecheck`;
+  `pnpm --filter @thinkwork/admin build`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/mobile test`;
+  `pnpm --filter @thinkwork/api test`;
+  `pnpm schema:build`;
+  codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/spaces`,
+  and `@thinkwork/mobile`;
+  generated GraphQL clients were formatted with Prettier; and
+  `git diff --check` passed.
+- Opened U4 PR [#2118](https://github.com/thinkwork-ai/thinkwork/pull/2118).
+  Initial CI test failed because the migration 0148 GraphQL contract still
+  asserted the U1-only API shape. Updated it to expect the U4 user reporting
+  and budget fields; `pnpm --filter @thinkwork/database-pg exec vitest run
+__tests__/migration-0148.test.ts` and
+  `pnpm --filter @thinkwork/database-pg test` passed locally before pushing
+  the fix.
 
 ### Blockers
 

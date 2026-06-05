@@ -137,13 +137,14 @@ describe("migration 0148 — user cost attribution", () => {
     );
   });
 
-  it("exposes user cost attribution fields in GraphQL source types", () => {
+  it("exposes user cost attribution and user budget APIs in GraphQL source types", () => {
     expect(costTypes).toMatch(/type CostEvent[\s\S]*userId: ID/);
     expect(costTypes).toMatch(/type BudgetPolicy[\s\S]*userId: ID/);
-    expect(costTypes).not.toMatch(
-      /input UpsertBudgetPolicyInput[\s\S]*userId: ID/,
-    );
-    expect(costTypes).not.toContain("type UserCostSummary");
+    expect(costTypes).toMatch(/input UpsertBudgetPolicyInput[\s\S]*userId: ID/);
+    expect(costTypes).toContain("type UserCostSummary");
+    expect(costTypes).toContain("costByUser(");
+    expect(costTypes).toContain("userBudgetStatus(");
+    expect(costTypes).toContain("unpauseUserBudget(");
     expect(subscriptionTypes).toMatch(
       /type CostRecordedEvent[\s\S]*userId: ID/,
     );
@@ -159,10 +160,11 @@ describe("migration 0148 — user cost attribution", () => {
     );
   });
 
-  it("keeps generated GraphQL clients aligned with the U1 contract", () => {
+  it("keeps generated GraphQL clients aligned with user cost and budget APIs", () => {
     for (const generated of generatedGraphqlFiles) {
       const budgetPolicy = generatedTypeBlock(generated, "BudgetPolicy");
       const scheduledJob = generatedTypeBlock(generated, "ScheduledJob");
+      const userCostSummary = generatedTypeBlock(generated, "UserCostSummary");
       const upsertBudgetPolicyInput = generatedTypeBlock(
         generated,
         "UpsertBudgetPolicyInput",
@@ -180,8 +182,18 @@ describe("migration 0148 — user cost attribution", () => {
       expect(scheduledJob).toMatch(
         /budgetPausedReason\?: Maybe<Scalars\["String"\]\["output"\]>/,
       );
-      expect(generated).not.toContain("export type UserCostSummary");
-      expect(upsertBudgetPolicyInput).not.toContain("userId");
+      expect(userCostSummary).toMatch(
+        /userId\?: Maybe<Scalars\["ID"\]\["output"\]>/,
+      );
+      expect(userCostSummary).toMatch(
+        /userName: Scalars\["String"\]\["output"\]/,
+      );
+      expect(userCostSummary).toMatch(
+        /isSystem: Scalars\["Boolean"\]\["output"\]/,
+      );
+      expect(upsertBudgetPolicyInput).toMatch(
+        /userId\?: InputMaybe<Scalars\["ID"\]\["input"\]>/,
+      );
     }
   });
 

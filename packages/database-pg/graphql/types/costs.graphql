@@ -37,6 +37,15 @@ type AgentCostSummary {
   eventCount: Int!
 }
 
+type UserCostSummary {
+  userId: ID
+  userName: String!
+  userEmail: String
+  totalUsd: Float!
+  eventCount: Int!
+  isSystem: Boolean!
+}
+
 type ModelCostSummary {
   model: String!
   totalUsd: Float!
@@ -80,6 +89,7 @@ type BudgetStatus {
 input UpsertBudgetPolicyInput {
   scope: String!
   agentId: ID
+  userId: ID
   limitUsd: Float!
   actionOnExceed: String
   period: String
@@ -94,6 +104,11 @@ extend type Query {
     from: AWSDateTime
     to: AWSDateTime
   ): [AgentCostSummary!]!
+  costByUser(
+    tenantId: ID!
+    from: AWSDateTime
+    to: AWSDateTime
+  ): [UserCostSummary!]!
   costByModel(
     tenantId: ID!
     from: AWSDateTime
@@ -102,6 +117,7 @@ extend type Query {
   costTimeSeries(tenantId: ID!, days: Int): [DailyCostPoint!]!
   budgetPolicies(tenantId: ID!): [BudgetPolicy!]!
   budgetStatus(tenantId: ID!): [BudgetStatus!]!
+  userBudgetStatus(tenantId: ID!, userId: ID!): BudgetStatus
   agentBudgetStatus(agentId: ID!): BudgetStatus
 }
 
@@ -112,4 +128,5 @@ extend type Mutation {
   ): BudgetPolicy!
   deleteBudgetPolicy(id: ID!): Boolean!
   unpauseAgent(agentId: ID!): Agent!
+  unpauseUserBudget(tenantId: ID!, userId: ID!): Int!
 }

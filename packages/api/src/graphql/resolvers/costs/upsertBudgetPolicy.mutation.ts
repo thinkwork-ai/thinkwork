@@ -1,5 +1,12 @@
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, and, budgetPolicies, snakeToCamel } from "../../utils.js";
+import {
+  db,
+  eq,
+  and,
+  budgetPolicies,
+  users,
+  snakeToCamel,
+} from "../../utils.js";
 
 export const upsertBudgetPolicy = async (
   _parent: any,
@@ -9,8 +16,23 @@ export const upsertBudgetPolicy = async (
   const i = args.input;
   const scope = i.scope;
   const agentId = scope === "agent" ? i.agentId : null;
+  const userId = scope === "user" ? i.userId : null;
   if (scope === "agent" && !agentId)
     throw new Error("agentId required for agent-scope policy");
+  if (scope === "user" && !userId)
+    throw new Error("userId required for user-scope policy");
+  if (!["tenant", "agent", "user"].includes(scope)) {
+    throw new Error("scope must be tenant, agent, or user");
+  }
+
+  if (userId) {
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.id, userId), eq(users.tenant_id, args.tenantId)))
+      .limit(1);
+    if (!user) throw new Error("userId must belong to tenant");
+  }
 
   // Check for existing policy to update
   const existingConditions = [
@@ -19,6 +41,9 @@ export const upsertBudgetPolicy = async (
   ];
   if (agentId) {
     existingConditions.push(eq(budgetPolicies.agent_id, agentId));
+  }
+  if (userId) {
+    existingConditions.push(eq(budgetPolicies.user_id, userId));
   }
   const [existing] = await db
     .select()
@@ -46,6 +71,7 @@ export const upsertBudgetPolicy = async (
     .values({
       tenant_id: args.tenantId,
       agent_id: agentId,
+      user_id: userId,
       scope,
       period: i.period || "monthly",
       limit_usd: String(i.limitUsd),
