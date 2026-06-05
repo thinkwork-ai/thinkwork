@@ -22,6 +22,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { costEvents, modelCatalog } from "@thinkwork/database-pg/schema";
 import { randomUUID } from "node:crypto";
+import { resolveTenantUserCostOwner } from "./user-budget-enforcement.js";
 
 const db = getDb();
 
@@ -85,6 +86,7 @@ export type HindsightPhase = "retain" | "reflect";
 export interface RecordHindsightCostParams {
   tenantId: string;
   agentId: string | null;
+  userId?: string | null;
   bankId: string;
   phase: HindsightPhase;
   model: string;
@@ -120,11 +122,17 @@ export async function recordHindsightCost(
   if (usd <= 0) return;
 
   try {
+    const userId = await resolveTenantUserCostOwner({
+      tenantId: params.tenantId,
+      userId: params.userId,
+    });
+
     await db
       .insert(costEvents)
       .values({
         tenant_id: params.tenantId,
         agent_id: params.agentId || undefined,
+        user_id: userId || undefined,
         request_id:
           params.requestId || `hindsight-${params.phase}-${randomUUID()}`,
         event_type: "llm",
