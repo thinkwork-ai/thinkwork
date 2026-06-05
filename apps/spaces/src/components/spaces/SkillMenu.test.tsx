@@ -50,7 +50,7 @@ describe("filterSkillCatalog", () => {
     ]);
   });
 
-  it("returns all (capped at 8) for an empty query", () => {
+  it("returns the full catalog for an empty query (no cap; menu scrolls)", () => {
     expect(filterSkillCatalog(catalog, "")).toHaveLength(2);
   });
 });

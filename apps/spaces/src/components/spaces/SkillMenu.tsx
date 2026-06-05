@@ -37,15 +37,14 @@ export function filterSkillCatalog(
   query: string,
 ): SkillOption[] {
   const normalized = query.trim().toLowerCase();
-  return options
-    .filter((option) =>
-      normalized
-        ? option.slug.toLowerCase().includes(normalized) ||
-          skillLabel(option).toLowerCase().includes(normalized) ||
-          option.description?.toLowerCase().includes(normalized)
-        : true,
-    )
-    .slice(0, 8);
+  // No cap — the whole catalog is browsable; the menu scrolls (max-h + overflow).
+  return options.filter((option) =>
+    normalized
+      ? option.slug.toLowerCase().includes(normalized) ||
+        skillLabel(option).toLowerCase().includes(normalized) ||
+        option.description?.toLowerCase().includes(normalized)
+      : true,
+  );
 }
 
 export function SkillMenu({
