@@ -49,20 +49,19 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md`.
 - Target branch: `main`.
-- Current unit: U6, Update CLI reporting, codegen, docs, and compatibility
-  messaging.
-- Current branch: `codex/user-cost-u6`.
-- Current worktree: `.Codex/worktrees/user-cost-u6`.
-- Status: in progress.
+- Current unit: Complete.
+- Current branch: none.
+- Current worktree: none.
+- Status: complete.
 
-| Unit                                                   | Branch               | PR                                                           | State       | Notes                                                                             |
-| ------------------------------------------------------ | -------------------- | ------------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------- |
-| U1 Extend cost and budget data model                   | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | Merged      | Squash merged as `35cbe18d`; dev migration `0148` applied and drift check passed. |
-| U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | [#2115](https://github.com/thinkwork-ai/thinkwork/pull/2115) | Merged      | Squash merged as `3a5a6d3`; reusable cost owner and user-budget helpers landed.   |
-| U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | Merged      | Squash merged as `d045346f`; runtime paths propagate user ownership and gates.    |
-| U4 Add user-first GraphQL cost and budget APIs         | `codex/user-cost-u4` | [#2118](https://github.com/thinkwork-ai/thinkwork/pull/2118) | Merged      | Squash merged as `b92e6585`; user-first cost and budget GraphQL APIs landed.      |
-| U5 Update Settings/Admin analytics user cost surfaces  | `codex/user-cost-u5` | [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121) | Merged      | Squash merged as `8b14d9bd`; user analytics and budget reporting landed.          |
-| U6 Update CLI reporting, codegen, docs, compatibility  | `codex/user-cost-u6` | [#2123](https://github.com/thinkwork-ai/thinkwork/pull/2123) | In progress | Adds CLI user cost reporting, user budget policy flags, and updated docs.         |
+| Unit                                                   | Branch               | PR                                                           | State  | Notes                                                                             |
+| ------------------------------------------------------ | -------------------- | ------------------------------------------------------------ | ------ | --------------------------------------------------------------------------------- |
+| U1 Extend cost and budget data model                   | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | Merged | Squash merged as `35cbe18d`; dev migration `0148` applied and drift check passed. |
+| U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | [#2115](https://github.com/thinkwork-ai/thinkwork/pull/2115) | Merged | Squash merged as `3a5a6d3`; reusable cost owner and user-budget helpers landed.   |
+| U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | Merged | Squash merged as `d045346f`; runtime paths propagate user ownership and gates.    |
+| U4 Add user-first GraphQL cost and budget APIs         | `codex/user-cost-u4` | [#2118](https://github.com/thinkwork-ai/thinkwork/pull/2118) | Merged | Squash merged as `b92e6585`; user-first cost and budget GraphQL APIs landed.      |
+| U5 Update Settings/Admin analytics user cost surfaces  | `codex/user-cost-u5` | [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121) | Merged | Squash merged as `8b14d9bd`; user analytics and budget reporting landed.          |
+| U6 Update CLI reporting, codegen, docs, compatibility  | `codex/user-cost-u6` | [#2123](https://github.com/thinkwork-ai/thinkwork/pull/2123) | Merged | Squash merged as `d9ba1110`; CLI and docs now use the user-first cost model.      |
 
 ### Progress Log
 
@@ -202,6 +201,11 @@ __tests__/migration-0148.test.ts` and
   `pnpm --filter @thinkwork/docs build`;
   and `git diff --check`.
 - Opened U6 PR [#2123](https://github.com/thinkwork-ai/thinkwork/pull/2123).
+- U6 CI passed; PR #2123 was squash merged as `d9ba1110`, the remote branch was
+  deleted, and the local U6 worktree/branch were removed.
+- All implementation units from
+  `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md` are implemented
+  and merged.
 
 ### Blockers
 
