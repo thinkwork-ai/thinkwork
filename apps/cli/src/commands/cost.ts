@@ -1,5 +1,5 @@
 /**
- * `thinkwork cost ...` — spend summaries (tenant, per-agent, per-model, series).
+ * `thinkwork cost ...` — spend summaries (tenant, per-user, per-model, series).
  */
 
 import { Command } from "commander";
@@ -38,6 +38,19 @@ const CostByAgentDoc = graphql(`
       agentName
       totalUsd
       eventCount
+    }
+  }
+`);
+
+const CostByUserDoc = graphql(`
+  query CliCostByUser($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {
+    costByUser(tenantId: $tenantId, from: $from, to: $to) {
+      userId
+      userName
+      userEmail
+      totalUsd
+      eventCount
+      isSystem
     }
   }
 `);
@@ -127,6 +140,36 @@ async function runCostByAgent(opts: RangeOptions): Promise<void> {
   );
 }
 
+async function runCostByUser(opts: RangeOptions): Promise<void> {
+  const ctx = await resolveTenantContext(opts);
+  const data = await gqlQuery(ctx.client, CostByUserDoc, {
+    tenantId: ctx.tenantId,
+    from: opts.from ?? null,
+    to: opts.to ?? null,
+  });
+  const items = data.costByUser ?? [];
+  if (isJsonMode()) {
+    printJson({ items });
+    return;
+  }
+  printTable(
+    items.map((r) => ({
+      user: r.userName,
+      id: r.userId ?? "—",
+      email: r.userEmail ?? (r.isSystem ? "system/unattributed" : "—"),
+      total: `$${r.totalUsd.toFixed(2)}`,
+      events: r.eventCount.toLocaleString(),
+    })),
+    [
+      { key: "user", header: "USER" },
+      { key: "id", header: "ID" },
+      { key: "email", header: "EMAIL" },
+      { key: "total", header: "TOTAL" },
+      { key: "events", header: "EVENTS" },
+    ],
+  );
+}
+
 async function runCostByModel(opts: RangeOptions): Promise<void> {
   const ctx = await resolveTenantContext(opts);
   const data = await gqlQuery(ctx.client, CostByModelDoc, {
@@ -190,7 +233,7 @@ export function registerCostCommand(program: Command): void {
   const cost = program
     .command("cost")
     .description(
-      "Tenant spend summaries — total, per-agent, per-model, and daily series.",
+      "Tenant spend summaries — total, per-user, per-model, and daily series.",
     );
 
   cost
@@ -204,12 +247,21 @@ export function registerCostCommand(program: Command): void {
 
   cost
     .command("by-agent")
-    .description("Spend broken down by agent.")
+    .description("Legacy audit breakdown by agent.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--from <iso>")
     .option("--to <iso>")
     .action(runCostByAgent);
+
+  cost
+    .command("by-user")
+    .description("Spend broken down by user.")
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug")
+    .option("--from <iso>")
+    .option("--to <iso>")
+    .action(runCostByUser);
 
   cost
     .command("by-model")

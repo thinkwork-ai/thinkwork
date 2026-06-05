@@ -49,10 +49,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md`.
 - Target branch: `main`.
-- Current unit: U5, Update Settings/Admin analytics surfaces to show user costs
-  and budgets.
-- Current branch: `codex/user-cost-u5`.
-- Current worktree: `.Codex/worktrees/user-cost-u5`.
+- Current unit: U6, Update CLI reporting, codegen, docs, and compatibility
+  messaging.
+- Current branch: `codex/user-cost-u6`.
+- Current worktree: `.Codex/worktrees/user-cost-u6`.
 - Status: in progress.
 
 | Unit                                                   | Branch               | PR                                                           | State       | Notes                                                                             |
@@ -61,7 +61,8 @@ status: in_progress
 | U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | [#2115](https://github.com/thinkwork-ai/thinkwork/pull/2115) | Merged      | Squash merged as `3a5a6d3`; reusable cost owner and user-budget helpers landed.   |
 | U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | Merged      | Squash merged as `d045346f`; runtime paths propagate user ownership and gates.    |
 | U4 Add user-first GraphQL cost and budget APIs         | `codex/user-cost-u4` | [#2118](https://github.com/thinkwork-ai/thinkwork/pull/2118) | Merged      | Squash merged as `b92e6585`; user-first cost and budget GraphQL APIs landed.      |
-| U5 Update Settings/Admin analytics user cost surfaces  | `codex/user-cost-u5` | [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121) | In progress | Replaces agent chargeback tables with user cost and user budget reporting.        |
+| U5 Update Settings/Admin analytics user cost surfaces  | `codex/user-cost-u5` | [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121) | Merged      | Squash merged as `8b14d9bd`; user analytics and budget reporting landed.          |
+| U6 Update CLI reporting, codegen, docs, compatibility  | `codex/user-cost-u6` | TBD                                                          | In progress | Adds CLI user cost reporting, user budget policy flags, and updated docs.         |
 
 ### Progress Log
 
@@ -182,6 +183,24 @@ __tests__/migration-0148.test.ts` and
   `curl -I --max-time 10 http://localhost:5174/settings/analytics` returned
   `200 OK` from the Spaces dev server; and `git diff --check` passed.
 - Opened U5 PR [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121).
+- U5 CI passed after two clean rebases onto `origin/main`; PR #2121 was squash
+  merged as `8b14d9bd`, the remote branch was deleted, and the local U5
+  worktree/branch were removed.
+- Created U6 worktree from merged `origin/main`.
+- U6 adds CLI `cost by-user`, keeps `cost by-agent` as a legacy audit command,
+  updates `budget upsert --scope user --user <id>`, refreshes CLI GraphQL
+  artifacts, and updates Admin/CLI/Control docs for user-first cost and budget
+  reporting.
+- U6 local verification passed:
+  `pnpm schema:build`;
+  codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/spaces`,
+  and `@thinkwork/mobile`;
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/cost.test.ts __tests__/budget.test.ts`;
+  `pnpm --filter thinkwork-cli typecheck`;
+  `pnpm --filter thinkwork-cli test`;
+  `pnpm --filter thinkwork-cli build`;
+  `pnpm --filter @thinkwork/docs build`;
+  and `git diff --check`.
 
 ### Blockers
 

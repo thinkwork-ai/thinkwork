@@ -1,5 +1,5 @@
 /**
- * `thinkwork budget ...` — tenant or per-agent spend policies.
+ * `thinkwork budget ...` — tenant or per-user spend policies.
  */
 
 import { Command } from "commander";
@@ -20,6 +20,7 @@ const BudgetPoliciesDoc = graphql(`
       id
       scope
       agentId
+      userId
       period
       limitUsd
       actionOnExceed
@@ -35,6 +36,7 @@ const BudgetStatusDoc = graphql(`
         id
         scope
         agentId
+        userId
         period
         limitUsd
       }
@@ -55,6 +57,7 @@ const UpsertBudgetPolicyDoc = graphql(`
       id
       scope
       agentId
+      userId
       limitUsd
       period
       actionOnExceed
@@ -82,7 +85,7 @@ async function runBudgetList(opts: TenantCliOptions): Promise<void> {
     items.map((p) => ({
       id: p.id,
       scope: p.scope,
-      agent: p.agentId ?? "—",
+      target: formatBudgetTarget(p.scope, p.userId ?? null, p.agentId ?? null),
       period: p.period,
       limit: `$${p.limitUsd.toFixed(2)}`,
       action: p.actionOnExceed,
@@ -91,7 +94,7 @@ async function runBudgetList(opts: TenantCliOptions): Promise<void> {
     [
       { key: "id", header: "POLICY ID" },
       { key: "scope", header: "SCOPE" },
-      { key: "agent", header: "AGENT" },
+      { key: "target", header: "TARGET" },
       { key: "period", header: "PERIOD" },
       { key: "limit", header: "LIMIT" },
       { key: "action", header: "ON EXCEED" },
@@ -114,7 +117,11 @@ async function runBudgetStatus(opts: TenantCliOptions): Promise<void> {
     items.map((s) => ({
       id: s.policy.id,
       scope: s.policy.scope,
-      agent: s.policy.agentId ?? "—",
+      target: formatBudgetTarget(
+        s.policy.scope,
+        s.policy.userId ?? null,
+        s.policy.agentId ?? null,
+      ),
       period: s.policy.period,
       limit: `$${s.policy.limitUsd.toFixed(2)}`,
       spent: `$${s.spentUsd.toFixed(2)}`,
@@ -124,7 +131,7 @@ async function runBudgetStatus(opts: TenantCliOptions): Promise<void> {
     [
       { key: "id", header: "POLICY ID" },
       { key: "scope", header: "SCOPE" },
-      { key: "agent", header: "AGENT" },
+      { key: "target", header: "TARGET" },
       { key: "period", header: "PERIOD" },
       { key: "limit", header: "LIMIT" },
       { key: "spent", header: "SPENT" },
@@ -137,15 +144,55 @@ async function runBudgetStatus(opts: TenantCliOptions): Promise<void> {
 interface UpsertOptions extends TenantCliOptions {
   scope?: string;
   agent?: string;
+  user?: string;
   limitUsd?: string;
   period?: string;
   action?: string;
 }
 
+function formatBudgetTarget(
+  scope: string,
+  userId: string | null,
+  agentId: string | null,
+): string {
+  if (scope === "user") return userId ? `user:${userId}` : "user:—";
+  if (scope === "agent") return agentId ? `agent:${agentId}` : "agent:—";
+  return "tenant";
+}
+
+function normalizeBudgetScope(scope: string): "tenant" | "user" | "agent" {
+  if (scope === "tenant" || scope === "user" || scope === "agent") {
+    return scope;
+  }
+  printError(`--scope "${scope}" must be one of tenant, user, or agent.`);
+  process.exit(1);
+}
+
 async function runBudgetUpsert(opts: UpsertOptions): Promise<void> {
   const ctx = await resolveTenantContext(opts);
   if (!opts.scope) {
-    printError("--scope <tenant|agent> is required.");
+    printError("--scope <tenant|user> is required.");
+    process.exit(1);
+  }
+  const scope = normalizeBudgetScope(opts.scope);
+  if (scope === "user" && !opts.user) {
+    printError("--user <id> is required when --scope user.");
+    process.exit(1);
+  }
+  if (scope === "agent" && !opts.agent) {
+    printError("--agent <id> is required when --scope agent.");
+    process.exit(1);
+  }
+  if (scope === "tenant" && (opts.user || opts.agent)) {
+    printError("--user and --agent are only valid for scoped budgets.");
+    process.exit(1);
+  }
+  if (scope === "user" && opts.agent) {
+    printError("--agent cannot be used with --scope user.");
+    process.exit(1);
+  }
+  if (scope === "agent" && opts.user) {
+    printError("--user cannot be used with --scope agent.");
     process.exit(1);
   }
   if (!opts.limitUsd) {
@@ -160,8 +207,9 @@ async function runBudgetUpsert(opts: UpsertOptions): Promise<void> {
   const data = await gqlMutate(ctx.client, UpsertBudgetPolicyDoc, {
     tenantId: ctx.tenantId,
     input: {
-      scope: opts.scope,
-      agentId: opts.agent ?? null,
+      scope,
+      agentId: scope === "agent" ? opts.agent! : null,
+      userId: scope === "user" ? opts.user! : null,
       limitUsd: limit,
       period: opts.period ?? "monthly",
       actionOnExceed: opts.action ?? "PAUSE",
@@ -208,7 +256,7 @@ async function runBudgetDelete(id: string, opts: DeleteOptions): Promise<void> {
 export function registerBudgetCommand(program: Command): void {
   const budget = program
     .command("budget")
-    .description("Tenant or per-agent spend policies + status.");
+    .description("Tenant and user spend policies + status.");
 
   budget
     .command("list")
@@ -230,8 +278,9 @@ export function registerBudgetCommand(program: Command): void {
     .description("Create or replace a budget policy.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--scope <s>", "tenant | agent")
-    .option("--agent <id>", "Required when --scope agent")
+    .option("--scope <s>", "tenant | user (agent accepted for legacy policies)")
+    .option("--user <id>", "Required when --scope user")
+    .option("--agent <id>", "Legacy: required when --scope agent")
     .option("--limit-usd <n>", "USD ceiling")
     .option("--period <p>", "daily | weekly | monthly", "monthly")
     .option("--action <a>", "PAUSE | ALERT", "PAUSE")
