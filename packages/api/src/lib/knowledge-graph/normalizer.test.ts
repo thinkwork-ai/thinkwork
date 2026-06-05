@@ -15,7 +15,7 @@ const transcript = [
 ];
 
 const ontology = {
-  mechanism: "custom_prompt" as const,
+  mechanism: "cognee_owl_ontology" as const,
   entityTypes: [
     {
       id: "entity-type-company",
@@ -37,6 +37,8 @@ const ontology = {
     },
   ],
   customPrompt: "Extract the approved graph.",
+  ontologyKey: "thinkwork_tenant_abc123",
+  ontologyOwlXml: "<rdf:RDF></rdf:RDF>",
 };
 
 describe("normalizeCogneeGraph", () => {

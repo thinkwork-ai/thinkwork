@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { Database } from "../db.js";
 
@@ -20,10 +21,12 @@ export interface OntologyRelationshipDefinition {
 }
 
 export interface KnowledgeGraphOntologyExport {
-  mechanism: "custom_prompt";
+  mechanism: "cognee_owl_ontology" | "custom_prompt";
   entityTypes: OntologyEntityDefinition[];
   relationshipTypes: OntologyRelationshipDefinition[];
   customPrompt: string;
+  ontologyKey: string | null;
+  ontologyOwlXml: string | null;
 }
 
 export async function loadApprovedOntologyExport(args: {
@@ -77,11 +80,23 @@ export async function loadApprovedOntologyExport(args: {
     targetTypeSlugs: row.target_type_slugs ?? [],
   }));
 
+  const ontologyOwlXml = renderOntologyOwl({
+    tenantId: args.tenantId,
+    entityTypes,
+    relationshipTypes,
+  });
+  const hasApprovedDefinitions =
+    entityTypes.length > 0 || relationshipTypes.length > 0;
+
   return {
-    mechanism: "custom_prompt",
+    mechanism: hasApprovedDefinitions ? "cognee_owl_ontology" : "custom_prompt",
     entityTypes,
     relationshipTypes,
     customPrompt: renderOntologyPrompt(entityTypes, relationshipTypes),
+    ontologyKey: hasApprovedDefinitions
+      ? buildCogneeOntologyKey(args.tenantId, ontologyOwlXml)
+      : null,
+    ontologyOwlXml: hasApprovedDefinitions ? ontologyOwlXml : null,
   };
 }
 
@@ -116,6 +131,7 @@ export function renderOntologyPrompt(
 
   return [
     "Extract a read-only knowledge graph from this ThinkWork thread.",
+    "Use the attached Cognee ontology as the primary schema constraint when it is present.",
     "Prefer these approved entity types; keep unknown types visible as diagnostics rather than inventing ontology changes.",
     "Approved entity types:",
     entityLines.length ? entityLines.join("\n") : "- none configured",
@@ -127,6 +143,87 @@ export function renderOntologyPrompt(
   ].join("\n\n");
 }
 
+export function renderOntologyOwl(args: {
+  tenantId: string;
+  entityTypes: OntologyEntityDefinition[];
+  relationshipTypes: OntologyRelationshipDefinition[];
+}): string {
+  const baseIri = `https://thinkwork.ai/ontology/${encodeURIComponent(args.tenantId)}/`;
+  const lines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"',
+    '         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"',
+    '         xmlns:owl="http://www.w3.org/2002/07/owl#"',
+    '         xmlns:skos="http://www.w3.org/2004/02/skos/core#">',
+    `  <owl:Ontology rdf:about="${escapeXmlAttribute(baseIri)}">`,
+    "    <rdfs:comment>Approved ThinkWork business ontology exported for Cognee thread graph extraction.</rdfs:comment>",
+    "  </owl:Ontology>",
+  ];
+
+  for (const type of args.entityTypes) {
+    lines.push(
+      `  <owl:Class rdf:about="${escapeXmlAttribute(`${baseIri}#${iriFragment(type.slug)}`)}">`,
+      `    <rdfs:label>${escapeXmlText(type.name)}</rdfs:label>`,
+    );
+    if (type.description) {
+      lines.push(
+        `    <rdfs:comment>${escapeXmlText(type.description)}</rdfs:comment>`,
+      );
+    }
+    for (const alias of type.aliases) {
+      lines.push(`    <skos:altLabel>${escapeXmlText(alias)}</skos:altLabel>`);
+    }
+    lines.push("  </owl:Class>");
+  }
+
+  for (const type of args.relationshipTypes) {
+    const comments = [
+      type.description,
+      type.sourceTypeSlugs.length
+        ? `Allowed source types: ${type.sourceTypeSlugs.join(", ")}`
+        : null,
+      type.targetTypeSlugs.length
+        ? `Allowed target types: ${type.targetTypeSlugs.join(", ")}`
+        : null,
+    ].filter(Boolean);
+    lines.push(
+      `  <owl:ObjectProperty rdf:about="${escapeXmlAttribute(`${baseIri}#${iriFragment(type.slug)}`)}">`,
+      `    <rdfs:label>${escapeXmlText(type.name)}</rdfs:label>`,
+    );
+    if (comments.length) {
+      lines.push(
+        `    <rdfs:comment>${escapeXmlText(comments.join(" "))}</rdfs:comment>`,
+      );
+    }
+    if (type.sourceTypeSlugs.length === 1) {
+      lines.push(
+        `    <rdfs:domain rdf:resource="${escapeXmlAttribute(`${baseIri}#${iriFragment(type.sourceTypeSlugs[0]!)}`)}"/>`,
+      );
+    }
+    if (type.targetTypeSlugs.length === 1) {
+      lines.push(
+        `    <rdfs:range rdf:resource="${escapeXmlAttribute(`${baseIri}#${iriFragment(type.targetTypeSlugs[0]!)}`)}"/>`,
+      );
+    }
+    for (const alias of type.aliases) {
+      lines.push(`    <skos:altLabel>${escapeXmlText(alias)}</skos:altLabel>`);
+    }
+    lines.push("  </owl:ObjectProperty>");
+  }
+
+  lines.push("</rdf:RDF>", "");
+  return lines.join("\n");
+}
+
+export function buildCogneeOntologyKey(
+  tenantId: string,
+  ontologyOwlXml: string,
+): string {
+  const tenantFragment = tenantId.replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase();
+  const hash = createHash("sha256").update(ontologyOwlXml).digest("hex");
+  return `thinkwork_${tenantFragment}_${hash.slice(0, 16)}`;
+}
+
 export function normalizeOntologySlug(
   value: string | null | undefined,
 ): string {
@@ -135,4 +232,19 @@ export function normalizeOntologySlug(
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+function iriFragment(value: string): string {
+  return normalizeOntologySlug(value) || "unnamed";
+}
+
+function escapeXmlText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeXmlAttribute(value: string): string {
+  return escapeXmlText(value).replace(/"/g, "&quot;");
 }

@@ -7,15 +7,17 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U9 hotfix - deployed smoke service auth and Cognee access control
+- Current unit: U10 - Cognee ontology-guided ingest best practices
 - Current branch/worktree:
-  `codex/cognee-kg-smoke-service-auth` /
-  `.Codex/worktrees/cognee-kg-smoke-service-auth`
-- Current PR: [#2086](https://github.com/thinkwork-ai/thinkwork/pull/2086)
-- Blocker: none. Live deployed smoke reached the worker and exposed a Cognee
-  `401 Unauthorized`; U9 patches the smoke auth mode and Cognee ECS access
-  control, then must merge/deploy through the normal pipeline before rerunning
-  live smoke.
+  `codex/cognee-kg-remember-content-type` /
+  `.Codex/worktrees/cognee-kg-remember-content-type`
+- Current PR: [#2087](https://github.com/thinkwork-ai/thinkwork/pull/2087)
+- Blocker: none. U9 merged and deployed, which fixed Cognee authentication.
+  Live deployed smoke now reaches Cognee. U10 updates thread ingest to use
+  Cognee's ontology-guided ingest path: export approved ThinkWork ontology rows
+  as OWL, upload/sync them to Cognee, pass `ontology_key`, and tag thread data
+  with NodeSets while preserving ThinkWork's normalized snapshot/evidence
+  layer.
 
 ## Progress Log
 
@@ -277,3 +279,32 @@ SMOKE_USER_ID, or provide DATABASE_URL for fallback.` The copied
   and `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`.
 - 2026-06-04: Opened U9 hotfix PR
   [#2086](https://github.com/thinkwork-ai/thinkwork/pull/2086).
+- 2026-06-05: U9 PR
+  [#2086](https://github.com/thinkwork-ai/thinkwork/pull/2086) passed required
+  CI and was squash-merged into `main` at
+  `2d342970e253a299b662b8dc9266bfacd9e46996`; the merge-triggered dev deploy
+  completed successfully.
+- 2026-06-05: Post-U9 live deployed smoke against dev thread
+  `81e6f391-a2d1-45be-98e1-d4fbb7d78878` reached Cognee and failed with
+  `/api/v1/remember` returning `409 Invalid request data for remember
+operation`. ECS logs showed the precise cause:
+  `ValueError: Unsupported remember content_type. Supported values: 'skills'.`
+  Started U10 hotfix branch `codex/cognee-kg-remember-content-type`.
+- 2026-06-05: User clarified that thread ingest should follow Cognee best
+  practices rather than mirror the Wiki ingest process exactly, and that
+  ThinkWork ontology tables should still be leveraged. U10 scope expanded from
+  a narrow `content_type` fix to an ontology-guided Cognee ingest rework.
+- 2026-06-05: U10 now exports approved ThinkWork ontology entity and
+  relationship rows to a deterministic RDF/OWL document, hashes it into a stable
+  Cognee `ontology_key`, uploads it when missing via `/api/v1/ontologies`,
+  sends that `ontology_key` to `remember`, and tags thread data with
+  `thinkwork_threads`, tenant, and thread NodeSets. It also keeps the
+  conservative custom prompt as supplemental guidance and removes the invalid
+  top-level `content_type=text/markdown` field.
+- 2026-06-05: U10 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/knowledge-graph/ontology-export.test.ts src/lib/knowledge-graph/cognee-client.test.ts src/lib/knowledge-graph/normalizer.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `bash scripts/build-lambdas.sh knowledge-graph-thread-ingest`; targeted
+  Prettier check; and `git diff --check`.
+- 2026-06-05: Opened U10 PR
+  [#2087](https://github.com/thinkwork-ai/thinkwork/pull/2087).

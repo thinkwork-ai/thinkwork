@@ -77,6 +77,8 @@ export async function processKnowledgeGraphThreadIngest(
 
     const client = deps.cogneeClient ?? new CogneeClient();
     const ingest = await client.ingestThread({
+      tenantId: run.tenant_id,
+      threadId: run.thread_id,
       datasetName: run.cognee_dataset_name,
       transcript: renderThreadTranscript(transcript),
       ontology,
