@@ -131,14 +131,6 @@ export const SettingsKnowledgeGraphOntologyQuery = graphql(`
   }
 `);
 
-export const SettingsKnowledgeGraphSourceIngestCapabilityQuery = graphql(`
-  query SettingsKnowledgeGraphSourceIngestCapability {
-    __type(name: "StartKnowledgeGraphIngestInput") {
-      name
-    }
-  }
-`);
-
 export const SettingsKnowledgeGraphThreadCandidatesQuery = graphql(`
   query SettingsKnowledgeGraphThreadCandidates(
     $tenantId: ID!
@@ -297,32 +289,6 @@ export const SettingsKnowledgeGraphEntityQuery = graphql(`
         messageCreatedAt
         speakerLabel
       }
-    }
-  }
-`);
-
-export const SettingsStartKnowledgeGraphIngestMutation = graphql(`
-  mutation SettingsStartKnowledgeGraphIngest(
-    $input: StartKnowledgeGraphIngestInput!
-  ) {
-    startKnowledgeGraphIngest(input: $input) {
-      id
-      status
-      threadId
-      sourceKind
-      sourceRef
-      sourceLabel
-      entityCount
-      relationshipCount
-      evidenceCount
-      diagnosticCount
-      messageCount
-      metrics
-      durationMs
-      error
-      createdAt
-      startedAt
-      finishedAt
     }
   }
 `);
