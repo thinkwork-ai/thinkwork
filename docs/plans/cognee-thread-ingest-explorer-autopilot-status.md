@@ -541,3 +541,5 @@ operation`. ECS logs showed the precise cause:
   `pnpm --filter @thinkwork/spaces build`;
   targeted Prettier check; and `git diff --check`. Spaces build completed
   with the existing sourcemap and large chunk warnings only.
+- 2026-06-05: Opened diagnostics follow-up PR
+  [#2100](https://github.com/thinkwork-ai/thinkwork/pull/2100).
