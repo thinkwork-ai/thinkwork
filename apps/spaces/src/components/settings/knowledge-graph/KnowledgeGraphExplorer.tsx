@@ -207,19 +207,6 @@ export function KnowledgeGraphExplorer({
         ),
       },
       {
-        accessorKey: "groundingStatus",
-        header: "Grounding",
-        size: 132,
-        cell: ({ row }) => (
-          <span className={COMPACT_TABLE_CELL}>
-            <TrustBadge
-              groundingStatus={row.original.groundingStatus}
-              provenanceStatus={row.original.provenanceStatus}
-            />
-          </span>
-        ),
-      },
-      {
         accessorKey: "relationshipCount",
         header: "Links",
         size: 88,

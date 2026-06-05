@@ -762,3 +762,18 @@ http://localhost:5174/settings/knowledge-graph` returned `200 OK`.
   relationships, and 23 evidence rows. Both smokes still show Cognee returning
   structural-only raw graph payloads, while the ontology-approved source
   fallback now makes the graph usable.
+- 2026-06-05: PR [#2108](https://github.com/thinkwork-ai/thinkwork/pull/2108)
+  passed required CI and was squash-merged into `main` at
+  `dcbb53f0fd8c356148d0c4c6a56c303c20e4bf8f`. Direct dev DB verification
+  after the merge showed the Settings data query has demo-visible rows behind
+  the resolver gate: 40 grounded ontology entities and 22 grounded ontology
+  relationships for tenant `0015953e-aa13-4cab-8398-2e70f73dda63`.
+- 2026-06-05: Started follow-up branch `codex/kg-data-view-demo-cleanup` from
+  `origin/main` to keep the Knowledge Graph Data view focused on visible
+  business objects. Removed the list-level Grounding/Provenance trust column
+  and removed unused source-ingest GraphQL documents from Spaces codegen so
+  the primary page no longer depends on source-specific schema operations.
+  Focused verification passed:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/knowledge-graph/KnowledgeGraphExplorer.test.tsx src/components/settings/SettingsKnowledgeGraph.test.ts`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  targeted Prettier check; and `git diff --check`.
