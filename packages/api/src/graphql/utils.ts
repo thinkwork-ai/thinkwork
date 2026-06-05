@@ -325,6 +325,12 @@ export async function invokeChatAgent(payload: {
    * (snake_case for the Python side).
    */
   messageAttachments?: ChatAgentInvokeAttachment[];
+  /**
+   * Force-pinned skill slugs the composer slash-command attached to this
+   * message (plan 2026-06-04-004 U2/U3). Raw slugs; chat-agent-invoke applies
+   * the blocklist guardrail and forwards them to AgentCore as `pinned_skills`.
+   */
+  pinnedSkills?: string[];
 }): Promise<boolean> {
   try {
     const fnArn = await getChatAgentInvokeFnArn();
