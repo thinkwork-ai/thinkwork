@@ -1065,10 +1065,21 @@ export type DeploymentStatus = {
   ecrUrl?: Maybe<Scalars["String"]["output"]>;
   hindsightEnabled: Scalars["Boolean"]["output"];
   hindsightEndpoint?: Maybe<Scalars["String"]["output"]>;
+  managedApplications: Array<ManagedApplicationDeployment>;
   managedMemoryEnabled: Scalars["Boolean"]["output"];
   region: Scalars["String"]["output"];
   source: Scalars["String"]["output"];
   stage: Scalars["String"]["output"];
+  twentyAlbArn?: Maybe<Scalars["String"]["output"]>;
+  twentyClusterArn?: Maybe<Scalars["String"]["output"]>;
+  twentyProvisioned: Scalars["Boolean"]["output"];
+  twentyRuntimeEnabled: Scalars["Boolean"]["output"];
+  twentyServerLogGroupName?: Maybe<Scalars["String"]["output"]>;
+  twentyServerServiceName?: Maybe<Scalars["String"]["output"]>;
+  twentyTargetGroupArn?: Maybe<Scalars["String"]["output"]>;
+  twentyUrl?: Maybe<Scalars["String"]["output"]>;
+  twentyWorkerLogGroupName?: Maybe<Scalars["String"]["output"]>;
+  twentyWorkerServiceName?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type DisableSkillInput = {
@@ -1632,6 +1643,49 @@ export type LinkedThread = {
   title: Scalars["String"]["output"];
 };
 
+export type ManagedApplicationDeployment = {
+  __typename?: "ManagedApplicationDeployment";
+  albArn?: Maybe<Scalars["String"]["output"]>;
+  backendMode?: Maybe<Scalars["String"]["output"]>;
+  clusterArn?: Maybe<Scalars["String"]["output"]>;
+  description: Scalars["String"]["output"];
+  displayName: Scalars["String"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  endpoint?: Maybe<Scalars["String"]["output"]>;
+  key: Scalars["String"]["output"];
+  logGroupName?: Maybe<Scalars["String"]["output"]>;
+  logGroupNames: Array<Scalars["String"]["output"]>;
+  message?: Maybe<Scalars["String"]["output"]>;
+  provisioned: Scalars["Boolean"]["output"];
+  runtimeEnabled: Scalars["Boolean"]["output"];
+  serviceName?: Maybe<Scalars["String"]["output"]>;
+  serviceNames: Array<Scalars["String"]["output"]>;
+  status: Scalars["String"]["output"];
+  targetGroupArn?: Maybe<Scalars["String"]["output"]>;
+  url?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type ManagedApplicationDeploymentChange = {
+  __typename?: "ManagedApplicationDeploymentChange";
+  desiredEnabled: Scalars["Boolean"]["output"];
+  key: Scalars["String"]["output"];
+  message: Scalars["String"]["output"];
+  provisioned: Scalars["Boolean"]["output"];
+  runtimeEnabled: Scalars["Boolean"]["output"];
+  workflowUrl: Scalars["String"]["output"];
+};
+
+export type ManagedApplicationHealthCheck = {
+  __typename?: "ManagedApplicationHealthCheck";
+  checkedAt: Scalars["AWSDateTime"]["output"];
+  endpoint?: Maybe<Scalars["String"]["output"]>;
+  healthy: Scalars["Boolean"]["output"];
+  key: Scalars["String"]["output"];
+  latencyMs: Scalars["Int"]["output"];
+  message: Scalars["String"]["output"];
+  statusCode?: Maybe<Scalars["Int"]["output"]>;
+};
+
 /**
  * Batch mark a caller's threads read or unread. The tenant is resolved from the
  * authenticated caller (never the input); only the caller's own
@@ -2083,6 +2137,7 @@ export type Mutation = {
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
+  setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
   setSpaceEmailTriggers: Space;
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
@@ -2732,6 +2787,10 @@ export type MutationSetKnowledgeGraphDeploymentArgs = {
   input: SetKnowledgeGraphDeploymentInput;
 };
 
+export type MutationSetManagedApplicationDeploymentArgs = {
+  input: SetManagedApplicationDeploymentInput;
+};
+
 export type MutationSetRoutineTriggerArgs = {
   input: RoutineTriggerInput;
   routineId: Scalars["ID"]["input"];
@@ -3372,6 +3431,7 @@ export type Query = {
   knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
   knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
   knowledgeGraphThreadCandidates: Array<KnowledgeGraphThreadCandidate>;
+  managedApplicationHealthCheck: ManagedApplicationHealthCheck;
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
@@ -3793,6 +3853,10 @@ export type QueryKnowledgeGraphThreadCandidatesArgs = {
   query?: InputMaybe<Scalars["String"]["input"]>;
   requesterUserId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryManagedApplicationHealthCheckArgs = {
+  key: Scalars["String"]["input"];
 };
 
 export type QueryMemoryGraphArgs = {
@@ -4695,6 +4759,11 @@ export type SendMessageMentionInput = {
 
 export type SetKnowledgeGraphDeploymentInput = {
   enabled: Scalars["Boolean"]["input"];
+};
+
+export type SetManagedApplicationDeploymentInput = {
+  enabled: Scalars["Boolean"]["input"];
+  key: Scalars["String"]["input"];
 };
 
 export type SetSpaceKnowledgeBasesInput = {

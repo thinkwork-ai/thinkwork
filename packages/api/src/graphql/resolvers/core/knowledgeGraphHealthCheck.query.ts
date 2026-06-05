@@ -12,7 +12,7 @@ import {
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import type { GraphQLContext } from "../../context.js";
 import { requireAdminOrServiceCaller } from "./authz.js";
-import { readCogneeStatus } from "./deploymentStatus.query.js";
+import { readCogneeStatus } from "./managedApplications.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
 
 const AWS_HEALTH_TIMEOUT_MS = 3500;
@@ -74,7 +74,7 @@ function healthyTargetCount(targets: TargetHealthDescription[]): number {
     .length;
 }
 
-async function probeCogneeAwsHealth(): Promise<CogneeAwsHealth> {
+export async function probeCogneeAwsHealth(): Promise<CogneeAwsHealth> {
   const stage = stageName();
   const region = regionName();
   const serviceName = cogneeServiceName(stage);

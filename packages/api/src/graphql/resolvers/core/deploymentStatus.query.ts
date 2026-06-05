@@ -1,67 +1,13 @@
 import type { GraphQLContext } from "../../context.js";
 import { requireAdminOrServiceCaller } from "./authz.js";
+import {
+  readCogneeStatus,
+  readManagedApplications,
+  readTwentyStatus,
+} from "./managedApplications.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
 
-type CogneeStatus = {
-  enabled: boolean;
-  endpoint: string | null;
-  backendMode: string | null;
-};
-
-export function readCogneeStatus(): CogneeStatus {
-  const legacyEndpoint = process.env.COGNEE_ENDPOINT || null;
-  const legacyBackendMode = process.env.COGNEE_BACKEND_MODE || null;
-  const raw = process.env.COGNEE || process.env.COGNEE_STATUS;
-
-  if (!raw) {
-    return {
-      enabled: Boolean(
-        legacyEndpoint ||
-        process.env.COGNEE_SERVICE_NAME ||
-        process.env.COGNEE_LOG_GROUP_NAME,
-      ),
-      endpoint: legacyEndpoint,
-      backendMode: legacyBackendMode,
-    };
-  }
-
-  const separatorIndex = raw.indexOf("|");
-  if (separatorIndex >= 0) {
-    const backend = raw.slice(0, separatorIndex).trim();
-    const endpoint = raw.slice(separatorIndex + 1).trim();
-    return {
-      enabled: true,
-      endpoint: endpoint || legacyEndpoint,
-      backendMode: backend || legacyBackendMode,
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as {
-      endpoint?: unknown;
-      backend?: unknown;
-    };
-    const endpoint =
-      typeof parsed.endpoint === "string" && parsed.endpoint.trim()
-        ? parsed.endpoint
-        : legacyEndpoint;
-    const backendMode =
-      typeof parsed.backend === "string" && parsed.backend.trim()
-        ? parsed.backend
-        : legacyBackendMode;
-    return {
-      enabled: true,
-      endpoint,
-      backendMode,
-    };
-  } catch {
-    return {
-      enabled: raw === "true" || Boolean(legacyEndpoint),
-      endpoint: legacyEndpoint,
-      backendMode: legacyBackendMode,
-    };
-  }
-}
+export { readCogneeStatus };
 
 /**
  * deploymentStatus — reports deployment infrastructure details from Lambda
@@ -88,6 +34,8 @@ export const deploymentStatus = async (
   const region = process.env.AWS_REGION || "us-east-1";
   const accountId = process.env.AWS_ACCOUNT_ID || null;
   const cognee = readCogneeStatus();
+  const twenty = readTwentyStatus();
+  const managedApplications = readManagedApplications();
   const cogneeServiceName =
     process.env.COGNEE_SERVICE_NAME ||
     (cognee.enabled ? `thinkwork-${stage}-cognee` : null);
@@ -124,5 +72,16 @@ export const deploymentStatus = async (
     cogneeBackendMode: cognee.backendMode,
     cogneeClusterArn,
     cogneeServiceName,
+    twentyProvisioned: twenty.provisioned && !twenty.malformed,
+    twentyRuntimeEnabled: twenty.runtimeEnabled && !twenty.malformed,
+    twentyUrl: twenty.url,
+    twentyClusterArn: twenty.clusterArn,
+    twentyServerServiceName: twenty.serverServiceName,
+    twentyWorkerServiceName: twenty.workerServiceName,
+    twentyServerLogGroupName: twenty.serverLogGroupName,
+    twentyWorkerLogGroupName: twenty.workerLogGroupName,
+    twentyAlbArn: twenty.albArn,
+    twentyTargetGroupArn: twenty.targetGroupArn,
+    managedApplications,
   };
 };
