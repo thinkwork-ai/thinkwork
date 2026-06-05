@@ -1,24 +1,10 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "urql";
+import { useQuery } from "urql";
 import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  Badge,
-  Button,
-  Switch,
-} from "@thinkwork/ui";
+import { Badge, Button } from "@thinkwork/ui";
 import { Copy, RefreshCw } from "lucide-react";
 import {
   SettingsDeploymentStatusQuery,
   SettingsKnowledgeGraphHealthCheckQuery,
-  SettingsSetKnowledgeGraphDeploymentMutation,
 } from "@/lib/settings-queries";
 import {
   SettingsRow,
@@ -26,47 +12,15 @@ import {
 } from "@/components/settings/SettingsContent";
 
 export function KnowledgeGraphConfigPanel() {
-  const [disableOpen, setDisableOpen] = useState(false);
-  const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
-  const [result, refetch] = useQuery({ query: SettingsDeploymentStatusQuery });
+  const [result] = useQuery({ query: SettingsDeploymentStatusQuery });
   const [healthResult, runHealthCheck] = useQuery({
     query: SettingsKnowledgeGraphHealthCheckQuery,
     pause: true,
     requestPolicy: "network-only",
   });
-  const [deploymentState, setDeployment] = useMutation(
-    SettingsSetKnowledgeGraphDeploymentMutation,
-  );
 
   const status = result.data?.deploymentStatus;
-  const desiredEnabled = pendingEnabled ?? Boolean(status?.cogneeEnabled);
-  const queued =
-    pendingEnabled !== null &&
-    pendingEnabled !== Boolean(status?.cogneeEnabled);
-
-  async function requestDeployment(enabled: boolean) {
-    const deployment = await setDeployment({ enabled });
-    if (deployment.error) {
-      toast.error(
-        `Could not ${enabled ? "enable" : "disable"} Knowledge Graph: ${deployment.error.message}`,
-      );
-      return;
-    }
-
-    setPendingEnabled(enabled);
-    setDisableOpen(false);
-    toast.success(
-      deployment.data?.setKnowledgeGraphDeployment.message ??
-        `Knowledge Graph ${enabled ? "enable" : "disable"} deployment queued.`,
-    );
-    refetch({ requestPolicy: "network-only" });
-  }
-
-  const statusLabel = queued
-    ? "deployment queued"
-    : status?.cogneeEnabled
-      ? "enabled"
-      : "disabled";
+  const statusLabel = status?.cogneeEnabled ? "enabled" : "disabled";
 
   return (
     <div className="max-w-[750px]">
@@ -78,28 +32,10 @@ export function KnowledgeGraphConfigPanel() {
         ) : (
           <>
             <SettingsRow
-              label="Cognee"
-              description="Provision or remove the stage Knowledge Graph service through Terraform."
+              label="Status"
+              description="Managed application state reported by deployment status."
             >
-              <Switch
-                checked={desiredEnabled}
-                disabled={deploymentState.fetching || result.fetching}
-                aria-label="Toggle Knowledge Graph infrastructure"
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    void requestDeployment(true);
-                  } else {
-                    setDisableOpen(true);
-                  }
-                }}
-              />
-            </SettingsRow>
-            <SettingsRow label="Status">
-              <Badge
-                variant={
-                  status?.cogneeEnabled || queued ? "default" : "secondary"
-                }
-              >
+              <Badge variant={status?.cogneeEnabled ? "default" : "secondary"}>
                 {status ? statusLabel : "..."}
               </Badge>
             </SettingsRow>
@@ -177,35 +113,8 @@ export function KnowledgeGraphConfigPanel() {
               </span>
             </SettingsRow>
           ) : null}
-          {pendingEnabled !== null ? (
-            <SettingsRow label="Requested state">
-              {pendingEnabled ? "enabled" : "disabled"}
-            </SettingsRow>
-          ) : null}
         </SettingsSection>
       ) : null}
-
-      <AlertDialog open={disableOpen} onOpenChange={setDisableOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Disable Knowledge Graph?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This queues a Terraform deployment that removes the Cognee service
-              for the current stage. Export graph data first if it needs to be
-              retained.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void requestDeployment(false)}
-              disabled={deploymentState.fetching}
-            >
-              Disable
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

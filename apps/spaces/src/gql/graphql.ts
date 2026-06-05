@@ -7440,6 +7440,37 @@ export type SettingsDeploymentStatusQuery = {
     cogneeBackendMode?: string | null;
     cogneeClusterArn?: string | null;
     cogneeServiceName?: string | null;
+    twentyProvisioned: boolean;
+    twentyRuntimeEnabled: boolean;
+    twentyUrl?: string | null;
+    twentyClusterArn?: string | null;
+    twentyServerServiceName?: string | null;
+    twentyWorkerServiceName?: string | null;
+    twentyServerLogGroupName?: string | null;
+    twentyWorkerLogGroupName?: string | null;
+    twentyAlbArn?: string | null;
+    twentyTargetGroupArn?: string | null;
+    managedApplications: Array<{
+      __typename?: "ManagedApplicationDeployment";
+      key: string;
+      displayName: string;
+      description: string;
+      status: string;
+      enabled: boolean;
+      provisioned: boolean;
+      runtimeEnabled: boolean;
+      url?: string | null;
+      endpoint?: string | null;
+      backendMode?: string | null;
+      logGroupName?: string | null;
+      logGroupNames: Array<string>;
+      clusterArn?: string | null;
+      serviceName?: string | null;
+      serviceNames: Array<string>;
+      albArn?: string | null;
+      targetGroupArn?: string | null;
+      message?: string | null;
+    }>;
   };
 };
 
@@ -7457,6 +7488,24 @@ export type SettingsSetKnowledgeGraphDeploymentMutation = {
   };
 };
 
+export type SettingsSetManagedApplicationDeploymentMutationVariables = Exact<{
+  key: Scalars["String"]["input"];
+  enabled: Scalars["Boolean"]["input"];
+}>;
+
+export type SettingsSetManagedApplicationDeploymentMutation = {
+  __typename?: "Mutation";
+  setManagedApplicationDeployment: {
+    __typename?: "ManagedApplicationDeploymentChange";
+    key: string;
+    desiredEnabled: boolean;
+    provisioned: boolean;
+    runtimeEnabled: boolean;
+    workflowUrl: string;
+    message: string;
+  };
+};
+
 export type SettingsKnowledgeGraphHealthCheckQueryVariables = Exact<{
   [key: string]: never;
 }>;
@@ -7465,6 +7514,24 @@ export type SettingsKnowledgeGraphHealthCheckQuery = {
   __typename?: "Query";
   knowledgeGraphHealthCheck: {
     __typename?: "KnowledgeGraphHealthCheck";
+    healthy: boolean;
+    statusCode?: number | null;
+    latencyMs: number;
+    endpoint?: string | null;
+    checkedAt: any;
+    message: string;
+  };
+};
+
+export type SettingsManagedApplicationHealthCheckQueryVariables = Exact<{
+  key: Scalars["String"]["input"];
+}>;
+
+export type SettingsManagedApplicationHealthCheckQuery = {
+  __typename?: "Query";
+  managedApplicationHealthCheck: {
+    __typename?: "ManagedApplicationHealthCheck";
+    key: string;
     healthy: boolean;
     statusCode?: number | null;
     latencyMs: number;
@@ -11884,6 +11951,118 @@ export const SettingsDeploymentStatusDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "cogneeServiceName" },
                 },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyProvisioned" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyRuntimeEnabled" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "twentyUrl" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyClusterArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyServerServiceName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyWorkerServiceName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyServerLogGroupName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyWorkerLogGroupName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyAlbArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyTargetGroupArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "managedApplications" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "key" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "displayName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "description" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "provisioned" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "runtimeEnabled" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "url" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "endpoint" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "backendMode" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "logGroupName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "logGroupNames" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "clusterArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "serviceName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "serviceNames" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "albArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "targetGroupArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "message" },
+                      },
+                    ],
+                  },
+                },
               ],
             },
           },
@@ -11963,6 +12142,99 @@ export const SettingsSetKnowledgeGraphDeploymentDocument = {
   SettingsSetKnowledgeGraphDeploymentMutation,
   SettingsSetKnowledgeGraphDeploymentMutationVariables
 >;
+export const SettingsSetManagedApplicationDeploymentDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsSetManagedApplicationDeployment" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "key" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "enabled" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "Boolean" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "setManagedApplicationDeployment" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "ObjectValue",
+                  fields: [
+                    {
+                      kind: "ObjectField",
+                      name: { kind: "Name", value: "key" },
+                      value: {
+                        kind: "Variable",
+                        name: { kind: "Name", value: "key" },
+                      },
+                    },
+                    {
+                      kind: "ObjectField",
+                      name: { kind: "Name", value: "enabled" },
+                      value: {
+                        kind: "Variable",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "key" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredEnabled" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "provisioned" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "runtimeEnabled" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "workflowUrl" } },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsSetManagedApplicationDeploymentMutation,
+  SettingsSetManagedApplicationDeploymentMutationVariables
+>;
 export const SettingsKnowledgeGraphHealthCheckDocument = {
   kind: "Document",
   definitions: [
@@ -11995,6 +12267,63 @@ export const SettingsKnowledgeGraphHealthCheckDocument = {
 } as unknown as DocumentNode<
   SettingsKnowledgeGraphHealthCheckQuery,
   SettingsKnowledgeGraphHealthCheckQueryVariables
+>;
+export const SettingsManagedApplicationHealthCheckDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsManagedApplicationHealthCheck" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "key" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "managedApplicationHealthCheck" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "key" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "key" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "key" } },
+                { kind: "Field", name: { kind: "Name", value: "healthy" } },
+                { kind: "Field", name: { kind: "Name", value: "statusCode" } },
+                { kind: "Field", name: { kind: "Name", value: "latencyMs" } },
+                { kind: "Field", name: { kind: "Name", value: "endpoint" } },
+                { kind: "Field", name: { kind: "Name", value: "checkedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsManagedApplicationHealthCheckQuery,
+  SettingsManagedApplicationHealthCheckQueryVariables
 >;
 export const SettingsKnowledgeGraphOntologyDocument = {
   kind: "Document",

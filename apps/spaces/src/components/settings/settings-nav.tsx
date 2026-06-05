@@ -3,6 +3,7 @@ import {
   AppWindow,
   BookOpen,
   Brain,
+  BriefcaseBusiness,
   Clock,
   FolderTree,
   NotebookText,
@@ -30,6 +31,8 @@ export interface SettingsNavItem {
   operatorOnly?: boolean;
   /** When true, only render in the desktop build (needs the local bridge). */
   desktopOnly?: boolean;
+  /** Optional managed app that must be runtime-enabled before the item shows. */
+  managedAppKey?: "cognee" | "twenty";
 }
 
 // General first (visible to all), then operator-only sections. Appearance is
@@ -79,10 +82,18 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
+    label: "CRM",
+    to: "/settings/crm",
+    icon: BriefcaseBusiness,
+    operatorOnly: true,
+    managedAppKey: "twenty",
+  },
+  {
     label: "Knowledge Graph",
     to: "/settings/knowledge-graph",
     icon: IconTopologyStar3,
     operatorOnly: true,
+    managedAppKey: "cognee",
   },
   {
     label: "Knowledge Bases",
@@ -143,11 +154,14 @@ export function visibleSettingsNavItems(opts: {
   isOperator: boolean;
   roleResolved: boolean;
   isDesktop: boolean;
+  managedApplications?: Partial<Record<"cognee" | "twenty", boolean>>;
 }): SettingsNavItem[] {
   return SETTINGS_NAV_ITEMS.filter(
     (item) =>
       (!item.operatorOnly || (opts.roleResolved && opts.isOperator)) &&
-      (!item.desktopOnly || opts.isDesktop),
+      (!item.desktopOnly || opts.isDesktop) &&
+      (!item.managedAppKey ||
+        opts.managedApplications?.[item.managedAppKey] === true),
   );
 }
 

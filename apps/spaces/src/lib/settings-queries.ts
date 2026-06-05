@@ -49,6 +49,36 @@ export const SettingsDeploymentStatusQuery = graphql(`
       cogneeBackendMode
       cogneeClusterArn
       cogneeServiceName
+      twentyProvisioned
+      twentyRuntimeEnabled
+      twentyUrl
+      twentyClusterArn
+      twentyServerServiceName
+      twentyWorkerServiceName
+      twentyServerLogGroupName
+      twentyWorkerLogGroupName
+      twentyAlbArn
+      twentyTargetGroupArn
+      managedApplications {
+        key
+        displayName
+        description
+        status
+        enabled
+        provisioned
+        runtimeEnabled
+        url
+        endpoint
+        backendMode
+        logGroupName
+        logGroupNames
+        clusterArn
+        serviceName
+        serviceNames
+        albArn
+        targetGroupArn
+        message
+      }
     }
   }
 `);
@@ -63,9 +93,39 @@ export const SettingsSetKnowledgeGraphDeploymentMutation = graphql(`
   }
 `);
 
+export const SettingsSetManagedApplicationDeploymentMutation = graphql(`
+  mutation SettingsSetManagedApplicationDeployment(
+    $key: String!
+    $enabled: Boolean!
+  ) {
+    setManagedApplicationDeployment(input: { key: $key, enabled: $enabled }) {
+      key
+      desiredEnabled
+      provisioned
+      runtimeEnabled
+      workflowUrl
+      message
+    }
+  }
+`);
+
 export const SettingsKnowledgeGraphHealthCheckQuery = graphql(`
   query SettingsKnowledgeGraphHealthCheck {
     knowledgeGraphHealthCheck {
+      healthy
+      statusCode
+      latencyMs
+      endpoint
+      checkedAt
+      message
+    }
+  }
+`);
+
+export const SettingsManagedApplicationHealthCheckQuery = graphql(`
+  query SettingsManagedApplicationHealthCheck($key: String!) {
+    managedApplicationHealthCheck(key: $key) {
+      key
       healthy
       statusCode
       latencyMs
