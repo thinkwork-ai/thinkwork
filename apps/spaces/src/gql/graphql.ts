@@ -7970,18 +7970,46 @@ export type SettingsCostSummaryQuery = {
   };
 };
 
-export type SettingsCostByAgentQueryVariables = Exact<{
+export type SettingsCostByUserQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
 }>;
 
-export type SettingsCostByAgentQuery = {
+export type SettingsCostByUserQuery = {
   __typename?: "Query";
-  costByAgent: Array<{
-    __typename?: "AgentCostSummary";
-    agentId?: string | null;
-    agentName: string;
+  costByUser: Array<{
+    __typename?: "UserCostSummary";
+    userId?: string | null;
+    userName: string;
+    userEmail?: string | null;
     totalUsd: number;
     eventCount: number;
+    isSystem: boolean;
+  }>;
+};
+
+export type SettingsBudgetStatusQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsBudgetStatusQuery = {
+  __typename?: "Query";
+  budgetStatus: Array<{
+    __typename?: "BudgetStatus";
+    spentUsd: number;
+    remainingUsd: number;
+    percentUsed: number;
+    status: string;
+    policy: {
+      __typename?: "BudgetPolicy";
+      id: string;
+      tenantId: string;
+      userId?: string | null;
+      scope: string;
+      period: string;
+      limitUsd: number;
+      actionOnExceed: string;
+      enabled: boolean;
+    };
   }>;
 };
 
@@ -14018,13 +14046,13 @@ export const SettingsCostSummaryDocument = {
   SettingsCostSummaryQuery,
   SettingsCostSummaryQueryVariables
 >;
-export const SettingsCostByAgentDocument = {
+export const SettingsCostByUserDocument = {
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "query",
-      name: { kind: "Name", value: "SettingsCostByAgent" },
+      name: { kind: "Name", value: "SettingsCostByUser" },
       variableDefinitions: [
         {
           kind: "VariableDefinition",
@@ -14043,7 +14071,7 @@ export const SettingsCostByAgentDocument = {
         selections: [
           {
             kind: "Field",
-            name: { kind: "Name", value: "costByAgent" },
+            name: { kind: "Name", value: "costByUser" },
             arguments: [
               {
                 kind: "Argument",
@@ -14057,10 +14085,12 @@ export const SettingsCostByAgentDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                { kind: "Field", name: { kind: "Name", value: "agentId" } },
-                { kind: "Field", name: { kind: "Name", value: "agentName" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                { kind: "Field", name: { kind: "Name", value: "userName" } },
+                { kind: "Field", name: { kind: "Name", value: "userEmail" } },
                 { kind: "Field", name: { kind: "Name", value: "totalUsd" } },
                 { kind: "Field", name: { kind: "Name", value: "eventCount" } },
+                { kind: "Field", name: { kind: "Name", value: "isSystem" } },
               ],
             },
           },
@@ -14069,8 +14099,100 @@ export const SettingsCostByAgentDocument = {
     },
   ],
 } as unknown as DocumentNode<
-  SettingsCostByAgentQuery,
-  SettingsCostByAgentQueryVariables
+  SettingsCostByUserQuery,
+  SettingsCostByUserQueryVariables
+>;
+export const SettingsBudgetStatusDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsBudgetStatus" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "budgetStatus" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "policy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "tenantId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "userId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "scope" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "period" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "limitUsd" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "actionOnExceed" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "spentUsd" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "remainingUsd" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "percentUsed" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsBudgetStatusQuery,
+  SettingsBudgetStatusQueryVariables
 >;
 export const SettingsCostByModelDocument = {
   kind: "Document",

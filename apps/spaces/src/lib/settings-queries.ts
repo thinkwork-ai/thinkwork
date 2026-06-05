@@ -576,13 +576,36 @@ export const SettingsCostSummaryQuery = graphql(`
   }
 `);
 
-export const SettingsCostByAgentQuery = graphql(`
-  query SettingsCostByAgent($tenantId: ID!) {
-    costByAgent(tenantId: $tenantId) {
-      agentId
-      agentName
+export const SettingsCostByUserQuery = graphql(`
+  query SettingsCostByUser($tenantId: ID!) {
+    costByUser(tenantId: $tenantId) {
+      userId
+      userName
+      userEmail
       totalUsd
       eventCount
+      isSystem
+    }
+  }
+`);
+
+export const SettingsBudgetStatusQuery = graphql(`
+  query SettingsBudgetStatus($tenantId: ID!) {
+    budgetStatus(tenantId: $tenantId) {
+      policy {
+        id
+        tenantId
+        userId
+        scope
+        period
+        limitUsd
+        actionOnExceed
+        enabled
+      }
+      spentUsd
+      remainingUsd
+      percentUsed
+      status
     }
   }
 `);

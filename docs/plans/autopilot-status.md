@@ -49,9 +49,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md`.
 - Target branch: `main`.
-- Current unit: U4, Add user-first GraphQL cost and budget APIs.
-- Current branch: `codex/user-cost-u4`.
-- Current worktree: `.Codex/worktrees/user-cost-u4`.
+- Current unit: U5, Update Settings/Admin analytics surfaces to show user costs
+  and budgets.
+- Current branch: `codex/user-cost-u5`.
+- Current worktree: `.Codex/worktrees/user-cost-u5`.
 - Status: in progress.
 
 | Unit                                                   | Branch               | PR                                                           | State       | Notes                                                                             |
@@ -59,7 +60,8 @@ status: in_progress
 | U1 Extend cost and budget data model                   | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | Merged      | Squash merged as `35cbe18d`; dev migration `0148` applied and drift check passed. |
 | U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | [#2115](https://github.com/thinkwork-ai/thinkwork/pull/2115) | Merged      | Squash merged as `3a5a6d3`; reusable cost owner and user-budget helpers landed.   |
 | U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | Merged      | Squash merged as `d045346f`; runtime paths propagate user ownership and gates.    |
-| U4 Add user-first GraphQL cost and budget APIs         | `codex/user-cost-u4` | TBD                                                          | In progress | Adds costByUser, user budget status/policy support, and user budget unpause APIs. |
+| U4 Add user-first GraphQL cost and budget APIs         | `codex/user-cost-u4` | [#2118](https://github.com/thinkwork-ai/thinkwork/pull/2118) | Merged      | Squash merged as `b92e6585`; user-first cost and budget GraphQL APIs landed.      |
+| U5 Update Settings/Admin analytics user cost surfaces  | `codex/user-cost-u5` | TBD                                                          | In progress | Replaces agent chargeback tables with user cost and user budget reporting.        |
 
 ### Progress Log
 
@@ -160,6 +162,25 @@ status: in_progress
 __tests__/migration-0148.test.ts` and
   `pnpm --filter @thinkwork/database-pg test` passed locally before pushing
   the fix.
+- U4 CI passed after the fix; PR #2118 was squash merged as `b92e6585`, the
+  remote branch was deleted, and the local U4 worktree/branch were removed.
+- Created U5 worktree from merged `origin/main`.
+- U5 updates Spaces Settings Analytics and Admin Analytics from agent
+  chargeback to user cost reporting, including user budget progress and a
+  visible system/unattributed row for unowned spend.
+- U5 local verification passed:
+  `pnpm --filter @thinkwork/admin exec vitest run src/stores/cost-store.test.ts src/routes/_authed/_tenant/-analytics/CostView.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsAnalytics.test.tsx`;
+  `pnpm --filter @thinkwork/admin test`;
+  `pnpm --filter @thinkwork/spaces test`;
+  `pnpm --filter @thinkwork/admin build`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces build`;
+  codegen passed for `@thinkwork/admin` and `@thinkwork/spaces`;
+  generated GraphQL type outputs and changed source files were formatted with
+  Prettier;
+  `curl -I --max-time 10 http://localhost:5174/settings/analytics` returned
+  `200 OK` from the Spaces dev server; and `git diff --check` passed.
 
 ### Blockers
 

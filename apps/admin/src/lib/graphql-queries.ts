@@ -1448,13 +1448,15 @@ export const CostSummaryQuery = gql`
   }
 `;
 
-export const CostByAgentQuery = gql`
-  query CostByAgent($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {
-    costByAgent(tenantId: $tenantId, from: $from, to: $to) {
-      agentId
-      agentName
+export const CostByUserQuery = gql`
+  query CostByUser($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {
+    costByUser(tenantId: $tenantId, from: $from, to: $to) {
+      userId
+      userName
+      userEmail
       totalUsd
       eventCount
+      isSystem
     }
   }
 `;
@@ -1490,6 +1492,7 @@ export const BudgetStatusQuery = gql`
         id
         tenantId
         agentId
+        userId
         scope
         period
         limitUsd
