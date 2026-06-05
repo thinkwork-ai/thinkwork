@@ -7,14 +7,14 @@ Started: 2026-06-04
 ## Current Status
 
 - State: in_progress
-- Current unit: U14 - Knowledge graph relationship UUID filter hotfix
+- Current unit: U15 - Knowledge graph entity evidence UUID filter hotfix
 - Current branch/worktree:
-  `codex/kg-graph-uuid-filter-fix` /
-  `.Codex/worktrees/kg-graph-uuid-filter-fix`
-- Current PR: [#2091](https://github.com/thinkwork-ai/thinkwork/pull/2091)
-- Blocker: none. U13 merged and deployed successfully; live smoke proved
-  Cognee ingestion now succeeds, then exposed a GraphQL read-path SQL cast bug
-  in `knowledgeGraphGraph`.
+  `codex/kg-entity-uuid-filter-fix` /
+  `.Codex/worktrees/kg-entity-uuid-filter-fix`
+- Current PR: [#2092](https://github.com/thinkwork-ai/thinkwork/pull/2092)
+- Blocker: none. U14 merged and deployed successfully; live smoke progressed
+  past `knowledgeGraphGraph`, then exposed the same Drizzle array-cast pattern
+  in `knowledgeGraphEntity`.
 
 ## Progress Log
 
@@ -403,3 +403,32 @@ operation`. ECS logs showed the precise cause:
   and typecheck ran successfully.
 - 2026-06-05: Opened U14 PR
   [#2091](https://github.com/thinkwork-ai/thinkwork/pull/2091).
+- 2026-06-05: U14 PR
+  [#2091](https://github.com/thinkwork-ai/thinkwork/pull/2091) passed required
+  CI and was squash-merged into `main` at
+  `44a191536459f0819555b41e48b09ab30d429973`; the remote branch was deleted.
+- 2026-06-05: U14 merge-triggered deploy run
+  [26990538027](https://github.com/thinkwork-ai/thinkwork/actions/runs/26990538027)
+  passed end to end, including Terraform, admin/docs deploys, workspace layout
+  migration, and deploy summary checks.
+- 2026-06-05: Post-U14 live deployed smoke against dev thread
+  `81e6f391-a2d1-45be-98e1-d4fbb7d78878` progressed through forced ingest and
+  `knowledgeGraphGraph`, then failed on GraphQL `knowledgeGraphEntity` with
+  `cannot cast type record to uuid[]`, exposing the remaining relationship
+  evidence filter SQL bug in the entity detail resolver.
+- 2026-06-05: Started U15 hotfix branch
+  `codex/kg-entity-uuid-filter-fix` from `origin/main`.
+- 2026-06-05: U15 replaces the entity detail resolver's
+  `ANY(${relationshipIds}::uuid[])` evidence filter with a parameterized UUID
+  `IN (...)` list and omits the relationship evidence clause when no
+  relationships are present.
+- 2026-06-05: U15 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api lint`
+  (no lint script present); targeted Prettier check; and `git diff --check`.
+  The fresh worktree dependency install again logged the local optional
+  `canvas` native build failure under Node 25 because `pkg-config` is
+  unavailable, but pnpm completed and the targeted API tests and typecheck ran
+  successfully.
+- 2026-06-05: Opened U15 PR
+  [#2092](https://github.com/thinkwork-ai/thinkwork/pull/2092).

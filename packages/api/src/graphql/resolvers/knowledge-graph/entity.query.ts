@@ -52,6 +52,13 @@ export async function knowledgeGraphEntity(
     relationshipsResult as unknown as { rows?: KnowledgeGraphRelationshipRow[] }
   ).rows ?? []) as KnowledgeGraphRelationshipRow[];
   const relationshipIds = relationshipRows.map((row) => row.id);
+  const relationshipIdFilters = relationshipIds.map((relationshipId) => {
+    return sql`${relationshipId}::uuid`;
+  });
+  const relationshipEvidenceFilter =
+    relationshipIdFilters.length > 0
+      ? sql`OR relationship_id IN (${sql.join(relationshipIdFilters, sql`, `)})`
+      : sql``;
 
   const evidenceResult = await ctx.db.execute(sql`
     SELECT *
@@ -60,7 +67,7 @@ export async function knowledgeGraphEntity(
        AND thread_id = ${entity.thread_id}
        AND (
          entity_id = ${entity.id}
-         OR relationship_id = ANY(${relationshipIds}::uuid[])
+         ${relationshipEvidenceFilter}
        )
      ORDER BY COALESCE(message_created_at, observed_at, created_at) DESC, created_at DESC
   `);
