@@ -110,7 +110,7 @@ export async function loadFilteredEntities(
           ELSE 'weak'
         END AS provenance_status,
         (array_agg(summary ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS summary,
-        (array_agg(aliases ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS aliases,
+        (array_agg(to_jsonb(aliases) ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS aliases,
         (array_agg(properties ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS properties,
         jsonb_build_object(
           'canonicalEntity', true,
