@@ -92,6 +92,12 @@ function buildTfvars(config: Record<string, string>): string {
     `# an immutable cognee_image_uri, dedicated DB secret ARN, and Bedrock ARNs.`,
     `enable_cognee = false`,
     ``,
+    `# ── Managed Applications ──────────────────────────────────────────`,
+    `# Twenty CRM is optional and disabled by default. Enabling it requires`,
+    `# a pinned twenty_image_uri plus deploy-prepared database/encryption secrets.`,
+    `twenty_provisioned     = false`,
+    `twenty_runtime_enabled = false`,
+    ``,
     `# ── Auth ──────────────────────────────────────────────────────────`,
     `api_auth_secret = "${config.api_auth_secret}"`,
   ];
@@ -524,6 +530,51 @@ variable "cognee_kms_key_arns" {
   default = []
 }
 
+variable "twenty_provisioned" {
+  type    = bool
+  default = false
+}
+
+variable "twenty_runtime_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "twenty_image_uri" {
+  type    = string
+  default = ""
+}
+
+variable "twenty_db_username" {
+  type    = string
+  default = "thinkwork_twenty"
+}
+
+variable "twenty_db_name" {
+  type    = string
+  default = "thinkwork_twenty"
+}
+
+variable "twenty_db_url_secret_arn" {
+  type    = string
+  default = ""
+}
+
+variable "twenty_encryption_key_secret_arn" {
+  type    = string
+  default = ""
+}
+
+variable "twenty_public_url" {
+  type    = string
+  default = ""
+}
+
+variable "twenty_certificate_arn" {
+  type    = string
+  default = ""
+}
+
 variable "agentcore_memory_id" {
   type        = string
   default     = ""
@@ -612,6 +663,15 @@ module "thinkwork" {
   cognee_graph_database_password_secret_arn = var.cognee_graph_database_password_secret_arn
   cognee_bedrock_model_resource_arns = var.cognee_bedrock_model_resource_arns
   cognee_kms_key_arns = var.cognee_kms_key_arns
+  twenty_provisioned = var.twenty_provisioned
+  twenty_runtime_enabled = var.twenty_runtime_enabled
+  twenty_image_uri = var.twenty_image_uri
+  twenty_db_username = var.twenty_db_username
+  twenty_db_name = var.twenty_db_name
+  twenty_db_url_secret_arn = var.twenty_db_url_secret_arn
+  twenty_encryption_key_secret_arn = var.twenty_encryption_key_secret_arn
+  twenty_public_url = var.twenty_public_url
+  twenty_certificate_arn = var.twenty_certificate_arn
   agentcore_memory_id        = var.agentcore_memory_id
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
@@ -675,6 +735,26 @@ output "cognee_endpoint" {
 
 output "cognee_log_group_name" {
   value = module.thinkwork.cognee_log_group_name
+}
+
+output "twenty_provisioned" {
+  value = module.thinkwork.twenty_provisioned
+}
+
+output "twenty_runtime_enabled" {
+  value = module.thinkwork.twenty_runtime_enabled
+}
+
+output "twenty_url" {
+  value = module.thinkwork.twenty_url
+}
+
+output "twenty_server_log_group_name" {
+  value = module.thinkwork.twenty_server_log_group_name
+}
+
+output "twenty_worker_log_group_name" {
+  value = module.thinkwork.twenty_worker_log_group_name
 }
 
 output "agentcore_memory_id" {

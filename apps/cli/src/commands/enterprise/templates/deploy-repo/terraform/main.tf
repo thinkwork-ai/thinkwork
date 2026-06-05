@@ -214,6 +214,60 @@ variable "cognee_kms_key_arns" {
   default     = []
 }
 
+variable "twenty_provisioned" {
+  description = "Provision the retained Twenty CRM managed-app substrate. Runtime can be parked independently with twenty_runtime_enabled."
+  type        = bool
+  default     = false
+}
+
+variable "twenty_runtime_enabled" {
+  description = "Run Twenty CRM server/worker tasks when the retained substrate is provisioned."
+  type        = bool
+  default     = false
+}
+
+variable "twenty_image_uri" {
+  description = "Twenty CRM container image URI pinned to an immutable sha256 digest. Required when twenty_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_db_username" {
+  description = "Dedicated PostgreSQL username for Twenty CRM."
+  type        = string
+  default     = "thinkwork_twenty"
+}
+
+variable "twenty_db_name" {
+  description = "Dedicated PostgreSQL database name for Twenty CRM."
+  type        = string
+  default     = "thinkwork_twenty"
+}
+
+variable "twenty_db_url_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON PG_DATABASE_URL field for the dedicated Twenty database. Required when twenty_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_encryption_key_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON ENCRYPTION_KEY field for Twenty. Required when twenty_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_public_url" {
+  description = "Public HTTPS URL for Twenty CRM. Leave empty to derive https://crm.<www_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_certificate_arn" {
+  description = "ACM certificate ARN for the Twenty public ALB. Leave empty to reuse the www-dns certificate."
+  type        = string
+  default     = ""
+}
+
 variable "lambda_artifact_bucket" {
   description = "Customer-owned S3 bucket containing pinned ThinkWork Lambda release artifacts."
   type        = string
@@ -261,6 +315,15 @@ module "thinkwork" {
   cognee_graph_database_password_secret_arn  = var.cognee_graph_database_password_secret_arn
   cognee_bedrock_model_resource_arns         = var.cognee_bedrock_model_resource_arns
   cognee_kms_key_arns                        = var.cognee_kms_key_arns
+  twenty_provisioned                         = var.twenty_provisioned
+  twenty_runtime_enabled                     = var.twenty_runtime_enabled
+  twenty_image_uri                           = var.twenty_image_uri
+  twenty_db_username                         = var.twenty_db_username
+  twenty_db_name                             = var.twenty_db_name
+  twenty_db_url_secret_arn                   = var.twenty_db_url_secret_arn
+  twenty_encryption_key_secret_arn           = var.twenty_encryption_key_secret_arn
+  twenty_public_url                          = var.twenty_public_url
+  twenty_certificate_arn                     = var.twenty_certificate_arn
 
   lambda_artifact_bucket   = var.lambda_artifact_bucket
   lambda_artifact_prefix   = var.lambda_artifact_prefix
@@ -281,4 +344,16 @@ output "cognee_enabled" {
 
 output "cognee_endpoint" {
   value = module.thinkwork.cognee_endpoint
+}
+
+output "twenty_provisioned" {
+  value = module.thinkwork.twenty_provisioned
+}
+
+output "twenty_runtime_enabled" {
+  value = module.thinkwork.twenty_runtime_enabled
+}
+
+output "twenty_url" {
+  value = module.thinkwork.twenty_url
 }

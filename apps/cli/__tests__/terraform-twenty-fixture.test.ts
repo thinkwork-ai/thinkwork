@@ -67,6 +67,13 @@ const GREENFIELD_TFVARS_EXAMPLE = resolve(
   REPO_ROOT,
   "terraform/examples/greenfield/terraform.tfvars.example",
 );
+const INIT_COMMAND = resolve(REPO_ROOT, "apps/cli/src/commands/init.ts");
+const ENTERPRISE_TEMPLATE_MAIN = resolve(
+  REPO_ROOT,
+  "apps/cli/src/commands/enterprise/templates/deploy-repo/terraform/main.tf",
+);
+const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
+const VERIFY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/verify.yml");
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -416,5 +423,112 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(tfvars).toMatch(/twenty_provisioned\s*=\s*false/);
     expect(tfvars).toMatch(/twenty_runtime_enabled\s*=\s*false/);
     expect(tfvars).toMatch(/empty derives https:\/\/crm\.<www_domain>/);
+  });
+
+  it("generates init tfvars and wrapper HCL with Twenty disabled by default", () => {
+    const source = read(INIT_COMMAND);
+
+    expect(source).toMatch(/twenty_provisioned\s+= false/);
+    expect(source).toMatch(/twenty_runtime_enabled = false/);
+    expect(source).toMatch(/variable "twenty_provisioned"/);
+    expect(source).toMatch(/variable "twenty_runtime_enabled"/);
+    expect(source).toMatch(/variable "twenty_image_uri"/);
+    expect(source).toMatch(/variable "twenty_db_url_secret_arn"/);
+    expect(source).toMatch(/variable "twenty_encryption_key_secret_arn"/);
+    expect(source).toMatch(/twenty_provisioned = var\.twenty_provisioned/);
+    expect(source).toMatch(
+      /twenty_runtime_enabled = var\.twenty_runtime_enabled/,
+    );
+    expect(source).toMatch(/twenty_db_name = var\.twenty_db_name/);
+    expect(source).toMatch(/output "twenty_provisioned"/);
+    expect(source).toMatch(/output "twenty_url"/);
+  });
+
+  it("exposes safe Twenty defaults in the enterprise deploy template", () => {
+    const source = read(ENTERPRISE_TEMPLATE_MAIN);
+    const thinkworkModule = firstNestedBlock(source, 'module "thinkwork"');
+
+    expect(source).toMatch(/variable "twenty_provisioned"/);
+    expect(source).toMatch(/default\s*=\s*false/);
+    expect(source).toMatch(/variable "twenty_runtime_enabled"/);
+    expect(source).toMatch(/variable "twenty_image_uri"/);
+    expect(source).toMatch(/variable "twenty_db_name"/);
+    expect(source).toMatch(/variable "twenty_db_url_secret_arn"/);
+    expect(source).toMatch(/variable "twenty_encryption_key_secret_arn"/);
+    expect(thinkworkModule).toMatch(
+      /twenty_provisioned\s*=\s*var\.twenty_provisioned/,
+    );
+    expect(thinkworkModule).toMatch(
+      /twenty_runtime_enabled\s*=\s*var\.twenty_runtime_enabled/,
+    );
+    expect(thinkworkModule).toMatch(
+      /twenty_db_url_secret_arn\s*=\s*var\.twenty_db_url_secret_arn/,
+    );
+    expect(source).toMatch(/output "twenty_provisioned"/);
+    expect(source).toMatch(/output "twenty_url"/);
+  });
+
+  it("keeps CI Terraform runs disabled by default but aligned with Twenty inputs", () => {
+    for (const workflow of [read(DEPLOY_WORKFLOW), read(VERIFY_WORKFLOW)]) {
+      expect(workflow).toMatch(/TWENTY_PROVISIONED_INPUT/);
+      expect(workflow).toMatch(/vars\.TWENTY_PROVISIONED \|\| 'false'/);
+      expect(workflow).toMatch(/TWENTY_RUNTIME_ENABLED_INPUT/);
+      expect(workflow).toMatch(/vars\.TWENTY_RUNTIME_ENABLED \|\| 'false'/);
+      expect(workflow).toMatch(/TWENTY_IMAGE_URI_INPUT/);
+      expect(workflow).toMatch(/TWENTY_DB_USERNAME_INPUT/);
+      expect(workflow).toMatch(/TWENTY_DB_NAME_INPUT/);
+      expect(workflow).toMatch(/thinkwork\/\$\{STAGE\}\/twenty\/db-url/);
+      expect(workflow).toMatch(
+        /thinkwork\/\$\{STAGE\}\/twenty\/encryption-key/,
+      );
+      expect(workflow).toMatch(/-var "twenty_provisioned=\$/);
+      expect(workflow).toMatch(/-var "twenty_runtime_enabled=\$/);
+      expect(workflow).toMatch(/-var "twenty_image_uri=\$/);
+      expect(workflow).toMatch(/-var "twenty_db_username=\$/);
+      expect(workflow).toMatch(/-var "twenty_db_name=\$/);
+      expect(workflow).toMatch(/-var "twenty_db_url_secret_arn=\$/);
+      expect(workflow).toMatch(/-var "twenty_encryption_key_secret_arn=\$/);
+    }
+  });
+
+  it("prepares Twenty runtime secrets and database before Terraform apply when provisioned", () => {
+    const workflow = read(DEPLOY_WORKFLOW);
+
+    expect(workflow).toMatch(/Prepare Twenty CRM runtime secrets and database/);
+    expect(workflow).toMatch(
+      /if \[ "\$\{TWENTY_PROVISIONED:-false\}" != "true" \]/,
+    );
+    expect(workflow).toMatch(/Twenty CRM not provisioned; skipping Twenty/);
+    expect(workflow).toMatch(/openssl rand -hex 32/);
+    expect(workflow).toMatch(/PG_DATABASE_URL/);
+    expect(workflow).toMatch(/ENCRYPTION_KEY/);
+    expect(workflow).toMatch(/aws secretsmanager create-secret/);
+    expect(workflow).toMatch(/aws secretsmanager put-secret-value/);
+    expect(workflow).toMatch(/TWENTY_DB_URL_SECRET_ARN=\$db_secret_arn/);
+    expect(workflow).toMatch(
+      /TWENTY_ENCRYPTION_KEY_SECRET_ARN=\$encryption_secret_arn/,
+    );
+    expect(workflow).toMatch(/CREATE ROLE %I LOGIN PASSWORD %L/);
+    expect(workflow).toMatch(/ALTER ROLE %I LOGIN PASSWORD %L/);
+    expect(workflow).toMatch(/CREATE DATABASE %I/);
+    expect(workflow).not.toMatch(/CREATE DATABASE %I OWNER %I/);
+    expect(workflow).not.toMatch(/ALTER DATABASE %I OWNER TO %I/);
+    expect(workflow).toMatch(/GRANT CONNECT ON DATABASE :\"twenty_db\"/);
+    expect(workflow).toMatch(/\\connect :\"twenty_db\"/);
+    expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);
+  });
+
+  it("keeps verify read-only and fails enabled Twenty plans without deploy-prepared secrets", () => {
+    const workflow = read(VERIFY_WORKFLOW);
+
+    expect(workflow).not.toMatch(/Prepare Twenty CRM runtime secrets/);
+    expect(workflow).not.toMatch(/aws secretsmanager create-secret/);
+    expect(workflow).toMatch(
+      /TWENTY_PROVISIONED=true but the Twenty DB URL secret does not exist yet/,
+    );
+    expect(workflow).toMatch(
+      /TWENTY_PROVISIONED=true but the Twenty encryption key secret does not exist yet/,
+    );
+    expect(workflow).toMatch(/Run the deploy workflow once to create it/);
   });
 });

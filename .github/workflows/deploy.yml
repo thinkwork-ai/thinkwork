@@ -649,6 +649,69 @@ jobs:
             echo "COGNEE_BEDROCK_MODEL_RESOURCE_ARNS=$cognee_bedrock_model_resource_arns"
           } >> "$GITHUB_ENV"
 
+      - name: Resolve Twenty CRM deployment inputs
+        env:
+          TWENTY_PROVISIONED_INPUT: ${{ vars.TWENTY_PROVISIONED || 'false' }}
+          TWENTY_RUNTIME_ENABLED_INPUT: ${{ vars.TWENTY_RUNTIME_ENABLED || 'false' }}
+          TWENTY_IMAGE_URI_INPUT: ${{ vars.TWENTY_IMAGE_URI || '' }}
+          TWENTY_DB_USERNAME_INPUT: ${{ vars.TWENTY_DB_USERNAME || 'thinkwork_twenty' }}
+          TWENTY_DB_NAME_INPUT: ${{ vars.TWENTY_DB_NAME || 'thinkwork_twenty' }}
+          TWENTY_DB_URL_SECRET_ARN_INPUT: ${{ vars.TWENTY_DB_URL_SECRET_ARN || '' }}
+          TWENTY_DB_URL_SECRET_ID_INPUT: ${{ vars.TWENTY_DB_URL_SECRET_ID || '' }}
+          TWENTY_ENCRYPTION_KEY_SECRET_ARN_INPUT: ${{ vars.TWENTY_ENCRYPTION_KEY_SECRET_ARN || '' }}
+          TWENTY_ENCRYPTION_KEY_SECRET_ID_INPUT: ${{ vars.TWENTY_ENCRYPTION_KEY_SECRET_ID || '' }}
+          TWENTY_PUBLIC_URL_INPUT: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_CERTIFICATE_ARN_INPUT: ${{ vars.TWENTY_CERTIFICATE_ARN || '' }}
+        run: |
+          set -euo pipefail
+
+          twenty_provisioned=$(printf '%s' "$TWENTY_PROVISIONED_INPUT" | tr '[:upper:]' '[:lower:]')
+          twenty_runtime_enabled=$(printf '%s' "$TWENTY_RUNTIME_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
+          for value_name in twenty_provisioned twenty_runtime_enabled; do
+            value="${!value_name}"
+            if [ "$value" != "true" ] && [ "$value" != "false" ]; then
+              echo "::error::${value_name^^} must be true or false."
+              exit 1
+            fi
+          done
+          if [ "$twenty_runtime_enabled" = "true" ] && [ "$twenty_provisioned" != "true" ]; then
+            echo "::error::TWENTY_RUNTIME_ENABLED=true requires TWENTY_PROVISIONED=true."
+            exit 1
+          fi
+
+          twenty_image_uri="${TWENTY_IMAGE_URI_INPUT:-}"
+          twenty_db_username="${TWENTY_DB_USERNAME_INPUT:-thinkwork_twenty}"
+          twenty_db_name="${TWENTY_DB_NAME_INPUT:-thinkwork_twenty}"
+          twenty_db_url_secret_id="${TWENTY_DB_URL_SECRET_ID_INPUT:-thinkwork/${STAGE}/twenty/db-url}"
+          twenty_encryption_key_secret_id="${TWENTY_ENCRYPTION_KEY_SECRET_ID_INPUT:-thinkwork/${STAGE}/twenty/encryption-key}"
+
+          if [ "$twenty_provisioned" = "true" ] && [[ ! "$twenty_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::TWENTY_IMAGE_URI must be pinned to an immutable sha256 digest when TWENTY_PROVISIONED=true."
+            exit 1
+          fi
+          if [[ ! "$twenty_db_username" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]]; then
+            echo "::error::TWENTY_DB_USERNAME must be a valid PostgreSQL identifier."
+            exit 1
+          fi
+          if [[ ! "$twenty_db_name" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || [ "$twenty_db_name" = "thinkwork" ]; then
+            echo "::error::TWENTY_DB_NAME must be a valid PostgreSQL identifier distinct from thinkwork."
+            exit 1
+          fi
+
+          {
+            echo "TWENTY_PROVISIONED=$twenty_provisioned"
+            echo "TWENTY_RUNTIME_ENABLED=$twenty_runtime_enabled"
+            echo "TWENTY_IMAGE_URI=$twenty_image_uri"
+            echo "TWENTY_DB_USERNAME=$twenty_db_username"
+            echo "TWENTY_DB_NAME=$twenty_db_name"
+            echo "TWENTY_DB_URL_SECRET_ARN=$TWENTY_DB_URL_SECRET_ARN_INPUT"
+            echo "TWENTY_DB_URL_SECRET_ID=$twenty_db_url_secret_id"
+            echo "TWENTY_ENCRYPTION_KEY_SECRET_ARN=$TWENTY_ENCRYPTION_KEY_SECRET_ARN_INPUT"
+            echo "TWENTY_ENCRYPTION_KEY_SECRET_ID=$twenty_encryption_key_secret_id"
+            echo "TWENTY_PUBLIC_URL=$TWENTY_PUBLIC_URL_INPUT"
+            echo "TWENTY_CERTIFICATE_ARN=$TWENTY_CERTIFICATE_ARN_INPUT"
+          } >> "$GITHUB_ENV"
+
       - name: Prepare Cognee database credentials
         working-directory: terraform/examples/greenfield
         run: |
@@ -754,6 +817,139 @@ jobs:
 
           echo "COGNEE_DB_PASSWORD_SECRET_ARN=$secret_arn" >> "$GITHUB_ENV"
 
+      - name: Prepare Twenty CRM runtime secrets and database
+        working-directory: terraform/examples/greenfield
+        run: |
+          set -euo pipefail
+          if [ "${TWENTY_PROVISIONED:-false}" != "true" ]; then
+            echo "Twenty CRM not provisioned; skipping Twenty runtime secret and database preparation."
+            exit 0
+          fi
+          source ../../../scripts/lib/terraform-output.sh
+
+          DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint 2>/dev/null || echo "")
+          DB_SECRET_ARN=$(tf_output_raw db_secret_arn 2>/dev/null || echo "")
+          if [ -z "$DB_ENDPOINT" ] || [ -z "$DB_SECRET_ARN" ]; then
+            echo "::error::Twenty CRM is provisioned but existing database outputs are missing. Apply the base stack first."
+            exit 1
+          fi
+
+          new_twenty_password() {
+            openssl rand -hex 32 | tr -d '\n'
+          }
+          new_twenty_encryption_key() {
+            openssl rand -hex 32 | tr -d '\n'
+          }
+
+          db_secret_selector="${TWENTY_DB_URL_SECRET_ARN:-$TWENTY_DB_URL_SECRET_ID}"
+          db_secret_arn=$(aws secretsmanager describe-secret \
+            --secret-id "$db_secret_selector" \
+            --query ARN --output text 2>/dev/null || echo "")
+          if [ -z "$db_secret_arn" ] || [ "$db_secret_arn" = "None" ]; then
+            twenty_password=$(new_twenty_password)
+            echo "::add-mask::$twenty_password"
+            db_secret_arn=$(aws secretsmanager create-secret \
+              --name "$TWENTY_DB_URL_SECRET_ID" \
+              --description "Dedicated Twenty CRM PostgreSQL URL for ${STAGE}" \
+              --secret-string '{}' \
+              --query ARN --output text)
+          else
+            secret_json=$(aws secretsmanager get-secret-value \
+              --secret-id "$db_secret_arn" \
+              --query SecretString --output text)
+            twenty_password=$(jq -r '.password // empty' <<< "$secret_json")
+            if [ -z "$twenty_password" ] || [ "$twenty_password" = "PLACEHOLDER_SET_VIA_CI" ] || [[ ! "$twenty_password" =~ ^[A-Za-z0-9._~-]+$ ]]; then
+              twenty_password=$(new_twenty_password)
+            fi
+            echo "::add-mask::$twenty_password"
+          fi
+
+          admin_password=$(aws secretsmanager get-secret-value \
+            --secret-id "$DB_SECRET_ARN" \
+            --query SecretString --output text | jq -r .password)
+          echo "::add-mask::$admin_password"
+          export DATABASE_URL="postgresql://thinkwork_admin:${admin_password}@${DB_ENDPOINT}:5432/thinkwork?sslmode=require"
+
+          psql "$DATABASE_URL" \
+            -v ON_ERROR_STOP=1 \
+            -v twenty_user="$TWENTY_DB_USERNAME" \
+            -v twenty_db="$TWENTY_DB_NAME" \
+            -v twenty_password="$twenty_password" <<'SQL'
+          SELECT format(
+            CASE
+              WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'twenty_user')
+                THEN 'ALTER ROLE %I LOGIN PASSWORD %L'
+              ELSE 'CREATE ROLE %I LOGIN PASSWORD %L'
+            END,
+            :'twenty_user',
+            :'twenty_password'
+          ) \gexec
+
+          SELECT format('CREATE DATABASE %I', :'twenty_db')
+          WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'twenty_db')
+          \gexec
+          GRANT CONNECT ON DATABASE :"twenty_db" TO :"twenty_user";
+          \connect :"twenty_db"
+          GRANT USAGE, CREATE ON SCHEMA public TO :"twenty_user";
+          GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES IN SCHEMA public TO :"twenty_user";
+          GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO :"twenty_user";
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES TO :"twenty_user";
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"twenty_user";
+          SQL
+
+          twenty_database_url="postgresql://${TWENTY_DB_USERNAME}:${twenty_password}@${DB_ENDPOINT}:5432/${TWENTY_DB_NAME}?sslmode=require"
+          echo "::add-mask::$twenty_database_url"
+          db_secret_json=$(jq -n \
+            --arg username "$TWENTY_DB_USERNAME" \
+            --arg password "$twenty_password" \
+            --arg database "$TWENTY_DB_NAME" \
+            --arg PG_DATABASE_URL "$twenty_database_url" \
+            '{username: $username, password: $password, database: $database, PG_DATABASE_URL: $PG_DATABASE_URL}')
+          aws secretsmanager put-secret-value \
+            --secret-id "$db_secret_arn" \
+            --secret-string "$db_secret_json" >/dev/null
+
+          encryption_secret_selector="${TWENTY_ENCRYPTION_KEY_SECRET_ARN:-$TWENTY_ENCRYPTION_KEY_SECRET_ID}"
+          encryption_secret_arn=$(aws secretsmanager describe-secret \
+            --secret-id "$encryption_secret_selector" \
+            --query ARN --output text 2>/dev/null || echo "")
+          if [ -z "$encryption_secret_arn" ] || [ "$encryption_secret_arn" = "None" ]; then
+            twenty_encryption_key=$(new_twenty_encryption_key)
+            echo "::add-mask::$twenty_encryption_key"
+            encryption_secret_json=$(jq -n \
+              --arg ENCRYPTION_KEY "$twenty_encryption_key" \
+              '{ENCRYPTION_KEY: $ENCRYPTION_KEY}')
+            encryption_secret_arn=$(aws secretsmanager create-secret \
+              --name "$TWENTY_ENCRYPTION_KEY_SECRET_ID" \
+              --description "Twenty CRM ENCRYPTION_KEY for ${STAGE}" \
+              --secret-string "$encryption_secret_json" \
+              --query ARN --output text)
+          else
+            encryption_secret_json=$(aws secretsmanager get-secret-value \
+              --secret-id "$encryption_secret_arn" \
+              --query SecretString --output text)
+            twenty_encryption_key=$(jq -r '.ENCRYPTION_KEY // empty' <<< "$encryption_secret_json")
+            if [ -z "$twenty_encryption_key" ] || [ "$twenty_encryption_key" = "PLACEHOLDER_SET_VIA_CI" ]; then
+              twenty_encryption_key=$(new_twenty_encryption_key)
+              echo "::add-mask::$twenty_encryption_key"
+              encryption_secret_json=$(jq -n \
+                --arg ENCRYPTION_KEY "$twenty_encryption_key" \
+                '{ENCRYPTION_KEY: $ENCRYPTION_KEY}')
+              aws secretsmanager put-secret-value \
+                --secret-id "$encryption_secret_arn" \
+                --secret-string "$encryption_secret_json" >/dev/null
+            else
+              echo "::add-mask::$twenty_encryption_key"
+            fi
+          fi
+
+          {
+            echo "TWENTY_DB_URL_SECRET_ARN=$db_secret_arn"
+            echo "TWENTY_ENCRYPTION_KEY_SECRET_ARN=$encryption_secret_arn"
+          } >> "$GITHUB_ENV"
+
       - name: Terraform Apply
         working-directory: terraform/examples/greenfield
         env:
@@ -796,6 +992,15 @@ jobs:
             -var "cognee_llm_provider=$COGNEE_LLM_PROVIDER" \
             -var "cognee_embedding_provider=$COGNEE_EMBEDDING_PROVIDER" \
             -var "cognee_bedrock_model_resource_arns=$COGNEE_BEDROCK_MODEL_RESOURCE_ARNS" \
+            -var "twenty_provisioned=$TWENTY_PROVISIONED" \
+            -var "twenty_runtime_enabled=$TWENTY_RUNTIME_ENABLED" \
+            -var "twenty_image_uri=$TWENTY_IMAGE_URI" \
+            -var "twenty_db_username=$TWENTY_DB_USERNAME" \
+            -var "twenty_db_name=$TWENTY_DB_NAME" \
+            -var "twenty_db_url_secret_arn=$TWENTY_DB_URL_SECRET_ARN" \
+            -var "twenty_encryption_key_secret_arn=$TWENTY_ENCRYPTION_KEY_SECRET_ARN" \
+            -var "twenty_public_url=$TWENTY_PUBLIC_URL" \
+            -var "twenty_certificate_arn=$TWENTY_CERTIFICATE_ARN" \
             -var "enable_workspace_orchestration=true" \
             -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
             -var "mapbox_public_token=${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}" \
