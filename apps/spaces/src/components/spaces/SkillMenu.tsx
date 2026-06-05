@@ -93,13 +93,8 @@ export function SkillMenu({
               )}
             />
             <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-1.5">
-                <span className="truncate text-sm">{skillLabel(skill)}</span>
-                {skill.installed ? null : (
-                  <span className="shrink-0 rounded-sm bg-muted px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                    catalog
-                  </span>
-                )}
+              <span className="block truncate text-sm">
+                {skillLabel(skill)}
               </span>
               {skill.description ? (
                 <span className="block truncate text-xs text-muted-foreground">

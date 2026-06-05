@@ -56,12 +56,11 @@ describe("filterSkillCatalog", () => {
 });
 
 describe("SkillMenu", () => {
-  it("renders matching skills and marks uninstalled catalog skills", () => {
+  it("renders matching skills uniformly (no installed/catalog distinction)", () => {
     render(<SkillMenu options={catalog} query="" onSelect={() => {}} />);
     expect(screen.getByText("CRM Dashboard")).toBeTruthy();
     expect(screen.getByText("Invoice Parser")).toBeTruthy();
-    // not-installed → "catalog" badge
-    expect(screen.getByText("catalog")).toBeTruthy();
+    expect(screen.queryByText("catalog")).toBeNull();
   });
 
   it("fires onSelect with the chosen skill", () => {

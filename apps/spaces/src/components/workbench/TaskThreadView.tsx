@@ -54,11 +54,14 @@ import {
   PromptInputFooter,
   PromptInputSpeechButton,
   PromptInputSubmit,
-  PromptInputTextarea,
   PromptInputTools,
   usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import {
+  SkillTokenInput,
+  type SkillTokenInputHandle,
+} from "@/components/workbench/SkillTokenInput";
 import { IconCircleCheckFilled, IconPaperclip } from "@tabler/icons-react";
 import {
   Reasoning,
@@ -2268,7 +2271,7 @@ function FollowUpComposer({
   ) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<SkillTokenInputHandle | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
   const skillPins = useComposerSkillPins({
     value: composer.text,
@@ -2365,15 +2368,20 @@ function FollowUpComposer({
     if (!prefillText) return;
     composer.setText(prefillText);
     const focusPrefilledComposer = () => {
-      const textarea =
-        textareaRef.current ??
-        document.querySelector<HTMLTextAreaElement>(
-          'textarea[aria-label="Follow up"]',
-        );
-      if (!textarea) return;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(prefillText.length, prefillText.length);
-      return document.activeElement === textarea;
+      // Focus through the editor handle (the contenteditable token field).
+      textareaRef.current?.focus();
+      const node = document.querySelector<HTMLElement>(
+        '[aria-label="Follow up"]',
+      );
+      if (!node) return document.activeElement != null;
+      // Place the caret at the end of the contenteditable token field.
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      return document.activeElement === node;
     };
     const timeoutIds: number[] = [];
     const scheduleTimeout = (delay: number) => {
@@ -2467,7 +2475,7 @@ function FollowUpComposer({
     }
   }
 
-  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
     // `@` and `/` menus are mutually exclusive. When the mention menu isn't
     // open, hand navigation to the skill-pin menu.
     if (!mentionMenuOpen) {
@@ -2551,12 +2559,14 @@ function FollowUpComposer({
             <PromptInputAttachments>
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
-            <PromptInputTextarea
+            <SkillTokenInput
               ref={textareaRef}
               aria-label="Follow up"
               className="min-h-12 max-h-24 py-3 text-base text-white placeholder:text-white/75"
               value={composer.text}
-              onChange={(event) => composer.setText(event.target.value)}
+              onChange={composer.setText}
+              catalog={skillCatalog}
+              mentions={mentions}
               onKeyDown={handleComposerKeyDown}
               placeholder="Type a command, attach a file..."
               disabled={disabled}
@@ -2587,7 +2597,9 @@ function FollowUpComposer({
             </PromptInputTools>
             <div className="flex items-center gap-1">
               <PromptInputSpeechButton
-                textareaRef={textareaRef}
+                textareaRef={
+                  textareaRef as React.RefObject<HTMLTextAreaElement | null>
+                }
                 onTranscriptionChange={composer.setText}
                 aria-label="Voice input"
                 title="Voice input"
