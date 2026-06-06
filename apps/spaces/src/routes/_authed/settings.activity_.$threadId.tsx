@@ -3,7 +3,7 @@ import { OperatorGuard } from "@/components/settings/OperatorGuard";
 import { SpacesThreadDetailRoute } from "@/components/workbench/SpacesThreadDetailRoute";
 import { formatActivityDay, isActivityDay } from "@/lib/settings-activity";
 
-export const Route = createFileRoute("/_authed/settings/activity/$threadId")({
+export const Route = createFileRoute("/_authed/settings/activity_/$threadId")({
   validateSearch: (search: Record<string, unknown>): { day?: string } => ({
     day: isActivityDay(search.day) ? search.day : undefined,
   }),
