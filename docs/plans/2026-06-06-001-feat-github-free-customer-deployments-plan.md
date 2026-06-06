@@ -1,7 +1,7 @@
 ---
 title: "feat: GitHub-free customer deployments"
 type: feat
-status: active
+status: complete
 date: 2026-06-06
 origin: docs/brainstorms/2026-06-06-github-free-customer-deployments-requirements.md
 deepened: 2026-06-06
