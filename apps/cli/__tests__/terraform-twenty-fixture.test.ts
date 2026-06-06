@@ -408,6 +408,12 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(source).toMatch(
       /resource "aws_acm_certificate_validation" "twenty"/,
     );
+    expect(source).toMatch(
+      /from\s*=\s*module\.www_dns\[0\]\.cloudflare_record\.acm_validation\["crm\.thinkwork\.ai"\]/,
+    );
+    expect(source).toMatch(
+      /to\s*=\s*cloudflare_record\.twenty_acm_validation\["crm\.thinkwork\.ai"\]/,
+    );
     expect(thinkworkModule).toMatch(
       /twenty_provisioned\s*=\s*var\.twenty_provisioned/,
     );
