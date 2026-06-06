@@ -48,6 +48,15 @@ import {
   MOBILE_PI_RUNTIME_TYPE,
 } from "../../../lib/mobile-turns/lifecycle.js";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
+import {
+  assertUserModelApproved,
+  ModelApprovalError,
+} from "../../../lib/model-approvals.js";
+import {
+  modelApprovalGraphQLError,
+  resolveRequestedModelId,
+  withRequestedModelMetadata,
+} from "../../../lib/turn-model-selection.js";
 
 function parseJsonArray(value: unknown): Record<string, unknown>[] {
   if (!value) return [];
@@ -91,6 +100,21 @@ export const createThread = async (
     throw new GraphQLError("Requester user identity required", {
       extensions: { code: "UNAUTHENTICATED" },
     });
+  }
+  const requestedModelId = resolveRequestedModelId({ modelId: i.modelId });
+  if (createdByType === "user" && createdById && requestedModelId) {
+    try {
+      await assertUserModelApproved({
+        tenantId: i.tenantId,
+        userId: createdById,
+        modelId: requestedModelId,
+      });
+    } catch (err) {
+      if (err instanceof ModelApprovalError) {
+        throw modelApprovalGraphQLError(err);
+      }
+      throw err;
+    }
   }
 
   let threadSpace: {
@@ -290,6 +314,7 @@ export const createThread = async (
             content: i.firstMessage,
             sender_type: createdByType,
             sender_id: createdById,
+            metadata: withRequestedModelMetadata(undefined, requestedModelId),
             created_at: openingMessageCreatedAt ?? undefined,
           })
           .returning({ id: messages.id });
@@ -312,6 +337,9 @@ export const createThread = async (
         const attachments = parseJsonArray(i.mobileTurnAttachments);
         const metadata = parseJsonObject(i.mobileTurnMetadata);
         const baseSnapshot = {
+          ...(requestedModelId
+            ? { model: requestedModelId, requested_model: requestedModelId }
+            : {}),
           mobile_turn: {
             client_turn_id: mobileTurnClientId,
             handoff_eligible: true,
@@ -369,6 +397,7 @@ export const createThread = async (
                 thread_turn_id: turn.id,
               },
               attachments,
+              ...(requestedModelId ? { requestedModelId } : {}),
             },
           })
           .returning({ id: messages.id });
@@ -477,6 +506,7 @@ export const createThread = async (
         messageId: firstMessageId,
         content: i.firstMessage,
         mentions: parsedOpeningMentions,
+        requestedModelId,
         sender: { type: createdByType, id: createdById },
       });
     } catch (err) {
@@ -497,6 +527,7 @@ export const createThread = async (
         spaceId: row.space_id,
         messageId: firstMessageId,
         content: i.firstMessage,
+        requestedModelId,
         sender: { type: createdByType, id: createdById },
       });
     } catch (err) {

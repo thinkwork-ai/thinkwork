@@ -111,6 +111,7 @@ input SendMessageInput {
   toolCalls: AWSJSON
   toolResults: AWSJSON
   metadata: AWSJSON
+  modelId: String
   mentions: [SendMessageMentionInput!]
 }
 

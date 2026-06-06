@@ -66,6 +66,11 @@ import {
 } from "../lib/chat-finalize/notify.js";
 import { logAgentCorePhase } from "../lib/agentcore-phase-log.js";
 import { checkUserBudgetAndPauseWork } from "../lib/user-budget-enforcement.js";
+import { normalizeRequestedModelId } from "../lib/turn-model-selection.js";
+import {
+  assertUserModelApproved,
+  ModelApprovalError,
+} from "../lib/model-approvals.js";
 
 /**
  * Extract or generate a trace ID for correlating CloudWatch/X-Ray traces.
@@ -145,6 +150,8 @@ interface InvokeEvent {
    * can load + emphasize them for this turn without a permanent install.
    */
   pinnedSkills?: string[];
+  modelId?: string;
+  requestedModelId?: string;
   /**
    * Mobile Pi background handoff reuses the durable local thread_turn row so
    * AgentCore finalizes the same logical turn instead of creating a second one.
@@ -578,7 +585,71 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       computerId: event.computerId,
       computerTaskId: event.computerTaskId,
     });
-    const agentModel = runtimeConfig.templateModel;
+    const fallbackAgentModel = runtimeConfig.templateModel;
+    const requestedParentModel =
+      normalizeRequestedModelId(event.modelId) ??
+      normalizeRequestedModelId(event.requestedModelId);
+    if (requestedParentModel) {
+      if (!currentUserId) {
+        const message = "Requester user identity required for selected model.";
+        console.warn(`[chat-agent-invoke] ${message}`);
+        logAgentCorePhase({
+          source: "chat-agent-invoke",
+          phase: "api.model_approval",
+          status: "failed",
+          traceId,
+          tenantId,
+          agentId,
+          threadId,
+          runtimeType,
+          detail: "missing_user",
+        });
+        if (turnId) {
+          await markThreadTurnSetupFailed({
+            turnId,
+            tenantId,
+            threadId,
+            agentId,
+            message,
+          });
+        }
+        return { ok: false, threadTurnId: turnId };
+      }
+      try {
+        await assertUserModelApproved({
+          tenantId,
+          userId: currentUserId,
+          modelId: requestedParentModel,
+        });
+      } catch (err) {
+        if (err instanceof ModelApprovalError) {
+          console.warn(`[chat-agent-invoke] ${err.message}`);
+          logAgentCorePhase({
+            source: "chat-agent-invoke",
+            phase: "api.model_approval",
+            status: "failed",
+            traceId,
+            tenantId,
+            agentId,
+            threadId,
+            runtimeType,
+            detail: err.code,
+          });
+          if (turnId) {
+            await markThreadTurnSetupFailed({
+              turnId,
+              tenantId,
+              threadId,
+              agentId,
+              message: err.message,
+            });
+          }
+          return { ok: false, threadTurnId: turnId };
+        }
+        throw err;
+      }
+    }
+    const agentModel = requestedParentModel ?? fallbackAgentModel;
     const tenantSlug = runtimeConfig.tenantSlug;
     const agentSlug = runtimeConfig.agentSlug;
     const humanName = runtimeConfig.humanName ?? "";
@@ -702,6 +773,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             context_snapshot: {
               runtime_type: runtimeType,
               model: agentModel,
+              ...(requestedParentModel
+                ? {
+                    requested_model: requestedParentModel,
+                    fallback_model: fallbackAgentModel,
+                  }
+                : {}),
               agent_slug: agentSlug || undefined,
               space_id: spaceId || undefined,
               dispatcher: desktopDelegation

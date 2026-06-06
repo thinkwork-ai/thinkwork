@@ -504,6 +504,19 @@ describe("GraphQL Schema Contract", () => {
       expect(String(fields.firstMessage.type)).toBe("String");
     });
 
+    it("turn-start inputs accept an optional selected parent model", () => {
+      const createThreadInput = schema.getType("CreateThreadInput");
+      const sendMessageInput = schema.getType("SendMessageInput");
+      expect(createThreadInput).toBeDefined();
+      expect(sendMessageInput).toBeDefined();
+      expect(String((createThreadInput as any).getFields().modelId.type)).toBe(
+        "String",
+      );
+      expect(String((sendMessageInput as any).getFields().modelId.type)).toBe(
+        "String",
+      );
+    });
+
     it("unreadThreadCount returns a non-null Int", () => {
       const queryType = schema.getQueryType();
       const field = queryType!.getFields().unreadThreadCount;

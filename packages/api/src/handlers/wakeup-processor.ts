@@ -96,6 +96,11 @@ import {
   readThreadGoalFile,
   readThreadGoalPromptFiles,
 } from "../lib/thread-goals/storage.js";
+import {
+  assertUserModelApproved,
+  ModelApprovalError,
+} from "../lib/model-approvals.js";
+import { normalizeRequestedModelId } from "../lib/turn-model-selection.js";
 
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
@@ -572,7 +577,46 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const runtimeType = normalizeAgentRuntimeType(
     agent.runtime ?? agent.template_runtime,
   );
-  const agentModel = agent.model ?? agent.template_model ?? null;
+  const fallbackAgentModel = agent.model ?? agent.template_model ?? null;
+  let agentModel = fallbackAgentModel;
+  const requestedParentModel =
+    normalizeRequestedModelId(payload?.modelId) ??
+    normalizeRequestedModelId(payload?.requestedModelId);
+  if (requestedParentModel && wakeup.source === "chat_message") {
+    if (
+      wakeup.requested_by_actor_type !== "user" ||
+      !wakeup.requested_by_actor_id
+    ) {
+      await failWakeupBeforeRun({
+        wakeup,
+        payload,
+        error: "Requester user identity required for selected model.",
+        runtimeType,
+        model: requestedParentModel,
+      });
+      return;
+    }
+    try {
+      await assertUserModelApproved({
+        tenantId: wakeup.tenant_id,
+        userId: wakeup.requested_by_actor_id,
+        modelId: requestedParentModel,
+      });
+      agentModel = requestedParentModel;
+    } catch (err) {
+      if (err instanceof ModelApprovalError) {
+        await failWakeupBeforeRun({
+          wakeup,
+          payload,
+          error: err.message,
+          runtimeType,
+          model: requestedParentModel,
+        });
+        return;
+      }
+      throw err;
+    }
+  }
 
   // PRD-02: Pre-invocation budget gate
   if (agent.budget_paused) {
@@ -1196,6 +1240,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         ...((wakeup.payload as Record<string, unknown> | undefined) ?? {}),
         runtime_type: runtimeType,
         model: agentModel,
+        ...(requestedParentModel && agentModel === requestedParentModel
+          ? {
+              requested_model: requestedParentModel,
+              fallback_model: fallbackAgentModel,
+            }
+          : {}),
       },
       thread_id: runThreadId || undefined,
       turn_number: turnNumber || undefined,

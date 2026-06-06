@@ -333,6 +333,7 @@ export async function invokeChatAgent(payload: {
    * the blocklist guardrail and forwards them to AgentCore as `pinned_skills`.
    */
   pinnedSkills?: string[];
+  requestedModelId?: string;
 }): Promise<boolean> {
   try {
     const fnArn = await getChatAgentInvokeFnArn();

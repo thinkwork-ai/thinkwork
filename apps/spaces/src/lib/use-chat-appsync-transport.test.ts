@@ -188,6 +188,34 @@ describe("createAppSyncChatTransport", () => {
       await readAll(stream);
     });
 
+    it("passes the selected model through the turn-start mutation", async () => {
+      const { mutation, subscription, source } = buildFakeUrqlClient({});
+      const transport = createAppSyncChatTransport({
+        urqlClient: { mutation, subscription },
+        threadId: "thread-1",
+        requestedModelId: "anthropic.claude-haiku",
+      });
+
+      const stream = await transport.sendMessages({
+        trigger: "submit-message",
+        chatId: "thread-1",
+        messageId: undefined,
+        messages: [buildUserMessage("use selected model")],
+        abortSignal: undefined,
+      });
+
+      const variables = mutation.mock.calls[0][1] as {
+        input: Record<string, unknown>;
+      };
+      expect(variables.input).toMatchObject({
+        modelId: "anthropic.claude-haiku",
+        metadata: { requestedModelId: "anthropic.claude-haiku" },
+      });
+
+      source.emit(JSON.stringify({ type: "finish" }));
+      await readAll(stream);
+    });
+
     it("refuses to issue a turn-start with an empty user prompt on submit-message", async () => {
       const { mutation, subscription } = buildFakeUrqlClient({});
       const transport = createAppSyncChatTransport({

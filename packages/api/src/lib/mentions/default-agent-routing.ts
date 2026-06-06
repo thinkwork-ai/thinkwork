@@ -51,6 +51,7 @@ export interface DispatchDefaultAgentTurnInput {
   spaceId?: string | null;
   messageId: string;
   content?: string | null;
+  requestedModelId?: string | null;
   sender?: {
     type?: string | null;
     id?: string | null;
@@ -77,6 +78,7 @@ export interface DefaultAgentChatInvoke {
    * payload branch for the Pi runtime (U3/U4). Raw (unfiltered) here.
    */
   pinnedSkills?: string[];
+  requestedModelId?: string;
 }
 
 export interface DefaultAgentChatExecutor {
@@ -161,6 +163,9 @@ export async function dispatchDefaultAgentChatTurn(
     userMessage: input.content ?? "",
     ...(messageAttachments.length > 0 ? { messageAttachments } : {}),
     ...(pinnedSkills.length > 0 ? { pinnedSkills } : {}),
+    ...(input.requestedModelId
+      ? { requestedModelId: input.requestedModelId }
+      : {}),
   });
   if (directInvoked) {
     return {
@@ -254,6 +259,12 @@ export function buildDefaultAgentTurnWakeup(
       messageId: input.messageId,
       userMessage: input.content ?? "",
       message: input.content ?? "",
+      ...(input.requestedModelId
+        ? {
+            modelId: input.requestedModelId,
+            requestedModelId: input.requestedModelId,
+          }
+        : {}),
     },
     idempotencyKey: `agent-default:${input.tenantId}:${input.messageId}:${input.agentId}`,
     requestedByActorType: input.sender?.type ?? "user",

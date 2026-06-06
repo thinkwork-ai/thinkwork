@@ -50,6 +50,7 @@ export interface CreateAppSyncChatTransportOptions {
    * silent regressions.
    */
   onChunkDrop?: (parsed: Extract<ParsedChunk, { kind: "drop" }>) => void;
+  requestedModelId?: string | null;
   /**
    * Hook for the `useChat` retry path. Defaults to the AppSync flow above;
    * exposed here so tests can simulate without hitting urql.
@@ -81,6 +82,7 @@ interface SendMessageVariables {
     toolCalls?: unknown;
     toolResults?: unknown;
     metadata?: unknown;
+    modelId?: string;
   };
 }
 
@@ -151,12 +153,21 @@ export function createAppSyncChatTransport(
           threadId: chatId,
           role: "USER",
           content: promptText ?? "",
+          ...(options.requestedModelId
+            ? { modelId: options.requestedModelId }
+            : {}),
           ...(trigger === "regenerate-message" && {
             metadata: {
               trigger: "regenerate-message",
               regenerateOf: input.messageId ?? null,
+              ...(options.requestedModelId
+                ? { requestedModelId: options.requestedModelId }
+                : {}),
             },
           }),
+          ...(trigger !== "regenerate-message" && options.requestedModelId
+            ? { metadata: { requestedModelId: options.requestedModelId } }
+            : {}),
         },
       };
 

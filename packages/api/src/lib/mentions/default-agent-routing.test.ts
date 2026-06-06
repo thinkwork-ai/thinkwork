@@ -174,6 +174,42 @@ describe("default agent routing", () => {
     ]);
   });
 
+  it("forwards the selected parent model to direct chat invoke", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const invoked: unknown[] = [];
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "Use the approved model",
+        requestedModelId: "anthropic.claude-haiku",
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input);
+          return true;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(invoked).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        messageId: "message-1",
+        userMessage: "Use the approved model",
+        requestedModelId: "anthropic.claude-haiku",
+      },
+    ]);
+  });
+
   it("falls back to the wakeup queue when direct chat invoke is unavailable", async () => {
     const repository = makeRepository({ agentId: "agent-1" });
 
@@ -184,6 +220,7 @@ describe("default agent routing", () => {
           threadId: "thread-1",
           messageId: "message-1",
           content: "Fallback please",
+          requestedModelId: "anthropic.claude-haiku",
         },
         repository,
         {
@@ -208,6 +245,8 @@ describe("default agent routing", () => {
         threadId: "thread-1",
         messageId: "message-1",
         userMessage: "Fallback please",
+        modelId: "anthropic.claude-haiku",
+        requestedModelId: "anthropic.claude-haiku",
       },
     });
   });

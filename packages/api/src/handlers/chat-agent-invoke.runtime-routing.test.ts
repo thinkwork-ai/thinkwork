@@ -8,9 +8,21 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class FakeModelApprovalError extends Error {
+    constructor(
+      public readonly code: string,
+      message: string,
+    ) {
+      super(message);
+      this.name = "ModelApprovalError";
+    }
+  }
+
   return {
     FakeAgentNotFoundError,
+    FakeModelApprovalError,
     resolveAgentRuntimeConfig: vi.fn(),
+    assertUserModelApproved: vi.fn(),
     lambdaSend: vi.fn(),
     selectRows: [] as Array<Array<Record<string, unknown>>>,
     insertValues: [] as Array<Record<string, unknown>>,
@@ -80,6 +92,11 @@ vi.mock("../lib/user-budget-enforcement.js", () => ({
   checkUserBudgetAndPauseWork: mocks.checkUserBudgetAndPauseWork,
 }));
 
+vi.mock("../lib/model-approvals.js", () => ({
+  assertUserModelApproved: mocks.assertUserModelApproved,
+  ModelApprovalError: mocks.FakeModelApprovalError,
+}));
+
 function queryRows() {
   const rows = () => Promise.resolve(mocks.selectRows.shift() ?? []);
   const chain = {
@@ -119,6 +136,7 @@ beforeEach(() => {
   mocks.insertValues = [];
   mocks.updateValues = [];
   mocks.lambdaSend.mockResolvedValue({});
+  mocks.assertUserModelApproved.mockResolvedValue(undefined);
   mocks.checkUserBudgetAndPauseWork.mockResolvedValue({
     overBudget: false,
     pauseReason: null,
@@ -301,6 +319,69 @@ describe("chat-agent-invoke runtime routing", () => {
       spaceSlug: "customer-onboarding",
     });
     expect(body.current_user_email).toBe("user-1@example.com");
+  });
+
+  it("uses the selected parent model for the turn context and Pi payload", async () => {
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "Use the cheaper approved model",
+      messageId: "message-1",
+      requestedModelId: "anthropic.claude-haiku",
+    });
+
+    expect(mocks.assertUserModelApproved).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      modelId: "anthropic.claude-haiku",
+    });
+    expect(mocks.insertValues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          context_snapshot: expect.objectContaining({
+            model: "anthropic.claude-haiku",
+            requested_model: "anthropic.claude-haiku",
+            fallback_model: "moonshotai.kimi-k2.5",
+          }),
+        }),
+      ]),
+    );
+    const command = mocks.lambdaSend.mock.calls[0][0] as {
+      input: { Payload: Uint8Array };
+    };
+    const body = decodeInvokeBody(command);
+    expect(body.model).toBe("anthropic.claude-haiku");
+  });
+
+  it("rejects direct selected-model dispatch when the user is not approved", async () => {
+    mocks.assertUserModelApproved.mockRejectedValueOnce(
+      new mocks.FakeModelApprovalError(
+        "MODEL_NOT_APPROVED",
+        "Model is not approved for this user.",
+      ),
+    );
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    const result = await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "Use an unapproved model",
+      messageId: "message-1",
+      modelId: "anthropic.claude-haiku",
+    });
+
+    expect(result).toEqual({ ok: false, threadTurnId: undefined });
+    expect(mocks.assertUserModelApproved).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      modelId: "anthropic.claude-haiku",
+    });
+    expect(mocks.insertValues).toEqual([]);
+    expect(mocks.lambdaSend).not.toHaveBeenCalled();
   });
 
   it("marks desktop managed delegation turns with parent provenance and returns the child turn id", async () => {

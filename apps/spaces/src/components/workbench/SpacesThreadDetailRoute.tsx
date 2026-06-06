@@ -1519,6 +1519,7 @@ export function SpacesThreadDetailRoute({
             rawText: string;
           }>;
           agentRequested?: boolean;
+          modelId?: string;
         } = {
           threadId,
           role: "USER",
@@ -1531,6 +1532,7 @@ export function SpacesThreadDetailRoute({
         }
         const turnModelId = requestedModelId ?? selectedModelId;
         if (turnModelId) {
+          sendInput.modelId = turnModelId;
           metadata.requestedModelId = turnModelId;
         }
         if (Object.keys(metadata).length > 0) {

@@ -33,6 +33,7 @@ describe("dispatchAgentMentions", () => {
         spaceId: "space-1",
         messageId: "message-1",
         content: "@Coordinator can you help?",
+        requestedModelId: "anthropic.claude-haiku",
         mentions,
         sender: { type: "user", id: "user-1" },
       }),
@@ -55,6 +56,8 @@ describe("dispatchAgentMentions", () => {
             endOffset: 12,
           },
           message: "@Coordinator can you help?",
+          modelId: "anthropic.claude-haiku",
+          requestedModelId: "anthropic.claude-haiku",
         },
         idempotencyKey:
           "agent-mention:tenant-1:message-1:11111111-1111-4111-8111-111111111111",
