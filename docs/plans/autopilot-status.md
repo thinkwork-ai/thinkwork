@@ -22,7 +22,7 @@ status: in_progress
 | U2 GitHub-Free Bootstrap and AWS Control Plane Substrate  | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
 | U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`    | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Merged | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                |
 | U4 Deployment Job Domain, API, and Runner Orchestration   | `codex/u4-deployment-job-api`      | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Merged | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                       |
-| U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`    | Pending                                                      | Active | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.    |
+| U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`    | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Active | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.    |
 
 ### Progress Log
 
@@ -221,6 +221,7 @@ status: in_progress
 - U5 local:
   `pnpm dlx prettier@3.8.2 --check --ignore-unknown <touched U5 files>` and
   `git diff --check` passed.
+- Opened PR [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172).
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 
