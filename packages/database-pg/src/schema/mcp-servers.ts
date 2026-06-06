@@ -60,6 +60,14 @@ export const tenantMcpServers = pgTable(
     tools: jsonb("tools"),
     enabled: boolean("enabled").notNull().default(true),
     /**
+     * Ownership marker for registry rows. Manual is the default for existing
+     * third-party servers; managed_application rows are reconciled by
+     * ThinkWork-managed applications such as Twenty CRM.
+     */
+    management_source: text("management_source").notNull().default("manual"),
+    /** Stable managed application key, e.g. "twenty-crm" for the CRM connector. */
+    managed_application_key: text("managed_application_key"),
+    /**
      * Admin-approval gate for MCP endpoints shipped inside uploaded plugins
      * (plan #007 §R8). 'pending' blocks invocation; 'approved' unlocks it;
      * 'rejected' is terminal. CHECK-constrained in migration 0025 to the
@@ -87,6 +95,9 @@ export const tenantMcpServers = pgTable(
   },
   (table) => [
     uniqueIndex("uq_tenant_mcp_servers_slug").on(table.tenant_id, table.slug),
+    uniqueIndex("uq_tenant_mcp_servers_managed_application")
+      .on(table.tenant_id, table.managed_application_key)
+      .where(sql`${table.managed_application_key} IS NOT NULL`),
     index("idx_tenant_mcp_servers_tenant").on(table.tenant_id),
   ],
 );
