@@ -15,6 +15,7 @@ import type {
 
 const reexecuteThreadsMock = vi.fn();
 const navigateMock = vi.fn();
+const usePageHeaderActionsMock = vi.hoisted(() => vi.fn());
 
 let queryItems: ActivityThreadSummary[] = [];
 let queryFetching = false;
@@ -35,7 +36,7 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
-  usePageHeaderActions: vi.fn(),
+  usePageHeaderActions: usePageHeaderActionsMock,
 }));
 
 vi.mock("@thinkwork/ui", () => ({
@@ -158,6 +159,7 @@ beforeEach(() => {
   subscriptionResults = [null, null];
   reexecuteThreadsMock.mockReset();
   navigateMock.mockReset();
+  usePageHeaderActionsMock.mockReset();
   vi.mocked(useNavigate).mockReturnValue(navigateMock);
   vi.mocked(useQuery).mockImplementation(() => [
     {
@@ -190,7 +192,7 @@ afterEach(() => {
 });
 
 describe("SettingsActivity", () => {
-  it("filters rows by selected day and keeps the date controls beside search", () => {
+  it("filters rows by selected day and keeps the date controls beside search below the chart", () => {
     const onSelectedDayChange = vi.fn();
 
     render(
@@ -201,6 +203,15 @@ describe("SettingsActivity", () => {
     );
 
     expect(screen.getByLabelText("Search activity")).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("activity-chart")
+        .compareDocumentPosition(screen.getByTestId("activity-toolbar")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByTestId("activity-toolbar").textContent).toContain(
+      "2 items",
+    );
     expect(screen.getByText("May 31")).toBeTruthy();
     expect(screen.getByText("Clear date filter")).toBeTruthy();
     expect(screen.getByText("CHAT-979: AgentCore retry")).toBeTruthy();
@@ -259,7 +270,13 @@ describe("SettingsActivity", () => {
     });
 
     reexecuteThreadsMock.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: /Refresh/i }));
+    const headerAction = usePageHeaderActionsMock.mock.calls.at(-1)?.[0]
+      ?.action as React.ReactElement<{
+      onClick: () => void;
+      "aria-label"?: string;
+    }>;
+    expect(headerAction.props["aria-label"]).toBe("Refresh activity");
+    headerAction.props.onClick();
     expect(reexecuteThreadsMock).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });

@@ -81,14 +81,15 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-004-feat-spaces-settings-activity-plan.md`.
 - Target branch: `main`.
-- Current unit: Complete.
-- Current branch: none.
-- Current worktree: none.
-- Status: complete.
+- Current unit: Feedback polish.
+- Current branch: `codex/spaces-activity-feedback`.
+- Current worktree: `.Codex/worktrees/spaces-settings-activity-preview`.
+- Status: active.
 
-| Unit group                                      | Branch                           | PR                                                           | State  | Notes                                                                          |
-| ----------------------------------------------- | -------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------ |
-| U1-U5 Settings Activity, breadcrumbs, detail QA | `codex/spaces-settings-activity` | [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) | Merged | Squash merged as `e066a825`; local verification and required PR checks passed. |
+| Unit group                                       | Branch                           | PR                                                           | State  | Notes                                                                                                                        |
+| ------------------------------------------------ | -------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| U1-U5 Settings Activity, breadcrumbs, detail QA  | `codex/spaces-settings-activity` | [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) | Merged | Squash merged as `e066a825`; local verification and required PR checks passed.                                               |
+| Feedback polish: Activity layout and detail port | `codex/spaces-activity-feedback` | [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135) | Active | Moves refresh to header, moves search below chart, and replaces Settings detail with an Admin-style read-only thread detail. |
 
 ### Progress Log
 
@@ -126,6 +127,33 @@ status: in_progress
   `prettier`, but the root package does not currently declare a local
   `prettier` dependency. `pnpm exec prettier --version` fails with
   `Command "prettier" not found`.
+- Follow-up feedback branch `codex/spaces-activity-feedback` created from
+  `origin/main` in `.Codex/worktrees/spaces-settings-activity-preview`.
+- Moved Settings Activity refresh into the Settings header as an icon-only
+  action and moved Search Activity below the chart while keeping date filter
+  controls on the same line.
+- Replaced the Settings Activity thread detail route's workbench/composer view
+  with a Settings-owned Admin-style read-only detail page: title, activity
+  timeline, properties panel, system prompt sheet, and traces table.
+- Added Spaces-side thread turns/traces queries and focused tests to prevent
+  this route from pointing back at `SpacesThreadDetailRoute`.
+- Local preview remains available at `http://localhost:5175/settings/activity`.
+- Opened feedback PR
+  [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135).
+- Feedback verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsActivity.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx src/routes/_authed/-settings.activity-routing.test.ts`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces build`;
+  `./node_modules/.pnpm/node_modules/.bin/prettier --check <touched files>`;
+  `git diff --check`;
+  `curl -I --max-time 5 http://localhost:5175/settings/activity`.
+- Second feedback pass moved the Activity item count into the search row,
+  tightened the Activity title-to-chart spacing, and lowered the thread detail
+  properties rail breakpoint from `xl` to `md` so it stays on the right in the
+  Settings shell. Verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsActivity.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx`;
+  `pnpm --filter @thinkwork/spaces typecheck`; `git diff --check`;
+  `curl -I --max-time 5 http://localhost:5174/settings/activity`.
 
 ### Blockers
 

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SpacesThreadDetailRoute } from "@/components/workbench/SpacesThreadDetailRoute";
+import { SettingsActivityThreadDetail as SettingsActivityThreadDetailView } from "@/components/settings/SettingsActivityThreadDetail";
 import { formatActivityDay, isActivityDay } from "@/lib/settings-activity";
 
 export const Route = createFileRoute("/_authed/settings/activity_/$threadId")({
@@ -29,10 +29,8 @@ function SettingsActivityThreadDetail() {
     : [{ label: "Activity", href: "/settings/activity" }];
 
   return (
-    <SpacesThreadDetailRoute
+    <SettingsActivityThreadDetailView
       threadId={threadId}
-      backHref="/settings/activity"
-      documentTitlePrefix="Activity Thread"
       breadcrumbParents={breadcrumbParents}
     />
   );

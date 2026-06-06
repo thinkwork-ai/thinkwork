@@ -22,5 +22,7 @@ describe("Settings Activity detail routing", () => {
     expect(routeSource).toContain(
       'createFileRoute("/_authed/settings/activity_/$threadId")',
     );
+    expect(routeSource).toContain("SettingsActivityThreadDetail");
+    expect(routeSource).not.toContain("SpacesThreadDetailRoute");
   });
 });

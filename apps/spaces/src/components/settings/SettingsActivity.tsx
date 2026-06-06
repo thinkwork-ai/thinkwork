@@ -15,10 +15,7 @@ import {
   type ChartConfig,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
-import {
-  SettingsPageTitle,
-  SettingsTablePane,
-} from "@/components/settings/SettingsContent";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   ThreadTurnUpdatedSubscription,
@@ -200,73 +197,99 @@ export function SettingsActivity({
 
   const loading = fetching && !data;
 
-  return (
-    <SettingsTablePane
-      title="Activity"
-      description="Recent thread activity across this workspace."
-      loading={loading}
-      toolbar={
-        <ActivityToolbar
-          search={search}
-          onSearchChange={setSearch}
-          selectedDay={selectedDay}
-          onClearDay={() => handleSelectDay(null)}
-          onRefresh={refreshAll}
-          refreshing={fetching}
+  usePageHeaderActions({
+    title: "Activity",
+    breadcrumbs: [{ label: "Activity" }],
+    action: (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={refreshAll}
+        disabled={fetching}
+        aria-label="Refresh activity"
+        title="Refresh activity"
+      >
+        <RefreshCw
+          className={cn("h-4 w-4", fetching && "animate-spin")}
+          aria-hidden="true"
         />
-      }
-    >
-      <div className="flex h-full min-h-0 flex-col gap-3">
-        <div className="shrink-0">
-          <div className="mb-2 text-xs text-muted-foreground">
-            {allItems.length} item{allItems.length === 1 ? "" : "s"}
-          </div>
-          <ActivityChart
-            items={allItems}
-            selectedDay={selectedDay}
-            onSelectDay={handleSelectDay}
-          />
-        </div>
-        {error ? (
-          <p className="shrink-0 text-sm text-destructive">{error.message}</p>
-        ) : null}
-        <div className="min-h-0 flex-1">
-          <DataTable
-            columns={columns}
-            data={filtered}
-            hideHeader
-            scrollable
-            allowHorizontalScroll={false}
-            pageSize={10}
-            tableClassName="table-fixed"
-            onRowClick={handleRowClick}
-            emptyState={
-              <div className="flex flex-col items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-                <Activity className="h-5 w-5" />
-                <span>No activity</span>
-              </div>
-            }
-          />
-        </div>
+      </Button>
+    ),
+    actionKey: `activity-refresh:${fetching ? "fetching" : "idle"}`,
+  });
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col p-6">
+      <div className="mb-4 shrink-0">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          Activity
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Recent thread activity across this workspace.
+        </p>
       </div>
-    </SettingsTablePane>
+      <div className="min-h-0 flex-1">
+        {loading ? (
+          <div className="flex h-full items-center justify-center">
+            <LoadingShimmer />
+          </div>
+        ) : (
+          <div className="flex h-full min-h-0 flex-col gap-3">
+            <ActivityChart
+              items={allItems}
+              selectedDay={selectedDay}
+              onSelectDay={handleSelectDay}
+            />
+            <ActivityToolbar
+              search={search}
+              onSearchChange={setSearch}
+              itemCount={allItems.length}
+              selectedDay={selectedDay}
+              onClearDay={() => handleSelectDay(null)}
+            />
+            {error ? (
+              <p className="shrink-0 text-sm text-destructive">
+                {error.message}
+              </p>
+            ) : null}
+            <div className="min-h-0 flex-1">
+              <DataTable
+                columns={columns}
+                data={filtered}
+                hideHeader
+                scrollable
+                allowHorizontalScroll={false}
+                pageSize={10}
+                tableClassName="table-fixed"
+                onRowClick={handleRowClick}
+                emptyState={
+                  <div className="flex flex-col items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                    <Activity className="h-5 w-5" />
+                    <span>No activity</span>
+                  </div>
+                }
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
 function ActivityToolbar({
   search,
   onSearchChange,
+  itemCount,
   selectedDay,
   onClearDay,
-  onRefresh,
-  refreshing,
 }: {
   search: string;
   onSearchChange: (value: string) => void;
+  itemCount: number;
   selectedDay: string | null;
   onClearDay: () => void;
-  onRefresh: () => void;
-  refreshing: boolean;
 }) {
   return (
     <div
@@ -283,18 +306,9 @@ function ActivityToolbar({
           aria-label="Search activity"
         />
       </label>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={onRefresh}
-        disabled={refreshing}
-      >
-        <RefreshCw
-          className={cn("h-3.5 w-3.5", refreshing && "animate-spin")}
-        />
-        Refresh
-      </Button>
+      <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+        {itemCount} item{itemCount === 1 ? "" : "s"}
+      </span>
       {selectedDay ? (
         <span className="flex shrink-0 items-center gap-2">
           <Badge variant="secondary" className="whitespace-nowrap text-xs">
