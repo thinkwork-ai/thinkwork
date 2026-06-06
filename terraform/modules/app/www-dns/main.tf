@@ -62,15 +62,15 @@ locals {
 
   # Existing CNAME records stay gated on non-empty targets because their target
   # outputs are already known in the deployed stack. Newly bootstrapped records
-  # such as app/computer compatibility/sandbox CNAMEs must gate only on explicit
-  # booleans so Terraform can plan the resource count before the new CloudFront
-  # distribution exists.
+  # such as app/computer compatibility/sandbox/crm CNAMEs must gate only on
+  # explicit booleans so Terraform can plan the resource count before the new
+  # distribution or load balancer exists.
   create_docs_record     = var.include_docs && var.docs_cloudfront_domain_name != ""
   create_admin_record    = var.include_admin && var.admin_cloudfront_domain_name != ""
   create_app_record      = var.include_app
   create_computer_record = var.include_computer
   create_api_record      = var.include_api && var.api_gateway_id != ""
-  create_crm_record      = var.include_crm && var.crm_alb_dns_name != ""
+  create_crm_record      = var.include_crm
 }
 
 ################################################################################

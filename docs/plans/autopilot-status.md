@@ -7897,3 +7897,40 @@ None.
 ## Open Blockers
 
 None.
+
+## End-to-End Dev Proof
+
+- 2026-06-06T02:20:00Z: Started UI lifecycle proof on branch
+  `codex/twenty-crm-e2e-proof` in worktree
+  `.Codex/worktrees/twenty-crm-e2e-fixes`.
+- The first `ENABLE` click from the logged-in `http://localhost:5175/settings/crm`
+  UI failed before workflow dispatch because the deployed API did not have
+  `THINKWORK_PLATFORM_OPERATOR_EMAILS` wired into the greenfield root module.
+  Opened and merged PR
+  [#2139](https://github.com/thinkwork-ai/thinkwork/pull/2139) as
+  `817ef26b`; the main deploy run
+  [27049619327](https://github.com/thinkwork-ai/thinkwork/actions/runs/27049619327)
+  completed successfully and the deployed Lambda now reports the operator
+  allowlist.
+- The next UI `ENABLE` click failed before workflow dispatch because the dev
+  GitHub deploy token secret `thinkwork/dev/github/deploy-token` did not exist.
+  Created the missing dev Secrets Manager secret from the current GitHub auth
+  token without printing the token.
+- The next UI `ENABLE` click succeeded in the browser: the CRM page showed
+  `queued` with "Deploy queued" copy and an "Open workflow" link. It set repo
+  variables to `TWENTY_PROVISIONED=true`, `TWENTY_RUNTIME_ENABLED=true`, and
+  `TWENTY_DESTROY_DATA=false`, then dispatched workflow run
+  [27049866903](https://github.com/thinkwork-ai/thinkwork/actions/runs/27049866903).
+- Run 27049866903 failed in Terraform Apply because
+  `cloudflare_record.crm.count` depended on `crm_alb_dns_name`, an ALB output
+  unknown during first deploy planning:
+  `Invalid count argument` in `terraform/modules/app/www-dns/main.tf`.
+- Fix in progress: gate the CRM DNS record count only on the static
+  `include_crm` flag and keep the ALB DNS name as the record content. Local
+  verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`,
+  `terraform -chdir=terraform/modules/app/www-dns fmt -check`,
+  `terraform -chdir=terraform/modules/app/www-dns init -backend=false &&
+terraform -chdir=terraform/modules/app/www-dns validate`,
+  `terraform -chdir=terraform/examples/greenfield fmt -check`, and
+  `git diff --check`.
