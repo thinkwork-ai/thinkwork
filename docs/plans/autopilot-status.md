@@ -87,19 +87,19 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-003-feat-twenty-crm-mcp-oauth-plan.md`.
 - Target branch: `main`.
-- Current unit: U1 Add managed MCP ownership schema.
-- Current branch: `codex/twenty-mcp-u1-schema`.
-- Current worktree: `.Codex/worktrees/twenty-mcp-u1-schema`.
+- Current unit: U2 Managed app MCP reconciliation.
+- Current branch: `codex/twenty-mcp-u2-reconcile`.
+- Current worktree: `.Codex/worktrees/twenty-mcp-u2-reconcile`.
 - Status: in progress.
 
-| Unit                              | Branch                       | PR                                                           | State   | Notes                                                                  |
-| --------------------------------- | ---------------------------- | ------------------------------------------------------------ | ------- | ---------------------------------------------------------------------- |
-| U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema` | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Active  | Adds explicit ownership columns and per-tenant managed row uniqueness. |
-| U2 Managed app MCP reconciliation | Pending                      | Pending                                                      | Pending | Not started.                                                           |
-| U3 Desktop/web MCP OAuth          | Pending                      | Pending                                                      | Pending | Not started.                                                           |
-| U4 Spaces MCP auth UI             | Pending                      | Pending                                                      | Pending | Not started.                                                           |
-| U5 Auth status and runtime safety | Pending                      | Pending                                                      | Pending | Not started.                                                           |
-| U6 E2E docs and smoke proof       | Pending                      | Pending                                                      | Pending | Not started.                                                           |
+| Unit                              | Branch                          | PR                                                           | State   | Notes                                                                                                                                              |
+| --------------------------------- | ------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema`    | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Merged  | Squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`; required checks passed after scoped dev migration application for the drift precheck. |
+| U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile` | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Active  | Adds Twenty managed MCP reconciliation, read-only deployment MCP state, lifecycle cleanup hooks, and CRM-page Install MCP Server recovery.         |
+| U3 Desktop/web MCP OAuth          | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
+| U4 Spaces MCP auth UI             | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
+| U5 Auth status and runtime safety | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
+| U6 E2E docs and smoke proof       | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
 
 ### Progress Log
 
@@ -112,6 +112,21 @@ status: in_progress
   `0149_managed_mcp_servers.sql` had not been applied to dev yet. Applied the
   scoped migration to the dev database and reran the scoped drift reporter
   successfully.
+- 2026-06-06: PR
+  [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) passed required
+  checks and was squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`.
+  Remote branch was already deleted by GitHub merge settings; local U1 branch
+  and worktree were removed.
+- 2026-06-06: Created U2 worktree from `origin/main` at `0d22cda0` on branch
+  `codex/twenty-mcp-u2-reconcile`.
+- 2026-06-06: Implemented the U2 local slice: managed Twenty MCP URL/state
+  helper, deployment-status MCP state enrichment, platform-operator
+  `installManagedApplicationMcpServer` mutation, best-effort lifecycle cleanup
+  hooks for park/destroy/redeploy, MCP list ownership metadata, Spaces CRM
+  recovery row, and regenerated GraphQL client types.
+- 2026-06-06: Opened PR
+  [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164). Required
+  checks `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
 
 ### CI / Verification
 
@@ -127,6 +142,26 @@ status: in_progress
 - Local/dev:
   `DATABASE_URL=<dev> bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0149_managed_mcp_servers.sql`
   passed after applying the migration to dev.
+- U2 local: `pnpm schema:build` passed.
+- U2 local:
+  `pnpm --filter @thinkwork/spaces codegen && pnpm --filter @thinkwork/admin codegen && pnpm --filter @thinkwork/mobile codegen && pnpm --filter thinkwork-cli codegen`
+  passed. `pnpm --filter @thinkwork/cli codegen` had no matching package; the
+  actual CLI package is `thinkwork-cli`.
+- U2 local:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/managed-mcp-lifecycle.test.ts src/__tests__/graphql-contract.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts`
+  passed.
+- U2 local:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsCrm.test.tsx src/components/settings/ManagedApplicationsSection.test.tsx`
+  passed.
+- U2 local:
+  `pnpm --filter @thinkwork/api typecheck && pnpm --filter @thinkwork/database-pg typecheck && pnpm --filter @thinkwork/spaces typecheck`
+  passed.
+- U2 local:
+  `pnpm dlx prettier@3.8.2 --check --ignore-unknown <touched files>` passed.
+- U2 local: `git diff --check` passed.
+- U2 GitHub checks on PR
+  [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164): `cla`,
+  `lint`, `test`, `typecheck`, and `verify` passed.
 
 ### Blockers
 

@@ -54,6 +54,11 @@ const FALLBACK_APPS: Record<ManagedAppKey, ManagedApplication> = {
     albArn: null,
     targetGroupArn: null,
     message: "Cognee is not provisioned for this stage.",
+    managedMcpServerId: null,
+    managedMcpStatus: "not_applicable",
+    managedMcpInstalled: false,
+    managedMcpInstallAvailable: false,
+    managedMcpMessage: null,
   },
   twenty: {
     __typename: "ManagedApplicationDeployment",
@@ -75,6 +80,11 @@ const FALLBACK_APPS: Record<ManagedAppKey, ManagedApplication> = {
     albArn: null,
     targetGroupArn: null,
     message: "Twenty CRM has not been provisioned for this stage.",
+    managedMcpServerId: null,
+    managedMcpStatus: "missing",
+    managedMcpInstalled: false,
+    managedMcpInstallAvailable: false,
+    managedMcpMessage: null,
   },
 };
 

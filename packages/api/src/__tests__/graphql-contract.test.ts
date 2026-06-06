@@ -580,6 +580,18 @@ describe("GraphQL Schema Contract", () => {
       expect(managedApp.getFields().runtimeEnabled.type.toString()).toBe(
         "Boolean!",
       );
+      expect(managedApp.getFields().managedMcpServerId.type.toString()).toBe(
+        "ID",
+      );
+      expect(managedApp.getFields().managedMcpStatus.type.toString()).toBe(
+        "String!",
+      );
+      expect(managedApp.getFields().managedMcpInstalled.type.toString()).toBe(
+        "Boolean!",
+      );
+      expect(
+        managedApp.getFields().managedMcpInstallAvailable.type.toString(),
+      ).toBe("Boolean!");
       expect(health.getFields().key.type.toString()).toBe("String!");
     });
 
@@ -612,6 +624,29 @@ describe("GraphQL Schema Contract", () => {
       expect(change.getFields().action.type.toString()).toBe("String!");
       expect(change.getFields().provisioned.type.toString()).toBe("Boolean!");
       expect(change.getFields().runtimeEnabled.type.toString()).toBe(
+        "Boolean!",
+      );
+    });
+
+    it("exposes platform-operator managed MCP install mutation", () => {
+      const mutation = schema.getMutationType() as any;
+      const registration = schema.getType(
+        "ManagedApplicationMcpRegistration",
+      ) as any;
+
+      expect(
+        mutation.getFields().installManagedApplicationMcpServer.type.toString(),
+      ).toBe("ManagedApplicationMcpRegistration!");
+      expect(
+        mutation
+          .getFields()
+          .installManagedApplicationMcpServer.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([["key", "String!"]]);
+      expect(registration.getFields().serverId.type.toString()).toBe("ID");
+      expect(registration.getFields().installed.type.toString()).toBe(
         "Boolean!",
       );
     });

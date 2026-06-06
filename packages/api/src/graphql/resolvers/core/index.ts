@@ -10,6 +10,7 @@ import { updateTenantPolicy } from "./updateTenantPolicy.mutation.js";
 import { updateTenantSettings } from "./updateTenantSettings.mutation.js";
 import { setKnowledgeGraphDeployment } from "./setKnowledgeGraphDeployment.mutation.js";
 import { setManagedApplicationDeployment } from "./setManagedApplicationDeployment.mutation.js";
+import { installManagedApplicationMcpServer } from "./installManagedApplicationMcpServer.mutation.js";
 import { addTenantMember } from "./addTenantMember.mutation.js";
 import { updateTenantMember } from "./updateTenantMember.mutation.js";
 import { removeTenantMember } from "./removeTenantMember.mutation.js";
@@ -44,6 +45,7 @@ export const coreMutations = {
   updateTenantSettings,
   setKnowledgeGraphDeployment,
   setManagedApplicationDeployment,
+  installManagedApplicationMcpServer,
   addTenantMember,
   updateTenantMember,
   removeTenantMember,

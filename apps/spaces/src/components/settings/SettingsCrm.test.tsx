@@ -10,6 +10,7 @@ const { queryDocs, runHealthCheckMock, setDeploymentMock, useQueryMock } =
       SettingsDeploymentStatusQuery: Symbol("deploymentStatus"),
       SettingsManagedApplicationHealthCheckQuery: Symbol("healthCheck"),
       SettingsSetManagedApplicationDeploymentMutation: Symbol("setManagedApp"),
+      SettingsInstallManagedApplicationMcpServerMutation: Symbol("installMcp"),
     },
     runHealthCheckMock: vi.fn(),
     setDeploymentMock: vi.fn(),
@@ -77,6 +78,9 @@ describe("SettingsCrm", () => {
     expect(screen.queryByText("Teardown")).toBeNull();
     expect(screen.queryByRole("button", { name: /park/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /destroy/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /install mcp server/i }),
+    ).toBeNull();
   });
 
   it("moves park and destroy controls to the bottom teardown section once provisioned", () => {
@@ -88,6 +92,9 @@ describe("SettingsCrm", () => {
     expect(screen.getByText("Teardown")).toBeTruthy();
     expect(screen.getByRole("button", { name: /park/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /destroy/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /install mcp server/i }),
+    ).toBeTruthy();
   });
 });
 
@@ -157,6 +164,11 @@ const deploymentWithTwentyDisabled = {
       albArn: null,
       targetGroupArn: null,
       message: "Twenty CRM has not been provisioned for this stage.",
+      managedMcpServerId: null,
+      managedMcpStatus: "missing",
+      managedMcpInstalled: false,
+      managedMcpInstallAvailable: false,
+      managedMcpMessage: null,
     },
   ],
 } as SettingsDeploymentStatusQuery["deploymentStatus"];
@@ -197,6 +209,11 @@ const deploymentWithTwentyRunning = {
       albArn: "arn:aws:elasticloadbalancing:alb/dev",
       targetGroupArn: "arn:aws:elasticloadbalancing:targetgroup/dev",
       message: "Twenty CRM is running.",
+      managedMcpServerId: null,
+      managedMcpStatus: "missing",
+      managedMcpInstalled: false,
+      managedMcpInstallAvailable: true,
+      managedMcpMessage: "Twenty CRM MCP server has not been registered yet.",
     },
   ],
 } as SettingsDeploymentStatusQuery["deploymentStatus"];

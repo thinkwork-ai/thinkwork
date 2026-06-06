@@ -1114,6 +1114,8 @@ async function mcpListTenantServers(
       // migration logic on the client.
       status: r.status,
       urlHash: r.url_hash,
+      managementSource: r.management_source,
+      managedApplicationKey: r.managed_application_key,
       approvedBy: r.approved_by,
       approvedAt: r.approved_at,
       createdAt: r.created_at,

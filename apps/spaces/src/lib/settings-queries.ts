@@ -78,6 +78,11 @@ export const SettingsDeploymentStatusQuery = graphql(`
         albArn
         targetGroupArn
         message
+        managedMcpServerId
+        managedMcpStatus
+        managedMcpInstalled
+        managedMcpInstallAvailable
+        managedMcpMessage
       }
     }
   }
@@ -105,6 +110,18 @@ export const SettingsSetManagedApplicationDeploymentMutation = graphql(`
       provisioned
       runtimeEnabled
       workflowUrl
+      message
+    }
+  }
+`);
+
+export const SettingsInstallManagedApplicationMcpServerMutation = graphql(`
+  mutation SettingsInstallManagedApplicationMcpServer($key: String!) {
+    installManagedApplicationMcpServer(key: $key) {
+      key
+      serverId
+      installed
+      status
       message
     }
   }

@@ -162,6 +162,11 @@ type ManagedApplicationDeployment {
   albArn: String
   targetGroupArn: String
   message: String
+  managedMcpServerId: ID
+  managedMcpStatus: String!
+  managedMcpInstalled: Boolean!
+  managedMcpInstallAvailable: Boolean!
+  managedMcpMessage: String
 }
 
 type KnowledgeGraphDeploymentChange {
@@ -186,6 +191,14 @@ type ManagedApplicationDeploymentChange {
   provisioned: Boolean!
   runtimeEnabled: Boolean!
   workflowUrl: String!
+  message: String!
+}
+
+type ManagedApplicationMcpRegistration {
+  key: String!
+  serverId: ID
+  installed: Boolean!
+  status: String!
   message: String!
 }
 
@@ -364,6 +377,9 @@ extend type Mutation {
   setManagedApplicationDeployment(
     input: SetManagedApplicationDeploymentInput!
   ): ManagedApplicationDeploymentChange!
+  installManagedApplicationMcpServer(
+    key: String!
+  ): ManagedApplicationMcpRegistration!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
   updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!
   "Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey."
