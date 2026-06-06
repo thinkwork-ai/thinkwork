@@ -212,6 +212,8 @@ directories:
 files:
   - out/**/*
   - package.json
+  - "!node_modules/@thinkwork/deployment-profile"
+  - "!node_modules/@thinkwork/deployment-profile/**"
 
 extraMetadata:
   main: out/main/index.js
@@ -266,6 +268,7 @@ publish:
 generateUpdatesFilesForAllChannels: true
 EOF
 
+pnpm --filter @thinkwork/deployment-profile build
 pnpm --filter @thinkwork/spaces build
 pnpm --filter @thinkwork/desktop run build
 pnpm --filter @thinkwork/desktop exec electron-builder --config .electron-builder.generated.yml "$PACKAGE_MODE" --publish "$PUBLISH_MODE"

@@ -7,19 +7,22 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
+    "predev": "pnpm --filter @thinkwork/deployment-profile build",
     "dev": "electron-vite dev",
+    "prebuild": "pnpm --filter @thinkwork/deployment-profile build",
     "build": "electron-vite build",
     "package": "bash ../../scripts/build-desktop.sh dev --dir --publish never",
+    "pretypecheck": "pnpm --filter @thinkwork/deployment-profile build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "echo 'lint: skipped (eslint not configured)'"
   },
   "dependencies": {
-    "@thinkwork/deployment-profile": "workspace:*",
     "@thinkwork/desktop-ipc": "workspace:*",
     "electron-updater": "6.8.3"
   },
   "devDependencies": {
+    "@thinkwork/deployment-profile": "workspace:*",
     "@electron/notarize": "3.1.1",
     "@tailwindcss/vite": "^4.0.7",
     "@tanstack/router-plugin": "^1.154.14",

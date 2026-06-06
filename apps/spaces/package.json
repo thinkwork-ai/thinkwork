@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "pnpm --filter @thinkwork/deployment-profile build",
     "build": "vite build",
     "build:iframe-shell": "vite build --config vite.iframe-shell.config.ts",
     "preview": "vite preview",
     "test": "vitest run",
+    "pretypecheck": "pnpm --filter @thinkwork/deployment-profile build",
     "typecheck": "tsc --noEmit",
     "codegen": "graphql-codegen --config codegen.ts"
   },

@@ -6,6 +6,10 @@ import spacesConfig from "../spaces/vite.config";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
 const spacesDir = resolve(rootDir, "../spaces");
+const bundledWorkspaceDeps = [
+  "@thinkwork/deployment-profile",
+  "@thinkwork/desktop-ipc",
+] as const;
 const DESKTOP_BUILD_ENV_KEYS = [
   "THINKWORK_DESKTOP_APP_ID",
   "THINKWORK_DESKTOP_CHANNEL",
@@ -66,7 +70,7 @@ export default defineConfig(async (env) => {
       },
       build: {
         externalizeDeps: {
-          exclude: ["@thinkwork/desktop-ipc"],
+          exclude: [...bundledWorkspaceDeps],
         },
         outDir: "out/main",
         rollupOptions: {
@@ -79,7 +83,7 @@ export default defineConfig(async (env) => {
     preload: {
       build: {
         externalizeDeps: {
-          exclude: ["@thinkwork/desktop-ipc"],
+          exclude: [...bundledWorkspaceDeps],
         },
         outDir: "out/preload",
         rollupOptions: {
