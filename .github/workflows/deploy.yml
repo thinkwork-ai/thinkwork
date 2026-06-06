@@ -1063,6 +1063,37 @@ jobs:
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}" \
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
 
+      - name: Restart Twenty CRM runtime after database prep
+        working-directory: terraform/examples/greenfield
+        run: |
+          set -euo pipefail
+          if [ "${TWENTY_PROVISIONED:-false}" != "true" ] || [ "${TWENTY_RUNTIME_ENABLED:-false}" != "true" ]; then
+            echo "Twenty CRM runtime is not enabled; skipping ECS restart."
+            exit 0
+          fi
+
+          source ../../../scripts/lib/terraform-output.sh
+          cluster_arn=$(tf_output_raw twenty_cluster_arn 2>/dev/null || echo "")
+          server_service=$(tf_output_raw twenty_server_service_name 2>/dev/null || echo "")
+          worker_service=$(tf_output_raw twenty_worker_service_name 2>/dev/null || echo "")
+
+          if [ -z "$cluster_arn" ] || [ -z "$server_service" ] || [ -z "$worker_service" ]; then
+            echo "::error::Twenty CRM runtime is enabled but ECS service outputs are missing."
+            exit 1
+          fi
+
+          aws ecs update-service \
+            --cluster "$cluster_arn" \
+            --service "$server_service" \
+            --force-new-deployment >/dev/null
+          aws ecs update-service \
+            --cluster "$cluster_arn" \
+            --service "$worker_service" \
+            --force-new-deployment >/dev/null
+          aws ecs wait services-stable \
+            --cluster "$cluster_arn" \
+            --services "$server_service" "$worker_service"
+
       - name: Destroy Twenty CRM retained data
         working-directory: terraform/examples/greenfield
         run: |

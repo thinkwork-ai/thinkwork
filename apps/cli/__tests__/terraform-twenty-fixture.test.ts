@@ -550,6 +550,10 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(workflow).toMatch(/RESET ROLE/);
     expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);
     expect(workflow).not.toMatch(/GRANT USAGE, CREATE ON SCHEMA core/);
+    expect(workflow).toMatch(/Restart Twenty CRM runtime after database prep/);
+    expect(workflow).toMatch(/aws ecs update-service/);
+    expect(workflow).toMatch(/--force-new-deployment/);
+    expect(workflow).toMatch(/aws ecs wait services-stable/);
   });
 
   it("destroys Twenty retained database and secrets only after Terraform teardown is requested", () => {
