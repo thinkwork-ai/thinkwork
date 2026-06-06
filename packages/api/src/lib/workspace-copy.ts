@@ -27,16 +27,9 @@ const BUCKET = process.env.WORKSPACE_BUCKET || "";
 // Default workspace file content
 // ---------------------------------------------------------------------------
 //
-// Canonical content lives in `@thinkwork/workspace-defaults`. The 11 files are:
-//   SOUL.md, IDENTITY.md, USER.md, GUARDRAILS.md, MEMORY_GUIDE.md,
-//   CAPABILITIES.md, PLATFORM.md, ROUTER.md,
-//   memory/lessons.md, memory/preferences.md, memory/contacts.md
-//
-// Note: `TOOLS.md` — which earlier inline DEFAULT_FILES included — is
-// superseded by CAPABILITIES.md per the agent-workspace-files plan and is
-// no longer seeded. Existing agent/template S3 prefixes that already have
-// TOOLS.md forked from prior bootstrap copies are unaffected until Unit 10
-// migration runs.
+// Canonical content lives in `@thinkwork/workspace-defaults`. The exported
+// file list is the source of truth; `TOOLS.md` is canonical again because it
+// carries enforceable model-routing policy for tool-level model stacking.
 
 const DEFAULT_FILES: Record<string, string> = loadDefaults();
 

@@ -1,3 +1,7 @@
+---
+modelRouting: []
+---
+
 ## Tool Usage Policy
 
 You have access to specialized tools. You MUST use them proactively:
@@ -20,3 +24,25 @@ You have access to specialized tools. You MUST use them proactively:
 - Use `delegate_to_workspace(target, task)` for folder-scoped specialist work that must finish in this turn, when available.
 - Use `wake_workspace(target, request_md, ...)` for async folder-scoped work that can pause, wait on humans, or resume after another agent completes.
 - Do not hand-write files under `work/inbox/`, `review/`, `work/runs/*/events/`, `events/intents/`, or `events/audit/`; use the workspace orchestration tools so the platform can validate, order, and audit the write.
+
+## Model Routing
+
+The YAML frontmatter at the top of this file is the machine-readable tool policy
+contract. Use `modelRouting` to route a specific tool or capability to a
+different approved model for cost or latency reasons.
+
+Example:
+
+```yaml
+modelRouting:
+  - tool: workspace_skill
+    match:
+      slug: financial-analysis
+    model: anthropic.claude-3-haiku-20240307-v1:0
+    reason: Use the cheaper model for the analyst subtask.
+```
+
+Routes layer by folder policy: agent root, active Space, active workspace, then
+user workspace. Higher-precedence files replace lower-precedence entries with
+the same `tool` and `match` signature. The runtime still validates that the
+selected model is approved for the user before a routed tool call runs.

@@ -179,6 +179,10 @@ old`,
       content: "# Distilled User Knowledge\n",
       lastModified: "2026-05-22T09:03:10.000Z",
     },
+    "tenants/acme/users/eric/TOOLS.md": {
+      content: "---\nmodelRouting: []\n---\n# User Tools\n",
+      lastModified: "2026-05-22T09:03:15.000Z",
+    },
     "tenants/acme/users/eric/memory/preferences.md": {
       content: "# Preferences\n",
       lastModified: "2026-05-22T09:03:20.000Z",
@@ -490,6 +494,7 @@ describe("renderWorkspaceTuple", () => {
         expect.objectContaining({ path: "Agent/AGENTS.md" }),
         expect.objectContaining({ path: "Agent/workspace/LEGACY.md" }),
         expect.objectContaining({ path: "Spaces/board-pack/TOOLS.md" }),
+        expect.objectContaining({ path: "User/TOOLS.md" }),
         expect.objectContaining({
           path: "User/memory/.snapshots/run-1/memory.md",
         }),
@@ -529,6 +534,7 @@ describe("renderWorkspaceTuple", () => {
       blockedTools: [],
       mcpAllowedServers: null,
       mcpBlockedServers: [],
+      modelRouting: [],
     });
 
     expect(store.puts.map((put) => put.key).sort()).toEqual([
@@ -548,6 +554,125 @@ describe("renderWorkspaceTuple", () => {
         }),
       ]),
     });
+  });
+
+  it("composes model routing from agent, Space, active workspace, and user TOOLS.md", async () => {
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/agents/finance-agent/TOOLS.md": {
+          content: `---
+modelRouting:
+  - tool: workspace_skill
+    match:
+      slug: financial-analysis
+    model: haiku
+---
+# Agent Tools
+`,
+        },
+        "tenants/acme/spaces/board-pack/TOOLS.md": {
+          content: `---
+modelRouting:
+  - tool: workspace_skill
+    match:
+      slug: financial-analysis
+    model: sonnet
+    reason: Board-pack analysis needs stronger synthesis
+---
+# Space Tools
+`,
+        },
+        "tenants/acme/agents/finance-agent/workspaces/financial-analysis/TOOLS.md":
+          {
+            content: `---
+modelRouting:
+  - tool: workspace_skill
+    match:
+      slug: financial-analysis
+    model: workspace-sonnet
+  - tool: workspace_skill
+    match:
+      slug: workspace-only
+    model: workspace-haiku
+---
+# Workspace Tools
+`,
+          },
+        "tenants/acme/users/eric/TOOLS.md": {
+          content: `---
+modelRouting:
+  - tool: workspace_skill
+    match:
+      slug: financial-analysis
+    model: opus
+---
+# User Tools
+`,
+        },
+      }),
+    );
+
+    const result = await renderWorkspaceTuple(
+      {
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        activeWorkspacePath: "workspaces/financial-analysis",
+      },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    expect(result.effectivePolicy.modelRouting).toEqual([
+      {
+        tool: "workspace_skill",
+        match: { slug: "financial-analysis" },
+        model: "opus",
+        sourcePath: "User/TOOLS.md",
+        sourceOwner: "user",
+        precedence: 40,
+      },
+      {
+        tool: "workspace_skill",
+        match: { slug: "workspace-only" },
+        model: "workspace-haiku",
+        sourcePath: "workspaces/financial-analysis/TOOLS.md",
+        sourceOwner: "workspace",
+        precedence: 30,
+      },
+    ]);
+    expect(result.hydrateManifest.files).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "Spaces/board-pack/TOOLS.md" }),
+        expect.objectContaining({ path: "User/TOOLS.md" }),
+      ]),
+    );
+  });
+
+  it("diagnoses a requested active workspace TOOLS.md policy that is missing", async () => {
+    const store = new FakeStore(seedObjects());
+
+    const result = await renderWorkspaceTuple(
+      {
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        activeWorkspacePath: "workspaces/missing",
+      },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+      },
+    );
+
+    expect(result.effectivePolicy.diagnostics).toContain(
+      "tools_md_workspace_policy_missing:workspaces/missing/TOOLS.md",
+    );
   });
 
   it("mounts rendered status files read-only while exposing narrative goal files as writable", async () => {

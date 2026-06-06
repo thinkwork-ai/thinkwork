@@ -3,6 +3,38 @@ export interface WorkspacePolicyInput {
   agentAllowedTools?: unknown;
   spaceToolPolicy?: unknown;
   spaceMcpPolicy?: unknown;
+  modelRoutingSources?: WorkspaceModelRoutingSource[];
+}
+
+export type WorkspaceModelRoutingSourceOwner =
+  | "agent"
+  | "space"
+  | "workspace"
+  | "user";
+
+export interface WorkspaceModelRoutingRouteInput {
+  tool: string;
+  match: Record<string, string>;
+  model: string;
+  reason?: string;
+}
+
+export interface WorkspaceModelRoutingSource {
+  owner: WorkspaceModelRoutingSourceOwner;
+  sourcePath: string;
+  precedence: number;
+  routes: WorkspaceModelRoutingRouteInput[];
+  diagnostics?: string[];
+}
+
+export interface EffectiveWorkspaceModelRoutingEntry {
+  tool: string;
+  match: Record<string, string>;
+  model: string;
+  sourcePath: string;
+  sourceOwner: WorkspaceModelRoutingSourceOwner;
+  precedence: number;
+  reason?: string;
 }
 
 export interface EffectiveWorkspacePolicy {
@@ -10,6 +42,7 @@ export interface EffectiveWorkspacePolicy {
   allowedTools: string[] | null;
   mcpAllowedServers: string[] | null;
   mcpBlockedServers: string[];
+  modelRouting: EffectiveWorkspaceModelRoutingEntry[];
   diagnostics: string[];
 }
 
@@ -47,6 +80,43 @@ function intersectNullable(
   return left.filter((item) => rightSet.has(item)).sort();
 }
 
+function modelRouteKey(route: WorkspaceModelRoutingRouteInput): string {
+  const matchSignature = Object.entries(route.match)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
+  return `${route.tool}\u0000${matchSignature}`;
+}
+
+function composeModelRouting(
+  sources: WorkspaceModelRoutingSource[] | undefined,
+  diagnostics: string[],
+): EffectiveWorkspaceModelRoutingEntry[] {
+  const routesByKey = new Map<string, EffectiveWorkspaceModelRoutingEntry>();
+  for (const source of [...(sources ?? [])].sort(
+    (left, right) => left.precedence - right.precedence,
+  )) {
+    diagnostics.push(...(source.diagnostics ?? []));
+    for (const route of source.routes) {
+      routesByKey.set(modelRouteKey(route), {
+        tool: route.tool,
+        match: { ...route.match },
+        model: route.model,
+        sourcePath: source.sourcePath,
+        sourceOwner: source.owner,
+        precedence: source.precedence,
+        ...(route.reason ? { reason: route.reason } : {}),
+      });
+    }
+  }
+
+  return Array.from(routesByKey.values()).sort((left, right) => {
+    const toolCompare = left.tool.localeCompare(right.tool);
+    if (toolCompare !== 0) return toolCompare;
+    return modelRouteKey(left).localeCompare(modelRouteKey(right));
+  });
+}
+
 export function composeWorkspacePolicy(
   input: WorkspacePolicyInput,
 ): EffectiveWorkspacePolicy {
@@ -72,12 +142,17 @@ export function composeWorkspacePolicy(
   ) {
     diagnostics.push("blocked_tools_take_precedence_over_allowed_tools");
   }
+  const modelRouting = composeModelRouting(
+    input.modelRoutingSources,
+    diagnostics,
+  );
 
   return {
     blockedTools,
     allowedTools,
     mcpAllowedServers: nullableStringArray(mcpPolicy.allowedServers),
     mcpBlockedServers: stringArray(mcpPolicy.blockedServers),
+    modelRouting,
     diagnostics,
   };
 }

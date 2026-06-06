@@ -76,7 +76,10 @@ import {
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
-import { isToolAllowed } from "../lib/workspace-renderer/index.js";
+import {
+  isToolAllowed,
+  type EffectiveWorkspacePolicy,
+} from "../lib/workspace-renderer/index.js";
 import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
 import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
 import {
@@ -209,14 +212,6 @@ export async function invokeAgentCore(
   return { ok: true, status: 200, result };
 }
 
-interface EffectiveWorkspacePolicy {
-  blockedTools: string[];
-  allowedTools: string[] | null;
-  mcpAllowedServers: string[] | null;
-  mcpBlockedServers: string[];
-  diagnostics: string[];
-}
-
 interface RenderWorkspaceTupleForWakeupResult {
   rendered: boolean;
   renderedPrefix?: string;
@@ -253,6 +248,7 @@ function isEffectiveWorkspacePolicy(
     isNullableStringArray(obj.allowedTools) &&
     isNullableStringArray(obj.mcpAllowedServers) &&
     isStringArray(obj.mcpBlockedServers) &&
+    (obj.modelRouting === undefined || Array.isArray(obj.modelRouting)) &&
     isStringArray(obj.diagnostics)
   );
 }
@@ -1498,6 +1494,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     allowedTools: null,
     mcpAllowedServers: null,
     mcpBlockedServers: [],
+    modelRouting: [],
     diagnostics: [],
   };
   let effectiveMcpPolicy: EffectiveWorkspacePolicy | null = null;
