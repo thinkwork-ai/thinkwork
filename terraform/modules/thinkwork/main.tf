@@ -315,6 +315,8 @@ module "cognito" {
 
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
+  oidc_identity_providers    = var.oidc_identity_providers
+  saml_identity_providers    = var.saml_identity_providers
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
 
   # Single ThinkworkAdmin Cognito client serves both admin and end-user SPAs.

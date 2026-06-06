@@ -56,6 +56,17 @@ export interface EnterpriseDeploymentConfig {
   lockTable: string;
   releaseVersion: string;
   releaseManifestUrl: string;
+  identityProvider?: {
+    type: "google" | "oidc" | "saml";
+    providerName: string;
+    secretRequired: boolean;
+    issuerUrl?: string;
+    discoveryUrl?: string;
+    metadataUrl?: string;
+    metadataXmlSha256?: string;
+    entityId?: string;
+    idpIdentifiers?: string[];
+  };
   controlPlanes?: Array<{
     stage: string;
     stateMachineName: string;

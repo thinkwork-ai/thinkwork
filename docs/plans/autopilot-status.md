@@ -11,15 +11,16 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U2 GitHub-Free Bootstrap and AWS Control Plane Substrate.
-- Current branch: `codex/u2-bootstrap-control-plane`.
-- Current worktree: `.Codex/worktrees/u2-bootstrap-control-plane`.
+- Current unit: U3 First-Admin Claim and Cognito Identity Provider Inputs.
+- Current branch: `codex/u3-first-admin-identity`.
+- Current worktree: `.Codex/worktrees/u3-first-admin-identity`.
 - Status: in progress.
 
-| Unit                                                     | Branch                             | PR                                                           | State  | Notes                                                                                                                                                 |
-| -------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Release Manifest and Artifact Contract                | `codex/u1-release-manifest`        | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
-| U2 GitHub-Free Bootstrap and AWS Control Plane Substrate | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Active | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
+| Unit                                                      | Branch                             | PR                                                           | State  | Notes                                                                                                                                                 |
+| --------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Release Manifest and Artifact Contract                 | `codex/u1-release-manifest`        | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
+| U2 GitHub-Free Bootstrap and AWS Control Plane Substrate  | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
+| U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`    | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Active | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                |
 
 ### Progress Log
 
@@ -57,6 +58,24 @@ status: in_progress
   longer prompts for or requires a GitHub repository; legacy repo-backed
   bootstrap still runs when `--repo` or saved registry metadata is present.
 - Opened PR [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165).
+- PR [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) passed
+  required CI and was squash merged as
+  `9329366677ba9466fe149cf818580dfacc228da1`.
+- Removed local worktree `.Codex/worktrees/u2-bootstrap-control-plane` and
+  deleted local branch `codex/u2-bootstrap-control-plane`.
+- Created isolated worktree `.Codex/worktrees/u3-first-admin-identity` from
+  `origin/main` at `93293666`.
+- Started U3 first-admin claim hardening, identity-provider bootstrap
+  validation, Cognito OIDC/SAML Terraform wiring, and focused tests.
+- Implemented U3 first-admin claim markers on tenants, verified-email gating
+  in `bootstrapUser`, sanitized Google/OIDC/SAML bootstrap validation, and
+  Cognito OIDC/SAML Terraform pass-through.
+- Opened PR [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166).
+- CI Migration Drift Precheck initially failed because dev was missing the
+  hand-rolled `0150_bootstrap_first_admin_claim.sql` columns.
+- Applied the scoped migration to the dev database and reran
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0150_bootstrap_first_admin_claim.sql`
+  successfully.
 
 ### CI / Verification
 
@@ -81,6 +100,35 @@ status: in_progress
   passed; local `.terraform` init artifacts were removed afterward.
 - U2 local:
   `pnpm dlx prettier --check <touched U2 TypeScript/Markdown files>` passed.
+- U2 CI: PR [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165)
+  passed CLA, lint, verify, typecheck, and test before merge.
+- U3 local:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/enterprise-identity-provider.test.ts __tests__/enterprise-bootstrap.test.ts __tests__/terraform-cognito-identity-provider-fixture.test.ts`
+  passed.
+- U3 local:
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/bootstrapUser.mutation.test.ts`
+  passed.
+- U3 local: `pnpm --filter thinkwork-cli typecheck` passed.
+- U3 local: `pnpm --filter @thinkwork/api typecheck` passed.
+- U3 local: `pnpm --filter @thinkwork/database-pg typecheck` passed.
+- U3 local:
+  `terraform -chdir=terraform/modules/foundation/cognito init -backend=false && terraform -chdir=terraform/modules/foundation/cognito validate`
+  passed; local `.terraform` init artifacts were removed afterward.
+- U3 local:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/enterprise-identity-provider.test.ts __tests__/enterprise-bootstrap.test.ts __tests__/enterprise-aws-bootstrap.test.ts __tests__/enterprise-deploy-routing.test.ts __tests__/terraform-cognito-identity-provider-fixture.test.ts __tests__/terraform-deployment-control-plane-fixture.test.ts`
+  passed.
+- U3 local:
+  `pnpm dlx prettier --check --ignore-unknown <touched U3 files>` passed.
+- U3 local:
+  `terraform fmt -check -recursive terraform/modules/foundation/cognito terraform/modules/thinkwork`
+  passed.
+- U3 local:
+  `terraform -chdir=terraform/modules/thinkwork init -backend=false && terraform -chdir=terraform/modules/thinkwork validate`
+  passed with existing provider deprecation warnings in unrelated modules; local
+  `.terraform` init artifacts were removed afterward.
+- U3 CI: PR [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166)
+  passed CLA, lint, verify, typecheck, test, and Migration Drift Precheck
+  before merge.
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 

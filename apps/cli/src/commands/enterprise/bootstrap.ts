@@ -38,6 +38,12 @@ import {
   buildEnterpriseAwsDeploymentControlPlanePlan,
   type EnterpriseAwsDeploymentControlPlanePlan,
 } from "./aws-deployments.js";
+import {
+  buildEnterpriseIdentityProviderPlan,
+  parseIdentityProviderType,
+  type EnterpriseIdentityProviderInput,
+  type EnterpriseIdentityProviderPlan,
+} from "./identity-provider.js";
 import { resolveEnterpriseReleasePin } from "./release.js";
 
 export interface EnterpriseBootstrapOptions {
@@ -54,6 +60,7 @@ export interface EnterpriseBootstrapOptions {
   artifactBucket?: string;
   stateBucket?: string;
   lockTable?: string;
+  identityProvider?: EnterpriseIdentityProviderInput;
   dispatchWorkflow?: boolean;
   dryRun?: boolean;
 }
@@ -66,6 +73,7 @@ export interface EnterpriseBootstrapPlan {
   accountId: string;
   region: string;
   release: ReturnType<typeof resolveEnterpriseReleasePin>;
+  identityProvider?: EnterpriseIdentityProviderPlan;
   aws: EnterpriseAwsBootstrapPlan;
   deploymentControlPlanes: EnterpriseAwsDeploymentControlPlanePlan[];
   github?: EnterpriseGitHubBootstrapPlan;
@@ -124,6 +132,9 @@ export function buildEnterpriseBootstrapPlan(
     options.stateBucket ?? `${customerSlug}-thinkwork-terraform-state`;
   const lockTable =
     options.lockTable ?? `${customerSlug}-thinkwork-terraform-locks`;
+  const identityProvider = buildEnterpriseIdentityProviderPlan(
+    options.identityProvider,
+  );
 
   const aws = buildEnterpriseAwsBootstrapPlan({
     accountId,
@@ -161,6 +172,7 @@ export function buildEnterpriseBootstrapPlan(
     accountId,
     region,
     release,
+    identityProvider,
     aws,
     deploymentControlPlanes,
     github,
@@ -217,6 +229,14 @@ export async function runEnterpriseBootstrap(
       planned(plan.aws.stateBucket, "Would ensure Terraform state bucket."),
       planned(plan.aws.lockTable, "Would ensure Terraform lock table."),
       planned(plan.aws.artifactBucket, "Would ensure release artifact bucket."),
+      ...(plan.identityProvider
+        ? [
+            planned(
+              `${plan.customerSlug}:identity-provider:${plan.identityProvider.providerName}`,
+              `Would configure ${plan.identityProvider.type.toUpperCase()} identity provider metadata and store required secrets in Secrets Manager.`,
+            ),
+          ]
+        : []),
       ...plan.deploymentControlPlanes.flatMap((controlPlane) => [
         planned(
           controlPlane.evidenceBucket,
@@ -355,6 +375,30 @@ export function registerEnterpriseBootstrapCommand(program: Command): void {
     )
     .option("--state-bucket <bucket>", "Terraform state bucket")
     .option("--lock-table <table>", "Terraform state lock table")
+    .option(
+      "--identity-provider <type>",
+      "Identity provider type: google, oidc, saml, or none",
+    )
+    .option("--idp-provider-name <name>", "OIDC/SAML provider name")
+    .option("--idp-client-id <id>", "OIDC/Google client ID")
+    .option("--idp-client-secret <secret>", "OIDC/Google client secret")
+    .option("--idp-issuer-url <url>", "OIDC issuer URL")
+    .option("--idp-discovery-url <url>", "OIDC discovery document URL")
+    .option("--idp-authorize-url <url>", "OIDC authorization endpoint URL")
+    .option("--idp-token-url <url>", "OIDC token endpoint URL")
+    .option("--idp-user-info-url <url>", "OIDC user-info endpoint URL")
+    .option("--idp-jwks-url <url>", "OIDC JWKS endpoint URL")
+    .option("--idp-scopes <scopes>", "Comma-separated OIDC scopes")
+    .option("--idp-metadata-url <url>", "SAML metadata URL")
+    .option("--idp-metadata-xml <xml>", "SAML metadata XML")
+    .option("--idp-entity-id <id>", "Expected SAML entityID")
+    .option(
+      "--idp-identifiers <values>",
+      "Comma-separated SAML IdP identifiers or email domains",
+    )
+    .option("--idp-email-attribute <name>", "IdP email attribute mapping")
+    .option("--idp-name-attribute <name>", "IdP name attribute mapping")
+    .option("--idp-username-attribute <name>", "IdP username attribute mapping")
     .option("--dispatch", "Dispatch deploy workflow after bootstrap")
     .option(
       "--dry-run",
@@ -377,6 +421,24 @@ export function registerEnterpriseBootstrapCommand(program: Command): void {
           artifactBucket?: string;
           stateBucket?: string;
           lockTable?: string;
+          identityProvider?: string;
+          idpProviderName?: string;
+          idpClientId?: string;
+          idpClientSecret?: string;
+          idpIssuerUrl?: string;
+          idpDiscoveryUrl?: string;
+          idpAuthorizeUrl?: string;
+          idpTokenUrl?: string;
+          idpUserInfoUrl?: string;
+          idpJwksUrl?: string;
+          idpScopes?: string;
+          idpMetadataUrl?: string;
+          idpMetadataXml?: string;
+          idpEntityId?: string;
+          idpIdentifiers?: string;
+          idpEmailAttribute?: string;
+          idpNameAttribute?: string;
+          idpUsernameAttribute?: string;
           dispatch?: boolean;
           dryRun?: boolean;
           yes?: boolean;
@@ -417,6 +479,7 @@ export function registerEnterpriseBootstrapCommand(program: Command): void {
               artifactBucket: opts.artifactBucket,
               stateBucket: opts.stateBucket,
               lockTable: opts.lockTable,
+              identityProvider: resolveIdentityProviderOptions(opts),
               dispatchWorkflow: opts.dispatch,
               dryRun: opts.dryRun,
             },
@@ -471,6 +534,7 @@ function recordDeploymentMetadata(
     releaseVersion: plan.release.version,
     releaseManifestUrl: plan.release.manifestUrl,
     deploymentMode: plan.repository ? "github" : "aws",
+    identityProvider: plan.identityProvider,
     controlPlanes: plan.deploymentControlPlanes,
     updatedAt: new Date().toISOString(),
   });
@@ -480,6 +544,58 @@ function recordDeploymentMetadata(
     status: "updated",
     message: "Recorded local enterprise deployment metadata without secrets.",
   };
+}
+
+function resolveIdentityProviderOptions(opts: {
+  identityProvider?: string;
+  idpProviderName?: string;
+  idpClientId?: string;
+  idpClientSecret?: string;
+  idpIssuerUrl?: string;
+  idpDiscoveryUrl?: string;
+  idpAuthorizeUrl?: string;
+  idpTokenUrl?: string;
+  idpUserInfoUrl?: string;
+  idpJwksUrl?: string;
+  idpScopes?: string;
+  idpMetadataUrl?: string;
+  idpMetadataXml?: string;
+  idpEntityId?: string;
+  idpIdentifiers?: string;
+  idpEmailAttribute?: string;
+  idpNameAttribute?: string;
+  idpUsernameAttribute?: string;
+}): EnterpriseIdentityProviderInput | undefined {
+  const type = parseIdentityProviderType(opts.identityProvider);
+  if (!type) return undefined;
+  return {
+    type,
+    providerName: opts.idpProviderName,
+    clientId: opts.idpClientId,
+    clientSecret: opts.idpClientSecret,
+    issuerUrl: opts.idpIssuerUrl,
+    discoveryUrl: opts.idpDiscoveryUrl,
+    authorizeUrl: opts.idpAuthorizeUrl,
+    tokenUrl: opts.idpTokenUrl,
+    userInfoUrl: opts.idpUserInfoUrl,
+    jwksUrl: opts.idpJwksUrl,
+    scopes: parseCsv(opts.idpScopes),
+    metadataUrl: opts.idpMetadataUrl,
+    metadataXml: opts.idpMetadataXml,
+    entityId: opts.idpEntityId,
+    idpIdentifiers: parseCsv(opts.idpIdentifiers),
+    emailAttribute: opts.idpEmailAttribute,
+    nameAttribute: opts.idpNameAttribute,
+    usernameAttribute: opts.idpUsernameAttribute,
+  };
+}
+
+function parseCsv(value: string | undefined): string[] | undefined {
+  const values = value
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return values && values.length > 0 ? values : undefined;
 }
 
 async function resolveCustomerSlug(flag: string | undefined): Promise<string> {

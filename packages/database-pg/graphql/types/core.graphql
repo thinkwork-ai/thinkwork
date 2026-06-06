@@ -37,6 +37,13 @@ type Tenant {
   operators mutate the column directly.
   """
   disabledBuiltinTools: [String!]!
+  """
+  True while a bootstrap-created tenant is waiting for the first verified
+  Cognito user whose email matches the pending owner email.
+  """
+  firstAdminClaimRequired: Boolean!
+  firstAdminClaimedAt: AWSDateTime
+  firstAdminClaimedUserId: ID
   settings: TenantSettings
   members: [TenantMember!]!
   agents: [Agent!]!

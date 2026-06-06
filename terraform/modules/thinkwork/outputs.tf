@@ -23,6 +23,11 @@ output "identity_pool_id" {
   value = module.cognito.identity_pool_id
 }
 
+output "identity_provider_names" {
+  description = "Supported Cognito identity providers for created app clients."
+  value       = module.cognito.identity_provider_names
+}
+
 output "kms_key_arn" {
   value = module.kms.key_arn
 }
