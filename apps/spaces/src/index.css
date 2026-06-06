@@ -100,6 +100,13 @@
   display: none;
 }
 
+/* Tailwind Typography (prose) gives every <table> a large vertical margin
+   (~2em top/bottom), which shows as empty bands above the header and below the
+   last row inside Streamdown's table card. Tighten it. */
+.ai-response [data-streamdown="table"] {
+  margin-block: 6px;
+}
+
 /* Streamdown wraps tables in an outer card plus a top-right control bar
    (copy / download / fullscreen). De-card it like the code block above and
    float the controls up to the top-right so they sit on the row of the
