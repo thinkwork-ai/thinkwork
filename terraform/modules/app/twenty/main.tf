@@ -67,7 +67,7 @@ locals {
     { name = "NODE_TLS_REJECT_UNAUTHORIZED", value = "0" },
     { name = "STORAGE_TYPE", value = "local" },
     { name = "STORAGE_LOCAL_PATH", value = local.storage_path },
-    { name = "IS_CONFIG_VARIABLES_IN_DB_ENABLED", value = "true" },
+    { name = "IS_CONFIG_VARIABLES_IN_DB_ENABLED", value = "false" },
     { name = "IS_MULTIWORKSPACE_ENABLED", value = "false" },
   ]
 

@@ -20,7 +20,11 @@ export function ManagedApplicationRouteGuard({
     pause: !showOperator,
   });
 
-  if (!roleResolved || (showOperator && result.fetching && !result.data)) {
+  if (
+    !roleResolved ||
+    (showOperator && result.fetching && !result.data) ||
+    (showOperator && !result.data && !result.error)
+  ) {
     return null;
   }
 
