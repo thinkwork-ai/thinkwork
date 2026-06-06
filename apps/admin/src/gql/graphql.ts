@@ -441,6 +441,13 @@ export type ApproveInboxItemInput = {
   reviewNotes?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type ApproveManagedApplicationDeploymentInput = {
+  destructiveConfirmation?: InputMaybe<Scalars["String"]["input"]>;
+  jobId: Scalars["ID"]["input"];
+  manifestDigest: Scalars["String"]["input"];
+  planDigest: Scalars["String"]["input"];
+};
+
 export type ApproveOntologyChangeSetInput = {
   changeSetId: Scalars["ID"]["input"];
   tenantId: Scalars["ID"]["input"];
@@ -1045,6 +1052,14 @@ export type DeleteScheduledJobResult = {
   ok: Scalars["Boolean"]["output"];
 };
 
+export type DeploymentEvidence = {
+  __typename?: "DeploymentEvidence";
+  bucket?: Maybe<Scalars["String"]["output"]>;
+  jobId: Scalars["ID"]["output"];
+  prefix?: Maybe<Scalars["String"]["output"]>;
+  urls: Array<Scalars["String"]["output"]>;
+};
+
 export type DeploymentStatus = {
   __typename?: "DeploymentStatus";
   accountId?: Maybe<Scalars["String"]["output"]>;
@@ -1643,6 +1658,21 @@ export type LinkedThread = {
   title: Scalars["String"]["output"];
 };
 
+export type ManagedApplication = {
+  __typename?: "ManagedApplication";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  currentStatus: Scalars["String"]["output"];
+  desiredConfig: Scalars["AWSJSON"]["output"];
+  desiredStatus: Scalars["String"]["output"];
+  displayName: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  key: Scalars["String"]["output"];
+  lastJobId?: Maybe<Scalars["ID"]["output"]>;
+  selectedManifestDigest?: Maybe<Scalars["String"]["output"]>;
+  selectedReleaseVersion?: Maybe<Scalars["String"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
 export type ManagedApplicationDeployment = {
   __typename?: "ManagedApplicationDeployment";
   albArn?: Maybe<Scalars["String"]["output"]>;
@@ -1685,6 +1715,48 @@ export type ManagedApplicationDeploymentChange = {
   provisioned: Scalars["Boolean"]["output"];
   runtimeEnabled: Scalars["Boolean"]["output"];
   workflowUrl: Scalars["String"]["output"];
+};
+
+export type ManagedApplicationDeploymentEvent = {
+  __typename?: "ManagedApplicationDeploymentEvent";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  eventType: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  jobId: Scalars["ID"]["output"];
+  message: Scalars["String"]["output"];
+  payload: Scalars["AWSJSON"]["output"];
+};
+
+export type ManagedApplicationDeploymentJob = {
+  __typename?: "ManagedApplicationDeploymentJob";
+  appKey: Scalars["String"]["output"];
+  applicationId?: Maybe<Scalars["ID"]["output"]>;
+  applyExecutionArn?: Maybe<Scalars["String"]["output"]>;
+  approvalRequired: Scalars["Boolean"]["output"];
+  approvedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  approvedByUserId?: Maybe<Scalars["ID"]["output"]>;
+  codebuildBuildArn?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  dataImpact: Scalars["AWSJSON"]["output"];
+  desiredConfigVersion: Scalars["String"]["output"];
+  errorMessage?: Maybe<Scalars["String"]["output"]>;
+  events: Array<ManagedApplicationDeploymentEvent>;
+  evidenceBucket?: Maybe<Scalars["String"]["output"]>;
+  evidencePrefix?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  manifestDigest: Scalars["String"]["output"];
+  operation: Scalars["String"]["output"];
+  planDigest?: Maybe<Scalars["String"]["output"]>;
+  planExecutionArn?: Maybe<Scalars["String"]["output"]>;
+  planSummary: Scalars["AWSJSON"]["output"];
+  rejectedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  rejectedByUserId?: Maybe<Scalars["ID"]["output"]>;
+  releaseVersion: Scalars["String"]["output"];
+  requestedByUserId?: Maybe<Scalars["ID"]["output"]>;
+  stateMachineArn?: Maybe<Scalars["String"]["output"]>;
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type ManagedApplicationHealthCheck = {
@@ -2008,6 +2080,7 @@ export type Mutation = {
   addThreadDependency: ThreadDependency;
   adminUpdateAppletSource: SaveAppletPayload;
   approveInboxItem: InboxItem;
+  approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   approveOntologyChangeSet: OntologyChangeSet;
   assignThreadLabel: ThreadLabelAssignment;
   /**
@@ -2126,6 +2199,7 @@ export type Mutation = {
   regenerateWebhookToken?: Maybe<Webhook>;
   registerPushToken: Scalars["Boolean"]["output"];
   rejectInboxItem: InboxItem;
+  rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
   rejectTenantEntityFact: TenantEntitySection;
   releaseThread: Thread;
@@ -2169,6 +2243,7 @@ export type Mutation = {
   startEvalRun: EvalRun;
   startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
   startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
+  startManagedApplicationPlan: ManagedApplicationDeploymentJob;
   startOntologySuggestionScan: OntologySuggestionScanJob;
   startSkillRun: SkillRun;
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
@@ -2260,6 +2335,10 @@ export type MutationAdminUpdateAppletSourceArgs = {
 export type MutationApproveInboxItemArgs = {
   id: Scalars["ID"]["input"];
   input?: InputMaybe<ApproveInboxItemInput>;
+};
+
+export type MutationApproveManagedApplicationDeploymentArgs = {
+  input: ApproveManagedApplicationDeploymentInput;
 };
 
 export type MutationApproveOntologyChangeSetArgs = {
@@ -2685,6 +2764,10 @@ export type MutationRejectInboxItemArgs = {
   input?: InputMaybe<RejectInboxItemInput>;
 };
 
+export type MutationRejectManagedApplicationDeploymentArgs = {
+  input: RejectManagedApplicationDeploymentInput;
+};
+
 export type MutationRejectOntologyChangeSetArgs = {
   input: RejectOntologyChangeSetInput;
 };
@@ -2855,6 +2938,10 @@ export type MutationStartKnowledgeGraphIngestArgs = {
 
 export type MutationStartKnowledgeGraphThreadIngestArgs = {
   input: StartKnowledgeGraphThreadIngestInput;
+};
+
+export type MutationStartManagedApplicationPlanArgs = {
+  input: StartManagedApplicationPlanInput;
 };
 
 export type MutationStartOntologySuggestionScanArgs = {
@@ -3437,6 +3524,7 @@ export type Query = {
   costTimeSeries: Array<DailyCostPoint>;
   customerOnboardingSpace?: Maybe<Space>;
   customizeBindings?: Maybe<CustomizeBindings>;
+  deploymentEvidence: DeploymentEvidence;
   deploymentStatus: DeploymentStatus;
   evalResultSpans: Array<EvalSpan>;
   evalRun?: Maybe<EvalRun>;
@@ -3457,7 +3545,9 @@ export type Query = {
   knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
   knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
   knowledgeGraphThreadCandidates: Array<KnowledgeGraphThreadCandidate>;
+  managedApplicationDeployment?: Maybe<ManagedApplicationDeploymentJob>;
   managedApplicationHealthCheck: ManagedApplicationHealthCheck;
+  managedApplications: Array<ManagedApplication>;
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
@@ -3773,6 +3863,10 @@ export type QueryCustomerOnboardingSpaceArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type QueryDeploymentEvidenceArgs = {
+  jobId: Scalars["ID"]["input"];
+};
+
 export type QueryEvalResultSpansArgs = {
   runId: Scalars["ID"]["input"];
   testCaseId: Scalars["ID"]["input"];
@@ -3879,6 +3973,10 @@ export type QueryKnowledgeGraphThreadCandidatesArgs = {
   query?: InputMaybe<Scalars["String"]["input"]>;
   requesterUserId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryManagedApplicationDeploymentArgs = {
+  jobId: Scalars["ID"]["input"];
 };
 
 export type QueryManagedApplicationHealthCheckArgs = {
@@ -4367,6 +4465,11 @@ export type RejectInboxItemInput = {
   reviewNotes?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type RejectManagedApplicationDeploymentInput = {
+  jobId: Scalars["ID"]["input"];
+  reason?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type RejectOntologyChangeSetInput = {
   changeSetId: Scalars["ID"]["input"];
   reason?: InputMaybe<Scalars["String"]["input"]>;
@@ -4785,6 +4888,7 @@ export type SendMessageMentionInput = {
 
 export type SetKnowledgeGraphDeploymentInput = {
   enabled: Scalars["Boolean"]["input"];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type SetManagedApplicationDeploymentInput = {
@@ -5164,6 +5268,16 @@ export type StartKnowledgeGraphThreadIngestInput = {
   threadId: Scalars["ID"]["input"];
 };
 
+export type StartManagedApplicationPlanInput = {
+  desiredConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  desiredConfigVersion?: InputMaybe<Scalars["String"]["input"]>;
+  idempotencyKey: Scalars["String"]["input"];
+  key: Scalars["String"]["input"];
+  manifestDigest?: InputMaybe<Scalars["String"]["input"]>;
+  operation: Scalars["String"]["input"];
+  releaseVersion?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type StartOntologySuggestionScanInput = {
   dedupeKey?: InputMaybe<Scalars["String"]["input"]>;
   tenantId: Scalars["ID"]["input"];
@@ -5283,6 +5397,13 @@ export type Tenant = {
    * operators mutate the column directly.
    */
   disabledBuiltinTools: Array<Scalars["String"]["output"]>;
+  /**
+   * True while a bootstrap-created tenant is waiting for the first verified
+   * Cognito user whose email matches the pending owner email.
+   */
+  firstAdminClaimRequired: Scalars["Boolean"]["output"];
+  firstAdminClaimedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  firstAdminClaimedUserId?: Maybe<Scalars["ID"]["output"]>;
   id: Scalars["ID"]["output"];
   issueCounter: Scalars["Int"]["output"];
   issuePrefix?: Maybe<Scalars["String"]["output"]>;

@@ -11,16 +11,17 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U3 First-Admin Claim and Cognito Identity Provider Inputs.
-- Current branch: `codex/u3-first-admin-identity`.
-- Current worktree: `.Codex/worktrees/u3-first-admin-identity`.
+- Current unit: U4 Deployment Job Domain, API, and Runner Orchestration.
+- Current branch: `codex/u4-deployment-job-api`.
+- Current worktree: `.Codex/worktrees/u4-deployment-job-api`.
 - Status: in progress.
 
 | Unit                                                      | Branch                             | PR                                                           | State  | Notes                                                                                                                                                 |
 | --------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | U1 Release Manifest and Artifact Contract                 | `codex/u1-release-manifest`        | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
 | U2 GitHub-Free Bootstrap and AWS Control Plane Substrate  | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
-| U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`    | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Active | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                |
+| U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`    | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Merged | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                |
+| U4 Deployment Job Domain, API, and Runner Orchestration   | `codex/u4-deployment-job-api`      | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Active | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                       |
 
 ### Progress Log
 
@@ -129,6 +130,44 @@ status: in_progress
 - U3 CI: PR [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166)
   passed CLA, lint, verify, typecheck, test, and Migration Drift Precheck
   before merge.
+- PR [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) was squash
+  merged as `634d06f1f1a84537765630636e4fcce874ef7723`; remote branch and
+  local U3 branch/worktree were removed.
+- Created isolated worktree `.Codex/worktrees/u4-deployment-job-api` from
+  `origin/main` at `634d06f1`.
+- Started U4 durable deployment-job schema, GraphQL API, compatibility Cognee
+  plan wrapper, and deployment-runner contract helpers.
+- Implemented U4 local slice: durable managed-app/application deployment
+  tables, GraphQL deployment job API, tenant-admin plan/approval/rejection
+  resolvers, Cognee compatibility wrapper over the new job API, generated
+  GraphQL client types, and the first deployment-runner plan/apply summary
+  helpers.
+- Applied scoped dev migration
+  `packages/database-pg/drizzle/0151_managed_deployments.sql` and verified its
+  declared objects with `scripts/db-migrate-manual.sh`.
+- U4 local: `pnpm schema:build` passed.
+- U4 local:
+  `pnpm --filter @thinkwork/deployment-runner test && pnpm --filter @thinkwork/deployment-runner typecheck`
+  passed.
+- U4 local:
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts src/graphql/resolvers/deployments/managed-applications.test.ts src/graphql/resolvers/deployments/managed-application-deployment.test.ts src/graphql/resolvers/deployments/deployment-evidence.test.ts src/__tests__/graphql-contract.test.ts`
+  passed.
+- U4 local: `pnpm --filter @thinkwork/api test` passed (423 files, 3642
+  tests; existing integration fixtures skipped).
+- U4 local:
+  `pnpm --filter @thinkwork/api typecheck && pnpm --filter @thinkwork/database-pg typecheck && pnpm --filter @thinkwork/deployment-runner typecheck && pnpm --filter @thinkwork/spaces typecheck && pnpm --filter thinkwork-cli typecheck`
+  passed.
+- U4 local:
+  `pnpm --filter @thinkwork/spaces codegen && pnpm --filter @thinkwork/admin codegen && pnpm --filter @thinkwork/mobile codegen && pnpm --filter thinkwork-cli codegen`
+  passed.
+- U4 local:
+  `pnpm dlx prettier@3.8.2 --check --ignore-unknown <touched U4 files>`
+  passed.
+- U4 local: `git diff --check` passed.
+- U4 local/dev:
+  `psql "$DATABASE_URL" -f packages/database-pg/drizzle/0151_managed_deployments.sql && bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0151_managed_deployments.sql`
+  passed against dev.
+- Opened PR [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169).
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 

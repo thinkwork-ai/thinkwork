@@ -1,26 +1,43 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSend, mockGetSecretValueCommand } = vi.hoisted(() => ({
-  mockSend: vi.fn(),
-  mockGetSecretValueCommand: vi.fn((input: unknown) => ({ input })),
-}));
+const { mockSend, mockGetSecretValueCommand, mockStartManagedApplicationPlan } =
+  vi.hoisted(() => ({
+    mockSend: vi.fn(),
+    mockGetSecretValueCommand: vi.fn((input: unknown) => ({ input })),
+    mockStartManagedApplicationPlan: vi.fn(),
+  }));
 
 vi.mock("@aws-sdk/client-secrets-manager", () => ({
   SecretsManagerClient: vi.fn(() => ({ send: mockSend })),
   GetSecretValueCommand: mockGetSecretValueCommand,
 }));
 
+vi.mock("../deployments/startManagedApplicationPlan.mutation.js", () => ({
+  startManagedApplicationPlan: mockStartManagedApplicationPlan,
+}));
+
+vi.mock("./resolve-auth-user.js", () => ({
+  resolveCallerTenantId: vi.fn(async () => null),
+}));
+
 let mod: typeof import("./setKnowledgeGraphDeployment.mutation.js");
 let managedMod: typeof import("./setManagedApplicationDeployment.mutation.js");
 
 const operatorCtx = {
-  auth: { authType: "cognito", email: "ops@example.com" },
+  auth: {
+    authType: "cognito",
+    email: "ops@example.com",
+    principalId: "user-1",
+  },
 } as any;
 
 beforeEach(async () => {
   vi.resetModules();
   mockSend.mockReset();
   mockGetSecretValueCommand.mockClear();
+  mockStartManagedApplicationPlan.mockReset().mockResolvedValue({
+    planExecutionArn: "arn:sfn:execution:plan",
+  });
   vi.stubEnv("STAGE", "dev");
   vi.stubEnv("THINKWORK_PLATFORM_OPERATOR_EMAILS", "ops@example.com");
   vi.stubEnv("KNOWLEDGE_GRAPH_DEPLOY_REPOSITORY", "thinkwork-ai/thinkwork");
@@ -32,16 +49,7 @@ beforeEach(async () => {
 });
 
 describe("setKnowledgeGraphDeployment", () => {
-  it("updates the Cognee deploy variable and dispatches the deploy workflow", async () => {
-    mockSend.mockResolvedValueOnce({
-      SecretString: JSON.stringify({ token: "gh-token" }),
-    });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(response(204))
-      .mockResolvedValueOnce(response(204));
-    vi.stubGlobal("fetch", fetchMock);
-
+  it("queues a Cognee deployment plan instead of dispatching GitHub Actions", async () => {
     const result = await mod.setKnowledgeGraphDeployment(
       null,
       { input: { enabled: true } },
@@ -50,61 +58,52 @@ describe("setKnowledgeGraphDeployment", () => {
 
     expect(result).toMatchObject({
       desiredEnabled: true,
-      workflowUrl:
-        "https://github.com/thinkwork-ai/thinkwork/actions/workflows/deploy.yml",
+      workflowUrl: "arn:sfn:execution:plan",
+      message: "Knowledge Graph enable deployment plan queued.",
     });
-    expect(mockGetSecretValueCommand).toHaveBeenCalledWith({
-      SecretId: "thinkwork/dev/github/deploy-token",
-    });
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/COGNEE_ENABLED",
-      expect.objectContaining({
-        method: "PATCH",
-        body: JSON.stringify({ name: "COGNEE_ENABLED", value: "true" }),
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/workflows/deploy.yml/dispatches",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ ref: "main" }),
-      }),
+    expect(mockGetSecretValueCommand).not.toHaveBeenCalled();
+    expect(mockStartManagedApplicationPlan).toHaveBeenCalledWith(
+      null,
+      {
+        input: expect.objectContaining({
+          key: "cognee",
+          operation: "ENABLE",
+        }),
+      },
+      operatorCtx,
     );
   });
 
-  it("creates the GitHub Actions variable when it does not exist yet", async () => {
-    mockSend.mockResolvedValueOnce({ SecretString: "plain-token" });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(response(404, { message: "Not Found" }))
-      .mockResolvedValueOnce(response(201, { name: "COGNEE_ENABLED" }))
-      .mockResolvedValueOnce(response(204));
-    vi.stubGlobal("fetch", fetchMock);
-
+  it("passes explicit idempotency keys through to the deployment job API", async () => {
     await mod.setKnowledgeGraphDeployment(
       null,
-      { input: { enabled: false } },
+      { input: { enabled: false, idempotencyKey: "kg-disable-1" } },
       operatorCtx,
     );
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ name: "COGNEE_ENABLED", value: "false" }),
-      }),
+    expect(mockStartManagedApplicationPlan).toHaveBeenCalledWith(
+      null,
+      {
+        input: {
+          key: "cognee",
+          operation: "DESTROY",
+          idempotencyKey: "kg-disable-1",
+        },
+      },
+      operatorCtx,
     );
   });
 
-  it("rejects callers outside the platform-operator allowlist", async () => {
+  it("surfaces deployment-job authorization failures", async () => {
+    mockStartManagedApplicationPlan.mockRejectedValueOnce(
+      new Error("Tenant admin role required"),
+    );
+
     await expect(
       mod.setKnowledgeGraphDeployment(null, { input: { enabled: true } }, {
         auth: { authType: "cognito", email: "member@example.com" },
       } as any),
-    ).rejects.toThrow(/platform-operator/);
+    ).rejects.toThrow(/tenant admin/i);
   });
 });
 

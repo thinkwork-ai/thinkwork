@@ -1,0 +1,100 @@
+type ManagedApplication {
+  id: ID!
+  key: String!
+  displayName: String!
+  desiredStatus: String!
+  currentStatus: String!
+  desiredConfig: AWSJSON!
+  selectedReleaseVersion: String
+  selectedManifestDigest: String
+  lastJobId: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ManagedApplicationDeploymentJob {
+  id: ID!
+  tenantId: ID!
+  applicationId: ID
+  appKey: String!
+  operation: String!
+  status: String!
+  requestedByUserId: ID
+  releaseVersion: String!
+  manifestDigest: String!
+  desiredConfigVersion: String!
+  stateMachineArn: String
+  planExecutionArn: String
+  applyExecutionArn: String
+  codebuildBuildArn: String
+  planDigest: String
+  planSummary: AWSJSON!
+  dataImpact: AWSJSON!
+  evidenceBucket: String
+  evidencePrefix: String
+  approvalRequired: Boolean!
+  approvedByUserId: ID
+  approvedAt: AWSDateTime
+  rejectedByUserId: ID
+  rejectedAt: AWSDateTime
+  errorMessage: String
+  events: [ManagedApplicationDeploymentEvent!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ManagedApplicationDeploymentEvent {
+  id: ID!
+  jobId: ID!
+  eventType: String!
+  message: String!
+  payload: AWSJSON!
+  createdAt: AWSDateTime!
+}
+
+type DeploymentEvidence {
+  jobId: ID!
+  bucket: String
+  prefix: String
+  urls: [String!]!
+}
+
+input StartManagedApplicationPlanInput {
+  key: String!
+  operation: String!
+  releaseVersion: String
+  manifestDigest: String
+  desiredConfigVersion: String
+  desiredConfig: AWSJSON
+  idempotencyKey: String!
+}
+
+input ApproveManagedApplicationDeploymentInput {
+  jobId: ID!
+  planDigest: String!
+  manifestDigest: String!
+  destructiveConfirmation: String
+}
+
+input RejectManagedApplicationDeploymentInput {
+  jobId: ID!
+  reason: String
+}
+
+extend type Query {
+  managedApplications: [ManagedApplication!]!
+  managedApplicationDeployment(jobId: ID!): ManagedApplicationDeploymentJob
+  deploymentEvidence(jobId: ID!): DeploymentEvidence!
+}
+
+extend type Mutation {
+  startManagedApplicationPlan(
+    input: StartManagedApplicationPlanInput!
+  ): ManagedApplicationDeploymentJob!
+  approveManagedApplicationDeployment(
+    input: ApproveManagedApplicationDeploymentInput!
+  ): ManagedApplicationDeploymentJob!
+  rejectManagedApplicationDeployment(
+    input: RejectManagedApplicationDeploymentInput!
+  ): ManagedApplicationDeploymentJob!
+}

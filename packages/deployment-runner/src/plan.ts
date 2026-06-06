@@ -1,0 +1,37 @@
+import {
+  dataImpactFor,
+  evidencePointer,
+  parseRunnerInput,
+  stablePlanDigest,
+  type DeploymentSummary,
+} from "./shared.js";
+
+export function buildPlanSummary(args: {
+  input: unknown;
+  evidenceBucket: string;
+}): DeploymentSummary {
+  const input = parseRunnerInput(args.input);
+  if (input.phase !== "plan") {
+    throw new Error("Plan summary requires phase=plan");
+  }
+  const body = {
+    jobId: input.jobId,
+    appKey: input.appKey,
+    operation: input.operation,
+    releaseVersion: input.releaseVersion,
+    manifestDigest: input.manifestDigest,
+    desiredConfigVersion: input.desiredConfigVersion,
+    dataImpact: dataImpactFor(input.appKey, input.operation),
+  };
+  return {
+    ...body,
+    planDigest: stablePlanDigest(body),
+    evidence: evidencePointer({
+      bucket: args.evidenceBucket,
+      tenantId: input.tenantId,
+      appKey: input.appKey,
+      jobId: input.jobId,
+      phase: "plan",
+    }),
+  };
+}
