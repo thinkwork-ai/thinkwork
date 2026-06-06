@@ -9,8 +9,10 @@ import {
   GET_DESKTOP_CONFIG_CHANNEL,
   GET_SESSION_TOKENS_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
+  IMPORT_DEPLOYMENT_PROFILE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
   OAUTH_ERROR_EVENT_CHANNEL,
+  REMOVE_DEPLOYMENT_PROFILE_CHANNEL,
   REMOVE_TOKEN_STORAGE_ITEM_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   SET_NATIVE_THEME_CHANNEL,
@@ -28,8 +30,11 @@ import {
   GetDesktopConfigResponseSchema,
   GetSessionTokensResponseSchema,
   GetUpdateStateResponseSchema,
+  ImportDeploymentProfileRequestSchema,
+  ImportDeploymentProfileResponseSchema,
   ConsumePendingOAuthResponseSchema,
   RemoveTokenStorageItemRequestSchema,
+  RemoveDeploymentProfileResponseSchema,
   OAuthErrorEventSchema,
   ReportInstallOutcomeRequestSchema,
   RaiseThreadNotificationRequestSchema,
@@ -131,6 +136,19 @@ const bridge = {
   async getDesktopConfig() {
     return GetDesktopConfigResponseSchema.parse(
       await ipcRenderer.invoke(GET_DESKTOP_CONFIG_CHANNEL),
+    );
+  },
+  async importDeploymentProfile(request) {
+    return ImportDeploymentProfileResponseSchema.parse(
+      await ipcRenderer.invoke(
+        IMPORT_DEPLOYMENT_PROFILE_CHANNEL,
+        ImportDeploymentProfileRequestSchema.parse(request),
+      ),
+    );
+  },
+  async removeDeploymentProfile() {
+    return RemoveDeploymentProfileResponseSchema.parse(
+      await ipcRenderer.invoke(REMOVE_DEPLOYMENT_PROFILE_CHANNEL),
     );
   },
   async getUpdateState() {

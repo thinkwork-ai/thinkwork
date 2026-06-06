@@ -98,6 +98,44 @@ describe("desktop IPC schemas", () => {
         state: "xyz",
       }),
     ).toEqual({ code: "abc", next: "/automations/123", state: "xyz" });
+    expect(
+      ChannelSchemas.importDeploymentProfile.request.parse({
+        json: '{"schemaVersion":1}',
+      }),
+    ).toEqual({ json: '{"schemaVersion":1}' });
+    expect(
+      ChannelSchemas.importDeploymentProfile.response.parse({
+        stage: "dev",
+        configured: true,
+        missing: [],
+        oauthRedirectUri: "thinkwork-dev://oauth/callback",
+        endpoints: {
+          apiUrl: "https://api.example.com",
+          graphqlHttpUrl: "https://api.example.com/graphql",
+          graphqlUrl: "https://appsync.example.com/graphql",
+          graphqlWsUrl: "wss://appsync.example.com/graphql",
+          cognitoDomain: "https://auth.example.com",
+        },
+        deployment: {
+          source: "profile",
+          deploymentId: "acme-dev",
+          displayName: "Acme ThinkWork",
+          stage: "dev",
+          region: "us-east-1",
+          profileSha256: "abc123",
+          trustStatus: "unsigned",
+          trustLabel: "Unsigned development profile",
+        },
+      }),
+    ).toMatchObject({
+      deployment: {
+        source: "profile",
+        displayName: "Acme ThinkWork",
+      },
+    });
+    expect(
+      ChannelSchemas.removeDeploymentProfile.request.parse(undefined),
+    ).toBeUndefined();
 
     expect(
       ChannelSchemas.getUpdateState.response.parse({
@@ -239,6 +277,15 @@ describe("desktop IPC schemas", () => {
         state: "xyz",
       },
     );
+    expect(
+      DeepLinkCallbackSchema.parse({
+        type: "deployment-profile",
+        json: '{"schemaVersion":1}',
+      }),
+    ).toEqual({
+      type: "deployment-profile",
+      json: '{"schemaVersion":1}',
+    });
     expect(() =>
       DeepLinkCallbackSchema.parse({
         code: "abc",

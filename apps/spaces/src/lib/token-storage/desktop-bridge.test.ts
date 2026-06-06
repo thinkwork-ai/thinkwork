@@ -76,6 +76,36 @@ function makeBridge(
         },
       };
     },
+    async importDeploymentProfile() {
+      return {
+        stage: "dev",
+        configured: true,
+        missing: [],
+        oauthRedirectUri: "thinkwork-dev://oauth/callback",
+        endpoints: {
+          apiUrl: "https://api.example.com",
+          graphqlHttpUrl: "https://api.example.com/graphql",
+          graphqlUrl: "https://appsync.example.com/graphql",
+          graphqlWsUrl: "wss://appsync.example.com/graphql",
+          cognitoDomain: "https://auth.example.com",
+        },
+      };
+    },
+    async removeDeploymentProfile() {
+      return {
+        stage: "dev",
+        configured: true,
+        missing: [],
+        oauthRedirectUri: "thinkwork-dev://oauth/callback",
+        endpoints: {
+          apiUrl: "https://api.example.com",
+          graphqlHttpUrl: "https://api.example.com/graphql",
+          graphqlUrl: "https://appsync.example.com/graphql",
+          graphqlWsUrl: "wss://appsync.example.com/graphql",
+          cognitoDomain: "https://auth.example.com",
+        },
+      };
+    },
     async getUpdateState() {
       return {
         status: "disabled",

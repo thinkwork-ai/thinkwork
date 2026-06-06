@@ -11,6 +11,10 @@ export const CONSUME_PENDING_OAUTH_CHANNEL = "desktop:consume-pending-oauth";
 export const DEEP_LINK_EVENT_CHANNEL = "desktop:deep-link";
 export const OAUTH_ERROR_EVENT_CHANNEL = "desktop:oauth-error";
 export const GET_DESKTOP_CONFIG_CHANNEL = "desktop:get-config";
+export const IMPORT_DEPLOYMENT_PROFILE_CHANNEL =
+  "desktop:deployment-profile:import";
+export const REMOVE_DEPLOYMENT_PROFILE_CHANNEL =
+  "desktop:deployment-profile:remove";
 export const GET_UPDATE_STATE_CHANNEL = "desktop:get-update-state";
 export const CHECK_FOR_UPDATES_CHANNEL = "desktop:check-for-updates";
 export const DOWNLOAD_UPDATE_CHANNEL = "desktop:download-update";
@@ -41,6 +45,8 @@ export const IPC_CHANNELS = {
   DEEP_LINK_EVENT: DEEP_LINK_EVENT_CHANNEL,
   OAUTH_ERROR_EVENT: OAUTH_ERROR_EVENT_CHANNEL,
   GET_DESKTOP_CONFIG: GET_DESKTOP_CONFIG_CHANNEL,
+  IMPORT_DEPLOYMENT_PROFILE: IMPORT_DEPLOYMENT_PROFILE_CHANNEL,
+  REMOVE_DEPLOYMENT_PROFILE: REMOVE_DEPLOYMENT_PROFILE_CHANNEL,
   GET_UPDATE_STATE: GET_UPDATE_STATE_CHANNEL,
   CHECK_FOR_UPDATES: CHECK_FOR_UPDATES_CHANNEL,
   DOWNLOAD_UPDATE: DOWNLOAD_UPDATE_CHANNEL,

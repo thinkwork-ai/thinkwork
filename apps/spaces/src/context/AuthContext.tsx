@@ -93,7 +93,8 @@ export function AuthProvider({
     const unsubscribe = tokenStorage.subscribe(() => {
       void restoreSession(false);
     });
-    const unsubscribeDeepLink = desktopBridge?.onDeepLink(() => {
+    const unsubscribeDeepLink = desktopBridge?.onDeepLink((callback) => {
+      if ("type" in callback && callback.type === "deployment-profile") return;
       void restoreSession(true);
     });
     const unsubscribeSignedOut = desktopBridge?.onSignedOut(() => {

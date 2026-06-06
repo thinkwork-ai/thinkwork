@@ -175,6 +175,111 @@ describe("SignInPage", () => {
     ).toBe(true);
   });
 
+  it("shows the active desktop deployment profile before OAuth starts", async () => {
+    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
+      getDesktopConfig: vi.fn().mockResolvedValue({
+        stage: "customer-dev",
+        configured: true,
+        missing: [],
+        oauthRedirectUri: "thinkwork-dev://oauth/callback",
+        endpoints: {
+          apiUrl: "https://api.customer.example.com",
+          graphqlHttpUrl: "https://api.customer.example.com/graphql",
+          graphqlUrl: "https://appsync.customer.example.com/graphql",
+          graphqlWsUrl: "wss://appsync.customer.example.com/graphql",
+          cognitoDomain: "https://auth.customer.example.com",
+        },
+        deployment: {
+          source: "profile",
+          deploymentId: "acme-dev",
+          displayName: "Acme ThinkWork",
+          stage: "customer-dev",
+          region: "us-west-2",
+          profileSha256: "abc123",
+          trustStatus: "unsigned",
+          trustLabel: "Unsigned development profile",
+        },
+      }),
+      startOAuth: vi.fn(),
+      clearTokenStorage: vi.fn(),
+      onOAuthError: () => () => {},
+      onDeepLink: () => () => {},
+    });
+
+    render(<SignInPage />);
+
+    await screen.findByText(
+      "Connected to Acme ThinkWork · customer-dev · us-west-2",
+    );
+    expect(screen.getByText("Unsigned development profile")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
+  });
+
+  it("imports pasted desktop deployment profile JSON", async () => {
+    const clearTokenStorage = vi.fn().mockResolvedValue(undefined);
+    const importDeploymentProfile = vi.fn().mockResolvedValue({
+      stage: "customer-dev",
+      configured: true,
+      missing: [],
+      oauthRedirectUri: "thinkwork-dev://oauth/callback",
+      endpoints: {
+        apiUrl: "https://api.customer.example.com",
+        graphqlHttpUrl: "https://api.customer.example.com/graphql",
+        graphqlUrl: "https://appsync.customer.example.com/graphql",
+        graphqlWsUrl: "wss://appsync.customer.example.com/graphql",
+        cognitoDomain: "https://auth.customer.example.com",
+      },
+      deployment: {
+        source: "profile",
+        deploymentId: "acme-dev",
+        displayName: "Acme ThinkWork",
+        stage: "customer-dev",
+        region: "us-west-2",
+        profileSha256: "abc123",
+        trustStatus: "unsigned",
+        trustLabel: "Unsigned development profile",
+      },
+    });
+    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
+      getDesktopConfig: vi.fn().mockResolvedValue({
+        stage: "dev",
+        configured: true,
+        missing: [],
+        oauthRedirectUri: "thinkwork-dev://oauth/callback",
+        endpoints: {
+          apiUrl: "https://api.example.com",
+          graphqlHttpUrl: "https://api.example.com/graphql",
+          graphqlUrl: "https://appsync.example.com/graphql",
+          graphqlWsUrl: "wss://appsync.example.com/graphql",
+          cognitoDomain: "thinkwork-dev",
+        },
+      }),
+      importDeploymentProfile,
+      clearTokenStorage,
+      startOAuth: vi.fn(),
+      onOAuthError: () => () => {},
+      onDeepLink: () => () => {},
+    });
+
+    render(<SignInPage />);
+    fireEvent.change(await screen.findByLabelText("Deployment profile JSON"), {
+      target: { value: '{"schemaVersion":1}' },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    await waitFor(() =>
+      expect(importDeploymentProfile).toHaveBeenCalledWith({
+        json: '{"schemaVersion":1}',
+      }),
+    );
+    expect(clearTokenStorage).toHaveBeenCalled();
+    await screen.findByText(
+      "Connected to Acme ThinkWork · customer-dev · us-west-2",
+    );
+  });
+
   it("uses the existing browser OAuth redirect outside desktop mode", () => {
     const navigations: string[] = [];
     Object.defineProperty(window, "location", {

@@ -181,6 +181,60 @@ describe("DesktopOAuthController", () => {
     });
   });
 
+  it("keeps token exchange bound to the env captured at OAuth start", async () => {
+    const storage = createStorage();
+    let activeEnv = {
+      ...env,
+      cognito: {
+        ...env.cognito,
+        clientId: "profile-client-a",
+        domain: "https://auth-a.example.com",
+      },
+    };
+    const idToken = encodeJwtPayload({
+      "cognito:username": "google_123",
+      sub: "cognito-sub",
+    });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        id_token: idToken,
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      }),
+    );
+    const controller = createController({
+      env: () => activeEnv,
+      fetch: fetchImpl,
+      storage,
+    });
+
+    const started = await controller.startOAuth();
+    activeEnv = {
+      ...env,
+      cognito: {
+        ...env.cognito,
+        clientId: "profile-client-b",
+        domain: "https://auth-b.example.com",
+      },
+    };
+    await controller.completeOAuthCallback({
+      code: "auth-code",
+      state: started.state,
+    });
+
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "https://auth-a.example.com/oauth2/token",
+    );
+    const tokenRequest = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+    expect((tokenRequest.body as URLSearchParams).get("client_id")).toBe(
+      "profile-client-a",
+    );
+    expect(storage.snapshot()).toHaveProperty(
+      "CognitoIdentityServiceProvider.profile-client-a.LastAuthUser",
+      "google_123",
+    );
+  });
+
   it("rejects a mismatched callback state without calling token exchange", async () => {
     const fetchImpl = vi.fn();
     const controller = createController({ fetch: fetchImpl });
