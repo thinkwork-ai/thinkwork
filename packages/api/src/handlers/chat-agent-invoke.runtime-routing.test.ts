@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => {
     FakeModelApprovalError,
     resolveAgentRuntimeConfig: vi.fn(),
     assertUserModelApproved: vi.fn(),
+    listApprovedModelCatalog: vi.fn(),
     lambdaSend: vi.fn(),
     selectRows: [] as Array<Array<Record<string, unknown>>>,
     insertValues: [] as Array<Record<string, unknown>>,
@@ -94,6 +95,7 @@ vi.mock("../lib/user-budget-enforcement.js", () => ({
 
 vi.mock("../lib/model-approvals.js", () => ({
   assertUserModelApproved: mocks.assertUserModelApproved,
+  listApprovedModelCatalog: mocks.listApprovedModelCatalog,
   ModelApprovalError: mocks.FakeModelApprovalError,
 }));
 
@@ -137,6 +139,9 @@ beforeEach(() => {
   mocks.updateValues = [];
   mocks.lambdaSend.mockResolvedValue({});
   mocks.assertUserModelApproved.mockResolvedValue(undefined);
+  mocks.listApprovedModelCatalog.mockResolvedValue([
+    { modelId: "us.amazon.nova-micro-v1:0" },
+  ]);
   mocks.checkUserBudgetAndPauseWork.mockResolvedValue({
     overBudget: false,
     pauseReason: null,
@@ -382,6 +387,83 @@ describe("chat-agent-invoke runtime routing", () => {
     });
     expect(mocks.insertValues).toEqual([]);
     expect(mocks.lambdaSend).not.toHaveBeenCalled();
+  });
+
+  it("passes effective TOOLS.md model routes and approved model ids to Pi", async () => {
+    vi.stubEnv("WORKSPACE_RENDERER_FUNCTION_NAME", "workspace-renderer-fn");
+    mocks.selectRows = [
+      [{ sender_id: "user-1", sender_type: "human" }],
+      [{ email: "user-1@example.com" }],
+      [{ spaceId: "space-1" }],
+      [{ slug: "research" }],
+      [{ count: 0 }],
+      [],
+    ];
+    mocks.lambdaSend
+      .mockResolvedValueOnce({
+        Payload: new TextEncoder().encode(
+          JSON.stringify({
+            ok: true,
+            renderedPrefix: "spaces/research/thread-1",
+            activeSpace: {
+              id: "space-1",
+              slug: "research",
+              name: "Research",
+              isDefault: false,
+            },
+            effectivePolicy: {
+              blockedTools: [],
+              allowedTools: null,
+              mcpAllowedServers: null,
+              mcpBlockedServers: [],
+              modelRouting: [
+                {
+                  tool: "workspace_skill",
+                  match: { slug: "research" },
+                  model: "us.amazon.nova-micro-v1:0",
+                  sourceOwner: "user",
+                  sourcePath: "/workspace/User/TOOLS.md",
+                  precedence: 300,
+                },
+              ],
+              diagnostics: [],
+            },
+            cacheStatus: "miss",
+          }),
+        ),
+      })
+      .mockResolvedValueOnce({});
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "Use the routed skill",
+      messageId: "message-1",
+    });
+
+    expect(mocks.listApprovedModelCatalog).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      userId: "user-1",
+    });
+    const command = mocks.lambdaSend.mock.calls[1][0] as {
+      input: { Payload: Uint8Array };
+    };
+    const body = decodeInvokeBody(command);
+    expect(body.model_routing_policy).toEqual({
+      routes: [
+        {
+          tool: "workspace_skill",
+          match: { slug: "research" },
+          model: "us.amazon.nova-micro-v1:0",
+          sourceOwner: "user",
+          sourcePath: "/workspace/User/TOOLS.md",
+          precedence: 300,
+        },
+      ],
+    });
+    expect(body.approved_model_ids).toEqual(["us.amazon.nova-micro-v1:0"]);
   });
 
   it("marks desktop managed delegation turns with parent provenance and returns the child turn id", async () => {

@@ -27,6 +27,7 @@ import type {
   RunAgentLoopArgs,
   RunAgentLoopResult,
 } from "./types.js";
+import type { ModelRoutedToolCallRecord } from "./model-routing-policy.js";
 
 /**
  * Full Pi built-in tool set. We pass an explicit allowlist so all seven are
@@ -196,6 +197,92 @@ function toolPreview(value: unknown, max = 600): string {
   } catch {
     return String(value).slice(0, max);
   }
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringRecordValue(value: unknown): Record<string, string> {
+  const record = recordValue(value);
+  if (!record) return {};
+  const normalized: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(record)) {
+    if (typeof raw === "string" && raw.trim()) normalized[key] = raw.trim();
+  }
+  return normalized;
+}
+
+function optionalStringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function optionalNumberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function extractModelRoutingRecord(input: {
+  toolCallId: string;
+  toolName: string;
+  result: unknown;
+}): ModelRoutedToolCallRecord | undefined {
+  const result = recordValue(input.result);
+  const details = recordValue(result?.details);
+  const routing = recordValue(details?.modelRouting);
+  const model = optionalStringValue(routing?.model);
+  if (!routing || !model) return undefined;
+  const rawRuleSource = recordValue(routing.ruleSource);
+  const ruleSourceOwner = optionalStringValue(rawRuleSource?.owner);
+  const status = optionalStringValue(routing.status);
+  return {
+    toolCallId: input.toolCallId,
+    toolName: optionalStringValue(routing.toolName) ?? input.toolName,
+    match: stringRecordValue(routing.match),
+    model,
+    ruleSource: {
+      ...(optionalStringValue(rawRuleSource?.path)
+        ? { path: optionalStringValue(rawRuleSource?.path)! }
+        : {}),
+      ...(ruleSourceOwner === "agent" ||
+      ruleSourceOwner === "space" ||
+      ruleSourceOwner === "workspace" ||
+      ruleSourceOwner === "user"
+        ? { owner: ruleSourceOwner }
+        : {}),
+      ...(optionalNumberValue(rawRuleSource?.precedence) !== undefined
+        ? { precedence: optionalNumberValue(rawRuleSource?.precedence) }
+        : {}),
+    },
+    status:
+      status === "rejected" || status === "failed" || status === "completed"
+        ? status
+        : "completed",
+    ...(optionalNumberValue(routing.inputTokens) !== undefined
+      ? { inputTokens: optionalNumberValue(routing.inputTokens) }
+      : {}),
+    ...(optionalNumberValue(routing.outputTokens) !== undefined
+      ? { outputTokens: optionalNumberValue(routing.outputTokens) }
+      : {}),
+    ...(optionalNumberValue(routing.cachedReadTokens) !== undefined
+      ? { cachedReadTokens: optionalNumberValue(routing.cachedReadTokens) }
+      : {}),
+    ...(optionalNumberValue(routing.cachedWriteTokens) !== undefined
+      ? { cachedWriteTokens: optionalNumberValue(routing.cachedWriteTokens) }
+      : {}),
+    ...(optionalNumberValue(routing.totalTokens) !== undefined
+      ? { totalTokens: optionalNumberValue(routing.totalTokens) }
+      : {}),
+    ...(optionalNumberValue(routing.durationMs) !== undefined
+      ? { durationMs: optionalNumberValue(routing.durationMs) }
+      : {}),
+    ...(optionalStringValue(routing.error)
+      ? { error: optionalStringValue(routing.error) }
+      : {}),
+  };
 }
 
 /**
@@ -504,6 +591,11 @@ export async function runAgentLoop(
       if (event.type === "tool_execution_end") {
         const finished = new Date().toISOString();
         const started = toolStarts.get(event.toolCallId);
+        const modelRouting = extractModelRoutingRecord({
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          result: event.result,
+        });
         deps.log?.({
           level: event.isError ? "error" : "info",
           event: "agentcore_phase",
@@ -532,6 +624,7 @@ export async function runAgentLoop(
           existing.output_preview = toolPreview(event.result);
           existing.status = event.isError ? "error" : "ok";
           existing.finished_at = finished;
+          if (modelRouting) existing.model_routing = modelRouting;
         } else {
           toolsCalled.add(event.toolName);
           toolInvocations.push({
@@ -542,6 +635,7 @@ export async function runAgentLoop(
             is_error: event.isError,
             output_preview: toolPreview(event.result),
             status: event.isError ? "error" : "ok",
+            ...(modelRouting ? { model_routing: modelRouting } : {}),
             finished_at: finished,
             runtime: "pi",
           });
@@ -605,12 +699,17 @@ export async function runAgentLoop(
         (message): message is AssistantMessage => message.role === "assistant",
       );
 
+    const modelRoutedToolCalls = toolInvocations.flatMap((invocation) =>
+      invocation.model_routing ? [invocation.model_routing] : [],
+    );
+
     return {
       content: textFromAssistant(assistant),
       usage: assistant?.usage,
       modelId,
       toolsCalled: [...toolsCalled],
       toolInvocations,
+      ...(modelRoutedToolCalls.length > 0 ? { modelRoutedToolCalls } : {}),
       toolCosts: toolInvocations.flatMap((invocation) =>
         collectToolCosts(invocation.result),
       ),
