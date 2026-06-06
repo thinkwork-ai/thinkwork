@@ -18,18 +18,18 @@ status: in_progress
 - Current worktree: `.Codex/worktrees/u4-parent-model-dispatch`.
 - Status: in progress.
 
-| Unit                                                        | Branch                              | PR                                                           | State  | Notes                                               |
-| ----------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | --------------------------------------------------- |
-| U1 Add per-user model approval data and API                 | `codex/u1-model-approvals`          | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Merged | Squash merged as `efdf8549`.                        |
-| U2 Add the admin Models section on user profile settings    | `codex/u2-user-model-settings`      | [#2175](https://github.com/thinkwork-ai/thinkwork/pull/2175) | Merged | Squash merged as `e0a43844`.                        |
-| U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers` | [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) | Merged | Squash merged as `8bf03028`.                        |
-| U4 Propagate and validate selected parent model             | `codex/u4-parent-model-dispatch`    | TBD                                                          | Active | Worktree created from `origin/main` after U3 merge. |
-| U5 Extend `TOOLS.md` effective policy with model routing    | TBD                                 | TBD                                                          | Todo   |                                                     |
-| U6 Implement model-routed `workspace_skill` child execution | TBD                                 | TBD                                                          | Todo   |                                                     |
-| U7 Record trace and cost evidence                           | TBD                                 | TBD                                                          | Todo   |                                                     |
-| U8 Surface evidence in Settings Activity thread detail      | TBD                                 | TBD                                                          | Todo   |                                                     |
-| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                 | TBD                                                          | Todo   |                                                     |
-| U10 Regenerate schemas and add demo policy documentation    | TBD                                 | TBD                                                          | Todo   |                                                     |
+| Unit                                                        | Branch                              | PR                                                           | State  | Notes                                  |
+| ----------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------- |
+| U1 Add per-user model approval data and API                 | `codex/u1-model-approvals`          | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Merged | Squash merged as `efdf8549`.           |
+| U2 Add the admin Models section on user profile settings    | `codex/u2-user-model-settings`      | [#2175](https://github.com/thinkwork-ai/thinkwork/pull/2175) | Merged | Squash merged as `e0a43844`.           |
+| U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers` | [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) | Merged | Squash merged as `8bf03028`.           |
+| U4 Propagate and validate selected parent model             | `codex/u4-parent-model-dispatch`    | [#2181](https://github.com/thinkwork-ai/thinkwork/pull/2181) | Active | Local verification passed; CI pending. |
+| U5 Extend `TOOLS.md` effective policy with model routing    | TBD                                 | TBD                                                          | Todo   |                                        |
+| U6 Implement model-routed `workspace_skill` child execution | TBD                                 | TBD                                                          | Todo   |                                        |
+| U7 Record trace and cost evidence                           | TBD                                 | TBD                                                          | Todo   |                                        |
+| U8 Surface evidence in Settings Activity thread detail      | TBD                                 | TBD                                                          | Todo   |                                        |
+| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                 | TBD                                                          | Todo   |                                        |
+| U10 Regenerate schemas and add demo policy documentation    | TBD                                 | TBD                                                          | Todo   |                                        |
 
 ### Progress Log
 
@@ -98,6 +98,7 @@ status: in_progress
 - Compound review pass identified and fixed a direct-invoke defense-in-depth
   gap: `chat-agent-invoke` now revalidates selected models before dispatching
   to Pi, so an internal caller cannot bypass GraphQL approval checks.
+- Opened PR [#2181](https://github.com/thinkwork-ai/thinkwork/pull/2181).
 
 ### CI / Verification
 
