@@ -961,6 +961,7 @@ export type CreateThreadInput = {
   mobileTurnClientId?: InputMaybe<Scalars["String"]["input"]>;
   mobileTurnMetadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   mobileTurnUserText?: InputMaybe<Scalars["String"]["input"]>;
+  modelId?: InputMaybe<Scalars["String"]["input"]>;
   spaceId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId: Scalars["ID"]["input"];
   title: Scalars["String"]["input"];
@@ -4882,6 +4883,7 @@ export type SendMessageInput = {
   dispatchMode?: InputMaybe<MessageDispatchMode>;
   mentions?: InputMaybe<Array<SendMessageMentionInput>>;
   metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  modelId?: InputMaybe<Scalars["String"]["input"]>;
   role: MessageRole;
   senderId?: InputMaybe<Scalars["ID"]["input"]>;
   senderType?: InputMaybe<Scalars["String"]["input"]>;
@@ -5983,11 +5985,21 @@ export type TraceEvent = {
   createdAt: Scalars["AWSDateTime"]["output"];
   durationMs?: Maybe<Scalars["Int"]["output"]>;
   estimated?: Maybe<Scalars["Boolean"]["output"]>;
+  eventType?: Maybe<Scalars["String"]["output"]>;
   inputTokens?: Maybe<Scalars["Int"]["output"]>;
+  match?: Maybe<Scalars["AWSJSON"]["output"]>;
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
   model?: Maybe<Scalars["String"]["output"]>;
+  modelRoutingStatus?: Maybe<Scalars["String"]["output"]>;
   outputTokens?: Maybe<Scalars["Int"]["output"]>;
+  parentRequestId?: Maybe<Scalars["String"]["output"]>;
+  requestId?: Maybe<Scalars["String"]["output"]>;
+  ruleSource?: Maybe<Scalars["AWSJSON"]["output"]>;
   runtimeType?: Maybe<Scalars["String"]["output"]>;
+  source?: Maybe<Scalars["String"]["output"]>;
   threadId?: Maybe<Scalars["ID"]["output"]>;
+  toolCallId?: Maybe<Scalars["String"]["output"]>;
+  toolName?: Maybe<Scalars["String"]["output"]>;
   traceId: Scalars["String"]["output"];
 };
 

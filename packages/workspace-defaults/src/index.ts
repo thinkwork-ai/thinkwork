@@ -977,6 +977,10 @@ The YAML frontmatter at the top of this file is the machine-readable tool policy
 contract. Use \`modelRouting\` to route a specific tool or capability to a
 different approved model for cost or latency reasons.
 
+This \`TOOLS.md\` contract is ThinkWork-native. It is not an external standard;
+the Pi runtime reads the frontmatter and enforces only the supported
+machine-readable keys.
+
 Example:
 
 \`\`\`yaml
@@ -984,7 +988,7 @@ modelRouting:
   - tool: workspace_skill
     match:
       slug: financial-analysis
-    model: anthropic.claude-3-haiku-20240307-v1:0
+    model: us.anthropic.claude-haiku-4-5-20251001-v1:0
     reason: Use the cheaper model for the analyst subtask.
 \`\`\`
 

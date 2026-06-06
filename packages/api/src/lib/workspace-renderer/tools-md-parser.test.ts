@@ -10,7 +10,7 @@ modelRouting:
   - tool: workspace_skill
     match:
       slug: financial-analysis
-    model: anthropic.claude-3-haiku-20240307-v1:0
+    model: us.anthropic.claude-haiku-4-5-20251001-v1:0
     reason: Cheaper analyst pass
 ---
 # Tools
@@ -24,7 +24,7 @@ modelRouting:
       {
         tool: "workspace_skill",
         match: { slug: "financial-analysis" },
-        model: "anthropic.claude-3-haiku-20240307-v1:0",
+        model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
         reason: "Cheaper analyst pass",
       },
     ]);

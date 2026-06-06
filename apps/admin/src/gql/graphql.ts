@@ -961,6 +961,7 @@ export type CreateThreadInput = {
   mobileTurnClientId?: InputMaybe<Scalars["String"]["input"]>;
   mobileTurnMetadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   mobileTurnUserText?: InputMaybe<Scalars["String"]["input"]>;
+  modelId?: InputMaybe<Scalars["String"]["input"]>;
   spaceId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId: Scalars["ID"]["input"];
   title: Scalars["String"]["input"];
@@ -4882,6 +4883,7 @@ export type SendMessageInput = {
   dispatchMode?: InputMaybe<MessageDispatchMode>;
   mentions?: InputMaybe<Array<SendMessageMentionInput>>;
   metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  modelId?: InputMaybe<Scalars["String"]["input"]>;
   role: MessageRole;
   senderId?: InputMaybe<Scalars["ID"]["input"]>;
   senderType?: InputMaybe<Scalars["String"]["input"]>;
@@ -5983,11 +5985,21 @@ export type TraceEvent = {
   createdAt: Scalars["AWSDateTime"]["output"];
   durationMs?: Maybe<Scalars["Int"]["output"]>;
   estimated?: Maybe<Scalars["Boolean"]["output"]>;
+  eventType?: Maybe<Scalars["String"]["output"]>;
   inputTokens?: Maybe<Scalars["Int"]["output"]>;
+  match?: Maybe<Scalars["AWSJSON"]["output"]>;
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
   model?: Maybe<Scalars["String"]["output"]>;
+  modelRoutingStatus?: Maybe<Scalars["String"]["output"]>;
   outputTokens?: Maybe<Scalars["Int"]["output"]>;
+  parentRequestId?: Maybe<Scalars["String"]["output"]>;
+  requestId?: Maybe<Scalars["String"]["output"]>;
+  ruleSource?: Maybe<Scalars["AWSJSON"]["output"]>;
   runtimeType?: Maybe<Scalars["String"]["output"]>;
+  source?: Maybe<Scalars["String"]["output"]>;
   threadId?: Maybe<Scalars["ID"]["output"]>;
+  toolCallId?: Maybe<Scalars["String"]["output"]>;
+  toolName?: Maybe<Scalars["String"]["output"]>;
   traceId: Scalars["String"]["output"];
 };
 
@@ -7239,6 +7251,44 @@ export type ModelCatalogQuery = {
     provider: string;
     inputCostPerMillion?: number | null;
     outputCostPerMillion?: number | null;
+  }>;
+};
+
+export type UserModelCatalogQueryVariables = Exact<{
+  userId: Scalars["ID"]["input"];
+}>;
+
+export type UserModelCatalogQuery = {
+  __typename?: "Query";
+  userModelCatalog: Array<{
+    __typename?: "UserModelCatalogEntry";
+    id: string;
+    modelId: string;
+    displayName: string;
+    provider: string;
+    inputCostPerMillion?: number | null;
+    outputCostPerMillion?: number | null;
+    approved: boolean;
+  }>;
+};
+
+export type SetUserModelApprovalMutationVariables = Exact<{
+  userId: Scalars["ID"]["input"];
+  modelId: Scalars["String"]["input"];
+  approved: Scalars["Boolean"]["input"];
+}>;
+
+export type SetUserModelApprovalMutation = {
+  __typename?: "Mutation";
+  setUserModelApproval: Array<{
+    __typename?: "UserModelCatalogEntry";
+    id: string;
+    modelId: string;
+    displayName: string;
+    provider: string;
+    inputCostPerMillion?: number | null;
+    outputCostPerMillion?: number | null;
+    approved: boolean;
   }>;
 };
 
@@ -12195,6 +12245,176 @@ export const ModelCatalogDocument = {
     },
   ],
 } as unknown as DocumentNode<ModelCatalogQuery, ModelCatalogQueryVariables>;
+export const UserModelCatalogDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "UserModelCatalog" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "userId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "userModelCatalog" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "userId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "userId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "modelId" } },
+                { kind: "Field", name: { kind: "Name", value: "displayName" } },
+                { kind: "Field", name: { kind: "Name", value: "provider" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "inputCostPerMillion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "outputCostPerMillion" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "approved" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  UserModelCatalogQuery,
+  UserModelCatalogQueryVariables
+>;
+export const SetUserModelApprovalDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SetUserModelApproval" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "userId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "modelId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "approved" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "Boolean" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "setUserModelApproval" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "userId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "userId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "modelId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "modelId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "approved" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "approved" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "modelId" } },
+                { kind: "Field", name: { kind: "Name", value: "displayName" } },
+                { kind: "Field", name: { kind: "Name", value: "provider" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "inputCostPerMillion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "outputCostPerMillion" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "approved" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SetUserModelApprovalMutation,
+  SetUserModelApprovalMutationVariables
+>;
 export const KnowledgeBasesListDocument = {
   kind: "Document",
   definitions: [
