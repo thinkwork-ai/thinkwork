@@ -29,14 +29,18 @@ vi.mock("@/context/TenantContext", () => ({
   }),
 }));
 
-vi.mock("@/lib/mcp-api", () => ({
-  listMcpServers: mocks.listMcpServers,
-  listUserMcpServers: mocks.listUserMcpServers,
-  deleteMcpServer: mocks.deleteMcpServer,
-  setMcpServerEnabled: mocks.setMcpServerEnabled,
-  clearUserMcpToken: mocks.clearUserMcpToken,
-  buildMcpOAuthAuthorizeUrl: mocks.buildMcpOAuthAuthorizeUrl,
-}));
+vi.mock("@/lib/mcp-api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/mcp-api")>();
+  return {
+    ...actual,
+    listMcpServers: mocks.listMcpServers,
+    listUserMcpServers: mocks.listUserMcpServers,
+    deleteMcpServer: mocks.deleteMcpServer,
+    setMcpServerEnabled: mocks.setMcpServerEnabled,
+    clearUserMcpToken: mocks.clearUserMcpToken,
+    buildMcpOAuthAuthorizeUrl: mocks.buildMcpOAuthAuthorizeUrl,
+  };
+});
 
 import { SettingsMcpServerDetail } from "./SettingsMcpServerDetail";
 
@@ -68,6 +72,23 @@ describe("SettingsMcpServerDetail", () => {
     expect(screen.getByRole("button", { name: /clear/i })).toBeTruthy();
   });
 
+  it("keeps managed MCP servers authenticatable but not manually removable", async () => {
+    mockServerState("active", {
+      managementSource: "managed_application",
+      managedApplicationKey: "twenty-crm",
+    });
+
+    render(<SettingsMcpServerDetail />);
+
+    expect(await screen.findByText("Twenty CRM")).toBeTruthy();
+    expect(screen.getByText("System-managed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /reconnect/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /remove server/i })).toBeNull();
+    expect(
+      screen.getByText(/Use CRM settings to park or destroy/i),
+    ).toBeTruthy();
+  });
+
   it("handles desktop OAuth callback success by refreshing state", async () => {
     mockServerState("not_connected");
     window.history.replaceState(
@@ -86,7 +107,10 @@ describe("SettingsMcpServerDetail", () => {
   });
 });
 
-function mockServerState(authStatus: "active" | "not_connected" | "expired") {
+function mockServerState(
+  authStatus: "active" | "not_connected" | "expired",
+  overrides: Record<string, unknown> = {},
+) {
   mocks.listMcpServers.mockResolvedValue({
     servers: [
       {
@@ -98,6 +122,7 @@ function mockServerState(authStatus: "active" | "not_connected" | "expired") {
         authType: "oauth",
         status: "approved",
         tools: [{ name: "opportunities.list" }],
+        ...overrides,
       },
     ],
   });

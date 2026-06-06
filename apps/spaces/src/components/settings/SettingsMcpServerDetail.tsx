@@ -8,6 +8,7 @@ import {
   buildMcpOAuthAuthorizeUrl,
   clearUserMcpToken,
   deleteMcpServer,
+  isManagedMcpServer,
   listMcpServers,
   listUserMcpServers,
   setMcpServerEnabled,
@@ -193,6 +194,7 @@ export function SettingsMcpServerDetail() {
   }
 
   const tools = server.tools ?? [];
+  const managed = isManagedMcpServer(server);
 
   const statusBadge =
     server.status && server.status !== "approved" ? (
@@ -220,13 +222,25 @@ export function SettingsMcpServerDetail() {
             </span>
           </SettingsRow>
           <SettingsRow label="Status">{statusBadge}</SettingsRow>
+          {managed ? (
+            <SettingsRow
+              label="Managed application"
+              description="Lifecycle changes are controlled from the managed application settings page."
+            >
+              <Badge variant="outline">System-managed</Badge>
+            </SettingsRow>
+          ) : null}
           <SettingsRow
             label="Enabled"
-            description="Make this server's tools available to the agent."
+            description={
+              managed
+                ? "Managed application lifecycle controls whether this connector is available."
+                : "Make this server's tools available to the agent."
+            }
           >
             <Switch
               checked={server.enabled}
-              disabled={pending}
+              disabled={pending || managed}
               onCheckedChange={toggle}
             />
           </SettingsRow>
@@ -304,11 +318,17 @@ export function SettingsMcpServerDetail() {
           )}
         </SettingsSection>
 
-        <div className="flex justify-end">
-          <Button variant="destructive" disabled={pending} onClick={remove}>
-            Remove server
-          </Button>
-        </div>
+        {managed ? (
+          <p className="text-right text-sm text-muted-foreground">
+            Use CRM settings to park or destroy this managed connector.
+          </p>
+        ) : (
+          <div className="flex justify-end">
+            <Button variant="destructive" disabled={pending} onClick={remove}>
+              Remove server
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
