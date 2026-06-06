@@ -997,6 +997,21 @@ output "twenty_url" {
   value       = module.thinkwork.twenty_url
 }
 
+output "twenty_cluster_arn" {
+  description = "ECS cluster ARN for Twenty CRM (null when twenty_provisioned = false)"
+  value       = module.thinkwork.twenty_cluster_arn
+}
+
+output "twenty_server_service_name" {
+  description = "ECS service name for the Twenty server (null when twenty_provisioned = false)"
+  value       = module.thinkwork.twenty_server_service_name
+}
+
+output "twenty_worker_service_name" {
+  description = "ECS service name for the Twenty worker (null when twenty_provisioned = false)"
+  value       = module.thinkwork.twenty_worker_service_name
+}
+
 output "twenty_server_log_group_name" {
   description = "CloudWatch log group for the Twenty server (null when twenty_provisioned = false)"
   value       = module.thinkwork.twenty_server_log_group_name

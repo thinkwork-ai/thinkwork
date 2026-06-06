@@ -434,6 +434,9 @@ describe("U1 - Twenty Terraform app module", () => {
     );
     expect(source).toMatch(/output "twenty_provisioned"/);
     expect(source).toMatch(/output "twenty_url"/);
+    expect(source).toMatch(/output "twenty_cluster_arn"/);
+    expect(source).toMatch(/output "twenty_server_service_name"/);
+    expect(source).toMatch(/output "twenty_worker_service_name"/);
     expect(tfvars).toMatch(/twenty_provisioned\s*=\s*false/);
     expect(tfvars).toMatch(/twenty_runtime_enabled\s*=\s*false/);
     expect(tfvars).toMatch(/empty derives https:\/\/crm\.<www_domain>/);
