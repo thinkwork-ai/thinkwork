@@ -6,12 +6,13 @@ import {
   readTwentyStatus,
 } from "./managedApplications.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
+import { enrichManagedApplicationsWithMcpState } from "../../../lib/managed-mcp-applications.js";
 
 export { readCogneeStatus };
 
 /**
  * deploymentStatus — reports deployment infrastructure details from Lambda
- * environment variables. No DB access, no live AWS API calls.
+ * environment variables plus read-only tenant MCP registry state.
  *
  * Operator-only: the payload includes account ID, DB endpoint, ECR URL, and
  * AppSync/Hindsight endpoints. Frontend hiding is not a security boundary, so
@@ -35,7 +36,10 @@ export const deploymentStatus = async (
   const accountId = process.env.AWS_ACCOUNT_ID || null;
   const cognee = readCogneeStatus();
   const twenty = readTwentyStatus();
-  const managedApplications = readManagedApplications();
+  const managedApplications = await enrichManagedApplicationsWithMcpState(
+    tenantId,
+    readManagedApplications(),
+  );
   const cogneeServiceName =
     process.env.COGNEE_SERVICE_NAME ||
     (cognee.enabled ? `thinkwork-${stage}-cognee` : null);

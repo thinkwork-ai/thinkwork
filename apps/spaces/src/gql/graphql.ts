@@ -1655,6 +1655,11 @@ export type ManagedApplicationDeployment = {
   key: Scalars["String"]["output"];
   logGroupName?: Maybe<Scalars["String"]["output"]>;
   logGroupNames: Array<Scalars["String"]["output"]>;
+  managedMcpInstallAvailable: Scalars["Boolean"]["output"];
+  managedMcpInstalled: Scalars["Boolean"]["output"];
+  managedMcpMessage?: Maybe<Scalars["String"]["output"]>;
+  managedMcpServerId?: Maybe<Scalars["ID"]["output"]>;
+  managedMcpStatus: Scalars["String"]["output"];
   message?: Maybe<Scalars["String"]["output"]>;
   provisioned: Scalars["Boolean"]["output"];
   runtimeEnabled: Scalars["Boolean"]["output"];
@@ -1691,6 +1696,15 @@ export type ManagedApplicationHealthCheck = {
   latencyMs: Scalars["Int"]["output"];
   message: Scalars["String"]["output"];
   statusCode?: Maybe<Scalars["Int"]["output"]>;
+};
+
+export type ManagedApplicationMcpRegistration = {
+  __typename?: "ManagedApplicationMcpRegistration";
+  installed: Scalars["Boolean"]["output"];
+  key: Scalars["String"]["output"];
+  message: Scalars["String"]["output"];
+  serverId?: Maybe<Scalars["ID"]["output"]>;
+  status: Scalars["String"]["output"];
 };
 
 /**
@@ -2079,6 +2093,7 @@ export type Mutation = {
   enableWorkflow: WorkflowBinding;
   escalateThread: Thread;
   importN8nRoutine: Routine;
+  installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
   inviteMember: TenantMember;
   markThreadsRead: MarkThreadsReadResult;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
@@ -2488,6 +2503,10 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationImportN8nRoutineArgs = {
   input: ImportN8nRoutineInput;
+};
+
+export type MutationInstallManagedApplicationMcpServerArgs = {
+  key: Scalars["String"]["input"];
 };
 
 export type MutationInviteMemberArgs = {
@@ -7478,6 +7497,11 @@ export type SettingsDeploymentStatusQuery = {
       albArn?: string | null;
       targetGroupArn?: string | null;
       message?: string | null;
+      managedMcpServerId?: string | null;
+      managedMcpStatus: string;
+      managedMcpInstalled: boolean;
+      managedMcpInstallAvailable: boolean;
+      managedMcpMessage?: string | null;
     }>;
   };
 };
@@ -7511,6 +7535,23 @@ export type SettingsSetManagedApplicationDeploymentMutation = {
     provisioned: boolean;
     runtimeEnabled: boolean;
     workflowUrl: string;
+    message: string;
+  };
+};
+
+export type SettingsInstallManagedApplicationMcpServerMutationVariables =
+  Exact<{
+    key: Scalars["String"]["input"];
+  }>;
+
+export type SettingsInstallManagedApplicationMcpServerMutation = {
+  __typename?: "Mutation";
+  installManagedApplicationMcpServer: {
+    __typename?: "ManagedApplicationMcpRegistration";
+    key: string;
+    serverId?: string | null;
+    installed: boolean;
+    status: string;
     message: string;
   };
 };
@@ -12069,6 +12110,29 @@ export const SettingsDeploymentStatusDocument = {
                         kind: "Field",
                         name: { kind: "Name", value: "message" },
                       },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "managedMcpServerId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "managedMcpStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "managedMcpInstalled" },
+                      },
+                      {
+                        kind: "Field",
+                        name: {
+                          kind: "Name",
+                          value: "managedMcpInstallAvailable",
+                        },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "managedMcpMessage" },
+                      },
                     ],
                   },
                 },
@@ -12247,6 +12311,64 @@ export const SettingsSetManagedApplicationDeploymentDocument = {
 } as unknown as DocumentNode<
   SettingsSetManagedApplicationDeploymentMutation,
   SettingsSetManagedApplicationDeploymentMutationVariables
+>;
+export const SettingsInstallManagedApplicationMcpServerDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: {
+        kind: "Name",
+        value: "SettingsInstallManagedApplicationMcpServer",
+      },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "key" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "installManagedApplicationMcpServer" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "key" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "key" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "key" } },
+                { kind: "Field", name: { kind: "Name", value: "serverId" } },
+                { kind: "Field", name: { kind: "Name", value: "installed" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsInstallManagedApplicationMcpServerMutation,
+  SettingsInstallManagedApplicationMcpServerMutationVariables
 >;
 export const SettingsKnowledgeGraphHealthCheckDocument = {
   kind: "Document",

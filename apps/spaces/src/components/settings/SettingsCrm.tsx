@@ -17,6 +17,7 @@ import {
   Copy,
   ExternalLink,
   PauseCircle,
+  Plug,
   Play,
   RefreshCw,
   Trash2,
@@ -24,6 +25,7 @@ import {
 import { ManagedApplicationDeploymentAction } from "@/gql/graphql";
 import {
   SettingsDeploymentStatusQuery,
+  SettingsInstallManagedApplicationMcpServerMutation,
   SettingsSetManagedApplicationDeploymentMutation,
   SettingsManagedApplicationHealthCheckQuery,
 } from "@/lib/settings-queries";
@@ -46,6 +48,9 @@ export function SettingsCrm() {
   });
   const [deploymentState, setManagedDeployment] = useMutation(
     SettingsSetManagedApplicationDeploymentMutation,
+  );
+  const [installMcpState, installMcpServer] = useMutation(
+    SettingsInstallManagedApplicationMcpServerMutation,
   );
   const [pendingAction, setPendingAction] =
     useState<ManagedApplicationDeploymentAction | null>(null);
@@ -91,6 +96,21 @@ export function SettingsCrm() {
     toast.success(
       result.data?.setManagedApplicationDeployment.message ??
         "Twenty CRM deployment queued.",
+    );
+    refreshStatus({ requestPolicy: "network-only" });
+  }
+
+  async function requestMcpInstall() {
+    const result = await installMcpServer({ key: "twenty" });
+    if (result.error) {
+      toast.error(
+        `Could not install Twenty MCP server: ${result.error.message}`,
+      );
+      return;
+    }
+    toast.success(
+      result.data?.installManagedApplicationMcpServer.message ??
+        "Twenty CRM MCP server installed.",
     );
     refreshStatus({ requestPolicy: "network-only" });
   }
@@ -156,6 +176,37 @@ export function SettingsCrm() {
               </SettingsRow>
             ) : null}
             <CopyableSettingsRow label="URL" value={crm?.url} external />
+            {crm?.runtimeEnabled ? (
+              <SettingsRow
+                label="MCP server"
+                description={
+                  crm.managedMcpMessage ??
+                  "Twenty CRM MCP server registration for ThinkWork agents."
+                }
+              >
+                <Badge
+                  variant={
+                    crm.managedMcpStatus === "installed"
+                      ? "default"
+                      : "secondary"
+                  }
+                >
+                  {crm.managedMcpStatus}
+                </Badge>
+                {crm.managedMcpInstallAvailable ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={installMcpState.fetching}
+                    onClick={() => void requestMcpInstall()}
+                  >
+                    <Plug className="size-4" />
+                    Install MCP Server
+                  </Button>
+                ) : null}
+              </SettingsRow>
+            ) : null}
             <SettingsRow
               label="First admin setup"
               description="Twenty native first-user setup creates the initial CRM workspace admin."

@@ -10,7 +10,10 @@ import {
 import {
   type ManagedApplicationKey,
   normalizeManagedApplicationKey,
+  readManagedApplication,
 } from "./managedApplications.js";
+import { resolveCallerTenantId } from "./resolve-auth-user.js";
+import { reconcileTwentyManagedMcp } from "../../../lib/managed-mcp-applications.js";
 
 type DeploymentVariable = {
   name: string;
@@ -54,6 +57,8 @@ export const setManagedApplicationDeployment = async (
     ref: config.ref,
   });
 
+  await reconcileManagedMcpAfterDeploymentRequest(ctx, key, action);
+
   const state = deploymentStateFor(key, action);
   return {
     key,
@@ -94,6 +99,49 @@ function resolveDeploymentAction(
   throw new GraphQLError("Managed application action is required", {
     extensions: { code: "BAD_USER_INPUT" },
   });
+}
+
+async function reconcileManagedMcpAfterDeploymentRequest(
+  ctx: GraphQLContext,
+  key: ManagedApplicationKey,
+  action: DeploymentAction,
+) {
+  if (key !== "twenty") return;
+
+  const tenantId = await resolveCallerTenantId(ctx);
+  if (!tenantId) return;
+
+  try {
+    const application = readManagedApplication("twenty");
+    if (action === "PARK") {
+      await reconcileTwentyManagedMcp({
+        tenantId,
+        application,
+        mode: "parked",
+      });
+      return;
+    }
+    if (action === "DESTROY") {
+      await reconcileTwentyManagedMcp({
+        tenantId,
+        application,
+        mode: "destroyed",
+      });
+      return;
+    }
+    if (application.runtimeEnabled && application.url) {
+      await reconcileTwentyManagedMcp({
+        tenantId,
+        application,
+        mode: "running",
+      });
+    }
+  } catch (error) {
+    console.warn(
+      "[managed-app-deployment] Twenty MCP reconciliation skipped:",
+      (error as Error).message,
+    );
+  }
 }
 
 function deploymentVariablesFor(

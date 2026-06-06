@@ -32,7 +32,12 @@ vi.mock("../../utils.js", () => ({
 function queryRows(rows: unknown[]) {
   const chain = {
     from: () => chain,
-    where: () => Promise.resolve(rows),
+    where: () => chain,
+    limit: () => Promise.resolve(rows),
+    then: (
+      resolve: (value: unknown[]) => unknown,
+      reject?: (reason: unknown) => unknown,
+    ) => Promise.resolve(rows).then(resolve, reject),
   };
   return chain;
 }
@@ -49,6 +54,7 @@ beforeEach(async () => {
   mockResolveCallerTenantId.mockReset();
   mockResolveCallerTenantId.mockResolvedValue("tenant-1");
   mockSelect.mockReset();
+  mockSelect.mockReturnValue(queryRows([]));
   deploymentStatusMod = await import("./deploymentStatus.query.js");
   tenantMod = await import("./tenant.query.js");
   tenantMembersMod = await import("./tenantMembers.query.js");
@@ -88,6 +94,7 @@ describe("deploymentStatus authz", () => {
           key: "twenty",
           status: "disabled",
           enabled: false,
+          managedMcpStatus: "not_ready",
         }),
       ]),
     );
@@ -166,6 +173,8 @@ describe("deploymentStatus authz", () => {
             "/thinkwork/dev/twenty/worker",
           ],
           serviceNames: ["server-service", "worker-service"],
+          managedMcpStatus: "missing",
+          managedMcpInstallAvailable: true,
         }),
       ]),
     );

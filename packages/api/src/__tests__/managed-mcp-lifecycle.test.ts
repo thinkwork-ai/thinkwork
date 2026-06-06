@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { tenantMcpServers } from "@thinkwork/database-pg/schema";
+import {
+  summarizeTwentyManagedMcpState,
+  twentyMcpUrlFromApplicationUrl,
+} from "../lib/managed-mcp-applications.js";
+import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
 
 const migrationSql = readFileSync(
   new URL(
@@ -50,3 +55,97 @@ describe("managed MCP lifecycle schema", () => {
     expect(migrationSql).toContain("WHERE managed_application_key IS NOT NULL");
   });
 });
+
+describe("Twenty managed MCP lifecycle", () => {
+  it("derives the canonical Twenty MCP endpoint from the deployed CRM URL", () => {
+    expect(twentyMcpUrlFromApplicationUrl("https://crm.thinkwork.ai")).toBe(
+      "https://crm.thinkwork.ai/mcp",
+    );
+    expect(
+      twentyMcpUrlFromApplicationUrl("https://crm.thinkwork.ai/welcome"),
+    ).toBe("https://crm.thinkwork.ai/mcp");
+  });
+
+  it("marks a running Twenty deployment as installable when the managed MCP row is missing", () => {
+    const state = summarizeTwentyManagedMcpState(runningTwenty(), null);
+
+    expect(state).toMatchObject({
+      serverId: null,
+      installed: false,
+      installAvailable: true,
+      status: "missing",
+    });
+  });
+
+  it("recognizes an approved managed Twenty MCP row as installed", () => {
+    const url = "https://crm.thinkwork.ai/mcp";
+    const authConfig = { oauth_resource: url };
+    const state = summarizeTwentyManagedMcpState(runningTwenty(), {
+      id: "server-1",
+      slug: "twenty-crm",
+      url,
+      enabled: true,
+      status: "approved",
+      url_hash: computeMcpUrlHash(url, authConfig),
+      auth_config: authConfig,
+      management_source: "managed_application",
+      managed_application_key: "twenty-crm",
+    });
+
+    expect(state).toMatchObject({
+      serverId: "server-1",
+      installed: true,
+      installAvailable: false,
+      status: "installed",
+    });
+  });
+
+  it("flags a managed Twenty MCP row for repair when the CRM URL changes", () => {
+    const url = "https://old-crm.thinkwork.ai/mcp";
+    const state = summarizeTwentyManagedMcpState(runningTwenty(), {
+      id: "server-1",
+      slug: "twenty-crm",
+      url,
+      enabled: true,
+      status: "approved",
+      url_hash: computeMcpUrlHash(url, { oauth_resource: url }),
+      auth_config: { oauth_resource: url },
+      management_source: "managed_application",
+      managed_application_key: "twenty-crm",
+    });
+
+    expect(state).toMatchObject({
+      installed: true,
+      installAvailable: true,
+      status: "needs_repair",
+    });
+  });
+});
+
+function runningTwenty() {
+  return {
+    key: "twenty" as const,
+    displayName: "Twenty CRM",
+    description: "Self-hosted CRM runtime managed by ThinkWork.",
+    status: "running" as const,
+    enabled: true,
+    provisioned: true,
+    runtimeEnabled: true,
+    url: "https://crm.thinkwork.ai",
+    endpoint: "https://crm.thinkwork.ai",
+    backendMode: null,
+    logGroupName: null,
+    logGroupNames: [],
+    clusterArn: null,
+    serviceName: null,
+    serviceNames: [],
+    albArn: null,
+    targetGroupArn: null,
+    message: null,
+    managedMcpServerId: null,
+    managedMcpStatus: "missing",
+    managedMcpInstalled: false,
+    managedMcpInstallAvailable: true,
+    managedMcpMessage: null,
+  };
+}

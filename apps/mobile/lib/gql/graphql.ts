@@ -1655,6 +1655,11 @@ export type ManagedApplicationDeployment = {
   key: Scalars["String"]["output"];
   logGroupName?: Maybe<Scalars["String"]["output"]>;
   logGroupNames: Array<Scalars["String"]["output"]>;
+  managedMcpInstallAvailable: Scalars["Boolean"]["output"];
+  managedMcpInstalled: Scalars["Boolean"]["output"];
+  managedMcpMessage?: Maybe<Scalars["String"]["output"]>;
+  managedMcpServerId?: Maybe<Scalars["ID"]["output"]>;
+  managedMcpStatus: Scalars["String"]["output"];
   message?: Maybe<Scalars["String"]["output"]>;
   provisioned: Scalars["Boolean"]["output"];
   runtimeEnabled: Scalars["Boolean"]["output"];
@@ -1691,6 +1696,15 @@ export type ManagedApplicationHealthCheck = {
   latencyMs: Scalars["Int"]["output"];
   message: Scalars["String"]["output"];
   statusCode?: Maybe<Scalars["Int"]["output"]>;
+};
+
+export type ManagedApplicationMcpRegistration = {
+  __typename?: "ManagedApplicationMcpRegistration";
+  installed: Scalars["Boolean"]["output"];
+  key: Scalars["String"]["output"];
+  message: Scalars["String"]["output"];
+  serverId?: Maybe<Scalars["ID"]["output"]>;
+  status: Scalars["String"]["output"];
 };
 
 /**
@@ -2079,6 +2093,7 @@ export type Mutation = {
   enableWorkflow: WorkflowBinding;
   escalateThread: Thread;
   importN8nRoutine: Routine;
+  installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
   inviteMember: TenantMember;
   markThreadsRead: MarkThreadsReadResult;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
@@ -2488,6 +2503,10 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationImportN8nRoutineArgs = {
   input: ImportN8nRoutineInput;
+};
+
+export type MutationInstallManagedApplicationMcpServerArgs = {
+  key: Scalars["String"]["input"];
 };
 
 export type MutationInviteMemberArgs = {

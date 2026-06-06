@@ -39,6 +39,11 @@ export type ManagedApplicationStatus = {
   albArn: string | null;
   targetGroupArn: string | null;
   message: string | null;
+  managedMcpServerId: string | null;
+  managedMcpStatus: string;
+  managedMcpInstalled: boolean;
+  managedMcpInstallAvailable: boolean;
+  managedMcpMessage: string | null;
 };
 
 export function normalizeManagedApplicationKey(
@@ -225,6 +230,11 @@ function cogneeManagedApplication(): ManagedApplicationStatus {
     message: cognee.enabled
       ? null
       : "Cognee is not provisioned for this stage.",
+    managedMcpServerId: null,
+    managedMcpStatus: "not_applicable",
+    managedMcpInstalled: false,
+    managedMcpInstallAvailable: false,
+    managedMcpMessage: null,
   };
 }
 
@@ -265,6 +275,15 @@ function twentyManagedApplication(): ManagedApplicationStatus {
     albArn: twenty.albArn,
     targetGroupArn: twenty.targetGroupArn,
     message: twentyStatusMessage(status),
+    managedMcpServerId: null,
+    managedMcpStatus: "missing",
+    managedMcpInstalled: false,
+    managedMcpInstallAvailable:
+      status === "running" && twenty.provisioned && Boolean(twenty.url),
+    managedMcpMessage:
+      status === "running" && twenty.url
+        ? "Twenty CRM MCP server has not been registered yet."
+        : null,
   };
 }
 
