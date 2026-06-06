@@ -359,13 +359,13 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(vars).toMatch(/variable "twenty_provisioned"/);
     expect(vars).toMatch(/variable "twenty_runtime_enabled"/);
     expect(vars).toMatch(/variable "twenty_url"/);
-    expect(vars).toMatch(/variable "twenty_server_service_name"/);
-    expect(vars).toMatch(/variable "twenty_worker_service_name"/);
     expect(handlers).toMatch(/twenty_env = var\.twenty_provisioned \? {/);
     expect(handlers).toMatch(
-      /TWENTY = "\$\{var\.twenty_provisioned \? "1" : "0"\}/,
+      /TWENTY = "\$\{var\.twenty_provisioned \? "1" : "0"\}\|\$\{var\.twenty_runtime_enabled \? "1" : "0"\}\|\$\{var\.twenty_url\}"/,
     );
-    expect(handlers).toMatch(/local\.cognee_env, local\.twenty_env/);
+    expect(handlers).toMatch(/}, local\.cognee_env\)/);
+    expect(handlers).toMatch(/"graphql-http" = merge\(\{/);
+    expect(handlers).toMatch(/}, local\.twenty_env\)/);
     expect(handlers).not.toMatch(/TWENTY_URL\s*=/);
   });
 

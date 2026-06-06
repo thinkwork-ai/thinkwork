@@ -119,15 +119,21 @@ export function readTwentyStatus(): TwentyStatus {
   const fallbackUrl = process.env.TWENTY_URL || null;
 
   if (!raw) {
+    const provisioned = truthyFlag(process.env.TWENTY_PROVISIONED);
+    const defaults = deriveTwentyDefaults(provisioned);
     return {
-      provisioned: truthyFlag(process.env.TWENTY_PROVISIONED),
+      provisioned,
       runtimeEnabled: truthyFlag(process.env.TWENTY_RUNTIME_ENABLED),
       url: fallbackUrl,
-      clusterArn: process.env.TWENTY_CLUSTER_ARN || null,
-      serverServiceName: process.env.TWENTY_SERVER_SERVICE_NAME || null,
-      workerServiceName: process.env.TWENTY_WORKER_SERVICE_NAME || null,
-      serverLogGroupName: process.env.TWENTY_SERVER_LOG_GROUP_NAME || null,
-      workerLogGroupName: process.env.TWENTY_WORKER_LOG_GROUP_NAME || null,
+      clusterArn: process.env.TWENTY_CLUSTER_ARN || defaults.clusterArn,
+      serverServiceName:
+        process.env.TWENTY_SERVER_SERVICE_NAME || defaults.serverServiceName,
+      workerServiceName:
+        process.env.TWENTY_WORKER_SERVICE_NAME || defaults.workerServiceName,
+      serverLogGroupName:
+        process.env.TWENTY_SERVER_LOG_GROUP_NAME || defaults.serverLogGroupName,
+      workerLogGroupName:
+        process.env.TWENTY_WORKER_LOG_GROUP_NAME || defaults.workerLogGroupName,
       albArn: process.env.TWENTY_ALB_ARN || null,
       targetGroupArn: process.env.TWENTY_TARGET_GROUP_ARN || null,
       malformed: false,
@@ -136,19 +142,32 @@ export function readTwentyStatus(): TwentyStatus {
 
   const parts = raw.split("|");
   const malformed = parts.length < 2;
+  const provisioned = truthyFlag(parts[0]);
+  const defaults = deriveTwentyDefaults(provisioned && !malformed);
   return {
-    provisioned: truthyFlag(parts[0]),
+    provisioned,
     runtimeEnabled: truthyFlag(parts[1]),
     url: nonEmpty(parts[2]) ?? fallbackUrl,
-    clusterArn: nonEmpty(parts[3]) ?? process.env.TWENTY_CLUSTER_ARN ?? null,
+    clusterArn:
+      nonEmpty(parts[3]) ??
+      process.env.TWENTY_CLUSTER_ARN ??
+      defaults.clusterArn,
     serverServiceName:
-      nonEmpty(parts[4]) ?? process.env.TWENTY_SERVER_SERVICE_NAME ?? null,
+      nonEmpty(parts[4]) ??
+      process.env.TWENTY_SERVER_SERVICE_NAME ??
+      defaults.serverServiceName,
     workerServiceName:
-      nonEmpty(parts[5]) ?? process.env.TWENTY_WORKER_SERVICE_NAME ?? null,
+      nonEmpty(parts[5]) ??
+      process.env.TWENTY_WORKER_SERVICE_NAME ??
+      defaults.workerServiceName,
     serverLogGroupName:
-      nonEmpty(parts[6]) ?? process.env.TWENTY_SERVER_LOG_GROUP_NAME ?? null,
+      nonEmpty(parts[6]) ??
+      process.env.TWENTY_SERVER_LOG_GROUP_NAME ??
+      defaults.serverLogGroupName,
     workerLogGroupName:
-      nonEmpty(parts[7]) ?? process.env.TWENTY_WORKER_LOG_GROUP_NAME ?? null,
+      nonEmpty(parts[7]) ??
+      process.env.TWENTY_WORKER_LOG_GROUP_NAME ??
+      defaults.workerLogGroupName,
     albArn: nonEmpty(parts[8]) ?? process.env.TWENTY_ALB_ARN ?? null,
     targetGroupArn:
       nonEmpty(parts[9]) ?? process.env.TWENTY_TARGET_GROUP_ARN ?? null,
@@ -272,4 +291,39 @@ function truthyFlag(value: unknown): boolean {
 
 function nonEmpty(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function deriveTwentyDefaults(
+  provisioned: boolean,
+): Pick<
+  TwentyStatus,
+  | "clusterArn"
+  | "serverServiceName"
+  | "workerServiceName"
+  | "serverLogGroupName"
+  | "workerLogGroupName"
+> {
+  if (!provisioned) {
+    return {
+      clusterArn: null,
+      serverServiceName: null,
+      workerServiceName: null,
+      serverLogGroupName: null,
+      workerLogGroupName: null,
+    };
+  }
+
+  const stage = process.env.STAGE || "unknown";
+  const region = process.env.AWS_REGION || "us-east-1";
+  const accountId = process.env.AWS_ACCOUNT_ID || null;
+
+  return {
+    clusterArn: accountId
+      ? `arn:aws:ecs:${region}:${accountId}:cluster/thinkwork-${stage}-twenty-cluster`
+      : null,
+    serverServiceName: `thinkwork-${stage}-twenty-server`,
+    workerServiceName: `thinkwork-${stage}-twenty-worker`,
+    serverLogGroupName: `/thinkwork/${stage}/twenty/server`,
+    workerLogGroupName: `/thinkwork/${stage}/twenty/worker`,
+  };
 }

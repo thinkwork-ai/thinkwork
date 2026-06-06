@@ -17,8 +17,9 @@ locals {
   } : {}
   twenty_env = var.twenty_provisioned ? {
     # Keep Twenty managed-app status compact for graphql-http. The resolver
-    # expands this into provisioned/runtime/url/service details.
-    TWENTY = "${var.twenty_provisioned ? "1" : "0"}|${var.twenty_runtime_enabled ? "1" : "0"}|${var.twenty_url}|${var.twenty_cluster_arn}|${var.twenty_server_service_name}|${var.twenty_worker_service_name}|${var.twenty_server_log_group_name}|${var.twenty_worker_log_group_name}|${var.twenty_alb_arn}|${var.twenty_target_group_arn}"
+    # derives stable ECS service/log identifiers from stage + account instead
+    # of carrying long ARNs in Lambda env vars.
+    TWENTY = "${var.twenty_provisioned ? "1" : "0"}|${var.twenty_runtime_enabled ? "1" : "0"}|${var.twenty_url}"
   } : {}
 
   # Common environment variables shared by all API handlers
@@ -96,7 +97,7 @@ locals {
     # hello@agents.thinkwork.ai (the already-verified SES inbound domain);
     # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.
     STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
-  }, local.cognee_env, local.twenty_env)
+  }, local.cognee_env)
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
@@ -179,7 +180,7 @@ locals {
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
     # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B
     # U8) which invokes routine-resume via the AWS SDK.
-    "graphql-http" = {
+    "graphql-http" = merge({
       ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
       ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
       AWS_ACCOUNT_ID              = var.account_id
@@ -211,7 +212,7 @@ locals {
       # + AWS_ACCOUNT_ID, which the Lambda already has. The runner
       # Lambda (separate function below) keeps an explicit
       # COMPLIANCE_EXPORTS_QUEUE_URL because its env is small.
-    }
+    }, local.twenty_env)
     # U2 eval fan-out substrate. eval-runner does not dispatch to this
     # queue until U3; eval-worker is a throwing inert stub that redrives
     # accidental traffic to the DLQ.

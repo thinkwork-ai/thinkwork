@@ -7970,3 +7970,19 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `terraform -chdir=terraform/modules/app/www-dns validate`,
   `pnpm dlx prettier@3.8.2 --check apps/cli/__tests__/terraform-twenty-fixture.test.ts docs/plans/autopilot-status.md`,
   and `git diff --check`.
+- PR [#2143](https://github.com/thinkwork-ai/thinkwork/pull/2143) merged as
+  `43806255`; its main deploy run
+  [27050982386](https://github.com/thinkwork-ai/thinkwork/actions/runs/27050982386)
+  adopted the CRM ACM validation record and created the Twenty CRM ALB, DNS
+  record, ElastiCache group, ECS task definitions, and ECS services, but failed
+  while updating API Lambda configuration because the full `TWENTY` deployment
+  status payload pushed `graphql-http` and `job-trigger` over Lambda's 4 KB
+  environment variable limit.
+- Follow-up fix in progress on branch `codex/twenty-crm-env-budget`: keep the
+  `TWENTY` deployment-status env var only on `graphql-http`, shrink it to
+  provisioned/runtime/url, and derive stable Twenty ECS service/log details from
+  stage/account in the API resolver. Local verification passed:
+  `terraform fmt terraform/modules/app/lambda-api/handlers.tf`,
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`,
+  and
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/managedApplications.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts`.
