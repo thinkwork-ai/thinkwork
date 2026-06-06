@@ -209,9 +209,29 @@ type TimelineEvent = {
   toolType?: string;
   toolInput?: string;
   toolOutput?: string;
+  routeModelId?: string;
+  routeInputTokens?: number | null;
+  routeOutputTokens?: number | null;
+  routeCacheReadTokens?: number | null;
+  routeStatus?: string;
+  routeRuleSource?: unknown;
+  routeMatch?: unknown;
+  routeUnavailableReason?: string;
   // Response
   responseText?: string;
 };
+
+type ToolModelEvidence = Pick<
+  TimelineEvent,
+  | "routeModelId"
+  | "routeInputTokens"
+  | "routeOutputTokens"
+  | "routeCacheReadTokens"
+  | "routeStatus"
+  | "routeRuleSource"
+  | "routeMatch"
+  | "routeUnavailableReason"
+>;
 
 function normalizeName(name: string): string {
   return name.replace(/[-\s]/g, "_");
@@ -225,6 +245,222 @@ function getSubAgentName(branch: string): string | null {
 
 function isSubAgentBranch(branch: string): boolean {
   return branch.startsWith("sub-agent");
+}
+
+function shortModelId(modelId: string): string {
+  return modelId
+    .replace(/^us\.anthropic\./, "")
+    .replace(/^anthropic\./, "")
+    .replace(/-v\d+:\d+$/, "");
+}
+
+function numberValue(value: unknown): number | null {
+  const num = Number(value);
+  return Number.isFinite(num) && num >= 0 ? num : null;
+}
+
+function modelRoutingRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function extractToolModelEvidence(
+  record: Record<string, unknown>,
+): ToolModelEvidence {
+  const routing = modelRoutingRecord(
+    record.model_routing ?? record.modelRouting,
+  );
+  const status =
+    String(
+      record.model_routing_status ??
+        record.modelRoutingStatus ??
+        routing.status ??
+        "",
+    ).trim() || undefined;
+  const model =
+    String(
+      record.model ??
+        record.model_id ??
+        record.modelId ??
+        routing.model ??
+        routing.model_id ??
+        routing.modelId ??
+        "",
+    ).trim() || undefined;
+  const inputTokens = numberValue(
+    record.input_tokens ??
+      record.inputTokens ??
+      routing.input_tokens ??
+      routing.inputTokens,
+  );
+  const outputTokens = numberValue(
+    record.output_tokens ??
+      record.outputTokens ??
+      routing.output_tokens ??
+      routing.outputTokens,
+  );
+  const cacheReadTokens = numberValue(
+    record.cached_read_tokens ??
+      record.cacheReadTokens ??
+      routing.cached_read_tokens ??
+      routing.cacheReadTokens,
+  );
+  const ruleSource =
+    record.model_routing_rule_source ??
+    record.modelRoutingRuleSource ??
+    routing.rule_source ??
+    routing.ruleSource;
+  const match =
+    record.model_routing_match ?? record.modelRoutingMatch ?? routing.match;
+  const error =
+    String(
+      record.error ?? record.error_message ?? routing.error ?? "",
+    ).trim() || undefined;
+
+  if (
+    !model &&
+    !status &&
+    inputTokens == null &&
+    outputTokens == null &&
+    ruleSource == null &&
+    match == null
+  ) {
+    return { routeUnavailableReason: "not routed" };
+  }
+
+  return {
+    routeModelId: model,
+    routeInputTokens: inputTokens,
+    routeOutputTokens: outputTokens,
+    routeCacheReadTokens: cacheReadTokens,
+    routeStatus: status,
+    routeRuleSource: ruleSource,
+    routeMatch: match,
+    routeUnavailableReason:
+      !model || inputTokens == null || outputTokens == null
+        ? (error ?? "tokens unavailable")
+        : undefined,
+  };
+}
+
+function extractToolModelEvidenceFromEvent(event: any): TimelineEvent | null {
+  if (event?.eventType !== "model_routed_tool_call") return null;
+  const payload = parseJsonField(event.payload) ?? {};
+  const toolName =
+    String(
+      payload.tool_name ??
+        payload.toolName ??
+        payload.name ??
+        "workspace_skill",
+    ).trim() || "workspace_skill";
+  const evidence = extractToolModelEvidence(payload);
+  return {
+    type: "tool_call",
+    timestamp: event.createdAt ?? "",
+    branch: "parent",
+    toolName,
+    toolType: "tool",
+    toolInput: "",
+    toolOutput: "",
+    ...evidence,
+  };
+}
+
+function toolRouteKey(event: TimelineEvent): string {
+  return normalizeName(event.toolName ?? "tool").toLowerCase();
+}
+
+function appendUnmatchedRouteEvents(
+  events: TimelineEvent[],
+  turnEvents: any[] = [],
+): TimelineEvent[] {
+  const existing = new Set(
+    events
+      .filter((event) => event.type === "tool_call")
+      .map((event) => toolRouteKey(event)),
+  );
+  const routeEvents = turnEvents
+    .map(extractToolModelEvidenceFromEvent)
+    .filter((event): event is TimelineEvent => event !== null)
+    .filter((event) => {
+      const key = toolRouteKey(event);
+      if (existing.has(key)) return false;
+      existing.add(key);
+      return true;
+    });
+  return routeEvents.length > 0 ? [...events, ...routeEvents] : events;
+}
+
+function hasConcreteRouteEvidence(event: TimelineEvent): boolean {
+  return Boolean(
+    event.routeModelId ||
+    event.routeStatus ||
+    event.routeInputTokens != null ||
+    event.routeOutputTokens != null,
+  );
+}
+
+function routeStatusLabel(status?: string): string {
+  if (!status) return "not routed";
+  return status.replace(/_/g, " ");
+}
+
+function formatRouteTokens(event: TimelineEvent): string {
+  if (event.routeInputTokens == null && event.routeOutputTokens == null) {
+    return "tokens unavailable";
+  }
+  const input = formatTokens(event.routeInputTokens ?? 0);
+  const output = formatTokens(event.routeOutputTokens ?? 0);
+  const cached =
+    event.routeCacheReadTokens && event.routeCacheReadTokens > 0
+      ? ` (${formatTokens(event.routeCacheReadTokens)} cached)`
+      : "";
+  return `${input}->${output}${cached}`;
+}
+
+function routeEvidenceLines(event: TimelineEvent): string[] {
+  const status = routeStatusLabel(event.routeStatus);
+  const model = event.routeModelId
+    ? shortModelId(event.routeModelId)
+    : event.routeUnavailableReason || status === "not routed"
+      ? "not routed"
+      : "unknown";
+  const lines = [
+    `Model: ${model}`,
+    `Tokens: ${formatRouteTokens(event)}`,
+    `Routing status: ${status}`,
+  ];
+  if (event.routeRuleSource != null) {
+    lines.push(
+      `Rule source: ${JSON.stringify(event.routeRuleSource, null, 2)}`,
+    );
+  }
+  if (event.routeMatch != null) {
+    lines.push(`Match: ${JSON.stringify(event.routeMatch, null, 2)}`);
+  }
+  if (event.routeUnavailableReason) {
+    lines.push(`Note: ${event.routeUnavailableReason}`);
+  }
+  return lines;
+}
+
+function ToolRouteDetail({ event }: { event: TimelineEvent }) {
+  const routed = hasConcreteRouteEvidence(event);
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+      <span className="max-w-40 truncate font-mono">
+        {event.routeModelId ? shortModelId(event.routeModelId) : "model --"}
+      </span>
+      <span className="tabular-nums">{formatRouteTokens(event)}</span>
+      <Badge
+        variant="outline"
+        className="px-1.5 py-0 text-[9px] text-muted-foreground"
+      >
+        {routed ? routeStatusLabel(event.routeStatus) : "not routed"}
+      </Badge>
+    </span>
+  );
 }
 
 type BranchSpan = {
@@ -246,6 +482,7 @@ function buildTimelineFromUsage(
   inputTokens?: number,
   outputTokens?: number,
   totalCost?: number,
+  turnEvents?: any[],
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
@@ -268,6 +505,7 @@ function buildTimelineFromUsage(
 
   // Add tool call events from usage data
   for (const ti of toolInvocations) {
+    const record = modelRoutingRecord(ti);
     events.push({
       type: "tool_call",
       timestamp: "",
@@ -279,6 +517,7 @@ function buildTimelineFromUsage(
       toolType: ti.type || "tool",
       toolInput: ti.input_preview || "",
       toolOutput: ti.output_preview || "",
+      ...extractToolModelEvidence(record),
     });
   }
 
@@ -291,7 +530,7 @@ function buildTimelineFromUsage(
     });
   }
 
-  return events;
+  return appendUnmatchedRouteEvents(events, turnEvents);
 }
 
 function buildTimeline(
@@ -299,6 +538,7 @@ function buildTimeline(
   toolInvocations: any[],
   userMessage: string,
   responseText: string,
+  turnEvents?: any[],
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
@@ -358,6 +598,7 @@ function buildTimeline(
           matchingTool?.type === "sub_agent"
             ? `sub-agent:${toolName.toLowerCase()}`
             : branch;
+        const matchingRecord = modelRoutingRecord(matchingTool);
 
         events.push({
           type: "tool_call",
@@ -367,6 +608,7 @@ function buildTimeline(
           toolType: matchingTool?.type || "mcp_tool",
           toolInput,
           toolOutput,
+          ...extractToolModelEvidence(matchingRecord),
         });
       }
     }
@@ -383,7 +625,7 @@ function buildTimeline(
 
   reparentSubAgentEvents(events);
 
-  return events;
+  return appendUnmatchedRouteEvents(events, turnEvents);
 }
 
 function reparentSubAgentEvents(events: TimelineEvent[]): void {
@@ -514,8 +756,13 @@ function ExecutionTimeline({
     variables: { tenantId: tenantId!, turnId },
     pause: !tenantId,
   });
+  const [eventsResult] = useQuery({
+    query: ThreadTurnEventsQuery,
+    variables: { runId: turnId, limit: 100 },
+  });
 
   const invocations = (result.data as any)?.turnInvocationLogs ?? [];
+  const turnEvents = (eventsResult.data as any)?.threadTurnEvents ?? [];
   if (result.fetching && invocations.length === 0)
     return (
       <p className="text-[10px] text-muted-foreground px-3">
@@ -526,7 +773,13 @@ function ExecutionTimeline({
   // Build timeline from CloudWatch invocations if available, otherwise from tool_invocations usage data
   const events =
     invocations.length > 0
-      ? buildTimeline(invocations, toolInvocations, "", responseText)
+      ? buildTimeline(
+          invocations,
+          toolInvocations,
+          "",
+          responseText,
+          turnEvents,
+        )
       : buildTimelineFromUsage(
           toolInvocations,
           responseText,
@@ -534,6 +787,7 @@ function ExecutionTimeline({
           inputTokens,
           outputTokens,
           totalCostFromTurn,
+          turnEvents,
         );
 
   if (events.length === 0) return null;
@@ -778,14 +1032,7 @@ function ExecutionTimeline({
                 </span>
               );
             } else {
-              rightDetail = (
-                <Badge
-                  variant="outline"
-                  className="text-[9px] px-1.5 py-0 text-muted-foreground"
-                >
-                  {isSub ? "sub-agent" : isSkill ? "skill" : "tool"}
-                </Badge>
-              );
+              rightDetail = <ToolRouteDetail event={ev} />;
             }
             const parts: string[] = [];
             const detailHeader = isSub
@@ -795,6 +1042,9 @@ function ExecutionTimeline({
                 : "MCP Tool";
             const detailName = isSkill ? skillName : ev.toolName;
             parts.push(`${detailHeader}  ·  ${detailName}`);
+            parts.push(
+              `── MODEL ROUTING ──\n\n${routeEvidenceLines(ev).join("\n")}`,
+            );
             if (ev.toolInput) parts.push(`── INPUT ──\n\n${ev.toolInput}`);
             if (ev.toolOutput) parts.push(`── OUTPUT ──\n\n${ev.toolOutput}`);
             clickTitle = isSkill

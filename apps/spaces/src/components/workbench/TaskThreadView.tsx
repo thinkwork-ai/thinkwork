@@ -3843,6 +3843,7 @@ function toolInvocationDetail(record: Record<string, unknown>) {
   const outputPreview = stringValue(record.output_preview);
   const status = stringValue(record.status);
   const parts = [
+    `Model routing\n${toolModelRoutingLines(record).join("\n")}`,
     inputPreview ? `Input: ${formatToolPreview(inputPreview)}` : null,
     outputPreview ? `Output: ${formatToolPreview(outputPreview)}` : null,
     status ? `Status: ${status}` : null,
@@ -3872,6 +3873,21 @@ function sanitizeToolInvocationMetadata(record: Record<string, unknown>) {
     "status",
     "is_error",
     "isError",
+    "model",
+    "model_id",
+    "modelId",
+    "input_tokens",
+    "inputTokens",
+    "output_tokens",
+    "outputTokens",
+    "cached_read_tokens",
+    "cacheReadTokens",
+    "model_routing_status",
+    "modelRoutingStatus",
+    "model_routing_rule_source",
+    "modelRoutingRuleSource",
+    "model_routing_match",
+    "modelRoutingMatch",
     "runtime",
     "started_at",
     "startedAt",
@@ -3882,6 +3898,78 @@ function sanitizeToolInvocationMetadata(record: Record<string, unknown>) {
     metadata[key] = sanitizeEventPayloadValue(record[key]);
   }
   return metadata;
+}
+
+function toolModelRoutingLines(record: Record<string, unknown>) {
+  const routing = parseRecord(record.model_routing ?? record.modelRouting);
+  const model =
+    stringValue(record.model) ||
+    stringValue(record.model_id) ||
+    stringValue(record.modelId) ||
+    stringValue(routing.model) ||
+    stringValue(routing.model_id) ||
+    stringValue(routing.modelId);
+  const input = numberValue(
+    record.input_tokens ??
+      record.inputTokens ??
+      routing.input_tokens ??
+      routing.inputTokens,
+  );
+  const output = numberValue(
+    record.output_tokens ??
+      record.outputTokens ??
+      routing.output_tokens ??
+      routing.outputTokens,
+  );
+  const cached = numberValue(
+    record.cached_read_tokens ??
+      record.cacheReadTokens ??
+      routing.cached_read_tokens ??
+      routing.cacheReadTokens,
+  );
+  const status =
+    stringValue(record.model_routing_status) ||
+    stringValue(record.modelRoutingStatus) ||
+    stringValue(routing.status) ||
+    "not routed";
+  const ruleSource =
+    record.model_routing_rule_source ??
+    record.modelRoutingRuleSource ??
+    routing.rule_source ??
+    routing.ruleSource;
+  const match =
+    record.model_routing_match ?? record.modelRoutingMatch ?? routing.match;
+
+  const tokenLine =
+    input == null && output == null
+      ? "Tokens: unavailable"
+      : `Tokens: ${formatCount(input ?? 0)} in / ${formatCount(output ?? 0)} out${
+          cached && cached > 0 ? ` (${formatCount(cached)} cached)` : ""
+        }`;
+  const lines = [
+    `Model: ${model ? shortenModelName(model) : "not routed"}`,
+    tokenLine,
+    `Routing status: ${status.replace(/_/g, " ")}`,
+  ];
+  if (ruleSource != null) {
+    lines.push(`Rule source: ${JSON.stringify(ruleSource, null, 2)}`);
+  }
+  if (match != null) {
+    lines.push(`Match: ${JSON.stringify(match, null, 2)}`);
+  }
+  return lines;
+}
+
+function numberValue(value: unknown): number | null {
+  const num = Number(value);
+  return Number.isFinite(num) && num >= 0 ? num : null;
+}
+
+function shortenModelName(model: string) {
+  return model
+    .replace(/^us\.anthropic\./, "")
+    .replace(/^anthropic\./, "")
+    .replace(/-v\d+:\d+$/, "");
 }
 
 function formatToolPreview(value: string) {

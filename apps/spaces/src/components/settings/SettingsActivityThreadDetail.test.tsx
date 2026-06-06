@@ -132,6 +132,18 @@ const turn = {
         type: "tool",
         input_preview: '{"query":"SpaceX"}',
         output_preview: "Search results",
+        model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        input_tokens: 1234,
+        output_tokens: 34,
+        cached_read_tokens: 12,
+        model_routing_status: "succeeded",
+        model_routing_rule_source: {
+          scope: "space",
+          path: "spaces/sales/TOOLS.md",
+        },
+        model_routing_match: {
+          tool: "web_search",
+        },
       },
     ],
   }),
@@ -234,6 +246,9 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.getByText("Properties")).toBeTruthy();
     expect(screen.getByText("Thinking")).toBeTruthy();
     expect(screen.getByText("Tool: web_search")).toBeTruthy();
+    expect(screen.getByText("claude-haiku-4-5-20251001")).toBeTruthy();
+    expect(screen.getByText(/1\.2K->34/)).toBeTruthy();
+    expect(screen.getByText("succeeded")).toBeTruthy();
     expect(screen.getByText("Eric Odom")).toBeTruthy();
     expect(screen.getByText("ThinkWork")).toBeTruthy();
     expect(screen.queryByText(/Type a command/i)).toBeNull();
