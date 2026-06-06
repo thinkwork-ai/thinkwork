@@ -21,7 +21,13 @@ status: in_progress
 | Deploy, park, and destructive cleanup flow     | `codex/twenty-crm-lifecycle-actions` | [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) | Merged | Adds explicit Deploy, Park, and Destroy actions; Destroy removes retained Twenty DB/role/secrets after Terraform.                     |
 | Managed Applications configuration-link polish | `codex/managed-app-config-link`      | [#2136](https://github.com/thinkwork-ai/thinkwork/pull/2136) | Merged | General now links Twenty to CRM configuration; CRM detail owns Deploy plus bottom Teardown controls for Park and destructive Destroy. |
 | E2E deploy-readiness UI/allowlist workflow     | `codex/twenty-crm-e2e-fixes`         | [#2137](https://github.com/thinkwork-ai/thinkwork/pull/2137) | Merged | Wires CI operator email input and makes CRM Deploy show immediate queued/error state before lifecycle proof.                          |
-| Greenfield operator allowlist variable         | `codex/twenty-crm-root-operator-var` | TBD                                                          | Active | Declares and forwards the root Terraform variable required by the merged deploy workflow.                                             |
+| Greenfield operator allowlist variable         | `codex/twenty-crm-root-operator-var` | [#2139](https://github.com/thinkwork-ai/thinkwork/pull/2139) | Merged | Declares and forwards the root Terraform variable required by the merged deploy workflow.                                             |
+| CRM DNS hosted-zone guard                      | `codex/twenty-crm-dns-fix`           | [#2141](https://github.com/thinkwork-ai/thinkwork/pull/2141) | Merged | Keeps CRM DNS records plan-safe before the ALB exists.                                                                                |
+| Dedicated CRM certificate                      | `codex/twenty-crm-cert-fix`          | [#2142](https://github.com/thinkwork-ai/thinkwork/pull/2142) | Merged | Issues a dedicated `crm.thinkwork.ai` ACM certificate.                                                                               |
+| CRM certificate validation state               | `codex/twenty-crm-cert-state-fix`    | [#2143](https://github.com/thinkwork-ai/thinkwork/pull/2143) | Merged | Moves the CRM ACM validation state to the correct Terraform module address.                                                          |
+| Lambda env budget fix                          | `codex/twenty-crm-status-env-budget` | [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144) | Merged | Keeps deployment-status env vars below Lambda's 4 KB limit.                                                                          |
+| Aurora URL psql compatibility                  | `codex/twenty-crm-db-url-ssl-fix`    | [#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147) | Merged | Uses `sslmode=require` so the deploy workflow's `psql` DB prep succeeds.                                                            |
+| Twenty Node TLS runtime fix                    | `codex/twenty-crm-node-tls-runtime`  | TBD                                                          | Active | Adds the Node TLS setting needed for Twenty's migration process to accept the Aurora RDS certificate in dev.                         |
 
 ### Progress Log
 
@@ -69,6 +75,23 @@ status: in_progress
 - Started follow-up branch `codex/twenty-crm-root-operator-var` to declare the
   root variable and pass it through to `module.thinkwork` before retrying the
   live Twenty lifecycle proof.
+- PR [#2139](https://github.com/thinkwork-ai/thinkwork/pull/2139) merged and
+  the following deploy surfaced successive AWS readiness fixes: plan-safe CRM
+  DNS, a dedicated `crm.thinkwork.ai` certificate, certificate validation state
+  placement, Lambda environment size, and Aurora connection-string
+  compatibility.
+- PRs [#2141](https://github.com/thinkwork-ai/thinkwork/pull/2141),
+  [#2142](https://github.com/thinkwork-ai/thinkwork/pull/2142),
+  [#2143](https://github.com/thinkwork-ai/thinkwork/pull/2143),
+  [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144), and
+  [#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147) merged and
+  deployed far enough to create the Twenty ECS service and
+  `https://crm.thinkwork.ai`.
+- The post-[#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147)
+  server task reached the Twenty migration phase, proving the database URL is
+  now accepted by `psql`, but Twenty's Node migration process failed with
+  `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` against Aurora. Started branch
+  `codex/twenty-crm-node-tls-runtime` to unblock the service boot.
 
 ### CI / Verification
 
@@ -100,11 +123,15 @@ status: in_progress
 - E2E-readiness verification:
   `pnpm --filter @thinkwork/spaces typecheck` passed.
 - E2E-readiness verification: `git diff --check` passed.
+- Runtime TLS follow-up verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`
+  passed with 20 tests; `terraform fmt -check terraform/modules/app/twenty/main.tf`
+  passed; `git diff --check` passed.
 
 ### Blockers
 
-- Waiting for the greenfield root-variable fix to merge and deploy before
-  rerunning the Twenty lifecycle proof against dev.
+- Twenty's Node migration process is still rejecting the Aurora RDS certificate
+  until the runtime TLS follow-up merges and deploys.
 
 ## Spaces Settings Activity - 2026-06-05
 
