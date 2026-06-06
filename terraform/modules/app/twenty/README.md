@@ -33,11 +33,34 @@ Twenty requires infrastructure-level secrets in environment variables:
 - `ENCRYPTION_KEY`
 - optional `FALLBACK_ENCRYPTION_KEY`
 - optional `APP_SECRET`
+- optional `EMAIL_SMTP_USER`
+- optional `EMAIL_SMTP_PASSWORD`
 
 The module injects these values through ECS secrets. It never places database
-credentials or encryption keys into plaintext task-definition environment
-values. Placeholder secret containers can be created for early wiring, but the
-real values are expected to be created or rotated by the deployment workflow.
+credentials, encryption keys, or SMTP credentials into plaintext task-definition
+environment values. Placeholder secret containers can be created for early
+wiring, but the real values are expected to be created or rotated by the
+deployment workflow.
+
+## Email
+
+When `email_from_address` is set, the module configures Twenty app email through
+ThinkWork-owned SES SMTP:
+
+- `EMAIL_DRIVER=SMTP`
+- `EMAIL_FROM_ADDRESS`
+- `EMAIL_FROM_NAME`
+- `EMAIL_SMTP_HOST`
+- `EMAIL_SMTP_PORT`
+- `EMAIL_SMTP_NO_TLS`
+- `EMAIL_SMTP_USER`
+- `EMAIL_SMTP_PASSWORD`
+
+The composite ThinkWork module derives `email_from_address` from
+`noreply@<ses_inbound_domain>` by default, so invitation and workspace emails
+work when the existing ThinkWork SES identity is verified. The SMTP username and
+password are generated as a least-privilege IAM access key, stored in Secrets
+Manager, and injected into both the Twenty server and worker containers.
 
 ## Admin Panel Configuration
 
@@ -46,7 +69,8 @@ server and worker containers. Twenty uses that mode to store Admin Panel
 configuration variables in the dedicated CRM database, so settings such as model
 provider keys, messaging providers, and storage options can be edited from the
 Twenty UI after deployment. Infrastructure settings like `PG_DATABASE_URL`,
-`SERVER_URL`, and encryption keys remain environment-only.
+`SERVER_URL`, encryption keys, and Terraform-managed email delivery settings
+remain environment-only.
 
 ## Cache
 

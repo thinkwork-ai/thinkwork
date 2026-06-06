@@ -30,6 +30,12 @@ locals {
   twenty_domain          = var.twenty_domain != "" ? var.twenty_domain : (var.www_domain != "" ? "crm.${var.www_domain}" : "")
   twenty_public_url      = var.twenty_public_url != "" ? var.twenty_public_url : (local.twenty_domain != "" ? "https://${local.twenty_domain}" : "")
   twenty_certificate_arn = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : var.www_certificate_arn
+  twenty_email_domain    = var.twenty_email_domain != "" ? var.twenty_email_domain : var.ses_inbound_domain
+  twenty_email_from_address = (
+    var.twenty_email_from_address != ""
+    ? var.twenty_email_from_address
+    : local.twenty_email_domain != "" ? "noreply@${local.twenty_email_domain}" : ""
+  )
   cognee_worker_subnet_ids = (
     length(module.vpc.private_subnet_ids) > 0
     ? module.vpc.private_subnet_ids
@@ -841,6 +847,10 @@ module "twenty" {
   encryption_key_secret_arn          = var.twenty_encryption_key_secret_arn
   fallback_encryption_key_secret_arn = var.twenty_fallback_encryption_key_secret_arn
   app_secret_arn                     = var.twenty_app_secret_arn
+
+  email_from_address = local.twenty_email_from_address
+  email_from_name    = var.twenty_email_from_name
+  email_smtp_host    = var.twenty_email_smtp_host
 
   cache_engine                 = var.twenty_cache_engine
   cache_engine_version         = var.twenty_cache_engine_version

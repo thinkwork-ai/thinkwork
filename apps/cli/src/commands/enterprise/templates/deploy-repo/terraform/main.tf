@@ -256,6 +256,18 @@ variable "twenty_encryption_key_secret_arn" {
   default     = ""
 }
 
+variable "twenty_email_from_address" {
+  description = "Verified SES sender address for Twenty app emails. Leave empty to derive noreply@ses_inbound_domain."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_email_from_name" {
+  description = "Display name for Twenty app email From headers."
+  type        = string
+  default     = "ThinkWork CRM"
+}
+
 variable "twenty_public_url" {
   description = "Public HTTPS URL for Twenty CRM. Leave empty to derive https://crm.<www_domain>."
   type        = string
@@ -322,6 +334,8 @@ module "thinkwork" {
   twenty_db_name                             = var.twenty_db_name
   twenty_db_url_secret_arn                   = var.twenty_db_url_secret_arn
   twenty_encryption_key_secret_arn           = var.twenty_encryption_key_secret_arn
+  twenty_email_from_address                  = var.twenty_email_from_address
+  twenty_email_from_name                     = var.twenty_email_from_name
   twenty_public_url                          = var.twenty_public_url
   twenty_certificate_arn                     = var.twenty_certificate_arn
 

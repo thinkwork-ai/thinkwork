@@ -102,6 +102,12 @@ export const twentyAdapter: ManagedAppAdapter = {
         "encryptionKeySecretArn",
         "Twenty encryptionKeySecretArn",
       ),
+      twenty_email_from_address: optionalString(
+        desiredConfig,
+        "emailFromAddress",
+      ),
+      twenty_email_from_name: optionalString(desiredConfig, "emailFromName"),
+      twenty_email_smtp_host: optionalString(desiredConfig, "emailSmtpHost"),
       twenty_fallback_encryption_key_secret_arn: optionalString(
         desiredConfig,
         "fallbackEncryptionKeySecretArn",

@@ -174,6 +174,54 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(environmentLocals).not.toMatch(/ENCRYPTION_KEY/);
   });
 
+  it("configures Twenty app email through ThinkWork SES SMTP", () => {
+    const source = read(TWENTY_MAIN);
+    const vars = read(TWENTY_VARS);
+    const readme = read(TWENTY_README);
+    const emailEnvironment = source.slice(
+      source.indexOf("email_environment = local.smtp_enabled ? ["),
+      source.indexOf("server_environment = concat("),
+    );
+    const containerSecrets = source.slice(
+      source.indexOf("container_secrets = concat("),
+      source.indexOf('data "aws_region" "current"'),
+    );
+    const iamPolicy = firstNestedBlock(
+      source,
+      'resource "aws_iam_user_policy" "ses_smtp"',
+    );
+
+    expect(vars).toMatch(/variable "email_from_address"/);
+    expect(vars).toMatch(/variable "email_from_name"/);
+    expect(vars).toMatch(/variable "email_smtp_host"/);
+    expect(vars).toMatch(/variable "email_smtp_port"/);
+    expect(vars).toMatch(/default\s*=\s*587/);
+    expect(source).toMatch(/smtp_enabled\s*=\s*var\.email_from_address != ""/);
+    expect(source).toMatch(
+      /smtp_host\s*=.*email-smtp\.\$\{data\.aws_region\.current\.name\}\.amazonaws\.com/,
+    );
+    expect(emailEnvironment).toMatch(/name\s*=\s*"EMAIL_DRIVER"/);
+    expect(emailEnvironment).toMatch(/value\s*=\s*"SMTP"/);
+    expect(emailEnvironment).toMatch(/EMAIL_FROM_ADDRESS/);
+    expect(emailEnvironment).toMatch(/EMAIL_FROM_NAME/);
+    expect(emailEnvironment).toMatch(/EMAIL_SMTP_HOST/);
+    expect(emailEnvironment).toMatch(/EMAIL_SMTP_NO_TLS/);
+    expect(emailEnvironment).toMatch(/EMAIL_SMTP_PORT/);
+    expect(source).toMatch(/resource "aws_iam_user" "ses_smtp"/);
+    expect(source).toMatch(/resource "aws_iam_access_key" "ses_smtp"/);
+    expect(source).toMatch(/ses_smtp_password_v4/);
+    expect(source).toMatch(/resource "aws_secretsmanager_secret" "ses_smtp"/);
+    expect(source).toMatch(
+      /name\s*=\s*"thinkwork\/\$\{var\.stage\}\/twenty\/ses-smtp"/,
+    );
+    expect(iamPolicy).toMatch(/ses:SendEmail/);
+    expect(iamPolicy).toMatch(/ses:SendRawEmail/);
+    expect(containerSecrets).toMatch(/EMAIL_SMTP_USER/);
+    expect(containerSecrets).toMatch(/EMAIL_SMTP_PASSWORD/);
+    expect(readme).toMatch(/ThinkWork-owned SES SMTP/);
+    expect(readme).toMatch(/noreply@<ses_inbound_domain>/);
+  });
+
   it("can create placeholder secret containers without exposing real values", () => {
     const source = read(TWENTY_MAIN);
     const vars = read(TWENTY_VARS);
@@ -304,6 +352,10 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(vars).toMatch(/variable "twenty_encryption_key_secret_arn"/);
     expect(vars).toMatch(/variable "twenty_cache_engine"/);
     expect(vars).toMatch(/twenty_cache_engine must be valkey or redis/);
+    expect(vars).toMatch(/variable "twenty_email_domain"/);
+    expect(vars).toMatch(/variable "twenty_email_from_address"/);
+    expect(vars).toMatch(/variable "twenty_email_from_name"/);
+    expect(vars).toMatch(/variable "twenty_email_smtp_host"/);
   });
 
   it("wires the Twenty module behind retained provisioned state", () => {
@@ -323,6 +375,10 @@ describe("U1 - Twenty Terraform app module", () => {
       /twenty_runtime_enabled\s*=\s*var\.twenty_provisioned && var\.twenty_runtime_enabled/,
     );
     expect(source).toMatch(/twenty_domain.*crm\.\$\{var\.www_domain\}/);
+    expect(source).toMatch(
+      /twenty_email_domain\s*=\s*var\.twenty_email_domain != "" \? var\.twenty_email_domain : var\.ses_inbound_domain/,
+    );
+    expect(source).toMatch(/noreply@\$\{local\.twenty_email_domain\}/);
     expect(twentyModule).toMatch(
       /count\s*=\s*local\.twenty_provisioned \? 1 : 0/,
     );
@@ -344,6 +400,15 @@ describe("U1 - Twenty Terraform app module", () => {
     );
     expect(twentyModule).toMatch(
       /encryption_key_secret_arn\s*=\s*var\.twenty_encryption_key_secret_arn/,
+    );
+    expect(twentyModule).toMatch(
+      /email_from_address\s*=\s*local\.twenty_email_from_address/,
+    );
+    expect(twentyModule).toMatch(
+      /email_from_name\s*=\s*var\.twenty_email_from_name/,
+    );
+    expect(twentyModule).toMatch(
+      /email_smtp_host\s*=\s*var\.twenty_email_smtp_host/,
     );
     expect(guardrails).toMatch(/twenty_provisioned requires twenty_image_uri/);
     expect(guardrails).toMatch(
@@ -433,6 +498,12 @@ describe("U1 - Twenty Terraform app module", () => {
       /twenty_runtime_enabled\s*=\s*var\.twenty_runtime_enabled/,
     );
     expect(thinkworkModule).toMatch(
+      /twenty_email_from_address\s*=\s*var\.twenty_email_from_address/,
+    );
+    expect(thinkworkModule).toMatch(
+      /twenty_email_from_name\s*=\s*var\.twenty_email_from_name/,
+    );
+    expect(thinkworkModule).toMatch(
       /twenty_public_url\s*=\s*local\.twenty_url/,
     );
     expect(thinkworkModule).toMatch(
@@ -450,6 +521,7 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(tfvars).toMatch(/twenty_provisioned\s*=\s*false/);
     expect(tfvars).toMatch(/twenty_runtime_enabled\s*=\s*false/);
     expect(tfvars).toMatch(/empty derives https:\/\/crm\.<www_domain>/);
+    expect(tfvars).toMatch(/empty derives noreply@ses_inbound_domain/);
   });
 
   it("generates init tfvars and wrapper HCL with Twenty disabled by default", () => {
@@ -462,11 +534,19 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(source).toMatch(/variable "twenty_image_uri"/);
     expect(source).toMatch(/variable "twenty_db_url_secret_arn"/);
     expect(source).toMatch(/variable "twenty_encryption_key_secret_arn"/);
+    expect(source).toMatch(/variable "twenty_email_from_address"/);
+    expect(source).toMatch(/variable "twenty_email_from_name"/);
     expect(source).toMatch(/twenty_provisioned = var\.twenty_provisioned/);
     expect(source).toMatch(
       /twenty_runtime_enabled = var\.twenty_runtime_enabled/,
     );
     expect(source).toMatch(/twenty_db_name = var\.twenty_db_name/);
+    expect(source).toMatch(
+      /twenty_email_from_address = var\.twenty_email_from_address/,
+    );
+    expect(source).toMatch(
+      /twenty_email_from_name = var\.twenty_email_from_name/,
+    );
     expect(source).toMatch(/output "twenty_provisioned"/);
     expect(source).toMatch(/output "twenty_url"/);
   });
@@ -482,6 +562,8 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(source).toMatch(/variable "twenty_db_name"/);
     expect(source).toMatch(/variable "twenty_db_url_secret_arn"/);
     expect(source).toMatch(/variable "twenty_encryption_key_secret_arn"/);
+    expect(source).toMatch(/variable "twenty_email_from_address"/);
+    expect(source).toMatch(/variable "twenty_email_from_name"/);
     expect(thinkworkModule).toMatch(
       /twenty_provisioned\s*=\s*var\.twenty_provisioned/,
     );
@@ -490,6 +572,12 @@ describe("U1 - Twenty Terraform app module", () => {
     );
     expect(thinkworkModule).toMatch(
       /twenty_db_url_secret_arn\s*=\s*var\.twenty_db_url_secret_arn/,
+    );
+    expect(thinkworkModule).toMatch(
+      /twenty_email_from_address\s*=\s*var\.twenty_email_from_address/,
+    );
+    expect(thinkworkModule).toMatch(
+      /twenty_email_from_name\s*=\s*var\.twenty_email_from_name/,
     );
     expect(source).toMatch(/output "twenty_provisioned"/);
     expect(source).toMatch(/output "twenty_url"/);
