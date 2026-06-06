@@ -33,6 +33,7 @@ import {
   ComputerEventsQuery,
   ComputerThreadQuery,
   ComputerThreadTasksQuery,
+  MyApprovedModelCatalogQuery,
   NewMessageSubscription,
   RunbookRunsQuery,
   SendMessageMutation,
@@ -66,6 +67,12 @@ import {
   desktopToolbarButtonClassName,
   desktopToolbarGapClassName,
 } from "@/lib/desktop-chrome";
+import {
+  chooseApprovedModelId,
+  readStoredModelId,
+  writeStoredModelId,
+  type ApprovedModelOption,
+} from "@/lib/approved-model-selection";
 
 interface SpacesThreadDetailRouteProps {
   threadId: string;
@@ -221,6 +228,10 @@ interface MentionTargetsResult {
   threadMentionTargets?: MentionTarget[] | null;
 }
 
+interface ApprovedModelsResult {
+  myApprovedModelCatalog?: ApprovedModelOption[] | null;
+}
+
 interface ThreadLinkedTasksResult {
   threadLinkedTasks?: LinkedTaskSummary[] | null;
 }
@@ -289,6 +300,9 @@ export function SpacesThreadDetailRoute({
   const { tenantId, userId } = useTenant();
   const [optimisticMessage, setOptimisticMessage] =
     useState<OptimisticMessage | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
+    readStoredModelId(),
+  );
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
   const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
@@ -367,6 +381,36 @@ export function SpacesThreadDetailRoute({
     () => skillCatalogData?.tenantSkillCatalog ?? [],
     [skillCatalogData],
   );
+  const [{ data: approvedModelData, error: approvedModelError }] =
+    useQuery<ApprovedModelsResult>({
+      query: MyApprovedModelCatalogQuery,
+      pause: !tenantId,
+      requestPolicy: "cache-and-network",
+    });
+  const approvedModels = approvedModelData?.myApprovedModelCatalog;
+
+  useEffect(() => {
+    if (!approvedModels) return;
+    const nextModelId = chooseApprovedModelId(approvedModels, selectedModelId);
+    if (nextModelId !== selectedModelId) {
+      setSelectedModelId(nextModelId);
+      writeStoredModelId(nextModelId);
+    }
+  }, [approvedModels, selectedModelId]);
+
+  useEffect(() => {
+    if (approvedModelError) {
+      console.warn(
+        "[SpacesThreadDetailRoute] failed to load approved models:",
+        approvedModelError,
+      );
+    }
+  }, [approvedModelError]);
+
+  function handleSelectedModelChange(modelId: string) {
+    setSelectedModelId(modelId);
+    writeStoredModelId(modelId);
+  }
 
   const computerId = routeThread?.computerId ?? null;
   // ComputerThreadTasks / ComputerEvents / RunbookRuns are vestigial: the
@@ -1392,6 +1436,9 @@ export function SpacesThreadDetailRoute({
       isSending={sending}
       mentionTargets={mentionTargetsData?.threadMentionTargets ?? []}
       skillCatalog={skillCatalog}
+      approvedModels={approvedModels ?? undefined}
+      selectedModelId={selectedModelId}
+      onSelectedModelChange={handleSelectedModelChange}
       currentUser={{
         id: userId,
       }}
@@ -1403,6 +1450,7 @@ export function SpacesThreadDetailRoute({
         mentions = [],
         agentRequested = true,
         pinnedSkills = [],
+        requestedModelId,
       ) => {
         setOptimisticMessage({
           content,
@@ -1480,6 +1528,10 @@ export function SpacesThreadDetailRoute({
         if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;
         if (pinnedSkills.length > 0) {
           metadata.skills = pinnedSkills.map((slug) => ({ slug }));
+        }
+        const turnModelId = requestedModelId ?? selectedModelId;
+        if (turnModelId) {
+          metadata.requestedModelId = turnModelId;
         }
         if (Object.keys(metadata).length > 0) {
           sendInput.metadata = JSON.stringify(metadata);

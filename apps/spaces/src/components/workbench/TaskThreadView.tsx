@@ -62,6 +62,7 @@ import {
   SkillTokenInput,
   type SkillTokenInputHandle,
 } from "@/components/workbench/SkillTokenInput";
+import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
 import { IconCircleCheckFilled, IconPaperclip } from "@tabler/icons-react";
 import {
   Reasoning,
@@ -116,6 +117,7 @@ import {
   useComposerSkillPins,
 } from "@/components/workbench/useComposerSkillPins";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
+import type { ApprovedModelOption } from "@/lib/approved-model-selection";
 
 const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
 const COMPOSER_TRANSCRIPT_GAP_PX = 32;
@@ -206,7 +208,11 @@ interface TaskThreadViewProps {
     mentions?: ComposerMention[],
     agentRequested?: boolean,
     pinnedSkills?: string[],
+    selectedModelId?: string,
   ) => Promise<void> | void;
+  approvedModels?: ApprovedModelOption[];
+  selectedModelId?: string | null;
+  onSelectedModelChange?: (modelId: string) => void;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
 }
@@ -329,6 +335,9 @@ export function TaskThreadView({
   isSending = false,
   mentionTargets = [],
   skillCatalog = [],
+  approvedModels,
+  selectedModelId,
+  onSelectedModelChange,
   currentUser,
   onSendFollowUp,
   artifactPanelState,
@@ -503,6 +512,9 @@ export function TaskThreadView({
               isSending={isSending}
               mentionTargets={mentionTargets}
               skillCatalog={skillCatalog}
+              approvedModels={approvedModels}
+              selectedModelId={selectedModelId}
+              onSelectedModelChange={onSelectedModelChange}
               threadMessages={thread.messages}
               currentUserId={currentUser?.id ?? null}
               prefill={composerPrefill}
@@ -2252,6 +2264,9 @@ function FollowUpComposer({
   currentUserId,
   prefill,
   onSubmit,
+  approvedModels,
+  selectedModelId,
+  onSelectedModelChange,
 }: {
   threadId: string;
   taskQueue?: ActiveTaskQueue | null;
@@ -2268,7 +2283,11 @@ function FollowUpComposer({
     mentions?: ComposerMention[],
     agentRequested?: boolean,
     pinnedSkills?: string[],
+    selectedModelId?: string,
   ) => Promise<void> | void;
+  approvedModels?: ApprovedModelOption[];
+  selectedModelId?: string | null;
+  onSelectedModelChange?: (modelId: string) => void;
 }) {
   const composer = useComposerState(null);
   const textareaRef = useRef<SkillTokenInputHandle | null>(null);
@@ -2336,10 +2355,14 @@ function FollowUpComposer({
     [composer.text, defaultAgentTarget, mentions],
   );
   const effectiveAgentEnabled = agentForcedOn || agentEnabled;
+  const modelSelectionBlocked =
+    approvedModels !== undefined &&
+    (approvedModels.length === 0 || !selectedModelId);
   const canSubmit =
     (composer.text.trim().length > 0 || composer.files.length > 0) &&
     !disabled &&
-    !isSending;
+    !isSending &&
+    !modelSelectionBlocked;
 
   useEffect(() => {
     if (agentForcedOn) setAgentEnabled(true);
@@ -2424,13 +2447,25 @@ function FollowUpComposer({
       const submittedMentions = mentions.filter((mention) =>
         content.includes(mention.rawText),
       );
-      await onSubmit(
-        content,
-        files,
-        submittedMentions,
-        effectiveAgentEnabled,
-        extractPinnedSkillSlugs(content, skillCatalog),
-      );
+      const pinnedSkills = extractPinnedSkillSlugs(content, skillCatalog);
+      if (selectedModelId) {
+        await onSubmit(
+          content,
+          files,
+          submittedMentions,
+          effectiveAgentEnabled,
+          pinnedSkills,
+          selectedModelId,
+        );
+      } else {
+        await onSubmit(
+          content,
+          files,
+          submittedMentions,
+          effectiveAgentEnabled,
+          pinnedSkills,
+        );
+      }
       composer.clear();
       setMentions([]);
     } catch (err) {
@@ -2594,6 +2629,13 @@ function FollowUpComposer({
                 <Bot className="size-5" />
               </button>
               <PromptInputAttachButton />
+              <ComposerModelPicker
+                models={approvedModels}
+                value={selectedModelId}
+                onValueChange={onSelectedModelChange}
+                disabled={disabled || isSending}
+                tone="dark"
+              />
             </PromptInputTools>
             <div className="flex items-center gap-1">
               <PromptInputSpeechButton
@@ -2616,8 +2658,10 @@ function FollowUpComposer({
           </PromptInputFooter>
         </PromptInput>
       </div>
-      {composer.error ? (
-        <p className="text-sm text-destructive">{composer.error}</p>
+      {composer.error || modelSelectionBlocked ? (
+        <p className="text-sm text-destructive">
+          {composer.error ?? "No approved model is available for your account."}
+        </p>
       ) : null}
     </div>
   );

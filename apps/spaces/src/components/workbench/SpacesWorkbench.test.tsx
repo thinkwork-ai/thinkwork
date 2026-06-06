@@ -17,6 +17,7 @@ function setComposerText(value: string) {
 import { useMutation, useQuery } from "urql";
 import {
   CreateThreadMutation,
+  MyApprovedModelCatalogQuery,
   NewThreadMentionTargetsQuery,
   SendMessageMutation,
   SpacesQuery,
@@ -58,12 +59,24 @@ vi.mock("@/lib/use-assigned-computer-selection", () => ({
 const navigate = vi.fn();
 const createThread = vi.fn();
 const sendMessage = vi.fn();
+let approvedModels:
+  | Array<{
+      id: string;
+      modelId: string;
+      displayName: string;
+      provider: string;
+      inputCostPerMillion: number;
+      outputCostPerMillion: number;
+    }>
+  | undefined;
 
 beforeEach(() => {
   vi.stubGlobal("__DESKTOP_BUILD__", true);
   navigate.mockReset();
   createThread.mockReset();
   sendMessage.mockReset();
+  approvedModels = undefined;
+  window.localStorage.clear();
   clearPendingThreadStart("thread-1");
   createThread.mockResolvedValue({
     data: { createThread: { id: "thread-1", agentId: "agent-1" } },
@@ -127,6 +140,21 @@ beforeEach(() => {
               },
             ],
           },
+          error: undefined,
+          fetching: false,
+          stale: false,
+          hasNext: false,
+        },
+        vi.fn(),
+      ];
+    }
+    if (query === MyApprovedModelCatalogQuery) {
+      return [
+        {
+          data:
+            approvedModels === undefined
+              ? undefined
+              : { myApprovedModelCatalog: approvedModels },
           error: undefined,
           fetching: false,
           stale: false,
@@ -239,6 +267,43 @@ describe("SpacesWorkbench", () => {
     resolveSend?.({ data: { sendMessage: { id: "message-1" } } });
     await waitFor(() => {
       expect(sendMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("sends selected approved model metadata for a new thread turn", async () => {
+    approvedModels = [
+      {
+        id: "model-haiku",
+        modelId: "anthropic.claude-haiku",
+        displayName: "Claude Haiku",
+        provider: "amazon_bedrock",
+        inputCostPerMillion: 0.15,
+        outputCostPerMillion: 0.6,
+      },
+    ];
+
+    render(<SpacesWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select model").textContent).toContain(
+        "Claude Haiku",
+      );
+    });
+    setComposerText("Use the approved model");
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        input: {
+          threadId: "thread-1",
+          role: "USER",
+          content: "Use the approved model",
+          mentions: [],
+          metadata: JSON.stringify({
+            requestedModelId: "anthropic.claude-haiku",
+          }),
+        },
+      });
     });
   });
 });

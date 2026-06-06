@@ -49,6 +49,25 @@ const mentionTargets: MentionTarget[] = [
   },
 ];
 
+const approvedModels = [
+  {
+    id: "model-sonnet",
+    modelId: "anthropic.claude-sonnet",
+    displayName: "Claude Sonnet",
+    provider: "amazon_bedrock",
+    inputCostPerMillion: 3,
+    outputCostPerMillion: 15,
+  },
+  {
+    id: "model-haiku",
+    modelId: "anthropic.claude-haiku",
+    displayName: "Claude Haiku",
+    provider: "amazon_bedrock",
+    inputCostPerMillion: 0.15,
+    outputCostPerMillion: 0.6,
+  },
+];
+
 describe("SpacesComposer focus styling", () => {
   // Plan U2: the empty-thread composer must not show a darker "well" or
   // ring when its textarea is focused. We assert on the className the
@@ -227,6 +246,69 @@ describe("SpacesComposer", () => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
     expect(onSubmit).toHaveBeenCalledWith([], [], true, []);
+  });
+
+  it("renders approved model choice with token cost context", () => {
+    render(
+      <SpacesComposer
+        value=""
+        onChange={() => {}}
+        onSubmit={() => {}}
+        approvedModels={approvedModels}
+        selectedModelId="anthropic.claude-haiku"
+        onSelectedModelChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByLabelText("Select model");
+    expect(trigger.textContent).toContain("Claude Haiku");
+    expect(trigger.getAttribute("title")).toContain(
+      "$0.15 input / $0.60 output per 1M tokens",
+    );
+  });
+
+  it("passes the selected approved model through submit", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <SpacesComposer
+        value="Use the cheaper model"
+        onChange={() => {}}
+        onSubmit={onSubmit}
+        approvedModels={approvedModels}
+        selectedModelId="anthropic.claude-haiku"
+        onSelectedModelChange={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        [],
+        [],
+        true,
+        [],
+        "anthropic.claude-haiku",
+      );
+    });
+  });
+
+  it("disables submit when approved models have loaded empty", () => {
+    render(
+      <SpacesComposer
+        value="Try to send"
+        onChange={() => {}}
+        onSubmit={() => {}}
+        approvedModels={[]}
+        selectedModelId={null}
+      />,
+    );
+
+    expect(
+      (screen.getByRole("button", { name: /start/i }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByText(/no approved model/i)).toBeTruthy();
   });
 
   it("passes agent opt-out through submit", async () => {

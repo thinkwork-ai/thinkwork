@@ -15,6 +15,7 @@ import {
   SkillTokenInput,
   type SkillTokenInputHandle,
 } from "@/components/workbench/SkillTokenInput";
+import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
 import { IconPaperclip, IconPlanet } from "@tabler/icons-react";
 import {
   useEffect,
@@ -47,6 +48,7 @@ import { toast } from "sonner";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { cn } from "@/lib/utils";
 import { deriveAgentDefault } from "@/lib/agent-mode";
+import type { ApprovedModelOption } from "@/lib/approved-model-selection";
 
 export interface SpacesComposerMention {
   targetType: "USER" | "AGENT";
@@ -73,6 +75,7 @@ interface SpacesComposerProps {
     mentions: SpacesComposerMention[],
     agentRequested: boolean,
     pinnedSkills: string[],
+    selectedModelId?: string,
   ) => void;
   mentionTargets?: MentionTarget[];
   /** Tenant skill catalog for the `/skill` force-pin popup. */
@@ -81,6 +84,9 @@ interface SpacesComposerProps {
   selectedSpaceId?: string | null;
   selectedSpaceIsDefault?: boolean;
   onSelectedSpaceChange?: (spaceId: string) => void;
+  approvedModels?: ApprovedModelOption[];
+  selectedModelId?: string | null;
+  onSelectedModelChange?: (modelId: string) => void;
   disabled?: boolean;
   isSubmitting?: boolean;
   error?: string | null;
@@ -110,6 +116,9 @@ export function SpacesComposer({
   selectedSpaceId,
   selectedSpaceIsDefault = true,
   onSelectedSpaceChange,
+  approvedModels,
+  selectedModelId,
+  onSelectedModelChange,
   disabled = false,
   isSubmitting = false,
   error,
@@ -182,6 +191,14 @@ export function SpacesComposer({
   // transition, the textarea would sit unfocused after fetch completes
   // and the user would have to click it.
   const isComposerDisabled = disabled || isSubmitting;
+  const modelSelectionBlocked =
+    approvedModels !== undefined &&
+    (approvedModels.length === 0 || !selectedModelId);
+  const displayError =
+    error ??
+    (modelSelectionBlocked
+      ? "No approved model is available for your account."
+      : null);
   useEffect(() => {
     function focusComposerInput() {
       const input = document.querySelector<HTMLElement>(
@@ -212,18 +229,25 @@ export function SpacesComposer({
 
   async function handlePromptSubmit(message: PromptInputMessage) {
     if (disabled || isSubmitting) return;
+    if (modelSelectionBlocked) return;
     const files = await fileUiPartsToFiles(message.files);
     const hasText = value.trim().length > 0;
     if (!hasText && files.length === 0) return;
     const submittedMentions = mentions.filter((mention) =>
       value.includes(mention.rawText),
     );
-    onSubmit(
-      files,
-      submittedMentions,
-      effectiveAgentEnabled,
-      extractPinnedSkillSlugs(value, skillCatalog),
-    );
+    const pinnedSkills = extractPinnedSkillSlugs(value, skillCatalog);
+    if (selectedModelId) {
+      onSubmit(
+        files,
+        submittedMentions,
+        effectiveAgentEnabled,
+        pinnedSkills,
+        selectedModelId,
+      );
+    } else {
+      onSubmit(files, submittedMentions, effectiveAgentEnabled, pinnedSkills);
+    }
     setMentions([]);
     // Fresh draft after send: drop the manual override so the next new thread
     // starts from the derived default again.
@@ -420,6 +444,12 @@ export function SpacesComposer({
                   </SelectContent>
                 </Select>
               ) : null}
+              <ComposerModelPicker
+                models={approvedModels}
+                value={selectedModelId}
+                onValueChange={onSelectedModelChange}
+                disabled={disabled || isSubmitting}
+              />
             </PromptInputTools>
             <div className="flex items-center gap-1">
               <PromptInputSpeechButton
@@ -434,14 +464,16 @@ export function SpacesComposer({
               />
               <ConditionalSubmit
                 hasText={value.trim().length > 0}
-                disabled={disabled}
+                disabled={disabled || modelSelectionBlocked}
                 isSubmitting={isSubmitting}
               />
             </div>
           </PromptInputFooter>
         </PromptInput>
       </div>
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {displayError ? (
+        <p className="text-sm text-destructive">{displayError}</p>
+      ) : null}
     </div>
   );
 }
