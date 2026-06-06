@@ -1,6 +1,20 @@
 import { Provider as UrqlProvider } from "urql";
-import { graphqlClient } from "./client";
+import { useEffect, useState } from "react";
+import { subscribePlatformConfig } from "@/lib/platform-config";
+import {
+  getGraphqlClient,
+  resetGraphqlClientForPlatformConfigChange,
+} from "./client";
 
 export function GraphQLProvider({ children }: { children: React.ReactNode }) {
-  return <UrqlProvider value={graphqlClient}>{children}</UrqlProvider>;
+  const [client, setClient] = useState(() => getGraphqlClient());
+
+  useEffect(() => {
+    setClient(resetGraphqlClientForPlatformConfigChange());
+    return subscribePlatformConfig(() => {
+      setClient(resetGraphqlClientForPlatformConfigChange());
+    });
+  }, []);
+
+  return <UrqlProvider value={client}>{children}</UrqlProvider>;
 }

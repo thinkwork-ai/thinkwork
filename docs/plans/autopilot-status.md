@@ -167,10 +167,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U7b Desktop Profile Binding.
-- Current branch: `codex/u7b-desktop-profile-binding`.
-- Current worktree: `.Codex/worktrees/u7b-desktop-profile-binding`.
-- Status: U7b in progress.
+- Current unit: U7c Mobile Profile Binding.
+- Current branch: `codex/u7c-mobile-profile-binding`.
+- Current worktree: `.Codex/worktrees/u7c-mobile-profile-binding`.
+- Status: U7c in progress.
 
 | Unit                                                      | Branch                                  | PR                                                           | State  | Notes                                                                                                                                                                                    |
 | --------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -181,7 +181,8 @@ status: in_progress
 | U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`         | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Merged | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.                                       |
 | U6 Spaces Managed Applications UX                         | `codex/u6-managed-applications-ux`      | [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) | Merged | Squash merged as `3167d15d7af8d838b834f991486bdb295a38fa87`; replaces switch-style lifecycle controls with Spaces plan preview, approval, progress, evidence, and destructive impact UX. |
 | U7a Profile Contract, Export, and Trust                   | `codex/u7a-deployment-profile-contract` | [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) | Merged | Squash merged as `51ab6151a04a9d3197e0212eb3a69c0d59453f95`; adds the shared deployment profile schema/trust validator and Spaces export/sign-in display surface for universal clients.  |
-| U7b Desktop Profile Binding                               | `codex/u7b-desktop-profile-binding`     | [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) | Active | Adds desktop profile import/storage, active-profile OAuth/API binding, and profile controls on the desktop sign-in surface.                                                              |
+| U7b Desktop Profile Binding                               | `codex/u7b-desktop-profile-binding`     | [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) | Merged | Squash merged as `87c30369f35ce999c708539ae268b89ee4c4d8d2`; adds desktop profile import/storage, active-profile OAuth/API binding, and profile controls on the desktop sign-in surface. |
+| U7c Mobile Profile Binding                                | `codex/u7c-mobile-profile-binding`      | [#2183](https://github.com/thinkwork-ai/thinkwork/pull/2183) | Active | Adds mobile profile import/storage, profile-backed auth/API config, sign-in controls, and a public profile import route.                                                                 |
 
 ### Progress Log
 
@@ -464,6 +465,30 @@ pnpm --filter @thinkwork/spaces typecheck`.
   and chunk-size warnings only.
 - Opened PR [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) for
   U7b.
+- PR [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) passed
+  required CI and was squash merged as
+  `87c30369f35ce999c708539ae268b89ee4c4d8d2`; its remote branch was deleted,
+  and the local U7b branch/worktree were removed.
+- Created isolated worktree `.Codex/worktrees/u7c-mobile-profile-binding` from
+  `origin/main` at `87c30369`.
+- Implemented U7c local slice in progress: mobile deployment profile
+  storage/import/remove, profile-backed platform config resolution,
+  profile-aware Cognito storage hydration, active-profile OAuth and GraphQL
+  binding, sign-in profile controls, and a public profile import route for
+  deep-link or QR payloads.
+- U7c setup: `pnpm install --no-frozen-lockfile` passed and updated
+  `pnpm-lock.yaml` after adding the mobile workspace dependency on
+  `@thinkwork/deployment-profile`; the known optional `canvas` native build
+  warning appeared under Node 25/pkg-config but did not fail install.
+- U7c local verification passed:
+  `pnpm --filter @thinkwork/mobile exec vitest run lib/deployment-profile.test.ts --config vitest.config.ts`;
+  `pnpm --filter @thinkwork/mobile test`; `pnpm dlx prettier --check <touched
+U7c files>`; and `git diff --check`.
+- U7c local note:
+  `pnpm --filter @thinkwork/mobile exec tsc --noEmit --pretty false` still
+  reports pre-existing mobile app-wide TypeScript failures; filtering that
+  output to touched U7c files only reports the existing
+  `app/_layout.tsx` `@react-navigation/native` module-resolution error.
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 

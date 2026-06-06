@@ -410,6 +410,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.97.0(react@19.1.0)
+      '@thinkwork/deployment-profile':
+        specifier: workspace:*
+        version: link:../../packages/deployment-profile
       '@thinkwork/pricing-config':
         specifier: workspace:*
         version: link:../../packages/pricing-config
