@@ -647,6 +647,11 @@ resource "aws_acm_certificate_validation" "twenty" {
   ]
 }
 
+moved {
+  from = module.www_dns[0].cloudflare_record.acm_validation["crm.thinkwork.ai"]
+  to   = cloudflare_record.twenty_acm_validation["crm.thinkwork.ai"]
+}
+
 module "thinkwork" {
   source = "../../modules/thinkwork"
 

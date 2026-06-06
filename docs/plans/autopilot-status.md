@@ -7952,3 +7952,21 @@ terraform -chdir=terraform/modules/app/www-dns validate`,
   `terraform -chdir=terraform/examples/greenfield init -backend=false &&
 terraform -chdir=terraform/examples/greenfield validate`, and
   `git diff --check`.
+- PR [#2142](https://github.com/thinkwork-ai/thinkwork/pull/2142) merged as
+  `8de0bbff`; its main deploy run
+  [27050610649](https://github.com/thinkwork-ai/thinkwork/actions/runs/27050610649)
+  created the dedicated Twenty ACM certificate but failed because the
+  `crm.thinkwork.ai` validation CNAME had already been created under the old
+  `module.www_dns[0].cloudflare_record.acm_validation` state address during
+  the previous failed shared-cert deploy.
+- Follow-up fix in progress: add a Terraform `moved` block from the old
+  `www_dns` CRM validation record address to the dedicated
+  `cloudflare_record.twenty_acm_validation["crm.thinkwork.ai"]` address so the
+  next apply adopts the existing CNAME instead of trying to recreate it. Local
+  verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`,
+  `terraform -chdir=terraform/examples/greenfield fmt -check`,
+  `terraform -chdir=terraform/examples/greenfield validate`,
+  `terraform -chdir=terraform/modules/app/www-dns validate`,
+  `pnpm dlx prettier@3.8.2 --check apps/cli/__tests__/terraform-twenty-fixture.test.ts docs/plans/autopilot-status.md`,
+  and `git diff --check`.
