@@ -131,3 +131,10 @@ export function buildMcpOAuthAuthorizeUrl({
   if (force) url.searchParams.set("force", "true");
   return url.toString();
 }
+
+export function isManagedMcpServer(server: McpServer): boolean {
+  return (
+    server.managementSource === "managed_application" ||
+    Boolean(server.managedApplicationKey)
+  );
+}

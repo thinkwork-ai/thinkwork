@@ -5,6 +5,7 @@ import { Badge, Button, DataTable, Input, Switch } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
   deleteMcpServer,
+  isManagedMcpServer,
   listMcpServers,
   listUserMcpServers,
   setMcpServerEnabled,
@@ -90,9 +91,19 @@ export function SettingsMcpServers() {
         accessorKey: "name",
         header: "Name",
         size: 200,
-        cell: ({ row }) => (
-          <span className="font-medium">{row.original.name}</span>
-        ),
+        cell: ({ row }) => {
+          const server = row.original;
+          return (
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-medium">{server.name}</span>
+              {isManagedMcpServer(server) ? (
+                <Badge variant="outline" className="shrink-0">
+                  managed
+                </Badge>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "url",
@@ -143,36 +154,48 @@ export function SettingsMcpServers() {
         id: "enabled",
         header: "Enabled",
         size: 90,
-        cell: ({ row }) => (
-          <span
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <Switch
-              checked={row.original.enabled}
-              disabled={pending[row.original.id]}
-              onCheckedChange={(v) => toggle(row.original.id, v)}
-            />
-          </span>
-        ),
+        cell: ({ row }) => {
+          const server = row.original;
+          return (
+            <span
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <Switch
+                checked={server.enabled}
+                disabled={pending[server.id] || isManagedMcpServer(server)}
+                onCheckedChange={(v) => toggle(server.id, v)}
+                aria-label={`Toggle ${server.name}`}
+              />
+            </span>
+          );
+        },
       },
       {
         id: "actions",
         header: "",
         size: 90,
-        cell: ({ row }) => (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={pending[row.original.id]}
-            onClick={(e) => {
-              e.stopPropagation();
-              remove(row.original.id);
-            }}
-          >
-            Remove
-          </Button>
-        ),
+        cell: ({ row }) => {
+          const server = row.original;
+          if (isManagedMcpServer(server)) {
+            return (
+              <span className="text-sm text-muted-foreground">System</span>
+            );
+          }
+          return (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={pending[server.id]}
+              onClick={(e) => {
+                e.stopPropagation();
+                remove(server.id);
+              }}
+            >
+              Remove
+            </Button>
+          );
+        },
       },
     ],
     [pending, toggle, remove],

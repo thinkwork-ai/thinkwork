@@ -135,17 +135,17 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-003-feat-twenty-crm-mcp-oauth-plan.md`.
 - Target branch: `main`.
-- Current unit: U3 Desktop/web MCP OAuth.
-- Current branch: `codex/twenty-mcp-u3-oauth`.
-- Current worktree: `.Codex/worktrees/twenty-mcp-u3-oauth`.
+- Current unit: U4 Spaces MCP auth UI.
+- Current branch: `codex/twenty-mcp-u4-auth-ui`.
+- Current worktree: `.Codex/worktrees/twenty-mcp-u4-auth-ui`.
 - Status: in progress.
 
 | Unit                              | Branch                          | PR                                                           | State   | Notes                                                                                                                                              |
 | --------------------------------- | ------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema`    | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Merged  | Squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`; required checks passed after scoped dev migration application for the drift precheck. |
 | U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile` | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Merged  | Squash merged as `e918df560c451daf2340a79ba808d753c9e37858`; required checks passed.                                                               |
-| U3 Desktop/web MCP OAuth          | `codex/twenty-mcp-u3-oauth`     | [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) | Active  | Adds desktop/web MCP OAuth return handling, resource propagation, and Spaces user authentication controls.                                         |
-| U4 Spaces MCP auth UI             | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
+| U3 Desktop/web MCP OAuth          | `codex/twenty-mcp-u3-oauth`     | [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) | Merged  | Squash merged as `828a51f238492540c67f47746b8732b8657d0e45`; required checks passed.                                                               |
+| U4 Spaces MCP auth UI             | `codex/twenty-mcp-u4-auth-ui`   | [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168) | Active  | Protects system-managed MCP rows in Spaces and completes the MCP auth UI polish.                                                                   |
 | U5 Auth status and runtime safety | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
 | U6 E2E docs and smoke proof       | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
 
@@ -191,6 +191,18 @@ status: in_progress
   passed.
 - 2026-06-06: Opened PR
   [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167).
+- 2026-06-06: PR
+  [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) passed required
+  checks and was squash merged as `828a51f238492540c67f47746b8732b8657d0e45`.
+  Remote branch was deleted; local U3 branch and worktree were removed.
+- 2026-06-06: Created U4 worktree from `origin/main` at `828a51f23` on branch
+  `codex/twenty-mcp-u4-auth-ui`.
+- 2026-06-06: Implemented U4 Spaces MCP polish: managed MCP rows now render as
+  system-managed in the list and detail views, manual enable/remove lifecycle
+  controls are disabled or hidden for managed rows, and OAuth connect/reconnect
+  controls remain available on the detail page.
+- 2026-06-06: Opened PR
+  [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168).
 
 ### CI / Verification
 
@@ -247,6 +259,19 @@ src/components/settings/ManagedApplicationsSection.test.tsx` passed.
   `/settings/mcp-servers` with `HTTP/1.1 200 OK`; no in-app browser control
   tool was exposed in this turn, so UI behavior was verified with component
   tests.
+- U4 local:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsMcpServers.test.tsx src/components/settings/SettingsMcpServerDetail.test.tsx src/lib/mcp-api.test.ts`
+  passed.
+- U4 local: `pnpm --filter @thinkwork/spaces typecheck` passed.
+- U4 local:
+  `pnpm dlx prettier@3.8.2 --check --ignore-unknown <touched U4 files>`
+  passed.
+- U4 local: `git diff --check` passed.
+- U4 local: selected `@thinkwork/spaces` package does not define a `lint`
+  script.
+- U4 local dev server:
+  `pnpm --filter @thinkwork/spaces dev --host 127.0.0.1 --port 5175` served
+  `/settings/general` and `/settings/mcp-servers` with HTTP 200.
 
 ### Blockers
 
