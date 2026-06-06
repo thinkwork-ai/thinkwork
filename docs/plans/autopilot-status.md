@@ -11,8 +11,8 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: CRM backend bootstrap fix.
-- Current branch: `codex/twenty-crm-route-guard`.
+- Current unit: Twenty database init detection fix.
+- Current branch: `codex/twenty-crm-db-init-bootstrap`.
 - Current worktree: `.Codex/worktrees/twenty-crm-general-deploy`.
 - Status: in progress.
 
@@ -31,7 +31,8 @@ status: in_progress
 | Twenty DB owner grants                         | `codex/twenty-crm-db-owner-grants`   | [#2149](https://github.com/thinkwork-ai/thinkwork/pull/2149) | Merged | Gives the dedicated Twenty database user enough rights to create schemas, extensions, and migration-owned objects.                     |
 | Twenty DB setup role switch                    | `codex/twenty-crm-db-setup-role`     | [#2150](https://github.com/thinkwork-ai/thinkwork/pull/2150) | Merged | Runs Twenty schema and extension setup under the app DB role so Postgres ownership checks pass.                                        |
 | General toggle and CRM route polish            | `codex/twenty-crm-general-deploy`    | [#2152](https://github.com/thinkwork-ai/thinkwork/pull/2152) | Merged | Moves deploy to the General toggle, persists pending deploy state, and shows Configure only after Twenty is provisioned.               |
-| CRM backend bootstrap fix                      | `codex/twenty-crm-route-guard`       | Pending                                                      | Active | Disables Twenty database-backed config at bootstrap and prevents the CRM settings guard from redirecting before deployment data loads. |
+| CRM backend bootstrap fix                      | `codex/twenty-crm-route-guard`       | [#2153](https://github.com/thinkwork-ai/thinkwork/pull/2153) | Merged | Disables Twenty database-backed config at bootstrap and prevents the CRM settings guard from redirecting before deployment data loads. |
+| Twenty database init detection fix             | `codex/twenty-crm-db-init-bootstrap` | Pending                                                      | Active | Stops deploy prep from pre-creating an empty `core` schema that makes Twenty skip `database:init:prod`.                                |
 
 ### Progress Log
 
@@ -150,6 +151,18 @@ status: in_progress
 - Opened branch `codex/twenty-crm-route-guard` to set
   `IS_CONFIG_VARIABLES_IN_DB_ENABLED=false` for Twenty tasks and to keep the
   CRM detail route from redirecting before deployment data finishes loading.
+- PR [#2153](https://github.com/thinkwork-ai/thinkwork/pull/2153) passed CI
+  and merged as `c4828d02`; main deploy run
+  [27060694010](https://github.com/thinkwork-ai/thinkwork/actions/runs/27060694010)
+  rolled server task definition `thinkwork-dev-twenty-server:7`.
+- The new task definition had `IS_CONFIG_VARIABLES_IN_DB_ENABLED=false`, but
+  the dedicated database still had zero `core`/`metadata` tables. Inspecting
+  the Twenty image entrypoint showed it only runs `yarn database:init:prod`
+  when the `core` schema does not exist; ThinkWork's deploy prep was creating
+  an empty `core` schema first, so Twenty skipped first-run initialization.
+- Opened branch `codex/twenty-crm-db-init-bootstrap` to stop creating `core`
+  in deploy prep and to drop an existing empty `core` schema so the next
+  service rollout can run Twenty's real database initialization.
 
 ### CI / Verification
 
