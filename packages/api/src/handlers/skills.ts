@@ -2166,7 +2166,9 @@ async function mcpListUserServers(
   const { agents, userMcpTokens } =
     await import("@thinkwork/database-pg/schema");
 
-  // Find all agents paired with this user
+  // Find all agents paired with this user. Agent assignments describe runtime
+  // availability, but managed OAuth connectors still need to be user-visible
+  // so the user can authenticate before an agent invocation needs them.
   const userAgents = await db
     .select({ id: agents.id, name: agents.name })
     .from(agents)
@@ -2174,37 +2176,80 @@ async function mcpListUserServers(
       and(eq(agents.tenant_id, tenantId), eq(agents.human_pair_id, userId)),
     );
 
-  if (userAgents.length === 0) {
-    return json({ servers: [] });
-  }
-
   const agentIds = userAgents.map((a) => a.id);
 
   // Get all MCP servers assigned to these agents
-  const rows = await db
+  const assignedRows =
+    agentIds.length > 0
+      ? await db
+          .select({
+            assignment_id: agentMcpServers.id,
+            agent_id: agentMcpServers.agent_id,
+            mcp_server_id: agentMcpServers.mcp_server_id,
+            enabled: agentMcpServers.enabled,
+            name: tenantMcpServers.name,
+            slug: tenantMcpServers.slug,
+            url: tenantMcpServers.url,
+            auth_type: tenantMcpServers.auth_type,
+            tools: tenantMcpServers.tools,
+            server_enabled: tenantMcpServers.enabled,
+            management_source: tenantMcpServers.management_source,
+            managed_application_key: tenantMcpServers.managed_application_key,
+          })
+          .from(agentMcpServers)
+          .innerJoin(
+            tenantMcpServers,
+            eq(agentMcpServers.mcp_server_id, tenantMcpServers.id),
+          )
+          .where(inArray(agentMcpServers.agent_id, agentIds))
+      : [];
+
+  const managedRows = await db
     .select({
-      assignment_id: agentMcpServers.id,
-      agent_id: agentMcpServers.agent_id,
-      mcp_server_id: agentMcpServers.mcp_server_id,
-      enabled: agentMcpServers.enabled,
+      mcp_server_id: tenantMcpServers.id,
       name: tenantMcpServers.name,
       slug: tenantMcpServers.slug,
       url: tenantMcpServers.url,
       auth_type: tenantMcpServers.auth_type,
       tools: tenantMcpServers.tools,
       server_enabled: tenantMcpServers.enabled,
+      management_source: tenantMcpServers.management_source,
+      managed_application_key: tenantMcpServers.managed_application_key,
     })
-    .from(agentMcpServers)
-    .innerJoin(
-      tenantMcpServers,
-      eq(agentMcpServers.mcp_server_id, tenantMcpServers.id),
-    )
-    .where(inArray(agentMcpServers.agent_id, agentIds));
+    .from(tenantMcpServers)
+    .where(
+      and(
+        eq(tenantMcpServers.tenant_id, tenantId),
+        eq(tenantMcpServers.management_source, "managed_application"),
+        eq(tenantMcpServers.enabled, true),
+        eq(tenantMcpServers.status, "approved"),
+      ),
+    );
+
+  const rows = [
+    ...assignedRows,
+    ...managedRows
+      .filter(
+        (r) => r.auth_type === "oauth" || r.auth_type === "per_user_oauth",
+      )
+      .map((r) => ({
+        ...r,
+        assignment_id: null,
+        agent_id: null,
+        enabled: false,
+      })),
+  ];
 
   // For OAuth servers, check if user has an active token in user_mcp_tokens
-  const oauthServerIds = rows
-    .filter((r) => r.auth_type === "oauth" || r.auth_type === "per_user_oauth")
-    .map((r) => r.mcp_server_id);
+  const oauthServerIds = [
+    ...new Set(
+      rows
+        .filter(
+          (r) => r.auth_type === "oauth" || r.auth_type === "per_user_oauth",
+        )
+        .map((r) => r.mcp_server_id),
+    ),
+  ];
 
   const userTokens =
     oauthServerIds.length > 0
@@ -2218,6 +2263,7 @@ async function mcpListUserServers(
             and(
               eq(userMcpTokens.user_id, userId),
               eq(userMcpTokens.tenant_id, tenantId),
+              inArray(userMcpTokens.mcp_server_id, oauthServerIds),
             ),
           )
       : [];
@@ -2240,6 +2286,8 @@ async function mcpListUserServers(
         else if (tok.status !== "active") authStatus = "expired";
       }
       const agentName = userAgents.find((a) => a.id === r.agent_id)?.name;
+      const runtimeAssigned = Boolean(r.assignment_id);
+      const runtimeEnabled = runtimeAssigned && r.enabled && r.server_enabled;
       return {
         id: r.mcp_server_id,
         name: r.name,
@@ -2247,9 +2295,13 @@ async function mcpListUserServers(
         url: r.url,
         authType: r.auth_type,
         tools: r.tools,
-        enabled: r.enabled && r.server_enabled,
+        enabled: runtimeEnabled || (!runtimeAssigned && r.server_enabled),
         authStatus,
         agentName,
+        runtimeAssigned,
+        runtimeEnabled,
+        managementSource: r.management_source,
+        managedApplicationKey: r.managed_application_key,
       };
     });
 

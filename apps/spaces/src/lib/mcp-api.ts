@@ -18,6 +18,8 @@ export type McpServer = {
   tools?: Array<{ name: string; description?: string }>;
   managementSource?: string | null;
   managedApplicationKey?: string | null;
+  runtimeAssigned?: boolean;
+  runtimeEnabled?: boolean;
 };
 
 const API_URL = import.meta.env.VITE_API_URL || "";
