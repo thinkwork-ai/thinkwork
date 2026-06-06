@@ -6,6 +6,56 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Twenty CRM MCP OAuth - 2026-06-06
+
+- Plan:
+  `docs/plans/2026-06-06-003-feat-twenty-crm-mcp-oauth-plan.md`.
+- Target branch: `main`.
+- Current unit: U1 Add managed MCP ownership schema.
+- Current branch: `codex/twenty-mcp-u1-schema`.
+- Current worktree: `.Codex/worktrees/twenty-mcp-u1-schema`.
+- Status: in progress.
+
+| Unit                              | Branch                       | PR                                                           | State   | Notes                                                                  |
+| --------------------------------- | ---------------------------- | ------------------------------------------------------------ | ------- | ---------------------------------------------------------------------- |
+| U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema` | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Active  | Adds explicit ownership columns and per-tenant managed row uniqueness. |
+| U2 Managed app MCP reconciliation | Pending                      | Pending                                                      | Pending | Not started.                                                           |
+| U3 Desktop/web MCP OAuth          | Pending                      | Pending                                                      | Pending | Not started.                                                           |
+| U4 Spaces MCP auth UI             | Pending                      | Pending                                                      | Pending | Not started.                                                           |
+| U5 Auth status and runtime safety | Pending                      | Pending                                                      | Pending | Not started.                                                           |
+| U6 E2E docs and smoke proof       | Pending                      | Pending                                                      | Pending | Not started.                                                           |
+
+### Progress Log
+
+- 2026-06-06: Created U1 worktree from `origin/main` at `4c03a74a`.
+- 2026-06-06: Added managed MCP ownership fields, migration, and schema
+  contract coverage.
+- 2026-06-06: Opened PR
+  [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162).
+- 2026-06-06: Migration Drift Precheck failed because
+  `0149_managed_mcp_servers.sql` had not been applied to dev yet. Applied the
+  scoped migration to the dev database and reran the scoped drift reporter
+  successfully.
+
+### CI / Verification
+
+- Local:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/managed-mcp-lifecycle.test.ts`
+  passed.
+- Local: `pnpm --filter @thinkwork/database-pg typecheck` passed.
+- Local: `pnpm --filter @thinkwork/api typecheck` passed.
+- Local:
+  `pnpm dlx prettier@3.8.2 --check --ignore-unknown packages/database-pg/src/schema/mcp-servers.ts packages/database-pg/drizzle/0149_managed_mcp_servers.sql packages/api/src/__tests__/managed-mcp-lifecycle.test.ts docs/plans/autopilot-status.md`
+  passed.
+- Local: `git diff --check` passed.
+- Local/dev:
+  `DATABASE_URL=<dev> bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0149_managed_mcp_servers.sql`
+  passed after applying the migration to dev.
+
+### Blockers
+
+- None.
+
 ## Twenty CRM Lifecycle Actions - 2026-06-05
 
 - Plan:
