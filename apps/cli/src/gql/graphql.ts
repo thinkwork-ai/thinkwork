@@ -2239,6 +2239,7 @@ export type Mutation = {
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
   setSpaceTools: Space;
+  setUserModelApproval: Array<UserModelCatalogEntry>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startEvalRun: EvalRun;
   startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
@@ -2923,6 +2924,12 @@ export type MutationSetSpaceToolsArgs = {
   input: SetSpaceToolsInput;
 };
 
+export type MutationSetUserModelApprovalArgs = {
+  approved: Scalars["Boolean"]["input"];
+  modelId: Scalars["String"]["input"];
+  userId: Scalars["ID"]["input"];
+};
+
 export type MutationStartCustomerOnboardingArgs = {
   input: StartCustomerOnboardingInput;
 };
@@ -3579,6 +3586,7 @@ export type Query = {
    */
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
+  myApprovedModelCatalog: Array<ModelCatalogEntry>;
   mySlackLinks: Array<SlackUserLink>;
   ontologyChangeSets: Array<OntologyChangeSet>;
   ontologyDefinitions: OntologyDefinitions;
@@ -3653,6 +3661,7 @@ export type Query = {
   unreadThreadCount: Scalars["Int"]["output"];
   user?: Maybe<User>;
   userBudgetStatus?: Maybe<BudgetStatus>;
+  userModelCatalog: Array<UserModelCatalogEntry>;
   userQuickActions: Array<UserQuickAction>;
   webhook?: Maybe<Webhook>;
   /**
@@ -4354,6 +4363,10 @@ export type QueryUserArgs = {
 
 export type QueryUserBudgetStatusArgs = {
   tenantId: Scalars["ID"]["input"];
+  userId: Scalars["ID"]["input"];
+};
+
+export type QueryUserModelCatalogArgs = {
   userId: Scalars["ID"]["input"];
 };
 
@@ -6280,6 +6293,21 @@ export type UserCostSummary = {
   userEmail?: Maybe<Scalars["String"]["output"]>;
   userId?: Maybe<Scalars["ID"]["output"]>;
   userName: Scalars["String"]["output"];
+};
+
+export type UserModelCatalogEntry = {
+  __typename?: "UserModelCatalogEntry";
+  approved: Scalars["Boolean"]["output"];
+  contextWindow?: Maybe<Scalars["Int"]["output"]>;
+  displayName: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  inputCostPerMillion?: Maybe<Scalars["Float"]["output"]>;
+  maxOutputTokens?: Maybe<Scalars["Int"]["output"]>;
+  modelId: Scalars["String"]["output"];
+  outputCostPerMillion?: Maybe<Scalars["Float"]["output"]>;
+  provider: Scalars["String"]["output"];
+  supportsTools?: Maybe<Scalars["Boolean"]["output"]>;
+  supportsVision?: Maybe<Scalars["Boolean"]["output"]>;
 };
 
 export type UserProfile = {

@@ -278,6 +278,42 @@ export const modelCatalog = pgTable("model_catalog", {
     .default(sql`now()`),
 });
 
+export const userModelApprovals = pgTable(
+  "user_model_approvals",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    user_id: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    model_id: text("model_id")
+      .references(() => modelCatalog.model_id, { onDelete: "cascade" })
+      .notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_user_model_approvals_tenant_user_model").on(
+      table.tenant_id,
+      table.user_id,
+      table.model_id,
+    ),
+    index("idx_user_model_approvals_tenant_user").on(
+      table.tenant_id,
+      table.user_id,
+    ),
+    index("idx_user_model_approvals_model").on(table.model_id),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // 1.6 — invites
 // ---------------------------------------------------------------------------
@@ -486,6 +522,24 @@ export const folderBundleImportRateLimitsRelations = relations(
     tenant: one(tenants, {
       fields: [folderBundleImportRateLimits.tenant_id],
       references: [tenants.id],
+    }),
+  }),
+);
+
+export const userModelApprovalsRelations = relations(
+  userModelApprovals,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [userModelApprovals.tenant_id],
+      references: [tenants.id],
+    }),
+    user: one(users, {
+      fields: [userModelApprovals.user_id],
+      references: [users.id],
+    }),
+    model: one(modelCatalog, {
+      fields: [userModelApprovals.model_id],
+      references: [modelCatalog.model_id],
     }),
   }),
 );

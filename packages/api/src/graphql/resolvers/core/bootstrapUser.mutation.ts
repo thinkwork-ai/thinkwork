@@ -24,6 +24,18 @@ import {
 } from "../../utils.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
+import { ensureDefaultModelApprovalsForUser } from "../../../lib/model-approvals.js";
+
+async function seedDefaultModelApprovals(tenantId: string, userId: string) {
+  try {
+    await ensureDefaultModelApprovalsForUser({ tenantId, userId });
+  } catch (err) {
+    console.warn(
+      "[bootstrapUser] Failed to seed default model approvals:",
+      err,
+    );
+  }
+}
 
 export const bootstrapUser = async (
   _parent: unknown,
@@ -155,6 +167,8 @@ export const bootstrapUser = async (
       );
     }
 
+    await seedDefaultModelApprovals(pendingTenant.id, user.id);
+
     return {
       user,
       tenant: claimedTenant ?? pendingTenant,
@@ -218,6 +232,8 @@ export const bootstrapUser = async (
       config: {},
     })
     .onConflictDoNothing();
+
+  await seedDefaultModelApprovals(tenant.id, user.id);
 
   // Update Cognito user with tenant_id (for future token claims)
   try {

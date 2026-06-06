@@ -7,55 +7,75 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockDb, insertCalls, updateCalls, selectQueue, returningQueue } =
-  vi.hoisted(() => {
-    const insertCalls: Array<{
-      table: string;
-      values: Record<string, unknown>;
-    }> = [];
-    const updateCalls: Array<{
-      table: string;
-      values: Record<string, unknown>;
-    }> = [];
-    const selectQueue: unknown[][] = [];
-    const returningQueue: unknown[][] = [];
+const {
+  mockDb,
+  insertCalls,
+  updateCalls,
+  selectQueue,
+  returningQueue,
+  approvalCalls,
+  approvalFailures,
+} = vi.hoisted(() => {
+  const insertCalls: Array<{
+    table: string;
+    values: Record<string, unknown>;
+  }> = [];
+  const updateCalls: Array<{
+    table: string;
+    values: Record<string, unknown>;
+  }> = [];
+  const approvalCalls: Array<{
+    tenantId: string;
+    userId: string;
+  }> = [];
+  const approvalFailures: Error[] = [];
+  const selectQueue: unknown[][] = [];
+  const returningQueue: unknown[][] = [];
 
-    const mockDb = {
-      select: vi.fn(() => {
-        const chain: any = {
-          from: vi.fn(() => chain),
-          where: vi.fn(() => chain),
-          limit: vi.fn(async () => selectQueue.shift() ?? []),
-          then: (resolve: (v: unknown) => void) =>
-            resolve(selectQueue.shift() ?? []),
+  const mockDb = {
+    select: vi.fn(() => {
+      const chain: any = {
+        from: vi.fn(() => chain),
+        where: vi.fn(() => chain),
+        limit: vi.fn(async () => selectQueue.shift() ?? []),
+        then: (resolve: (v: unknown) => void) =>
+          resolve(selectQueue.shift() ?? []),
+      };
+      return chain;
+    }),
+    insert: vi.fn((table: { __table__: string }) => ({
+      values: (values: Record<string, unknown>) => {
+        insertCalls.push({ table: table.__table__, values });
+        const result: any = {
+          returning: async () => returningQueue.shift() ?? [],
+          onConflictDoNothing: () => Promise.resolve([]),
+          then: (resolve: (v: unknown) => void) => resolve([]),
         };
-        return chain;
-      }),
-      insert: vi.fn((table: { __table__: string }) => ({
-        values: (values: Record<string, unknown>) => {
-          insertCalls.push({ table: table.__table__, values });
-          const result: any = {
+        return result;
+      },
+    })),
+    update: vi.fn((table: { __table__: string }) => ({
+      set: vi.fn((values: Record<string, unknown>) => {
+        updateCalls.push({ table: table.__table__, values });
+        return {
+          where: vi.fn(() => ({
             returning: async () => returningQueue.shift() ?? [],
-            onConflictDoNothing: () => Promise.resolve([]),
-            then: (resolve: (v: unknown) => void) => resolve([]),
-          };
-          return result;
-        },
-      })),
-      update: vi.fn((table: { __table__: string }) => ({
-        set: vi.fn((values: Record<string, unknown>) => {
-          updateCalls.push({ table: table.__table__, values });
-          return {
-            where: vi.fn(() => ({
-              returning: async () => returningQueue.shift() ?? [],
-            })),
-          };
-        }),
-      })),
-    };
+          })),
+        };
+      }),
+    })),
+  };
 
-    return { mockDb, insertCalls, updateCalls, selectQueue, returningQueue };
-  });
+  return {
+    mockDb,
+    insertCalls,
+    updateCalls,
+    selectQueue,
+    returningQueue,
+    approvalCalls,
+    approvalFailures,
+  };
+});
 
 vi.mock("../../utils.js", () => ({
   db: mockDb,
@@ -70,6 +90,17 @@ vi.mock("../../utils.js", () => ({
 
 vi.mock("@thinkwork/database-pg/utils/generate-slug", () => ({
   generateSlug: () => "happy-otter",
+}));
+
+vi.mock("../../../lib/model-approvals.js", () => ({
+  ensureDefaultModelApprovalsForUser: vi.fn(
+    async (input: { tenantId: string; userId: string }) => {
+      approvalCalls.push(input);
+      const failure = approvalFailures.shift();
+      if (failure) throw failure;
+      return ["us.anthropic.claude-sonnet-4-6"];
+    },
+  ),
 }));
 
 vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
@@ -88,6 +119,8 @@ beforeEach(() => {
   updateCalls.length = 0;
   selectQueue.length = 0;
   returningQueue.length = 0;
+  approvalCalls.length = 0;
+  approvalFailures.length = 0;
 });
 
 describe("bootstrapUser", () => {
@@ -111,6 +144,7 @@ describe("bootstrapUser", () => {
     expect(userInsert).toBeDefined();
     expect(userInsert?.values.cognito_sub).toBe("sub-new");
     expect(userInsert?.values.email).toBe("new@example.com");
+    expect(approvalCalls).toEqual([{ tenantId: "tenant-1", userId: "user-1" }]);
     expect(result.isNew).toBe(true);
   });
 
@@ -172,6 +206,9 @@ describe("bootstrapUser", () => {
         first_admin_claimed_user_id: "user-claim",
       }),
     );
+    expect(approvalCalls).toEqual([
+      { tenantId: "tenant-claim", userId: "user-claim" },
+    ]);
     expect(result.tenant.id).toBe("tenant-claim");
     expect(result.isNew).toBe(true);
   });
@@ -203,5 +240,32 @@ describe("bootstrapUser", () => {
 
     expect(insertCalls).toEqual([]);
     expect(updateCalls).toEqual([]);
+  });
+
+  it("does not fail bootstrap when default model approval seeding is unavailable", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    approvalFailures.push(new Error("relation does not exist"));
+    selectQueue.push([]); // existing user lookup → none
+    selectQueue.push([]); // pending (paid) tenant lookup → none
+    returningQueue.push([{ id: "tenant-1", slug: "happy-otter" }]);
+    returningQueue.push([{ id: "user-1", email: "new@example.com" }]);
+
+    const result = await bootstrapUser({}, {}, {
+      auth: {
+        authType: "cognito",
+        principalId: "sub-new",
+        email: "new@example.com",
+        name: "New User",
+      },
+      headers: {},
+    } as any);
+
+    expect(result.isNew).toBe(true);
+    expect(approvalCalls).toEqual([{ tenantId: "tenant-1", userId: "user-1" }]);
+    expect(warn).toHaveBeenCalledWith(
+      "[bootstrapUser] Failed to seed default model approvals:",
+      expect.any(Error),
+    );
+    warn.mockRestore();
   });
 });

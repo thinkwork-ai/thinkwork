@@ -154,6 +154,20 @@ type ModelCatalogEntry {
   supportsTools: Boolean
 }
 
+type UserModelCatalogEntry {
+  id: ID!
+  modelId: String!
+  provider: String!
+  displayName: String!
+  inputCostPerMillion: Float
+  outputCostPerMillion: Float
+  contextWindow: Int
+  maxOutputTokens: Int
+  supportsVision: Boolean
+  supportsTools: Boolean
+  approved: Boolean!
+}
+
 type AgentWorkspace {
   slug: String!
   name: String!
@@ -163,8 +177,15 @@ type AgentWorkspace {
 extend type Query {
   tenantAgent(tenantId: ID!): Agent!
   modelCatalog: [ModelCatalogEntry!]!
+  userModelCatalog(userId: ID!): [UserModelCatalogEntry!]!
+  myApprovedModelCatalog: [ModelCatalogEntry!]!
 }
 
 extend type Mutation {
   updateTenantAgent(tenantId: ID!, input: UpdateTenantAgentInput!): Agent!
+  setUserModelApproval(
+    userId: ID!
+    modelId: String!
+    approved: Boolean!
+  ): [UserModelCatalogEntry!]!
 }

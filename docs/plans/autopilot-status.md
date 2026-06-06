@@ -6,6 +6,82 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Model Stacking Tool Routing - 2026-06-06
+
+- Plan:
+  `docs/plans/2026-06-06-004-feat-model-stacking-tool-routing-plan.md`.
+- Requirements:
+  `docs/brainstorms/2026-06-06-model-stacking-tool-routing-requirements.md`.
+- Target branch: `main`.
+- Current unit: U1 Add per-user model approval data and API.
+- Current branch: `codex/u1-model-approvals`.
+- Current worktree: `.Codex/worktrees/u1-model-approvals`.
+- Status: in progress.
+
+| Unit                                                        | Branch                     | PR                                                           | State  | Notes                                              |
+| ----------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------------------- |
+| U1 Add per-user model approval data and API                 | `codex/u1-model-approvals` | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Active | CI passed once; final status update pending rerun. |
+| U2 Add the admin Models section on user profile settings    | TBD                        | TBD                                                          | Todo   |                                                    |
+| U3 Add approved model pickers to composers                  | TBD                        | TBD                                                          | Todo   |                                                    |
+| U4 Propagate and validate selected parent model             | TBD                        | TBD                                                          | Todo   |                                                    |
+| U5 Extend `TOOLS.md` effective policy with model routing    | TBD                        | TBD                                                          | Todo   |                                                    |
+| U6 Implement model-routed `workspace_skill` child execution | TBD                        | TBD                                                          | Todo   |                                                    |
+| U7 Record trace and cost evidence                           | TBD                        | TBD                                                          | Todo   |                                                    |
+| U8 Surface evidence in Settings Activity thread detail      | TBD                        | TBD                                                          | Todo   |                                                    |
+| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                        | TBD                                                          | Todo   |                                                    |
+| U10 Regenerate schemas and add demo policy documentation    | TBD                        | TBD                                                          | Todo   |                                                    |
+
+### Progress Log
+
+- Started autopilot workflow, read `AGENTS.md`, the model-stacking plan, and
+  relevant prior solution docs for manual Drizzle migrations and fresh-worktree
+  TypeScript build cache issues.
+- Created isolated U1 worktree `.Codex/worktrees/u1-model-approvals` from
+  `origin/main`.
+- Brought the local plan and requirements documents into the U1 worktree so the
+  source artifacts can land with the first implementation PR.
+- Implemented U1 model approval substrate: `user_model_approvals` Drizzle table,
+  manual migration + rollback, GraphQL admin/self APIs, shared
+  `model-approvals` helper, bootstrap default seeding, generated GraphQL
+  clients, and focused tests.
+- Opened PR [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171).
+- CI Migration Drift Precheck initially failed because dev was missing the new
+  hand-rolled `0149_user_model_approvals.sql` objects.
+- Applied the scoped migration to the dev database; it created the
+  `user_model_approvals` table/indexes/constraints and backfilled 26 approval
+  rows.
+- Reran the scoped drift reporter for
+  `packages/database-pg/drizzle/0149_user_model_approvals.sql`; all markers
+  passed.
+- Reran the failed Migration Drift Precheck job; it passed. PR checks then
+  passed: CLA, lint, verify, typecheck, test, and Migration Drift Precheck.
+
+### CI / Verification
+
+- U1 local verification passed:
+  - `pnpm schema:build`
+  - `pnpm --filter @thinkwork/admin codegen`
+  - `pnpm --filter thinkwork-cli codegen`
+  - `pnpm --filter @thinkwork/mobile codegen`
+  - `pnpm --filter @thinkwork/spaces codegen`
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/model-approvals.test.ts src/graphql/resolvers/core/bootstrapUser.mutation.test.ts`
+  - `pnpm --filter @thinkwork/database-pg exec vitest run __tests__/migration-0149-user-model-approvals.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/database-pg typecheck`
+  - `pnpm --filter thinkwork-cli typecheck`
+  - `pnpm --filter @thinkwork/spaces typecheck`
+  - `pnpm --filter @thinkwork/api test`
+  - `pnpm --filter @thinkwork/database-pg test`
+  - `pnpm dlx prettier --check <U1 touched non-SQL files>`
+- Repo-level `pnpm format:check` could not run because `prettier` is not
+  installed in the fresh worktree. `pnpm dlx prettier --check
+"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reports 570 pre-existing formatting
+  warnings across unrelated files; touched U1 files pass the narrowed check.
+
+### Blockers
+
+- None.
+
 ## GitHub-Free Customer Deployments - 2026-06-06
 
 - Plan:
