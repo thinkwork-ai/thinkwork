@@ -13,9 +13,9 @@ status: in_progress
 - Requirements:
   `docs/brainstorms/2026-06-06-model-stacking-tool-routing-requirements.md`.
 - Target branch: `main`.
-- Current unit: U9 Add end-to-end layered `TOOLS.md` proof.
-- Current branch: `codex/u9-model-stacking-e2e-proof`.
-- Current worktree: `.Codex/worktrees/u9-model-stacking-e2e-proof`.
+- Current unit: U10 Regenerate schemas and add demo policy documentation.
+- Current branch: `codex/u10-model-stacking-docs`.
+- Current worktree: `.Codex/worktrees/u10-model-stacking-docs`.
 - Status: in progress.
 
 | Unit                                                        | Branch                                     | PR                                                           | State  | Notes                        |
@@ -28,8 +28,8 @@ status: in_progress
 | U6 Implement model-routed `workspace_skill` child execution | `codex/u6-model-routed-workspace-skill`    | [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189) | Merged | Squash merged as `5ac9a4c3`. |
 | U7 Record trace and cost evidence                           | `codex/u7-model-routing-trace-cost`        | [#2191](https://github.com/thinkwork-ai/thinkwork/pull/2191) | Merged | Squash merged as `bc66e94f`. |
 | U8 Surface evidence in Settings Activity thread detail      | `codex/u8-activity-model-routing-evidence` | [#2192](https://github.com/thinkwork-ai/thinkwork/pull/2192) | Merged | Squash merged as `3060d2c0`. |
-| U9 Add end-to-end layered `TOOLS.md` proof                  | `codex/u9-model-stacking-e2e-proof`        | [#2193](https://github.com/thinkwork-ai/thinkwork/pull/2193) | Active |                              |
-| U10 Regenerate schemas and add demo policy documentation    | TBD                                        | TBD                                                          | Todo   |                              |
+| U9 Add end-to-end layered `TOOLS.md` proof                  | `codex/u9-model-stacking-e2e-proof`        | [#2193](https://github.com/thinkwork-ai/thinkwork/pull/2193) | Merged | Squash merged as `3c967da3`. |
+| U10 Regenerate schemas and add demo policy documentation    | `codex/u10-model-stacking-docs`            | [#2194](https://github.com/thinkwork-ai/thinkwork/pull/2194) | Active |                              |
 
 ### Progress Log
 
@@ -189,6 +189,30 @@ status: in_progress
   passed, 9 skipped), `pnpm -r --if-present typecheck`,
   `pnpm -r --if-present lint`, and `git diff --check`.
 - Opened PR [#2193](https://github.com/thinkwork-ai/thinkwork/pull/2193).
+- PR [#2193](https://github.com/thinkwork-ai/thinkwork/pull/2193) passed CLA,
+  lint, verify, typecheck, and test, then was squash merged as
+  `3c967da3c5d41f8364c77749429155795dbd4224`. The remote branch was already
+  deleted by GitHub; the local U9 worktree and branch were removed.
+- Created isolated U10 worktree `.Codex/worktrees/u10-model-stacking-docs`
+  from `origin/main` at `3c967da3`.
+- Started U10 wrap-up work: regenerated GraphQL schema/codegen artifacts,
+  updated the default `TOOLS.md` model-routing example, and added the solution
+  note for ThinkWork-native `TOOLS.md` routing syntax, precedence, and demo
+  replay.
+- U10 local verification passed: `pnpm schema:build`,
+  `pnpm --filter @thinkwork/admin codegen`,
+  `pnpm --filter @thinkwork/spaces codegen`,
+  `pnpm --filter @thinkwork/mobile codegen`,
+  `pnpm --filter thinkwork-cli codegen`,
+  `pnpm --filter @thinkwork/api test -- src/lib/workspace-renderer/tools-md-parser.test.ts`,
+  `pnpm --filter @thinkwork/workspace-defaults test`,
+  `pnpm --filter @thinkwork/spaces typecheck`,
+  `pnpm --filter @thinkwork/admin build`,
+  `pnpm --filter thinkwork-cli typecheck`,
+  `pnpm --filter @thinkwork/workspace-defaults build`,
+  `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, and
+  `git diff --check`.
+- Opened PR [#2194](https://github.com/thinkwork-ai/thinkwork/pull/2194).
 - Created isolated U3 worktree `.Codex/worktrees/u3-approved-model-composers`
   from `origin/main` at `e0a43844`.
 - Implemented U3 approved model selection in Spaces: shared approved-model
