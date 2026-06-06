@@ -168,6 +168,7 @@ describe("U1 - Twenty Terraform app module", () => {
     );
     expect(containerSecrets).toMatch(/FALLBACK_ENCRYPTION_KEY/);
     expect(containerSecrets).toMatch(/APP_SECRET/);
+    expect(environmentLocals).toMatch(/PG_SSL_ALLOW_SELF_SIGNED/);
     expect(environmentLocals).not.toMatch(/PG_DATABASE_URL/);
     expect(environmentLocals).not.toMatch(/ENCRYPTION_KEY/);
   });

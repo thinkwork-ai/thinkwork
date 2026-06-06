@@ -7997,3 +7997,13 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 - Follow-up fix in progress on branch `codex/twenty-crm-db-sslmode`: write the
   Twenty `PG_DATABASE_URL` secret with `sslmode=no-verify`, matching the
   existing ThinkWork API Lambda's Aurora connection mode for Node/Postgres.
+- PR [#2145](https://github.com/thinkwork-ai/thinkwork/pull/2145) merged as
+  `d6366452`; its main deploy run
+  [27052003345](https://github.com/thinkwork-ai/thinkwork/actions/runs/27052003345)
+  completed successfully and rewrote the retained Twenty DB URL secret with
+  `sslmode=no-verify`, but the public endpoint still returned ALB `503`.
+  Follow-up ECS inspection showed the worker reached the database while the
+  server task still exited on RDS TLS verification. Twenty's own documented
+  env surface includes `PG_SSL_ALLOW_SELF_SIGNED=true` for this case, so the
+  next fix branch `codex/twenty-crm-rds-tls-runtime` adds that task environment
+  flag to the Terraform module and fixture tests.
