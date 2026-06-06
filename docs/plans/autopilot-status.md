@@ -174,19 +174,19 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-003-feat-twenty-crm-mcp-oauth-plan.md`.
 - Target branch: `main`.
-- Current unit: U4 Spaces MCP auth UI.
-- Current branch: `codex/twenty-mcp-u4-auth-ui`.
-- Current worktree: `.Codex/worktrees/twenty-mcp-u4-auth-ui`.
+- Current unit: U5 Auth status and runtime safety.
+- Current branch: `codex/twenty-mcp-u5-runtime-safety`.
+- Current worktree: `.Codex/worktrees/twenty-mcp-u5-runtime-safety`.
 - Status: in progress.
 
-| Unit                              | Branch                          | PR                                                           | State   | Notes                                                                                                                                              |
-| --------------------------------- | ------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema`    | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Merged  | Squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`; required checks passed after scoped dev migration application for the drift precheck. |
-| U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile` | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Merged  | Squash merged as `e918df560c451daf2340a79ba808d753c9e37858`; required checks passed.                                                               |
-| U3 Desktop/web MCP OAuth          | `codex/twenty-mcp-u3-oauth`     | [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) | Merged  | Squash merged as `828a51f238492540c67f47746b8732b8657d0e45`; required checks passed.                                                               |
-| U4 Spaces MCP auth UI             | `codex/twenty-mcp-u4-auth-ui`   | [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168) | Active  | Protects system-managed MCP rows in Spaces and completes the MCP auth UI polish.                                                                   |
-| U5 Auth status and runtime safety | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
-| U6 E2E docs and smoke proof       | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
+| Unit                              | Branch                               | PR                                                           | State   | Notes                                                                                                                                              |
+| --------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema`         | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Merged  | Squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`; required checks passed after scoped dev migration application for the drift precheck. |
+| U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile`      | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Merged  | Squash merged as `e918df560c451daf2340a79ba808d753c9e37858`; required checks passed.                                                               |
+| U3 Desktop/web MCP OAuth          | `codex/twenty-mcp-u3-oauth`          | [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) | Merged  | Squash merged as `828a51f238492540c67f47746b8732b8657d0e45`; required checks passed.                                                               |
+| U4 Spaces MCP auth UI             | `codex/twenty-mcp-u4-auth-ui`        | [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168) | Merged  | Squash merged as `f8428a38432429e627cb776dfe160c4940568a6e`; required checks passed.                                                               |
+| U5 Auth status and runtime safety | `codex/twenty-mcp-u5-runtime-safety` | [#2170](https://github.com/thinkwork-ai/thinkwork/pull/2170) | Active  | Exposes managed OAuth server auth status before runtime assignment and preserves per-user runtime token gating.                                    |
+| U6 E2E docs and smoke proof       | Pending                              | Pending                                                      | Pending | Not started.                                                                                                                                       |
 
 ### Progress Log
 
@@ -242,6 +242,19 @@ status: in_progress
   controls remain available on the detail page.
 - 2026-06-06: Opened PR
   [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168).
+- 2026-06-06: PR
+  [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168) passed required
+  checks and was squash merged as `f8428a38432429e627cb776dfe160c4940568a6e`.
+  Remote branch was deleted; local U4 branch and worktree were removed.
+- 2026-06-06: Created U5 worktree from `origin/main` at `f8428a38` on branch
+  `codex/twenty-mcp-u5-runtime-safety`.
+- 2026-06-06: Implemented U5 local slice: `/api/skills/user-mcp-servers` now
+  includes enabled/approved managed OAuth connectors even before the current
+  user has a paired-agent runtime assignment, reports current-user auth status
+  over the merged server set, and exposes runtime assignment flags without
+  weakening runtime invocation gating.
+- 2026-06-06: Opened PR
+  [#2170](https://github.com/thinkwork-ai/thinkwork/pull/2170).
 
 ### CI / Verification
 
@@ -311,6 +324,11 @@ src/components/settings/ManagedApplicationsSection.test.tsx` passed.
 - U4 local dev server:
   `pnpm --filter @thinkwork/spaces dev --host 127.0.0.1 --port 5175` served
   `/settings/general` and `/settings/mcp-servers` with HTTP 200.
+- U5 local:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/mcp-user-servers.test.ts src/lib/__tests__/mcp-configs-approved-filter.test.ts`
+  passed.
+- U5 local: `pnpm --filter @thinkwork/api typecheck` passed.
+- U5 local: `pnpm --filter @thinkwork/spaces typecheck` passed.
 
 ### Blockers
 

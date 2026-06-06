@@ -269,4 +269,56 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
       '"userMcpTokens.status","active"',
     );
   });
+
+  it("canonical OAuth servers without an active user token are skipped", async () => {
+    mockRowsForJoin.mockReturnValue([
+      baseRow({
+        mcp_server_id: "srv-twenty",
+        slug: "twenty-crm",
+        auth_type: "oauth",
+      }),
+    ]);
+    mockRowsForUserToken.mockReturnValue([]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const configs = await buildMcpConfigs("agent-1", "user-current-1");
+
+    expect(configs).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("user has not completed OAuth"),
+    );
+    warn.mockRestore();
+  });
+
+  it("canonical OAuth servers inject the current user's active token", async () => {
+    mockRowsForJoin.mockReturnValue([
+      baseRow({
+        mcp_server_id: "srv-twenty",
+        slug: "twenty-crm",
+        auth_type: "oauth",
+      }),
+    ]);
+    mockRowsForUserToken.mockReturnValue([
+      {
+        id: "tok-twenty",
+        secret_ref: "arn:aws:secretsmanager:us-east-1:123:secret:twenty",
+        status: "active",
+        expires_at: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    ]);
+    mockSecretString.mockReturnValue(
+      JSON.stringify({ access_token: "twenty-user-token" }),
+    );
+
+    const configs = await buildMcpConfigs("agent-1", "user-current-1");
+
+    expect(configs).toEqual([
+      {
+        name: "twenty-crm",
+        url: "https://mcp.example/a",
+        transport: "streamable-http",
+        auth: { type: "bearer", token: "twenty-user-token" },
+      },
+    ]);
+  });
 });
