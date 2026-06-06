@@ -8149,3 +8149,11 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   outputs. Follow-up branch `codex/twenty-crm-root-ecs-outputs` exposes those
   outputs so the deploy workflow can restart the actual Twenty ECS services
   after database prep.
+- Post-deploy browser verification on `crm.thinkwork.ai` reached the Twenty UI
+  and loaded GraphQL successfully, but first-user sign-up failed with
+  `EACCES` while creating `/app/packages/twenty-server/.local-storage/...`.
+  Server logs showed the failure in `SignUpInWorkspace` while uploading default
+  workspace application files. Follow-up branch
+  `codex/twenty-crm-efs-access-point` switches the retained EFS mount to an
+  access point rooted at `/local-storage` with explicit writable POSIX
+  ownership and IAM mount/write authorization for the task role.

@@ -228,6 +228,28 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
   })
 }
 
+resource "aws_iam_role_policy" "ecs_task_efs" {
+  name = "twenty-efs"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "elasticfilesystem:ClientMount",
+        "elasticfilesystem:ClientWrite",
+      ]
+      Resource = aws_efs_file_system.twenty.arn
+      Condition = {
+        StringEquals = {
+          "elasticfilesystem:AccessPointArn" = aws_efs_access_point.twenty.arn
+        }
+      }
+    }]
+  })
+}
+
 resource "aws_iam_role" "ecs_task" {
   name = "${local.name}-task"
 
@@ -439,6 +461,27 @@ resource "aws_efs_file_system" "twenty" {
   tags = { Name = "${local.name}-efs" }
 }
 
+resource "aws_efs_access_point" "twenty" {
+  file_system_id = aws_efs_file_system.twenty.id
+
+  posix_user {
+    uid = 1000
+    gid = 1000
+  }
+
+  root_directory {
+    path = "/local-storage"
+
+    creation_info {
+      owner_uid   = 1000
+      owner_gid   = 1000
+      permissions = "0775"
+    }
+  }
+
+  tags = { Name = "${local.name}-efs-ap" }
+}
+
 resource "aws_efs_mount_target" "twenty" {
   for_each = local.storage_mount_subnet_ids_by_index
 
@@ -531,6 +574,11 @@ resource "aws_ecs_task_definition" "server" {
     efs_volume_configuration {
       file_system_id     = aws_efs_file_system.twenty.id
       transit_encryption = "ENABLED"
+
+      authorization_config {
+        access_point_id = aws_efs_access_point.twenty.id
+        iam             = "ENABLED"
+      }
     }
   }
 
@@ -573,6 +621,7 @@ resource "aws_ecs_task_definition" "server" {
 
   depends_on = [
     aws_efs_mount_target.twenty,
+    aws_iam_role_policy.ecs_task_efs,
     aws_elasticache_replication_group.twenty,
     terraform_data.configuration_guardrails,
   ]
@@ -600,6 +649,11 @@ resource "aws_ecs_task_definition" "worker" {
     efs_volume_configuration {
       file_system_id     = aws_efs_file_system.twenty.id
       transit_encryption = "ENABLED"
+
+      authorization_config {
+        access_point_id = aws_efs_access_point.twenty.id
+        iam             = "ENABLED"
+      }
     }
   }
 
@@ -630,6 +684,7 @@ resource "aws_ecs_task_definition" "worker" {
 
   depends_on = [
     aws_efs_mount_target.twenty,
+    aws_iam_role_policy.ecs_task_efs,
     aws_elasticache_replication_group.twenty,
     terraform_data.configuration_guardrails,
   ]
