@@ -1,10 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { DesktopConfig } from "@thinkwork/desktop-ipc";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@thinkwork/ui";
 import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
 import { useAuth } from "@/context/AuthContext";
 import { getGoogleSignInUrl } from "@/lib/auth";
+import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import {
   getDesktopBridge,
   isDesktopBuild,
@@ -23,6 +24,10 @@ export function SignInPage() {
   const { next } = Route.useSearch();
   const navigate = useNavigate();
   const isDesktop = isDesktopBuild();
+  const webDeploymentProfile = useMemo(
+    () => getSpacesDeploymentProfileSnapshot(),
+    [],
+  );
   const [error, setError] = useState<string | null>(null);
   const [desktopConfig, setDesktopConfig] = useState<DesktopConfig | null>(
     null,
@@ -99,9 +104,17 @@ export function SignInPage() {
       setError("Desktop bridge is unavailable.");
       return;
     }
+    if (!webDeploymentProfile.okForOAuth) {
+      setError(
+        `Deployment configuration is incomplete: ${webDeploymentProfile.missing.join(", ")}`,
+      );
+      return;
+    }
 
     window.location.href = getGoogleSignInUrl();
   }
+
+  const webConfigBlocked = !isDesktop && !webDeploymentProfile.okForOAuth;
 
   const splash = (
     <main className="flex min-h-0 flex-1 items-center justify-center px-6 py-12">
@@ -140,6 +153,20 @@ export function SignInPage() {
             )}
           </div>
         )}
+        {!isDesktop && (
+          <div className="text-center text-xs text-muted-foreground">
+            <p>
+              {webDeploymentProfile.okForOAuth
+                ? `${webDeploymentProfile.displayName} · ${webDeploymentProfile.stage} · ${webDeploymentProfile.region}`
+                : `Configuration incomplete for ${webDeploymentProfile.stage}`}
+            </p>
+            <p className={webConfigBlocked ? "mt-1 text-destructive" : "mt-1"}>
+              {webConfigBlocked
+                ? `Missing ${webDeploymentProfile.missing.join(", ")}`
+                : webDeploymentProfile.trustLabel}
+            </p>
+          </div>
+        )}
         <Button
           onClick={() => void handleGoogle()}
           size="lg"
@@ -147,7 +174,8 @@ export function SignInPage() {
           disabled={
             isLoading ||
             isStartingOAuth ||
-            Boolean(desktopConfig && !desktopConfig.configured)
+            Boolean(desktopConfig && !desktopConfig.configured) ||
+            webConfigBlocked
           }
         >
           {isLoading
