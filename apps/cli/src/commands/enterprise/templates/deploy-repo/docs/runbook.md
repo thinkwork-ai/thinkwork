@@ -5,10 +5,20 @@
 This repository deploys a pinned ThinkWork release into the customer AWS
 account. It is a deployment repository, not a source fork.
 
+> Legacy compatibility: new customer-owned deployments should use the
+> GitHub-free AWS control-plane bootstrap. This generated repository runbook is
+> retained for existing customers that still operate through GitHub Actions.
+
 The exact operational path is:
 
 ```text
 bootstrap -> workflow dispatch -> CI deploy -> overlay apply -> smoke summary
+```
+
+The GitHub-free operational path is:
+
+```text
+bootstrap -> customer AWS Step Functions -> CodeBuild deploy -> smoke evidence
 ```
 
 ## First-Time Setup
@@ -148,8 +158,47 @@ one-line flow into explicit steps.
      -f run_smokes=false
    ```
 
-   Prefer `thinkwork destroy`; use direct `gh workflow run` only as a
-   troubleshooting fallback.
+Prefer `thinkwork destroy`; use direct `gh workflow run` only as a
+troubleshooting fallback.
+
+## GitHub-Free Bootstrap Smoke
+
+When operating a GitHub-free customer deployment, run the foundation smoke from
+the ThinkWork release workspace or support checkout after bootstrap:
+
+```bash
+node scripts/smoke/foundation-bootstrap-smoke.mjs
+
+SMOKE_ENABLE_FOUNDATION_BOOTSTRAP=1 \
+  SMOKE_TERRAFORM_DIR=terraform/examples/greenfield \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/foundation-smoke.json \
+  node scripts/smoke/foundation-bootstrap-smoke.mjs
+```
+
+Set `SMOKE_EVIDENCE_S3_URI=s3://<evidence-bucket>/<prefix>` to upload the
+evidence envelope. The evidence must include release/manifest identifiers,
+deployment job identifiers when available, endpoint status, and smoke results.
+It must not include secrets.
+
+## Managed Application Smokes
+
+Run managed-app smokes after deploy, destroy, park, or release upgrade jobs:
+
+```bash
+SMOKE_ENABLE_COGNEE_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/cognee-smoke.json \
+  node scripts/smoke/cognee-managed-app-smoke.mjs
+
+SMOKE_ENABLE_TWENTY_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/twenty-smoke.json \
+  node scripts/smoke/twenty-managed-app-smoke.mjs
+```
+
+Cognee and Twenty smokes skip with explicit evidence when the app is not
+enabled, unprovisioned, or parked. A skipped smoke is valid evidence only when
+that app state is intentional for the stage.
 
 ## Workflow Components
 
@@ -236,6 +285,17 @@ Never commit secrets. Supported secret homes are:
 
 Do not store plaintext secrets in `terraform/stages/*.tfvars`, `.env`,
 `customer/`, or runbook files.
+
+## GitHub-Free Failure Triage
+
+| Failure                           | First response                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Manifest verification failed      | Stop before mutation. Fetch a trusted release manifest and compare the expected SHA-256.                            |
+| Plan failed                       | Inspect the CodeBuild log and Terraform plan artifact linked from the deployment job.                               |
+| Apply failed                      | Inspect Step Functions event history, then CodeBuild logs. Retry only after preserving evidence.                    |
+| Smoke failed                      | Attach the smoke evidence JSON to the deployment job/support case and inspect endpoint-specific details.            |
+| First-admin claim mismatch        | Verify Cognito email verification and the bootstrap first-admin email.                                              |
+| Deployment profile import blocked | Confirm required profile fields, TLS URLs, signature trust, and that the user signed out before replacing profiles. |
 
 ## Rollback
 

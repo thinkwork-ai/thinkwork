@@ -444,6 +444,22 @@ export default defineConfig({
               collapsed: true,
               items: [
                 {
+                  label: "GitHub-Free Customer Deployments",
+                  slug: "deploy/github-free-customer-deployments",
+                },
+                {
+                  label: "Managed Applications",
+                  slug: "deploy/managed-applications",
+                },
+                {
+                  label: "Deployment Profiles",
+                  slug: "deploy/deployment-profiles",
+                },
+                {
+                  label: "Release Manifests",
+                  slug: "deploy/release-manifests",
+                },
+                {
                   label: "Enterprise Deployment Repo",
                   slug: "deploy/enterprise-deployment-repo",
                 },

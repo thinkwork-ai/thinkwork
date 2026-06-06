@@ -194,10 +194,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U7c Mobile Profile Binding.
-- Current branch: `codex/u7c-mobile-profile-binding`.
-- Current worktree: `.Codex/worktrees/u7c-mobile-profile-binding`.
-- Status: U7c in progress.
+- Current unit: U8 Operational Evidence, Documentation, and Rollout.
+- Current branch: `codex/u8-deployment-docs-smokes`.
+- Current worktree: `.Codex/worktrees/u8-deployment-docs-smokes`.
+- Status: U8 in progress.
 
 | Unit                                                      | Branch                                  | PR                                                           | State  | Notes                                                                                                                                                                                    |
 | --------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -209,7 +209,8 @@ status: in_progress
 | U6 Spaces Managed Applications UX                         | `codex/u6-managed-applications-ux`      | [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) | Merged | Squash merged as `3167d15d7af8d838b834f991486bdb295a38fa87`; replaces switch-style lifecycle controls with Spaces plan preview, approval, progress, evidence, and destructive impact UX. |
 | U7a Profile Contract, Export, and Trust                   | `codex/u7a-deployment-profile-contract` | [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) | Merged | Squash merged as `51ab6151a04a9d3197e0212eb3a69c0d59453f95`; adds the shared deployment profile schema/trust validator and Spaces export/sign-in display surface for universal clients.  |
 | U7b Desktop Profile Binding                               | `codex/u7b-desktop-profile-binding`     | [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) | Merged | Squash merged as `87c30369f35ce999c708539ae268b89ee4c4d8d2`; adds desktop profile import/storage, active-profile OAuth/API binding, and profile controls on the desktop sign-in surface. |
-| U7c Mobile Profile Binding                                | `codex/u7c-mobile-profile-binding`      | [#2183](https://github.com/thinkwork-ai/thinkwork/pull/2183) | Active | Adds mobile profile import/storage, profile-backed auth/API config, sign-in controls, and a public profile import route.                                                                 |
+| U7c Mobile Profile Binding                                | `codex/u7c-mobile-profile-binding`      | [#2183](https://github.com/thinkwork-ai/thinkwork/pull/2183) | Merged | Squash merged as `6d467d24937455a88e44ca7dbdf13a5c076beff3`; adds mobile profile import/storage, profile-backed auth/API config, sign-in controls, and a public profile import route.    |
+| U8 Operational Evidence, Documentation, and Rollout       | `codex/u8-deployment-docs-smokes`       | [#2187](https://github.com/thinkwork-ai/thinkwork/pull/2187) | Active | Adds deployment docs, smoke evidence envelopes, foundation bootstrap smoke, and legacy rollout guidance.                                                                                 |
 
 ### Progress Log
 
@@ -516,6 +517,30 @@ U7c files>`; and `git diff --check`.
   reports pre-existing mobile app-wide TypeScript failures; filtering that
   output to touched U7c files only reports the existing
   `app/_layout.tsx` `@react-navigation/native` module-resolution error.
+- PR [#2183](https://github.com/thinkwork-ai/thinkwork/pull/2183) passed
+  required CI and was squash merged as
+  `6d467d24937455a88e44ca7dbdf13a5c076beff3`; its remote branch was deleted,
+  and the local U7c branch/worktree were removed.
+- Created isolated worktree `.Codex/worktrees/u8-deployment-docs-smokes` from
+  `origin/main` at `6d467d249`.
+- Implemented U8 local slice in progress: GitHub-free deployment docs,
+  managed-app docs, deployment profile docs, release manifest docs, smoke
+  evidence envelope helper, foundation bootstrap smoke, Cognee/Twenty evidence
+  output, and legacy deployment repo runbook guidance.
+- U8 setup: `pnpm install --frozen-lockfile` passed in the fresh worktree; the
+  known optional `canvas` native build warning appeared under Node
+  25/pkg-config but did not fail install.
+- U8 local verification passed:
+  `node scripts/smoke/foundation-bootstrap-smoke.mjs`;
+  `node scripts/smoke/cognee-managed-app-smoke.mjs`;
+  `node scripts/smoke/twenty-managed-app-smoke.mjs`;
+  `pnpm --filter @thinkwork/docs build`;
+  `pnpm dlx prettier --check <touched U8 files>`; and `git diff --check`.
+- U8 docs build emitted existing docs-site warnings for the missing i18n
+  directory, Pagefind skipping the workspace overlay HTML fragment, npm
+  unknown env/user config entries, and the missing Astro sitemap `site` option.
+- Opened PR [#2187](https://github.com/thinkwork-ai/thinkwork/pull/2187) for
+  U8.
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 

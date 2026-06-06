@@ -1,0 +1,69 @@
+---
+title: Release Manifests
+description: Signed immutable release contracts used by CLI bootstrap and AWS-native deployment jobs.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A release manifest is the immutable contract between a ThinkWork release and a
+customer deployment job. It lets the CLI and the customer AWS control plane
+deploy without cloning the ThinkWork source repository.
+
+## What It Contains
+
+The manifest includes:
+
+- manifest schema version
+- release version
+- compatibility bounds
+- artifact URLs and SHA-256 hashes
+- Terraform module or bundle references
+- deployment runner/build image reference
+- managed-app descriptors for Cognee and Twenty
+- smoke contracts
+- deployment profile schema version
+- key id and detached signature metadata
+
+## Verification Order
+
+1. Verify the manifest signature with a pinned trusted ThinkWork public key.
+2. Reject expired or revoked signing keys.
+3. Verify compatibility bounds for the CLI and runner.
+4. Download artifacts only after the manifest is trusted.
+5. Verify every artifact SHA-256 before Terraform, static assets, or runtime
+   bundles consume it.
+6. Record the manifest digest on deployment jobs and smoke evidence.
+
+<Aside type="caution">
+  Never proceed with a placeholder digest such as `CHANGE_ME`. If the manifest
+  digest cannot be resolved and verified, stop before any deployment mutation.
+</Aside>
+
+## Upgrade Evidence
+
+Release upgrade evidence should record:
+
+- previous release version and manifest digest
+- target release version and manifest digest
+- Step Functions execution ARN
+- CodeBuild build ARN/id
+- Terraform plan and apply artifact keys
+- post-upgrade foundation smoke result
+- managed-app smoke results for enabled apps
+
+## Failure Triage
+
+| Failure                            | Meaning                                                                                         |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Invalid signature                  | The manifest cannot be trusted. Stop and fetch a known-good manifest.                           |
+| Unknown key                        | The runner does not trust the signing key. Update trusted keys only through a reviewed release. |
+| Revoked or expired key             | Do not deploy. Use a release signed by an active key.                                           |
+| Artifact hash mismatch             | The artifact does not match the manifest. Stop before Terraform or runtime update.              |
+| Compatibility mismatch             | Upgrade the CLI/runner or choose a compatible release.                                          |
+| Missing managed-app smoke metadata | The release is not usable for managed-app deployment.                                           |
+
+## Operator Notes
+
+ThinkWork can continue to publish release assets from the ThinkWork-owned GitHub
+project. Customer deployments consume signed release artifacts from the release
+manifest; they do not need a customer source repo or customer GitHub Actions.

@@ -28,6 +28,8 @@ This kit fills the gap.
 | `fixtures/task-completed.json`            | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                                                                                                    |
 | `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                               |
 | `spaces-runbook-smoke.mjs`                | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
+| `foundation-bootstrap-smoke.mjs`          | GitHub-free foundation bootstrap smoke. Dry-run reports required endpoint/evidence inputs; live mode verifies generated Spaces/API/Auth/profile/control-plane outputs and emits a support evidence envelope.                                |
+| `deployment-evidence.mjs`                 | Shared JSON evidence envelope writer/uploader for foundation and managed-app smokes. Writes locally or uploads to S3 only when explicitly configured.                                                                                       |
 | `knowledge-graph-thread-ingest-smoke.mjs` | Cognee Knowledge Graph smoke. Dry-run reports required live-mode configuration; live mode starts a manual thread ingest, polls the run, and verifies table/graph/detail GraphQL reads from the normalized snapshot.                         |
 | `twenty-managed-app-smoke.mjs`            | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                    |
 
@@ -97,6 +99,24 @@ Passing live mode means:
 - parked Twenty stages skip with an explicit retained-runtime message;
 - running Twenty stages expose an HTTPS URL;
 - the public `https://.../healthz` endpoint returns a successful response.
+
+## GitHub-free foundation smoke
+
+The foundation bootstrap smoke is read-only and dry-run by default:
+
+```sh
+node scripts/smoke/foundation-bootstrap-smoke.mjs
+
+SMOKE_ENABLE_FOUNDATION_BOOTSTRAP=1 \
+  SMOKE_TERRAFORM_DIR=terraform/examples/greenfield \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/foundation-smoke.json \
+  node scripts/smoke/foundation-bootstrap-smoke.mjs
+```
+
+Live mode reads Terraform outputs unless endpoint overrides are provided. It
+verifies generated Spaces, GraphQL/AppSync, Cognito, deployment profile, and
+deployment control-plane outputs. Set `SMOKE_EVIDENCE_S3_URI=s3://bucket/prefix`
+to upload the evidence envelope with `aws s3 cp`.
 
 ## Knowledge Graph thread ingest smoke
 

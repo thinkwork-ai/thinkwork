@@ -1,0 +1,97 @@
+---
+title: Deployment Profiles
+description: Bind universal desktop and mobile clients to a customer-owned ThinkWork deployment before sign-in.
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+Desktop and mobile builds are universal. They do not need customer-specific
+endpoint binaries. A deployment profile tells the client which customer
+ThinkWork deployment to use before OAuth starts.
+
+## Profile Shape
+
+A v1 deployment profile is JSON with these required fields:
+
+```json
+{
+  "schemaVersion": 1,
+  "deploymentId": "acme-prod",
+  "displayName": "Acme ThinkWork",
+  "stage": "prod",
+  "region": "us-east-1",
+  "issuedAt": "2026-06-06T00:00:00.000Z",
+  "spacesUrl": "https://spaces.acme.example.com",
+  "apiUrl": "https://api.acme.example.com",
+  "graphqlHttpUrl": "https://api.acme.example.com/graphql",
+  "appsyncHttpUrl": "https://abc.appsync-api.us-east-1.amazonaws.com/graphql",
+  "appsyncWsUrl": "wss://abc.appsync-realtime-api.us-east-1.amazonaws.com/graphql",
+  "cognitoDomain": "https://acme.auth.us-east-1.amazoncognito.com",
+  "cognitoUserPoolId": "us-east-1_abc",
+  "cognitoClientId": "client-id",
+  "signature": null
+}
+```
+
+Production profiles should be signed by a trusted ThinkWork deployment profile
+key. Unsigned profiles are for development fallback only.
+
+## Import Methods
+
+<Steps>
+
+1. **Export the profile from Spaces**
+
+   Open the deployment profile panel on the customer deployment and copy the
+   JSON or profile link.
+
+2. **Import on desktop**
+
+   Open the desktop sign-in screen and paste the profile JSON, select a profile
+   file, or open a profile deep link.
+
+3. **Import on mobile**
+
+   Open the mobile sign-in screen and paste the profile JSON or link. A QR code
+   can point at the same profile link.
+
+4. **Verify before OAuth**
+
+   The sign-in screen shows display name, stage, region, and trust status.
+   Incomplete config blocks sign-in before OAuth begins.
+
+</Steps>
+
+## Changing Deployments
+
+Sign out before replacing or removing a deployment profile. Changing the active
+profile clears deployment-scoped auth/session/client caches so the next OAuth
+flow starts against the selected customer deployment.
+
+Malformed replacements do not clear the previous valid profile.
+
+## Trust Rules
+
+| Profile state                   | Client behavior                                 |
+| ------------------------------- | ----------------------------------------------- |
+| Trusted signature               | Allow sign-in and show signing key/trust label. |
+| Unsigned development profile    | Allow only in development fallback builds.      |
+| Missing required field          | Block sign-in and show missing configuration.   |
+| Invalid URL or non-TLS endpoint | Block sign-in.                                  |
+| Unknown signing key             | Block production sign-in.                       |
+| Signature mismatch              | Block production sign-in.                       |
+
+<Aside type="caution">
+  A profile controls OAuth and API endpoints. Treat unexpected profile links
+  like sensitive operational input. Import only profiles received through a
+  trusted customer support or admin channel.
+</Aside>
+
+## Support Checks
+
+- Confirm `schemaVersion` is `1`.
+- Confirm Cognito domain, client id, user pool id, AppSync HTTP URL, AppSync WS
+  URL, API URL, and Spaces URL are present.
+- Confirm URLs are HTTPS/WSS, except explicit localhost development fallback.
+- Confirm the displayed deployment is the customer deployment the user expects.
+- Ask the user to sign out before changing profiles.

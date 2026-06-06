@@ -18,6 +18,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { attachSmokeEvidence } from "./deployment-evidence.mjs";
 
 const LIVE_ENABLED = process.env.SMOKE_ENABLE_TWENTY_MANAGED_APP === "1";
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15_000);
@@ -44,30 +45,34 @@ const tenantId = first(env.SMOKE_TENANT_ID, env.TENANT_ID);
 if (!LIVE_ENABLED) {
   console.log(
     JSON.stringify(
-      {
-        ok: true,
-        skippedLive: true,
-        reason:
-          "set SMOKE_ENABLE_TWENTY_MANAGED_APP=1 to run the deployed Twenty managed-app smoke",
-        dryRun: {
-          terraformDir,
-          requiredWhenRunning: [
-            "Terraform outputs in SMOKE_TERRAFORM_DIR or SMOKE_TWENTY_URL",
-            "Twenty provisioned/runtime deployment status",
-          ],
-          optionalGraphqlEnv: [
-            "SMOKE_TENANT_ID",
-            "VITE_GRAPHQL_HTTP_URL or GRAPHQL_HTTP_URL or API_GRAPHQL_URL",
-            "API_AUTH_SECRET or THINKWORK_API_SECRET or VITE_GRAPHQL_API_KEY or GRAPHQL_API_KEY",
-          ],
-          verifies: [
-            "twenty_provisioned false skips cleanly",
-            "twenty_runtime_enabled true requires HTTPS twenty_url",
-            "public Twenty /healthz responds successfully",
-            "optional GraphQL deployment status and managed-app health agree with the public URL",
-          ],
+      await attachSmokeEvidence(
+        "twenty-managed-app",
+        {
+          ok: true,
+          skippedLive: true,
+          reason:
+            "set SMOKE_ENABLE_TWENTY_MANAGED_APP=1 to run the deployed Twenty managed-app smoke",
+          dryRun: {
+            terraformDir,
+            requiredWhenRunning: [
+              "Terraform outputs in SMOKE_TERRAFORM_DIR or SMOKE_TWENTY_URL",
+              "Twenty provisioned/runtime deployment status",
+            ],
+            optionalGraphqlEnv: [
+              "SMOKE_TENANT_ID",
+              "VITE_GRAPHQL_HTTP_URL or GRAPHQL_HTTP_URL or API_GRAPHQL_URL",
+              "API_AUTH_SECRET or THINKWORK_API_SECRET or VITE_GRAPHQL_API_KEY or GRAPHQL_API_KEY",
+            ],
+            verifies: [
+              "twenty_provisioned false skips cleanly",
+              "twenty_runtime_enabled true requires HTTPS twenty_url",
+              "public Twenty /healthz responds successfully",
+              "optional GraphQL deployment status and managed-app health agree with the public URL",
+            ],
+          },
         },
-      },
+        env,
+      ),
       null,
       2,
     ),
@@ -77,7 +82,17 @@ if (!LIVE_ENABLED) {
 
 try {
   const result = await runLiveSmoke();
-  console.log(JSON.stringify({ ok: true, ...result }, null, 2));
+  console.log(
+    JSON.stringify(
+      await attachSmokeEvidence(
+        "twenty-managed-app",
+        { ok: true, ...result },
+        env,
+      ),
+      null,
+      2,
+    ),
+  );
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 }
