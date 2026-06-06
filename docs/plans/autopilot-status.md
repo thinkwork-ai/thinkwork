@@ -22,7 +22,7 @@ status: in_progress
 | ----------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------- |
 | U1 Add per-user model approval data and API                 | `codex/u1-model-approvals`          | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Merged | Squash merged as `efdf8549`.           |
 | U2 Add the admin Models section on user profile settings    | `codex/u2-user-model-settings`      | [#2175](https://github.com/thinkwork-ai/thinkwork/pull/2175) | Merged | Squash merged as `e0a43844`.           |
-| U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers` | TBD                                                          | Active | Local verification passed; PR pending. |
+| U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers` | [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) | Active | Local verification passed; CI pending. |
 | U4 Propagate and validate selected parent model             | TBD                                 | TBD                                                          | Todo   |                                        |
 | U5 Extend `TOOLS.md` effective policy with model routing    | TBD                                 | TBD                                                          | Todo   |                                        |
 | U6 Implement model-routed `workspace_skill` child execution | TBD                                 | TBD                                                          | Todo   |                                        |
@@ -80,6 +80,7 @@ status: in_progress
   picker utilities, a compact composer model selector with provider and token
   cost context, local persistence/fallback selection, new-thread metadata
   propagation, follow-up metadata propagation, and focused tests.
+- Opened PR [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179).
 
 ### CI / Verification
 
