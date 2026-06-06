@@ -1,5 +1,5 @@
+import { buildManagedAppPlan, getManagedAppAdapter } from "./apps/registry.js";
 import {
-  dataImpactFor,
   evidencePointer,
   parseRunnerInput,
   stablePlanDigest,
@@ -14,14 +14,25 @@ export function buildPlanSummary(args: {
   if (input.phase !== "plan") {
     throw new Error("Plan summary requires phase=plan");
   }
+  const adapter = getManagedAppAdapter(input.appKey);
+  const appPlan = buildManagedAppPlan({
+    appKey: input.appKey,
+    operation: input.operation,
+    desiredConfig: input.desiredConfig,
+  });
   const body = {
     jobId: input.jobId,
     appKey: input.appKey,
+    displayName: adapter.displayName,
     operation: input.operation,
     releaseVersion: input.releaseVersion,
     manifestDigest: input.manifestDigest,
     desiredConfigVersion: input.desiredConfigVersion,
-    dataImpact: dataImpactFor(input.appKey, input.operation),
+    dataImpact: appPlan.dataImpact,
+    terraformVariables: appPlan.terraformVariables,
+    preDestroySteps: appPlan.preDestroySteps,
+    smokeContracts: appPlan.smokeContracts,
+    statusOutputs: appPlan.statusOutputs,
   };
   return {
     ...body,

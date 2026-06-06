@@ -551,6 +551,7 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
         source: `${TERRAFORM_MODULE_SOURCE}//modules/app/cognee`,
         version,
       },
+      requiredImages: ["cognee"],
       smokeContracts: [
         {
           id: "cognee-health",
@@ -566,6 +567,7 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
         source: `${TERRAFORM_MODULE_SOURCE}//modules/app/twenty`,
         version,
       },
+      requiredImages: ["twenty"],
       smokeContracts: [
         {
           id: "twenty-health",

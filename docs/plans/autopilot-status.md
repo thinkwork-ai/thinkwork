@@ -11,9 +11,9 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U4 Deployment Job Domain, API, and Runner Orchestration.
-- Current branch: `codex/u4-deployment-job-api`.
-- Current worktree: `.Codex/worktrees/u4-deployment-job-api`.
+- Current unit: U5 Cognee and Twenty Managed-App Adapters.
+- Current branch: `codex/u5-managed-app-adapters`.
+- Current worktree: `.Codex/worktrees/u5-managed-app-adapters`.
 - Status: in progress.
 
 | Unit                                                      | Branch                             | PR                                                           | State  | Notes                                                                                                                                                 |
@@ -21,7 +21,8 @@ status: in_progress
 | U1 Release Manifest and Artifact Contract                 | `codex/u1-release-manifest`        | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
 | U2 GitHub-Free Bootstrap and AWS Control Plane Substrate  | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
 | U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`    | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Merged | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                |
-| U4 Deployment Job Domain, API, and Runner Orchestration   | `codex/u4-deployment-job-api`      | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Active | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                       |
+| U4 Deployment Job Domain, API, and Runner Orchestration   | `codex/u4-deployment-job-api`      | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Merged | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                       |
+| U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`    | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Active | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.    |
 
 ### Progress Log
 
@@ -168,6 +169,59 @@ status: in_progress
   `psql "$DATABASE_URL" -f packages/database-pg/drizzle/0151_managed_deployments.sql && bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0151_managed_deployments.sql`
   passed against dev.
 - Opened PR [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169).
+- PR [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) initially
+  passed required CI, was rebased after `main` moved, passed CLA, lint, verify,
+  typecheck, test, and Migration Drift Precheck again, and was squash merged as
+  `ffd70d9c3e39d11428d941bcab3fac677f57fe4b`.
+- Removed local worktree `.Codex/worktrees/u4-deployment-job-api` and deleted
+  local branch `codex/u4-deployment-job-api`; the remote branch was deleted by
+  the merge workflow.
+- Created isolated worktree `.Codex/worktrees/u5-managed-app-adapters` from
+  `origin/main` at `ffd70d9c`.
+- Started U5 Cognee/Twenty managed-app adapter work. Confirmed both Terraform
+  app modules and the composite module wiring already exist on `main`, so this
+  unit is focused on first-party runner adapters, smoke contracts, release
+  descriptor image requirements, and API data-impact reuse.
+- Implemented U5 local slice: runner app registry, Cognee/Twenty adapter
+  variable mapping and status extraction, app-specific destructive impact and
+  pre-destroy evidence steps, desired-config plan payloads, API reuse of the
+  shared data-impact catalog, release descriptor required images, and a Cognee
+  managed-app smoke script.
+- U4 CI: PR [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169)
+  passed CLA, lint, verify, typecheck, test, and Migration Drift Precheck after
+  rebasing onto current `main`.
+- U4 merge: PR [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169)
+  was squash merged as `ffd70d9c3e39d11428d941bcab3fac677f57fe4b`; U4 branch
+  and worktree were removed.
+- U5 setup: `pnpm install --no-frozen-lockfile` passed and updated
+  `pnpm-lock.yaml` after adding the API workspace dependency on
+  `@thinkwork/deployment-runner`; the known optional `canvas` native build
+  warning appeared under Node 25/pkg-config but did not fail install.
+- U5 local:
+  `pnpm --filter @thinkwork/deployment-runner test && pnpm --filter @thinkwork/deployment-runner typecheck`
+  passed.
+- U5 local:
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/deployments/managed-applications.test.ts src/graphql/resolvers/deployments/managed-application-deployment.test.ts src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts && pnpm --filter @thinkwork/api typecheck`
+  passed.
+- U5 local:
+  `pnpm test:release && pnpm --filter @thinkwork/release-manifest test`
+  passed.
+- U5 local:
+  `node scripts/smoke/cognee-managed-app-smoke.mjs` and
+  `node scripts/smoke/twenty-managed-app-smoke.mjs` both skipped live mode as
+  expected in dry-run.
+- U5 local:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
+  passed.
+- U5 local: `pnpm --filter @thinkwork/api test` passed (424 files, 3649
+  tests; existing live integration fixtures skipped).
+- U5 local:
+  `pnpm --filter @thinkwork/release-manifest typecheck && pnpm --filter thinkwork-cli typecheck`
+  passed.
+- U5 local:
+  `pnpm dlx prettier@3.8.2 --check --ignore-unknown <touched U5 files>` and
+  `git diff --check` passed.
+- Opened PR [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172).
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 

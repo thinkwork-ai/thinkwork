@@ -1,5 +1,5 @@
+import { buildManagedAppPlan, getManagedAppAdapter } from "./apps/registry.js";
 import {
-  dataImpactFor,
   evidencePointer,
   manifestDigestMatches,
   parseRunnerInput,
@@ -25,15 +25,29 @@ export function buildApplySummary(args: {
       "Verified manifest digest does not match job manifest digest",
     );
   }
+  const adapter = getManagedAppAdapter(input.appKey);
+  const appPlan = input.desiredConfig
+    ? buildManagedAppPlan({
+        appKey: input.appKey,
+        operation: input.operation,
+        desiredConfig: input.desiredConfig,
+      })
+    : null;
   return {
     jobId: input.jobId,
     appKey: input.appKey,
+    displayName: adapter.displayName,
     operation: input.operation,
     releaseVersion: input.releaseVersion,
     manifestDigest: input.manifestDigest,
     desiredConfigVersion: input.desiredConfigVersion,
     planDigest: input.planDigest!,
-    dataImpact: dataImpactFor(input.appKey, input.operation),
+    dataImpact: appPlan?.dataImpact ?? adapter.dataImpact(input.operation),
+    terraformVariables: appPlan?.terraformVariables,
+    preDestroySteps:
+      appPlan?.preDestroySteps ?? adapter.preDestroySteps(input.operation),
+    smokeContracts: adapter.smokeContracts,
+    statusOutputs: adapter.statusOutputs,
     evidence: evidencePointer({
       bucket: args.evidenceBucket,
       tenantId: input.tenantId,

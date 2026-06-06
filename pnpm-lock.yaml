@@ -980,6 +980,9 @@ importers:
       '@thinkwork/database-pg':
         specifier: workspace:*
         version: link:../database-pg
+      '@thinkwork/deployment-runner':
+        specifier: workspace:*
+        version: link:../deployment-runner
       '@thinkwork/evals-core':
         specifier: workspace:*
         version: link:../evals-core

@@ -106,6 +106,15 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     manifest.managedApps.map((app) => app.id),
     ["cognee", "twenty"],
   );
+  assert.deepEqual(
+    Object.fromEntries(
+      manifest.managedApps.map((app) => [app.id, app.requiredImages]),
+    ),
+    {
+      cognee: ["cognee"],
+      twenty: ["twenty"],
+    },
+  );
 });
 
 test("signing helpers can verify the generated manifest", async () => {

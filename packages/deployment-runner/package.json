@@ -7,7 +7,10 @@
   "exports": {
     ".": "./src/shared.ts",
     "./plan": "./src/plan.ts",
-    "./apply": "./src/apply.ts"
+    "./apply": "./src/apply.ts",
+    "./apps/registry": "./src/apps/registry.ts",
+    "./apps/cognee": "./src/apps/cognee.ts",
+    "./apps/twenty": "./src/apps/twenty.ts"
   },
   "scripts": {
     "build": "tsc --build",

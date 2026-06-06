@@ -1,4 +1,11 @@
 import { createHash } from "node:crypto";
+import {
+  dataImpactForManagedApp,
+  type ManagedAppDataImpact,
+  type ManagedAppKey,
+  type PreDestroyStep,
+  type SmokeContract,
+} from "./apps/registry.js";
 
 export type ManagedAppOperation = "ENABLE" | "PARK" | "DESTROY" | "UPGRADE";
 
@@ -6,11 +13,12 @@ export interface DeploymentRunnerInput {
   phase: "plan" | "apply";
   tenantId: string;
   jobId: string;
-  appKey: "cognee" | "twenty";
+  appKey: ManagedAppKey;
   operation: ManagedAppOperation;
   releaseVersion: string;
   manifestDigest: string;
   desiredConfigVersion: string;
+  desiredConfig?: Record<string, unknown>;
   planDigest?: string;
 }
 
@@ -21,17 +29,18 @@ export interface DeploymentEvidencePointer {
 
 export interface DeploymentSummary {
   jobId: string;
-  appKey: string;
+  appKey: ManagedAppKey;
+  displayName?: string;
   operation: ManagedAppOperation;
   releaseVersion: string;
   manifestDigest: string;
   desiredConfigVersion: string;
   planDigest: string;
-  dataImpact: {
-    destructive: boolean;
-    summary: string;
-    resources: string[];
-  };
+  dataImpact: ManagedAppDataImpact;
+  terraformVariables?: Record<string, unknown>;
+  preDestroySteps?: PreDestroyStep[];
+  smokeContracts?: readonly SmokeContract[];
+  statusOutputs?: string[];
   evidence: DeploymentEvidencePointer;
 }
 
@@ -59,6 +68,14 @@ export function parseRunnerInput(value: unknown): DeploymentRunnerInput {
   }
   if (input.phase === "apply") {
     assertSha256(input.planDigest, "planDigest");
+  }
+  if (
+    input.desiredConfig !== undefined &&
+    (!input.desiredConfig ||
+      typeof input.desiredConfig !== "object" ||
+      Array.isArray(input.desiredConfig))
+  ) {
+    throw new Error("desiredConfig must be an object when provided");
   }
   return input as DeploymentRunnerInput;
 }
@@ -96,36 +113,10 @@ export function evidencePointer(args: {
 }
 
 export function dataImpactFor(
-  appKey: DeploymentRunnerInput["appKey"],
+  appKey: ManagedAppKey,
   operation: ManagedAppOperation,
-): DeploymentSummary["dataImpact"] {
-  if (operation !== "DESTROY") {
-    return {
-      destructive: false,
-      summary: "No destructive teardown requested.",
-      resources: [],
-    };
-  }
-  if (appKey === "twenty") {
-    return {
-      destructive: true,
-      summary:
-        "Twenty CRM destroy deletes runtime resources and app-owned data.",
-      resources: [
-        "Twenty ECS services and load balancer resources",
-        "Dedicated Twenty database, role, and generated secrets",
-      ],
-    };
-  }
-  return {
-    destructive: true,
-    summary:
-      "Cognee destroy deletes runtime resources and app-owned graph data.",
-    resources: [
-      "Cognee runtime services",
-      "App-owned graph/vector data and generated secrets",
-    ],
-  };
+): ManagedAppDataImpact {
+  return dataImpactForManagedApp(appKey, operation);
 }
 
 function assertString(value: unknown, field: string): asserts value is string {
