@@ -18,18 +18,18 @@ status: in_progress
 - Current worktree: `.Codex/worktrees/u1-model-approvals`.
 - Status: in progress.
 
-| Unit                                                        | Branch                     | PR                                                           | State  | Notes                                  |
-| ----------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------- |
-| U1 Add per-user model approval data and API                 | `codex/u1-model-approvals` | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Active | Local verification passed; CI pending. |
-| U2 Add the admin Models section on user profile settings    | TBD                        | TBD                                                          | Todo   |                                        |
-| U3 Add approved model pickers to composers                  | TBD                        | TBD                                                          | Todo   |                                        |
-| U4 Propagate and validate selected parent model             | TBD                        | TBD                                                          | Todo   |                                        |
-| U5 Extend `TOOLS.md` effective policy with model routing    | TBD                        | TBD                                                          | Todo   |                                        |
-| U6 Implement model-routed `workspace_skill` child execution | TBD                        | TBD                                                          | Todo   |                                        |
-| U7 Record trace and cost evidence                           | TBD                        | TBD                                                          | Todo   |                                        |
-| U8 Surface evidence in Settings Activity thread detail      | TBD                        | TBD                                                          | Todo   |                                        |
-| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                        | TBD                                                          | Todo   |                                        |
-| U10 Regenerate schemas and add demo policy documentation    | TBD                        | TBD                                                          | Todo   |                                        |
+| Unit                                                        | Branch                     | PR                                                           | State  | Notes                                              |
+| ----------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------------------- |
+| U1 Add per-user model approval data and API                 | `codex/u1-model-approvals` | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Active | CI passed once; final status update pending rerun. |
+| U2 Add the admin Models section on user profile settings    | TBD                        | TBD                                                          | Todo   |                                                    |
+| U3 Add approved model pickers to composers                  | TBD                        | TBD                                                          | Todo   |                                                    |
+| U4 Propagate and validate selected parent model             | TBD                        | TBD                                                          | Todo   |                                                    |
+| U5 Extend `TOOLS.md` effective policy with model routing    | TBD                        | TBD                                                          | Todo   |                                                    |
+| U6 Implement model-routed `workspace_skill` child execution | TBD                        | TBD                                                          | Todo   |                                                    |
+| U7 Record trace and cost evidence                           | TBD                        | TBD                                                          | Todo   |                                                    |
+| U8 Surface evidence in Settings Activity thread detail      | TBD                        | TBD                                                          | Todo   |                                                    |
+| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                        | TBD                                                          | Todo   |                                                    |
+| U10 Regenerate schemas and add demo policy documentation    | TBD                        | TBD                                                          | Todo   |                                                    |
 
 ### Progress Log
 
@@ -45,6 +45,16 @@ status: in_progress
   `model-approvals` helper, bootstrap default seeding, generated GraphQL
   clients, and focused tests.
 - Opened PR [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171).
+- CI Migration Drift Precheck initially failed because dev was missing the new
+  hand-rolled `0149_user_model_approvals.sql` objects.
+- Applied the scoped migration to the dev database; it created the
+  `user_model_approvals` table/indexes/constraints and backfilled 26 approval
+  rows.
+- Reran the scoped drift reporter for
+  `packages/database-pg/drizzle/0149_user_model_approvals.sql`; all markers
+  passed.
+- Reran the failed Migration Drift Precheck job; it passed. PR checks then
+  passed: CLA, lint, verify, typecheck, test, and Migration Drift Precheck.
 
 ### CI / Verification
 
