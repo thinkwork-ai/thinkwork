@@ -53,6 +53,17 @@ vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
 const ORIGINAL_LOCATION = window.location;
 
 beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", "https://api.example.com");
+  vi.stubEnv("VITE_GRAPHQL_HTTP_URL", "https://api.example.com/graphql");
+  vi.stubEnv("VITE_GRAPHQL_URL", "https://appsync.example.com/graphql");
+  vi.stubEnv("VITE_GRAPHQL_WS_URL", "wss://appsync.example.com/graphql");
+  vi.stubEnv("VITE_COGNITO_USER_POOL_ID", "us-east-1_TestPool");
+  vi.stubEnv("VITE_COGNITO_CLIENT_ID", "test-client-id");
+  vi.stubEnv("VITE_COGNITO_DOMAIN", "thinkwork-test");
+  vi.stubEnv("VITE_DEPLOYMENT_ID", "thinkwork-dev");
+  vi.stubEnv("VITE_DEPLOYMENT_DISPLAY_NAME", "Acme ThinkWork");
+  vi.stubEnv("VITE_STAGE", "dev");
+  vi.stubEnv("VITE_AWS_REGION", "us-east-1");
   authContextMocks.useAuth.mockReturnValue({
     isAuthenticated: false,
     isLoading: false,
@@ -64,6 +75,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
   Object.defineProperty(window, "location", {
     configurable: true,
     value: ORIGINAL_LOCATION,
@@ -79,6 +91,8 @@ describe("SignInPage", () => {
 
     expect(screen.getByRole("heading", { name: "ThinkWork" })).toBeTruthy();
     expect(screen.getByText("Spaces")).toBeTruthy();
+    expect(screen.getByText("Acme ThinkWork · dev · us-east-1")).toBeTruthy();
+    expect(screen.getByText("Unsigned build-time fallback")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
     expect(screen.queryByText(/Sign in with the Google account/i)).toBeNull();
   });
@@ -180,6 +194,33 @@ describe("SignInPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Log in" }));
 
     expect(navigations).toEqual(["https://auth.example/login"]);
+  });
+
+  it("blocks browser OAuth when required deployment profile fields are missing", () => {
+    vi.stubEnv("VITE_COGNITO_CLIENT_ID", "");
+    const navigations: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        set href(target: string) {
+          navigations.push(target);
+        },
+        get href() {
+          return navigations.at(-1) ?? "https://app.example/sign-in";
+        },
+      },
+    });
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+
+    expect(screen.getByText("Configuration incomplete for dev")).toBeTruthy();
+    expect(screen.getByText(/Missing VITE_COGNITO_CLIENT_ID/)).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(navigations).toEqual([]);
   });
 
   it("surfaces desktop OAuth errors broadcast by main", async () => {

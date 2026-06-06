@@ -112,19 +112,20 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U6 Spaces Managed Applications UX.
-- Current branch: `codex/u6-managed-applications-ux`.
-- Current worktree: `.Codex/worktrees/u6-managed-applications-ux`.
-- Status: U6 locally verified; PR preparation in progress.
+- Current unit: U7a Profile Contract, Export, and Trust.
+- Current branch: `codex/u7a-deployment-profile-contract`.
+- Current worktree: `.Codex/worktrees/u7a-deployment-profile-contract`.
+- Status: U7a in progress.
 
-| Unit                                                      | Branch                             | PR                                                           | State  | Notes                                                                                                                                                 |
-| --------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Release Manifest and Artifact Contract                 | `codex/u1-release-manifest`        | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
-| U2 GitHub-Free Bootstrap and AWS Control Plane Substrate  | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
-| U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`    | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Merged | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                |
-| U4 Deployment Job Domain, API, and Runner Orchestration   | `codex/u4-deployment-job-api`      | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Merged | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                       |
-| U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`    | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Merged | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.    |
-| U6 Spaces Managed Applications UX                         | `codex/u6-managed-applications-ux` | [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) | Active | Locally verified; replaces switch-style lifecycle controls with Spaces plan preview, approval, progress, evidence, and destructive impact UX.         |
+| Unit                                                      | Branch                                  | PR                                                           | State  | Notes                                                                                                                                                                                    |
+| --------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Release Manifest and Artifact Contract                 | `codex/u1-release-manifest`             | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests.                                    |
+| U2 GitHub-Free Bootstrap and AWS Control Plane Substrate  | `codex/u2-bootstrap-control-plane`      | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                                                    |
+| U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`         | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Merged | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                                                   |
+| U4 Deployment Job Domain, API, and Runner Orchestration   | `codex/u4-deployment-job-api`           | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Merged | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                                                          |
+| U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`         | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Merged | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.                                       |
+| U6 Spaces Managed Applications UX                         | `codex/u6-managed-applications-ux`      | [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) | Merged | Squash merged as `3167d15d7af8d838b834f991486bdb295a38fa87`; replaces switch-style lifecycle controls with Spaces plan preview, approval, progress, evidence, and destructive impact UX. |
+| U7a Profile Contract, Export, and Trust                   | `codex/u7a-deployment-profile-contract` | [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) | Active | Adds the shared deployment profile schema/trust validator and Spaces export/sign-in display surface for universal clients.                                                               |
 
 ### Progress Log
 
@@ -348,6 +349,37 @@ status: in_progress
   emitted existing sourcemap and chunk-size warnings only.
 - Opened PR [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) for
   U6.
+- PR [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) passed
+  required CI, was rebased after `main` moved, passed the required checks
+  again, and was squash merged as
+  `3167d15d7af8d838b834f991486bdb295a38fa87`.
+- Removed local worktree `.Codex/worktrees/u6-managed-applications-ux` and
+  deleted local branch `codex/u6-managed-applications-ux`; the remote branch
+  was already deleted by the merge workflow.
+- Created isolated worktree
+  `.Codex/worktrees/u7a-deployment-profile-contract` from `origin/main` at
+  `3167d15d`.
+- Implemented U7a local slice: added `@thinkwork/deployment-profile` with v1
+  schema validation, canonical hashing, WebCrypto Ed25519 signing/verification,
+  trust-state reporting, TLS endpoint validation, and focused contract tests;
+  added a public Spaces `/deployment-profile` export page; and updated sign-in
+  to show deployment display/stage/region plus trust/configuration state before
+  OAuth.
+- U7a setup: `pnpm install --no-frozen-lockfile` passed and updated
+  `pnpm-lock.yaml` after adding the Spaces workspace dependency on
+  `@thinkwork/deployment-profile`; the known optional `canvas` native build
+  warning appeared under Node 25/pkg-config but did not fail install.
+- U7a local verification passed:
+  `pnpm --filter @thinkwork/deployment-profile test` (12 tests);
+  `pnpm --filter @thinkwork/deployment-profile typecheck`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/routes/-sign-in.test.tsx`
+  (8 tests); `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces test` (128 files, 877 tests); and
+  `pnpm --filter @thinkwork/spaces build`. The full Spaces test suite emitted
+  existing localstorage/DialogContent/deprecation warnings; the build emitted
+  existing sourcemap and chunk-size warnings.
+- Opened PR [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) for
+  U7a.
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 

@@ -38,6 +38,7 @@
     "@tanstack/router-devtools": "^1.154.14",
     "@tanstack/router-plugin": "^1.154.14",
     "@thinkwork/computer-stdlib": "workspace:*",
+    "@thinkwork/deployment-profile": "workspace:*",
     "@thinkwork/desktop-ipc": "workspace:*",
     "@thinkwork/graph": "workspace:*",
     "@thinkwork/ui": "workspace:*",
