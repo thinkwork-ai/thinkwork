@@ -36,6 +36,7 @@ import {
   agentCapabilities,
   agentSkills,
   modelCatalog,
+  userModelApprovals,
   // Messages
   messages,
   messageMentions,
@@ -151,6 +152,7 @@ export {
   agentCapabilities,
   agentSkills,
   modelCatalog,
+  userModelApprovals,
   messages,
   messageMentions,
   messageArtifacts,
