@@ -909,22 +909,30 @@ jobs:
           GRANT CONNECT, CREATE ON DATABASE :"twenty_db" TO :"twenty_user";
           \connect :"twenty_db"
           SET ROLE :"twenty_user";
-          CREATE SCHEMA IF NOT EXISTS core;
+          DO $do$
+          DECLARE
+            core_table_count integer;
+          BEGIN
+            SELECT count(*) INTO core_table_count
+            FROM information_schema.tables
+            WHERE table_schema = 'core';
+
+            IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'core')
+              AND core_table_count = 0 THEN
+              EXECUTE 'DROP SCHEMA core CASCADE';
+            END IF;
+          END
+          $do$;
           ALTER SCHEMA public OWNER TO :"twenty_user";
           CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
           CREATE EXTENSION IF NOT EXISTS "unaccent";
           RESET ROLE;
           GRANT USAGE, CREATE ON SCHEMA public TO :"twenty_user";
-          GRANT USAGE, CREATE ON SCHEMA core TO :"twenty_user";
           GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES IN SCHEMA public TO :"twenty_user";
           GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO :"twenty_user";
           ALTER DEFAULT PRIVILEGES IN SCHEMA public
             GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES TO :"twenty_user";
           ALTER DEFAULT PRIVILEGES IN SCHEMA public
-            GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"twenty_user";
-          ALTER DEFAULT PRIVILEGES IN SCHEMA core
-            GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES TO :"twenty_user";
-          ALTER DEFAULT PRIVILEGES IN SCHEMA core
             GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"twenty_user";
           SQL
 
