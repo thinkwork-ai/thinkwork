@@ -1,21 +1,23 @@
 #!/usr/bin/env tsx
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readdir, stat, writeFile } from "node:fs/promises";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const RELEASE_MANIFEST_SCHEMA_VERSION = 1;
-export const CUSTOMER_OVERLAY_SCHEMA_VERSION = 1;
-export const TERRAFORM_MODULE_SOURCE = "thinkwork-ai/thinkwork/aws";
-
-export type ReleaseArtifactType =
-  | "lambda"
-  | "static-site"
-  | "terraform"
-  | "seed";
-
-export type RuntimeImageArchitecture = "amd64" | "arm64";
+import {
+  CUSTOMER_OVERLAY_SCHEMA_VERSION,
+  RELEASE_MANIFEST_SCHEMA_VERSION,
+  TERRAFORM_MODULE_SOURCE,
+  signReleaseManifest,
+  validateReleaseManifest,
+  type ManagedAppDescriptor,
+  type ReleaseArtifact,
+  type ReleaseArtifactType,
+  type RuntimeImage,
+  type RuntimeImageArchitecture,
+  type ThinkWorkReleaseManifest,
+} from "../../packages/release-manifest/src/index";
 
 export interface ReleaseArtifactInput {
   name: string;
@@ -41,49 +43,14 @@ export interface BuildReleaseManifestOptions {
   artifacts?: ReleaseArtifactInput[];
   lambdaDir?: string;
   runtimeImages?: RuntimeImageInput[];
+  minCliVersion?: string;
+  minRunnerVersion?: string;
+  profileSchemaVersion?: number;
+  deploymentRunnerImage?: string | null;
+  managedApps?: ManagedAppDescriptor[];
+  acceptedKeyIds?: string[];
+  revokedKeyIds?: string[];
   createdAt?: string;
-}
-
-export interface ReleaseArtifact {
-  name: string;
-  type: ReleaseArtifactType;
-  fileName: string;
-  relativePath: string;
-  url: string | null;
-  sha256: string;
-  sizeBytes: number;
-}
-
-export interface RuntimeImage {
-  name: string;
-  repository: string;
-  tag: string;
-  digest: string;
-  architecture: RuntimeImageArchitecture;
-  uri: string;
-}
-
-export interface ThinkWorkReleaseManifest {
-  schemaVersion: number;
-  release: {
-    version: string;
-    gitSha: string;
-    createdAt: string;
-  };
-  components: {
-    cli: {
-      version: string;
-    };
-    terraform: {
-      source: string;
-      version: string;
-    };
-    customerOverlay: {
-      schemaVersion: number;
-    };
-  };
-  artifacts: ReleaseArtifact[];
-  runtimeImages: RuntimeImage[];
 }
 
 interface ParsedArgs {
@@ -95,6 +62,17 @@ interface ParsedArgs {
   artifactSpecs: string[];
   imageSpecs: string[];
   lambdaDir?: string;
+  minCliVersion?: string;
+  minRunnerVersion?: string;
+  profileSchemaVersion?: number;
+  deploymentRunnerImage?: string | null;
+  managedAppSpecs: string[];
+  acceptedKeyIds: string[];
+  revokedKeyIds: string[];
+  signingKeyId?: string;
+  privateKeyPath?: string;
+  signatureOutputPath?: string;
+  signatureExpiresAt?: string;
 }
 
 function normalizeVersion(version: string): string {
@@ -255,13 +233,31 @@ export async function buildReleaseManifest(
         source: TERRAFORM_MODULE_SOURCE,
         version,
       },
+      deploymentRunner: {
+        version,
+        image: options.deploymentRunnerImage ?? null,
+      },
       customerOverlay: {
         schemaVersion: CUSTOMER_OVERLAY_SCHEMA_VERSION,
       },
     },
+    compatibility: {
+      minCliVersion: normalizeVersion(options.minCliVersion ?? version),
+      minRunnerVersion: normalizeVersion(options.minRunnerVersion ?? version),
+      profileSchemaVersion: options.profileSchemaVersion ?? 1,
+    },
     artifacts,
     runtimeImages,
+    managedApps: (options.managedApps ?? defaultManagedApps(version)).sort(
+      (left, right) => left.id.localeCompare(right.id),
+    ),
+    signing: {
+      acceptedKeyIds: options.acceptedKeyIds ?? [],
+      revokedKeyIds: options.revokedKeyIds ?? [],
+    },
   };
+
+  return validateReleaseManifest(manifest);
 }
 
 function parseKeyValueSpec(spec: string): Record<string, string> {
@@ -323,11 +319,51 @@ export function parseRuntimeImageSpec(spec: string): RuntimeImageInput {
   };
 }
 
+export function parseManagedAppSpec(spec: string): ManagedAppDescriptor {
+  const values = parseKeyValueSpec(spec);
+  if (!values.id || !values.displayName) {
+    throw new Error(
+      `Managed app spec must include id and displayName: ${spec}`,
+    );
+  }
+  return {
+    id: values.id,
+    displayName: values.displayName,
+    terraformModule:
+      values.terraformSource || values.terraformVersion
+        ? {
+            source: values.terraformSource ?? TERRAFORM_MODULE_SOURCE,
+            version: values.terraformVersion ?? values.version ?? "0.0.0",
+          }
+        : undefined,
+    requiredArtifacts: values.requiredArtifacts
+      ? splitCsvList(values.requiredArtifacts)
+      : undefined,
+    requiredImages: values.requiredImages
+      ? splitCsvList(values.requiredImages)
+      : undefined,
+    smokeContracts: values.smokeCommand
+      ? [
+          {
+            id: values.smokeId ?? `${values.id}-smoke`,
+            command: values.smokeCommand,
+            required: values.smokeRequired
+              ? values.smokeRequired !== "false"
+              : true,
+          },
+        ]
+      : undefined,
+  };
+}
+
 function parseArgs(argv: string[]): ParsedArgs {
   const parsed: ParsedArgs = {
     artifactRoot: "dist/release",
     artifactSpecs: [],
     imageSpecs: [],
+    managedAppSpecs: [],
+    acceptedKeyIds: [],
+    revokedKeyIds: [],
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -366,6 +402,57 @@ function parseArgs(argv: string[]): ParsedArgs {
         parsed.lambdaDir = requireValue(arg, next);
         index += 1;
         break;
+      case "--created-at":
+        parsed.createdAt = requireValue(arg, next);
+        index += 1;
+        break;
+      case "--min-cli-version":
+        parsed.minCliVersion = requireValue(arg, next);
+        index += 1;
+        break;
+      case "--min-runner-version":
+        parsed.minRunnerVersion = requireValue(arg, next);
+        index += 1;
+        break;
+      case "--profile-schema-version":
+        parsed.profileSchemaVersion = Number.parseInt(
+          requireValue(arg, next),
+          10,
+        );
+        index += 1;
+        break;
+      case "--deployment-runner-image":
+        parsed.deploymentRunnerImage = requireValue(arg, next);
+        index += 1;
+        break;
+      case "--managed-app":
+        parsed.managedAppSpecs.push(requireValue(arg, next));
+        index += 1;
+        break;
+      case "--accepted-key-id":
+        parsed.acceptedKeyIds.push(requireValue(arg, next));
+        index += 1;
+        break;
+      case "--revoked-key-id":
+        parsed.revokedKeyIds.push(requireValue(arg, next));
+        index += 1;
+        break;
+      case "--signing-key-id":
+        parsed.signingKeyId = requireValue(arg, next);
+        index += 1;
+        break;
+      case "--private-key-path":
+        parsed.privateKeyPath = requireValue(arg, next);
+        index += 1;
+        break;
+      case "--signature-output":
+        parsed.signatureOutputPath = requireValue(arg, next);
+        index += 1;
+        break;
+      case "--signature-expires-at":
+        parsed.signatureExpiresAt = requireValue(arg, next);
+        index += 1;
+        break;
       default:
         throw new Error(`Unknown argument: ${arg}`);
     }
@@ -398,6 +485,10 @@ async function main(): Promise<void> {
 
   const outputPath =
     args.outputPath ?? path.join(args.artifactRoot, "thinkwork-release.json");
+  const acceptedKeyIds = [...args.acceptedKeyIds];
+  if (args.signingKeyId && !acceptedKeyIds.includes(args.signingKeyId)) {
+    acceptedKeyIds.push(args.signingKeyId);
+  }
   const manifest = await buildReleaseManifest({
     version,
     gitSha,
@@ -407,10 +498,96 @@ async function main(): Promise<void> {
     lambdaDir: args.lambdaDir,
     artifacts: args.artifactSpecs.map(parseArtifactSpec),
     runtimeImages: args.imageSpecs.map(parseRuntimeImageSpec),
+    minCliVersion: args.minCliVersion,
+    minRunnerVersion: args.minRunnerVersion,
+    profileSchemaVersion: args.profileSchemaVersion,
+    deploymentRunnerImage: args.deploymentRunnerImage,
+    managedApps:
+      args.managedAppSpecs.length > 0
+        ? args.managedAppSpecs.map(parseManagedAppSpec)
+        : undefined,
+    acceptedKeyIds,
+    revokedKeyIds: args.revokedKeyIds,
   });
 
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   console.log(`Wrote ThinkWork release manifest to ${outputPath}`);
+
+  if (args.signingKeyId || args.privateKeyPath || args.signatureOutputPath) {
+    if (
+      !args.signingKeyId ||
+      !args.privateKeyPath ||
+      !args.signatureOutputPath
+    ) {
+      throw new Error(
+        "--signing-key-id, --private-key-path, and --signature-output are all required when signing",
+      );
+    }
+    const signature = signReleaseManifest({
+      manifest,
+      keyId: args.signingKeyId,
+      privateKeyPem: await readFile(args.privateKeyPath, "utf8"),
+      expiresAt:
+        args.signatureExpiresAt ??
+        defaultSignatureExpiration(manifest.release.createdAt),
+    });
+    await writeFile(
+      args.signatureOutputPath,
+      `${JSON.stringify(signature, null, 2)}\n`,
+      "utf8",
+    );
+    console.log(
+      `Wrote ThinkWork release manifest signature to ${args.signatureOutputPath}`,
+    );
+  }
+}
+
+function defaultManagedApps(version: string): ManagedAppDescriptor[] {
+  return [
+    {
+      id: "cognee",
+      displayName: "Cognee",
+      terraformModule: {
+        source: `${TERRAFORM_MODULE_SOURCE}//modules/app/cognee`,
+        version,
+      },
+      smokeContracts: [
+        {
+          id: "cognee-health",
+          command: "scripts/smoke/cognee-managed-app-smoke.mjs",
+          required: true,
+        },
+      ],
+    },
+    {
+      id: "twenty",
+      displayName: "Twenty CRM",
+      terraformModule: {
+        source: `${TERRAFORM_MODULE_SOURCE}//modules/app/twenty`,
+        version,
+      },
+      smokeContracts: [
+        {
+          id: "twenty-health",
+          command: "scripts/smoke/twenty-managed-app-smoke.mjs",
+          required: true,
+        },
+      ],
+    },
+  ];
+}
+
+function splitCsvList(value: string): string[] {
+  return value
+    .split("|")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function defaultSignatureExpiration(createdAt: string): string {
+  const date = new Date(createdAt);
+  date.setUTCFullYear(date.getUTCFullYear() + 1);
+  return date.toISOString();
 }
 
 const modulePath = fileURLToPath(import.meta.url);

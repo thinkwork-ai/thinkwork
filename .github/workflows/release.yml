@@ -117,6 +117,17 @@ jobs:
       - name: Build release manifest
         run: |
           AGENTCORE_REPOSITORY="${{ steps.release.outputs.agentcore_repository }}"
+          SIGN_ARGS=()
+          if [[ -n "${RELEASE_MANIFEST_PRIVATE_KEY:-}" && -n "${RELEASE_MANIFEST_KEY_ID:-}" ]]; then
+            install -m 700 -d dist/release/signing
+            printf '%s' "$RELEASE_MANIFEST_PRIVATE_KEY" > dist/release/signing/release-private-key.pem
+            SIGN_ARGS=(
+              --signing-key-id "$RELEASE_MANIFEST_KEY_ID"
+              --private-key-path dist/release/signing/release-private-key.pem
+              --signature-output dist/release/thinkwork-release.sig.json
+              --signature-expires-at "$(date -u -d '+1 year' '+%Y-%m-%dT%H:%M:%S.000Z')"
+            )
+          fi
           pnpm exec tsx scripts/release/build-release-manifest.ts \
             --version "${{ steps.release.outputs.version }}" \
             --commit "${GITHUB_SHA}" \
@@ -127,7 +138,11 @@ jobs:
             --artifact "name=spaces,type=static-site,path=dist/release/static/spaces.tar.gz" \
             --artifact "name=docs,type=static-site,path=dist/release/static/docs.tar.gz" \
             --image "name=agentcore-pi-amd64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-pi-amd64,digest=${{ steps.pi-amd64.outputs.digest }},architecture=amd64" \
-            --image "name=agentcore-pi-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-pi-arm64,digest=${{ steps.pi-arm64.outputs.digest }},architecture=arm64"
+            --image "name=agentcore-pi-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-pi-arm64,digest=${{ steps.pi-arm64.outputs.digest }},architecture=arm64" \
+            "${SIGN_ARGS[@]}"
+        env:
+          RELEASE_MANIFEST_KEY_ID: ${{ secrets.RELEASE_MANIFEST_KEY_ID }}
+          RELEASE_MANIFEST_PRIVATE_KEY: ${{ secrets.RELEASE_MANIFEST_PRIVATE_KEY }}
 
       - name: Upload deployable release assets
         uses: actions/upload-artifact@v4
@@ -135,6 +150,7 @@ jobs:
           name: thinkwork-release-assets
           path: |
             dist/release/thinkwork-release.json
+            dist/release/thinkwork-release.sig.json
             dist/release/lambdas/*.zip
             dist/release/static/*.tar.gz
           retention-days: 7

@@ -177,7 +177,8 @@ function buildTemplateReplacements(
     CUSTOMER_SLUG: options.customerSlug,
     LAMBDA_ARTIFACT_PREFIX: `releases/${releaseVersion}/lambdas`,
     REGION: options.region ?? "us-east-1",
-    RELEASE_MANIFEST_SHA256: options.releaseManifestSha256 ?? "CHANGE_ME",
+    RELEASE_MANIFEST_SHA256:
+      options.releaseManifestSha256 ?? "UNRESOLVED_MANIFEST_SHA256",
     RELEASE_MANIFEST_URL:
       options.releaseManifestUrl ??
       `https://github.com/thinkwork-ai/thinkwork/releases/download/${releaseVersion}/thinkwork-release.json`,

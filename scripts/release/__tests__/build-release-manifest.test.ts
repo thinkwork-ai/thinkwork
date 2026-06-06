@@ -1,14 +1,27 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { generateKeyPairSync } from "node:crypto";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
+import {
+  signReleaseManifest,
+  verifyReleaseManifest,
+  type ThinkWorkReleaseManifest,
+  type ReleaseManifestSignature,
+  type TrustedReleaseKey,
+} from "../../../packages/release-manifest/src/index";
 import {
   buildReleaseManifest,
   parseArtifactSpec,
+  parseManagedAppSpec,
   parseRuntimeImageSpec,
 } from "../build-release-manifest.ts";
+
+const execFileAsync = promisify(execFile);
 
 async function makeTempReleaseRoot(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), "thinkwork-release-"));
@@ -59,6 +72,17 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   });
 
   assert.equal(manifest.release.version, "1.2.3");
+  assert.deepEqual(manifest.compatibility, {
+    minCliVersion: "1.2.3",
+    minRunnerVersion: "1.2.3",
+    profileSchemaVersion: 1,
+  });
+  assert.deepEqual(manifest.signing, {
+    acceptedKeyIds: [],
+    revokedKeyIds: [],
+  });
+  assert.equal(manifest.components.deploymentRunner.version, "1.2.3");
+  assert.equal(manifest.components.deploymentRunner.image, null);
   assert.deepEqual(
     manifest.artifacts.map(
       (artifact) => `${artifact.type}:${artifact.name}:${artifact.fileName}`,
@@ -77,6 +101,133 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   assert.equal(
     manifest.runtimeImages[0]?.uri,
     "ghcr.io/thinkwork-ai/thinkwork-agentcore:v1.2.3-pi-amd64@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  );
+  assert.deepEqual(
+    manifest.managedApps.map((app) => app.id),
+    ["cognee", "twenty"],
+  );
+});
+
+test("signing helpers can verify the generated manifest", async () => {
+  const pair = generateKeyPairSync("ed25519");
+  const trustedKey: TrustedReleaseKey = {
+    keyId: "release-2026-primary",
+    publicKeyPem: pair.publicKey.export({
+      format: "pem",
+      type: "spki",
+    }) as string,
+  };
+  const privateKeyPem = pair.privateKey.export({
+    format: "pem",
+    type: "pkcs8",
+  }) as string;
+  const root = await makeTempReleaseRoot();
+  const artifactPath = path.join(root, "seed.tar.gz");
+  await writeFile(artifactPath, "seed");
+
+  const manifest = await buildReleaseManifest({
+    version: "1.2.3",
+    gitSha: "abc123",
+    artifactRoot: root,
+    artifacts: [{ name: "seed", type: "seed", path: artifactPath }],
+    acceptedKeyIds: [trustedKey.keyId],
+    createdAt: "2026-06-06T00:00:00.000Z",
+  });
+  const signature: ReleaseManifestSignature = signReleaseManifest({
+    manifest,
+    keyId: trustedKey.keyId,
+    privateKeyPem,
+    signedAt: "2026-06-06T00:00:00.000Z",
+    expiresAt: "2026-12-31T00:00:00.000Z",
+  });
+
+  assert.doesNotThrow(() =>
+    verifyReleaseManifest({
+      manifest,
+      signature,
+      trustedKeys: [trustedKey],
+      now: "2026-06-07T00:00:00.000Z",
+    }),
+  );
+});
+
+test("buildReleaseManifest accepts managed app and signing metadata overrides", async () => {
+  const root = await makeTempReleaseRoot();
+  const terraformArtifact = path.join(root, "thinkwork-module.tar.gz");
+  await writeFile(terraformArtifact, "module");
+
+  const manifest = await buildReleaseManifest({
+    version: "v2.0.0",
+    gitSha: "abc123",
+    artifactRoot: root,
+    artifacts: [
+      {
+        name: "thinkwork-module",
+        type: "terraform",
+        path: terraformArtifact,
+      },
+    ],
+    minCliVersion: "1.9.0",
+    minRunnerVersion: "1.8.0",
+    profileSchemaVersion: 2,
+    deploymentRunnerImage:
+      "ghcr.io/thinkwork-ai/deployment-runner:v2@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    managedApps: [
+      {
+        id: "twenty",
+        displayName: "Twenty CRM",
+        requiredArtifacts: ["thinkwork-module"],
+      },
+    ],
+    acceptedKeyIds: ["release-2026-primary", "release-2026-next"],
+    revokedKeyIds: ["release-2025-retired"],
+  });
+
+  assert.equal(manifest.compatibility.minCliVersion, "1.9.0");
+  assert.equal(manifest.compatibility.profileSchemaVersion, 2);
+  assert.equal(
+    manifest.components.deploymentRunner.image,
+    "ghcr.io/thinkwork-ai/deployment-runner:v2@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  );
+  assert.deepEqual(
+    manifest.managedApps.map((app) => app.id),
+    ["twenty"],
+  );
+  assert.deepEqual(manifest.signing.acceptedKeyIds, [
+    "release-2026-primary",
+    "release-2026-next",
+  ]);
+  assert.deepEqual(manifest.signing.revokedKeyIds, ["release-2025-retired"]);
+});
+
+test("CLI build script includes default managed apps when no overrides are passed", async () => {
+  const root = await makeTempReleaseRoot();
+  const artifactPath = path.join(root, "seed.tar.gz");
+  const outputPath = path.join(root, "thinkwork-release.json");
+  await writeFile(artifactPath, "seed");
+
+  await execFileAsync(path.resolve("node_modules/.bin/tsx"), [
+    "scripts/release/build-release-manifest.ts",
+    "--version",
+    "v1.2.3",
+    "--commit",
+    "abc123",
+    "--artifact-root",
+    root,
+    "--artifact",
+    `name=seed,type=seed,path=${artifactPath}`,
+    "--output",
+    outputPath,
+    "--created-at",
+    "2026-06-06T00:00:00.000Z",
+  ]);
+
+  const manifest = JSON.parse(
+    await readFile(outputPath, "utf8"),
+  ) as ThinkWorkReleaseManifest;
+  assert.deepEqual(
+    manifest.managedApps.map((app) => app.id),
+    ["cognee", "twenty"],
   );
 });
 
@@ -144,5 +295,24 @@ test("spec parsers reject incomplete artifact and image definitions", () => {
         "name=agentcore-pi,repository=ghcr.io/thinkwork-ai/thinkwork-agentcore,tag=v1",
       ),
     /architecture/,
+  );
+  assert.deepEqual(
+    parseManagedAppSpec(
+      "id=twenty,displayName=Twenty CRM,requiredArtifacts=twenty-module,smokeCommand=scripts/smoke/twenty-managed-app-smoke.mjs",
+    ),
+    {
+      id: "twenty",
+      displayName: "Twenty CRM",
+      requiredArtifacts: ["twenty-module"],
+      requiredImages: undefined,
+      smokeContracts: [
+        {
+          id: "twenty-smoke",
+          command: "scripts/smoke/twenty-managed-app-smoke.mjs",
+          required: true,
+        },
+      ],
+      terraformModule: undefined,
+    },
   );
 });

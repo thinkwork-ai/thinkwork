@@ -132,6 +132,19 @@ describe("enterprise deployment repo template", () => {
     expect(result.preserved).toContain(join(root, "customer/seeds/README.md"));
   });
 
+  it("uses an explicit unresolved manifest digest placeholder instead of CHANGE_ME", () => {
+    const root = tempRepo();
+    renderEnterpriseDeployRepoTemplate({
+      targetDir: root,
+      customerSlug: "acme",
+      releaseVersion: "v1.2.3",
+    });
+
+    const lock = read(root, "thinkwork.lock");
+    expect(lock).toContain("UNRESOLVED_MANIFEST_SHA256");
+    expect(lock).not.toContain("CHANGE_ME");
+  });
+
   it("validates customer slugs and stage names using CLI-compatible rules", () => {
     expect(validateCustomerSlug("acme-123")).toBe("acme-123");
     expect(() => validateCustomerSlug("Acme")).toThrow(/Invalid customer slug/);
