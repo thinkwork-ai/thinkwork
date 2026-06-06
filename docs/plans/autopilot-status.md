@@ -26,7 +26,7 @@ status: in_progress
 | U4 Propagate and validate selected parent model             | `codex/u4-parent-model-dispatch`        | [#2181](https://github.com/thinkwork-ai/thinkwork/pull/2181) | Merged | Squash merged as `015bc739`. |
 | U5 Extend `TOOLS.md` effective policy with model routing    | `codex/u5-tools-policy-model-routing`   | [#2185](https://github.com/thinkwork-ai/thinkwork/pull/2185) | Merged | Squash merged as `ed7aed80`. |
 | U6 Implement model-routed `workspace_skill` child execution | `codex/u6-model-routed-workspace-skill` | [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189) | Merged | Squash merged as `5ac9a4c3`. |
-| U7 Record trace and cost evidence                           | `codex/u7-model-routing-trace-cost`     | TBD                                                          | Active |                              |
+| U7 Record trace and cost evidence                           | `codex/u7-model-routing-trace-cost`     | [#2191](https://github.com/thinkwork-ai/thinkwork/pull/2191) | Active |                              |
 | U8 Surface evidence in Settings Activity thread detail      | TBD                                     | TBD                                                          | Todo   |                              |
 | U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                     | TBD                                                          | Todo   |                              |
 | U10 Regenerate schemas and add demo policy documentation    | TBD                                     | TBD                                                          | Todo   |                              |
@@ -148,6 +148,7 @@ status: in_progress
   files passed, 3 skipped; 3680 tests passed, 9 skipped), full
   `pnpm --filter @thinkwork/pi-runtime-core test`, and full
   `pnpm --filter @thinkwork/agentcore-pi test`.
+- Opened PR [#2191](https://github.com/thinkwork-ai/thinkwork/pull/2191).
 - Created isolated U3 worktree `.Codex/worktrees/u3-approved-model-composers`
   from `origin/main` at `e0a43844`.
 - Implemented U3 approved model selection in Spaces: shared approved-model
