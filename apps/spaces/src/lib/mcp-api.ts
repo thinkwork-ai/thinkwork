@@ -22,6 +22,14 @@ export type McpServer = {
   runtimeEnabled?: boolean;
 };
 
+export type RuntimeMcpTool = {
+  name: string;
+  server: string;
+  tool: string;
+  description?: string;
+  inputSchema?: unknown;
+};
+
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 async function request<T>(
@@ -104,6 +112,37 @@ export function clearUserMcpToken(
       "x-tenant-id": tenantId,
       "x-principal-id": userId,
     },
+  });
+}
+
+export function listRuntimeMcpTools(
+  agentId: string,
+): Promise<{ tools: RuntimeMcpTool[]; errors?: unknown[] }> {
+  return request("/api/mcp/tools/list", {
+    method: "POST",
+    tenantSlug: "",
+    body: JSON.stringify({ agentId }),
+  });
+}
+
+export function callRuntimeMcpTool(
+  agentId: string,
+  server: string,
+  tool: string,
+  args: Record<string, unknown> = {},
+): Promise<{
+  content?: Array<{ type?: string; text?: string }>;
+  isError?: boolean;
+}> {
+  return request("/api/mcp/tools/call", {
+    method: "POST",
+    tenantSlug: "",
+    body: JSON.stringify({
+      agentId,
+      server,
+      tool,
+      arguments: args,
+    }),
   });
 }
 

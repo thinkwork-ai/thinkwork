@@ -94,9 +94,33 @@ ThinkWork SSO/Cognito/Google integration for Twenty is documented as follow-up
 work after the smallest deployable release. The CRM settings page should show
 that SSO is deferred rather than exposing inactive SSO controls.
 
-Other deferred work includes CRM connector tools, MCP integration, agent
-read/write access to CRM data, and a first-class CRM extension inside
-ThinkWork.
+Other deferred work includes richer CRM connector workflows, write-policy
+design for CRM mutations, and a first-class CRM extension inside ThinkWork.
+
+## Twenty CRM MCP
+
+When Twenty CRM is running, ThinkWork reconciles a system-managed MCP server
+named **Twenty CRM** into Settings -> MCP Servers. Operators should not add a
+second manual Twenty MCP row. Use the CRM settings page only to install or
+repair the managed MCP registration when an already-running stage is missing
+the row.
+
+Managed Applications and MCP Servers intentionally split responsibilities:
+
+| Surface                                     | Responsibility                                                        |
+| ------------------------------------------- | --------------------------------------------------------------------- |
+| Settings -> General -> Managed Applications | Deploy, park, destroy, and recover managed application infrastructure |
+| Settings -> CRM                             | Inspect CRM runtime state and repair the managed MCP registration     |
+| Settings -> MCP Servers                     | Let each user connect, reconnect, or clear their own Twenty MCP auth  |
+
+Parking Twenty disables runtime availability for the managed MCP connector but
+keeps the MCP row and per-user token records so reconnect continuity survives a
+redeploy. Destructive Destroy removes the managed MCP row and token material as
+part of full CRM cleanup.
+
+When the managed MCP row is installed or repaired, ThinkWork assigns it to the
+tenant platform default agent. That makes the connector available to runtime
+only after the current user has completed their own OAuth connection.
 
 ## Deployment Verification
 
@@ -117,9 +141,45 @@ deployment status. If Twenty is not provisioned, the smoke skips with a clear
 message. If Twenty is running, it requires an HTTPS URL and probes the public
 `/healthz` endpoint.
 
+After the CRM runtime is healthy and the user has connected Twenty from
+Settings -> MCP Servers, run the MCP OAuth smoke:
+
+```sh
+node scripts/smoke/twenty-mcp-oauth-smoke.mjs
+
+SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
+  SMOKE_API_BASE_URL=<api-url> \
+  SMOKE_COGNITO_ID_TOKEN=<current-user-id-token> \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_USER_ID=<user-id> \
+  SMOKE_AGENT_ID=<agent-id> \
+  node scripts/smoke/twenty-mcp-oauth-smoke.mjs
+```
+
+Dry-run mode prints the required live-mode inputs. Live mode verifies Twenty
+OAuth metadata, the system-managed MCP row, the current user's connected auth
+status, and the ThinkWork MCP proxy `tools/list` path. Set
+`SMOKE_TWENTY_MCP_CALL=1` plus `SMOKE_TWENTY_USER_EMAIL` or
+`SMOKE_TWENTY_WORKSPACE_MEMBER_ID` to run the required
+assigned-opportunities tool proof through ThinkWork's runtime credential
+injection path:
+
+```sh
+SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
+  SMOKE_TWENTY_MCP_CALL=1 \
+  SMOKE_TWENTY_USER_EMAIL=<twenty-user-email> \
+  SMOKE_API_BASE_URL=<api-url> \
+  SMOKE_COGNITO_ID_TOKEN=<current-user-id-token> \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_USER_ID=<user-id> \
+  SMOKE_AGENT_ID=<agent-id> \
+  node scripts/smoke/twenty-mcp-oauth-smoke.mjs
+```
+
 ## Related Pages
 
 - [Admin — Settings](/applications/admin/settings/) — read-only deployment metadata
 - [Desktop App](/applications/desktop/) — installed Spaces app that hosts Settings
 - [Business Ontology Operations](/guides/business-ontology-operations/) — Cognee substrate guidance
 - [Deploy Configuration](/deploy/configuration/) — Terraform configuration reference
+- [MCP Tools](/concepts/mcp-tools/) — managed MCP registration and per-user OAuth model

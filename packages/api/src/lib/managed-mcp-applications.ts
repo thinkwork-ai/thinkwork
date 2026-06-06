@@ -6,6 +6,7 @@ import { GraphQLError } from "graphql";
 import { and, eq } from "drizzle-orm";
 import {
   agentMcpServers,
+  agents,
   agentTemplateMcpServers,
   spaceMcpServers,
   tenantMcpContextTools,
@@ -235,6 +236,11 @@ export async function reconcileTwentyManagedMcp(args: {
         approved_at: new Date(),
       })
       .returning({ id: tenantMcpServers.id })) as { id: string }[];
+    await ensureManagedMcpDefaultAgentAssignments(
+      db,
+      args.tenantId,
+      inserted.id,
+    );
     return {
       serverId: inserted.id,
       installed: true,
@@ -263,6 +269,7 @@ export async function reconcileTwentyManagedMcp(args: {
       updated_at: new Date(),
     })
     .where(eq(tenantMcpServers.id, existing.id));
+  await ensureManagedMcpDefaultAgentAssignments(db, args.tenantId, existing.id);
   await setManagedMcpAssignmentsEnabled(db, existing.id, true);
 
   return {
@@ -272,6 +279,34 @@ export async function reconcileTwentyManagedMcp(args: {
     status: "installed",
     message: "Twenty CRM MCP server registration repaired.",
   };
+}
+
+async function ensureManagedMcpDefaultAgentAssignments(
+  db: DbLike,
+  tenantId: string,
+  serverId: string,
+) {
+  const platformAgents = (await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(
+      and(eq(agents.tenant_id, tenantId), eq(agents.is_platform_default, true)),
+    )) as { id: string }[];
+
+  for (const agent of platformAgents) {
+    await db
+      .insert(agentMcpServers)
+      .values({
+        agent_id: agent.id,
+        tenant_id: tenantId,
+        mcp_server_id: serverId,
+        enabled: true,
+      })
+      .onConflictDoUpdate({
+        target: [agentMcpServers.agent_id, agentMcpServers.mcp_server_id],
+        set: { enabled: true, updated_at: new Date() },
+      });
+  }
 }
 
 function applyManagedMcpState(

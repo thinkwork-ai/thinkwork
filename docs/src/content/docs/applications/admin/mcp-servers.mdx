@@ -1,9 +1,9 @@
 ---
 title: Admin — Tenant MCP Servers
-description: Register MCP (Model Context Protocol) servers at the tenant level, configure authentication, test connections, and assign them to agent templates. Per-user OAuth tokens are issued from the mobile app.
+description: Register MCP (Model Context Protocol) servers at the tenant level, configure authentication, test connections, and assign them to agent templates. Per-user OAuth tokens are issued from Spaces/Desktop or mobile.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 The Tenant MCP Servers page is where operators register external MCP servers that the tenant's agents can call at runtime. MCP servers expose tools — CRM lookups, ticket operations, internal API actions, search — through the Model Context Protocol, and ThinkWork connects to them over HTTP streaming or SSE at invocation time.
 
@@ -14,13 +14,13 @@ The Tenant MCP Servers page is where operators register external MCP servers tha
 
 A `DataTable` with a "Register Server" button in the header. Each row shows:
 
-| Column | Notes |
-|---|---|
-| Name | Display name, used throughout the admin app and the mobile integrations screen |
-| Transport | Streamable HTTP or SSE |
-| Auth type | None, Tenant API Key, or OAuth |
-| Tool count | How many tools this server exposed during its last test connection |
-| Status | Enabled / Disabled |
+| Column     | Notes                                                                          |
+| ---------- | ------------------------------------------------------------------------------ |
+| Name       | Display name, used throughout the admin app and the mobile integrations screen |
+| Transport  | Streamable HTTP or SSE                                                         |
+| Auth type  | None, Tenant API Key, or OAuth                                                 |
+| Tool count | How many tools this server exposed during its last test connection             |
+| Status     | Enabled / Disabled                                                             |
 
 Clicking a row opens a **`ServerDetailDialog`** with the full detail, test connection button, tool list, enable toggle, and delete action.
 
@@ -28,32 +28,40 @@ Clicking a row opens a **`ServerDetailDialog`** with the full detail, test conne
 
 The "Register Server" button opens the **`AddServerDialog`** form:
 
-| Field | Purpose |
-|---|---|
-| Name | Display name |
-| URL | MCP endpoint URL |
-| Transport | Streamable HTTP (recommended) or SSE |
-| Authentication | None, Tenant API Key, or OAuth |
+| Field                 | Purpose                                             |
+| --------------------- | --------------------------------------------------- |
+| Name                  | Display name                                        |
+| URL                   | MCP endpoint URL                                    |
+| Transport             | Streamable HTTP (recommended) or SSE                |
+| Authentication        | None, Tenant API Key, or OAuth                      |
 | API Key (conditional) | Only shown if Auth = Tenant API Key; password input |
 
 For **Tenant API Key** auth, the plaintext key goes into the POST body and the backend writes it to the credential vault (Secrets Manager) before the server row is persisted. The UI never stores the key in a JSON field; it's a secret reference from day one.
 
-For **OAuth** auth, the dialog shows a note: *"Each user will need to connect their own account from the mobile app."* The admin registers the server and its OAuth metadata, but per-user tokens are never issued from the admin app — they come from the mobile [Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) screen.
+For **OAuth** auth, the dialog shows a note that each user needs to connect
+their own account. The admin registers the server and its OAuth metadata, but
+per-user tokens are never issued from the admin app. Users connect from
+Spaces/Desktop Settings -> MCP Servers or from the mobile
+[Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/)
+screen.
 
 <Aside type="note">
-This split — admin registers the server, users grant their tokens — is deliberate. Operators configure infrastructure once; users grant access individually. The admin app cannot impersonate a user into an OAuth flow, so the per-user flow stays in the mobile self-serve UI.
+  This split — admin registers the server, users grant their tokens — is
+  deliberate. Operators configure infrastructure once; users grant access
+  individually. The admin app cannot impersonate a user into an OAuth flow, so
+  the per-user flow stays in end-user Settings surfaces.
 </Aside>
 
 ### REST endpoints
 
 MCP server management is REST, not GraphQL:
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/skills/mcp-servers` | List registered servers |
-| `POST /api/skills/mcp-servers` | Register a new server |
-| `PUT /api/skills/mcp-servers/:id` | Partial update (enable toggle, etc.) |
-| `DELETE /api/skills/mcp-servers/:id` | Remove a server |
+| Endpoint                                | Purpose                                                                     |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| `GET /api/skills/mcp-servers`           | List registered servers                                                     |
+| `POST /api/skills/mcp-servers`          | Register a new server                                                       |
+| `PUT /api/skills/mcp-servers/:id`       | Partial update (enable toggle, etc.)                                        |
+| `DELETE /api/skills/mcp-servers/:id`    | Remove a server                                                             |
 | `POST /api/skills/mcp-servers/:id/test` | Test connection — returns `{ ok: boolean; tools?: Tool[]; error?: string }` |
 
 All requests carry `x-tenant-slug` in the header.
@@ -72,7 +80,9 @@ Once assigned to a template, the MCP server flows down to every agent created fr
 
 ### OAuth flow from the admin UI
 
-Although per-user tokens normally come from the mobile app, the admin UI does expose an **Authenticate** button on OAuth servers. Clicking it opens a browser popup to:
+Although per-user tokens normally come from Spaces/Desktop or mobile Settings,
+the admin UI does expose an **Authenticate** button on OAuth servers. Clicking
+it opens a browser popup to:
 
 ```
 GET /api/skills/mcp-oauth/authorize?mcpServerId=<id>&tenantSlug=<slug>&force=true
@@ -122,7 +132,7 @@ The admin UI does not currently expose an in-place rotate button — rotation ha
 - **REST, not GraphQL.** MCP server management does not flow through urql, so there's no live subscription for MCP state changes. The list fetches on mount and after mutations.
 - **No in-place key rotation.** Rotating a tenant API key currently requires delete + re-register.
 - **Tool list is a snapshot.** Test connection caches the tool list at the time of the test. If the MCP server adds or removes tools, the cached list is stale until the next test.
-- **OAuth popup flow is rudimentary.** The admin-side OAuth button opens a browser popup and relies on the user completing the flow manually; no polling or refresh on completion.
+- **Admin OAuth popup flow is rudimentary.** The admin-side OAuth button opens a browser popup and relies on the user completing the flow manually; end-user Spaces/Desktop Settings has the supported desktop return flow.
 
 ## Related pages
 
