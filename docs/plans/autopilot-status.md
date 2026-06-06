@@ -19,7 +19,7 @@ status: in_progress
 | Unit                                                     | Branch                             | PR                                                           | State  | Notes                                                                                                                                                 |
 | -------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | U1 Release Manifest and Artifact Contract                | `codex/u1-release-manifest`        | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
-| U2 GitHub-Free Bootstrap and AWS Control Plane Substrate | `codex/u2-bootstrap-control-plane` | Pending                                                      | Active | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
+| U2 GitHub-Free Bootstrap and AWS Control Plane Substrate | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Active | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
 
 ### Progress Log
 
@@ -56,6 +56,7 @@ status: in_progress
 - Updated `thinkwork deploy --bootstrap` so the default new-deployment path no
   longer prompts for or requires a GitHub repository; legacy repo-backed
   bootstrap still runs when `--repo` or saved registry metadata is present.
+- Opened PR [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165).
 
 ### CI / Verification
 
