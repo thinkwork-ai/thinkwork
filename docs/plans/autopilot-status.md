@@ -11,8 +11,8 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: Twenty database init detection fix.
-- Current branch: `codex/twenty-crm-db-init-bootstrap`.
+- Current unit: Twenty ECS runtime restart after database prep.
+- Current branch: `codex/twenty-crm-runtime-restart`.
 - Current worktree: `.Codex/worktrees/twenty-crm-general-deploy`.
 - Status: in progress.
 
@@ -32,7 +32,8 @@ status: in_progress
 | Twenty DB setup role switch                    | `codex/twenty-crm-db-setup-role`     | [#2150](https://github.com/thinkwork-ai/thinkwork/pull/2150) | Merged | Runs Twenty schema and extension setup under the app DB role so Postgres ownership checks pass.                                        |
 | General toggle and CRM route polish            | `codex/twenty-crm-general-deploy`    | [#2152](https://github.com/thinkwork-ai/thinkwork/pull/2152) | Merged | Moves deploy to the General toggle, persists pending deploy state, and shows Configure only after Twenty is provisioned.               |
 | CRM backend bootstrap fix                      | `codex/twenty-crm-route-guard`       | [#2153](https://github.com/thinkwork-ai/thinkwork/pull/2153) | Merged | Disables Twenty database-backed config at bootstrap and prevents the CRM settings guard from redirecting before deployment data loads. |
-| Twenty database init detection fix             | `codex/twenty-crm-db-init-bootstrap` | Pending                                                      | Active | Stops deploy prep from pre-creating an empty `core` schema that makes Twenty skip `database:init:prod`.                                |
+| Twenty database init detection fix             | `codex/twenty-crm-db-init-bootstrap` | [#2154](https://github.com/thinkwork-ai/thinkwork/pull/2154) | Merged | Stops deploy prep from pre-creating an empty `core` schema that makes Twenty skip `database:init:prod`.                                |
+| Twenty ECS restart after database prep         | `codex/twenty-crm-runtime-restart`   | Pending                                                      | Active | Forces a Twenty ECS deployment after database prep so schema initialization changes take effect immediately.                           |
 
 ### Progress Log
 
@@ -163,6 +164,15 @@ status: in_progress
 - Opened branch `codex/twenty-crm-db-init-bootstrap` to stop creating `core`
   in deploy prep and to drop an existing empty `core` schema so the next
   service rollout can run Twenty's real database initialization.
+- PR [#2154](https://github.com/thinkwork-ai/thinkwork/pull/2154) passed CI
+  and merged as `6f8510c4`; main deploy run
+  [27061105098](https://github.com/thinkwork-ai/thinkwork/actions/runs/27061105098)
+  ran the corrected database prep and removed the empty `core` schema.
+- The deploy did not register a new Twenty task definition, so the already
+  running server process did not restart and could not run the image entrypoint
+  against the now-empty database. Opened branch
+  `codex/twenty-crm-runtime-restart` to force a server/worker ECS deployment
+  after database prep when Twenty runtime is enabled.
 
 ### CI / Verification
 
