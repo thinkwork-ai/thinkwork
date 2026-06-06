@@ -941,6 +941,59 @@ Use:
 Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`persisted\`, and an \`appId\`. Link to \`/artifacts/{appId}\`.
 `;
 
+/**
+ * Mirror of `packages/workspace-defaults/files/TOOLS.md`.
+ */
+const TOOLS_MD = `---
+modelRouting: []
+---
+
+## Tool Usage Policy
+
+You have access to specialized tools. You MUST use them proactively:
+
+- **Never tell the user to search, check a website, or look something up themselves.** If you have a tool that can retrieve the information, use it.
+- **Always prefer tool-sourced answers** over training data for anything time-sensitive: current events, recent dates, prices, schedules, availability, weather, or any factual claim that may have changed since your training cutoff.
+- **When uncertain whether information is current**, use your tools to verify before responding.
+- **Call tools first, then respond.** Do not apologize for limitations you can overcome with a tool call.
+
+## Web Research Tool Choice
+
+- **Web Search** finds current results and candidate URLs. Use it for discovery and ordinary factual lookups.
+- **Web Extraction** reads one known public URL as clean page content. Use it after Web Search finds a promising URL, or when the user gives you a URL and asks you to read, summarize, analyze, or quote it.
+- **Browser Automation** is the heavyweight fallback for interaction: forms, clicks, auth flows, rendered-state inspection, multi-step browsing, or pages Web Extraction cannot read.
+- Do not create or install workspace skills to emulate these built-ins, and never write provider credentials or API keys into workspace files.
+
+## Workspace Orchestration
+
+- Use \`delegate(task, context)\` for short text-only specialist help that must finish in this turn.
+- Use \`delegate_to_workspace(target, task)\` for folder-scoped specialist work that must finish in this turn, when available.
+- Use \`wake_workspace(target, request_md, ...)\` for async folder-scoped work that can pause, wait on humans, or resume after another agent completes.
+- Do not hand-write files under \`work/inbox/\`, \`review/\`, \`work/runs/*/events/\`, \`events/intents/\`, or \`events/audit/\`; use the workspace orchestration tools so the platform can validate, order, and audit the write.
+
+## Model Routing
+
+The YAML frontmatter at the top of this file is the machine-readable tool policy
+contract. Use \`modelRouting\` to route a specific tool or capability to a
+different approved model for cost or latency reasons.
+
+Example:
+
+\`\`\`yaml
+modelRouting:
+  - tool: workspace_skill
+    match:
+      slug: financial-analysis
+    model: anthropic.claude-3-haiku-20240307-v1:0
+    reason: Use the cheaper model for the analyst subtask.
+\`\`\`
+
+Routes layer by folder policy: agent root, active Space, active workspace, then
+user workspace. Higher-precedence files replace lower-precedence entries with
+the same \`tool\` and \`match\` signature. The runtime still validates that the
+selected model is approved for the user before a routed tool call runs.
+`;
+
 // ---------------------------------------------------------------------------
 // Version
 // ---------------------------------------------------------------------------
@@ -969,16 +1022,17 @@ Only tell the user the artifact exists after \`save_app\` returns \`ok\`, \`pers
  *     `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 22;
+export const DEFAULTS_VERSION = 23;
 
 // ---------------------------------------------------------------------------
 // Aggregator
 // ---------------------------------------------------------------------------
 
 /**
- * Canonical 13-file set. Plan §008 U3 added `AGENTS.md` and `CONTEXT.md`
+ * Canonical 14-file set. Plan §008 U3 added `AGENTS.md` and `CONTEXT.md`
  * (the runtime already loaded both but defaults didn't ship them) — every
  * Fat-folder agent now seeds with the Layer-1 Map and a root scope file.
+ * Model-stacking U5 restores `TOOLS.md` as a first-class policy contract.
  * Ordering is not load-bearing but matches the plan's R1 requirement order
  * for readability.
  */
@@ -987,6 +1041,7 @@ export const CANONICAL_FILE_NAMES = [
   "SPACE.md",
   "AGENTS.md",
   "CONTEXT.md",
+  "TOOLS.md",
   "GUARDRAILS.md",
   "MEMORY_GUIDE.md",
   "ROUTER.md",
@@ -1005,6 +1060,7 @@ const CONTENT: Record<CanonicalFileName, string> = {
   "SPACE.md": SPACE_MD,
   "AGENTS.md": AGENTS_MD,
   "CONTEXT.md": CONTEXT_MD,
+  "TOOLS.md": TOOLS_MD,
   "GUARDRAILS.md": GUARDRAILS_MD,
   "MEMORY_GUIDE.md": MEMORY_GUIDE_MD,
   "ROUTER.md": ROUTER_MD,

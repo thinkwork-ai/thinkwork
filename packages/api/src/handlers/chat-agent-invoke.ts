@@ -950,6 +950,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       allowedTools: null,
       mcpAllowedServers: null,
       mcpBlockedServers: [],
+      modelRouting: [],
       diagnostics: [],
     };
     let renderedWorkspace: RenderWorkspaceTupleForInvokeResult = {

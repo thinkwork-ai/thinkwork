@@ -52,4 +52,87 @@ describe("composeWorkspacePolicy", () => {
     expect(policy.mcpAllowedServers).toEqual(["github", "slack"]);
     expect(policy.mcpBlockedServers).toEqual(["prod-db"]);
   });
+
+  it("composes model routing by source precedence while preserving distinct matches", () => {
+    const policy = composeWorkspacePolicy({
+      modelRoutingSources: [
+        {
+          owner: "agent",
+          sourcePath: "TOOLS.md",
+          precedence: 10,
+          routes: [
+            {
+              tool: "workspace_skill",
+              match: { slug: "financial-analysis" },
+              model: "haiku",
+            },
+            {
+              tool: "web_search",
+              match: {},
+              model: "haiku",
+            },
+          ],
+        },
+        {
+          owner: "space",
+          sourcePath: "Spaces/board-pack/TOOLS.md",
+          precedence: 20,
+          routes: [
+            {
+              tool: "workspace_skill",
+              match: { slug: "financial-analysis" },
+              model: "sonnet",
+              reason: "Board work needs better synthesis",
+            },
+          ],
+          diagnostics: ["space_tools_md_checked"],
+        },
+        {
+          owner: "user",
+          sourcePath: "User/TOOLS.md",
+          precedence: 40,
+          routes: [
+            {
+              tool: "workspace_skill",
+              match: { slug: "financial-analysis" },
+              model: "opus",
+            },
+            {
+              tool: "workspace_skill",
+              match: { slug: "legal-review" },
+              model: "sonnet",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(policy.modelRouting).toEqual([
+      {
+        tool: "web_search",
+        match: {},
+        model: "haiku",
+        sourcePath: "TOOLS.md",
+        sourceOwner: "agent",
+        precedence: 10,
+      },
+      {
+        tool: "workspace_skill",
+        match: { slug: "financial-analysis" },
+        model: "opus",
+        sourcePath: "User/TOOLS.md",
+        sourceOwner: "user",
+        precedence: 40,
+      },
+      {
+        tool: "workspace_skill",
+        match: { slug: "legal-review" },
+        model: "sonnet",
+        sourcePath: "User/TOOLS.md",
+        sourceOwner: "user",
+        precedence: 40,
+      },
+    ]);
+    expect(policy.diagnostics).toContain("space_tools_md_checked");
+  });
 });

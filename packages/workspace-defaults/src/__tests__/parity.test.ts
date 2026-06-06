@@ -30,6 +30,7 @@ const AUTHORITATIVE_SOURCES: Record<string, string> = {
   "SPACE.md": join(LOCAL_FILES_DIR, "SPACE.md"),
   "AGENTS.md": join(LOCAL_FILES_DIR, "AGENTS.md"),
   "CONTEXT.md": join(LOCAL_FILES_DIR, "CONTEXT.md"),
+  "TOOLS.md": join(LOCAL_FILES_DIR, "TOOLS.md"),
   "GUARDRAILS.md": join(LOCAL_FILES_DIR, "GUARDRAILS.md"),
   "MEMORY_GUIDE.md": join(LOCAL_FILES_DIR, "MEMORY_GUIDE.md"),
   "ROUTER.md": join(LOCAL_FILES_DIR, "ROUTER.md"),

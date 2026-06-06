@@ -10,6 +10,7 @@ export interface WorkspaceRenderTupleInput {
   invokingServiceIdentity?: string | null;
   agentBlockedTools?: unknown;
   agentAllowedTools?: unknown;
+  activeWorkspacePath?: string | null;
 }
 
 export interface ResolvedWorkspaceRenderTuple {

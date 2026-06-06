@@ -6,7 +6,11 @@ import {
   threadRuntimePrefix,
   userWorkspacePrefix,
 } from "./prefixes.js";
-import { composeWorkspacePolicy } from "./effective-policy-composer.js";
+import {
+  composeWorkspacePolicy,
+  type WorkspaceModelRoutingSource,
+  type WorkspaceModelRoutingSourceOwner,
+} from "./effective-policy-composer.js";
 import { DrizzleWorkspaceTupleRepository } from "./repository.js";
 import { S3WorkspaceRendererObjectStore } from "./s3-store.js";
 import {
@@ -28,11 +32,13 @@ import type {
   WorkspaceTupleRepository,
 } from "./types.js";
 import { WorkspaceRenderError } from "./types.js";
+import { parseToolsMdPolicy } from "./tools-md-parser.js";
 
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
 const s3 = new S3Client({ region: REGION });
 const HYDRATE_MANIFEST_PATH = ".hydrate_manifest.json";
+const TOOLS_MD = "TOOLS.md";
 
 export interface RenderWorkspaceTupleDeps {
   bucket?: string;
@@ -174,6 +180,154 @@ function runtimeSourcePath(relPath: string): string {
   return relPath.startsWith("workspace/")
     ? relPath.slice("workspace/".length)
     : relPath;
+}
+
+function normalizeWorkspacePolicyPath(
+  activeWorkspacePath: string | null | undefined,
+): string | null {
+  const normalized = activeWorkspacePath
+    ?.trim()
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\/+/g, "/");
+  if (!normalized || normalized === "." || normalized.includes("..")) {
+    return null;
+  }
+  if (normalized === TOOLS_MD) return null;
+  return normalized.endsWith(`/${TOOLS_MD}`)
+    ? normalized.slice(0, -1 * `/${TOOLS_MD}`.length)
+    : normalized;
+}
+
+function policySourcePath(input: {
+  owner: WorkspaceModelRoutingSourceOwner;
+  tuple: ResolvedWorkspaceRenderTuple;
+  workspacePath?: string | null;
+}): string {
+  switch (input.owner) {
+    case "agent":
+      return TOOLS_MD;
+    case "space":
+      return `Spaces/${runtimeFolderSegment(input.tuple.spaceSlug)}/${TOOLS_MD}`;
+    case "workspace":
+      return `${input.workspacePath}/${TOOLS_MD}`;
+    case "user":
+      return `User/${TOOLS_MD}`;
+  }
+}
+
+async function readToolsModelRoutingSource(input: {
+  objectStore: WorkspaceRendererObjectStore;
+  bucket: string;
+  key: string;
+  owner: WorkspaceModelRoutingSourceOwner;
+  sourcePath: string;
+  precedence: number;
+  missingDiagnostic?: string;
+}): Promise<WorkspaceModelRoutingSource | null> {
+  const content = await input.objectStore.getText({
+    bucket: input.bucket,
+    key: input.key,
+  });
+  if (content === null) {
+    if (!input.missingDiagnostic) return null;
+    return {
+      owner: input.owner,
+      sourcePath: input.sourcePath,
+      precedence: input.precedence,
+      routes: [],
+      diagnostics: [input.missingDiagnostic],
+    };
+  }
+
+  const parsed = parseToolsMdPolicy(content, { path: input.sourcePath });
+  return {
+    owner: input.owner,
+    sourcePath: input.sourcePath,
+    precedence: input.precedence,
+    routes: parsed.modelRouting,
+    diagnostics: parsed.diagnostics.map(
+      (diagnostic) =>
+        `${diagnostic.code}:${diagnostic.path ?? input.sourcePath}:${diagnostic.message}`,
+    ),
+  };
+}
+
+async function readToolsModelRoutingSources(input: {
+  objectStore: WorkspaceRendererObjectStore;
+  bucket: string;
+  tuple: ResolvedWorkspaceRenderTuple;
+  agentPrefix: string;
+  spacePrefix: string;
+  userPrefix: string | null;
+  activeWorkspacePath?: string | null;
+}): Promise<WorkspaceModelRoutingSource[]> {
+  const workspacePath = normalizeWorkspacePolicyPath(input.activeWorkspacePath);
+  const requestedWorkspacePath = input.activeWorkspacePath?.trim();
+  const requests: Array<Promise<WorkspaceModelRoutingSource | null>> = [
+    readToolsModelRoutingSource({
+      objectStore: input.objectStore,
+      bucket: input.bucket,
+      key: `${input.agentPrefix}${TOOLS_MD}`,
+      owner: "agent",
+      sourcePath: policySourcePath({ owner: "agent", tuple: input.tuple }),
+      precedence: 10,
+    }),
+    readToolsModelRoutingSource({
+      objectStore: input.objectStore,
+      bucket: input.bucket,
+      key: `${input.spacePrefix}${TOOLS_MD}`,
+      owner: "space",
+      sourcePath: policySourcePath({ owner: "space", tuple: input.tuple }),
+      precedence: 20,
+    }),
+  ];
+
+  if (requestedWorkspacePath && !workspacePath) {
+    requests.push(
+      Promise.resolve({
+        owner: "workspace" as const,
+        sourcePath: TOOLS_MD,
+        precedence: 30,
+        routes: [],
+        diagnostics: [
+          `tools_md_workspace_policy_skipped_invalid_active_workspace:${requestedWorkspacePath}`,
+        ],
+      }),
+    );
+  } else if (workspacePath) {
+    requests.push(
+      readToolsModelRoutingSource({
+        objectStore: input.objectStore,
+        bucket: input.bucket,
+        key: `${input.agentPrefix}${workspacePath}/${TOOLS_MD}`,
+        owner: "workspace",
+        sourcePath: policySourcePath({
+          owner: "workspace",
+          tuple: input.tuple,
+          workspacePath,
+        }),
+        precedence: 30,
+        missingDiagnostic: `tools_md_workspace_policy_missing:${workspacePath}/${TOOLS_MD}`,
+      }),
+    );
+  }
+
+  if (input.userPrefix) {
+    requests.push(
+      readToolsModelRoutingSource({
+        objectStore: input.objectStore,
+        bucket: input.bucket,
+        key: `${input.userPrefix}${TOOLS_MD}`,
+        owner: "user",
+        sourcePath: policySourcePath({ owner: "user", tuple: input.tuple }),
+        precedence: 40,
+      }),
+    );
+  }
+
+  return (await Promise.all(requests)).filter(
+    (source): source is WorkspaceModelRoutingSource => source !== null,
+  );
 }
 
 function hydratePathForSource(
@@ -534,9 +688,19 @@ export async function renderWorkspaceTuple(
     userPrefix,
     renderedPrefix,
   ].filter((prefix): prefix is string => Boolean(prefix));
+  const modelRoutingSources = await readToolsModelRoutingSources({
+    objectStore,
+    bucket,
+    tuple,
+    agentPrefix,
+    spacePrefix,
+    userPrefix,
+    activeWorkspacePath: input.activeWorkspacePath,
+  });
   const effectivePolicy = composeWorkspacePolicy({
     agentBlockedTools: input.agentBlockedTools,
     agentAllowedTools: input.agentAllowedTools,
+    modelRoutingSources,
   });
   const [authorizedSpaces, marker, existingManifest, existingSpaceIndex] =
     await Promise.all([
