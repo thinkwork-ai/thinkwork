@@ -105,6 +105,7 @@ export function buildFinalizeBody(
           usage: runResult.usage,
           tools_called: runResult.toolsCalled,
           tool_invocations: runResult.toolInvocations,
+          model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
           tool_costs: toolCosts,
           hindsight_usage: [],
           ...(runResult.diagnostics

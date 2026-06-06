@@ -46,6 +46,7 @@ export interface InvocationResponse {
     usage?: Usage;
     tools_called?: string[];
     tool_invocations?: ToolInvocationRecord[];
+    model_routed_tool_calls?: ModelRoutedToolCallRecord[];
     tool_costs?: ToolCostRecord[];
     hindsight_usage?: unknown[];
   };
@@ -56,6 +57,7 @@ export interface InvocationResponse {
   mcp_proxy_registered?: boolean;
   tools_called?: string[];
   tool_invocations?: ToolInvocationRecord[];
+  model_routed_tool_calls?: ModelRoutedToolCallRecord[];
   tool_costs?: ToolCostRecord[];
   hindsight_usage?: unknown[];
 }

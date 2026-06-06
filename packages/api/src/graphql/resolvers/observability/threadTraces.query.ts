@@ -13,6 +13,8 @@ export const threadTraces = async (
   const rows = await db
     .select({
       traceId: costEvents.trace_id,
+      requestId: costEvents.request_id,
+      eventType: costEvents.event_type,
       threadId: costEvents.thread_id,
       agentId: costEvents.agent_id,
       agentName: agents.name,
@@ -37,9 +39,33 @@ export const threadTraces = async (
     .orderBy(sql`${costEvents.created_at} DESC`)
     .limit(100);
 
-  return rows.map((r) => ({
-    ...r,
-    estimated: (r.metadata as any)?.estimated === true,
-    createdAt: r.createdAt?.toISOString(),
-  }));
+  return rows.map((r) => {
+    const metadata =
+      r.metadata && typeof r.metadata === "object"
+        ? (r.metadata as Record<string, unknown>)
+        : {};
+    return {
+      ...r,
+      estimated: metadata.estimated === true,
+      source: typeof metadata.source === "string" ? metadata.source : null,
+      parentRequestId:
+        typeof metadata.parent_request_id === "string"
+          ? metadata.parent_request_id
+          : null,
+      toolCallId:
+        typeof metadata.tool_call_id === "string"
+          ? metadata.tool_call_id
+          : null,
+      toolName:
+        typeof metadata.tool_name === "string" ? metadata.tool_name : null,
+      modelRoutingStatus:
+        typeof metadata.model_routing_status === "string"
+          ? metadata.model_routing_status
+          : null,
+      ruleSource: metadata.rule_source ?? null,
+      match: metadata.match ?? null,
+      metadata,
+      createdAt: r.createdAt?.toISOString(),
+    };
+  });
 };

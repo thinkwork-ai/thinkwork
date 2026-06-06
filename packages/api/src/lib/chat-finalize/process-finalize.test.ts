@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   insertAssistantMessage: vi.fn(),
   notifyNewMessage: vi.fn(),
   markComputerTaskFailedFromFinalize: vi.fn(),
+  appendThreadTurnEvent: vi.fn(),
   sendTurnCompletedPush: vi.fn(),
   sendThreadReplyEmail: vi.fn(),
   refreshCustomerOnboardingGoalFolderSafely: vi.fn(),
@@ -51,6 +52,11 @@ vi.mock("../cost-recording.js", async (importOriginal) => {
   };
 });
 
+vi.mock("../thread-turn-events.js", () => ({
+  appendThreadTurnEvent: mocks.appendThreadTurnEvent,
+  drizzleThreadTurnEventStore: () => ({}),
+}));
+
 vi.mock("./notify.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./notify.js")>();
   return {
@@ -86,8 +92,10 @@ vi.mock("./record-guardrail-block.js", () => ({
 
 import {
   capturedSystemPromptFromFinalizePayload,
+  collectModelRoutedToolCalls,
   diagnosticsFromFinalizePayload,
   diagnosticsWithWorkspaceReconcile,
+  enrichToolInvocationsWithModelRouting,
   isHiddenDesktopDelegation,
   processFinalize,
   toFinalizeResponse,
@@ -123,6 +131,7 @@ beforeEach(() => {
   mocks.insertAssistantMessage.mockResolvedValue({ id: "msg-1" });
   mocks.notifyNewMessage.mockResolvedValue(undefined);
   mocks.markComputerTaskFailedFromFinalize.mockResolvedValue(undefined);
+  mocks.appendThreadTurnEvent.mockResolvedValue({ id: 1, seq: 0 });
   mocks.sendTurnCompletedPush.mockResolvedValue(undefined);
   mocks.sendThreadReplyEmail.mockResolvedValue(undefined);
   mocks.refreshCustomerOnboardingGoalFolderSafely.mockResolvedValue(undefined);
@@ -265,6 +274,67 @@ describe("isHiddenDesktopDelegation", () => {
   });
 });
 
+describe("model routed tool evidence helpers", () => {
+  it("collects routed model usage from tool invocation metadata", () => {
+    expect(
+      collectModelRoutedToolCalls({
+        tool_invocations: [
+          {
+            id: "tool-1",
+            tool_name: "workspace_skill",
+            model_routing: {
+              match: { slug: "research" },
+              model: "anthropic.claude-haiku",
+              status: "completed",
+              inputTokens: 42,
+              outputTokens: 7,
+              cachedReadTokens: 3,
+              durationMs: 123,
+              ruleSource: { owner: "user", path: "User/TOOLS.md" },
+            },
+          },
+        ],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        toolCallId: "tool-1",
+        toolName: "workspace_skill",
+        model: "anthropic.claude-haiku",
+        inputTokens: 42,
+        outputTokens: 7,
+        cachedReadTokens: 3,
+        ruleSource: { owner: "user", path: "User/TOOLS.md" },
+      }),
+    ]);
+  });
+
+  it("enriches tool invocations with flat model and token fields", () => {
+    expect(
+      enrichToolInvocationsWithModelRouting([
+        {
+          id: "tool-1",
+          tool_name: "workspace_skill",
+          model_routing: {
+            match: { slug: "research" },
+            model: "anthropic.claude-haiku",
+            inputTokens: 42,
+            outputTokens: 7,
+            cachedReadTokens: 3,
+          },
+        },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        model: "anthropic.claude-haiku",
+        input_tokens: 42,
+        output_tokens: 7,
+        cached_read_tokens: 3,
+        model_routing_status: "completed",
+      }),
+    ]);
+  });
+});
+
 describe("processFinalize reconcile seam", () => {
   it("passes the runtime cost owner user id to cost recording and subscriptions", async () => {
     mocks.updateReturning = [
@@ -315,6 +385,154 @@ describe("processFinalize reconcile seam", () => {
         agentId: AGENT_ID,
         userId: "55555555-5555-5555-5555-555555555555",
         amountUsd: 1.23,
+      }),
+    );
+  });
+
+  it("records child LLM cost and durable event evidence for routed tool models", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        trace_id: "trace-1",
+        cost_owner_user_id: "55555555-5555-5555-5555-555555555555",
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "done",
+          model_routed_tool_calls: [
+            {
+              toolCallId: "tool-1",
+              toolName: "workspace_skill",
+              match: { slug: "research" },
+              model: "anthropic.claude-haiku",
+              status: "completed",
+              inputTokens: 100,
+              outputTokens: 20,
+              cachedReadTokens: 5,
+              durationMs: 250,
+              ruleSource: { owner: "user", path: "User/TOOLS.md" },
+            },
+          ],
+          tool_invocations: [
+            {
+              id: "tool-1",
+              tool_name: "workspace_skill",
+              model_routing: {
+                match: { slug: "research" },
+                model: "anthropic.claude-haiku",
+                status: "completed",
+                inputTokens: 100,
+                outputTokens: 20,
+                cachedReadTokens: 5,
+                durationMs: 250,
+                ruleSource: { owner: "user", path: "User/TOOLS.md" },
+              },
+            },
+          ],
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 1000,
+          output_tokens: 200,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(mocks.recordCostEvents).toHaveBeenCalledTimes(2);
+    expect(mocks.recordCostEvents).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        requestId: `${TURN_ID}:tool:tool-1:model`,
+        model: "anthropic.claude-haiku",
+        inputTokens: 100,
+        outputTokens: 20,
+        cachedReadTokens: 5,
+        source: "pi_tool_model_route",
+        recordCompute: false,
+        metadata: expect.objectContaining({
+          parent_request_id: TURN_ID,
+          tool_call_id: "tool-1",
+          tool_name: "workspace_skill",
+          model_routing_status: "completed",
+          match: { slug: "research" },
+        }),
+      }),
+    );
+    expect(mocks.appendThreadTurnEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        runId: TURN_ID,
+        eventType: "model_routed_tool_call",
+        payload: expect.objectContaining({
+          tool_call_id: "tool-1",
+          model: "anthropic.claude-haiku",
+          input_tokens: 100,
+          output_tokens: 20,
+        }),
+      }),
+    );
+    expect(mocks.updateSets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          usage_json: expect.objectContaining({
+            model_routed_tool_calls: [
+              expect.objectContaining({
+                toolCallId: "tool-1",
+                model: "anthropic.claude-haiku",
+              }),
+            ],
+            tool_invocations: [
+              expect.objectContaining({
+                model: "anthropic.claude-haiku",
+                input_tokens: 100,
+                output_tokens: 20,
+              }),
+            ],
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("records rejected model routes as events without child LLM cost rows", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "done",
+          model_routed_tool_calls: [
+            {
+              toolCallId: "tool-1",
+              toolName: "workspace_skill",
+              match: { slug: "research" },
+              model: "not-approved",
+              status: "rejected",
+              error: "not approved",
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(mocks.recordCostEvents).toHaveBeenCalledTimes(1);
+    expect(mocks.appendThreadTurnEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        level: "error",
+        payload: expect.objectContaining({
+          status: "rejected",
+          error: "not approved",
+          model: "not-approved",
+        }),
       }),
     );
   });
