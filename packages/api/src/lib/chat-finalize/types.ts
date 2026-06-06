@@ -14,6 +14,22 @@ export interface FinalizeClaimRequirements {
   context_owner?: string;
 }
 
+export interface FinalizeModelRoutedToolCall {
+  toolCallId: string;
+  toolName: string;
+  match: Record<string, string>;
+  model: string;
+  ruleSource?: Record<string, unknown>;
+  status: "completed" | "rejected" | "failed";
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedReadTokens?: number;
+  cachedWriteTokens?: number;
+  totalTokens?: number;
+  durationMs?: number;
+  error?: string;
+}
+
 export interface FinalizePayload {
   /** Idempotency key — `thread_turns.id` that chat-agent-invoke inserted before dispatching. */
   thread_turn_id: string;
@@ -63,6 +79,8 @@ export interface FinalizePayload {
     choices?: unknown;
     /** Tool invocations with optional genui_data for UI render. */
     tool_invocations?: Array<Record<string, unknown>>;
+    /** Child model calls made for TOOLS.md model-routed tool invocations. */
+    model_routed_tool_calls?: FinalizeModelRoutedToolCall[];
     /** Tools called (legacy + flat list for thread_turns.usage_json). */
     tools_called?: string[];
     /** Tool cost rows (Nova Act, browser, etc.) for cost_events insertion. */

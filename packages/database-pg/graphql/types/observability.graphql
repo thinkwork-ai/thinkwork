@@ -2,6 +2,8 @@
 
 type TraceEvent {
   traceId: String!
+  requestId: String
+  eventType: String
   threadId: ID
   agentId: ID
   agentName: String
@@ -12,6 +14,14 @@ type TraceEvent {
   durationMs: Int
   costUsd: Float
   estimated: Boolean
+  source: String
+  parentRequestId: String
+  toolCallId: String
+  toolName: String
+  modelRoutingStatus: String
+  ruleSource: AWSJSON
+  match: AWSJSON
+  metadata: AWSJSON
   createdAt: AWSDateTime!
 }
 
@@ -54,9 +64,22 @@ type ModelInvocation {
 
 extend type Query {
   threadTraces(threadId: ID!, tenantId: ID!): [TraceEvent!]!
-  agentPerformance(tenantId: ID!, from: AWSDateTime, to: AWSDateTime): [AgentPerformance!]!
-  performanceTimeSeries(tenantId: ID!, agentId: ID, days: Int): [PerformanceTimeSeries!]!
+  agentPerformance(
+    tenantId: ID!
+    from: AWSDateTime
+    to: AWSDateTime
+  ): [AgentPerformance!]!
+  performanceTimeSeries(
+    tenantId: ID!
+    agentId: ID
+    days: Int
+  ): [PerformanceTimeSeries!]!
   singleAgentPerformance(agentId: ID!, tenantId: ID!): AgentPerformance
-  agentCostBreakdown(agentId: ID!, tenantId: ID!, from: AWSDateTime, to: AWSDateTime): CostSummary!
+  agentCostBreakdown(
+    agentId: ID!
+    tenantId: ID!
+    from: AWSDateTime
+    to: AWSDateTime
+  ): CostSummary!
   turnInvocationLogs(tenantId: ID!, turnId: ID!): [ModelInvocation!]!
 }

@@ -178,6 +178,9 @@ export interface RecordCostParams {
   traceId?: string;
   runtimeType?: string | null;
   bedrockRequestIds?: string[];
+  metadata?: Record<string, unknown>;
+  /** Record the AgentCore compute row. Defaults to true. */
+  recordCompute?: boolean;
   /**
    * Tag this row in cost_events.metadata.source. Defaults to
    * "wakeup_processor" for backward compatibility with the original caller.
@@ -227,7 +230,10 @@ export async function recordCostEvents(
       outputTokens * pricing.outputPerMillion) /
     1_000_000;
 
-  const computeCost = (params.durationMs / 1000) * AGENTCORE_RATE_PER_SECOND;
+  const computeCost =
+    (params.durationMs / 1000) *
+    AGENTCORE_RATE_PER_SECOND *
+    ((params.recordCompute ?? true) ? 1 : 0);
 
   // Skip recording if both costs are zero AND not estimated (no real usage)
   if (llmCost === 0 && computeCost === 0 && !estimated)
@@ -255,6 +261,7 @@ export async function recordCostEvents(
       trace_id: params.traceId || undefined,
       metadata: {
         source,
+        ...(params.metadata ?? {}),
         estimated,
         ...(params.runtimeType ? { runtime_type: params.runtimeType } : {}),
         ...(params.bedrockRequestIds?.length
@@ -264,7 +271,7 @@ export async function recordCostEvents(
     });
   }
 
-  if (computeCost > 0) {
+  if ((params.recordCompute ?? true) && computeCost > 0) {
     values.push({
       tenant_id: params.tenantId,
       agent_id: params.agentId || undefined,
@@ -278,6 +285,7 @@ export async function recordCostEvents(
       trace_id: params.traceId || undefined,
       metadata: {
         source,
+        ...(params.metadata ?? {}),
         ...(params.runtimeType ? { runtime_type: params.runtimeType } : {}),
       },
     });

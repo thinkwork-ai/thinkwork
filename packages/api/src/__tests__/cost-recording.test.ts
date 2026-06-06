@@ -359,4 +359,49 @@ describe("recordCostEvents user attribution", () => {
     ]);
     expect(rows.every((row) => row.user_id === undefined)).toBe(true);
   });
+
+  it("can write child model LLM metadata without an AgentCore compute row", async () => {
+    const { recordCostEvents, insertedValues } = await importCostRecorder([
+      [{ id: "user-1" }],
+      [],
+    ]);
+
+    await recordCostEvents({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      userId: "user-1",
+      requestId: "turn-1:tool:tool-1:model",
+      model: "claude-3-5-haiku",
+      inputTokens: 10_000,
+      outputTokens: 2_000,
+      cachedReadTokens: 100,
+      durationMs: 1000,
+      threadId: "thread-1",
+      traceId: "trace-1",
+      source: "pi_tool_model_route",
+      metadata: {
+        parent_request_id: "turn-1",
+        tool_call_id: "tool-1",
+        tool_name: "workspace_skill",
+      },
+      recordCompute: false,
+    });
+
+    const rows = insertedValues[0] as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        event_type: "llm",
+        request_id: "turn-1:tool:tool-1:model",
+        model: "claude-3-5-haiku",
+        cached_read_tokens: 100,
+        metadata: expect.objectContaining({
+          source: "pi_tool_model_route",
+          parent_request_id: "turn-1",
+          tool_call_id: "tool-1",
+          tool_name: "workspace_skill",
+        }),
+      }),
+    );
+  });
 });

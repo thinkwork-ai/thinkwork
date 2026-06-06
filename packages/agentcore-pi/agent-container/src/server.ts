@@ -2143,6 +2143,7 @@ export async function handleInvocation(
     mcp_proxy_registered: bundle.mcpProxyRegistered,
     tools_called: runResult.toolsCalled,
     tool_invocations: runResult.toolInvocations,
+    model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
     hindsight_usage: hindsightUsage,
     response: {
       role: "assistant",
@@ -2152,6 +2153,7 @@ export async function handleInvocation(
       usage: runResult.usage,
       tools_called: runResult.toolsCalled,
       tool_invocations: runResult.toolInvocations,
+      model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
       tool_costs:
         runResult.toolCosts ??
         runResult.toolInvocations.flatMap((invocation) =>

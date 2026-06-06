@@ -41,6 +41,10 @@ import { notifyThreadUpdate } from "../../graphql/notify.js";
 import { sendTurnCompletedPush } from "../push-notifications.js";
 import { sendThreadReplyEmail } from "../email/thread-reply.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "../spaces/customer-onboarding-goal-md.js";
+import {
+  appendThreadTurnEvent,
+  drizzleThreadTurnEventStore,
+} from "../thread-turn-events.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
   GENERIC_AGENT_ERROR_MESSAGE,
@@ -206,6 +210,10 @@ export async function processFinalize(
 
   // ---- Completed-turn finalize chain ----------------------------------
   const invokeResult = payload.response ?? {};
+  const modelRoutedToolCalls = collectModelRoutedToolCalls(invokeResult);
+  const toolInvocations = enrichToolInvocationsWithModelRouting(
+    invokeResult.tool_invocations ?? [],
+  );
   const capturedSystemPrompt = capturedSystemPromptFromFinalizePayload(payload);
   const responseRuntimeType =
     typeof invokeResult.runtime === "string" ? invokeResult.runtime : null;
@@ -286,6 +294,18 @@ export async function processFinalize(
   } catch (costErr) {
     console.error(`[chat-finalize] Cost recording failed:`, costErr);
   }
+
+  await recordModelRoutedToolEvidence({
+    tenantId,
+    agentId,
+    userId: costOwnerUserId,
+    turnId,
+    threadId,
+    traceId,
+    runtimeType,
+    agentName,
+    modelRoutedToolCalls,
+  });
 
   // 3. Record Hindsight phase costs
   const hindsightUsage = invokeResult.hindsight_usage ?? [];
@@ -370,7 +390,8 @@ export async function processFinalize(
       amount_usd: tc.amount_usd,
       provider: tc.provider,
     })),
-    tool_invocations: invokeResult.tool_invocations ?? [],
+    tool_invocations: toolInvocations,
+    model_routed_tool_calls: modelRoutedToolCalls,
   };
 
   try {
@@ -418,7 +439,6 @@ export async function processFinalize(
 
   // 6. Compute downstream signals
   const displayResponse = responseText;
-  const toolInvocations = invokeResult.tool_invocations ?? [];
   const computerThreadResponse = invokeResult.computer_thread_response;
 
   // 7. Insert assistant message (or reuse the one the runtime already
@@ -577,6 +597,281 @@ export function diagnosticsWithWorkspaceReconcile(
       conflicted_files: conflictedFiles.length,
     },
   };
+}
+
+export interface ModelRoutedToolCallEvidence {
+  toolCallId: string;
+  toolName: string;
+  match: Record<string, string>;
+  model: string;
+  ruleSource: Record<string, unknown>;
+  status: "completed" | "rejected" | "failed";
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  cachedWriteTokens?: number;
+  totalTokens?: number;
+  durationMs: number;
+  error?: string;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function optionalNumberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+  const record = readRecord(value);
+  const result: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(record)) {
+    if (
+      typeof raw === "string" ||
+      typeof raw === "number" ||
+      typeof raw === "boolean"
+    ) {
+      result[key] = String(raw);
+    }
+  }
+  return result;
+}
+
+function normalizeModelRoutedToolCall(
+  value: unknown,
+  fallback?: { toolCallId?: string; toolName?: string },
+): ModelRoutedToolCallEvidence | null {
+  const record = readRecord(value);
+  const model = stringValue(record.model);
+  if (!model) return null;
+  const statusValue = stringValue(record.status);
+  const status =
+    statusValue === "rejected" || statusValue === "failed"
+      ? statusValue
+      : "completed";
+  const toolCallId =
+    stringValue(record.toolCallId) ??
+    stringValue(record.tool_call_id) ??
+    fallback?.toolCallId;
+  const toolName =
+    stringValue(record.toolName) ??
+    stringValue(record.tool_name) ??
+    fallback?.toolName;
+  if (!toolCallId || !toolName) return null;
+  const ruleSource = readRecord(record.ruleSource ?? record.rule_source);
+  return {
+    toolCallId,
+    toolName,
+    match: stringRecord(record.match),
+    model,
+    ruleSource,
+    status,
+    inputTokens: numberValue(record.inputTokens ?? record.input_tokens),
+    outputTokens: numberValue(record.outputTokens ?? record.output_tokens),
+    cachedReadTokens: numberValue(
+      record.cachedReadTokens ?? record.cached_read_tokens,
+    ),
+    durationMs: numberValue(record.durationMs ?? record.duration_ms),
+    ...(optionalNumberValue(
+      record.cachedWriteTokens ?? record.cached_write_tokens,
+    ) !== undefined
+      ? {
+          cachedWriteTokens: optionalNumberValue(
+            record.cachedWriteTokens ?? record.cached_write_tokens,
+          ),
+        }
+      : {}),
+    ...(optionalNumberValue(record.totalTokens ?? record.total_tokens) !==
+    undefined
+      ? {
+          totalTokens: optionalNumberValue(
+            record.totalTokens ?? record.total_tokens,
+          ),
+        }
+      : {}),
+    ...(stringValue(record.error) ? { error: stringValue(record.error) } : {}),
+  };
+}
+
+export function collectModelRoutedToolCalls(
+  response: Pick<NonNullable<FinalizePayload["response"]>, "tool_invocations"> &
+    Record<string, unknown>,
+): ModelRoutedToolCallEvidence[] {
+  const byKey = new Map<string, ModelRoutedToolCallEvidence>();
+  const add = (call: ModelRoutedToolCallEvidence | null) => {
+    if (!call) return;
+    byKey.set(call.toolCallId, call);
+  };
+
+  const explicit = response.model_routed_tool_calls;
+  if (Array.isArray(explicit)) {
+    for (const item of explicit) add(normalizeModelRoutedToolCall(item));
+  }
+
+  for (const invocation of response.tool_invocations ?? []) {
+    const record = readRecord(invocation);
+    add(
+      normalizeModelRoutedToolCall(
+        record.model_routing ?? record.modelRouting,
+        {
+          toolCallId: stringValue(record.id),
+          toolName:
+            stringValue(record.tool_name) ??
+            stringValue(record.toolName) ??
+            stringValue(record.name),
+        },
+      ),
+    );
+  }
+
+  return [...byKey.values()];
+}
+
+export function enrichToolInvocationsWithModelRouting(
+  toolInvocations: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return toolInvocations.map((invocation) => {
+    const routing = normalizeModelRoutedToolCall(
+      invocation.model_routing ?? invocation.modelRouting,
+      {
+        toolCallId: stringValue(invocation.id),
+        toolName:
+          stringValue(invocation.tool_name) ??
+          stringValue(invocation.toolName) ??
+          stringValue(invocation.name),
+      },
+    );
+    if (!routing) return invocation;
+    return {
+      ...invocation,
+      model: routing.model,
+      input_tokens: routing.inputTokens,
+      output_tokens: routing.outputTokens,
+      cached_read_tokens: routing.cachedReadTokens,
+      model_routing_status: routing.status,
+      model_routing_rule_source: routing.ruleSource,
+      model_routing_match: routing.match,
+      model_routing: invocation.model_routing ?? routing,
+    };
+  });
+}
+
+async function recordModelRoutedToolEvidence(input: {
+  tenantId: string;
+  agentId: string;
+  userId?: string | null;
+  turnId: string;
+  threadId: string;
+  traceId?: string;
+  runtimeType?: string | null;
+  agentName?: string | null;
+  modelRoutedToolCalls: ModelRoutedToolCallEvidence[];
+}): Promise<void> {
+  if (input.modelRoutedToolCalls.length === 0) return;
+
+  let childSpendRecorded = false;
+  for (const call of input.modelRoutedToolCalls) {
+    const metadata = {
+      parent_request_id: input.turnId,
+      tool_call_id: call.toolCallId,
+      tool_name: call.toolName,
+      rule_source: call.ruleSource,
+      match: call.match,
+      model_routing_status: call.status,
+      ...(call.error ? { error: call.error } : {}),
+    };
+
+    try {
+      await appendThreadTurnEvent(drizzleThreadTurnEventStore(db), {
+        tenantId: input.tenantId,
+        runId: input.turnId,
+        agentId: input.agentId,
+        eventType: "model_routed_tool_call",
+        stream: "step",
+        level: call.status === "completed" ? "info" : "error",
+        color: call.status === "completed" ? "green" : "red",
+        message:
+          call.status === "completed"
+            ? `Tool ${call.toolName} used routed model ${call.model}`
+            : `Tool ${call.toolName} model route ${call.status}`,
+        payload: {
+          tool_call_id: call.toolCallId,
+          tool_name: call.toolName,
+          model: call.model,
+          input_tokens: call.inputTokens,
+          output_tokens: call.outputTokens,
+          cached_read_tokens: call.cachedReadTokens,
+          duration_ms: call.durationMs,
+          status: call.status,
+          rule_source: call.ruleSource,
+          match: call.match,
+          ...(call.error ? { error: call.error } : {}),
+        },
+      });
+    } catch (eventErr) {
+      console.error(
+        `[chat-finalize] Model-routed tool event recording failed:`,
+        eventErr,
+      );
+    }
+
+    if (call.status !== "completed") continue;
+
+    try {
+      const costResult = await recordCostEvents({
+        tenantId: input.tenantId,
+        agentId: input.agentId,
+        userId: input.userId,
+        requestId: `${input.turnId}:tool:${call.toolCallId}:model`,
+        model: call.model,
+        inputTokens: call.inputTokens,
+        outputTokens: call.outputTokens,
+        cachedReadTokens: call.cachedReadTokens,
+        durationMs: call.durationMs,
+        threadId: input.threadId,
+        traceId: input.traceId,
+        runtimeType: input.runtimeType,
+        source: "pi_tool_model_route",
+        metadata,
+        recordCompute: false,
+      });
+      if (costResult.totalUsd > 0) {
+        childSpendRecorded = true;
+        await notifyCostRecorded({
+          tenantId: input.tenantId,
+          agentId: input.agentId,
+          agentName: input.agentName ?? "",
+          userId: input.userId,
+          eventType: "tool_model_route",
+          amountUsd: costResult.totalUsd,
+          model: call.model,
+        });
+      }
+    } catch (costErr) {
+      console.error(
+        `[chat-finalize] Model-routed tool cost recording failed:`,
+        costErr,
+      );
+    }
+  }
+
+  if (childSpendRecorded) {
+    try {
+      await checkBudgetAndPause(input.tenantId, input.agentId, input.userId);
+    } catch (budgetErr) {
+      console.error(
+        `[chat-finalize] Model-routed tool budget check failed:`,
+        budgetErr,
+      );
+    }
+  }
 }
 
 function readRecord(value: unknown): Record<string, unknown> {

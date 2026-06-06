@@ -13,9 +13,9 @@ status: in_progress
 - Requirements:
   `docs/brainstorms/2026-06-06-model-stacking-tool-routing-requirements.md`.
 - Target branch: `main`.
-- Current unit: U6 Implement model-routed `workspace_skill` child execution.
-- Current branch: `codex/u6-model-routed-workspace-skill`.
-- Current worktree: `.Codex/worktrees/u6-model-routed-workspace-skill`.
+- Current unit: U7 Record trace and cost evidence.
+- Current branch: `codex/u7-model-routing-trace-cost`.
+- Current worktree: `.Codex/worktrees/u7-model-routing-trace-cost`.
 - Status: in progress.
 
 | Unit                                                        | Branch                                  | PR                                                           | State  | Notes                        |
@@ -25,8 +25,8 @@ status: in_progress
 | U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers`     | [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) | Merged | Squash merged as `8bf03028`. |
 | U4 Propagate and validate selected parent model             | `codex/u4-parent-model-dispatch`        | [#2181](https://github.com/thinkwork-ai/thinkwork/pull/2181) | Merged | Squash merged as `015bc739`. |
 | U5 Extend `TOOLS.md` effective policy with model routing    | `codex/u5-tools-policy-model-routing`   | [#2185](https://github.com/thinkwork-ai/thinkwork/pull/2185) | Merged | Squash merged as `ed7aed80`. |
-| U6 Implement model-routed `workspace_skill` child execution | `codex/u6-model-routed-workspace-skill` | [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189) | Active |                              |
-| U7 Record trace and cost evidence                           | TBD                                     | TBD                                                          | Todo   |                              |
+| U6 Implement model-routed `workspace_skill` child execution | `codex/u6-model-routed-workspace-skill` | [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189) | Merged | Squash merged as `5ac9a4c3`. |
+| U7 Record trace and cost evidence                           | `codex/u7-model-routing-trace-cost`     | TBD                                                          | Active |                              |
 | U8 Surface evidence in Settings Activity thread detail      | TBD                                     | TBD                                                          | Todo   |                              |
 | U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                     | TBD                                                          | Todo   |                              |
 | U10 Regenerate schemas and add demo policy documentation    | TBD                                     | TBD                                                          | Todo   |                              |
@@ -127,6 +127,27 @@ status: in_progress
   `git diff --check`, `bash scripts/verify-supply-chain.sh`, full
   `pi-runtime-core`, `pi-extensions`, `agentcore-pi`, and `api` test suites.
 - Opened PR [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189).
+- PR [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189) passed CLA,
+  lint, verify, typecheck, and test, then was squash merged as
+  `5ac9a4c3f1c5b9740de596942967f8584d5eeabf`. The remote branch was already
+  deleted by GitHub; the local U6 worktree and branch were removed.
+- Created isolated U7 worktree `.Codex/worktrees/u7-model-routing-trace-cost`
+  from `origin/main` at `5ac9a4c3`.
+- Started U7 trace/cost evidence work: finalize now derives routed child model
+  usage from Pi tool invocation metadata, records child LLM cost rows, appends
+  durable model-route thread-turn events, and enriches stored tool invocation
+  payloads with model/token fields for the Activity UI.
+- U7 focused verification passed:
+  `pnpm --filter @thinkwork/api test -- src/lib/chat-finalize/process-finalize.test.ts src/__tests__/cost-recording.test.ts src/graphql/resolvers/observability/threadTraces.query.test.ts src/graphql/resolvers/triggers/threadTurnEvents.query.test.ts`,
+  `pnpm --filter @thinkwork/pi-runtime-core test -- test/agent-loop.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts`,
+  package typechecks for `api`, `pi-runtime-core`, and `agentcore-pi`, and
+  `pnpm schema:build` with no derived `terraform/schema.graphql` diff.
+- U7 broader local verification passed: `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, full `pnpm --filter @thinkwork/api test` (429
+  files passed, 3 skipped; 3680 tests passed, 9 skipped), full
+  `pnpm --filter @thinkwork/pi-runtime-core test`, and full
+  `pnpm --filter @thinkwork/agentcore-pi test`.
 - Created isolated U3 worktree `.Codex/worktrees/u3-approved-model-composers`
   from `origin/main` at `e0a43844`.
 - Implemented U3 approved model selection in Spaces: shared approved-model
