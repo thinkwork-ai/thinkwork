@@ -1,7 +1,7 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-30
-status: in_progress
+status: complete
 ---
 
 # Autopilot Status Ledger
@@ -13,10 +13,10 @@ status: in_progress
 - Requirements:
   `docs/brainstorms/2026-06-06-model-stacking-tool-routing-requirements.md`.
 - Target branch: `main`.
-- Current unit: U10 Regenerate schemas and add demo policy documentation.
-- Current branch: `codex/u10-model-stacking-docs`.
-- Current worktree: `.Codex/worktrees/u10-model-stacking-docs`.
-- Status: in progress.
+- Current unit: complete.
+- Current branch: none.
+- Current worktree: none.
+- Status: complete.
 
 | Unit                                                        | Branch                                     | PR                                                           | State  | Notes                        |
 | ----------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ---------------------------- |
@@ -29,7 +29,7 @@ status: in_progress
 | U7 Record trace and cost evidence                           | `codex/u7-model-routing-trace-cost`        | [#2191](https://github.com/thinkwork-ai/thinkwork/pull/2191) | Merged | Squash merged as `bc66e94f`. |
 | U8 Surface evidence in Settings Activity thread detail      | `codex/u8-activity-model-routing-evidence` | [#2192](https://github.com/thinkwork-ai/thinkwork/pull/2192) | Merged | Squash merged as `3060d2c0`. |
 | U9 Add end-to-end layered `TOOLS.md` proof                  | `codex/u9-model-stacking-e2e-proof`        | [#2193](https://github.com/thinkwork-ai/thinkwork/pull/2193) | Merged | Squash merged as `3c967da3`. |
-| U10 Regenerate schemas and add demo policy documentation    | `codex/u10-model-stacking-docs`            | [#2194](https://github.com/thinkwork-ai/thinkwork/pull/2194) | Active |                              |
+| U10 Regenerate schemas and add demo policy documentation    | `codex/u10-model-stacking-docs`            | [#2194](https://github.com/thinkwork-ai/thinkwork/pull/2194) | Merged | Squash merged as `cfcc0521`. |
 
 ### Progress Log
 
@@ -213,6 +213,12 @@ status: in_progress
   `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`, and
   `git diff --check`.
 - Opened PR [#2194](https://github.com/thinkwork-ai/thinkwork/pull/2194).
+- PR [#2194](https://github.com/thinkwork-ai/thinkwork/pull/2194) passed CLA,
+  lint, verify, typecheck, and test, then was squash merged as
+  `cfcc0521a3f22138aba6d9ff20d9eed82d78eb2c`. The remote branch was already
+  deleted by GitHub; the local U10 worktree and branch were removed.
+- All model-stacking implementation units U1-U10 are complete and merged into
+  `origin/main`.
 - Created isolated U3 worktree `.Codex/worktrees/u3-approved-model-composers`
   from `origin/main` at `e0a43844`.
 - Implemented U3 approved model selection in Spaces: shared approved-model
