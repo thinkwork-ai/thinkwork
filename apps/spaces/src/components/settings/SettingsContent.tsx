@@ -170,7 +170,7 @@ export function SettingsRow({
   description,
   children,
 }: {
-  label: string;
+  label: ReactNode;
   description?: string;
   children?: ReactNode;
 }) {
