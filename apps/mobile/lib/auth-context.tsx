@@ -23,7 +23,22 @@ import { AppState, Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import type { AuthUser } from "@/lib/auth";
 import * as auth from "@/lib/auth";
-import { setAuthToken, reconnectSubscriptions } from "@/lib/graphql/client";
+import {
+  setAuthToken,
+  reconnectSubscriptions,
+  resetGraphqlClientForPlatformConfigChange,
+} from "@/lib/graphql/client";
+import {
+  formatPlatformConfigMissing,
+  getPlatformConfig,
+  hydratePlatformConfig,
+  subscribePlatformConfig,
+  type MobilePlatformConfig,
+} from "@/lib/platform-config";
+import {
+  importDeploymentProfile as importDeploymentProfileJson,
+  removeDeploymentProfile as removeDeploymentProfileJson,
+} from "@/lib/deployment-profile";
 import * as SecureStore from "expo-secure-store";
 
 // Keys for biometric credential storage
@@ -68,6 +83,9 @@ interface AuthContextValue {
   retryBootstrap: () => Promise<boolean>;
   /** Sign in with Google via Cognito hosted UI */
   signInWithGoogle: () => Promise<void>;
+  deploymentConfig: MobilePlatformConfig;
+  importDeploymentProfile: (input: string) => Promise<void>;
+  removeDeploymentProfile: () => Promise<void>;
   /** Increments each time the app returns to foreground and token is refreshed. Watch this to re-fetch data. */
   refreshCounter: number;
 }
@@ -86,7 +104,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hasStoredSession, setHasStoredSession] = useState(false);
   const [didActiveLogin, setDidActiveLogin] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
+  const [deploymentConfig, setDeploymentConfig] = useState(() =>
+    getPlatformConfig(),
+  );
   const refreshingRef = useRef(false);
+
+  useEffect(
+    () =>
+      subscribePlatformConfig((config) => {
+        setDeploymentConfig(config);
+      }),
+    [],
+  );
 
   // Resolve a tenantId for a restored user. Federated (Google) JWTs — and
   // sometimes even SRP-restored sessions that point at a federated user —
@@ -115,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
+        const graphqlUrl = getPlatformConfig().graphqlUrl;
         if (!graphqlUrl) return user;
         const res = await fetch(graphqlUrl, {
           method: "POST",
@@ -156,6 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const runBootstrap = useCallback(async (): Promise<boolean> => {
     console.log("[auth-boot] bootstrap start");
     try {
+      await hydratePlatformConfig();
       // Wait for CognitoSecureStorage to hydrate from SecureStore
       await auth.waitForStorageReady();
 
@@ -289,6 +319,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ------ Sign in ------
   const handleSignIn = useCallback(async (email: string, password: string) => {
+    const config = getPlatformConfig();
+    if (!config.configured) {
+      throw new Error(
+        `Deployment configuration is incomplete: ${formatPlatformConfigMissing(config)}`,
+      );
+    }
     const session = await auth.signIn(email, password);
     const token = session.getIdToken().getJwtToken();
     setAuthToken(token);
@@ -343,9 +379,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     oauthInFlightRef.current = true;
     try {
       if (Platform.OS === "web") {
+        const config = getPlatformConfig();
+        if (!config.configured) {
+          throw new Error(
+            `Deployment configuration is incomplete: ${formatPlatformConfigMissing(config)}`,
+          );
+        }
         const redirectUri = window.location.origin + "/auth/callback";
         window.location.href = auth.getGoogleSignInUrl(redirectUri);
         return;
+      }
+
+      const config = getPlatformConfig();
+      if (!config.configured) {
+        throw new Error(
+          `Deployment configuration is incomplete: ${formatPlatformConfigMissing(config)}`,
+        );
       }
 
       // Native: hard-code the redirect URI rather than computing via
@@ -398,7 +447,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // call bootstrapUser to auto-provision a tenant and merge the id into
       // local user state so the routing guard can redirect to the home tab.
       if (!oauthUser.tenantId) {
-        const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
+        const graphqlUrl = getPlatformConfig().graphqlUrl;
         if (!graphqlUrl) throw new Error("GraphQL URL not configured");
         const res = await fetch(graphqlUrl, {
           method: "POST",
@@ -473,6 +522,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const clearDeploymentScopedSession = useCallback(async () => {
+    auth.clearAuthStorageForDeploymentChange();
+    setAuthToken(null);
+    resetGraphqlClientForPlatformConfigChange();
+    setUser(null);
+    setHasStoredSession(false);
+    setDidActiveLogin(false);
+    if (Platform.OS !== "web") {
+      await Promise.all([
+        SecureStore.deleteItemAsync(STORED_TENANT_ID_KEY).catch(() => {}),
+        SecureStore.deleteItemAsync(CRED_EMAIL_KEY).catch(() => {}),
+        SecureStore.deleteItemAsync(CRED_PASSWORD_KEY).catch(() => {}),
+      ]);
+    }
+  }, []);
+
+  const ensureProfileChangeAllowed = useCallback(() => {
+    if (user || hasStoredSession) {
+      throw new Error("Sign out before changing deployment profiles.");
+    }
+  }, [hasStoredSession, user]);
+
+  const handleImportDeploymentProfile = useCallback(
+    async (input: string) => {
+      ensureProfileChangeAllowed();
+      await importDeploymentProfileJson(input);
+      await clearDeploymentScopedSession();
+      setDeploymentConfig(getPlatformConfig());
+    },
+    [clearDeploymentScopedSession, ensureProfileChangeAllowed],
+  );
+
+  const handleRemoveDeploymentProfile = useCallback(async () => {
+    ensureProfileChangeAllowed();
+    await removeDeploymentProfileJson();
+    await clearDeploymentScopedSession();
+    setDeploymentConfig(getPlatformConfig());
+  }, [clearDeploymentScopedSession, ensureProfileChangeAllowed]);
+
   // ------ Token getter (for manual use) ------
   const getToken = useCallback(async () => {
     const token = await auth.getIdToken();
@@ -496,6 +584,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         restoreWithCredentials,
         retryBootstrap: runBootstrap,
         signInWithGoogle: handleSignInWithGoogle,
+        deploymentConfig,
+        importDeploymentProfile: handleImportDeploymentProfile,
+        removeDeploymentProfile: handleRemoveDeploymentProfile,
         refreshCounter,
       }}
     >

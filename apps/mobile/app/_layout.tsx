@@ -226,6 +226,7 @@ function RootLayoutNav() {
       "invite",
       "forgot-password",
       "auth",
+      "deployment-profile",
     ];
     const isPublicRoute = publicRoutes.includes(segments[0] as string);
 
@@ -358,6 +359,10 @@ function RootLayoutNav() {
               <Stack.Screen name="onboarding/complete" />
               <Stack.Screen
                 name="auth/callback"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="deployment-profile"
                 options={{ headerShown: false }}
               />
               <Stack.Screen name="demo" />

@@ -8,9 +8,9 @@
 
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { getPlatformConfig } from "./platform-config";
 
 const PREFIX = "CognitoIdentityServiceProvider";
-const CLIENT_ID = process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID || "";
 
 // In-memory cache so synchronous reads work (Cognito SDK calls getItem synchronously)
 const memoryCache = new Map<string, string>();
@@ -18,7 +18,7 @@ const memoryCache = new Map<string, string>();
 // On startup, we need to hydrate the memory cache from SecureStore.
 // This must complete before CognitoUserPool tries to read tokens.
 let hydrated = false;
-const hydratePromise = hydrate();
+let hydratePromise: Promise<void> | null = null;
 
 async function hydrate() {
   if (Platform.OS === "web") {
@@ -27,7 +27,12 @@ async function hydrate() {
   }
 
   const t0 = Date.now();
-  console.log("[auth-boot] hydrate start, clientIdLen=", CLIENT_ID.length);
+  const clientId = getPlatformConfig().cognitoClientId;
+  console.log("[auth-boot] hydrate start, clientIdLen=", clientId.length);
+  if (!clientId) {
+    hydrated = true;
+    return;
+  }
 
   try {
     // SecureStore doesn't support listing keys. We derive the full set of
@@ -35,7 +40,7 @@ async function hydrate() {
     // for older sessions). Relying on LastAuthUser avoids a failure mode
     // where a reload — e.g. Updates.reloadAsync() after an OTA install —
     // killed the debounced manifest write before it could flush.
-    const lastUserKey = `${PREFIX}.${CLIENT_ID}.LastAuthUser`;
+    const lastUserKey = `${PREFIX}.${clientId}.LastAuthUser`;
     const username = await SecureStore.getItemAsync(lastUserKey);
     console.log(
       "[auth-boot] hydrate LastAuthUser:",
@@ -45,7 +50,7 @@ async function hydrate() {
 
     if (username) {
       keysToLoad.add(lastUserKey);
-      const userPrefix = `${PREFIX}.${CLIENT_ID}.${username}`;
+      const userPrefix = `${PREFIX}.${clientId}.${username}`;
       keysToLoad.add(`${userPrefix}.idToken`);
       keysToLoad.add(`${userPrefix}.accessToken`);
       keysToLoad.add(`${userPrefix}.refreshToken`);
@@ -86,11 +91,17 @@ async function hydrate() {
 
 /** Wait for the cache to be hydrated from SecureStore. */
 export function waitForStorageReady(): Promise<void> {
+  hydratePromise ??= hydrate();
   return hydratePromise;
 }
 
 export function isStorageReady(): boolean {
   return hydrated;
+}
+
+export function resetStorageHydrationForDeploymentChange() {
+  hydrated = false;
+  hydratePromise = null;
 }
 
 // Maintain a set of all keys we've stored so we can hydrate next time.

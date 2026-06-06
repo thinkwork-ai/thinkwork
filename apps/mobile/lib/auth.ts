@@ -15,25 +15,27 @@ import {
   CognitoSecureStorage,
   waitForStorageReady,
   isStorageReady,
+  resetStorageHydrationForDeploymentChange,
 } from "./cognito-storage";
+import { getPlatformConfig } from "./platform-config";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-const USER_POOL_ID = process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID || "";
-const CLIENT_ID = process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID || "";
-const COGNITO_DOMAIN = process.env.EXPO_PUBLIC_COGNITO_DOMAIN || "";
-
 let _userPool: CognitoUserPool | null = null;
+let _userPoolKey: string | null = null;
 
 function getUserPool(): CognitoUserPool | null {
-  if (!USER_POOL_ID || !CLIENT_ID) return null;
-  if (!_userPool) {
+  const config = getPlatformConfig();
+  if (!config.cognitoUserPoolId || !config.cognitoClientId) return null;
+  const key = `${config.cognitoUserPoolId}:${config.cognitoClientId}`;
+  if (!_userPool || _userPoolKey !== key) {
     _userPool = new CognitoUserPool({
-      UserPoolId: USER_POOL_ID,
-      ClientId: CLIENT_ID,
+      UserPoolId: config.cognitoUserPoolId,
+      ClientId: config.cognitoClientId,
       Storage: CognitoSecureStorage,
     });
+    _userPoolKey = key;
   }
   return _userPool;
 }
@@ -242,7 +244,8 @@ export function parseUserFromSession(session: CognitoUserSession): AuthUser {
 // Check if auth is configured
 // ---------------------------------------------------------------------------
 export function isAuthConfigured(): boolean {
-  return !!(USER_POOL_ID && CLIENT_ID);
+  const config = getPlatformConfig();
+  return !!(config.cognitoUserPoolId && config.cognitoClientId);
 }
 
 // ---------------------------------------------------------------------------
@@ -271,14 +274,18 @@ export interface OAuthTokens {
 
 /** Build the Cognito hosted UI authorize URL for Google sign-in. */
 export function getGoogleSignInUrl(redirectUri: string): string {
+  const config = getPlatformConfig();
+  if (!config.cognitoDomain || !config.cognitoClientId) {
+    throw new Error("Auth not configured");
+  }
   const params = new URLSearchParams({
     identity_provider: "Google",
     response_type: "code",
-    client_id: CLIENT_ID,
+    client_id: config.cognitoClientId,
     redirect_uri: redirectUri,
     scope: "openid email profile",
   });
-  return `${COGNITO_DOMAIN}/oauth2/authorize?${params.toString()}`;
+  return `${config.cognitoDomain}/oauth2/authorize?${params.toString()}`;
 }
 
 /** Exchange an authorization code for tokens via the Cognito token endpoint. */
@@ -286,22 +293,26 @@ export async function exchangeCodeForTokens(
   code: string,
   redirectUri: string,
 ): Promise<OAuthTokens> {
+  const config = getPlatformConfig();
+  if (!config.cognitoDomain || !config.cognitoClientId) {
+    throw new Error("Auth not configured");
+  }
   // Log the EXACT inputs Cognito will see. Don't log the full code (treat it
   // as a credential), just its length and a short prefix so we can tell two
   // attempts apart without leaking the secret.
   console.log("[auth] exchangeCodeForTokens", {
-    domain: COGNITO_DOMAIN,
-    clientIdLen: CLIENT_ID.length,
+    domain: config.cognitoDomain,
+    clientIdLen: config.cognitoClientId.length,
     redirectUri,
     codeLen: code.length,
     codePrefix: code.slice(0, 6),
   });
-  const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
+  const response = await fetch(`${config.cognitoDomain}/oauth2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: CLIENT_ID,
+      client_id: config.cognitoClientId,
       code,
       redirect_uri: redirectUri,
     }).toString(),
@@ -335,9 +346,10 @@ export function storeOAuthTokens(tokens: OAuthTokens): AuthUser {
   const payload = decodeJwtPayload(tokens.id_token);
   const username =
     (payload["sub"] as string) ?? (payload["cognito:username"] as string) ?? "";
+  const prefix = cognitoStoragePrefix();
+  if (!prefix) throw new Error("Auth not configured");
 
   // Write tokens into CognitoSecureStorage using Cognito SDK key format
-  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
   CognitoSecureStorage.setItem(`${prefix}.LastAuthUser`, username);
   CognitoSecureStorage.setItem(
     `${prefix}.${username}.idToken`,
@@ -368,7 +380,8 @@ export function storeOAuthTokens(tokens: OAuthTokens): AuthUser {
  * the session via SRP (federated users have no password).
  */
 export function getStoredOAuthIdToken(): string | null {
-  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  const prefix = cognitoStoragePrefix();
+  if (!prefix) return null;
   const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
   if (!username) return null;
   return CognitoSecureStorage.getItem(`${prefix}.${username}.idToken`);
@@ -378,7 +391,8 @@ export function getStoredOAuthIdToken(): string | null {
  * Get the stored OAuth access token directly from CognitoSecureStorage.
  */
 export function getStoredOAuthAccessToken(): string | null {
-  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  const prefix = cognitoStoragePrefix();
+  if (!prefix) return null;
   const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
   if (!username) return null;
   return CognitoSecureStorage.getItem(`${prefix}.${username}.accessToken`);
@@ -388,7 +402,8 @@ export function getStoredOAuthAccessToken(): string | null {
  * Get the stored OAuth refresh token directly from CognitoSecureStorage.
  */
 export function getStoredOAuthRefreshToken(): string | null {
-  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  const prefix = cognitoStoragePrefix();
+  if (!prefix) return null;
   const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
   if (!username) return null;
   return CognitoSecureStorage.getItem(`${prefix}.${username}.refreshToken`);
@@ -446,14 +461,16 @@ export async function refreshOAuthTokens(): Promise<string | null> {
   _oauthRefreshInFlight = (async () => {
     const refreshToken = getStoredOAuthRefreshToken();
     if (!refreshToken) return null;
+    const config = getPlatformConfig();
+    if (!config.cognitoDomain || !config.cognitoClientId) return null;
 
     try {
-      const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
+      const response = await fetch(`${config.cognitoDomain}/oauth2/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           grant_type: "refresh_token",
-          client_id: CLIENT_ID,
+          client_id: config.cognitoClientId,
           refresh_token: refreshToken,
         }).toString(),
       });
@@ -464,7 +481,8 @@ export async function refreshOAuthTokens(): Promise<string | null> {
       };
       if (!body.id_token || !body.access_token) return null;
 
-      const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+      const prefix = cognitoStoragePrefix();
+      if (!prefix) return null;
       const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
       if (!username) return null;
       CognitoSecureStorage.setItem(
@@ -485,4 +503,18 @@ export async function refreshOAuthTokens(): Promise<string | null> {
   })();
 
   return _oauthRefreshInFlight;
+}
+
+export function clearAuthStorageForDeploymentChange(): void {
+  signOut();
+  _userPool = null;
+  _userPoolKey = null;
+  _oauthRefreshInFlight = null;
+  CognitoSecureStorage.clear();
+  resetStorageHydrationForDeploymentChange();
+}
+
+function cognitoStoragePrefix(): string | null {
+  const clientId = getPlatformConfig().cognitoClientId;
+  return clientId ? `CognitoIdentityServiceProvider.${clientId}` : null;
 }

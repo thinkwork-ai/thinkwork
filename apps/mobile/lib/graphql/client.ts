@@ -6,18 +6,7 @@ import {
 } from "urql";
 import { randomUUID } from "expo-crypto";
 import { setAuthToken as setSdkAuthToken } from "@thinkwork/react-native-sdk";
-
-// AppSync endpoint from environment
-const GRAPHQL_URL = process.env.EXPO_PUBLIC_GRAPHQL_URL || "";
-const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
-const GRAPHQL_WS_URL = process.env.EXPO_PUBLIC_GRAPHQL_WS_URL || "";
-
-console.log("[AppSync WS] Config:", {
-  GRAPHQL_WS_URL: GRAPHQL_WS_URL
-    ? `${GRAPHQL_WS_URL.slice(0, 40)}...`
-    : "(empty)",
-  hasApiKey: !!GRAPHQL_API_KEY,
-});
+import { getPlatformConfig } from "@/lib/platform-config";
 
 // ---------------------------------------------------------------------------
 // Token management — updated by AuthProvider after sign-in
@@ -34,19 +23,19 @@ export function setAuthToken(token: string | null) {
 // ---------------------------------------------------------------------------
 
 function getAuthHeader() {
+  const config = getPlatformConfig();
   // AppSync WS auth requires the *regular* API host (not realtime host)
   // e.g. "xyz.appsync-api.us-east-1.amazonaws.com" not "xyz.appsync-realtime-api..."
-  const appsyncHost = GRAPHQL_WS_URL
+  const appsyncHost = config.graphqlWsUrl
     ? new URL(
-        GRAPHQL_WS_URL.replace("wss://", "https://").replace(
-          "ws://",
-          "http://",
-        ),
+        config.graphqlWsUrl
+          .replace("wss://", "https://")
+          .replace("ws://", "http://"),
       ).host.replace(".appsync-realtime-api.", ".appsync-api.")
-    : new URL(GRAPHQL_URL).host;
+    : new URL(config.graphqlUrl).host;
   return cachedToken
     ? { Authorization: cachedToken, host: appsyncHost }
-    : { "x-api-key": GRAPHQL_API_KEY, host: appsyncHost };
+    : { "x-api-key": config.graphqlApiKey, host: appsyncHost };
 }
 
 type Sink = {
@@ -90,10 +79,15 @@ function ensureConnection(): Promise<void> {
   wsReady = false;
 
   return new Promise((resolve, reject) => {
+    const config = getPlatformConfig();
+    if (!config.graphqlWsUrl) {
+      reject(new Error("GraphQL WebSocket URL not configured"));
+      return;
+    }
     const authHeader = getAuthHeader();
     const headerB64 = btoa(JSON.stringify(authHeader));
     const payloadB64 = btoa(JSON.stringify({}));
-    const url = `${GRAPHQL_WS_URL}?header=${encodeURIComponent(headerB64)}&payload=${encodeURIComponent(payloadB64)}`;
+    const url = `${config.graphqlWsUrl}?header=${encodeURIComponent(headerB64)}&payload=${encodeURIComponent(payloadB64)}`;
 
     try {
       sharedWs = new WebSocket(url, ["graphql-ws"]);
@@ -269,11 +263,19 @@ function createAppSyncSubscription(request: {
 // urql Client
 // ---------------------------------------------------------------------------
 let _client: Client | null = null;
+let _clientKey: string | null = null;
 
 function buildClient(): Client {
+  const config = getPlatformConfig();
+  console.log("[AppSync WS] Config:", {
+    GRAPHQL_WS_URL: config.graphqlWsUrl
+      ? `${config.graphqlWsUrl.slice(0, 40)}...`
+      : "(empty)",
+    hasApiKey: !!config.graphqlApiKey,
+  });
   const exchanges = [cacheExchange, fetchExchange];
 
-  if (GRAPHQL_WS_URL) {
+  if (config.graphqlWsUrl) {
     exchanges.push(
       subscriptionExchange({
         forwardSubscription(request) {
@@ -287,14 +289,15 @@ function buildClient(): Client {
   }
 
   return new Client({
-    url: GRAPHQL_URL || "https://localhost/graphql",
+    url: config.graphqlUrl || "https://localhost/graphql",
     exchanges,
     fetchOptions: () => {
+      const latestConfig = getPlatformConfig();
       const headers: Record<string, string> = {};
       if (cachedToken) {
         headers["Authorization"] = cachedToken;
-      } else if (GRAPHQL_API_KEY) {
-        headers["x-api-key"] = GRAPHQL_API_KEY;
+      } else if (latestConfig.graphqlApiKey) {
+        headers["x-api-key"] = latestConfig.graphqlApiKey;
       }
       return { headers };
     },
@@ -302,8 +305,11 @@ function buildClient(): Client {
 }
 
 export function getGraphqlClient(): Client {
-  if (!_client) {
+  const key = currentClientKey();
+  if (!_client || _clientKey !== key) {
+    reconnectSubscriptions();
     _client = buildClient();
+    _clientKey = key;
   }
   return _client;
 }
@@ -319,6 +325,22 @@ export function reconnectSubscriptions() {
     sharedWs = null;
     wsReady = false;
   }
+}
+
+export function resetGraphqlClientForPlatformConfigChange(): Client {
+  reconnectSubscriptions();
+  _client = null;
+  _clientKey = null;
+  return getGraphqlClient();
+}
+
+function currentClientKey(): string {
+  const config = getPlatformConfig();
+  return [
+    config.graphqlUrl,
+    config.graphqlWsUrl,
+    config.graphqlApiKey ? "api-key" : "no-api-key",
+  ].join("|");
 }
 
 // Eager export for provider

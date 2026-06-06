@@ -6,10 +6,11 @@ import {
   Platform,
   ScrollView,
   Image,
+  TextInput,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
-import { Scan } from "lucide-react-native";
+import { Scan, Trash2, Upload } from "lucide-react-native";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,15 @@ function GoogleIcon({ size = 20 }: { size?: number }) {
 
 export default function SignInScreen() {
   const router = useRouter();
-  const { signIn, signInWithGoogle } = useAuth();
+  const {
+    signIn,
+    signInWithGoogle,
+    deploymentConfig,
+    importDeploymentProfile,
+    removeDeploymentProfile,
+    isAuthenticated,
+    hasStoredSession,
+  } = useAuth();
   const {
     isSupported: biometricSupported,
     hasStoredCredentials,
@@ -63,8 +72,12 @@ export default function SignInScreen() {
   const [biometricLoading2, setBiometricLoading2] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [profileJson, setProfileJson] = useState("");
+  const [profileBusy, setProfileBusy] = useState(false);
 
   const biometricName = getBiometricName(biometricType);
+  const configBlocked = !deploymentConfig.configured;
+  const profileChangeBlocked = isAuthenticated || hasStoredSession;
 
   useEffect(() => {
     refreshCredentialsCheck();
@@ -73,6 +86,12 @@ export default function SignInScreen() {
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
       setError("Please enter email and password");
+      return;
+    }
+    if (configBlocked) {
+      setError(
+        `Deployment configuration is incomplete: ${deploymentConfig.missing.join(", ")}`,
+      );
       return;
     }
 
@@ -120,6 +139,12 @@ export default function SignInScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    if (configBlocked) {
+      setError(
+        `Deployment configuration is incomplete: ${deploymentConfig.missing.join(", ")}`,
+      );
+      return;
+    }
     setGoogleLoading(true);
     setError(null);
     try {
@@ -134,6 +159,12 @@ export default function SignInScreen() {
   };
 
   const handleBiometricLogin = async () => {
+    if (configBlocked) {
+      setError(
+        `Deployment configuration is incomplete: ${deploymentConfig.missing.join(", ")}`,
+      );
+      return;
+    }
     setBiometricLoading2(true);
     setError(null);
 
@@ -152,6 +183,37 @@ export default function SignInScreen() {
     }
   };
 
+  const handleImportProfile = async () => {
+    if (!profileJson.trim()) {
+      setError("Paste a deployment profile first");
+      return;
+    }
+    setProfileBusy(true);
+    setError(null);
+    try {
+      await importDeploymentProfile(profileJson);
+      setProfileJson("");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || "Deployment profile import failed.");
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+
+  const handleRemoveProfile = async () => {
+    setProfileBusy(true);
+    setError(null);
+    try {
+      await removeDeploymentProfile();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || "Deployment profile removal failed.");
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-white dark:bg-neutral-950"
@@ -159,7 +221,7 @@ export default function SignInScreen() {
     >
       <ScrollView
         contentContainerStyle={{
-          flex: 1,
+          flexGrow: 1,
           alignItems: "center",
           justifyContent: "center",
           padding: 16,
@@ -187,6 +249,88 @@ export default function SignInScreen() {
           </CardHeader>
 
           <CardContent className="gap-4">
+            <View className="gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-950">
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                    {deploymentConfig.deployment.displayName}
+                  </Text>
+                  <Text size="xs" variant="muted">
+                    {deploymentConfig.deployment.stage}
+                    {deploymentConfig.deployment.region
+                      ? ` · ${deploymentConfig.deployment.region}`
+                      : ""}
+                  </Text>
+                </View>
+                <Text
+                  size="xs"
+                  className={
+                    deploymentConfig.configured
+                      ? "text-emerald-700 dark:text-emerald-400"
+                      : "text-destructive"
+                  }
+                >
+                  {deploymentConfig.configured
+                    ? deploymentConfig.deployment.trustLabel
+                    : "Incomplete"}
+                </Text>
+              </View>
+              {!deploymentConfig.configured && (
+                <Text size="xs" className="text-destructive">
+                  Missing {deploymentConfig.missing.join(", ")}
+                </Text>
+              )}
+              <TextInput
+                value={profileJson}
+                onChangeText={setProfileJson}
+                placeholder="Deployment profile JSON or link"
+                placeholderTextColor={
+                  colorScheme === "dark" ? "#a3a3a3" : "#737373"
+                }
+                multiline
+                numberOfLines={4}
+                editable={!profileChangeBlocked && !profileBusy}
+                className="min-h-24 rounded-xl border border-neutral-300 px-3 py-2 text-sm text-neutral-900 dark:border-neutral-700 dark:text-neutral-100"
+                style={
+                  Platform.OS === "android"
+                    ? { textAlignVertical: "top" as const }
+                    : undefined
+                }
+              />
+              <View className="flex-row gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onPress={handleImportProfile}
+                  loading={profileBusy}
+                  disabled={profileChangeBlocked || !profileJson.trim()}
+                >
+                  <Upload size={16} color={colors.foreground} />
+                  <Text className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                    Import
+                  </Text>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onPress={handleRemoveProfile}
+                  disabled={
+                    profileChangeBlocked ||
+                    profileBusy ||
+                    deploymentConfig.deployment.source !== "profile"
+                  }
+                >
+                  <Trash2 size={16} color={colors.foreground} />
+                </Button>
+              </View>
+              {profileChangeBlocked && (
+                <Text size="xs" variant="muted">
+                  Sign out before changing deployments.
+                </Text>
+              )}
+            </View>
+
             {biometricSupported &&
               hasStoredCredentials &&
               !biometricLoading &&
@@ -195,6 +339,7 @@ export default function SignInScreen() {
                   variant="outline"
                   onPress={handleBiometricLogin}
                   loading={biometricLoading2}
+                  disabled={configBlocked}
                   className="mb-2"
                 >
                   <View className="flex-row items-center">
@@ -210,6 +355,7 @@ export default function SignInScreen() {
               variant="outline"
               onPress={handleGoogleSignIn}
               loading={googleLoading}
+              disabled={configBlocked}
             >
               <View className="flex-row items-center">
                 <GoogleIcon size={20} />
@@ -265,7 +411,11 @@ export default function SignInScreen() {
               </View>
             )}
 
-            <Button onPress={handleSubmit} loading={loading}>
+            <Button
+              onPress={handleSubmit}
+              loading={loading}
+              disabled={configBlocked}
+            >
               Sign in
             </Button>
 
