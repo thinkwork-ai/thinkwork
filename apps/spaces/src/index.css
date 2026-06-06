@@ -39,10 +39,10 @@
  * `:not(.desktop-vibrancy)` so the desktop build keeps its own treatment.
  */
 .dark:not(.desktop-vibrancy) {
-  --background: oklch(0.155 0.004 65);
-  --card: oklch(0.205 0.006 65);
-  --sidebar: oklch(0.205 0.006 65);
-  --sidebar-accent: oklch(0.269 0.006 65);
+  --background: #1a1a1a;
+  --card: #171717;
+  --sidebar: #2c3032;
+  --sidebar-accent: #505455;
 }
 
 /*

@@ -25,8 +25,8 @@ import {
   useSidebar,
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
-import { APP_VERSION_LABEL } from "@/lib/app-version";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
+import { APP_VERSION_LABEL } from "@/lib/app-version";
 import { DesktopNavigationControls } from "@/components/DesktopApplicationHeader";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
@@ -65,16 +65,11 @@ export function SpacesSidebar() {
               <img
                 src="/logo.png"
                 alt="ThinkWork"
-                className="h-9 w-9 shrink-0 object-contain"
+                className="h-7 w-7 shrink-0 object-contain"
               />
-              <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
-                <span className="truncate text-base font-semibold leading-none tracking-tight">
-                  ThinkWork
-                </span>
-                <span className="truncate text-xs text-sidebar-foreground/55">
-                  {APP_VERSION_LABEL}
-                </span>
-              </div>
+              <span className="truncate text-base font-semibold leading-none tracking-tight group-data-[collapsible=icon]:hidden">
+                ThinkWork
+              </span>
             </Link>
           </div>
         </SidebarHeader>
@@ -163,6 +158,10 @@ function AccountMenu({
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+          ThinkWork {APP_VERSION_LABEL}
+        </div>
       </DropdownMenuContent>
       <AlertDialog
         open={confirmSignOutOpen}
