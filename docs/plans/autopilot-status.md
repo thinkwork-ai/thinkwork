@@ -135,16 +135,16 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-003-feat-twenty-crm-mcp-oauth-plan.md`.
 - Target branch: `main`.
-- Current unit: U2 Managed app MCP reconciliation.
-- Current branch: `codex/twenty-mcp-u2-reconcile`.
-- Current worktree: `.Codex/worktrees/twenty-mcp-u2-reconcile`.
+- Current unit: U3 Desktop/web MCP OAuth.
+- Current branch: `codex/twenty-mcp-u3-oauth`.
+- Current worktree: `.Codex/worktrees/twenty-mcp-u3-oauth`.
 - Status: in progress.
 
 | Unit                              | Branch                          | PR                                                           | State   | Notes                                                                                                                                              |
 | --------------------------------- | ------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema`    | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Merged  | Squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`; required checks passed after scoped dev migration application for the drift precheck. |
-| U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile` | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Active  | Adds Twenty managed MCP reconciliation, read-only deployment MCP state, lifecycle cleanup hooks, and CRM-page Install MCP Server recovery.         |
-| U3 Desktop/web MCP OAuth          | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
+| U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile` | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Merged  | Squash merged as `e918df560c451daf2340a79ba808d753c9e37858`; required checks passed.                                                               |
+| U3 Desktop/web MCP OAuth          | `codex/twenty-mcp-u3-oauth`     | [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) | Active  | Adds desktop/web MCP OAuth return handling, resource propagation, and Spaces user authentication controls.                                         |
 | U4 Spaces MCP auth UI             | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
 | U5 Auth status and runtime safety | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
 | U6 E2E docs and smoke proof       | Pending                         | Pending                                                      | Pending | Not started.                                                                                                                                       |
@@ -175,6 +175,22 @@ status: in_progress
 - 2026-06-06: Opened PR
   [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164). Required
   checks `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- 2026-06-06: PR
+  [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) was squash
+  merged as `e918df560c451daf2340a79ba808d753c9e37858`. Created U3 worktree
+  from `origin/main` at `e918df56` on branch `codex/twenty-mcp-u3-oauth`.
+- 2026-06-06: Read relevant prior solution notes for U3:
+  `docs/solutions/spikes/2026-05-21-electron-oauth-cold-start-validation.md`,
+  `docs/solutions/logic-errors/oauth-authorize-wrong-user-id-binding-2026-04-21.md`,
+  and
+  `docs/solutions/best-practices/oauth-client-credentials-in-secrets-manager-2026-04-21.md`.
+  Kept this unit on the existing per-user MCP token storage path and avoided
+  arbitrary tenant-user resolution.
+- 2026-06-06: Rebased U3 onto `origin/main` at `634d06f1` after the first
+  local verification pass; focused API/Spaces tests and typechecks still
+  passed.
+- 2026-06-06: Opened PR
+  [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167).
 
 ### CI / Verification
 
@@ -210,6 +226,27 @@ status: in_progress
 - U2 GitHub checks on PR
   [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164): `cla`,
   `lint`, `test`, `typecheck`, and `verify` passed.
+- U3 local: `pnpm --filter @thinkwork/api exec vitest run
+src/lib/mcp-oauth-client.test.ts src/__tests__/managed-mcp-lifecycle.test.ts`
+  passed.
+- U3 local: `pnpm --filter @thinkwork/spaces exec vitest run
+src/lib/mcp-api.test.ts
+src/components/settings/SettingsMcpServerDetail.test.tsx
+src/components/settings/SettingsCrm.test.tsx
+src/components/settings/ManagedApplicationsSection.test.tsx` passed.
+- U3 local:
+  `pnpm --filter @thinkwork/api typecheck && pnpm --filter @thinkwork/spaces typecheck`
+  passed.
+- U3 local: selected `@thinkwork/api` and `@thinkwork/spaces` packages do not
+  define `lint` scripts.
+- U3 local:
+  `pnpm dlx prettier@3.8.2 --check --ignore-unknown <touched files>` passed.
+- U3 local: `git diff --check` passed.
+- U3 local dev server:
+  `pnpm --filter @thinkwork/spaces dev --host 127.0.0.1 --port 5175` served
+  `/settings/mcp-servers` with `HTTP/1.1 200 OK`; no in-app browser control
+  tool was exposed in this turn, so UI behavior was verified with component
+  tests.
 
 ### Blockers
 
