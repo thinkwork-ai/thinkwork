@@ -384,6 +384,70 @@ describe("runAgentLoop", () => {
     expect(invocation.finished_at).toBeTruthy();
   });
 
+  it("records model-routed tool call metadata from tool results", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_start",
+          toolCallId: "c1",
+          toolName: "workspace_skill",
+          args: { slug: "research" },
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "c1",
+          toolName: "workspace_skill",
+          result: {
+            content: [{ type: "text", text: "routed answer" }],
+            details: {
+              modelRouting: {
+                toolName: "workspace_skill",
+                match: { slug: "research" },
+                model: "us.amazon.nova-micro-v1:0",
+                ruleSource: {
+                  path: "/workspace/User/TOOLS.md",
+                  owner: "user",
+                  precedence: 300,
+                },
+                status: "completed",
+                inputTokens: 12,
+                outputTokens: 5,
+                totalTokens: 17,
+                durationMs: 42,
+              },
+            },
+          },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+
+    expect(result.toolInvocations[0].model_routing).toEqual({
+      toolCallId: "c1",
+      toolName: "workspace_skill",
+      match: { slug: "research" },
+      model: "us.amazon.nova-micro-v1:0",
+      ruleSource: {
+        path: "/workspace/User/TOOLS.md",
+        owner: "user",
+        precedence: 300,
+      },
+      status: "completed",
+      inputTokens: 12,
+      outputTokens: 5,
+      totalTokens: 17,
+      durationMs: 42,
+    });
+    expect(result.modelRoutedToolCalls).toEqual([
+      result.toolInvocations[0].model_routing,
+    ]);
+  });
+
   it("fires emitActivity on tool start + end with the dedup-contract shape (U5)", async () => {
     const session = makeFakeSession({
       messages: [assistantMessage("done")],

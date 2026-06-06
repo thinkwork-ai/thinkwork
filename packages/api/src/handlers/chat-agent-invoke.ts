@@ -69,6 +69,7 @@ import { checkUserBudgetAndPauseWork } from "../lib/user-budget-enforcement.js";
 import { normalizeRequestedModelId } from "../lib/turn-model-selection.js";
 import {
   assertUserModelApproved,
+  listApprovedModelCatalog,
   ModelApprovalError,
 } from "../lib/model-approvals.js";
 
@@ -1131,6 +1132,21 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         return true;
       },
     );
+    const modelRoutingRoutes = effectiveToolPolicy.modelRouting ?? [];
+    const modelRoutingPolicy =
+      modelRoutingRoutes.length > 0
+        ? { routes: modelRoutingRoutes }
+        : undefined;
+    const approvedModelIds = modelRoutingPolicy
+      ? currentUserId
+        ? (
+            await listApprovedModelCatalog({
+              tenantId,
+              userId: currentUserId,
+            })
+          ).map((model) => model.modelId)
+        : []
+      : undefined;
 
     // 2d. Call AgentCore Lambda directly via the SDK (no Function URL).
     console.log(
@@ -1253,6 +1269,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         : undefined,
       runtime_type: runtimeType,
       model: agentModel,
+      model_routing_policy: modelRoutingPolicy,
+      approved_model_ids: approvedModelIds,
       budget_monthly_cents: runtimeConfig.budgetMonthlyCents,
       budget_paused: runtimeConfig.budgetPaused,
       skills:

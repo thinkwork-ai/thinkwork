@@ -3,6 +3,7 @@ import type { Message, Usage } from "@earendil-works/pi-ai";
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 
 import type { SessionStore } from "./durable-session-manager.js";
+import type { ModelRoutedToolCallRecord } from "./model-routing-policy.js";
 
 export interface ToolCostRecord {
   provider: string;
@@ -23,6 +24,7 @@ export interface ToolInvocationRecord {
   input_preview?: string;
   output_preview?: string;
   status?: string;
+  model_routing?: ModelRoutedToolCallRecord;
   started_at?: string;
   finished_at?: string;
   runtime: "pi";
@@ -123,6 +125,7 @@ export interface RunAgentLoopResult {
   modelId: string;
   toolsCalled: string[];
   toolInvocations: ToolInvocationRecord[];
+  modelRoutedToolCalls?: ModelRoutedToolCallRecord[];
   toolCosts?: ToolCostRecord[];
   diagnostics?: Record<string, unknown>;
 }

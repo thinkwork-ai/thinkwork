@@ -19,6 +19,7 @@ import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import {
   CompletionCallbackAuthError,
   buildInvocationResources,
+  createBedrockChildModelCaller,
   handleInvocation,
   postCompletion,
   postFinalizeCallback,
@@ -56,6 +57,31 @@ function fakeAgentCoreClient(): unknown {
 }
 function fakeS3Client(): unknown {
   return { send: vi.fn() };
+}
+
+type RegisteredTool = {
+  name: string;
+  execute: (...args: unknown[]) => Promise<{
+    content?: Array<Record<string, unknown>>;
+    details?: unknown;
+  }>;
+};
+
+function makeFakeExtensionApi() {
+  const tools: RegisteredTool[] = [];
+  const api = {
+    registerTool: (tool: unknown) => {
+      tools.push(tool as RegisteredTool);
+    },
+    on: vi.fn(),
+  };
+  return { api, tools };
+}
+
+function getTool(tools: RegisteredTool[], name: string): RegisteredTool {
+  const tool = tools.find((candidate) => candidate.name === name);
+  if (!tool) throw new Error(`tool ${name} not registered`);
+  return tool;
 }
 
 // Stub out the env so MEMORY_ENGINE doesn't try to actually wire anything.
@@ -1807,6 +1833,138 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(bundle.tools.map((tool) => tool.name)).not.toContain(
       "workspace_skill",
     );
+  });
+
+  it("binds TOOLS.md model routing policy and approvals into workspace_skill", async () => {
+    const childModelCaller = vi.fn(async () => ({
+      text: "routed skill result",
+      usage: {
+        inputTokens: 20,
+        outputTokens: 6,
+        totalTokens: 26,
+      },
+    }));
+    const bundle = await buildInvocationResources({
+      payload: {
+        model_routing_policy: {
+          routes: [
+            {
+              tool: "workspace_skill",
+              match: { slug: "research" },
+              model: "us.amazon.nova-micro-v1:0",
+              sourceOwner: "space",
+              sourcePath: "/workspace/Spaces/sales/TOOLS.md",
+              precedence: 200,
+            },
+          ],
+        },
+        approved_model_ids: ["us.amazon.nova-micro-v1:0"],
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [
+        {
+          slug: "research",
+          name: "Research",
+          description: "Research helper",
+          skillPath: "/tmp/workspace/skills/research/SKILL.md",
+          content: "# Research",
+        },
+      ],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+      childModelCaller,
+    });
+    const { api, tools } = makeFakeExtensionApi();
+    for (const factory of bundle.extensionFactories) {
+      await factory(api as never);
+    }
+
+    const result = await getTool(tools, "workspace_skill").execute(
+      "call-1",
+      { slug: "research" },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(childModelCaller).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: "us.amazon.nova-micro-v1:0" }),
+    );
+    expect((result.content?.[0] as { text: string }).text).toBe(
+      "routed skill result",
+    );
+    expect(result.details).toMatchObject({
+      modelRouting: {
+        model: "us.amazon.nova-micro-v1:0",
+        inputTokens: 20,
+        outputTokens: 6,
+        totalTokens: 26,
+      },
+    });
+  });
+
+  it("maps Bedrock Converse child-model responses into text and token usage", async () => {
+    const send = vi.fn(async () => ({
+      output: {
+        message: {
+          content: [{ text: "child response" }],
+        },
+      },
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 9,
+        outputTokens: 4,
+        totalTokens: 13,
+        cacheReadInputTokens: 2,
+      },
+    }));
+    const caller = createBedrockChildModelCaller({ send } as never);
+
+    const result = await caller({
+      modelId: "us.amazon.nova-micro-v1:0",
+      systemPrompt: "system",
+      prompt: "prompt",
+    });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      text: "child response",
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 9,
+        outputTokens: 4,
+        totalTokens: 13,
+        cachedReadTokens: 2,
+        cachedWriteTokens: undefined,
+      },
+    });
   });
 
   it("registers delegation as an extension tool only when the host supplies a DelegationProvider", async () => {

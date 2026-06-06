@@ -64,6 +64,10 @@ import {
   type ThinkworkExtension,
 } from "@thinkwork/pi-extensions";
 import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
+import {
+  BedrockRuntimeClient,
+  ConverseCommand,
+} from "@aws-sdk/client-bedrock-runtime";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
 import {
@@ -73,9 +77,12 @@ import {
   type DelegationProvider,
   isFinalizeCallbackConfigured,
   normalizeHistory,
+  normalizeApprovedModelIds,
+  normalizeModelRoutingPolicy,
   postFinalizeCallback,
   readActivityCallbackConfig,
   runAgentLoop,
+  type ChildModelCaller,
   type InvocationResponse,
   type PiRetainStatus,
   type RunAgentLoopResult,
@@ -170,6 +177,73 @@ export type {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function numberFromRecord(
+  record: Record<string, unknown> | null,
+  key: string,
+): number | undefined {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function extractConverseText(response: unknown): string {
+  const output = asRecord(asRecord(response)?.output);
+  const message = asRecord(output?.message);
+  const content = Array.isArray(message?.content) ? message.content : [];
+  return content
+    .map((part) => asString(asRecord(part)?.text))
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function createBedrockChildModelCaller(
+  client: BedrockRuntimeClient,
+): ChildModelCaller {
+  return async (input) => {
+    const response = await client.send(
+      new ConverseCommand({
+        modelId: input.modelId,
+        system: [{ text: input.systemPrompt }],
+        messages: [
+          {
+            role: "user",
+            content: [{ text: input.prompt }],
+          },
+        ],
+        inferenceConfig: {
+          maxTokens: 2048,
+          temperature: 0,
+        },
+      }),
+    );
+    const usage = asRecord(response.usage);
+    const cachedReadTokens =
+      numberFromRecord(usage, "cacheReadInputTokens") ??
+      numberFromRecord(usage, "cacheReadTokens");
+    const cachedWriteTokens =
+      numberFromRecord(usage, "cacheWriteInputTokens") ??
+      numberFromRecord(usage, "cacheWriteTokens");
+    return {
+      text: extractConverseText(response),
+      stopReason: asString(response.stopReason) || undefined,
+      usage: {
+        inputTokens: numberFromRecord(usage, "inputTokens"),
+        outputTokens: numberFromRecord(usage, "outputTokens"),
+        totalTokens: numberFromRecord(usage, "totalTokens"),
+        cachedReadTokens,
+        cachedWriteTokens,
+      },
+    };
+  };
 }
 
 interface RuntimePhaseDiagnostic {
@@ -344,6 +418,10 @@ export interface HandlerDependencies {
    * `memory-retain` Lambda. Overridden in tests with a stubbed client.
    */
   lambdaClientFactory: (region: string) => LambdaClient;
+  /** Bedrock Runtime client factory for model-routed child executions. */
+  bedrockRuntimeClientFactory: (region: string) => BedrockRuntimeClient;
+  /** Optional override for model-routed child execution (test-only). */
+  childModelCaller?: ChildModelCaller;
   /** Optional override for the MCP connect factory (tests inject fakes). */
   connectMcpServerFactory?: ConnectMcpServerFn;
   /**
@@ -381,6 +459,8 @@ const defaultDependencies: HandlerDependencies = {
   agentCoreClientFactory: () => new BedrockAgentCoreClient({}),
   s3ClientFactory: (region: string) => new S3Client({ region }),
   lambdaClientFactory: (region: string) => new LambdaClient({ region }),
+  bedrockRuntimeClientFactory: (region: string) =>
+    new BedrockRuntimeClient({ region }),
 };
 
 // ---------------------------------------------------------------------------
@@ -462,6 +542,8 @@ export interface BuildInvocationResourcesArgs {
   /** Optional host seam for managed delegation. Cloud currently omits this;
    * desktop wires its provider when it adopts shared extensions in U9. */
   delegationProvider?: DelegationProvider;
+  /** Optional host seam for TOOLS.md model-routed child execution. */
+  childModelCaller?: ChildModelCaller;
 }
 
 /**
@@ -724,8 +806,26 @@ export async function buildInvocationResources(
 
   // Workspace skills — the prompt lists installed skills, while the extension
   // exposes `workspace_skill` so the agent can read full SKILL.md instructions
-  // on demand before applying one.
-  addExtension(createSkillsExtension({ skills: args.workspaceSkills }));
+  // on demand before applying one. When TOOLS.md declares a model route for a
+  // skill, the tool executes that skill through the routed child model instead
+  // of returning raw instructions to the parent model.
+  const modelRoutingPolicy = normalizeModelRoutingPolicy(
+    args.payload.model_routing_policy,
+  );
+  const approvedModelIds = normalizeApprovedModelIds(
+    args.payload.approved_model_ids,
+  );
+  addExtension(
+    createSkillsExtension({
+      skills: args.workspaceSkills,
+      modelRoutingPolicy,
+      approvedModelIds,
+      childModelCaller:
+        modelRoutingPolicy.routes.length > 0
+          ? args.childModelCaller
+          : undefined,
+    }),
+  );
 
   // MCP (U7) — validate, mint, build.
   const rawConfigs = parseMcpConfigs(args.payload.mcp_configs);
@@ -1476,6 +1576,11 @@ export async function handleInvocation(
       handleStore,
       mcpJsonConfig,
       mcpRegistry,
+      childModelCaller:
+        deps.childModelCaller ??
+        createBedrockChildModelCaller(
+          deps.bedrockRuntimeClientFactory(env.awsRegion),
+        ),
     });
     logAgentCorePhase({
       phase: "runtime.tool_assembly",
