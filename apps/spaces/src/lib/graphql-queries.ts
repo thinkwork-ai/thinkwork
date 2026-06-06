@@ -109,6 +109,19 @@ export const MarkThreadsReadMutation = gql`
   }
 `;
 
+export const MyApprovedModelCatalogQuery = gql`
+  query MyApprovedModelCatalog {
+    myApprovedModelCatalog {
+      id
+      modelId
+      displayName
+      provider
+      inputCostPerMillion
+      outputCostPerMillion
+    }
+  }
+`;
+
 export const PinThreadMutation = gql`
   mutation PinThread($tenantId: ID!, $threadId: ID!) {
     pinThread(tenantId: $tenantId, threadId: $threadId) {

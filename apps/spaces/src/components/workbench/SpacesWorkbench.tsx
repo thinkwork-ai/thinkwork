@@ -21,6 +21,7 @@ import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { useTenant } from "@/context/TenantContext";
 import {
   CreateThreadMutation,
+  MyApprovedModelCatalogQuery,
   NewThreadMentionTargetsQuery,
   SendMessageMutation,
   SpacesQuery,
@@ -29,6 +30,12 @@ import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 import { setPendingThreadStart } from "@/lib/pending-thread-starts";
+import {
+  chooseApprovedModelId,
+  readStoredModelId,
+  writeStoredModelId,
+  type ApprovedModelOption,
+} from "@/lib/approved-model-selection";
 
 interface CreateThreadResult {
   createThread: { id: string; agentId?: string | null };
@@ -58,6 +65,10 @@ interface SendMessageVars {
     mentions?: SpacesComposerMention[];
     agentRequested?: boolean;
   };
+}
+
+interface ApprovedModelsResult {
+  myApprovedModelCatalog?: ApprovedModelOption[] | null;
 }
 
 interface NewThreadMentionTargetsData {
@@ -91,6 +102,9 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(
     spaceId ?? null,
   );
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
+    readStoredModelId(),
+  );
   const {
     computers,
     fetching: computersFetching,
@@ -114,6 +128,12 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [{ data: approvedModelData, error: approvedModelError }] =
+    useQuery<ApprovedModelsResult>({
+      query: MyApprovedModelCatalogQuery,
+      pause: !tenantId,
+      requestPolicy: "cache-and-network",
+    });
   // Tenant skill catalog for the `/skill` force-pin popup. No agent context yet
   // on the new-thread surface, so `installed` is unannotated and the picker
   // shows the full catalog; the blocklist guardrail is enforced at dispatch.
@@ -137,6 +157,14 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       );
     }
   }, [mentionTargetError]);
+  useEffect(() => {
+    if (approvedModelError) {
+      console.warn(
+        "[SpacesWorkbench] failed to load approved models:",
+        approvedModelError,
+      );
+    }
+  }, [approvedModelError]);
   const [{ data: spacesData, fetching: spacesFetching }] = useQuery<
     SpacesResult,
     { tenantId: string }
@@ -193,6 +221,21 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     () => buildNewThreadMentionTargets(mentionTargetData),
     [mentionTargetData],
   );
+  const approvedModels = approvedModelData?.myApprovedModelCatalog;
+  useEffect(() => {
+    if (!approvedModels) return;
+    const nextModelId = chooseApprovedModelId(approvedModels, selectedModelId);
+    if (nextModelId !== selectedModelId) {
+      setSelectedModelId(nextModelId);
+      writeStoredModelId(nextModelId);
+    }
+  }, [approvedModels, selectedModelId]);
+
+  function handleSelectedModelChange(modelId: string) {
+    setSelectedModelId(modelId);
+    writeStoredModelId(modelId);
+  }
+
   useEffect(() => {
     if (spaceId && spaces.some((space) => space.id === spaceId)) {
       setSelectedSpaceId(spaceId);
@@ -214,6 +257,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     mentions: SpacesComposerMention[],
     agentRequested: boolean,
     pinnedSkills: string[] = [],
+    requestedModelId?: string,
   ) {
     const trimmed = prompt.trim();
     if (!trimmed && files.length === 0) return;
@@ -328,6 +372,10 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       if (pinnedSkills.length > 0) {
         metadata.skills = pinnedSkills.map((slug) => ({ slug }));
       }
+      const turnModelId = requestedModelId ?? selectedModelId;
+      if (turnModelId) {
+        metadata.requestedModelId = turnModelId;
+      }
       if (Object.keys(metadata).length > 0) {
         sendInput.metadata = JSON.stringify(metadata);
       }
@@ -399,6 +447,9 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           selectedSpaceId={selectedSpace?.id ?? defaultSpaceId ?? null}
           selectedSpaceIsDefault={selectedSpaceIsDefault}
           onSelectedSpaceChange={setSelectedSpaceId}
+          approvedModels={approvedModels ?? undefined}
+          selectedModelId={selectedModelId}
+          onSelectedModelChange={handleSelectedModelChange}
           isSubmitting={fetching || busy || computersFetching || spacesFetching}
           error={error}
         />

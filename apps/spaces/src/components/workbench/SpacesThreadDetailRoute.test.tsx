@@ -12,6 +12,7 @@ import { serializeEditor } from "./SkillTokenInput";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
+  MyApprovedModelCatalogQuery,
   RefreshThreadProgressMutation,
   ReviewGoalMutation,
   ThreadGoalFilesQuery,
@@ -121,6 +122,7 @@ let mentionTargetsData: unknown;
 let linkedTasksData: unknown;
 let progressMarkdownData: unknown;
 let goalFilesData: unknown;
+let approvedModelsData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
 beforeEach(() => {
@@ -140,6 +142,7 @@ beforeEach(() => {
   resetStreamingChunks.mockReset();
   apiFetchMock.apiFetch.mockReset();
   apiFetchMock.apiFetch.mockResolvedValue([]);
+  window.localStorage.clear();
   streamingChunks = [];
   threadData = {
     thread: {
@@ -180,6 +183,7 @@ beforeEach(() => {
   linkedTasksData = { threadLinkedTasks: [] };
   progressMarkdownData = { threadProgressMarkdown: null };
   goalFilesData = { threadGoalFiles: null };
+  approvedModelsData = undefined;
 
   sendMessage.mockResolvedValue({});
   updateThreadMock.mockResolvedValue({});
@@ -239,6 +243,9 @@ beforeEach(() => {
     }
     if (options.query === ThreadGoalFilesQuery) {
       return [queryState(goalFilesData), reexecuteGoalFilesQuery];
+    }
+    if (options.query === MyApprovedModelCatalogQuery) {
+      return [queryState(approvedModelsData), vi.fn()];
     }
     if (variables?.threadId && variables?.limit) {
       return [queryState(taskData), reexecuteTasksQuery];
@@ -1231,6 +1238,44 @@ describe("SpacesThreadDetailRoute", () => {
           threadId: "thread-1",
           role: "USER",
           content: "Run this through AgentCore",
+        },
+      });
+    });
+  });
+
+  it("sends selected approved model metadata for follow-up turns", async () => {
+    approvedModelsData = {
+      myApprovedModelCatalog: [
+        {
+          id: "model-haiku",
+          modelId: "anthropic.claude-haiku",
+          displayName: "Claude Haiku",
+          provider: "amazon_bedrock",
+          inputCostPerMillion: 0.15,
+          outputCostPerMillion: 0.6,
+        },
+      ],
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select model").textContent).toContain(
+        "Claude Haiku",
+      );
+    });
+    setFollowUpText("Use the approved follow-up model");
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        input: {
+          threadId: "thread-1",
+          role: "USER",
+          content: "Use the approved follow-up model",
+          metadata: JSON.stringify({
+            requestedModelId: "anthropic.claude-haiku",
+          }),
         },
       });
     });

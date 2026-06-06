@@ -118,6 +118,54 @@ describe("TaskThreadView", () => {
     expect(screen.queryByText("Computer planned the response.")).toBeNull();
   });
 
+  it("passes the selected approved model through follow-up submit", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Model picker",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Start with Sonnet",
+            },
+          ],
+        }}
+        onSendFollowUp={onSendFollowUp}
+        approvedModels={[
+          {
+            id: "model-haiku",
+            modelId: "anthropic.claude-haiku",
+            displayName: "Claude Haiku",
+            provider: "amazon_bedrock",
+            inputCostPerMillion: 0.15,
+            outputCostPerMillion: 0.6,
+          },
+        ]}
+        selectedModelId="anthropic.claude-haiku"
+        onSelectedModelChange={() => {}}
+      />,
+    );
+
+    const followUp = screen.getByLabelText("Follow up");
+    setFollowUpText(followUp, "Continue on cheaper model");
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "Continue on cheaper model",
+        [],
+        [],
+        true,
+        [],
+        "anthropic.claude-haiku",
+      );
+    });
+  });
+
   it("renders an agent avatar rail for assistant messages only", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-26T20:00:00Z"));
