@@ -8157,3 +8157,31 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `codex/twenty-crm-efs-access-point` switches the retained EFS mount to an
   access point rooted at `/local-storage` with explicit writable POSIX
   ownership and IAM mount/write authorization for the task role.
+- PR [#2157](https://github.com/thinkwork-ai/thinkwork/pull/2157) merged as
+  `49d6e0d8`; its main deploy run
+  [27062112612](https://github.com/thinkwork-ai/thinkwork/actions/runs/27062112612)
+  completed successfully. Browser verification reached the Twenty workspace,
+  and first-user setup completed successfully after the writable EFS access
+  point fix.
+- End-to-end UI lifecycle verification completed on local Spaces
+  `http://localhost:5175`: General Settings parked Twenty CRM through the UI,
+  deploy run
+  [27062629580](https://github.com/thinkwork-ai/thinkwork/actions/runs/27062629580)
+  completed Terraform Apply successfully, ECS server/worker desired counts
+  reached `0/0`, public `/healthz` returned `503` as expected while parked, and
+  the retained dedicated database still contained 63 tables. General Settings
+  then redeployed Twenty CRM from the retained database, deploy run
+  [27062811580](https://github.com/thinkwork-ai/thinkwork/actions/runs/27062811580)
+  completed Terraform Apply successfully, ECS server/worker reached
+  `1/1/0`, public `/healthz` returned HTTP 200, GraphQL returned
+  `{"data":{"__typename":"Query"}}`, and the CRM browser loaded the existing
+  Twenty workspace data.
+- Local UI follow-up branch `codex/fix-crm-configure-routing` fixes the
+  General Settings `Configure` action to use TanStack Router navigation. The
+  raw anchor could hard-load `/settings/crm` and let the route guard redirect
+  back to General before cached deployment state was available, especially in
+  the desktop/local SPA. Local verification passed:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/ManagedApplicationsSection.test.tsx src/components/settings/SettingsCrm.test.tsx`,
+  `pnpm --filter @thinkwork/spaces typecheck`,
+  `pnpm dlx prettier@3.8.2 --check apps/spaces/src/components/settings/ManagedApplicationsSection.tsx apps/spaces/src/components/settings/ManagedApplicationsSection.test.tsx`,
+  and `git diff --check`.

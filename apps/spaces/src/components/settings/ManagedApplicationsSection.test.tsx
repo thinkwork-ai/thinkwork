@@ -63,15 +63,16 @@ describe("ManagedApplicationsSection", () => {
   });
 
   it("keeps destructive lifecycle controls off the General managed app row", () => {
-    expect(source).toContain('href="/settings/crm"');
-    expect(source).toContain("Configure");
+    expect(source).toContain('to="/settings/crm"');
+    expect(source).toContain("<ManagedApplicationLabel app={app} />");
+    expect(source).not.toContain("Configure");
     expect(source).not.toContain("TwentyLifecycleControls");
     expect(source).not.toContain("Park Twenty CRM?");
     expect(source).not.toContain("Destroy Twenty CRM and delete data?");
     expect(queries).toContain("managedApplications {");
   });
 
-  it("renders an enable switch for disabled Twenty CRM without a Configure link", async () => {
+  it("renders an enable switch for disabled Twenty CRM with a CRM settings link", async () => {
     render(
       <ManagedApplicationsSection
         deployment={deploymentWithTwentyDisabled}
@@ -79,6 +80,9 @@ describe("ManagedApplicationsSection", () => {
       />,
     );
 
+    expect(
+      screen.getByRole("link", { name: "Twenty CRM" }).getAttribute("href"),
+    ).toBe("/settings/crm");
     expect(screen.queryByRole("link", { name: /configure/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /deploy/i })).toBeNull();
 
@@ -98,7 +102,7 @@ describe("ManagedApplicationsSection", () => {
     });
   });
 
-  it("renders Configure for provisioned Twenty CRM without a Deploy button", () => {
+  it("renders the CRM settings and external links for provisioned Twenty CRM", () => {
     render(
       <ManagedApplicationsSection
         deployment={deploymentWithTwentyEnabled}
@@ -106,8 +110,15 @@ describe("ManagedApplicationsSection", () => {
       />,
     );
 
-    const configureLink = screen.getByRole("link", { name: /configure/i });
-    expect(configureLink.getAttribute("href")).toBe("/settings/crm");
+    expect(screen.queryByRole("link", { name: /configure/i })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Twenty CRM" }).getAttribute("href"),
+    ).toBe("/settings/crm");
+    expect(
+      screen
+        .getByRole("link", { name: /open twenty crm/i })
+        .getAttribute("href"),
+    ).toBe("https://crm.example.com");
     expect(screen.queryByRole("button", { name: /deploy/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /park/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /destroy/i })).toBeNull();
