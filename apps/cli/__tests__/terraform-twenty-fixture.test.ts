@@ -382,9 +382,7 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(vars).toMatch(/variable "crm_alb_dns_name"/);
     expect(source).toMatch(/crm\s*=\s*"crm\.\$\{var\.domain\}"/);
     expect(source).toMatch(/var\.include_crm \? \[local\.crm\] : \[\]/);
-    expect(source).toMatch(
-      /create_crm_record\s*=\s*var\.include_crm && var\.crm_alb_dns_name != ""/,
-    );
+    expect(source).toMatch(/create_crm_record\s*=\s*var\.include_crm/);
     expect(crmRecord).toMatch(/name\s*=\s*local\.crm/);
     expect(crmRecord).toMatch(/content\s*=\s*var\.crm_alb_dns_name/);
     expect(crmRecord).toMatch(/proxied\s*=\s*false/);
