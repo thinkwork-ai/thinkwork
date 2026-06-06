@@ -20,7 +20,7 @@ status: in_progress
 | --------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | U1 Release Manifest and Artifact Contract                 | `codex/u1-release-manifest`        | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
 | U2 GitHub-Free Bootstrap and AWS Control Plane Substrate  | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
-| U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`    | Pending                                                      | Active | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                |
+| U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`    | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Active | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                |
 
 ### Progress Log
 
@@ -70,6 +70,7 @@ status: in_progress
 - Implemented U3 first-admin claim markers on tenants, verified-email gating
   in `bootstrapUser`, sanitized Google/OIDC/SAML bootstrap validation, and
   Cognito OIDC/SAML Terraform pass-through.
+- Opened PR [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166).
 
 ### CI / Verification
 
