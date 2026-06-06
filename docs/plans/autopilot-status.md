@@ -220,10 +220,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U8 Operational Evidence, Documentation, and Rollout.
-- Current branch: `codex/u8-deployment-docs-smokes`.
-- Current worktree: `.Codex/worktrees/u8-deployment-docs-smokes`.
-- Status: U8 in progress.
+- Current unit: Complete.
+- Current branch: none.
+- Current worktree: none.
+- Status: complete.
 
 | Unit                                                      | Branch                                  | PR                                                           | State  | Notes                                                                                                                                                                                    |
 | --------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -236,7 +236,7 @@ status: in_progress
 | U7a Profile Contract, Export, and Trust                   | `codex/u7a-deployment-profile-contract` | [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) | Merged | Squash merged as `51ab6151a04a9d3197e0212eb3a69c0d59453f95`; adds the shared deployment profile schema/trust validator and Spaces export/sign-in display surface for universal clients.  |
 | U7b Desktop Profile Binding                               | `codex/u7b-desktop-profile-binding`     | [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) | Merged | Squash merged as `87c30369f35ce999c708539ae268b89ee4c4d8d2`; adds desktop profile import/storage, active-profile OAuth/API binding, and profile controls on the desktop sign-in surface. |
 | U7c Mobile Profile Binding                                | `codex/u7c-mobile-profile-binding`      | [#2183](https://github.com/thinkwork-ai/thinkwork/pull/2183) | Merged | Squash merged as `6d467d24937455a88e44ca7dbdf13a5c076beff3`; adds mobile profile import/storage, profile-backed auth/API config, sign-in controls, and a public profile import route.    |
-| U8 Operational Evidence, Documentation, and Rollout       | `codex/u8-deployment-docs-smokes`       | [#2187](https://github.com/thinkwork-ai/thinkwork/pull/2187) | Active | Adds deployment docs, smoke evidence envelopes, foundation bootstrap smoke, and legacy rollout guidance.                                                                                 |
+| U8 Operational Evidence, Documentation, and Rollout       | `codex/u8-deployment-docs-smokes`       | [#2187](https://github.com/thinkwork-ai/thinkwork/pull/2187) | Merged | Squash merged as `134afccc97d5abd8fa9c2a0a2e55295623cd1c71`; adds deployment docs, smoke evidence envelopes, foundation bootstrap smoke, and legacy rollout guidance.                    |
 
 ### Progress Log
 
@@ -567,6 +567,13 @@ U7c files>`; and `git diff --check`.
   unknown env/user config entries, and the missing Astro sitemap `site` option.
 - Opened PR [#2187](https://github.com/thinkwork-ai/thinkwork/pull/2187) for
   U8.
+- PR [#2187](https://github.com/thinkwork-ai/thinkwork/pull/2187) passed CLA,
+  lint, verify, typecheck, and test on the current-base run, then auto-merged
+  with squash commit `134afccc97d5abd8fa9c2a0a2e55295623cd1c71`.
+- Removed local worktree `.Codex/worktrees/u8-deployment-docs-smokes` and
+  deleted local branch `codex/u8-deployment-docs-smokes`; the remote branch was
+  already deleted by GitHub and the stale remote-tracking ref was pruned.
+- GitHub-free customer deployments implementation is complete across U1-U8.
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 
