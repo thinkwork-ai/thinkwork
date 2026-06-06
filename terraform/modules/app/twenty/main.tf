@@ -64,6 +64,7 @@ locals {
     { name = "SERVER_URL", value = var.public_url },
     { name = "REDIS_URL", value = local.redis_url },
     { name = "PG_SSL_ALLOW_SELF_SIGNED", value = "true" },
+    { name = "NODE_TLS_REJECT_UNAUTHORIZED", value = "0" },
     { name = "STORAGE_TYPE", value = "local" },
     { name = "STORAGE_LOCAL_PATH", value = local.storage_path },
     { name = "IS_CONFIG_VARIABLES_IN_DB_ENABLED", value = "true" },
