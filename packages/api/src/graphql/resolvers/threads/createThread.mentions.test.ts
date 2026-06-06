@@ -5,6 +5,13 @@ const source = readFileSync(
   new URL("./createThread.mutation.ts", import.meta.url),
   "utf8",
 );
+const threadsGraphql = readFileSync(
+  new URL(
+    "../../../../../database-pg/graphql/types/threads.graphql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("createThread opening message mention routing", () => {
   it("persists opening message mentions and participants after the thread exists", () => {
@@ -40,5 +47,16 @@ describe("createThread opening message mention routing", () => {
     expect(source).toContain("MOBILE_PI_INVOCATION_SOURCE");
     expect(source).toContain("checkpoint_0");
     expect(source).toContain("notifyThreadTurnUpdate");
+  });
+
+  it("validates and persists selected parent models for opening messages", () => {
+    expect(threadsGraphql).toContain("modelId: String");
+    expect(source).toContain("resolveRequestedModelId");
+    expect(source).toContain("assertUserModelApproved");
+    expect(source.indexOf("await assertUserModelApproved")).toBeLessThan(
+      source.indexOf("db.transaction"),
+    );
+    expect(source).toContain("withRequestedModelMetadata");
+    expect(source).toContain("requestedModelId,");
   });
 });

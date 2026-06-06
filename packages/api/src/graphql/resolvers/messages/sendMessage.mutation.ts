@@ -34,6 +34,15 @@ import {
   shouldApplyCustomerOnboardingChatUpdate,
   shouldDispatchDefaultAgentTurn,
 } from "./sendMessage.agent-handling.js";
+import {
+  assertUserModelApproved,
+  ModelApprovalError,
+} from "../../../lib/model-approvals.js";
+import {
+  modelApprovalGraphQLError,
+  resolveRequestedModelId,
+  withRequestedModelMetadata,
+} from "../../../lib/turn-model-selection.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -129,6 +138,29 @@ export const sendMessage = async (
   // contents (s3_key, mime_type, size) live exclusively on the
   // thread_attachments table — never duplicated into messages.metadata.
   const parsedMetadata = i.metadata ? JSON.parse(i.metadata) : undefined;
+  const requestedModelId = resolveRequestedModelId({
+    modelId: i.modelId,
+    metadata: parsedMetadata,
+  });
+  if (isUserMessage && requestedModelId) {
+    if (senderType !== "user" || !senderId) {
+      throw new GraphQLError("Requester user identity required", {
+        extensions: { code: "UNAUTHENTICATED" },
+      });
+    }
+    try {
+      await assertUserModelApproved({
+        tenantId: thread.tenant_id,
+        userId: senderId,
+        modelId: requestedModelId,
+      });
+    } catch (err) {
+      if (err instanceof ModelApprovalError) {
+        throw modelApprovalGraphQLError(err);
+      }
+      throw err;
+    }
+  }
   let canonicalMetadata: Record<string, unknown> | undefined;
   try {
     canonicalMetadata = await canonicalizeMessageAttachmentMetadata({
@@ -145,6 +177,10 @@ export const sendMessage = async (
     }
     throw err;
   }
+  canonicalMetadata = withRequestedModelMetadata(
+    canonicalMetadata,
+    requestedModelId,
+  );
   const mentionTargets = await loadThreadMentionTargets({
     tenantId: thread.tenant_id,
     threadId: i.threadId,
@@ -310,6 +346,7 @@ export const sendMessage = async (
         messageId: row.id,
         content: i.content,
         mentions: parsedMentions,
+        requestedModelId,
         sender: { type: senderType, id: senderId },
       });
     } catch (err) {
@@ -334,6 +371,7 @@ export const sendMessage = async (
         spaceId: thread.space_id,
         messageId: row.id,
         content: i.content,
+        requestedModelId,
         sender: { type: senderType, id: senderId },
       });
     } catch (err) {

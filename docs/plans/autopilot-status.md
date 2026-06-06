@@ -13,23 +13,23 @@ status: in_progress
 - Requirements:
   `docs/brainstorms/2026-06-06-model-stacking-tool-routing-requirements.md`.
 - Target branch: `main`.
-- Current unit: U3 Add approved model pickers to composers.
-- Current branch: `codex/u3-approved-model-composers`.
-- Current worktree: `.Codex/worktrees/u3-approved-model-composers`.
+- Current unit: U4 Propagate and validate selected parent model.
+- Current branch: `codex/u4-parent-model-dispatch`.
+- Current worktree: `.Codex/worktrees/u4-parent-model-dispatch`.
 - Status: in progress.
 
-| Unit                                                        | Branch                              | PR                                                           | State  | Notes                                  |
-| ----------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------- |
-| U1 Add per-user model approval data and API                 | `codex/u1-model-approvals`          | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Merged | Squash merged as `efdf8549`.           |
-| U2 Add the admin Models section on user profile settings    | `codex/u2-user-model-settings`      | [#2175](https://github.com/thinkwork-ai/thinkwork/pull/2175) | Merged | Squash merged as `e0a43844`.           |
-| U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers` | [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) | Active | Local verification passed; CI pending. |
-| U4 Propagate and validate selected parent model             | TBD                                 | TBD                                                          | Todo   |                                        |
-| U5 Extend `TOOLS.md` effective policy with model routing    | TBD                                 | TBD                                                          | Todo   |                                        |
-| U6 Implement model-routed `workspace_skill` child execution | TBD                                 | TBD                                                          | Todo   |                                        |
-| U7 Record trace and cost evidence                           | TBD                                 | TBD                                                          | Todo   |                                        |
-| U8 Surface evidence in Settings Activity thread detail      | TBD                                 | TBD                                                          | Todo   |                                        |
-| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                 | TBD                                                          | Todo   |                                        |
-| U10 Regenerate schemas and add demo policy documentation    | TBD                                 | TBD                                                          | Todo   |                                        |
+| Unit                                                        | Branch                              | PR                                                           | State  | Notes                                               |
+| ----------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ------ | --------------------------------------------------- |
+| U1 Add per-user model approval data and API                 | `codex/u1-model-approvals`          | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Merged | Squash merged as `efdf8549`.                        |
+| U2 Add the admin Models section on user profile settings    | `codex/u2-user-model-settings`      | [#2175](https://github.com/thinkwork-ai/thinkwork/pull/2175) | Merged | Squash merged as `e0a43844`.                        |
+| U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers` | [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) | Merged | Squash merged as `8bf03028`.                        |
+| U4 Propagate and validate selected parent model             | `codex/u4-parent-model-dispatch`    | TBD                                                          | Active | Worktree created from `origin/main` after U3 merge. |
+| U5 Extend `TOOLS.md` effective policy with model routing    | TBD                                 | TBD                                                          | Todo   |                                                     |
+| U6 Implement model-routed `workspace_skill` child execution | TBD                                 | TBD                                                          | Todo   |                                                     |
+| U7 Record trace and cost evidence                           | TBD                                 | TBD                                                          | Todo   |                                                     |
+| U8 Surface evidence in Settings Activity thread detail      | TBD                                 | TBD                                                          | Todo   |                                                     |
+| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                 | TBD                                                          | Todo   |                                                     |
+| U10 Regenerate schemas and add demo policy documentation    | TBD                                 | TBD                                                          | Todo   |                                                     |
 
 ### Progress Log
 
@@ -81,6 +81,23 @@ status: in_progress
   cost context, local persistence/fallback selection, new-thread metadata
   propagation, follow-up metadata propagation, and focused tests.
 - Opened PR [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179).
+- PR [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) passed CLA,
+  lint, verify, typecheck, and test after rebasing onto current `origin/main`.
+- PR [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) was squash
+  merged as `8bf030285077dfbb4788dbc4b1641428322b3d23`; its remote branch was
+  already gone after merge, and the U3 local worktree/branch were removed.
+- Created isolated U4 worktree `.Codex/worktrees/u4-parent-model-dispatch` from
+  `origin/main` at `8bf03028`.
+- Implemented U4 selected parent-model dispatch: `CreateThreadInput` and
+  `SendMessageInput` now accept `modelId`, user-originated selected models are
+  approval-validated before dispatch, selected models are persisted on message
+  metadata, and direct/wakeup Pi dispatch carries the requested model into turn
+  context and runtime payloads.
+- Kept generated GraphQL client churn out of U4 after confirming `origin/main`
+  already includes the generated input fields needed by Spaces.
+- Compound review pass identified and fixed a direct-invoke defense-in-depth
+  gap: `chat-agent-invoke` now revalidates selected models before dispatching
+  to Pi, so an internal caller cannot bypass GraphQL approval checks.
 
 ### CI / Verification
 
@@ -124,6 +141,20 @@ status: in_progress
   - `pnpm --filter @thinkwork/spaces exec vitest run src/lib/approved-model-selection.test.ts src/components/workbench/SpacesComposer.test.tsx src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx`
   - `pnpm --filter @thinkwork/spaces typecheck`
   - `pnpm --filter @thinkwork/spaces build`
+  - `git diff --check`
+- U3 CI passed after final rebase:
+  - CLA
+  - lint
+  - verify
+  - typecheck
+  - test
+- U4 local verification passed:
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/mentions/default-agent-routing.test.ts src/lib/mentions/dispatch-agent-mentions.test.ts src/graphql/resolvers/messages/sendMessage.mentions.test.ts src/graphql/resolvers/threads/createThread.mentions.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts src/__tests__/graphql-contract.test.ts`
+  - `pnpm --filter @thinkwork/spaces exec vitest run src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/lib/use-chat-appsync-transport.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/spaces typecheck`
+  - `pnpm --filter @thinkwork/spaces build`
+  - `pnpm --filter @thinkwork/api test`
   - `git diff --check`
 
 ### Blockers

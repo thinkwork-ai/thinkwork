@@ -1273,6 +1273,7 @@ describe("SpacesThreadDetailRoute", () => {
           threadId: "thread-1",
           role: "USER",
           content: "Use the approved follow-up model",
+          modelId: "anthropic.claude-haiku",
           metadata: JSON.stringify({
             requestedModelId: "anthropic.claude-haiku",
           }),

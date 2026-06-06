@@ -30,6 +30,7 @@ export interface DispatchAgentMentionInput {
   spaceId?: string | null;
   messageId: string;
   content?: string | null;
+  requestedModelId?: string | null;
   mentions: ParsedMention[];
   sender?: {
     type?: string | null;
@@ -96,6 +97,12 @@ export function buildAgentMentionWakeups(
           endOffset: mention.endOffset,
         },
         message: input.content ?? "",
+        ...(input.requestedModelId
+          ? {
+              modelId: input.requestedModelId,
+              requestedModelId: input.requestedModelId,
+            }
+          : {}),
       },
       idempotencyKey: `agent-mention:${input.tenantId}:${input.messageId}:${mention.targetId}`,
       requestedByActorType: input.sender?.type ?? "user",

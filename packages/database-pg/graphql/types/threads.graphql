@@ -144,6 +144,7 @@ input CreateThreadInput {
   billingCode: String
   labels: AWSJSON
   metadata: AWSJSON
+  modelId: String
   dueAt: AWSDateTime
   createdByType: String
   createdById: String

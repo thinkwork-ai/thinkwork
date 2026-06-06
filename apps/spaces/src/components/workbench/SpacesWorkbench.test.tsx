@@ -299,6 +299,7 @@ describe("SpacesWorkbench", () => {
           role: "USER",
           content: "Use the approved model",
           mentions: [],
+          modelId: "anthropic.claude-haiku",
           metadata: JSON.stringify({
             requestedModelId: "anthropic.claude-haiku",
           }),

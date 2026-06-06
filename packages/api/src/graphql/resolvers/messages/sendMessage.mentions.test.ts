@@ -59,6 +59,17 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("metadata: canonicalMetadata");
   });
 
+  it("validates selected parent models before persisting or dispatching", () => {
+    expect(messagesGraphql).toContain("modelId: String");
+    expect(source).toContain("resolveRequestedModelId");
+    expect(source).toContain("assertUserModelApproved");
+    expect(source.indexOf("await assertUserModelApproved")).toBeLessThan(
+      source.indexOf(".insert(messages)"),
+    );
+    expect(source).toContain("withRequestedModelMetadata");
+    expect(source).toContain("requestedModelId,");
+  });
+
   it("preserves sender defaults while allowing agent-authenticated senders", () => {
     expect(source).toContain(
       "const senderType = normalizeMessageSenderType(i.senderType)",

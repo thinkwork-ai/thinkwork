@@ -64,6 +64,7 @@ interface SendMessageVars {
     metadata?: string;
     mentions?: SpacesComposerMention[];
     agentRequested?: boolean;
+    modelId?: string;
   };
 }
 
@@ -374,6 +375,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       }
       const turnModelId = requestedModelId ?? selectedModelId;
       if (turnModelId) {
+        sendInput.modelId = turnModelId;
         metadata.requestedModelId = turnModelId;
       }
       if (Object.keys(metadata).length > 0) {
