@@ -8140,3 +8140,12 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `codex/twenty-crm-psql-sslmode` restores the workflow-created DB URL to
   `sslmode=require` for `psql` compatibility while retaining
   `PG_SSL_ALLOW_SELF_SIGNED=true` for the Twenty Node/Postgres runtime.
+- PR [#2155](https://github.com/thinkwork-ai/thinkwork/pull/2155) merged as
+  `6f8510c4`; its main deploy run
+  [27061400747](https://github.com/thinkwork-ai/thinkwork/actions/runs/27061400747)
+  reached the new post-prep ECS restart step but failed because the
+  greenfield root module did not expose `twenty_cluster_arn`,
+  `twenty_server_service_name`, or `twenty_worker_service_name` as Terraform
+  outputs. Follow-up branch `codex/twenty-crm-root-ecs-outputs` exposes those
+  outputs so the deploy workflow can restart the actual Twenty ECS services
+  after database prep.
