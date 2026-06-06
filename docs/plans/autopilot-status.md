@@ -11,25 +11,27 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: Complete.
-- Current branch: none.
-- Current worktree: `.Codex/worktrees/twenty-crm-e2e-fixes`.
-- Status: complete.
+- Current unit: CRM backend bootstrap fix.
+- Current branch: `codex/twenty-crm-route-guard`.
+- Current worktree: `.Codex/worktrees/twenty-crm-general-deploy`.
+- Status: in progress.
 
-| Unit                                           | Branch                               | PR                                                           | State  | Notes                                                                                                                                 |
-| ---------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Deploy, park, and destructive cleanup flow     | `codex/twenty-crm-lifecycle-actions` | [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) | Merged | Adds explicit Deploy, Park, and Destroy actions; Destroy removes retained Twenty DB/role/secrets after Terraform.                     |
-| Managed Applications configuration-link polish | `codex/managed-app-config-link`      | [#2136](https://github.com/thinkwork-ai/thinkwork/pull/2136) | Merged | General now links Twenty to CRM configuration; CRM detail owns Deploy plus bottom Teardown controls for Park and destructive Destroy. |
-| E2E deploy-readiness UI/allowlist workflow     | `codex/twenty-crm-e2e-fixes`         | [#2137](https://github.com/thinkwork-ai/thinkwork/pull/2137) | Merged | Wires CI operator email input and makes CRM Deploy show immediate queued/error state before lifecycle proof.                          |
-| Greenfield operator allowlist variable         | `codex/twenty-crm-root-operator-var` | [#2139](https://github.com/thinkwork-ai/thinkwork/pull/2139) | Merged | Declares and forwards the root Terraform variable required by the merged deploy workflow.                                             |
-| CRM DNS hosted-zone guard                      | `codex/twenty-crm-dns-fix`           | [#2141](https://github.com/thinkwork-ai/thinkwork/pull/2141) | Merged | Keeps CRM DNS records plan-safe before the ALB exists.                                                                                |
-| Dedicated CRM certificate                      | `codex/twenty-crm-cert-fix`          | [#2142](https://github.com/thinkwork-ai/thinkwork/pull/2142) | Merged | Issues a dedicated `crm.thinkwork.ai` ACM certificate.                                                                               |
-| CRM certificate validation state               | `codex/twenty-crm-cert-state-fix`    | [#2143](https://github.com/thinkwork-ai/thinkwork/pull/2143) | Merged | Moves the CRM ACM validation state to the correct Terraform module address.                                                          |
-| Lambda env budget fix                          | `codex/twenty-crm-status-env-budget` | [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144) | Merged | Keeps deployment-status env vars below Lambda's 4 KB limit.                                                                          |
-| Aurora URL psql compatibility                  | `codex/twenty-crm-db-url-ssl-fix`    | [#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147) | Merged | Uses `sslmode=require` so the deploy workflow's `psql` DB prep succeeds.                                                            |
-| Twenty Node TLS runtime fix                    | `codex/twenty-crm-node-tls-runtime`  | [#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148) | Merged | Adds the Node TLS setting needed for Twenty's migration process to accept the Aurora RDS certificate in dev.                         |
-| Twenty DB owner grants                         | `codex/twenty-crm-db-owner-grants`   | [#2149](https://github.com/thinkwork-ai/thinkwork/pull/2149) | Merged | Gives the dedicated Twenty database user enough rights to create schemas, extensions, and migration-owned objects.                   |
-| Twenty DB setup role switch                    | `codex/twenty-crm-db-setup-role`     | [#2150](https://github.com/thinkwork-ai/thinkwork/pull/2150) | Merged | Runs Twenty schema and extension setup under the app DB role so Postgres ownership checks pass.                                      |
+| Unit                                           | Branch                               | PR                                                           | State  | Notes                                                                                                                                  |
+| ---------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Deploy, park, and destructive cleanup flow     | `codex/twenty-crm-lifecycle-actions` | [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) | Merged | Adds explicit Deploy, Park, and Destroy actions; Destroy removes retained Twenty DB/role/secrets after Terraform.                      |
+| Managed Applications configuration-link polish | `codex/managed-app-config-link`      | [#2136](https://github.com/thinkwork-ai/thinkwork/pull/2136) | Merged | General now links Twenty to CRM configuration; CRM detail owns Deploy plus bottom Teardown controls for Park and destructive Destroy.  |
+| E2E deploy-readiness UI/allowlist workflow     | `codex/twenty-crm-e2e-fixes`         | [#2137](https://github.com/thinkwork-ai/thinkwork/pull/2137) | Merged | Wires CI operator email input and makes CRM Deploy show immediate queued/error state before lifecycle proof.                           |
+| Greenfield operator allowlist variable         | `codex/twenty-crm-root-operator-var` | [#2139](https://github.com/thinkwork-ai/thinkwork/pull/2139) | Merged | Declares and forwards the root Terraform variable required by the merged deploy workflow.                                              |
+| CRM DNS hosted-zone guard                      | `codex/twenty-crm-dns-fix`           | [#2141](https://github.com/thinkwork-ai/thinkwork/pull/2141) | Merged | Keeps CRM DNS records plan-safe before the ALB exists.                                                                                 |
+| Dedicated CRM certificate                      | `codex/twenty-crm-cert-fix`          | [#2142](https://github.com/thinkwork-ai/thinkwork/pull/2142) | Merged | Issues a dedicated `crm.thinkwork.ai` ACM certificate.                                                                                 |
+| CRM certificate validation state               | `codex/twenty-crm-cert-state-fix`    | [#2143](https://github.com/thinkwork-ai/thinkwork/pull/2143) | Merged | Moves the CRM ACM validation state to the correct Terraform module address.                                                            |
+| Lambda env budget fix                          | `codex/twenty-crm-status-env-budget` | [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144) | Merged | Keeps deployment-status env vars below Lambda's 4 KB limit.                                                                            |
+| Aurora URL psql compatibility                  | `codex/twenty-crm-db-url-ssl-fix`    | [#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147) | Merged | Uses `sslmode=require` so the deploy workflow's `psql` DB prep succeeds.                                                               |
+| Twenty Node TLS runtime fix                    | `codex/twenty-crm-node-tls-runtime`  | [#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148) | Merged | Adds the Node TLS setting needed for Twenty's migration process to accept the Aurora RDS certificate in dev.                           |
+| Twenty DB owner grants                         | `codex/twenty-crm-db-owner-grants`   | [#2149](https://github.com/thinkwork-ai/thinkwork/pull/2149) | Merged | Gives the dedicated Twenty database user enough rights to create schemas, extensions, and migration-owned objects.                     |
+| Twenty DB setup role switch                    | `codex/twenty-crm-db-setup-role`     | [#2150](https://github.com/thinkwork-ai/thinkwork/pull/2150) | Merged | Runs Twenty schema and extension setup under the app DB role so Postgres ownership checks pass.                                        |
+| General toggle and CRM route polish            | `codex/twenty-crm-general-deploy`    | [#2152](https://github.com/thinkwork-ai/thinkwork/pull/2152) | Merged | Moves deploy to the General toggle, persists pending deploy state, and shows Configure only after Twenty is provisioned.               |
+| CRM backend bootstrap fix                      | `codex/twenty-crm-route-guard`       | Pending                                                      | Active | Disables Twenty database-backed config at bootstrap and prevents the CRM settings guard from redirecting before deployment data loads. |
 
 ### Progress Log
 
@@ -134,6 +136,20 @@ status: in_progress
   `INACTIVE` with zero tasks, deleted the Twenty DB URL secret, removed
   `crm.thinkwork.ai` DNS resolution, and removed both the `thinkwork_twenty`
   database and `thinkwork_twenty` role from Postgres.
+- PR [#2152](https://github.com/thinkwork-ai/thinkwork/pull/2152) passed CI,
+  was squash merged as `dd46b423`, and shipped the General Settings toggle UX.
+- After redeploying through the General toggle, `crm.thinkwork.ai` returned the
+  Twenty frontend and `/healthz` returned `ok`, but the browser showed
+  `Unable to Reach Back-end` on `/welcome`.
+- CloudWatch logs for `/thinkwork/dev/twenty/server` showed repeated
+  `DatabaseConfigDriver` failures reading `core.keyValuePair`; direct database
+  inspection showed `core` existed with zero tables. Twenty source confirms
+  `IS_CONFIG_VARIABLES_IN_DB_ENABLED` defaults to enabled unless explicitly
+  set to `false`, while the official Docker Compose file does not enable the
+  database-backed config path for first boot.
+- Opened branch `codex/twenty-crm-route-guard` to set
+  `IS_CONFIG_VARIABLES_IN_DB_ENABLED=false` for Twenty tasks and to keep the
+  CRM detail route from redirecting before deployment data finishes loading.
 
 ### CI / Verification
 
