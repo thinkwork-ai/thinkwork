@@ -21,6 +21,7 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   STAGE: dev
+  THINKWORK_PLATFORM_OPERATOR_EMAILS: ${{ vars.THINKWORK_PLATFORM_OPERATOR_EMAILS || 'eric@thinkwork.ai' }}
 
 jobs:
   # ── Detect what changed ──────────────────────────────────────────
@@ -1027,6 +1028,7 @@ jobs:
             -var "google_oauth_client_secret=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" \
             -var "lambda_zips_dir=$LAMBDA_DIR" \
             -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP" \
+            -var "platform_operator_emails=$THINKWORK_PLATFORM_OPERATOR_EMAILS" \
             -var "www_domain=${{ vars.WWW_DOMAIN }}" \
             -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \
             -var "ses_inbound_domain=agents.thinkwork.ai" \

@@ -11,15 +11,16 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: Managed Applications configuration-link correction.
-- Current branch: `codex/managed-app-config-link`.
-- Current worktree: `.Codex/worktrees/managed-app-config-link`.
+- Current unit: End-to-end lifecycle proof and deploy-readiness fix.
+- Current branch: `codex/twenty-crm-e2e-fixes`.
+- Current worktree: `.Codex/worktrees/twenty-crm-e2e-fixes`.
 - Status: active.
 
 | Unit                                           | Branch                               | PR                                                           | State  | Notes                                                                                                                                 |
 | ---------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Deploy, park, and destructive cleanup flow     | `codex/twenty-crm-lifecycle-actions` | [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) | Merged | Adds explicit Deploy, Park, and Destroy actions; Destroy removes retained Twenty DB/role/secrets after Terraform.                     |
-| Managed Applications configuration-link polish | `codex/managed-app-config-link`      | [#2136](https://github.com/thinkwork-ai/thinkwork/pull/2136) | Active | General now links Twenty to CRM configuration; CRM detail owns Deploy plus bottom Teardown controls for Park and destructive Destroy. |
+| Managed Applications configuration-link polish | `codex/managed-app-config-link`      | [#2136](https://github.com/thinkwork-ai/thinkwork/pull/2136) | Merged | General now links Twenty to CRM configuration; CRM detail owns Deploy plus bottom Teardown controls for Park and destructive Destroy. |
+| E2E deploy-readiness and proof                 | `codex/twenty-crm-e2e-fixes`         | TBD                                                          | Active | Fixes the live platform-operator allowlist wiring and makes CRM Deploy show immediate queued/error state before lifecycle proof.      |
 
 ### Progress Log
 
@@ -46,6 +47,16 @@ status: in_progress
 - Moved Twenty Park and destructive Destroy controls to a bottom Teardown
   section on the CRM detail page, while keeping Deploy and queued workflow
   status near the top of the detail page.
+- Confirmed the first live Twenty Deploy request failed before queueing because
+  the deployed `graphql-http` Lambda had an empty
+  `THINKWORK_PLATFORM_OPERATOR_EMAILS` environment variable. Direct GraphQL
+  mutation returned `FAILED_PRECONDITION`.
+- Set repository variable `THINKWORK_PLATFORM_OPERATOR_EMAILS` to
+  `eric@thinkwork.ai` and opened branch `codex/twenty-crm-e2e-fixes` to wire
+  that value into Terraform apply/verify.
+- Updated the CRM detail page so Deploy calls the mutation directly, shows
+  `queued` immediately while the request is in flight, and renders mutation
+  failures inline as `Last deployment request`.
 
 ### CI / Verification
 
@@ -71,10 +82,17 @@ status: in_progress
 - Follow-up local verification: `git diff --check` passed.
 - Started Spaces locally on `http://127.0.0.1:5175/`; Playwright screenshots
   reached the expected unauthenticated login screen in a fresh browser context.
+- E2E-readiness verification:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsCrm.test.tsx src/components/settings/ManagedApplicationsSection.test.tsx`
+  passed with 9 tests.
+- E2E-readiness verification:
+  `pnpm --filter @thinkwork/spaces typecheck` passed.
+- E2E-readiness verification: `git diff --check` passed.
 
 ### Blockers
 
-- None.
+- Waiting for the allowlist/UI fix PR to merge and deploy before rerunning the
+  Twenty lifecycle proof against dev.
 
 ## Spaces Settings Activity - 2026-06-05
 
