@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CLEAR_TOKEN_STORAGE_CHANNEL,
   CONSUME_PENDING_OAUTH_CHANNEL,
+  DEEP_LINK_EVENT_CHANNEL,
   GET_SESSION_TOKENS_CHANNEL,
   OAUTH_ERROR_EVENT_CHANNEL,
   START_OAUTH_CHANNEL,
@@ -170,6 +171,39 @@ describe("auth bridge handlers", () => {
     expect(sent).toHaveBeenCalledWith(OAUTH_ERROR_EVENT_CHANNEL, {
       message: "invalid_request: Bad redirect",
     });
+  });
+
+  it("broadcasts deployment profile deep links without OAuth exchange", () => {
+    const ipcMain = createIpcMain();
+    const sent = vi.fn();
+    const completeOAuthCallback = vi.fn();
+    const dispatchers: Array<(callback: DeepLinkCallback) => void> = [];
+    registerAuthBridgeHandlers({
+      ipcMain,
+      storage: createStorage(),
+      getWindows: () => [{ webContents: { send: sent } }],
+      consumePendingOAuth: () => null,
+      markDeepLinkReady: (nextDispatcher) => {
+        dispatchers.push(nextDispatcher);
+      },
+      oauth: {
+        startOAuth: vi.fn(),
+        completeOAuthCallback,
+        signOut: vi.fn(),
+      },
+    });
+
+    dispatchers[0]?.({
+      type: "deployment-profile",
+      json: '{"schemaVersion":1}',
+    });
+
+    expect(completeOAuthCallback).not.toHaveBeenCalled();
+    expect(sent).toHaveBeenCalledWith(DEEP_LINK_EVENT_CHANNEL, {
+      type: "deployment-profile",
+      json: '{"schemaVersion":1}',
+    });
+    expect(ipcMain.invoke(CONSUME_PENDING_OAUTH_CHANNEL)).toBeNull();
   });
 
   it("rejects untrusted sender frames", () => {

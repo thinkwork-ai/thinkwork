@@ -6,15 +6,14 @@ import {
   safeStorage,
   shell,
 } from "electron";
-import { join } from "node:path";
-import { SafeStorageCognitoStorage } from "./cognito-storage.js";
-import { registerAuthBridgeHandlers } from "./auth-bridge.js";
 import {
   CHECK_FOR_UPDATES_CHANNEL,
   DOWNLOAD_UPDATE_CHANNEL,
   GET_DESKTOP_CONFIG_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
+  IMPORT_DEPLOYMENT_PROFILE_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
+  REMOVE_DEPLOYMENT_PROFILE_CHANNEL,
   REPORT_INSTALL_OUTCOME_CHANNEL,
   SET_NATIVE_THEME_CHANNEL,
   RAISE_THREAD_NOTIFICATION_CHANNEL,
@@ -23,18 +22,24 @@ import {
   CheckForUpdatesRequestSchema,
   DownloadUpdateRequestSchema,
   GetDesktopConfigRequestSchema,
+  GetDesktopConfigResponseSchema,
   GetUpdateStateRequestSchema,
+  ImportDeploymentProfileRequestSchema,
+  ImportDeploymentProfileResponseSchema,
   InstallUpdateRequestSchema,
   ReportInstallOutcomeRequestSchema,
   RaiseThreadNotificationRequestSchema,
+  RemoveDeploymentProfileRequestSchema,
+  RemoveDeploymentProfileResponseSchema,
   assertSafeSenderFrame,
   type DeepLinkCallback,
 } from "@thinkwork/desktop-ipc";
+import { registerAuthBridgeHandlers } from "./auth-bridge.js";
+import { SafeStorageCognitoStorage } from "./cognito-storage.js";
+import { DesktopDeploymentProfileManager } from "./deployment-profile.js";
 import { raiseThreadNotification } from "./notifications.js";
 import type { DeepLinkDispatcher } from "./deep-link.js";
-import { resolveDeepLinkScheme } from "./deep-link.js";
 import type { DesktopEnvSnapshot } from "./env.js";
-import { validateDesktopEnv } from "./env.js";
 import type { DesktopMenuCommandHandlers } from "./menus.js";
 import { DesktopOAuthController } from "./oauth.js";
 import { createDesktopUpdatesController } from "./updates.js";
@@ -53,8 +58,13 @@ export async function registerDesktopIpcHandlers(
     safeStorage,
     logger: console,
   });
-  const oauth = new DesktopOAuthController({
+  const deploymentProfiles = new DesktopDeploymentProfileManager({
+    app,
     env: options.env,
+    logger: console,
+  });
+  const oauth = new DesktopOAuthController({
+    env: () => deploymentProfiles.activeEnv(),
     storage,
     app,
     shell,
@@ -78,6 +88,16 @@ export async function registerDesktopIpcHandlers(
   });
   await updates.start();
 
+  const auth = registerAuthBridgeHandlers({
+    ipcMain,
+    storage,
+    getWindows: () => BrowserWindow.getAllWindows(),
+    consumePendingOAuth: options.consumePendingOAuthDeepLink,
+    markDeepLinkReady: options.markDeepLinkIpcReady,
+    oauth,
+    logger: console,
+  });
+
   // Sync the native window appearance to the app theme so macOS vibrancy
   // materials render light/dark to match (the in-app theme is renderer-owned;
   // without this the material follows the OS, muddying the light sidebar).
@@ -86,26 +106,32 @@ export async function registerDesktopIpcHandlers(
     nativeTheme.themeSource = payload === "light" ? "light" : "dark";
   });
 
-  ipcMain.handle(GET_DESKTOP_CONFIG_CHANNEL, (event, payload) => {
+  ipcMain.handle(GET_DESKTOP_CONFIG_CHANNEL, async (event, payload) => {
     assertSafeSenderFrame(event);
     GetDesktopConfigRequestSchema.parse(payload);
-    const validation = validateDesktopEnv(options.env);
-    const deepLinkScheme = resolveDeepLinkScheme(
-      options.env.deepLinkScheme ?? options.env.stage,
+    return GetDesktopConfigResponseSchema.parse(
+      await deploymentProfiles.getDesktopConfig(),
     );
-    return {
-      stage: options.env.stage,
-      configured: validation.configured,
-      missing: validation.missing,
-      oauthRedirectUri: `${deepLinkScheme}://oauth/callback`,
-      endpoints: {
-        apiUrl: options.env.apiUrl,
-        graphqlHttpUrl: options.env.graphqlHttpUrl,
-        graphqlUrl: options.env.graphqlUrl,
-        graphqlWsUrl: options.env.graphqlWsUrl,
-        cognitoDomain: options.env.cognito.domain,
-      },
-    };
+  });
+  ipcMain.handle(IMPORT_DEPLOYMENT_PROFILE_CHANNEL, async (event, payload) => {
+    assertSafeSenderFrame(event);
+    if (hasAuthenticatedSession(auth.snapshot().items)) {
+      throw new Error("Sign out before changing deployment profiles.");
+    }
+    const request = ImportDeploymentProfileRequestSchema.parse(payload);
+    const config = await deploymentProfiles.importProfileJson(request.json);
+    auth.clearTokenStorage();
+    return ImportDeploymentProfileResponseSchema.parse(config);
+  });
+  ipcMain.handle(REMOVE_DEPLOYMENT_PROFILE_CHANNEL, async (event, payload) => {
+    assertSafeSenderFrame(event);
+    RemoveDeploymentProfileRequestSchema.parse(payload);
+    if (hasAuthenticatedSession(auth.snapshot().items)) {
+      throw new Error("Sign out before changing deployment profiles.");
+    }
+    const config = await deploymentProfiles.removeProfile();
+    auth.clearTokenStorage();
+    return RemoveDeploymentProfileResponseSchema.parse(config);
   });
   ipcMain.handle(GET_UPDATE_STATE_CHANNEL, (event, payload) => {
     assertSafeSenderFrame(event);
@@ -142,16 +168,6 @@ export async function registerDesktopIpcHandlers(
   app.on("before-quit", () => {
     updates.dispose();
     oauth.dispose();
-  });
-
-  const auth = registerAuthBridgeHandlers({
-    ipcMain,
-    storage,
-    getWindows: () => BrowserWindow.getAllWindows(),
-    consumePendingOAuth: options.consumePendingOAuthDeepLink,
-    markDeepLinkReady: options.markDeepLinkIpcReady,
-    oauth,
-    logger: console,
   });
 
   return {

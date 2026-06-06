@@ -77,9 +77,17 @@ export const OAuthFailureCallbackSchema = z
   })
   .strict();
 
+export const DeploymentProfileDeepLinkSchema = z
+  .object({
+    type: z.literal("deployment-profile"),
+    json: z.string().min(1),
+  })
+  .strict();
+
 export const DeepLinkCallbackSchema = z.union([
   OAuthSuccessCallbackSchema,
   OAuthFailureCallbackSchema,
+  DeploymentProfileDeepLinkSchema,
 ]);
 
 export const PendingOAuthCallbackSchema = OAuthSuccessCallbackSchema.extend({
@@ -111,11 +119,34 @@ export const DesktopConfigSchema = z
         cognitoDomain: z.string().nullable(),
       })
       .strict(),
+    deployment: z
+      .object({
+        source: z.enum(["env", "profile"]),
+        deploymentId: z.string().min(1).nullable(),
+        displayName: z.string().min(1),
+        stage: z.string().min(1),
+        region: z.string().min(1).nullable(),
+        profileSha256: z.string().min(1).nullable(),
+        trustStatus: z.string().min(1),
+        trustLabel: z.string().min(1),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
 export const GetDesktopConfigRequestSchema = EmptyRequestSchema;
 export const GetDesktopConfigResponseSchema = DesktopConfigSchema;
+
+export const ImportDeploymentProfileRequestSchema = z
+  .object({
+    json: z.string().min(1),
+  })
+  .strict();
+export const ImportDeploymentProfileResponseSchema = DesktopConfigSchema;
+
+export const RemoveDeploymentProfileRequestSchema = EmptyRequestSchema;
+export const RemoveDeploymentProfileResponseSchema = DesktopConfigSchema;
 
 export const UpdateStatusSchema = z.enum([
   "disabled",
@@ -277,6 +308,14 @@ export const ChannelSchemas = {
     request: GetDesktopConfigRequestSchema,
     response: GetDesktopConfigResponseSchema,
   },
+  importDeploymentProfile: {
+    request: ImportDeploymentProfileRequestSchema,
+    response: ImportDeploymentProfileResponseSchema,
+  },
+  removeDeploymentProfile: {
+    request: RemoveDeploymentProfileRequestSchema,
+    response: RemoveDeploymentProfileResponseSchema,
+  },
   getUpdateState: {
     request: GetUpdateStateRequestSchema,
     response: GetUpdateStateResponseSchema,
@@ -317,9 +356,15 @@ export type SignOutResponse = z.infer<typeof SignOutResponseSchema>;
 export type DeepLinkCallback = z.infer<typeof DeepLinkCallbackSchema>;
 export type OAuthSuccessCallback = z.infer<typeof OAuthSuccessCallbackSchema>;
 export type OAuthFailureCallback = z.infer<typeof OAuthFailureCallbackSchema>;
+export type DeploymentProfileDeepLink = z.infer<
+  typeof DeploymentProfileDeepLinkSchema
+>;
 export type PendingOAuthCallback = z.infer<typeof PendingOAuthCallbackSchema>;
 export type OAuthErrorEvent = z.infer<typeof OAuthErrorEventSchema>;
 export type DesktopConfig = z.infer<typeof DesktopConfigSchema>;
+export type ImportDeploymentProfileRequest = z.infer<
+  typeof ImportDeploymentProfileRequestSchema
+>;
 export type UpdateStatus = z.infer<typeof UpdateStatusSchema>;
 export type UpdateArchMetadata = z.infer<typeof UpdateArchMetadataSchema>;
 export type UpdateState = z.infer<typeof UpdateStateSchema>;

@@ -322,6 +322,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@thinkwork/deployment-profile':
+        specifier: workspace:*
+        version: link:../../packages/deployment-profile
       '@thinkwork/desktop-ipc':
         specifier: workspace:*
         version: link:../../packages/desktop-ipc

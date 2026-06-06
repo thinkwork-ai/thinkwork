@@ -135,10 +135,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U7a Profile Contract, Export, and Trust.
-- Current branch: `codex/u7a-deployment-profile-contract`.
-- Current worktree: `.Codex/worktrees/u7a-deployment-profile-contract`.
-- Status: U7a in progress.
+- Current unit: U7b Desktop Profile Binding.
+- Current branch: `codex/u7b-desktop-profile-binding`.
+- Current worktree: `.Codex/worktrees/u7b-desktop-profile-binding`.
+- Status: U7b in progress.
 
 | Unit                                                      | Branch                                  | PR                                                           | State  | Notes                                                                                                                                                                                    |
 | --------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -148,7 +148,8 @@ status: in_progress
 | U4 Deployment Job Domain, API, and Runner Orchestration   | `codex/u4-deployment-job-api`           | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Merged | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                                                          |
 | U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`         | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Merged | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.                                       |
 | U6 Spaces Managed Applications UX                         | `codex/u6-managed-applications-ux`      | [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) | Merged | Squash merged as `3167d15d7af8d838b834f991486bdb295a38fa87`; replaces switch-style lifecycle controls with Spaces plan preview, approval, progress, evidence, and destructive impact UX. |
-| U7a Profile Contract, Export, and Trust                   | `codex/u7a-deployment-profile-contract` | [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) | Active | Adds the shared deployment profile schema/trust validator and Spaces export/sign-in display surface for universal clients.                                                               |
+| U7a Profile Contract, Export, and Trust                   | `codex/u7a-deployment-profile-contract` | [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) | Merged | Squash merged as `51ab6151a04a9d3197e0212eb3a69c0d59453f95`; adds the shared deployment profile schema/trust validator and Spaces export/sign-in display surface for universal clients.  |
+| U7b Desktop Profile Binding                               | `codex/u7b-desktop-profile-binding`     | [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) | Active | Adds desktop profile import/storage, active-profile OAuth/API binding, and profile controls on the desktop sign-in surface.                                                              |
 
 ### Progress Log
 
@@ -403,6 +404,34 @@ status: in_progress
   existing sourcemap and chunk-size warnings.
 - Opened PR [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) for
   U7a.
+- PR [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) passed
+  required CI and was squash merged as
+  `51ab6151a04a9d3197e0212eb3a69c0d59453f95`.
+- Removed local worktree `.Codex/worktrees/u7a-deployment-profile-contract`
+  and deleted local branch `codex/u7a-deployment-profile-contract`; the remote
+  branch was deleted by the merge workflow.
+- Created isolated worktree
+  `.Codex/worktrees/u7b-desktop-profile-binding` from `origin/main` at
+  `51ab6151`.
+- Implemented U7b local slice: desktop deployment profile storage/import/remove
+  in Electron user data, profile-aware desktop config IPC, profile deep-link
+  parsing, active-profile OAuth binding, profile-safe auth bridge handling, and
+  desktop sign-in controls for paste/file import and removal before OAuth.
+- U7b local focused verification passed:
+  `pnpm --filter @thinkwork/desktop-ipc test`;
+  `pnpm --filter @thinkwork/desktop exec vitest run test/main/deployment-profile.test.ts test/main/deep-link.test.ts test/main/oauth.test.ts test/main/auth-bridge.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/routes/-sign-in.test.tsx src/context/AuthContext.test.tsx`;
+  and `pnpm --filter @thinkwork/desktop-ipc typecheck &&
+pnpm --filter @thinkwork/desktop typecheck &&
+pnpm --filter @thinkwork/spaces typecheck`.
+- U7b broader local verification passed:
+  `pnpm --filter @thinkwork/desktop test`; `pnpm --filter @thinkwork/spaces test`
+  (128 files, 882 tests; existing localstorage/DialogContent/deprecation
+  warnings); `pnpm --filter @thinkwork/desktop build`; and
+  `pnpm --filter @thinkwork/spaces build`. Builds emitted existing sourcemap
+  and chunk-size warnings only.
+- Opened PR [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) for
+  U7b.
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 

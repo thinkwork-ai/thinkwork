@@ -50,6 +50,36 @@ describe("desktop deep links", () => {
     });
   });
 
+  it("parses deployment profile import deep links", () => {
+    const json = JSON.stringify({ schemaVersion: 1, deploymentId: "acme" });
+    const encoded = Buffer.from(json).toString("base64url");
+
+    expect(
+      parseDeepLinkCallback(
+        `thinkwork-dev://deployment-profile/import?profile=${encoded}`,
+        {
+          allowedSchemes: ["thinkwork-dev"],
+        },
+      ),
+    ).toEqual({
+      type: "deployment-profile",
+      json,
+    });
+    expect(
+      parseDeepLinkCallback(
+        `thinkwork-dev://deployment-profile/import?json=${encodeURIComponent(
+          json,
+        )}`,
+        {
+          allowedSchemes: ["thinkwork-dev"],
+        },
+      ),
+    ).toEqual({
+      type: "deployment-profile",
+      json,
+    });
+  });
+
   it("rejects disallowed paths, missing data, and malformed URLs", () => {
     const logger = { warn: vi.fn() };
 
@@ -72,8 +102,13 @@ describe("desktop deep links", () => {
       ),
     ).toBeNull();
     expect(parseDeepLinkCallback("not a url", { logger })).toBeNull();
+    expect(
+      parseDeepLinkCallback("thinkwork://deployment-profile/import", {
+        logger,
+      }),
+    ).toBeNull();
 
-    expect(logger.warn).toHaveBeenCalledTimes(5);
+    expect(logger.warn).toHaveBeenCalledTimes(6);
   });
 
   it("rejects callbacks for schemes outside the active stage", () => {

@@ -15,6 +15,7 @@
     "lint": "echo 'lint: skipped (eslint not configured)'"
   },
   "dependencies": {
+    "@thinkwork/deployment-profile": "workspace:*",
     "@thinkwork/desktop-ipc": "workspace:*",
     "electron-updater": "6.8.3"
   },

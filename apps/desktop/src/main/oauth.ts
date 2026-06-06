@@ -38,7 +38,7 @@ export type FetchLike = (
 ) => Promise<Response>;
 
 export interface DesktopOAuthOptions {
-  env: DesktopEnvSnapshot;
+  env: DesktopEnvProvider;
   storage: ICognitoStorage;
   app: DesktopAppPathLike;
   shell: DesktopShellLike;
@@ -57,6 +57,7 @@ export interface InFlightAttempt {
   verifierBytes: Buffer;
   challenge: string;
   createdAt: number;
+  env: DesktopEnvSnapshot;
   next?: string;
 }
 
@@ -66,10 +67,14 @@ export interface OAuthTokens {
   refresh_token: string;
 }
 
+export type DesktopEnvProvider =
+  | DesktopEnvSnapshot
+  | (() => DesktopEnvSnapshot | Promise<DesktopEnvSnapshot>);
+
 export class DesktopOAuthController {
   readonly pendingRevocationsPath: string;
 
-  private readonly env: DesktopEnvSnapshot;
+  private readonly envProvider: DesktopEnvProvider;
   private readonly storage: ICognitoStorage;
   private readonly shell: DesktopShellLike;
   private readonly fetchImpl: FetchLike;
@@ -84,7 +89,7 @@ export class DesktopOAuthController {
   private evictionTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: DesktopOAuthOptions) {
-    this.env = options.env;
+    this.envProvider = options.env;
     this.storage = options.storage;
     this.shell = options.shell;
     this.fetchImpl = options.fetch ?? fetch;
@@ -115,7 +120,8 @@ export class DesktopOAuthController {
   async startOAuth(
     request: StartOAuthRequest = undefined,
   ): Promise<StartOAuthResponse> {
-    const clientId = requireConfig(this.env.cognito.clientId, "client id");
+    const env = await this.currentEnv();
+    const clientId = requireConfig(env.cognito.clientId, "client id");
     const verifierBytes = randomBytes(32);
     const verifier = verifierString(verifierBytes);
     const challenge = sha256Base64Url(verifier);
@@ -128,10 +134,11 @@ export class DesktopOAuthController {
       verifierBytes,
       challenge,
       createdAt,
+      env,
       next: request?.next,
     });
 
-    const url = this.buildAuthorizeUrl({ challenge, clientId, state });
+    const url = this.buildAuthorizeUrl({ challenge, clientId, env, state });
     try {
       await this.shell.openExternal(url);
     } catch (error) {
@@ -156,7 +163,11 @@ export class DesktopOAuthController {
     this.inFlight.delete(callback.state);
     try {
       const tokens = await this.exchangeCodeForTokens(callback.code, attempt);
-      this.persistTokens(tokens, resolveCognitoUsername(tokens.id_token));
+      this.persistTokens(
+        tokens,
+        resolveCognitoUsername(tokens.id_token),
+        attempt.env,
+      );
 
       return {
         code: callback.code,
@@ -222,36 +233,39 @@ export class DesktopOAuthController {
   private buildAuthorizeUrl(options: {
     challenge: string;
     clientId: string;
+    env: DesktopEnvSnapshot;
     state: string;
   }): string {
     const params = new URLSearchParams({
       identity_provider: "Google",
       response_type: "code",
       client_id: options.clientId,
-      redirect_uri: this.redirectUri(),
+      redirect_uri: this.redirectUri(options.env),
       scope: "openid email profile",
       code_challenge: options.challenge,
       code_challenge_method: "S256",
       state: options.state,
       prompt: "select_account",
     });
-    return `${this.cognitoDomainBase()}/oauth2/authorize?${params.toString()}`;
+    return `${this.cognitoDomainBase(
+      options.env,
+    )}/oauth2/authorize?${params.toString()}`;
   }
 
   private async exchangeCodeForTokens(
     code: string,
     attempt: InFlightAttempt,
   ): Promise<OAuthTokens> {
-    const clientId = requireConfig(this.env.cognito.clientId, "client id");
+    const clientId = requireConfig(attempt.env.cognito.clientId, "client id");
     const response = await this.fetchImpl(
-      `${this.cognitoDomainBase()}/oauth2/token`,
+      `${this.cognitoDomainBase(attempt.env)}/oauth2/token`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           grant_type: "authorization_code",
           client_id: clientId,
-          redirect_uri: this.redirectUri(),
+          redirect_uri: this.redirectUri(attempt.env),
           code,
           code_verifier: verifierString(attempt.verifierBytes),
         }),
@@ -278,8 +292,12 @@ export class DesktopOAuthController {
     };
   }
 
-  private persistTokens(tokens: OAuthTokens, username: string): void {
-    const clientId = requireConfig(this.env.cognito.clientId, "client id");
+  private persistTokens(
+    tokens: OAuthTokens,
+    username: string,
+    env: DesktopEnvSnapshot,
+  ): void {
+    const clientId = requireConfig(env.cognito.clientId, "client id");
     const prefix = `CognitoIdentityServiceProvider.${clientId}`;
     this.storage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
     this.storage.setItem(
@@ -325,9 +343,10 @@ export class DesktopOAuthController {
   }
 
   private async revokeRefreshToken(refreshToken: string): Promise<void> {
-    const clientId = requireConfig(this.env.cognito.clientId, "client id");
+    const env = await this.currentEnv();
+    const clientId = requireConfig(env.cognito.clientId, "client id");
     const response = await this.fetchImpl(
-      `${this.cognitoDomainBase()}/oauth2/revoke`,
+      `${this.cognitoDomainBase(env)}/oauth2/revoke`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -394,17 +413,24 @@ export class DesktopOAuthController {
     );
   }
 
-  private redirectUri(): string {
+  private async currentEnv(): Promise<DesktopEnvSnapshot> {
+    if (typeof this.envProvider === "function") {
+      return this.envProvider();
+    }
+    return this.envProvider;
+  }
+
+  private redirectUri(env: DesktopEnvSnapshot): string {
     return `${resolveDeepLinkScheme(
-      this.env.deepLinkScheme ?? this.env.stage,
+      env.deepLinkScheme ?? env.stage,
     )}://oauth/callback`;
   }
 
-  private cognitoDomainBase(): string {
-    const raw = requireConfig(
-      this.env.cognito.domain,
-      "Cognito domain",
-    ).replace(/\/$/, "");
+  private cognitoDomainBase(env: DesktopEnvSnapshot): string {
+    const raw = requireConfig(env.cognito.domain, "Cognito domain").replace(
+      /\/$/,
+      "",
+    );
     if (raw.startsWith("https://")) return raw;
     return `https://${raw}.auth.us-east-1.amazoncognito.com`;
   }

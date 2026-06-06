@@ -125,6 +125,12 @@ export function parseDeepLinkCallback(
     return null;
   }
 
+  if (url.host === "deployment-profile" && url.pathname === "/import") {
+    const json = decodeProfileJson(url, options.logger);
+    if (!json) return null;
+    return { type: "deployment-profile", json };
+  }
+
   if (
     url.host !== "oauth" ||
     url.pathname !== "/callback" ||
@@ -164,6 +170,36 @@ export function parseDeepLinkCallback(
   }
 
   return { code, state };
+}
+
+function decodeProfileJson(
+  url: URL,
+  logger: Pick<Console, "warn"> | undefined,
+): string | null {
+  const encoded = url.searchParams.get("profile");
+  const json = url.searchParams.get("json");
+  if (encoded && json) {
+    logger?.warn(
+      "[desktop] rejected deployment profile deep link with two payloads",
+    );
+    return null;
+  }
+
+  if (json?.trim()) return json;
+
+  if (!encoded?.trim()) {
+    logger?.warn(
+      "[desktop] rejected deployment profile deep link without payload",
+    );
+    return null;
+  }
+
+  try {
+    return Buffer.from(encoded, "base64url").toString("utf8");
+  } catch {
+    logger?.warn("[desktop] rejected deployment profile deep link payload");
+    return null;
+  }
 }
 
 export function isDeepLinkUrl(value: string): boolean {

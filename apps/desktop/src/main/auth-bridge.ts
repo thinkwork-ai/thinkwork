@@ -62,6 +62,7 @@ export interface RegisterAuthBridgeOptions {
 
 export interface AuthBridgeState {
   snapshot(): TokenStorageSnapshot;
+  clearTokenStorage(): void;
   signOut(): Promise<SignOutResponse>;
   onAuthStateChanged(listener: () => void): () => void;
 }
@@ -112,6 +113,11 @@ export function registerAuthBridgeHandlers(
   }
 
   async function acceptDeepLink(callback: DeepLinkCallback): Promise<void> {
+    if ("type" in callback) {
+      broadcast(DEEP_LINK_EVENT_CHANNEL, callback);
+      return;
+    }
+
     if ("error" in callback) {
       const message = formatOAuthError(callback);
       logger.warn("[desktop:auth-bridge] OAuth returned an error", message);
@@ -214,6 +220,10 @@ export function registerAuthBridgeHandlers(
 
   return {
     snapshot,
+    clearTokenStorage() {
+      options.storage.clear();
+      publishTokenStorageChange();
+    },
     signOut,
     onAuthStateChanged(listener) {
       authStateListeners.add(listener);
