@@ -42,6 +42,12 @@ import {
 import { resolveTenantId } from "../lib/tenants.js";
 import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
 import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
+import {
+  mcpOAuthCompletionUrl,
+  normalizeMcpOAuthReturnTo,
+  resolveMcpOAuthResource,
+  type McpOAuthResourceMetadata,
+} from "../lib/mcp-oauth-client.js";
 import { emitAuditEvent } from "../lib/compliance/emit.js";
 import {
   builtinToolSecretName,
@@ -689,6 +695,11 @@ async function mcpOAuthAuthorize(
   const apiBaseUrl = `https://${event.headers.host || ""}`;
   const callbackUrl = `${apiBaseUrl}/api/skills/mcp-oauth/callback`;
   const forceRediscovery = qs.force === "true";
+  const rawReturnTo = qs.returnTo || qs.redirectTo;
+  const returnTo = normalizeMcpOAuthReturnTo(rawReturnTo);
+  if (rawReturnTo && !returnTo) {
+    return error("Invalid MCP OAuth return URL", 400);
+  }
 
   // Always discover via RFC 9728 unless we have cached endpoints AND not forcing rediscovery
   let authorizeEndpoint =
@@ -696,6 +707,7 @@ async function mcpOAuthAuthorize(
   let tokenEndpoint = (!forceRediscovery && authConfig.token_endpoint) || "";
   let clientId = (!forceRediscovery && authConfig.client_id) || "";
   let registrationEndpoint = "";
+  let resourceMetadata: McpOAuthResourceMetadata | null = null;
 
   if (!authorizeEndpoint || !tokenEndpoint) {
     // Discover via RFC 9728
@@ -711,11 +723,9 @@ async function mcpOAuthAuthorize(
         `Failed to discover OAuth metadata: ${resourceRes.status}`,
         502,
       );
-    const resourceMeta = (await resourceRes.json()) as {
-      authorization_servers?: string[];
-    };
+    resourceMetadata = (await resourceRes.json()) as McpOAuthResourceMetadata;
 
-    const authServerUrl = resourceMeta.authorization_servers?.[0];
+    const authServerUrl = resourceMetadata.authorization_servers?.[0];
     if (!authServerUrl)
       return error("No authorization server in resource metadata", 502);
 
@@ -742,6 +752,12 @@ async function mcpOAuthAuthorize(
     if (authMeta.registration_endpoint)
       registrationEndpoint = authMeta.registration_endpoint;
   }
+
+  const resource = resolveMcpOAuthResource({
+    serverUrl: server.url,
+    authConfig,
+    resourceMetadata,
+  });
 
   // RFC 7591 Dynamic Client Registration — if no client_id and registration endpoint exists
   if (!clientId && registrationEndpoint) {
@@ -774,9 +790,11 @@ async function mcpOAuthAuthorize(
     // recompute, approved OAuth servers would self-revoke the first
     // time a user initiated OAuth (auth_config drift → hash mismatch).
     const nextAuthConfig = {
+      ...authConfig,
       authorize_endpoint: authorizeEndpoint,
       token_endpoint: tokenEndpoint,
       client_id: clientId,
+      oauth_resource: resource,
     };
     await db
       .update(tenantMcpServers)
@@ -812,6 +830,8 @@ async function mcpOAuthAuthorize(
       tokenEndpoint,
       clientId,
       codeVerifier,
+      resource,
+      returnTo,
     }),
   ).toString("base64url");
 
@@ -824,6 +844,7 @@ async function mcpOAuthAuthorize(
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("code_challenge", codeChallenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
+  authorizeUrl.searchParams.set("resource", resource);
   // The mobile MCP connect flow uses a persistent ASWebAuthenticationSession
   // cookie jar (no `preferEphemeralSession`) so reconnects reuse the WorkOS
   // session. If the user explicitly clears auth from the server detail
@@ -840,27 +861,32 @@ async function mcpOAuthAuthorize(
 }
 
 /**
- * Mobile-app deep link for MCP OAuth completion. The mobile MCP Servers
- * screen opens the OAuth flow via `WebBrowser.openAuthSessionAsync(url,
- * MCP_OAUTH_DEEP_LINK)` (plain 2-arg form, persistent cookie jar), and
- * Expo's ASWebAuthenticationSession watches for ANY redirect to this scheme.
- * As soon as our `mcpOAuthCallback` returns a 302 with `Location:
- * thinkwork://mcp-oauth-complete?...`, the in-app browser auto-closes
- * and the mobile callback receives the result via Expo's promise.
+ * OAuth completion defaults to the mobile app deep link. Desktop/web callers
+ * pass `returnTo` during authorize so the callback can instead return to the
+ * Settings MCP detail page with `mcpOAuth=success|error` query parameters.
  *
  * Hard-coded `thinkwork` scheme matches `apps/mobile/app.json:scheme`.
  * If we ever ship the app under a different scheme, update both at once.
  */
-const MCP_OAUTH_DEEP_LINK = "thinkwork://mcp-oauth-complete";
-
 function deepLinkRedirect(
   status: "success" | "error",
   extras: Record<string, string> = {},
 ): APIGatewayProxyStructuredResultV2 {
-  const params = new URLSearchParams({ status, ...extras });
   return {
     statusCode: 302,
-    headers: { Location: `${MCP_OAUTH_DEEP_LINK}?${params.toString()}` },
+    headers: { Location: mcpOAuthCompletionUrl(null, status, extras) },
+    body: "",
+  };
+}
+
+function mcpOAuthRedirect(
+  returnTo: string | null | undefined,
+  status: "success" | "error",
+  extras: Record<string, string> = {},
+): APIGatewayProxyStructuredResultV2 {
+  return {
+    statusCode: 302,
+    headers: { Location: mcpOAuthCompletionUrl(returnTo, status, extras) },
     body: "",
   };
 }
@@ -890,6 +916,8 @@ async function mcpOAuthCallback(
     tokenEndpoint: string;
     clientId: string;
     codeVerifier: string;
+    resource?: string;
+    returnTo?: string | null;
   };
   try {
     state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
@@ -910,6 +938,7 @@ async function mcpOAuthCallback(
       redirect_uri: callbackUrl,
       client_id: state.clientId,
       code_verifier: state.codeVerifier,
+      ...(state.resource ? { resource: state.resource } : {}),
     }).toString(),
     signal: AbortSignal.timeout(10000),
   });
@@ -919,7 +948,7 @@ async function mcpOAuthCallback(
     console.error(
       `[mcp-oauth] Token exchange failed: ${tokenRes.status} ${errBody}`,
     );
-    return deepLinkRedirect("error", {
+    return mcpOAuthRedirect(state.returnTo, "error", {
       reason: "token_exchange_failed",
       status: String(tokenRes.status),
     });
@@ -1002,10 +1031,11 @@ async function mcpOAuthCallback(
     `[mcp-oauth] Token stored for user ${state.userId}, MCP server ${state.mcpServerId}`,
   );
 
-  // Redirect to the mobile deep link — ASWebAuthenticationSession on
-  // the mobile side detects the `thinkwork://` scheme and auto-closes
-  // the in-app browser, returning control to the MCP Servers screen.
-  return deepLinkRedirect("success");
+  // Redirect to the requested desktop/web return URL, or fall back to
+  // the mobile deep link so ASWebAuthenticationSession auto-closes.
+  return mcpOAuthRedirect(state.returnTo, "success", {
+    mcpServerId: state.mcpServerId,
+  });
 }
 
 function legacySkillRestGone(): APIGatewayProxyStructuredResultV2 {

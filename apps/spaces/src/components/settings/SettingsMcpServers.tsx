@@ -6,13 +6,14 @@ import { useTenant } from "@/context/TenantContext";
 import {
   deleteMcpServer,
   listMcpServers,
+  listUserMcpServers,
   setMcpServerEnabled,
   type McpServer,
 } from "@/lib/mcp-api";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 
 export function SettingsMcpServers() {
-  const { tenant } = useTenant();
+  const { tenant, tenantId, userId } = useTenant();
   const navigate = useNavigate();
   const tenantSlug = tenant?.slug ?? null;
   const [servers, setServers] = useState<McpServer[] | null>(null);
@@ -23,12 +24,25 @@ export function SettingsMcpServers() {
   const load = useCallback(() => {
     if (!tenantSlug) return;
     setError(null);
-    listMcpServers(tenantSlug)
-      .then((r) => setServers(r.servers))
+    Promise.all([
+      listMcpServers(tenantSlug),
+      tenantId && userId
+        ? listUserMcpServers(tenantId, userId)
+        : Promise.resolve({ servers: [] }),
+    ])
+      .then(([tenantResult, userResult]) => {
+        const userById = new Map(userResult.servers.map((s) => [s.id, s]));
+        setServers(
+          tenantResult.servers.map((server) => ({
+            ...server,
+            authStatus: userById.get(server.id)?.authStatus,
+          })),
+        );
+      })
       .catch((e) =>
         setError(e instanceof Error ? e.message : "Failed to load"),
       );
-  }, [tenantSlug]);
+  }, [tenantId, tenantSlug, userId]);
 
   useEffect(() => {
     load();
@@ -93,12 +107,37 @@ export function SettingsMcpServers() {
         accessorKey: "status",
         header: "Status",
         size: 110,
-        cell: ({ row }) =>
-          row.original.status && row.original.status !== "approved" ? (
-            <Badge variant="outline">{row.original.status}</Badge>
+        cell: ({ row }) => {
+          const server = row.original;
+          if (
+            server.authType === "oauth" ||
+            server.authType === "per_user_oauth"
+          ) {
+            return (
+              <Badge
+                variant={
+                  server.authStatus === "active" ? "outline" : "secondary"
+                }
+                className={
+                  server.authStatus === "active"
+                    ? "border-emerald-500/40 text-emerald-400"
+                    : undefined
+                }
+              >
+                {server.authStatus === "active"
+                  ? "connected"
+                  : server.authStatus === "expired"
+                    ? "expired"
+                    : "not connected"}
+              </Badge>
+            );
+          }
+          return server.status && server.status !== "approved" ? (
+            <Badge variant="outline">{server.status}</Badge>
           ) : (
             <span className="text-muted-foreground">—</span>
-          ),
+          );
+        },
       },
       {
         id: "enabled",
