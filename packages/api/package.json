@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "pi:capability-smoke": "tsx scripts/pi-runtime-capability-smoke.ts",
     "context-engine:e2e": "vitest run --config vitest.context-engine-e2e.config.ts",
+    "model-stacking:e2e": "vitest run --config vitest.model-stacking-e2e.config.ts",
     "sandbox:e2e": "vitest run --config vitest.sandbox-e2e.config.ts",
     "user-memory-mcp:e2e": "vitest run --config vitest.user-memory-mcp-e2e.config.ts"
   },
