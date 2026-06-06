@@ -99,16 +99,16 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-004-feat-spaces-settings-activity-plan.md`.
 - Target branch: `main`.
-- Current unit: Identical Admin activity timeline follow-up.
-- Current branch: `codex/spaces-activity-identical-timeline`.
+- Current unit: Complete.
+- Current branch: none.
 - Current worktree: `.Codex/worktrees/spaces-settings-activity-preview`.
-- Status: active.
+- Status: complete.
 
-| Unit group                                               | Branch                                     | PR                                                           | State  | Notes                                                                                                                |
-| -------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------- |
-| U1-U5 Settings Activity, breadcrumbs, detail QA          | `codex/spaces-settings-activity`           | [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) | Merged | Squash merged as `e066a825`; local verification and required PR checks passed.                                       |
-| Feedback polish: Activity layout and detail port         | `codex/spaces-activity-feedback`           | [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135) | Merged | Squash merged as `b6a46790`; moved refresh/search/count layout and added a Settings-owned read-only detail route.    |
-| Follow-up: identical Admin activity execution trace port | `codex/spaces-activity-identical-timeline` | [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138) | Active | Replaces the approximate Settings timeline with the Admin `ExecutionTrace` implementation and Spaces query adapters. |
+| Unit group                                               | Branch                                     | PR                                                           | State  | Notes                                                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| U1-U5 Settings Activity, breadcrumbs, detail QA          | `codex/spaces-settings-activity`           | [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) | Merged | Squash merged as `e066a825`; local verification and required PR checks passed.                                          |
+| Feedback polish: Activity layout and detail port         | `codex/spaces-activity-feedback`           | [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135) | Merged | Squash merged as `b6a46790`; moved refresh/search/count layout and added a Settings-owned read-only detail route.       |
+| Follow-up: identical Admin activity execution trace port | `codex/spaces-activity-identical-timeline` | [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138) | Merged | Squash merged as `81681826`; replaced the approximate Settings timeline with the Admin `ExecutionTrace` implementation. |
 
 ### Progress Log
 
@@ -191,6 +191,11 @@ status: in_progress
   `pnpm --filter @thinkwork/spaces build`;
   `./node_modules/.pnpm/node_modules/.bin/prettier --check <touched files>`;
   `git diff --check`; `curl -I --max-time 5 http://localhost:5174/settings/activity`.
+- PR [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138) CI passed:
+  CLA, lint, verify, typecheck, and test all green.
+- PR [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138) was squash
+  merged into `main` as `81681826`. The remote branch was deleted and the
+  preview worktree was synced to the merged commit.
 
 ### Blockers
 
