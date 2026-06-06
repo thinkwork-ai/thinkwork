@@ -71,6 +71,11 @@ status: in_progress
   in `bootstrapUser`, sanitized Google/OIDC/SAML bootstrap validation, and
   Cognito OIDC/SAML Terraform pass-through.
 - Opened PR [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166).
+- CI Migration Drift Precheck initially failed because dev was missing the
+  hand-rolled `0150_bootstrap_first_admin_claim.sql` columns.
+- Applied the scoped migration to the dev database and reran
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0150_bootstrap_first_admin_claim.sql`
+  successfully.
 
 ### CI / Verification
 
@@ -121,6 +126,9 @@ status: in_progress
   `terraform -chdir=terraform/modules/thinkwork init -backend=false && terraform -chdir=terraform/modules/thinkwork validate`
   passed with existing provider deprecation warnings in unrelated modules; local
   `.terraform` init artifacts were removed afterward.
+- U3 CI: PR [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166)
+  passed CLA, lint, verify, typecheck, test, and Migration Drift Precheck
+  before merge.
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 
