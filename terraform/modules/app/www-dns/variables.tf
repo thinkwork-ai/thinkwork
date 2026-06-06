@@ -85,7 +85,7 @@ variable "include_api" {
 }
 
 variable "include_crm" {
-  description = "When true, add crm.<domain> to the ACM cert SANs and create a Cloudflare CNAME for the Twenty CRM public ALB."
+  description = "When true, create a Cloudflare CNAME for the Twenty CRM public ALB. The CRM ALB uses its own certificate."
   type        = bool
   default     = false
 }

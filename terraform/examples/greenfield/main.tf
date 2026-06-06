@@ -285,7 +285,7 @@ variable "twenty_public_url" {
 }
 
 variable "twenty_certificate_arn" {
-  description = "ACM certificate ARN for the Twenty public ALB. Leave empty to reuse the www-dns certificate."
+  description = "ACM certificate ARN for the Twenty public ALB. Leave empty to create a dedicated crm.<www_domain> certificate when Twenty is provisioned."
   type        = string
   default     = ""
 }
@@ -551,6 +551,8 @@ locals {
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
   crm_domain      = var.www_domain != "" ? "crm.${var.www_domain}" : ""
   twenty_url      = var.twenty_public_url != "" ? var.twenty_public_url : (local.crm_domain != "" ? "https://${local.crm_domain}" : "")
+
+  twenty_managed_certificate_enabled = local.www_dns_enabled && var.twenty_provisioned && var.twenty_certificate_arn == "" && local.crm_domain != ""
 }
 
 resource "aws_acm_certificate" "computer_sandbox" {
@@ -599,6 +601,52 @@ resource "aws_acm_certificate_validation" "computer_sandbox" {
   ]
 }
 
+resource "aws_acm_certificate" "twenty" {
+  count = local.twenty_managed_certificate_enabled ? 1 : 0
+
+  domain_name       = local.crm_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "thinkwork-${var.stage}-twenty"
+  }
+}
+
+resource "cloudflare_record" "twenty_acm_validation" {
+  for_each = {
+    for dvo in flatten([
+      for cert in aws_acm_certificate.twenty : tolist(cert.domain_validation_options)
+      ]) : dvo.domain_name => {
+      name  = dvo.resource_record_name
+      value = dvo.resource_record_value
+      type  = dvo.resource_record_type
+    }
+  }
+
+  zone_id = var.cloudflare_zone_id
+  name    = trimsuffix(each.value.name, ".")
+  content = trimsuffix(each.value.value, ".")
+  type    = each.value.type
+  ttl     = 60
+  proxied = false
+  comment = "ACM DNS validation for ${each.key}"
+
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "twenty" {
+  count = local.twenty_managed_certificate_enabled ? 1 : 0
+
+  certificate_arn = aws_acm_certificate.twenty[0].arn
+  validation_record_fqdns = [
+    for record in cloudflare_record.twenty_acm_validation : record.hostname
+  ]
+}
+
 module "thinkwork" {
   source = "../../modules/thinkwork"
 
@@ -642,7 +690,7 @@ module "thinkwork" {
   twenty_db_url_secret_arn                   = var.twenty_db_url_secret_arn
   twenty_encryption_key_secret_arn           = var.twenty_encryption_key_secret_arn
   twenty_public_url                          = local.twenty_url
-  twenty_certificate_arn                     = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : (local.www_dns_enabled ? module.www_dns[0].certificate_arn : "")
+  twenty_certificate_arn                     = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : (local.twenty_managed_certificate_enabled ? aws_acm_certificate_validation.twenty[0].certificate_arn : "")
   google_oauth_client_id                     = var.google_oauth_client_id
   google_oauth_client_secret                 = var.google_oauth_client_secret
   pre_signup_lambda_zip                      = var.pre_signup_lambda_zip
@@ -768,8 +816,8 @@ module "www_dns" {
   api_gateway_id         = module.thinkwork.api_id
   api_gateway_stage_name = "$default"
 
-  # Twenty CRM custom domain (crm.<apex>). The SAN is gated on the plain
-  # twenty_provisioned bool; the CNAME waits for the ALB DNS output.
+  # Twenty CRM custom domain (crm.<apex>). CRM uses its own ACM certificate;
+  # this module owns only the public CNAME to the ALB.
   include_crm      = var.twenty_provisioned
   crm_alb_dns_name = module.thinkwork.twenty_alb_dns_name != null ? module.thinkwork.twenty_alb_dns_name : ""
 }

@@ -369,7 +369,7 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(handlers).not.toMatch(/TWENTY_URL\s*=/);
   });
 
-  it("adds crm.<domain> DNS and certificate SAN support", () => {
+  it("adds crm.<domain> DNS support without rotating the shared site certificate", () => {
     const source = read(WWW_DNS_MAIN);
     const vars = read(WWW_DNS_VARS);
     const outputs = read(WWW_DNS_OUTPUTS);
@@ -381,7 +381,7 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(vars).toMatch(/variable "include_crm"/);
     expect(vars).toMatch(/variable "crm_alb_dns_name"/);
     expect(source).toMatch(/crm\s*=\s*"crm\.\$\{var\.domain\}"/);
-    expect(source).toMatch(/var\.include_crm \? \[local\.crm\] : \[\]/);
+    expect(source).not.toMatch(/var\.include_crm \? \[local\.crm\] : \[\]/);
     expect(source).toMatch(/create_crm_record\s*=\s*var\.include_crm/);
     expect(crmRecord).toMatch(/name\s*=\s*local\.crm/);
     expect(crmRecord).toMatch(/content\s*=\s*var\.crm_alb_dns_name/);
@@ -400,6 +400,14 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(source).toMatch(
       /crm_domain\s*=\s*var\.www_domain != "" \? "crm\.\$\{var\.www_domain\}"/,
     );
+    expect(source).toMatch(/twenty_managed_certificate_enabled/);
+    expect(source).toMatch(/resource "aws_acm_certificate" "twenty"/);
+    expect(source).toMatch(
+      /resource "cloudflare_record" "twenty_acm_validation"/,
+    );
+    expect(source).toMatch(
+      /resource "aws_acm_certificate_validation" "twenty"/,
+    );
     expect(thinkworkModule).toMatch(
       /twenty_provisioned\s*=\s*var\.twenty_provisioned/,
     );
@@ -410,7 +418,7 @@ describe("U1 - Twenty Terraform app module", () => {
       /twenty_public_url\s*=\s*local\.twenty_url/,
     );
     expect(thinkworkModule).toMatch(
-      /twenty_certificate_arn\s*=\s*var\.twenty_certificate_arn/,
+      /twenty_certificate_arn\s*=\s*var\.twenty_certificate_arn != "" \? var\.twenty_certificate_arn : \(local\.twenty_managed_certificate_enabled \? aws_acm_certificate_validation\.twenty\[0\]\.certificate_arn : ""\)/,
     );
     expect(wwwDnsModule).toMatch(/include_crm\s*=\s*var\.twenty_provisioned/);
     expect(wwwDnsModule).toMatch(
