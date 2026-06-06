@@ -38,6 +38,8 @@ database_engine = "rds-postgres"
 # twenty_encryption_key_secret_arn  = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/twenty/encryption-key-..."
 # twenty_public_url                 = "" # empty derives https://crm.<www_domain>
 # twenty_certificate_arn            = "" # empty creates a dedicated crm.<www_domain> certificate
+# twenty_email_from_address         = "" # empty derives noreply@ses_inbound_domain for SES SMTP
+# twenty_email_from_name            = "ThinkWork CRM"
 
 # Database master password — use a strong password
 db_password = "CHANGE_ME_strong_password_here"

@@ -565,6 +565,16 @@ variable "twenty_encryption_key_secret_arn" {
   default = ""
 }
 
+variable "twenty_email_from_address" {
+  type    = string
+  default = ""
+}
+
+variable "twenty_email_from_name" {
+  type    = string
+  default = "ThinkWork CRM"
+}
+
 variable "twenty_public_url" {
   type    = string
   default = ""
@@ -670,6 +680,8 @@ module "thinkwork" {
   twenty_db_name = var.twenty_db_name
   twenty_db_url_secret_arn = var.twenty_db_url_secret_arn
   twenty_encryption_key_secret_arn = var.twenty_encryption_key_secret_arn
+  twenty_email_from_address = var.twenty_email_from_address
+  twenty_email_from_name = var.twenty_email_from_name
   twenty_public_url = var.twenty_public_url
   twenty_certificate_arn = var.twenty_certificate_arn
   agentcore_memory_id        = var.agentcore_memory_id

@@ -500,6 +500,30 @@ variable "twenty_app_secret_arn" {
   default     = ""
 }
 
+variable "twenty_email_domain" {
+  description = "Verified SES domain used to derive Twenty's default noreply sender. Defaults to ses_inbound_domain."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_email_from_address" {
+  description = "Verified SES sender address for Twenty app emails. Defaults to noreply@<twenty_email_domain or ses_inbound_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_email_from_name" {
+  description = "Display name for Twenty app email From headers."
+  type        = string
+  default     = "ThinkWork CRM"
+}
+
+variable "twenty_email_smtp_host" {
+  description = "SES SMTP host for Twenty app emails. Leave empty to use email-smtp.<region>.amazonaws.com."
+  type        = string
+  default     = ""
+}
+
 variable "twenty_domain" {
   description = "Public hostname for Twenty CRM. Leave empty to derive crm.<www_domain> when www_domain is set."
   type        = string

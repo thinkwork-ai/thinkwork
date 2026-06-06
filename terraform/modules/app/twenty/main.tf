@@ -17,6 +17,9 @@ locals {
   redis_scheme = var.cache_transit_encryption_enabled ? "rediss" : "redis"
   redis_url    = "${local.redis_scheme}://${aws_elasticache_replication_group.twenty.primary_endpoint_address}:${var.cache_port}"
 
+  smtp_enabled = var.email_from_address != ""
+  smtp_host    = var.email_smtp_host != "" ? var.email_smtp_host : "email-smtp.${data.aws_region.current.name}.amazonaws.com"
+
   managed_secret_specs = {
     db_url = {
       enabled       = var.create_secret_placeholders && var.db_url_secret_arn == ""
@@ -52,6 +55,7 @@ locals {
     local.effective_encryption_key_secret_arn,
     var.fallback_encryption_key_secret_arn,
     var.app_secret_arn,
+    local.smtp_enabled ? aws_secretsmanager_secret.ses_smtp[0].arn : "",
   ])
 
   storage_mount_subnet_ids_by_index = {
@@ -71,8 +75,18 @@ locals {
     { name = "IS_MULTIWORKSPACE_ENABLED", value = "false" },
   ]
 
+  email_environment = local.smtp_enabled ? [
+    { name = "EMAIL_DRIVER", value = "SMTP" },
+    { name = "EMAIL_FROM_ADDRESS", value = var.email_from_address },
+    { name = "EMAIL_FROM_NAME", value = var.email_from_name },
+    { name = "EMAIL_SMTP_HOST", value = local.smtp_host },
+    { name = "EMAIL_SMTP_NO_TLS", value = tostring(var.email_smtp_no_tls) },
+    { name = "EMAIL_SMTP_PORT", value = tostring(var.email_smtp_port) },
+  ] : []
+
   server_environment = concat(
     local.base_environment,
+    local.email_environment,
     [
       { name = "DISABLE_DB_MIGRATIONS", value = "false" },
       { name = "DISABLE_CRON_JOBS_REGISTRATION", value = "false" },
@@ -81,6 +95,7 @@ locals {
 
   worker_environment = concat(
     local.base_environment,
+    local.email_environment,
     [
       { name = "DISABLE_DB_MIGRATIONS", value = "true" },
       { name = "DISABLE_CRON_JOBS_REGISTRATION", value = "true" },
@@ -93,11 +108,16 @@ locals {
       { name = "ENCRYPTION_KEY", valueFrom = "${local.effective_encryption_key_secret_arn}:ENCRYPTION_KEY::" },
     ],
     var.fallback_encryption_key_secret_arn != "" ? [{ name = "FALLBACK_ENCRYPTION_KEY", valueFrom = "${var.fallback_encryption_key_secret_arn}:FALLBACK_ENCRYPTION_KEY::" }] : [],
-    var.app_secret_arn != "" ? [{ name = "APP_SECRET", valueFrom = "${var.app_secret_arn}:APP_SECRET::" }] : []
+    var.app_secret_arn != "" ? [{ name = "APP_SECRET", valueFrom = "${var.app_secret_arn}:APP_SECRET::" }] : [],
+    local.smtp_enabled ? [
+      { name = "EMAIL_SMTP_USER", valueFrom = "${aws_secretsmanager_secret.ses_smtp[0].arn}:EMAIL_SMTP_USER::" },
+      { name = "EMAIL_SMTP_PASSWORD", valueFrom = "${aws_secretsmanager_secret.ses_smtp[0].arn}:EMAIL_SMTP_PASSWORD::" },
+    ] : []
   )
 }
 
 data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
 
 resource "aws_secretsmanager_secret" "twenty" {
   for_each = local.managed_secrets
@@ -120,6 +140,68 @@ resource "aws_secretsmanager_secret_version" "twenty" {
   lifecycle {
     ignore_changes = [secret_string]
   }
+}
+
+resource "aws_iam_user" "ses_smtp" {
+  count = local.smtp_enabled ? 1 : 0
+
+  name = "${local.name}-ses-smtp"
+  path = "/thinkwork/${var.stage}/"
+
+  tags = {
+    Name = "${local.name}-ses-smtp"
+    Role = "twenty-email"
+  }
+}
+
+resource "aws_iam_user_policy" "ses_smtp" {
+  count = local.smtp_enabled ? 1 : 0
+
+  name = "twenty-ses-smtp-send"
+  user = aws_iam_user.ses_smtp[0].name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ses:SendEmail",
+        "ses:SendRawEmail",
+      ]
+      Resource = [
+        "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:identity/*",
+        "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:configuration-set/*",
+      ]
+    }]
+  })
+}
+
+resource "aws_iam_access_key" "ses_smtp" {
+  count = local.smtp_enabled ? 1 : 0
+
+  user = aws_iam_user.ses_smtp[0].name
+}
+
+resource "aws_secretsmanager_secret" "ses_smtp" {
+  count = local.smtp_enabled ? 1 : 0
+
+  name        = "thinkwork/${var.stage}/twenty/ses-smtp"
+  description = "SES SMTP credentials for Twenty app emails"
+
+  tags = {
+    Name = "thinkwork/${var.stage}/twenty/ses-smtp"
+    Role = "twenty-email"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "ses_smtp" {
+  count = local.smtp_enabled ? 1 : 0
+
+  secret_id = aws_secretsmanager_secret.ses_smtp[0].id
+  secret_string = jsonencode({
+    EMAIL_SMTP_USER     = aws_iam_access_key.ses_smtp[0].id
+    EMAIL_SMTP_PASSWORD = aws_iam_access_key.ses_smtp[0].ses_smtp_password_v4
+  })
 }
 
 ################################################################################

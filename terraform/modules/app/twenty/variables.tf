@@ -178,6 +178,36 @@ variable "kms_key_arns" {
   default     = []
 }
 
+variable "email_from_address" {
+  description = "Verified SES sender address for Twenty app emails. Leave empty to skip SMTP configuration."
+  type        = string
+  default     = ""
+}
+
+variable "email_from_name" {
+  description = "Display name for Twenty app email From headers."
+  type        = string
+  default     = "ThinkWork CRM"
+}
+
+variable "email_smtp_host" {
+  description = "SES SMTP host for Twenty app emails. Leave empty to use email-smtp.<region>.amazonaws.com."
+  type        = string
+  default     = ""
+}
+
+variable "email_smtp_port" {
+  description = "SES SMTP port for Twenty app emails."
+  type        = number
+  default     = 587
+}
+
+variable "email_smtp_no_tls" {
+  description = "Set true to disable TLS for Twenty SMTP. SES should use TLS."
+  type        = bool
+  default     = false
+}
+
 variable "cache_engine" {
   description = "ElastiCache engine. Prefer valkey; redis is available as a compatibility fallback."
   type        = string
