@@ -39,6 +39,15 @@ credentials or encryption keys into plaintext task-definition environment
 values. Placeholder secret containers can be created for early wiring, but the
 real values are expected to be created or rotated by the deployment workflow.
 
+## Admin Panel Configuration
+
+The module sets `IS_CONFIG_VARIABLES_IN_DB_ENABLED=true` on both the Twenty
+server and worker containers. Twenty uses that mode to store Admin Panel
+configuration variables in the dedicated CRM database, so settings such as model
+provider keys, messaging providers, and storage options can be edited from the
+Twenty UI after deployment. Infrastructure settings like `PG_DATABASE_URL`,
+`SERVER_URL`, and encryption keys remain environment-only.
+
 ## Cache
 
 The default cache engine is Valkey because it is the lower-cost
