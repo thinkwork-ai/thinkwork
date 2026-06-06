@@ -5,26 +5,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import {
-  Activity,
-  Bot,
-  Brain,
-  ChevronRight,
-  Cpu,
-  DollarSign,
-  ExternalLink,
-  FileText,
-  User,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronRight, ExternalLink, FileText } from "lucide-react";
 import { useQuery, useSubscription } from "urql";
 import { Badge, Button, Separator, cn } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
+import { ExecutionTrace } from "@/components/settings/SettingsActivityExecutionTrace";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -88,6 +75,12 @@ interface ActivityMessage {
     displayName?: string | null;
     avatarUrl?: string | null;
   } | null;
+  durableArtifact?: {
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+  } | null;
 }
 
 interface ThreadTurnsResult {
@@ -131,10 +124,6 @@ interface ThreadTrace {
   estimated?: boolean | null;
   createdAt?: string | null;
 }
-
-type TimelineEvent =
-  | { kind: "message"; id: string; at: string; message: ActivityMessage }
-  | { kind: "turn"; id: string; at: string; turn: ThreadTurn };
 
 const TRIGGER_LABELS: Record<string, string> = {
   chat: "Manual chat",
@@ -225,23 +214,22 @@ export function SettingsActivityThreadDetail({
         .filter((node): node is ActivityMessage => Boolean(node)),
     [thread?.messages?.edges],
   );
-  const timeline = useMemo(
-    () => buildTimeline(messages, turns),
-    [messages, turns],
-  );
-  const totalTokens = useMemo(
+  const executionMessages = useMemo(
     () =>
-      turns.reduce((sum, turn) => {
-        const usage = parseUsage(turn.usageJson);
-        return sum + usage.inputTokens + usage.outputTokens;
-      }, 0),
-    [turns],
+      messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content ?? null,
+        senderType: message.sender?.type ?? null,
+        senderId: message.sender?.id ?? null,
+        createdAt: message.createdAt ?? thread?.createdAt ?? "",
+        durableArtifact: message.durableArtifact ?? null,
+      })),
+    [messages, thread?.createdAt],
   );
-  const succeededTurns = turns.filter((turn) =>
-    ["succeeded", "success", "completed", "done"].includes(
-      (turn.status ?? "").toLowerCase(),
-    ),
-  ).length;
+  const userLabel =
+    messages.find((message) => message.role.toUpperCase() === "USER")?.sender
+      ?.displayName ?? "User";
   const latestSystemPrompt =
     turns.find((turn) => turn.systemPrompt?.trim())?.systemPrompt ?? null;
   const title = thread?.title?.trim() || thread?.identifier || "Thread";
@@ -289,53 +277,20 @@ export function SettingsActivityThreadDetail({
           <Separator className="mb-8" />
 
           <section className="mb-10">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
-                <Activity className="h-4 w-4" />
-                Activity
-              </h2>
-              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                <Metric
-                  icon={Cpu}
-                  label={formatTurnCount(turns.length, succeededTurns)}
-                />
-                {totalTokens > 0 ? (
-                  <Metric
-                    icon={Zap}
-                    label={`${formatTokens(totalTokens)} tokens`}
-                  />
-                ) : null}
-                {thread.costSummary ? (
-                  <Metric
-                    icon={DollarSign}
-                    label={formatUsd(thread.costSummary)}
-                    strong
-                  />
-                ) : null}
+            {tenantId ? (
+              <ExecutionTrace
+                threadId={threadId}
+                tenantId={tenantId}
+                messages={executionMessages}
+                defaultAgentName="ThinkWork"
+                assistantLabel="ThinkWork"
+                userLabel={userLabel}
+              />
+            ) : turnsFetching ? (
+              <div className="flex justify-center py-12">
+                <LoadingShimmer />
               </div>
-            </div>
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
-              {timeline.length > 0 ? (
-                timeline.map((event) =>
-                  event.kind === "message" ? (
-                    <MessageTimelineRow
-                      key={event.id}
-                      message={event.message}
-                    />
-                  ) : (
-                    <TurnTimelineRow key={event.id} turn={event.turn} />
-                  ),
-                )
-              ) : turnsFetching ? (
-                <div className="flex justify-center py-12">
-                  <LoadingShimmer />
-                </div>
-              ) : (
-                <p className="py-10 text-center text-sm text-muted-foreground">
-                  No activity recorded for this thread yet.
-                </p>
-              )}
-            </div>
+            ) : null}
           </section>
 
           <ThreadTraces traces={tracesData?.threadTraces ?? []} />
@@ -358,161 +313,6 @@ export function SettingsActivityThreadDetail({
         emptyDescription="No system prompt captured for this thread."
         emptyMessage="No system prompt available for this thread."
       />
-    </div>
-  );
-}
-
-function MessageTimelineRow({ message }: { message: ActivityMessage }) {
-  const [expanded, setExpanded] = useState(false);
-  const role = message.role.toUpperCase();
-  const isUser = role === "USER";
-  const label =
-    message.sender?.displayName?.trim() || (isUser ? "User" : "ThinkWork");
-  const content = message.content?.trim() || "(empty message)";
-
-  return (
-    <TimelineRow
-      icon={isUser ? User : Bot}
-      iconClassName={
-        isUser ? "bg-blue-950/60 text-blue-400" : "bg-cyan-950/60 text-cyan-300"
-      }
-      title={label}
-      subtitle={expanded ? null : content}
-      time={message.createdAt}
-      expanded={expanded}
-      onToggle={() => setExpanded((value) => !value)}
-      meta={
-        message.tokenCount ? (
-          <span>{formatTokens(message.tokenCount)} tokens</span>
-        ) : null
-      }
-    >
-      <MarkdownBlock content={content} />
-    </TimelineRow>
-  );
-}
-
-function TurnTimelineRow({ turn }: { turn: ThreadTurn }) {
-  const [expanded, setExpanded] = useState(false);
-  const usage = parseUsage(turn.usageJson);
-  const duration = turnDurationMs(turn);
-
-  return (
-    <TimelineRow
-      icon={Brain}
-      iconClassName="bg-emerald-950/60 text-emerald-300"
-      title="Thinking"
-      subtitle={triggerLabel(turn.invocationSource, turn.triggerName)}
-      time={turn.finishedAt ?? turn.startedAt ?? turn.createdAt}
-      expanded={expanded}
-      onToggle={() => setExpanded((value) => !value)}
-      badge={runtimeLabel(turn.runtimeType)}
-      meta={
-        <>
-          {usage.inputTokens || usage.outputTokens ? (
-            <span>
-              {formatTokens(usage.inputTokens)} -&gt;{" "}
-              {formatTokens(usage.outputTokens)}
-            </span>
-          ) : null}
-          {duration ? <span>{formatDuration(duration)}</span> : null}
-          {turn.totalCost ? <span>{formatUsd(turn.totalCost)}</span> : null}
-        </>
-      }
-    >
-      <div className="space-y-3 text-sm text-muted-foreground">
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="capitalize">
-            {turn.status || "unknown"}
-          </Badge>
-          {turn.errorCode ? (
-            <Badge
-              variant="outline"
-              className="border-destructive/50 text-destructive"
-            >
-              {turn.errorCode}
-            </Badge>
-          ) : null}
-          {turn.retryAttempt ? (
-            <Badge variant="outline">retry {turn.retryAttempt}</Badge>
-          ) : null}
-        </div>
-        {turn.error ? <p className="text-destructive">{turn.error}</p> : null}
-        {turn.triggerDetail ? <p>{turn.triggerDetail}</p> : null}
-      </div>
-    </TimelineRow>
-  );
-}
-
-function TimelineRow({
-  icon: Icon,
-  iconClassName,
-  title,
-  subtitle,
-  time,
-  badge,
-  meta,
-  expanded,
-  onToggle,
-  children,
-}: {
-  icon: LucideIcon;
-  iconClassName: string;
-  title: string;
-  subtitle?: string | null;
-  time?: string | null;
-  badge?: string | null;
-  meta?: ReactNode;
-  expanded: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className="border-b border-border last:border-b-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_auto] items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/35"
-      >
-        <span
-          className={cn(
-            "mt-0.5 flex h-8 w-8 items-center justify-center rounded-full",
-            iconClassName,
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </span>
-        <span className="min-w-0">
-          <span className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-semibold text-foreground">
-              {title}
-            </span>
-            <ChevronRight
-              className={cn(
-                "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
-                expanded && "rotate-90",
-              )}
-            />
-            {badge ? (
-              <Badge variant="outline" className="font-mono text-[10px]">
-                {badge}
-              </Badge>
-            ) : null}
-          </span>
-          {subtitle ? (
-            <span className="mt-1 block truncate text-sm text-muted-foreground">
-              {subtitle}
-            </span>
-          ) : null}
-          {expanded ? <span className="mt-4 block">{children}</span> : null}
-        </span>
-        <span className="flex min-w-[8rem] flex-col items-end gap-1 text-xs text-muted-foreground">
-          <span className="flex flex-wrap justify-end gap-3 tabular-nums">
-            {meta}
-          </span>
-          {time ? <span>{relativeTime(time)}</span> : null}
-        </span>
-      </button>
     </div>
   );
 }
@@ -699,56 +499,6 @@ function ThreadTraces({ traces }: { traces: ThreadTrace[] }) {
   );
 }
 
-function Metric({
-  icon: Icon,
-  label,
-  strong,
-}: {
-  icon: LucideIcon;
-  label: string;
-  strong?: boolean;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap",
-        strong && "font-medium text-foreground",
-      )}
-    >
-      <Icon className="h-4 w-4" />
-      {label}
-    </span>
-  );
-}
-
-function MarkdownBlock({ content }: { content: string }) {
-  return (
-    <div className="prose prose-sm dark:prose-invert max-w-none text-foreground">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-    </div>
-  );
-}
-
-function buildTimeline(
-  messages: ActivityMessage[],
-  turns: ThreadTurn[],
-): TimelineEvent[] {
-  return [
-    ...messages.map((message) => ({
-      kind: "message" as const,
-      id: `message-${message.id}`,
-      at: message.createdAt ?? "",
-      message,
-    })),
-    ...turns.map((turn) => ({
-      kind: "turn" as const,
-      id: `turn-${turn.id}`,
-      at: turn.startedAt ?? turn.createdAt ?? turn.finishedAt ?? "",
-      turn,
-    })),
-  ].sort((a, b) => dateValue(a.at) - dateValue(b.at));
-}
-
 function compareTurns(a: ThreadTurn, b: ThreadTurn) {
   const aTurn = a.turnNumber ?? 0;
   const bTurn = b.turnNumber ?? 0;
@@ -759,66 +509,10 @@ function compareTurns(a: ThreadTurn, b: ThreadTurn) {
   );
 }
 
-function parseUsage(value: unknown): {
-  inputTokens: number;
-  outputTokens: number;
-} {
-  const json = parseJsonObject(value);
-  const inputTokens =
-    numberFrom(json, "input_tokens") ??
-    numberFrom(json, "inputTokens") ??
-    numberFrom(json, "prompt_tokens") ??
-    0;
-  const outputTokens =
-    numberFrom(json, "output_tokens") ??
-    numberFrom(json, "outputTokens") ??
-    numberFrom(json, "completion_tokens") ??
-    0;
-  return { inputTokens, outputTokens };
-}
-
-function parseJsonObject(value: unknown): Record<string, unknown> {
-  if (!value) return {};
-  if (typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function numberFrom(
-  value: Record<string, unknown>,
-  key: string,
-): number | undefined {
-  const raw = value[key];
-  if (typeof raw === "number") return raw;
-  if (typeof raw === "string") {
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
 function dateValue(value?: string | null) {
   if (!value) return 0;
   const time = new Date(value).getTime();
   return Number.isFinite(time) ? time : 0;
-}
-
-function turnDurationMs(turn: ThreadTurn): number | null {
-  const started = dateValue(turn.startedAt);
-  const finished = dateValue(turn.finishedAt);
-  if (started && finished && finished >= started) return finished - started;
-  return null;
 }
 
 function triggerLabel(
@@ -847,10 +541,6 @@ function normalizeStatus(status?: string | null): string {
 function runtimeLabel(runtimeType?: string | null): string {
   const trimmed = runtimeType?.trim();
   return trimmed ? trimmed.toUpperCase() : "--";
-}
-
-function formatTurnCount(turnCount: number, succeededTurns: number): string {
-  return `${turnCount} turn${turnCount === 1 ? "" : "s"} (${succeededTurns} succeeded)`;
 }
 
 function formatTokens(value?: number | null): string {
