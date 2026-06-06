@@ -15,6 +15,15 @@ import {
   NewThreadMentionTargetsQuery,
   ThreadMentionTargetsQuery,
 } from "./graphql-queries";
+import {
+  SettingsApproveManagedApplicationDeploymentMutation,
+  SettingsDeploymentEvidenceQuery,
+  SettingsDeploymentStatusQuery,
+  SettingsManagedApplicationDeploymentQuery,
+  SettingsManagedApplicationsQuery,
+  SettingsRejectManagedApplicationDeploymentMutation,
+  SettingsStartManagedApplicationPlanMutation,
+} from "./settings-queries";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
 const SCHEMA_DIR = join(REPO_ROOT, "packages/database-pg/graphql");
@@ -45,6 +54,35 @@ describe("spaces mention-target queries vs canonical schema", () => {
   it.each([
     ["NewThreadMentionTargetsQuery", NewThreadMentionTargetsQuery],
     ["ThreadMentionTargetsQuery", ThreadMentionTargetsQuery],
+  ] as const)("%s validates against the schema", (_name, doc) => {
+    const errors = validate(schema, doc as DocumentNode);
+    expect(errors.map((e) => e.message)).toEqual([]);
+  });
+});
+
+describe("spaces settings deployment queries vs canonical schema", () => {
+  const schema = loadCanonicalSchema();
+
+  it.each([
+    ["SettingsDeploymentStatusQuery", SettingsDeploymentStatusQuery],
+    ["SettingsManagedApplicationsQuery", SettingsManagedApplicationsQuery],
+    [
+      "SettingsManagedApplicationDeploymentQuery",
+      SettingsManagedApplicationDeploymentQuery,
+    ],
+    ["SettingsDeploymentEvidenceQuery", SettingsDeploymentEvidenceQuery],
+    [
+      "SettingsStartManagedApplicationPlanMutation",
+      SettingsStartManagedApplicationPlanMutation,
+    ],
+    [
+      "SettingsApproveManagedApplicationDeploymentMutation",
+      SettingsApproveManagedApplicationDeploymentMutation,
+    ],
+    [
+      "SettingsRejectManagedApplicationDeploymentMutation",
+      SettingsRejectManagedApplicationDeploymentMutation,
+    ],
   ] as const)("%s validates against the schema", (_name, doc) => {
     const errors = validate(schema, doc as DocumentNode);
     expect(errors.map((e) => e.message)).toEqual([]);

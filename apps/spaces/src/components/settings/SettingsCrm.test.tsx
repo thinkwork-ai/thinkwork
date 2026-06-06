@@ -9,7 +9,6 @@ const { queryDocs, runHealthCheckMock, setDeploymentMock, useQueryMock } =
     queryDocs: {
       SettingsDeploymentStatusQuery: Symbol("deploymentStatus"),
       SettingsManagedApplicationHealthCheckQuery: Symbol("healthCheck"),
-      SettingsSetManagedApplicationDeploymentMutation: Symbol("setManagedApp"),
       SettingsInstallManagedApplicationMcpServerMutation: Symbol("installMcp"),
     },
     runHealthCheckMock: vi.fn(),
@@ -53,11 +52,13 @@ describe("SettingsCrm", () => {
     expect(source).toContain("First admin setup");
     expect(source).toContain("Twenty native first-user setup");
     expect(source).toContain("Follow-up: connect ThinkWork/Cognito SSO");
-    expect(source).toContain("SettingsSetManagedApplicationDeploymentMutation");
-    expect(source).toContain("deployment queued");
-    expect(source).toContain('SettingsSection label="Teardown"');
-    expect(source).toContain("Park runtime");
-    expect(source).toContain("Destroy Twenty CRM and delete data?");
+    expect(source).toContain('to="/settings/managed-applications"');
+    expect(source).not.toContain(
+      "SettingsSetManagedApplicationDeploymentMutation",
+    );
+    expect(source).not.toContain('SettingsSection label="Teardown"');
+    expect(source).not.toContain("Park runtime");
+    expect(source).not.toContain("Destroy Twenty CRM and delete data?");
     expect(source).toContain("SettingsManagedApplicationHealthCheckQuery");
     expect(source).toContain("managedApplicationHealthCheck");
   });
@@ -79,19 +80,30 @@ describe("SettingsCrm", () => {
     expect(screen.queryByRole("button", { name: /park/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /destroy/i })).toBeNull();
     expect(
+      screen
+        .getByRole("link", { name: /manage deployment/i })
+        .getAttribute("href"),
+    ).toBe("/settings/managed-applications");
+    expect(
       screen.queryByRole("button", { name: /install mcp server/i }),
     ).toBeNull();
   });
 
-  it("moves park and destroy controls to the bottom teardown section once provisioned", () => {
+  it("keeps lifecycle actions on the managed applications page once provisioned", () => {
     mockDeployment(deploymentWithTwentyRunning);
 
     render(<SettingsCrm />);
 
     expect(screen.queryByRole("button", { name: /deploy/i })).toBeNull();
-    expect(screen.getByText("Teardown")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /park/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /destroy/i })).toBeTruthy();
+    expect(screen.queryByText("Teardown")).toBeNull();
+    expect(screen.queryByRole("button", { name: /park/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /destroy/i })).toBeNull();
+    expect(
+      screen
+        .getAllByRole("link", { name: /manage/i })
+        .at(-1)
+        ?.getAttribute("href"),
+    ).toBe("/settings/managed-applications");
     expect(
       screen.getByRole("button", { name: /install mcp server/i }),
     ).toBeTruthy();
@@ -125,8 +137,12 @@ const deploymentWithTwentyDisabled = {
   bucketName: null,
   databaseEndpoint: null,
   ecrUrl: null,
+  adminUrl: null,
+  docsUrl: null,
   apiEndpoint: null,
   appsyncUrl: null,
+  appsyncRealtimeUrl: null,
+  hindsightEndpoint: null,
   cogneeEnabled: false,
   cogneeEndpoint: null,
   cogneeBackendMode: null,
