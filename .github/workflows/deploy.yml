@@ -913,7 +913,7 @@ jobs:
             GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"twenty_user";
           SQL
 
-          twenty_database_url="postgresql://${TWENTY_DB_USERNAME}:${twenty_password}@${DB_ENDPOINT}:5432/${TWENTY_DB_NAME}?sslmode=no-verify"
+          twenty_database_url="postgresql://${TWENTY_DB_USERNAME}:${twenty_password}@${DB_ENDPOINT}:5432/${TWENTY_DB_NAME}?sslmode=require"
           echo "::add-mask::$twenty_database_url"
           db_secret_json=$(jq -n \
             --arg username "$TWENTY_DB_USERNAME" \

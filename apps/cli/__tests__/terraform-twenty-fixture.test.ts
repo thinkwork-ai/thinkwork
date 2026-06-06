@@ -520,7 +520,7 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(workflow).toMatch(/openssl rand -hex 32/);
     expect(workflow).toMatch(/PG_DATABASE_URL/);
     expect(workflow).toMatch(
-      /twenty_database_url="postgresql:\/\/\$\{TWENTY_DB_USERNAME\}:\$\{twenty_password\}@\$\{DB_ENDPOINT\}:5432\/\$\{TWENTY_DB_NAME\}\?sslmode=no-verify"/,
+      /twenty_database_url="postgresql:\/\/\$\{TWENTY_DB_USERNAME\}:\$\{twenty_password\}@\$\{DB_ENDPOINT\}:5432\/\$\{TWENTY_DB_NAME\}\?sslmode=require"/,
     );
     expect(workflow).toMatch(/ENCRYPTION_KEY/);
     expect(workflow).toMatch(/aws secretsmanager create-secret/);

@@ -8007,3 +8007,12 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   env surface includes `PG_SSL_ALLOW_SELF_SIGNED=true` for this case, so the
   next fix branch `codex/twenty-crm-rds-tls-runtime` adds that task environment
   flag to the Terraform module and fixture tests.
+- PR [#2146](https://github.com/thinkwork-ai/thinkwork/pull/2146) merged as
+  `63593687`; its main deploy run
+  [27052357899](https://github.com/thinkwork-ai/thinkwork/actions/runs/27052357899)
+  reached Terraform Apply and rolled server task definition revision 2, but
+  the container's pre-Nest migration wrapper failed first with
+  `psql: error: invalid sslmode value: "no-verify"`. Follow-up branch
+  `codex/twenty-crm-psql-sslmode` restores the workflow-created DB URL to
+  `sslmode=require` for `psql` compatibility while retaining
+  `PG_SSL_ALLOW_SELF_SIGNED=true` for the Twenty Node/Postgres runtime.
