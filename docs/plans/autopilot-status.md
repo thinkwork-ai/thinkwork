@@ -27,7 +27,8 @@ status: in_progress
 | CRM certificate validation state               | `codex/twenty-crm-cert-state-fix`    | [#2143](https://github.com/thinkwork-ai/thinkwork/pull/2143) | Merged | Moves the CRM ACM validation state to the correct Terraform module address.                                                          |
 | Lambda env budget fix                          | `codex/twenty-crm-status-env-budget` | [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144) | Merged | Keeps deployment-status env vars below Lambda's 4 KB limit.                                                                          |
 | Aurora URL psql compatibility                  | `codex/twenty-crm-db-url-ssl-fix`    | [#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147) | Merged | Uses `sslmode=require` so the deploy workflow's `psql` DB prep succeeds.                                                            |
-| Twenty Node TLS runtime fix                    | `codex/twenty-crm-node-tls-runtime`  | TBD                                                          | Active | Adds the Node TLS setting needed for Twenty's migration process to accept the Aurora RDS certificate in dev.                         |
+| Twenty Node TLS runtime fix                    | `codex/twenty-crm-node-tls-runtime`  | [#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148) | Merged | Adds the Node TLS setting needed for Twenty's migration process to accept the Aurora RDS certificate in dev.                         |
+| Twenty DB owner grants                         | `codex/twenty-crm-db-owner-grants`   | TBD                                                          | Active | Gives the dedicated Twenty database user enough rights to create schemas, extensions, and migration-owned objects.                   |
 
 ### Progress Log
 
@@ -92,6 +93,14 @@ status: in_progress
   now accepted by `psql`, but Twenty's Node migration process failed with
   `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` against Aurora. Started branch
   `codex/twenty-crm-node-tls-runtime` to unblock the service boot.
+- PR [#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148) passed CI,
+  was squash merged as `af6d549c`, and rolled ECS task definition
+  `thinkwork-dev-twenty-server:3`.
+- The post-[#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148)
+  server logs proved the Aurora TLS fix worked, then failed on dedicated DB
+  privileges: Twenty could not create the `core` schema or install
+  `uuid-ossp`/`unaccent` as the `thinkwork_twenty` role. Started branch
+  `codex/twenty-crm-db-owner-grants`.
 
 ### CI / Verification
 
@@ -127,11 +136,15 @@ status: in_progress
   `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`
   passed with 20 tests; `terraform fmt -check terraform/modules/app/twenty/main.tf`
   passed; `git diff --check` passed.
+- DB owner grant follow-up verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`
+  passed with 20 tests; `.github/workflows/deploy.yml` parsed as YAML; `git diff --check`
+  passed.
 
 ### Blockers
 
-- Twenty's Node migration process is still rejecting the Aurora RDS certificate
-  until the runtime TLS follow-up merges and deploys.
+- Twenty's Node migration process now reaches the database, but the dedicated
+  database role needs owner/create privileges before first boot can complete.
 
 ## Spaces Settings Activity - 2026-06-05
 

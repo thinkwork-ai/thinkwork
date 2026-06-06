@@ -488,6 +488,10 @@ describe("U4 - Cognee deployment template propagation", () => {
 
   it("prepares the Cognee DB secret and role before Terraform apply when enabled", () => {
     const workflow = read(DEPLOY_WORKFLOW);
+    const cogneeDbPrep = workflow.slice(
+      workflow.indexOf("Prepare Cognee database credentials"),
+      workflow.indexOf("Prepare Twenty CRM runtime secrets and database"),
+    );
 
     expect(workflow).toMatch(/Prepare Cognee database credentials/);
     expect(workflow).toMatch(
@@ -505,8 +509,8 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(workflow).toMatch(/ALTER ROLE %I LOGIN PASSWORD %L/);
     expect(workflow).toMatch(/COGNEE_DB_NAME_INPUT/);
     expect(workflow).toMatch(/CREATE DATABASE %I/);
-    expect(workflow).not.toMatch(/CREATE DATABASE %I OWNER %I/);
-    expect(workflow).not.toMatch(/ALTER DATABASE %I OWNER TO %I/);
+    expect(cogneeDbPrep).not.toMatch(/CREATE DATABASE %I OWNER %I/);
+    expect(cogneeDbPrep).not.toMatch(/ALTER DATABASE %I OWNER TO %I/);
     expect(workflow).toMatch(/GRANT CONNECT ON DATABASE :\"cognee_db\"/);
     expect(workflow).toMatch(/\\connect :\"cognee_db\"/);
     expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);

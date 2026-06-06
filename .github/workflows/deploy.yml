@@ -902,14 +902,25 @@ jobs:
           SELECT format('CREATE DATABASE %I', :'twenty_db')
           WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'twenty_db')
           \gexec
-          GRANT CONNECT ON DATABASE :"twenty_db" TO :"twenty_user";
+          SELECT format('ALTER DATABASE %I OWNER TO %I', :'twenty_db', :'twenty_user')
+          \gexec
+          GRANT CONNECT, CREATE ON DATABASE :"twenty_db" TO :"twenty_user";
           \connect :"twenty_db"
+          CREATE SCHEMA IF NOT EXISTS core AUTHORIZATION :"twenty_user";
+          ALTER SCHEMA public OWNER TO :"twenty_user";
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+          CREATE EXTENSION IF NOT EXISTS "unaccent";
           GRANT USAGE, CREATE ON SCHEMA public TO :"twenty_user";
+          GRANT USAGE, CREATE ON SCHEMA core TO :"twenty_user";
           GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES IN SCHEMA public TO :"twenty_user";
           GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO :"twenty_user";
           ALTER DEFAULT PRIVILEGES IN SCHEMA public
             GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES TO :"twenty_user";
           ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"twenty_user";
+          ALTER DEFAULT PRIVILEGES IN SCHEMA core
+            GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES TO :"twenty_user";
+          ALTER DEFAULT PRIVILEGES IN SCHEMA core
             GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"twenty_user";
           SQL
 
