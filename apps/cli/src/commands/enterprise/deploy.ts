@@ -282,13 +282,15 @@ export async function resolveEnterpriseDeployRequest(
     options.repo ??
     registry?.repository ??
     (repoContext ? inferRepository(repoContext.repoRoot) : undefined) ??
-    (await promptWhenInteractive(
-      "GitHub deployment repo (owner/name):",
-      stdinIsTty,
-      deps.promptInput,
-      "GitHub repository is required for enterprise deploy. Pass --repo <owner/name>.",
-      `${customerSlug}/${customerSlug}-thinkwork-deploy`,
-    ));
+    (options.bootstrap
+      ? undefined
+      : await promptWhenInteractive(
+          "GitHub deployment repo (owner/name):",
+          stdinIsTty,
+          deps.promptInput,
+          "GitHub repository is required for enterprise deploy. Pass --repo <owner/name>.",
+          `${customerSlug}/${customerSlug}-thinkwork-deploy`,
+        ));
   const checkoutDir =
     options.checkoutDir ??
     registry?.checkoutDir ??
@@ -324,12 +326,6 @@ export async function runEnterpriseDeploy(
   const request = await resolveEnterpriseDeployRequest(options, deps);
   const stdinIsTty = deps.stdinIsTty ?? Boolean(process.stdin.isTTY);
 
-  if (!request.repository) {
-    throw new Error(
-      "GitHub repository is required for enterprise deploy bootstrap. Pass --repo <owner/name>.",
-    );
-  }
-
   if (!request.bootstrap) {
     const workflow = await dispatchEnterpriseWorkflow(request, options, deps);
     persistWorkflowMetadata(request, workflow, undefined, deps.saveDeployment);
@@ -356,34 +352,35 @@ export async function runEnterpriseDeploy(
     dryRun: options.dryRun,
     fetchManifest: deps.fetchManifest,
   });
-  const stageSecrets = await resolveEnterpriseStageSecrets({
-    stages: bootstrapStages,
-    dbPassword: options.dbPassword,
-    apiAuthSecret: options.apiAuthSecret,
-    stdinIsTty: deps.stdinIsTty,
-    promptSecret: deps.promptSecret,
-    dryRun: options.dryRun,
-  });
-  const repositoryClient =
-    deps.repositoryClient ?? new GhCliEnterpriseRepositoryClient();
-  const gitClient = deps.gitClient ?? new GitCliEnterpriseGitClient();
-  const repositorySteps = await prepareEnterpriseRepository(
-    {
-      repository: request.repository,
-      targetDir: request.checkoutDir,
-      createRepo: request.createRepo,
-      dryRun: options.dryRun,
-      promptCreateRepo:
-        !options.yes && !options.dryRun && stdinIsTty
-          ? async (repository) =>
-              (deps.promptConfirm ?? confirm)(
-                `  GitHub repository ${repository} does not exist. Create it as a private repository?`,
-              )
-          : undefined,
-    },
-    repositoryClient,
-    gitClient,
-  );
+  const stageSecrets = request.repository
+    ? await resolveEnterpriseStageSecrets({
+        stages: bootstrapStages,
+        dbPassword: options.dbPassword,
+        apiAuthSecret: options.apiAuthSecret,
+        stdinIsTty: deps.stdinIsTty,
+        promptSecret: deps.promptSecret,
+        dryRun: options.dryRun,
+      })
+    : {};
+  const repositorySteps = request.repository
+    ? await prepareEnterpriseRepository(
+        {
+          repository: request.repository,
+          targetDir: request.checkoutDir,
+          createRepo: request.createRepo,
+          dryRun: options.dryRun,
+          promptCreateRepo:
+            !options.yes && !options.dryRun && stdinIsTty
+              ? async (repository) =>
+                  (deps.promptConfirm ?? confirm)(
+                    `  GitHub repository ${repository} does not exist. Create it as a private repository?`,
+                  )
+              : undefined,
+        },
+        deps.repositoryClient ?? new GhCliEnterpriseRepositoryClient(),
+        deps.gitClient ?? new GitCliEnterpriseGitClient(),
+      )
+    : { ready: true, steps: [] };
   const bootstrap = await runBootstrap({
     targetDir: request.checkoutDir,
     customerSlug: request.customerSlug,
@@ -402,25 +399,35 @@ export async function runEnterpriseDeploy(
         status: "planned" as const,
         message: `Would set ${Object.keys(stageSecrets[stage]).length} GitHub Environment secret(s) for ${stage}.`,
       }))
-    : await setEnterpriseStageSecrets(
-        request.repository,
-        stageSecrets,
-        deps.secretSetter ?? new GhCliEnterpriseSecretSetter(),
-      );
-  const git = options.dryRun
-    ? [
-        {
-          target: request.checkoutDir,
-          status: "planned" as const,
-          message: "Would commit and push deployment repository changes.",
-        },
-      ]
-    : await commitAndPushEnterpriseRepository(request.checkoutDir, gitClient);
-  const workflow = options.dryRun
-    ? plannedEnterpriseWorkflow(request)
-    : await dispatchEnterpriseWorkflow(request, options, deps, bootstrap);
+    : request.repository
+      ? await setEnterpriseStageSecrets(
+          request.repository,
+          stageSecrets,
+          deps.secretSetter ?? new GhCliEnterpriseSecretSetter(),
+        )
+      : [];
+  const git =
+    options.dryRun && request.repository
+      ? [
+          {
+            target: request.checkoutDir,
+            status: "planned" as const,
+            message: "Would commit and push deployment repository changes.",
+          },
+        ]
+      : request.repository
+        ? await commitAndPushEnterpriseRepository(
+            request.checkoutDir,
+            deps.gitClient ?? new GitCliEnterpriseGitClient(),
+          )
+        : [];
+  const workflow = request.repository
+    ? options.dryRun
+      ? plannedEnterpriseWorkflow(request)
+      : await dispatchEnterpriseWorkflow(request, options, deps, bootstrap)
+    : plannedEnterpriseAwsBootstrap(request);
   const dispatch = [workflow.dispatch];
-  if (!options.dryRun) {
+  if (!options.dryRun && request.repository) {
     persistWorkflowMetadata(request, workflow, bootstrap, deps.saveDeployment);
   }
 
@@ -660,6 +667,22 @@ function plannedEnterpriseWorkflow(
       target: `${repository}:deploy.yml:${request.stage}`,
       status: "planned",
       message: `Would dispatch deploy workflow for ${request.stage}.`,
+    },
+    artifacts: [],
+    urls: {},
+    waited: false,
+  };
+}
+
+function plannedEnterpriseAwsBootstrap(
+  request: EnterpriseDeployRequest,
+): EnterpriseWorkflowResult {
+  return {
+    dispatch: {
+      target: `${request.customerSlug}:${request.stage}:deployment-control-plane`,
+      status: "reused",
+      message:
+        "AWS deployment authority is bootstrapped in the customer account; no GitHub workflow is configured.",
     },
     artifacts: [],
     urls: {},

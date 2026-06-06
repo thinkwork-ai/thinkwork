@@ -11,14 +11,15 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U1 Release Manifest and Artifact Contract.
-- Current branch: `codex/u1-release-manifest`.
-- Current worktree: `.Codex/worktrees/u1-release-manifest`.
+- Current unit: U2 GitHub-Free Bootstrap and AWS Control Plane Substrate.
+- Current branch: `codex/u2-bootstrap-control-plane`.
+- Current worktree: `.Codex/worktrees/u2-bootstrap-control-plane`.
 - Status: in progress.
 
-| Unit                                      | Branch                      | PR                                                           | State  | Notes                                                                                                                                                 |
-| ----------------------------------------- | --------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Release Manifest and Artifact Contract | `codex/u1-release-manifest` | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Active | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
+| Unit                                                     | Branch                             | PR                                                           | State  | Notes                                                                                                                                                 |
+| -------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Release Manifest and Artifact Contract                | `codex/u1-release-manifest`        | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
+| U2 GitHub-Free Bootstrap and AWS Control Plane Substrate | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Active | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
 
 ### Progress Log
 
@@ -45,6 +46,17 @@ status: in_progress
 - Fixed the CI failure by keeping the shared release manifest package out of
   `thinkwork-cli` runtime dependencies and inlining the tiny version normalizer
   used by the CLI release pin helper.
+- PR [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) passed
+  required CI and was squash merged as
+  `dba58857bc072a63e1df43f32640f4dd321d17af`.
+- Created isolated worktree `.Codex/worktrees/u2-bootstrap-control-plane` from
+  `origin/main` at `dba58857`.
+- Implemented the inert deployment-control-plane Terraform module, composite
+  module wiring, GitHub-free bootstrap planning, and focused fixture tests.
+- Updated `thinkwork deploy --bootstrap` so the default new-deployment path no
+  longer prompts for or requires a GitHub repository; legacy repo-backed
+  bootstrap still runs when `--repo` or saved registry metadata is present.
+- Opened PR [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165).
 
 ### CI / Verification
 
@@ -60,6 +72,15 @@ status: in_progress
 - Repo-wide `pnpm format:check` is not locally runnable in this checkout
   because the root script invokes `prettier`, but the root package does not
   declare a `prettier` dependency.
+- U2 local:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/enterprise-aws-bootstrap.test.ts __tests__/enterprise-bootstrap.test.ts __tests__/enterprise-deploy-bootstrap.test.ts __tests__/enterprise-deploy-routing.test.ts __tests__/enterprise-repository.test.ts __tests__/enterprise-template.test.ts __tests__/terraform-deployment-control-plane-fixture.test.ts`
+  passed.
+- U2 local: `pnpm --filter thinkwork-cli typecheck` passed.
+- U2 local:
+  `terraform -chdir=terraform/modules/app/deployment-control-plane init -backend=false && terraform -chdir=terraform/modules/app/deployment-control-plane validate`
+  passed; local `.terraform` init artifacts were removed afterward.
+- U2 local:
+  `pnpm dlx prettier --check <touched U2 TypeScript/Markdown files>` passed.
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 

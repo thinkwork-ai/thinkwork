@@ -62,6 +62,42 @@ variable "platform_operator_emails" {
   default     = ""
 }
 
+variable "enable_deployment_control_plane" {
+  description = "Enable the AWS-native deployment control plane used for GitHub-free customer deployments."
+  type        = bool
+  default     = true
+}
+
+variable "deployment_release_version" {
+  description = "Selected ThinkWork release version stored in the deployment control plane."
+  type        = string
+  default     = "unresolved"
+}
+
+variable "deployment_release_manifest_url" {
+  description = "Selected ThinkWork release manifest URL stored in the deployment control plane."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_release_manifest_sha256" {
+  description = "Selected ThinkWork release manifest SHA-256 stored in the deployment control plane."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_control_plane_log_retention_days" {
+  description = "CloudWatch log retention for deployment control-plane state machine and runner logs."
+  type        = number
+  default     = 30
+}
+
+variable "deployment_control_plane_create_secret_placeholders" {
+  description = "Create placeholder Secrets Manager containers for deployment-control-plane bootstrap secrets."
+  type        = bool
+  default     = true
+}
+
 # ---------------------------------------------------------------------------
 # BYO Foundation (all optional — defaults to creating everything)
 # ---------------------------------------------------------------------------

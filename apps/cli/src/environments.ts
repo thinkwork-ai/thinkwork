@@ -40,7 +40,8 @@ const ENTERPRISE_DEPLOYMENTS_DIR = join(
 
 export interface EnterpriseDeploymentConfig {
   customerSlug: string;
-  repository: string;
+  repository?: string;
+  deploymentMode?: "github" | "aws";
   targetDir: string;
   checkoutDir?: string;
   defaultStage?: string;
@@ -55,6 +56,13 @@ export interface EnterpriseDeploymentConfig {
   lockTable: string;
   releaseVersion: string;
   releaseManifestUrl: string;
+  controlPlanes?: Array<{
+    stage: string;
+    stateMachineName: string;
+    codeBuildProjectName: string;
+    evidenceBucket: string;
+    ssmPrefix: string;
+  }>;
   updatedAt: string;
 }
 

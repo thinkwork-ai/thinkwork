@@ -34,12 +34,16 @@ import {
   type EnterpriseGitHubBootstrapClient,
   type EnterpriseGitHubBootstrapPlan,
 } from "./github.js";
+import {
+  buildEnterpriseAwsDeploymentControlPlanePlan,
+  type EnterpriseAwsDeploymentControlPlanePlan,
+} from "./aws-deployments.js";
 import { resolveEnterpriseReleasePin } from "./release.js";
 
 export interface EnterpriseBootstrapOptions {
   targetDir: string;
   customerSlug: string;
-  repository: string;
+  repository?: string;
   stages?: string[];
   region?: string;
   accountId?: string;
@@ -57,13 +61,14 @@ export interface EnterpriseBootstrapOptions {
 export interface EnterpriseBootstrapPlan {
   customerSlug: string;
   targetDir: string;
-  repository: string;
+  repository?: string;
   stages: string[];
   accountId: string;
   region: string;
   release: ReturnType<typeof resolveEnterpriseReleasePin>;
   aws: EnterpriseAwsBootstrapPlan;
-  github: EnterpriseGitHubBootstrapPlan;
+  deploymentControlPlanes: EnterpriseAwsDeploymentControlPlanePlan[];
+  github?: EnterpriseGitHubBootstrapPlan;
 }
 
 export interface EnterpriseBootstrapResult {
@@ -89,7 +94,9 @@ export function buildEnterpriseBootstrapPlan(
   identity?: AwsIdentity | null,
 ): EnterpriseBootstrapPlan {
   const customerSlug = validateCustomerSlug(options.customerSlug);
-  const repository = parseGitHubRepository(options.repository).fullName;
+  const repository = options.repository
+    ? parseGitHubRepository(options.repository).fullName
+    : undefined;
   const stages = validateStages(options.stages ?? ["dev", "prod"]);
   const accountId = options.accountId ?? identity?.account;
   const region = options.region ?? identity?.region;
@@ -128,14 +135,23 @@ export function buildEnterpriseBootstrapPlan(
     lockTable,
     artifactBucket,
   });
-  const github = buildEnterpriseGitHubBootstrapPlan({
-    repository,
-    stages,
+  const deploymentControlPlanes = buildEnterpriseAwsDeploymentControlPlanePlan({
+    customerSlug,
+    accountId,
     region,
-    artifactBucket,
-    stageRoles: aws.stageRoles,
-    dispatchWorkflow: options.dispatchWorkflow,
+    stages,
+    release,
   });
+  const github = repository
+    ? buildEnterpriseGitHubBootstrapPlan({
+        repository,
+        stages,
+        region,
+        artifactBucket,
+        stageRoles: aws.stageRoles,
+        dispatchWorkflow: options.dispatchWorkflow,
+      })
+    : undefined;
 
   return {
     customerSlug,
@@ -146,6 +162,7 @@ export function buildEnterpriseBootstrapPlan(
     region,
     release,
     aws,
+    deploymentControlPlanes,
     github,
   };
 }
@@ -168,23 +185,29 @@ export async function runEnterpriseBootstrap(
       "Release manifest SHA-256 is required before mutating bootstrap. Pass --manifest-sha256 or use `thinkwork enterprise deploy --bootstrap` so the CLI fetches the manifest digest.",
     );
   }
-  const template = renderEnterpriseDeployRepoTemplate({
-    targetDir: plan.targetDir,
-    customerSlug: plan.customerSlug,
-    stages: plan.stages,
-    region: plan.region,
-    accountId: plan.accountId,
-    releaseVersion: plan.release.version,
-    releaseManifestUrl: plan.release.manifestUrl,
-    releaseManifestSha256: plan.release.manifestSha256,
-    terraformModuleVersion: plan.release.terraformModuleVersion,
-    artifactBucket: plan.aws.artifactBucket,
-  });
+  const template = plan.repository
+    ? renderEnterpriseDeployRepoTemplate({
+        targetDir: plan.targetDir,
+        customerSlug: plan.customerSlug,
+        stages: plan.stages,
+        region: plan.region,
+        accountId: plan.accountId,
+        releaseVersion: plan.release.version,
+        releaseManifestUrl: plan.release.manifestUrl,
+        releaseManifestSha256: plan.release.manifestSha256,
+        terraformModuleVersion: plan.release.terraformModuleVersion,
+        artifactBucket: plan.aws.artifactBucket,
+      })
+    : { written: [], preserved: [] };
 
   const awsClient = deps.awsClient ?? new AwsCliEnterpriseBootstrapClient();
   const githubClient =
-    deps.githubClient ??
-    new GhCliEnterpriseBootstrapClient(parseGitHubRepository(plan.repository));
+    plan.repository && plan.github
+      ? (deps.githubClient ??
+        new GhCliEnterpriseBootstrapClient(
+          parseGitHubRepository(plan.repository),
+        ))
+      : undefined;
 
   const awsResults: BootstrapStepResult[] = [];
   const githubResults: BootstrapStepResult[] = [];
@@ -194,39 +217,63 @@ export async function runEnterpriseBootstrap(
       planned(plan.aws.stateBucket, "Would ensure Terraform state bucket."),
       planned(plan.aws.lockTable, "Would ensure Terraform lock table."),
       planned(plan.aws.artifactBucket, "Would ensure release artifact bucket."),
-      planned(
-        plan.aws.oidcProviderArn,
-        "Would ensure GitHub Actions OIDC provider.",
-      ),
+      ...plan.deploymentControlPlanes.flatMap((controlPlane) => [
+        planned(
+          controlPlane.evidenceBucket,
+          `Would ensure deployment evidence bucket for ${controlPlane.stage}.`,
+        ),
+        planned(
+          controlPlane.stateMachineName,
+          `Would ensure deployment orchestrator state machine for ${controlPlane.stage}.`,
+        ),
+        planned(
+          controlPlane.codeBuildProjectName,
+          `Would ensure inert deployment runner project for ${controlPlane.stage}.`,
+        ),
+        planned(
+          controlPlane.ssmPrefix,
+          `Would write deployment SSM/AppConfig profile pointers for ${controlPlane.stage}.`,
+        ),
+      ]),
+      ...(plan.aws.oidcProviderArn
+        ? [
+            planned(
+              plan.aws.oidcProviderArn,
+              "Would ensure GitHub Actions OIDC provider.",
+            ),
+          ]
+        : []),
       ...plan.aws.stageRoles.map((role) =>
         planned(role.roleArn, `Would ensure deploy role for ${role.stage}.`),
       ),
     );
-    githubResults.push(
-      planned(plan.targetDir, "Would write deployment repository files."),
-      ...plan.github.environments.flatMap((environment) => [
-        planned(
-          `${plan.repository}:${environment.stage}`,
-          `Would ensure GitHub Environment ${environment.stage}.`,
-        ),
-        planned(
-          `${plan.repository}:${environment.stage}:vars`,
-          `Would upsert non-secret GitHub variables for ${environment.stage}.`,
-        ),
-        planned(
-          `${plan.repository}:${environment.stage}:secrets`,
-          `Would require GitHub Environment secrets for ${environment.stage}: ${environment.secretPlaceholders.join(", ")}.`,
-        ),
-        ...(plan.github.dispatchWorkflow
-          ? [
-              planned(
-                `${plan.repository}:deploy.yml:${environment.stage}`,
-                `Would dispatch deploy workflow for ${environment.stage}.`,
-              ),
-            ]
-          : []),
-      ]),
-    );
+    if (plan.repository && plan.github) {
+      githubResults.push(
+        planned(plan.targetDir, "Would write deployment repository files."),
+        ...plan.github.environments.flatMap((environment) => [
+          planned(
+            `${plan.repository}:${environment.stage}`,
+            `Would ensure GitHub Environment ${environment.stage}.`,
+          ),
+          planned(
+            `${plan.repository}:${environment.stage}:vars`,
+            `Would upsert non-secret GitHub variables for ${environment.stage}.`,
+          ),
+          planned(
+            `${plan.repository}:${environment.stage}:secrets`,
+            `Would require GitHub Environment secrets for ${environment.stage}: ${environment.secretPlaceholders.join(", ")}.`,
+          ),
+          ...(plan.github?.dispatchWorkflow
+            ? [
+                planned(
+                  `${plan.repository}:deploy.yml:${environment.stage}`,
+                  `Would dispatch deploy workflow for ${environment.stage}.`,
+                ),
+              ]
+            : []),
+        ]),
+      );
+    }
   } else {
     awsResults.push(
       await awsClient.ensureStateBucket(plan.aws.stateBucket, plan.region),
@@ -235,23 +282,29 @@ export async function runEnterpriseBootstrap(
         plan.aws.artifactBucket,
         plan.region,
       ),
-      await awsClient.ensureOidcProvider(plan.accountId),
     );
+    if (plan.aws.oidcProviderArn) {
+      awsResults.push(await awsClient.ensureOidcProvider(plan.accountId));
+    }
     for (const role of plan.aws.stageRoles) {
       awsResults.push(await awsClient.ensureDeployRole(role));
     }
 
-    githubResults.push(await githubClient.writeRepositoryFiles(plan.targetDir));
-    for (const environment of plan.github.environments) {
+    if (plan.repository && plan.github && githubClient) {
       githubResults.push(
-        await githubClient.ensureEnvironment(environment),
-        await githubClient.upsertEnvironmentVariables(environment),
-        secretPlaceholderResult(plan.repository, environment),
+        await githubClient.writeRepositoryFiles(plan.targetDir),
       );
-      if (plan.github.dispatchWorkflow) {
+      for (const environment of plan.github.environments) {
         githubResults.push(
-          await githubClient.dispatchWorkflow(environment.stage),
+          await githubClient.ensureEnvironment(environment),
+          await githubClient.upsertEnvironmentVariables(environment),
+          secretPlaceholderResult(plan.repository, environment),
         );
+        if (plan.github.dispatchWorkflow) {
+          githubResults.push(
+            await githubClient.dispatchWorkflow(environment.stage),
+          );
+        }
       }
     }
   }
@@ -276,10 +329,13 @@ export function registerEnterpriseBootstrapCommand(program: Command): void {
   program
     .command("bootstrap [targetDir]")
     .description(
-      "Bootstrap a customer-owned ThinkWork deployment repository and CI trust bridge.",
+      "Bootstrap a customer-owned ThinkWork deployment control plane.",
     )
     .option("--customer <slug>", "Customer slug, e.g. acme")
-    .option("--repo <owner/name>", "Customer GitHub deployment repository")
+    .option(
+      "--repo <owner/name>",
+      "Optional legacy customer GitHub deployment repository",
+    )
     .option("--stage <stage...>", "Deployment stage(s)", ["dev", "prod"])
     .option("--region <region>", "AWS region")
     .option("--account-id <id>", "AWS account ID")
@@ -328,7 +384,7 @@ export function registerEnterpriseBootstrapCommand(program: Command): void {
       ) => {
         try {
           const customerSlug = await resolveCustomerSlug(opts.customer);
-          const repository = await resolveRepository(opts.repo);
+          const repository = resolveRepository(opts.repo);
           const identity = getAwsIdentity();
           printHeader("enterprise bootstrap", customerSlug, identity);
 
@@ -338,8 +394,8 @@ export function registerEnterpriseBootstrapCommand(program: Command): void {
             );
             const message =
               prodStages.length > 0
-                ? `  Bootstrap deployment authority for ${repository} including production-like stage(s): ${prodStages.join(", ")}?`
-                : `  Bootstrap deployment authority for ${repository}?`;
+                ? `  Bootstrap AWS deployment authority including production-like stage(s): ${prodStages.join(", ")}?`
+                : "  Bootstrap AWS deployment authority?";
             if (!(await confirm(message))) {
               console.log("  Aborted.");
               return;
@@ -414,6 +470,8 @@ function recordDeploymentMetadata(
     lockTable: plan.aws.lockTable,
     releaseVersion: plan.release.version,
     releaseManifestUrl: plan.release.manifestUrl,
+    deploymentMode: plan.repository ? "github" : "aws",
+    controlPlanes: plan.deploymentControlPlanes,
     updatedAt: new Date().toISOString(),
   });
 
@@ -433,13 +491,8 @@ async function resolveCustomerSlug(flag: string | undefined): Promise<string> {
   return input({ message: "Customer slug:" });
 }
 
-async function resolveRepository(flag: string | undefined): Promise<string> {
-  if (flag) return flag;
-  if (!process.stdin.isTTY) {
-    throw new Error("GitHub repository is required. Pass --repo <owner/name>.");
-  }
-  const { input } = await import("@inquirer/prompts");
-  return input({ message: "GitHub deployment repo (owner/name):" });
+function resolveRepository(flag: string | undefined): string | undefined {
+  return flag;
 }
 
 function printBootstrapSummary(result: EnterpriseBootstrapResult): void {
@@ -449,8 +502,12 @@ function printBootstrapSummary(result: EnterpriseBootstrapResult): void {
     console.log(`  - ${step.status}: ${step.message}`);
   }
   console.log("  GitHub");
-  for (const step of result.github) {
-    console.log(`  - ${step.status}: ${step.message}`);
+  if (result.github.length === 0) {
+    console.log("  - planned: No GitHub repository configured.");
+  } else {
+    for (const step of result.github) {
+      console.log(`  - ${step.status}: ${step.message}`);
+    }
   }
   if (result.template.preserved.length > 0) {
     printWarning(

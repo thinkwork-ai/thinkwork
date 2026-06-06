@@ -74,14 +74,17 @@ describe("enterprise bootstrap plan", () => {
     expect(result.plan.aws.artifactBucket).toBe(
       "acme-thinkwork-release-artifacts",
     );
-    expect(result.aws.map((step) => step.status)).toEqual([
-      "planned",
-      "planned",
-      "planned",
-      "planned",
-      "planned",
-      "planned",
-    ]);
+    expect(result.aws.every((step) => step.status === "planned")).toBe(true);
+    expect(result.aws.map((step) => step.target)).toEqual(
+      expect.arrayContaining([
+        "acme-thinkwork-terraform-state",
+        "acme-thinkwork-terraform-locks",
+        "acme-thinkwork-release-artifacts",
+        "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com",
+        "arn:aws:iam::111122223333:role/thinkwork-acme-dev-deploy",
+        "arn:aws:iam::111122223333:role/thinkwork-acme-prod-deploy",
+      ]),
+    );
     expect(result.github.some((step) => step.target.includes("prod"))).toBe(
       true,
     );

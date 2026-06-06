@@ -206,8 +206,10 @@ describe("top-level enterprise deploy routing", () => {
     const answers = new Map([
       ["Customer slug (for example acme):", "acme"],
       ["Deployment stage:", ""],
-      ["GitHub deployment repo (owner/name):", ""],
     ]);
+    const promptInput = vi.fn(async (message, defaultValue) => {
+      return answers.get(message) ?? defaultValue ?? "";
+    });
 
     const request = await resolveEnterpriseDeployRequest(
       { bootstrap: true, component: "all" },
@@ -215,19 +217,21 @@ describe("top-level enterprise deploy routing", () => {
         stdinIsTty: true,
         cwd: tempDir(),
         loadDeployment: vi.fn(() => null),
-        promptInput: vi.fn(async (message, defaultValue) => {
-          return answers.get(message) ?? defaultValue ?? "";
-        }),
+        promptInput,
       },
     );
 
     expect(request).toEqual(
       expect.objectContaining({
         customerSlug: "acme",
-        repository: "acme/acme-thinkwork-deploy",
+        repository: undefined,
         stage: "dev",
         bootstrap: true,
       }),
+    );
+    expect(promptInput).not.toHaveBeenCalledWith(
+      "GitHub deployment repo (owner/name):",
+      expect.anything(),
     );
   });
 
@@ -271,6 +275,7 @@ describe("top-level enterprise deploy routing", () => {
       {
         stdinIsTty: false,
         cwd: root,
+        loadDeployment: vi.fn(() => null),
         runBootstrap,
         repositoryClient: {
           repositoryExists: vi.fn(async () => true),
@@ -329,6 +334,81 @@ describe("top-level enterprise deploy routing", () => {
       dispatchWorkflow: false,
       dryRun: undefined,
     });
+  });
+
+  it("bootstraps AWS deployment authority without GitHub repository work", async () => {
+    const root = tempDir();
+    const runBootstrap = vi.fn(async () => ({
+      ...bootstrapResult(),
+      plan: {
+        ...bootstrapResult().plan,
+        repository: undefined,
+      },
+      github: [],
+      template: { written: [], preserved: [] },
+    }));
+    const repositoryExists = vi.fn(async () => true);
+    const setEnvironmentSecret = vi.fn(async () => undefined);
+    const commitAll = vi.fn();
+    const dispatchDeployWorkflow = vi.fn();
+
+    const result = await runEnterpriseDeploy(
+      {
+        bootstrap: true,
+        customer: "acme",
+        checkoutDir: root,
+        stage: "dev",
+        component: "all",
+        manifestSha256: "abc123",
+        yes: true,
+      },
+      {
+        stdinIsTty: false,
+        cwd: root,
+        loadDeployment: vi.fn(() => null),
+        runBootstrap,
+        repositoryClient: {
+          repositoryExists,
+          createPrivateRepository: vi.fn(),
+          cloneRepository: vi.fn(),
+        },
+        gitClient: {
+          isGitRepository: vi.fn(() => false),
+          hasChanges: vi.fn(async () => false),
+          commitAll,
+          push: vi.fn(),
+        },
+        secretSetter: { setEnvironmentSecret },
+        workflowClient: {
+          dispatchDeployWorkflow,
+          latestDeployRun: vi.fn(),
+          getRun: vi.fn(),
+          listRunArtifacts: vi.fn(),
+        },
+      },
+    );
+
+    expect(result.kind).toBe("bootstrap");
+    expect(runBootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: undefined,
+        manifestSha256: "abc123",
+        dispatchWorkflow: false,
+      }),
+    );
+    expect(result.repository).toEqual([]);
+    expect(result.secrets).toEqual([]);
+    expect(result.git).toEqual([]);
+    expect(result.dispatch[0]).toEqual(
+      expect.objectContaining({
+        target: "acme:dev:deployment-control-plane",
+        status: "reused",
+      }),
+    );
+    expect(repositoryExists).not.toHaveBeenCalled();
+    expect(setEnvironmentSecret).not.toHaveBeenCalled();
+    expect(commitAll).not.toHaveBeenCalled();
+    expect(dispatchDeployWorkflow).not.toHaveBeenCalled();
   });
 
   it("dispatches follow-up enterprise deploys from saved registry metadata", async () => {

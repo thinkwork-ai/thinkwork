@@ -6,7 +6,7 @@ import { join } from "node:path";
 export interface EnterpriseAwsBootstrapConfig {
   accountId: string;
   region: string;
-  repository: string;
+  repository?: string;
   stages: string[];
   customerSlug: string;
   stateBucket: string;
@@ -27,7 +27,7 @@ export interface EnterpriseAwsBootstrapPlan {
   stateBucket: string;
   lockTable: string;
   artifactBucket: string;
-  oidcProviderArn: string;
+  oidcProviderArn?: string;
   stageRoles: EnterpriseAwsStagePlan[];
 }
 
@@ -80,34 +80,38 @@ export interface IamPolicyDocument {
 export function buildEnterpriseAwsBootstrapPlan(
   config: EnterpriseAwsBootstrapConfig,
 ): EnterpriseAwsBootstrapPlan {
-  const oidcProviderArn = `arn:aws:iam::${config.accountId}:oidc-provider/token.actions.githubusercontent.com`;
+  const oidcProviderArn = config.repository
+    ? `arn:aws:iam::${config.accountId}:oidc-provider/token.actions.githubusercontent.com`
+    : undefined;
   return {
     stateBucket: config.stateBucket,
     lockTable: config.lockTable,
     artifactBucket: config.artifactBucket,
     oidcProviderArn,
-    stageRoles: config.stages.map((stage) => {
-      const roleName = `thinkwork-${config.customerSlug}-${stage}-deploy`;
-      return {
-        stage,
-        roleName,
-        roleArn: `arn:aws:iam::${config.accountId}:role/${roleName}`,
-        trustPolicy: buildGitHubOidcTrustPolicy({
-          oidcProviderArn,
-          repository: config.repository,
-          stage,
-        }),
-        deployPolicyName: `thinkwork-${config.customerSlug}-${stage}-deploy`,
-        deployPolicy: buildEnterpriseDeployRolePolicy({
-          accountId: config.accountId,
-          region: config.region,
-          stage,
-          stateBucket: config.stateBucket,
-          lockTable: config.lockTable,
-          artifactBucket: config.artifactBucket,
-        }),
-      };
-    }),
+    stageRoles: config.repository
+      ? config.stages.map((stage) => {
+          const roleName = `thinkwork-${config.customerSlug}-${stage}-deploy`;
+          return {
+            stage,
+            roleName,
+            roleArn: `arn:aws:iam::${config.accountId}:role/${roleName}`,
+            trustPolicy: buildGitHubOidcTrustPolicy({
+              oidcProviderArn: oidcProviderArn!,
+              repository: config.repository!,
+              stage,
+            }),
+            deployPolicyName: `thinkwork-${config.customerSlug}-${stage}-deploy`,
+            deployPolicy: buildEnterpriseDeployRolePolicy({
+              accountId: config.accountId,
+              region: config.region,
+              stage,
+              stateBucket: config.stateBucket,
+              lockTable: config.lockTable,
+              artifactBucket: config.artifactBucket,
+            }),
+          };
+        })
+      : [],
   };
 }
 
