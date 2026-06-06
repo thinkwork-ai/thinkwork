@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Users } from "lucide-react";
 import { TenantMembersListQuery } from "@/lib/graphql-queries";
 import { HumanProfileSection } from "@/components/humans/HumanProfileSection";
+import { UserModelsSection } from "@/components/humans/UserModelsSection";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -115,7 +116,9 @@ function UserDetailPage() {
           </div>
         </div>
       }
-      contentClassName={tab === "workspace" ? "overflow-hidden pb-4" : undefined}
+      contentClassName={
+        tab === "workspace" ? "overflow-hidden pb-4" : undefined
+      }
     >
       <Tabs
         value={tab}
@@ -131,7 +134,7 @@ function UserDetailPage() {
           />
         </TabsContent>
         <TabsContent value="configuration">
-          <div className="max-w-[760px]">
+          <div className="max-w-[760px] space-y-6">
             <HumanProfileSection
               userId={member.user.id}
               memberId={member.id}
@@ -146,6 +149,7 @@ function UserDetailPage() {
               }}
               onRoleSaved={() => reexecute({ requestPolicy: "network-only" })}
             />
+            <UserModelsSection userId={member.user.id} />
           </div>
         </TabsContent>
       </Tabs>

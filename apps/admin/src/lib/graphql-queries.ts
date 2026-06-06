@@ -286,6 +286,42 @@ export const ModelCatalogQuery = graphql(`
   }
 `);
 
+export const UserModelCatalogQuery = gql`
+  query UserModelCatalog($userId: ID!) {
+    userModelCatalog(userId: $userId) {
+      id
+      modelId
+      displayName
+      provider
+      inputCostPerMillion
+      outputCostPerMillion
+      approved
+    }
+  }
+`;
+
+export const SetUserModelApprovalMutation = gql`
+  mutation SetUserModelApproval(
+    $userId: ID!
+    $modelId: String!
+    $approved: Boolean!
+  ) {
+    setUserModelApproval(
+      userId: $userId
+      modelId: $modelId
+      approved: $approved
+    ) {
+      id
+      modelId
+      displayName
+      provider
+      inputCostPerMillion
+      outputCostPerMillion
+      approved
+    }
+  }
+`;
+
 // ---------------------------------------------------------------------------
 // Knowledge Bases (PRD-13)
 // ---------------------------------------------------------------------------
