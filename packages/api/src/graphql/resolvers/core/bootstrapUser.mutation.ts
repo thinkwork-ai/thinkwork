@@ -77,6 +77,12 @@ export const bootstrapUser = async (
     .limit(1);
 
   if (pendingTenant) {
+    if (ctx.auth.emailVerified !== true) {
+      throw new Error(
+        "Verified email is required to claim the pending tenant.",
+      );
+    }
+
     console.log(
       `[bootstrapUser] Claiming pre-provisioned paid tenant ${pendingTenant.id} (plan=${pendingTenant.plan}) for ${email}`,
     );
@@ -116,7 +122,13 @@ export const bootstrapUser = async (
 
     const [claimedTenant] = await db
       .update(tenants)
-      .set({ pending_owner_email: null, updated_at: sql`now()` })
+      .set({
+        pending_owner_email: null,
+        first_admin_claim_required: false,
+        first_admin_claimed_at: sql`now()`,
+        first_admin_claimed_user_id: user.id,
+        updated_at: sql`now()`,
+      })
       .where(eq(tenants.id, pendingTenant.id))
       .returning();
 

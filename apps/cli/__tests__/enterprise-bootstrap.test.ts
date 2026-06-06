@@ -104,6 +104,39 @@ describe("enterprise bootstrap plan", () => {
     expect(saveDeployment).not.toHaveBeenCalled();
   });
 
+  it("plans identity provider setup without storing bootstrap secrets", async () => {
+    const saveDeployment = vi.fn();
+    const result = await runEnterpriseBootstrap(
+      {
+        targetDir: tempRepo(),
+        customerSlug: "acme",
+        stages: ["dev"],
+        identityProvider: {
+          type: "oidc",
+          providerName: "AcmeOIDC",
+          clientId: "client",
+          clientSecret: "super-secret",
+          issuerUrl: "https://login.example.com",
+        },
+        dryRun: true,
+      },
+      { identity, saveDeployment },
+    );
+
+    expect(result.plan.identityProvider).toEqual(
+      expect.objectContaining({
+        type: "oidc",
+        providerName: "AcmeOIDC",
+        secretRequired: true,
+      }),
+    );
+    expect(result.aws.map((step) => step.target)).toContain(
+      "acme:identity-provider:AcmeOIDC",
+    );
+    expect(JSON.stringify(result)).not.toContain("super-secret");
+    expect(saveDeployment).not.toHaveBeenCalled();
+  });
+
   it("reuses existing mocked resources on repeated non-dry-run bootstrap", async () => {
     const root = tempRepo();
     const awsClient = new ExistingAwsClient();

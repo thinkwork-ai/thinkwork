@@ -7,41 +7,55 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockDb, insertCalls, selectQueue, returningQueue } = vi.hoisted(() => {
-  const insertCalls: Array<{ table: string; values: Record<string, unknown> }> =
-    [];
-  const selectQueue: unknown[][] = [];
-  const returningQueue: unknown[][] = [];
+const { mockDb, insertCalls, updateCalls, selectQueue, returningQueue } =
+  vi.hoisted(() => {
+    const insertCalls: Array<{
+      table: string;
+      values: Record<string, unknown>;
+    }> = [];
+    const updateCalls: Array<{
+      table: string;
+      values: Record<string, unknown>;
+    }> = [];
+    const selectQueue: unknown[][] = [];
+    const returningQueue: unknown[][] = [];
 
-  const mockDb = {
-    select: vi.fn(() => {
-      const chain: any = {
-        from: vi.fn(() => chain),
-        where: vi.fn(() => chain),
-        limit: vi.fn(async () => selectQueue.shift() ?? []),
-      };
-      return chain;
-    }),
-    insert: vi.fn((table: { __table__: string }) => ({
-      values: (values: Record<string, unknown>) => {
-        insertCalls.push({ table: table.__table__, values });
-        const result: any = {
-          returning: async () => returningQueue.shift() ?? [],
-          onConflictDoNothing: () => Promise.resolve([]),
-          then: (resolve: (v: unknown) => void) => resolve([]),
+    const mockDb = {
+      select: vi.fn(() => {
+        const chain: any = {
+          from: vi.fn(() => chain),
+          where: vi.fn(() => chain),
+          limit: vi.fn(async () => selectQueue.shift() ?? []),
+          then: (resolve: (v: unknown) => void) =>
+            resolve(selectQueue.shift() ?? []),
         };
-        return result;
-      },
-    })),
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: vi.fn(() => ({ returning: async () => [] })),
+        return chain;
+      }),
+      insert: vi.fn((table: { __table__: string }) => ({
+        values: (values: Record<string, unknown>) => {
+          insertCalls.push({ table: table.__table__, values });
+          const result: any = {
+            returning: async () => returningQueue.shift() ?? [],
+            onConflictDoNothing: () => Promise.resolve([]),
+            then: (resolve: (v: unknown) => void) => resolve([]),
+          };
+          return result;
+        },
       })),
-    })),
-  };
+      update: vi.fn((table: { __table__: string }) => ({
+        set: vi.fn((values: Record<string, unknown>) => {
+          updateCalls.push({ table: table.__table__, values });
+          return {
+            where: vi.fn(() => ({
+              returning: async () => returningQueue.shift() ?? [],
+            })),
+          };
+        }),
+      })),
+    };
 
-  return { mockDb, insertCalls, selectQueue, returningQueue };
-});
+    return { mockDb, insertCalls, updateCalls, selectQueue, returningQueue };
+  });
 
 vi.mock("../../utils.js", () => ({
   db: mockDb,
@@ -71,6 +85,7 @@ import { bootstrapUser } from "./bootstrapUser.mutation.js";
 
 beforeEach(() => {
   insertCalls.length = 0;
+  updateCalls.length = 0;
   selectQueue.length = 0;
   returningQueue.length = 0;
 });
@@ -97,5 +112,96 @@ describe("bootstrapUser", () => {
     expect(userInsert?.values.cognito_sub).toBe("sub-new");
     expect(userInsert?.values.email).toBe("new@example.com");
     expect(result.isNew).toBe(true);
+  });
+
+  it("claims a pending tenant only for a verified matching email", async () => {
+    selectQueue.push([]); // existing user lookup -> none
+    selectQueue.push([
+      {
+        id: "tenant-claim",
+        slug: "acme",
+        plan: "pro",
+        pending_owner_email: "Admin@Example.com",
+        first_admin_claim_required: true,
+      },
+    ]);
+    selectQueue.push([]); // existing users in tenant
+    returningQueue.push([{ id: "user-claim", email: "admin@example.com" }]);
+    returningQueue.push([
+      {
+        id: "tenant-claim",
+        slug: "acme",
+        pending_owner_email: null,
+        first_admin_claim_required: false,
+      },
+    ]);
+
+    const result = await bootstrapUser({}, {}, {
+      auth: {
+        authType: "cognito",
+        principalId: "sub-claim",
+        email: "admin@example.com",
+        emailVerified: true,
+        name: "Admin User",
+      },
+      headers: {},
+    } as any);
+
+    const userInsert = insertCalls.find((c) => c.table === "users");
+    const memberInsert = insertCalls.find((c) => c.table === "tenant_members");
+    const tenantUpdate = updateCalls.find((c) => c.table === "tenants");
+
+    expect(userInsert?.values).toEqual(
+      expect.objectContaining({
+        tenant_id: "tenant-claim",
+        email: "admin@example.com",
+        cognito_sub: "sub-claim",
+      }),
+    );
+    expect(memberInsert?.values).toEqual(
+      expect.objectContaining({
+        tenant_id: "tenant-claim",
+        principal_id: "user-claim",
+        role: "owner",
+      }),
+    );
+    expect(tenantUpdate?.values).toEqual(
+      expect.objectContaining({
+        pending_owner_email: null,
+        first_admin_claim_required: false,
+        first_admin_claimed_user_id: "user-claim",
+      }),
+    );
+    expect(result.tenant.id).toBe("tenant-claim");
+    expect(result.isNew).toBe(true);
+  });
+
+  it("rejects a pending tenant claim when the matching email is not verified", async () => {
+    selectQueue.push([]); // existing user lookup -> none
+    selectQueue.push([
+      {
+        id: "tenant-claim",
+        slug: "acme",
+        plan: "pro",
+        pending_owner_email: "admin@example.com",
+        first_admin_claim_required: true,
+      },
+    ]);
+
+    await expect(
+      bootstrapUser({}, {}, {
+        auth: {
+          authType: "cognito",
+          principalId: "sub-unverified",
+          email: "admin@example.com",
+          emailVerified: false,
+          name: "Admin User",
+        },
+        headers: {},
+      } as any),
+    ).rejects.toThrow(/Verified email is required/);
+
+    expect(insertCalls).toEqual([]);
+    expect(updateCalls).toEqual([]);
   });
 });

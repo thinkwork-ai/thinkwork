@@ -73,6 +73,16 @@ export const tenants = pgTable(
     // bootstrapUser directly (free signups) or once a paid tenant is claimed.
     // Partial unique index enforced via drizzle/0022_stripe_billing_indexes.sql.
     pending_owner_email: text("pending_owner_email"),
+    // Bootstrap-first deployments use the same pending-owner-email claim path
+    // as paid signup, but mark the tenant as first-admin gated until the
+    // verified Cognito email claims it.
+    first_admin_claim_required: boolean("first_admin_claim_required")
+      .notNull()
+      .default(false),
+    first_admin_claimed_at: timestamp("first_admin_claimed_at", {
+      withTimezone: true,
+    }),
+    first_admin_claimed_user_id: uuid("first_admin_claimed_user_id"),
     // Soft-delete marker for canceled / churned tenants. Set by the
     // stripe-webhook Lambda when customer.subscription.deleted fires
     // (and in the future, by any other deactivation path: operator

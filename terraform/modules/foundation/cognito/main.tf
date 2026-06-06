@@ -15,6 +15,12 @@ locals {
   admin_client_id  = local.create ? aws_cognito_user_pool_client.admin[0].id : var.existing_admin_client_id
   mobile_client_id = local.create ? aws_cognito_user_pool_client.mobile[0].id : var.existing_mobile_client_id
   identity_pool_id = local.create ? aws_cognito_identity_pool.main[0].id : var.existing_identity_pool_id
+  oidc_identity_providers = {
+    for provider in var.oidc_identity_providers : provider.provider_name => provider
+  }
+  saml_identity_providers = {
+    for provider in var.saml_identity_providers : provider.provider_name => provider
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -191,7 +197,57 @@ resource "aws_cognito_identity_provider" "google" {
 }
 
 locals {
-  identity_providers = var.google_oauth_client_id != "" ? ["Google", "COGNITO"] : ["COGNITO"]
+  identity_providers = concat(
+    var.google_oauth_client_id != "" ? ["Google"] : [],
+    keys(local.oidc_identity_providers),
+    keys(local.saml_identity_providers),
+    ["COGNITO"]
+  )
+}
+
+resource "aws_cognito_identity_provider" "oidc" {
+  for_each = local.create ? local.oidc_identity_providers : {}
+
+  user_pool_id  = aws_cognito_user_pool.main[0].id
+  provider_name = each.value.provider_name
+  provider_type = "OIDC"
+
+  provider_details = merge(
+    {
+      client_id                 = each.value.client_id
+      client_secret             = each.value.client_secret
+      authorize_scopes          = each.value.authorize_scopes
+      oidc_issuer               = each.value.issuer_url
+      token_request_method      = "POST"
+      attributes_request_method = "GET"
+    },
+    each.value.authorize_url != "" ? { authorize_url = each.value.authorize_url } : {},
+    each.value.token_url != "" ? { token_url = each.value.token_url } : {},
+    each.value.attributes_url != "" ? { attributes_url = each.value.attributes_url } : {},
+    each.value.jwks_uri != "" ? { jwks_uri = each.value.jwks_uri } : {}
+  )
+
+  attribute_mapping = {
+    email    = each.value.attribute_mapping.email
+    name     = each.value.attribute_mapping.name
+    username = each.value.attribute_mapping.username
+  }
+}
+
+resource "aws_cognito_identity_provider" "saml" {
+  for_each = local.create ? local.saml_identity_providers : {}
+
+  user_pool_id     = aws_cognito_user_pool.main[0].id
+  provider_name    = each.value.provider_name
+  provider_type    = "SAML"
+  idp_identifiers  = each.value.idp_identifiers
+  provider_details = { MetadataURL = each.value.metadata_url }
+
+  attribute_mapping = {
+    email    = each.value.attribute_mapping.email
+    name     = each.value.attribute_mapping.name
+    username = each.value.attribute_mapping.username
+  }
 }
 
 ################################################################################
@@ -235,7 +291,11 @@ resource "aws_cognito_user_pool_client" "admin" {
     "custom:tenant_id",
   ]
 
-  depends_on = [aws_cognito_identity_provider.google]
+  depends_on = [
+    aws_cognito_identity_provider.google,
+    aws_cognito_identity_provider.oidc,
+    aws_cognito_identity_provider.saml,
+  ]
 }
 
 ################################################################################
@@ -285,7 +345,11 @@ resource "aws_cognito_user_pool_client" "mobile" {
     "custom:tenant_id",
   ]
 
-  depends_on = [aws_cognito_identity_provider.google]
+  depends_on = [
+    aws_cognito_identity_provider.google,
+    aws_cognito_identity_provider.oidc,
+    aws_cognito_identity_provider.saml,
+  ]
 }
 
 ################################################################################

@@ -27,3 +27,8 @@ output "auth_domain" {
   description = "Cognito hosted UI domain (only available when create_cognito = true)"
   value       = local.create ? aws_cognito_user_pool_domain.main[0].domain : null
 }
+
+output "identity_provider_names" {
+  description = "Supported Cognito identity providers for created app clients."
+  value       = local.identity_providers
+}

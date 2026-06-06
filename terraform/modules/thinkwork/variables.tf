@@ -50,6 +50,42 @@ variable "google_oauth_client_secret" {
   default     = ""
 }
 
+variable "oidc_identity_providers" {
+  description = "Additional Cognito OIDC identity providers for customer bootstrap."
+  type = list(object({
+    provider_name    = string
+    client_id        = string
+    client_secret    = string
+    issuer_url       = string
+    authorize_scopes = optional(string, "openid email profile")
+    authorize_url    = optional(string, "")
+    token_url        = optional(string, "")
+    attributes_url   = optional(string, "")
+    jwks_uri         = optional(string, "")
+    attribute_mapping = optional(object({
+      email    = optional(string, "email")
+      name     = optional(string, "name")
+      username = optional(string, "sub")
+    }), {})
+  }))
+  default = []
+}
+
+variable "saml_identity_providers" {
+  description = "Additional Cognito SAML identity providers for customer bootstrap."
+  type = list(object({
+    provider_name   = string
+    metadata_url    = string
+    idp_identifiers = optional(list(string), [])
+    attribute_mapping = optional(object({
+      email    = optional(string, "email")
+      name     = optional(string, "name")
+      username = optional(string, "NameID")
+    }), {})
+  }))
+  default = []
+}
+
 variable "redirect_success_url" {
   description = "Default OAuth-callback redirect target when no per-request returnUrl is supplied. Mobile callers pass thinkwork:// custom scheme; web falls through to this."
   type        = string
