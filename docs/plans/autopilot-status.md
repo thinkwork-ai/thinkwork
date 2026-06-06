@@ -16,9 +16,9 @@ status: in_progress
 - Current worktree: `.Codex/worktrees/u1-release-manifest`.
 - Status: in progress.
 
-| Unit                                      | Branch                      | PR      | State  | Notes                                                                                                                                                 |
-| ----------------------------------------- | --------------------------- | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Release Manifest and Artifact Contract | `codex/u1-release-manifest` | Pending | Active | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
+| Unit                                      | Branch                      | PR                                                           | State  | Notes                                                                                                                                                 |
+| ----------------------------------------- | --------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Release Manifest and Artifact Contract | `codex/u1-release-manifest` | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Active | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
 
 ### Progress Log
 
@@ -37,6 +37,7 @@ status: in_progress
   verifier entrypoint for CI and runner usage.
 - Updated CLI release pin behavior so mutating bootstrap requires a resolved
   manifest SHA-256 instead of silently writing `CHANGE_ME`.
+- Opened PR [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163).
 
 ### CI / Verification
 
