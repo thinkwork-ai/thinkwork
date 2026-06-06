@@ -11,10 +11,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: End-to-end lifecycle proof and deploy-readiness fix.
-- Current branch: `codex/twenty-crm-root-operator-var`.
+- Current unit: Complete.
+- Current branch: none.
 - Current worktree: `.Codex/worktrees/twenty-crm-e2e-fixes`.
-- Status: active.
+- Status: complete.
 
 | Unit                                           | Branch                               | PR                                                           | State  | Notes                                                                                                                                 |
 | ---------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -29,7 +29,7 @@ status: in_progress
 | Aurora URL psql compatibility                  | `codex/twenty-crm-db-url-ssl-fix`    | [#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147) | Merged | Uses `sslmode=require` so the deploy workflow's `psql` DB prep succeeds.                                                            |
 | Twenty Node TLS runtime fix                    | `codex/twenty-crm-node-tls-runtime`  | [#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148) | Merged | Adds the Node TLS setting needed for Twenty's migration process to accept the Aurora RDS certificate in dev.                         |
 | Twenty DB owner grants                         | `codex/twenty-crm-db-owner-grants`   | [#2149](https://github.com/thinkwork-ai/thinkwork/pull/2149) | Merged | Gives the dedicated Twenty database user enough rights to create schemas, extensions, and migration-owned objects.                   |
-| Twenty DB setup role switch                    | `codex/twenty-crm-db-setup-role`     | TBD                                                          | Active | Runs Twenty schema and extension setup under the app DB role so Postgres ownership checks pass.                                      |
+| Twenty DB setup role switch                    | `codex/twenty-crm-db-setup-role`     | [#2150](https://github.com/thinkwork-ai/thinkwork/pull/2150) | Merged | Runs Twenty schema and extension setup under the app DB role so Postgres ownership checks pass.                                      |
 
 ### Progress Log
 
@@ -108,6 +108,32 @@ status: in_progress
   when creating schemas with `AUTHORIZATION`. Started branch
   `codex/twenty-crm-db-setup-role` to grant role membership and run the setup
   SQL under `SET ROLE thinkwork_twenty`.
+- PR [#2150](https://github.com/thinkwork-ai/thinkwork/pull/2150) passed CI,
+  was squash merged as `22ae261c`, and deployed through main workflow run
+  [27053615405](https://github.com/thinkwork-ai/thinkwork/actions/runs/27053615405).
+- Verified phase 1 through the UI and AWS: Twenty Deploy reached `running`,
+  ECS services `thinkwork-dev-twenty-server` and `thinkwork-dev-twenty-worker`
+  were desired/running `1/1`, the target group was healthy, and
+  `https://crm.thinkwork.ai` returned HTTP 200.
+- Created a Postgres proof row in the dedicated Twenty database:
+  `public.thinkwork_lifecycle_probe` with id `twenty-crm-e2e`.
+- Verified phase 2 through the UI: Park queued workflow
+  [27053792609](https://github.com/thinkwork-ai/thinkwork/actions/runs/27053792609),
+  completed successfully, set both ECS services to desired/running `0/0`, and
+  preserved the `twenty-crm-e2e` database proof row.
+- Verified phase 3 through the UI: redeploy from the parked state queued
+  workflow
+  [27054063926](https://github.com/thinkwork-ai/thinkwork/actions/runs/27054063926),
+  completed successfully, restored both ECS services to desired/running `1/1`,
+  restored healthy target health, returned HTTP 200 from
+  `https://crm.thinkwork.ai`, and preserved the `twenty-crm-e2e` proof row.
+- Verified phase 4 through the UI: destructive Destroy queued workflow
+  [27054477535](https://github.com/thinkwork-ai/thinkwork/actions/runs/27054477535),
+  completed successfully, showed Twenty as `disabled` / not provisioned in
+  Settings CRM, removed the target group, left the ECS cluster and services
+  `INACTIVE` with zero tasks, deleted the Twenty DB URL secret, removed
+  `crm.thinkwork.ai` DNS resolution, and removed both the `thinkwork_twenty`
+  database and `thinkwork_twenty` role from Postgres.
 
 ### CI / Verification
 
@@ -151,11 +177,19 @@ status: in_progress
   `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
   passed with 45 tests; `.github/workflows/deploy.yml` parsed as YAML;
   `git diff --check` passed.
+- End-to-end UI lifecycle proof passed on `http://localhost:5175/settings/crm`:
+  Deploy new Twenty CRM, Park runtime while preserving the dedicated database,
+  redeploy from the existing database, and destructive Destroy including
+  database cleanup.
+- Live AWS/database verification passed after destructive Destroy: GraphQL
+  `deploymentStatus` reported Twenty `disabled`, ECS services were inactive
+  with zero tasks, Secrets Manager could not find `thinkwork/dev/twenty/db-url`,
+  and Postgres returned `database=not found` and `role=not found` for the
+  dedicated Twenty resources.
 
 ### Blockers
 
-- Twenty database prep needs the deploy admin to become a member of the Twenty
-  app role before creating app-owned schemas and extensions.
+- None.
 
 ## Spaces Settings Activity - 2026-06-05
 
