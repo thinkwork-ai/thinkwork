@@ -354,19 +354,19 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-003-feat-twenty-crm-mcp-oauth-plan.md`.
 - Target branch: `main`.
-- Current unit: U5 Auth status and runtime safety.
-- Current branch: `codex/twenty-mcp-u5-runtime-safety`.
-- Current worktree: `.Codex/worktrees/twenty-mcp-u5-runtime-safety`.
-- Status: in progress.
+- Current unit: U6 E2E docs, runtime tool import, and smoke proof.
+- Current branch: `codex/twenty-mcp-u6-e2e-proof`.
+- Current worktree: `.Codex/worktrees/twenty-mcp-u6-e2e-proof`.
+- Status: local implementation and live proof complete; PR pending.
 
-| Unit                              | Branch                               | PR                                                           | State   | Notes                                                                                                                                              |
-| --------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema`         | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Merged  | Squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`; required checks passed after scoped dev migration application for the drift precheck. |
-| U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile`      | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Merged  | Squash merged as `e918df560c451daf2340a79ba808d753c9e37858`; required checks passed.                                                               |
-| U3 Desktop/web MCP OAuth          | `codex/twenty-mcp-u3-oauth`          | [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) | Merged  | Squash merged as `828a51f238492540c67f47746b8732b8657d0e45`; required checks passed.                                                               |
-| U4 Spaces MCP auth UI             | `codex/twenty-mcp-u4-auth-ui`        | [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168) | Merged  | Squash merged as `f8428a38432429e627cb776dfe160c4940568a6e`; required checks passed.                                                               |
-| U5 Auth status and runtime safety | `codex/twenty-mcp-u5-runtime-safety` | [#2170](https://github.com/thinkwork-ai/thinkwork/pull/2170) | Active  | Exposes managed OAuth server auth status before runtime assignment and preserves per-user runtime token gating.                                    |
-| U6 E2E docs and smoke proof       | Pending                              | Pending                                                      | Pending | Not started.                                                                                                                                       |
+| Unit                              | Branch                               | PR                                                           | State  | Notes                                                                                                                                              |
+| --------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema`         | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Merged | Squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`; required checks passed after scoped dev migration application for the drift precheck. |
+| U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile`      | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Merged | Squash merged as `e918df560c451daf2340a79ba808d753c9e37858`; required checks passed.                                                               |
+| U3 Desktop/web MCP OAuth          | `codex/twenty-mcp-u3-oauth`          | [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) | Merged | Squash merged as `828a51f238492540c67f47746b8732b8657d0e45`; required checks passed.                                                               |
+| U4 Spaces MCP auth UI             | `codex/twenty-mcp-u4-auth-ui`        | [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168) | Merged | Squash merged as `f8428a38432429e627cb776dfe160c4940568a6e`; required checks passed.                                                               |
+| U5 Auth status and runtime safety | `codex/twenty-mcp-u5-runtime-safety` | [#2170](https://github.com/thinkwork-ai/thinkwork/pull/2170) | Merged | Squash merged as `2ef9d59252e3fd7ab78b8224c40a2001a9051816`; required checks passed.                                                               |
+| U6 E2E docs and smoke proof       | `codex/twenty-mcp-u6-e2e-proof`      | [#2176](https://github.com/thinkwork-ai/thinkwork/pull/2176) | Active | Adds smoke tooling/docs, default-agent assignment, runtime tool import/search UI, and live assigned-opportunities proof.                           |
 
 ### Progress Log
 
@@ -435,6 +435,50 @@ status: in_progress
   weakening runtime invocation gating.
 - 2026-06-06: Opened PR
   [#2170](https://github.com/thinkwork-ai/thinkwork/pull/2170).
+- 2026-06-06: PR
+  [#2170](https://github.com/thinkwork-ai/thinkwork/pull/2170) passed required
+  checks and was squash merged as `2ef9d59252e3fd7ab78b8224c40a2001a9051816`.
+  Remote branch was deleted; local U5 branch and worktree were removed.
+- 2026-06-06: Created U6 worktree from `origin/main` at `2ef9d592` on branch
+  `codex/twenty-mcp-u6-e2e-proof`.
+- 2026-06-06: Added `scripts/smoke/twenty-mcp-oauth-smoke.mjs` for dry-run
+  and opt-in live verification of Twenty OAuth metadata, current-user managed
+  MCP visibility, MCP proxy `tools/list`, and optional assigned-opportunities
+  `tools/call` through ThinkWork runtime auth.
+- 2026-06-06: Updated Managed Applications and MCP docs to clarify that
+  deploy/park/destroy live on Managed Applications/CRM, while per-user Twenty
+  MCP OAuth connect/reconnect/clear-auth lives in Settings -> MCP Servers.
+- 2026-06-06: Live read-only probe refreshed the dev Cognito token in memory,
+  confirmed `deploymentStatus` reports Twenty running at
+  `https://crm.thinkwork.ai`, and confirmed
+  `managedMcpStatus: "missing"` / `managedMcpInstallAvailable: true`.
+  `/api/skills/user-mcp-servers` does not yet show **Twenty CRM**, so the
+  agent opportunities proof cannot run until the managed MCP row is installed
+  through the normal recovery/deploy path.
+- 2026-06-06: Added managed Twenty MCP default-agent assignment on first
+  install and repair so the runtime proxy can see the system-managed server
+  without a manual per-agent assignment.
+- 2026-06-06: Ran the authorized production GraphQL recovery mutation
+  `installManagedApplicationMcpServer(key: "twenty")`. It registered managed
+  MCP server `5d50f8cc-e7df-40b0-bf9f-b7bf20638e11` for
+  `https://crm.thinkwork.ai/mcp`.
+- 2026-06-06: Completed user OAuth for the Twenty MCP server and confirmed
+  `/api/skills/user-mcp-servers` reports **Twenty CRM** with
+  `authStatus: active`, `runtimeAssigned: true`, and `runtimeEnabled: true`.
+- 2026-06-06: Completed the required live agent proof through the ThinkWork MCP
+  proxy. `tools/list` returned the Twenty server tools, the smoke discovered
+  Eric's Twenty workspace member by email, and `execute_tool` ->
+  `find_many_opportunities` returned 5 opportunity records assigned to
+  `eric@thinkwork.ai`.
+- 2026-06-06: Added Settings -> MCP Servers detail runtime tool import,
+  expanded Twenty `get_tool_catalog` display, search, refresh, and bounded
+  paging so the full CRM catalog is visible after OAuth instead of relying on
+  stale cached server-tool rows.
+- 2026-06-06: Verified the Spaces UI locally on `http://localhost:5175` with
+  the in-app browser: Settings -> MCP Servers listed **Twenty CRM** as managed,
+  connected, and enabled; the Twenty detail page imported `Tools (223)` from
+  the live runtime catalog; searching for `find_many_opportunities` filtered
+  the catalog to the expected opportunity tool.
 
 ### CI / Verification
 
@@ -509,10 +553,32 @@ src/components/settings/ManagedApplicationsSection.test.tsx` passed.
   passed.
 - U5 local: `pnpm --filter @thinkwork/api typecheck` passed.
 - U5 local: `pnpm --filter @thinkwork/spaces typecheck` passed.
+- U6 local: `node scripts/smoke/twenty-mcp-oauth-smoke.mjs` passed dry-run.
+- U6 live read-only:
+  `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 node scripts/smoke/twenty-mcp-oauth-smoke.mjs`
+  failed at the expected managed-row gate because `/api/skills/user-mcp-servers`
+  did not return **Twenty CRM** for the authenticated dev user.
+- U6 local:
+  `pnpm --filter @thinkwork/api exec vitest run src/__tests__/managed-mcp-lifecycle.test.ts src/__tests__/mcp-user-servers.test.ts src/lib/__tests__/mcp-configs-approved-filter.test.ts`
+  passed.
+- U6 local:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsMcpServerDetail.test.tsx src/lib/mcp-api.test.ts`
+  passed.
+- U6 live:
+  `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 node scripts/smoke/twenty-mcp-oauth-smoke.mjs`
+  passed after managed MCP recovery and user OAuth; `tools/list` returned the
+  Twenty runtime tools.
+- U6 live:
+  `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 SMOKE_TWENTY_MCP_CALL=1 SMOKE_TWENTY_USER_EMAIL=eric@thinkwork.ai node scripts/smoke/twenty-mcp-oauth-smoke.mjs`
+  passed and found 5 Twenty opportunity records assigned to Eric.
+- U6 local UI:
+  `pnpm --filter @thinkwork/spaces dev --host 127.0.0.1 --port 5175` served
+  Settings; in-app browser verification confirmed the Twenty MCP list row,
+  detail page, imported `Tools (223)` catalog, and tool search/filter.
 
 ### Blockers
 
-- None.
+- None currently.
 
 ## Twenty CRM Lifecycle Actions - 2026-06-05
 

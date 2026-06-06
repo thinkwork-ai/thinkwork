@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { tenantMcpServers } from "@thinkwork/database-pg/schema";
 import {
+  reconcileTwentyManagedMcp,
   summarizeTwentyManagedMcpState,
   twentyMcpUrlFromApplicationUrl,
 } from "../lib/managed-mcp-applications.js";
@@ -120,6 +121,43 @@ describe("Twenty managed MCP lifecycle", () => {
       status: "needs_repair",
     });
   });
+
+  it("assigns the managed Twenty MCP server to the tenant platform default agent on first install", async () => {
+    const writes: Array<Record<string, unknown>> = [];
+    const fakeDb = queueDb({
+      selects: [[], [], [{ id: "agent-platform" }]],
+      inserts: writes,
+    });
+
+    await expect(
+      reconcileTwentyManagedMcp({
+        tenantId: "tenant-1",
+        application: runningTwenty(),
+        mode: "running",
+        db: fakeDb as any,
+        fetchImpl: async () =>
+          new Response(
+            JSON.stringify({
+              authorization_servers: ["https://crm.thinkwork.ai"],
+            }),
+            { status: 200 },
+          ),
+      }),
+    ).resolves.toMatchObject({
+      serverId: "server-1",
+      installed: true,
+      status: "installed",
+    });
+
+    expect(writes).toContainEqual(
+      expect.objectContaining({
+        agent_id: "agent-platform",
+        tenant_id: "tenant-1",
+        mcp_server_id: "server-1",
+        enabled: true,
+      }),
+    );
+  });
 });
 
 function runningTwenty() {
@@ -147,5 +185,44 @@ function runningTwenty() {
     managedMcpInstalled: false,
     managedMcpInstallAvailable: true,
     managedMcpMessage: null,
+  };
+}
+
+function queueDb(args: {
+  selects: unknown[][];
+  inserts: Array<Record<string, unknown>>;
+}) {
+  const selectQueue = [...args.selects];
+
+  const whereResult = () => {
+    const rows = selectQueue.shift() ?? [];
+    return {
+      limit: async () => rows,
+      then: (
+        resolve: (value: unknown[]) => void,
+        reject: (reason?: unknown) => void,
+      ) => Promise.resolve(rows).then(resolve, reject),
+    };
+  };
+
+  return {
+    select: () => ({
+      from: () => ({
+        where: () => whereResult(),
+      }),
+    }),
+    insert: () => ({
+      values: (value: Record<string, unknown>) => {
+        args.inserts.push(value);
+        return {
+          returning: async () => [{ id: "server-1" }],
+          onConflictDoUpdate: async () => undefined,
+        };
+      },
+    }),
+    update: () => ({
+      set: () => ({ where: async () => undefined }),
+    }),
+    delete: () => ({ where: async () => undefined }),
   };
 }

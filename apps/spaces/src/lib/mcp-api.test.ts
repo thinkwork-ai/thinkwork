@@ -36,4 +36,39 @@ describe("mcp-api", () => {
       "http://localhost:5175/settings/mcp-servers/server-1",
     );
   });
+
+  it("lists runtime MCP tools through the proxy endpoint", async () => {
+    const { apiFetch } = await import("@/lib/api-fetch");
+    const { listRuntimeMcpTools } = await import("./mcp-api");
+    vi.mocked(apiFetch).mockResolvedValue({ tools: [] });
+
+    await listRuntimeMcpTools("agent-1");
+
+    expect(apiFetch).toHaveBeenCalledWith("/api/mcp/tools/list", {
+      method: "POST",
+      body: JSON.stringify({ agentId: "agent-1" }),
+      extraHeaders: {},
+    });
+  });
+
+  it("calls bounded runtime MCP tools through the proxy endpoint", async () => {
+    const { apiFetch } = await import("@/lib/api-fetch");
+    const { callRuntimeMcpTool } = await import("./mcp-api");
+    vi.mocked(apiFetch).mockResolvedValue({ content: [] });
+
+    await callRuntimeMcpTool("agent-1", "twenty-crm", "get_tool_catalog", {
+      limit: 25,
+    });
+
+    expect(apiFetch).toHaveBeenCalledWith("/api/mcp/tools/call", {
+      method: "POST",
+      body: JSON.stringify({
+        agentId: "agent-1",
+        server: "twenty-crm",
+        tool: "get_tool_catalog",
+        arguments: { limit: 25 },
+      }),
+      extraHeaders: {},
+    });
+  });
 });

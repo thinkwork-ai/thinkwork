@@ -12,9 +12,10 @@ Use MCP tools when the tenant platform agent needs to call remote capabilities d
 ## How it works
 
 ```text
-Admin registers MCP server
-    -> Assigns it to a template or Space
-    -> Invocation resolves tenant or user auth
+Operator or managed app registers MCP server
+    -> Server is assigned to an agent, template, or Space
+    -> User connects OAuth-protected servers from Settings -> MCP Servers
+    -> Invocation resolves tenant or current-user auth
     -> Runtime connects to MCP server
     -> Tools are discovered
     -> Tenant platform agent calls tools during the turn
@@ -23,20 +24,45 @@ Admin registers MCP server
 
 ## Registration
 
-MCP servers are registered at the tenant level, then assigned to templates or Spaces depending on the product surface.
+MCP servers are registered at the tenant level, then assigned to agents,
+templates, or Spaces depending on the product surface. Most rows are manual
+operator registrations. Managed applications can also reconcile system-managed
+rows, such as the **Twenty CRM** MCP server that appears automatically when the
+Twenty managed application is running.
 
 Typical config includes:
 
-| Field | Description |
-| --- | --- |
-| Name | Display name for the MCP server |
-| URL | HTTP endpoint for the server |
-| Transport | Streamable HTTP or SSE |
-| Auth | None, tenant API key, or per-user OAuth |
+| Field     | Description                             |
+| --------- | --------------------------------------- |
+| Name      | Display name for the MCP server         |
+| URL       | HTTP endpoint for the server            |
+| Transport | Streamable HTTP or SSE                  |
+| Auth      | None, tenant API key, or per-user OAuth |
 
 ### URL is read from the record on every call
 
 The MCP endpoint URL lives in `tenant_mcp_servers.url`. The runtime resolves it on every outbound call. There are no hardcoded defaults and no env-var fallbacks for MCP base URLs. Rename the record in admin and the next request uses the new host.
+
+### Managed application MCP rows
+
+System-managed MCP rows carry managed ownership metadata and are not manually
+removed from the MCP Servers UI. Their lifecycle follows the managed
+application:
+
+| Managed app state | MCP behavior                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Running           | Managed row is visible, assigned to the tenant platform agent, and available for user OAuth from Settings -> MCP Servers |
+| Parked            | Runtime use is disabled; user token continuity is retained                                                               |
+| Destroyed         | Managed row and stored token material are removed during cleanup                                                         |
+
+If an already-running Twenty CRM stage is missing the managed row, operators
+repair it from Settings -> CRM with **Install MCP Server**. Do not register a
+duplicate manual Twenty row.
+
+The MCP server detail page imports runtime tools from the assigned agent. For
+Twenty CRM, the UI expands the MCP server's `get_tool_catalog` response so the
+full CRM tool catalog can be searched and paged instead of only showing the
+small top-level MCP wrapper tools.
 
 ## Authentication
 
@@ -44,7 +70,9 @@ MCP tools commonly use one of three patterns:
 
 - **None** for private-network services or systems with external network controls.
 - **Tenant API key** for a shared secret resolved at invocation time.
-- **Per-user OAuth** when downstream tools need user-scoped access.
+- **Per-user OAuth** when downstream tools need user-scoped access. Users
+  connect from Spaces/Desktop Settings -> MCP Servers. Mobile retains the same
+  self-service flow for mobile users.
 
 <Aside type="note">
   If a per-user OAuth token is missing, ThinkWork can skip that MCP server for
@@ -54,6 +82,11 @@ MCP tools commonly use one of three patterns:
 ## Runtime behavior
 
 At runtime, ThinkWork discovers tools from the MCP server and adds them beside built-in tools and skill-provided tools. If an MCP server is unavailable, the worker can continue with its remaining toolset.
+
+For OAuth MCP servers, runtime assembly only includes the server when the
+current user has an active stored token. There is no tenant-wide fallback for a
+missing user credential. When the token exists, ThinkWork injects it into the
+outbound MCP call automatically; the agent does not see or manage the token.
 
 MCP usage is tracked in the thread timeline, including:
 
@@ -66,4 +99,5 @@ MCP usage is tracked in the thread timeline, including:
 
 - [Integrations](/concepts/integrations/)
 - [Admin: Tenant MCP Servers](/applications/admin/mcp-servers/)
+- [Managed Applications](/applications/admin/managed-applications/)
 - [Mobile: Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/)
