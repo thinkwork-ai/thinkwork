@@ -530,6 +530,7 @@ export const ComputerThreadQuery = gql`
             id
             role
             content
+            tokenCount
             parts
             metadata
             toolCalls
@@ -560,6 +561,57 @@ export const ComputerThreadQuery = gql`
           }
         }
       }
+    }
+  }
+`;
+
+export const SettingsActivityThreadTurnsQuery = gql`
+  query SettingsActivityThreadTurns(
+    $tenantId: ID!
+    $threadId: ID!
+    $limit: Int
+  ) {
+    threadTurns(tenantId: $tenantId, threadId: $threadId, limit: $limit) {
+      id
+      tenantId
+      agentId
+      invocationSource
+      triggerDetail
+      triggerName
+      threadId
+      turnNumber
+      runtimeType
+      status
+      startedAt
+      finishedAt
+      error
+      errorCode
+      resultJson
+      usageJson
+      totalCost
+      retryAttempt
+      originTurnId
+      systemPrompt
+      createdAt
+    }
+  }
+`;
+
+export const SettingsActivityThreadTracesQuery = gql`
+  query SettingsActivityThreadTraces($threadId: ID!, $tenantId: ID!) {
+    threadTraces(threadId: $threadId, tenantId: $tenantId) {
+      traceId
+      threadId
+      agentId
+      agentName
+      runtimeType
+      model
+      inputTokens
+      outputTokens
+      durationMs
+      costUsd
+      estimated
+      createdAt
     }
   }
 `;
