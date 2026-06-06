@@ -201,8 +201,18 @@ describe("U1 - Twenty Terraform app module", () => {
 
     expect(source).toMatch(/resource "aws_efs_file_system" "twenty"/);
     expect(source).toMatch(/encrypted\s*=\s*true/);
+    expect(source).toMatch(/resource "aws_efs_access_point" "twenty"/);
+    expect(source).toMatch(/path\s*=\s*"\/local-storage"/);
+    expect(source).toMatch(/owner_uid\s*=\s*1000/);
     expect(source).toMatch(/resource "aws_efs_mount_target" "twenty"/);
     expect(source).toMatch(/transit_encryption\s*=\s*"ENABLED"/);
+    expect(source).toMatch(
+      /access_point_id\s*=\s*aws_efs_access_point\.twenty\.id/,
+    );
+    expect(source).toMatch(/iam\s*=\s*"ENABLED"/);
+    expect(source).toMatch(/resource "aws_iam_role_policy" "ecs_task_efs"/);
+    expect(source).toMatch(/elasticfilesystem:ClientMount/);
+    expect(source).toMatch(/elasticfilesystem:ClientWrite/);
     expect(source).toMatch(/STORAGE_TYPE/);
     expect(source).toMatch(/STORAGE_LOCAL_PATH/);
     expect(source).toMatch(/\/app\/packages\/twenty-server\/\.local-storage/);
