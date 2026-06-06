@@ -475,6 +475,22 @@ module "appsync" {
   subscription_schema = local.subscription_schema
 }
 
+module "deployment_control_plane" {
+  count  = var.enable_deployment_control_plane ? 1 : 0
+  source = "../app/deployment-control-plane"
+
+  stage      = var.stage
+  account_id = var.account_id
+  region     = var.region
+
+  release_version         = var.deployment_release_version
+  release_manifest_url    = var.deployment_release_manifest_url
+  release_manifest_sha256 = var.deployment_release_manifest_sha256
+
+  log_retention_days         = var.deployment_control_plane_log_retention_days
+  create_secret_placeholders = var.deployment_control_plane_create_secret_placeholders
+}
+
 module "api" {
   source = "../app/lambda-api"
 

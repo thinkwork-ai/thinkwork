@@ -102,6 +102,51 @@ output "auth_domain" {
   value       = module.cognito.auth_domain
 }
 
+output "deployment_control_plane_enabled" {
+  description = "Whether the AWS-native deployment control plane is enabled."
+  value       = var.enable_deployment_control_plane
+}
+
+output "deployment_state_machine_arn" {
+  description = "Deployment orchestration Step Functions state machine ARN."
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].state_machine_arn : null
+}
+
+output "deployment_state_machine_name" {
+  description = "Deployment orchestration Step Functions state machine name."
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].state_machine_name : null
+}
+
+output "deployment_runner_project_name" {
+  description = "CodeBuild project name for the deployment runner."
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].codebuild_project_name : null
+}
+
+output "deployment_evidence_bucket_name" {
+  description = "S3 bucket for deployment evidence artifacts."
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].evidence_bucket_name : null
+}
+
+output "deployment_ssm_prefix" {
+  description = "SSM parameter prefix for deployment control-plane metadata."
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].ssm_prefix : null
+}
+
+output "deployment_appconfig_application_id" {
+  description = "AppConfig application ID for deployment configuration."
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].appconfig_application_id : null
+}
+
+output "deployment_appconfig_environment_id" {
+  description = "AppConfig environment ID for deployment configuration."
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].appconfig_environment_id : null
+}
+
+output "deployment_appconfig_configuration_profile_id" {
+  description = "AppConfig configuration profile ID for deployment configuration."
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].appconfig_configuration_profile_id : null
+}
+
 output "mapbox_public_token" {
   description = "Mapbox public token used by apps/spaces MapView. Surfaced for scripts/build-spaces.sh to inline as VITE_MAPBOX_PUBLIC_TOKEN at build time. MapView falls back to OSM tiles when this is empty."
   value       = var.mapbox_public_token
