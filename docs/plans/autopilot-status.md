@@ -7986,3 +7986,14 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`,
   and
   `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/managedApplications.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts`.
+- PR [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144) merged as
+  `abbb713a`; its main deploy run
+  [27051568752](https://github.com/thinkwork-ai/thinkwork/actions/runs/27051568752)
+  completed successfully. Post-deploy GraphQL status reported Twenty CRM as
+  `running` at `https://crm.thinkwork.ai`, but direct public reachability
+  returned ALB `503` because the ECS server task was boot-looping on
+  `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` while connecting to Aurora through the
+  workflow-created `PG_DATABASE_URL`.
+- Follow-up fix in progress on branch `codex/twenty-crm-db-sslmode`: write the
+  Twenty `PG_DATABASE_URL` secret with `sslmode=no-verify`, matching the
+  existing ThinkWork API Lambda's Aurora connection mode for Node/Postgres.
