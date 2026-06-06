@@ -1,9 +1,30 @@
-import { useQuery } from "urql";
+import { useState } from "react";
+import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { Badge, Button } from "@thinkwork/ui";
-import { Copy, ExternalLink, RefreshCw } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Badge,
+  Button,
+} from "@thinkwork/ui";
+import {
+  Copy,
+  ExternalLink,
+  PauseCircle,
+  Play,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import { ManagedApplicationDeploymentAction } from "@/gql/graphql";
 import {
   SettingsDeploymentStatusQuery,
+  SettingsSetManagedApplicationDeploymentMutation,
   SettingsManagedApplicationHealthCheckQuery,
 } from "@/lib/settings-queries";
 import {
@@ -14,18 +35,60 @@ import {
 } from "@/components/settings/SettingsContent";
 
 export function SettingsCrm() {
-  const [statusResult] = useQuery({ query: SettingsDeploymentStatusQuery });
+  const [statusResult, refreshStatus] = useQuery({
+    query: SettingsDeploymentStatusQuery,
+  });
   const [healthResult, runHealthCheck] = useQuery({
     query: SettingsManagedApplicationHealthCheckQuery,
     variables: { key: "twenty" },
     pause: true,
     requestPolicy: "network-only",
   });
+  const [deploymentState, setManagedDeployment] = useMutation(
+    SettingsSetManagedApplicationDeploymentMutation,
+  );
+  const [pendingAction, setPendingAction] =
+    useState<ManagedApplicationDeploymentAction | null>(null);
+  const [confirmAction, setConfirmAction] =
+    useState<ManagedApplicationDeploymentAction | null>(null);
+  const [workflowUrl, setWorkflowUrl] = useState<string | null>(null);
 
   const deployment = statusResult.data?.deploymentStatus;
   const crm = deployment?.managedApplications.find(
     (app) => app.key === "twenty",
   );
+  const queued =
+    pendingAction !== null &&
+    !crmActionSatisfied(
+      {
+        provisioned: crm?.provisioned ?? false,
+        runtimeEnabled: crm?.runtimeEnabled ?? false,
+      },
+      pendingAction,
+    );
+  const statusLabel = queued ? "queued" : (crm?.status ?? "...");
+  const deploymentDescription = queued
+    ? `${actionVerb(pendingAction)} queued. The deploy workflow is updating Twenty CRM for this stage.`
+    : (crm?.message ?? "Runtime state from deployment status.");
+
+  async function requestDeployment(action: ManagedApplicationDeploymentAction) {
+    const result = await setManagedDeployment({ key: "twenty", action });
+    if (result.error) {
+      toast.error(`Could not update Twenty CRM: ${result.error.message}`);
+      return;
+    }
+
+    setPendingAction(action);
+    setWorkflowUrl(
+      result.data?.setManagedApplicationDeployment.workflowUrl ?? null,
+    );
+    setConfirmAction(null);
+    toast.success(
+      result.data?.setManagedApplicationDeployment.message ??
+        "Twenty CRM deployment queued.",
+    );
+    refreshStatus({ requestPolicy: "network-only" });
+  }
 
   return (
     <SettingsPane>
@@ -43,16 +106,35 @@ export function SettingsCrm() {
       ) : (
         <>
           <SettingsSection label="Application">
-            <SettingsRow
-              label="Status"
-              description={
-                crm?.message ?? "Runtime state from deployment status."
-              }
-            >
-              <Badge variant={crm?.runtimeEnabled ? "default" : "secondary"}>
-                {crm?.status ?? "..."}
+            <SettingsRow label="Deployment" description={deploymentDescription}>
+              <Badge
+                variant={
+                  queued || crm?.runtimeEnabled ? "default" : "secondary"
+                }
+              >
+                {statusLabel}
               </Badge>
+              <CrmDeployAction
+                provisioned={crm?.provisioned ?? false}
+                runtimeEnabled={crm?.runtimeEnabled ?? false}
+                queued={queued}
+                fetching={deploymentState.fetching || statusResult.fetching}
+                onAction={setConfirmAction}
+              />
             </SettingsRow>
+            {workflowUrl ? (
+              <SettingsRow
+                label="Workflow"
+                description="The deploy workflow will update status when it finishes."
+              >
+                <Button asChild type="button" variant="outline" size="sm">
+                  <a href={workflowUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="size-4" />
+                    Open workflow
+                  </a>
+                </Button>
+              </SettingsRow>
+            ) : null}
             <CopyableSettingsRow label="URL" value={crm?.url} external />
             <SettingsRow
               label="First admin setup"
@@ -127,8 +209,81 @@ export function SettingsCrm() {
               </SettingsRow>
             ) : null}
           </SettingsSection>
+
+          {crm?.provisioned ? (
+            <SettingsSection label="Teardown">
+              <SettingsRow
+                label="Park runtime"
+                description="Stop the Twenty server and worker while keeping the dedicated database, files, secrets, and re-enable path."
+              >
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    queued ||
+                    deploymentState.fetching ||
+                    statusResult.fetching ||
+                    !crm.runtimeEnabled
+                  }
+                  onClick={() =>
+                    setConfirmAction(ManagedApplicationDeploymentAction.Park)
+                  }
+                >
+                  <PauseCircle className="size-4" />
+                  Park
+                </Button>
+              </SettingsRow>
+              <SettingsRow
+                label="Destroy application"
+                description="Remove the Twenty runtime, storage, cache, app secrets, and dedicated database for this stage."
+              >
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={
+                    queued || deploymentState.fetching || statusResult.fetching
+                  }
+                  onClick={() =>
+                    setConfirmAction(ManagedApplicationDeploymentAction.Destroy)
+                  }
+                >
+                  <Trash2 className="size-4" />
+                  Destroy
+                </Button>
+              </SettingsRow>
+            </SettingsSection>
+          ) : null}
         </>
       )}
+      <AlertDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => !open && setConfirmAction(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmActionTitle(confirmAction)}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmActionDescription(confirmAction)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deploymentState.fetching || confirmAction === null}
+              onClick={() => {
+                if (confirmAction === null) return;
+                void requestDeployment(confirmAction);
+              }}
+            >
+              {confirmActionLabel(confirmAction)}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SettingsPane>
   );
 }
@@ -140,6 +295,93 @@ function formatHealthCheck(check: {
 }) {
   const status = check.statusCode ? `HTTP ${check.statusCode}` : "no status";
   return `${status} in ${check.latencyMs} ms. ${check.message}`;
+}
+
+function CrmDeployAction({
+  provisioned,
+  runtimeEnabled,
+  queued,
+  fetching,
+  onAction,
+}: {
+  provisioned: boolean;
+  runtimeEnabled: boolean;
+  queued: boolean;
+  fetching: boolean;
+  onAction: (action: ManagedApplicationDeploymentAction) => void;
+}) {
+  if (provisioned && runtimeEnabled) {
+    return null;
+  }
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      disabled={queued || fetching}
+      onClick={() => onAction(ManagedApplicationDeploymentAction.Enable)}
+    >
+      <Play className="size-4" />
+      {queued ? "Queued" : "Deploy"}
+    </Button>
+  );
+}
+
+function crmActionSatisfied(
+  crm: { provisioned: boolean; runtimeEnabled: boolean },
+  action: ManagedApplicationDeploymentAction,
+) {
+  if (action === ManagedApplicationDeploymentAction.Enable) {
+    return crm.runtimeEnabled;
+  }
+  if (action === ManagedApplicationDeploymentAction.Park) {
+    return crm.provisioned && !crm.runtimeEnabled;
+  }
+  return !crm.provisioned && !crm.runtimeEnabled;
+}
+
+function actionVerb(action: ManagedApplicationDeploymentAction | null) {
+  if (action === ManagedApplicationDeploymentAction.Enable) return "Deploy";
+  if (action === ManagedApplicationDeploymentAction.Park) return "Park";
+  if (action === ManagedApplicationDeploymentAction.Destroy) return "Destroy";
+  return "Deployment";
+}
+
+function confirmActionTitle(action: ManagedApplicationDeploymentAction | null) {
+  if (action === ManagedApplicationDeploymentAction.Enable) {
+    return "Deploy Twenty CRM?";
+  }
+  if (action === ManagedApplicationDeploymentAction.Park) {
+    return "Park Twenty CRM?";
+  }
+  if (action === ManagedApplicationDeploymentAction.Destroy) {
+    return "Destroy Twenty CRM and delete data?";
+  }
+  return "Update Twenty CRM?";
+}
+
+function confirmActionDescription(
+  action: ManagedApplicationDeploymentAction | null,
+) {
+  if (action === ManagedApplicationDeploymentAction.Enable) {
+    return "This queues the deploy workflow to provision Twenty CRM and start the server and worker runtime.";
+  }
+  if (action === ManagedApplicationDeploymentAction.Park) {
+    return "This queues the deploy workflow to stop the CRM runtime while retaining the dedicated database, secrets, files, and re-enable path.";
+  }
+  if (action === ManagedApplicationDeploymentAction.Destroy) {
+    return "This queues a destructive deploy workflow that removes the Twenty runtime, storage, cache, app secrets, and dedicated database. This cannot be undone from ThinkWork.";
+  }
+  return "";
+}
+
+function confirmActionLabel(action: ManagedApplicationDeploymentAction | null) {
+  if (action === ManagedApplicationDeploymentAction.Enable) return "Deploy";
+  if (action === ManagedApplicationDeploymentAction.Park) return "Park";
+  if (action === ManagedApplicationDeploymentAction.Destroy) {
+    return "Destroy and delete data";
+  }
+  return "Continue";
 }
 
 function ValueListRow({ label, values }: { label: string; values: string[] }) {

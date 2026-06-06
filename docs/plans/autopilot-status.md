@@ -11,14 +11,15 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: Follow-up lifecycle completion.
-- Current branch: `codex/twenty-crm-lifecycle-actions`.
-- Current worktree: `.Codex/worktrees/twenty-crm-lifecycle-actions`.
+- Current unit: Managed Applications configuration-link correction.
+- Current branch: `codex/managed-app-config-link`.
+- Current worktree: `.Codex/worktrees/managed-app-config-link`.
 - Status: active.
 
-| Unit                                       | Branch                               | PR                                                           | State  | Notes                                                                                                             |
-| ------------------------------------------ | ------------------------------------ | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------- |
-| Deploy, park, and destructive cleanup flow | `codex/twenty-crm-lifecycle-actions` | [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) | Active | Adds explicit Deploy, Park, and Destroy actions; Destroy removes retained Twenty DB/role/secrets after Terraform. |
+| Unit                                           | Branch                               | PR                                                           | State  | Notes                                                                                                                                 |
+| ---------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Deploy, park, and destructive cleanup flow     | `codex/twenty-crm-lifecycle-actions` | [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) | Merged | Adds explicit Deploy, Park, and Destroy actions; Destroy removes retained Twenty DB/role/secrets after Terraform.                     |
+| Managed Applications configuration-link polish | `codex/managed-app-config-link`      | [#2136](https://github.com/thinkwork-ai/thinkwork/pull/2136) | Active | General now links Twenty to CRM configuration; CRM detail owns Deploy plus bottom Teardown controls for Park and destructive Destroy. |
 
 ### Progress Log
 
@@ -37,6 +38,14 @@ status: in_progress
   Secrets Manager entries only after Terraform teardown is requested.
 - Added stale-secret-ARN fallback in deploy prep so a future Deploy can recover
   cleanly after a prior destructive Destroy.
+- Merged PR [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) and
+  released desktop canary `desktop-v0.1.0-canary.108`.
+- Started follow-up branch `codex/managed-app-config-link` after UI review.
+- Replaced the inline Twenty Deploy/Park/Destroy button cluster in General
+  with a single Configure link to `/settings/crm`.
+- Moved Twenty Park and destructive Destroy controls to a bottom Teardown
+  section on the CRM detail page, while keeping Deploy and queued workflow
+  status near the top of the detail page.
 
 ### CI / Verification
 
@@ -54,6 +63,14 @@ status: in_progress
 - `pnpm --filter @thinkwork/spaces build` passed with existing sourcemap and
   chunk-size warnings.
 - Workflow YAML parse and `git diff --check` passed.
+- Follow-up local verification:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/ManagedApplicationsSection.test.tsx src/components/settings/SettingsCrm.test.tsx src/components/settings/settings-nav.test.ts`
+  passed with 15 tests.
+- Follow-up local verification:
+  `pnpm --filter @thinkwork/spaces typecheck` passed.
+- Follow-up local verification: `git diff --check` passed.
+- Started Spaces locally on `http://127.0.0.1:5175/`; Playwright screenshots
+  reached the expected unauthenticated login screen in a fresh browser context.
 
 ### Blockers
 

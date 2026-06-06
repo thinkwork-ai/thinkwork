@@ -1,12 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsDeploymentStatusQuery } from "@/gql/graphql";
 
@@ -58,18 +52,16 @@ describe("ManagedApplicationsSection", () => {
     expect(source).toContain("SettingsSetManagedApplicationDeploymentMutation");
   });
 
-  it("uses retained-data semantics for Twenty disable", () => {
-    expect(source).toContain("Park Twenty CRM?");
-    expect(source).toContain("retaining the dedicated database");
-    expect(source).toContain("Destroy Twenty CRM and delete data?");
-    expect(source).toContain("dedicated database. This cannot be undone");
-    expect(source).toContain("CRM settings remain hidden");
-    expect(queries).toContain("setManagedApplicationDeployment");
-    expect(queries).toContain("$action: ManagedApplicationDeploymentAction!");
+  it("links Twenty to CRM configuration instead of inline lifecycle controls", () => {
+    expect(source).toContain('href="/settings/crm"');
+    expect(source).toContain("Configure");
+    expect(source).not.toContain("TwentyLifecycleControls");
+    expect(source).not.toContain("Park Twenty CRM?");
+    expect(source).not.toContain("Destroy Twenty CRM and delete data?");
     expect(queries).toContain("managedApplications {");
   });
 
-  it("confirms parking Twenty before queuing the retained-data disable", async () => {
+  it("renders a single Configure link for Twenty CRM", () => {
     render(
       <ManagedApplicationsSection
         deployment={deploymentWithTwentyEnabled}
@@ -77,43 +69,11 @@ describe("ManagedApplicationsSection", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByText("Park")[0]);
-    expect(screen.getByText("Park Twenty CRM?")).toBeTruthy();
-    expect(screen.getByText(/retaining the dedicated database/)).toBeTruthy();
-
-    const parkActions = screen.getAllByText("Park");
-    fireEvent.click(parkActions[parkActions.length - 1]);
-
-    await waitFor(() =>
-      expect(setDeploymentMock).toHaveBeenCalledWith({
-        key: "twenty",
-        action: "PARK",
-      }),
-    );
-  });
-
-  it("confirms destructive Twenty cleanup separately from parking", async () => {
-    render(
-      <ManagedApplicationsSection
-        deployment={deploymentWithTwentyEnabled}
-        loading={false}
-      />,
-    );
-
-    fireEvent.click(screen.getByText("Destroy"));
-    expect(
-      screen.getByText("Destroy Twenty CRM and delete data?"),
-    ).toBeTruthy();
-    expect(screen.getByText(/cannot be undone/)).toBeTruthy();
-
-    fireEvent.click(screen.getByText("Destroy and delete data"));
-
-    await waitFor(() =>
-      expect(setDeploymentMock).toHaveBeenCalledWith({
-        key: "twenty",
-        action: "DESTROY",
-      }),
-    );
+    const configureLink = screen.getByRole("link", { name: /configure/i });
+    expect(configureLink.getAttribute("href")).toBe("/settings/crm");
+    expect(screen.queryByRole("button", { name: /deploy/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /park/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /destroy/i })).toBeNull();
   });
 });
 
