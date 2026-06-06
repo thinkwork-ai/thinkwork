@@ -40,7 +40,9 @@ import {
 import {
   AgentNotFoundError,
   resolveAgentRuntimeConfig,
+  tenantCatalogSkillS3Key,
 } from "../lib/resolve-agent-runtime-config.js";
+import { buildPinnedSkillConfigs } from "../lib/skills/message-pinned-skills.js";
 import {
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
@@ -63,6 +65,7 @@ import {
   notifyThreadTurnUpdate,
 } from "../lib/chat-finalize/notify.js";
 import { logAgentCorePhase } from "../lib/agentcore-phase-log.js";
+import { checkUserBudgetAndPauseWork } from "../lib/user-budget-enforcement.js";
 
 /**
  * Extract or generate a trace ID for correlating CloudWatch/X-Ray traces.
@@ -133,6 +136,15 @@ interface InvokeEvent {
    * invoke payload as `message_attachments` (snake_case for Python).
    */
   messageAttachments?: InvokeAttachment[];
+  /**
+   * Force-pinned skill slugs the composer slash-command attached to this
+   * message (plan 2026-06-04-004). Raw slugs resolved from
+   * `messages.metadata.skills` by the dispatch caller. Filtered through the
+   * same tool policy as installed skills, then forwarded to AgentCore as the
+   * ephemeral `pinned_skills` branch (skillId + catalog s3Key) so the runtime
+   * can load + emphasize them for this turn without a permanent install.
+   */
+  pinnedSkills?: string[];
   /**
    * Mobile Pi background handoff reuses the durable local thread_turn row so
    * AgentCore finalizes the same logical turn instead of creating a second one.
@@ -745,6 +757,60 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       }
     }
 
+    if (currentUserId) {
+      const budgetStatus = await checkUserBudgetAndPauseWork({
+        tenantId,
+        userId: currentUserId,
+      });
+      if (budgetStatus.overBudget) {
+        const message =
+          budgetStatus.pauseReason ??
+          "User budget exceeded; this turn was not dispatched.";
+        console.log(
+          `[chat-agent-invoke] User ${currentUserId} is over budget, skipping dispatch`,
+        );
+        logAgentCorePhase({
+          source: "chat-agent-invoke",
+          phase: "api.budget_gate",
+          status: "failed",
+          traceId,
+          tenantId,
+          agentId,
+          threadId,
+          threadTurnId: turnId,
+          runtimeType,
+          detail: "user_budget_exceeded",
+        });
+        if (turnId) {
+          await markThreadTurnSetupFailed({
+            turnId,
+            tenantId,
+            threadId,
+            agentId,
+            message,
+          });
+        }
+        const errMsg = await insertAssistantMessage(
+          threadId,
+          tenantId,
+          agentId,
+          message,
+        );
+        if (errMsg) {
+          await notifyNewMessage({
+            messageId: errMsg.id,
+            threadId,
+            tenantId,
+            role: "assistant",
+            content: message,
+            senderType: "agent",
+            senderId: agentId,
+          });
+        }
+        return { ok: false, threadTurnId: turnId };
+      }
+    }
+
     // 2c. Load prior conversation history for this thread from Aurora.
     // The runtime container no longer has a working source of session memory
     // (AgentCore Memory was retired in PRD-41B Phase 3 — store_turn became a
@@ -948,6 +1014,28 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       effectiveBlockedTools.length > 0 || effectiveToolPolicy.allowedTools
         ? skillsConfig.filter(isSkillAllowedByPolicy)
         : skillsConfig;
+
+    // Force-pinned skills (composer slash-command, plan 2026-06-04-004 U3).
+    // Build an ephemeral config branch carrying the catalog s3Key for each
+    // pinned slug, then drop any the tool policy blocks — reusing the SAME
+    // `isSkillAllowedByPolicy` guardrail as installed skills so an operator pin
+    // can never override an admin blocklist (KD4). Kept SEPARATE from
+    // `effectiveSkillsConfig` so the runtime can both load uninstalled pins and
+    // emphasize all of them, without mutating the resolved/installed set.
+    const pinnedSkillSlugs = Array.isArray(event.pinnedSkills)
+      ? event.pinnedSkills
+      : [];
+    const pinnedSkillsConfig = buildPinnedSkillConfigs({
+      slugs: pinnedSkillSlugs,
+      tenantSlug: tenantSlug || "",
+      catalogS3Key: tenantCatalogSkillS3Key,
+      isAllowed: isSkillAllowedByPolicy,
+    });
+    if (pinnedSkillSlugs.length > 0) {
+      console.log(
+        `[chat-agent-invoke] pinned skills requested=${pinnedSkillSlugs.length} allowed=${pinnedSkillsConfig.length}`,
+      );
+    }
     const effectiveMcpPolicy = renderedWorkspace.rendered
       ? (renderedWorkspace.effectivePolicy ?? null)
       : null;
@@ -1091,6 +1179,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       budget_paused: runtimeConfig.budgetPaused,
       skills:
         effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
+      // Ephemeral force-pinned skills (plan 2026-06-04-004 U3/U4). Separate from
+      // `skills` so the runtime loads + emphasizes them for this turn without a
+      // permanent install. Already policy-filtered above (KD4).
+      pinned_skills:
+        pinnedSkillsConfig.length > 0 ? pinnedSkillsConfig : undefined,
       knowledge_bases: knowledgeBasesConfig,
       trigger_channel: "chat",
       guardrail_config: guardrailPayload || undefined,
@@ -1148,6 +1241,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       activity_callback_secret:
         THINKWORK_API_SECRET && turnId ? THINKWORK_API_SECRET : undefined,
       thread_turn_id: turnId || undefined,
+      cost_owner_user_id: currentUserId || undefined,
     } as Record<string, unknown>;
 
     if (sandboxPreflight && currentUserId) {

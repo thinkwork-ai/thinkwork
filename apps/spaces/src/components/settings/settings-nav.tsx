@@ -3,9 +3,11 @@ import {
   AppWindow,
   BookOpen,
   Brain,
+  BriefcaseBusiness,
+  Clock,
   FolderTree,
+  History,
   NotebookText,
-  Plug,
   Repeat,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -13,13 +15,13 @@ import {
   Users,
   Webhook,
   Wrench,
-  Zap,
 } from "lucide-react";
 import {
   IconChartBar,
   IconPlanet,
   IconTopologyStar3,
 } from "@tabler/icons-react";
+import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
 export interface SettingsNavItem {
   label: string;
@@ -30,11 +32,13 @@ export interface SettingsNavItem {
   operatorOnly?: boolean;
   /** When true, only render in the desktop build (needs the local bridge). */
   desktopOnly?: boolean;
+  /** Optional managed app that must be runtime-enabled before the item shows. */
+  managedAppKey?: "cognee" | "twenty";
 }
 
 // General first (visible to all), then operator-only sections. Appearance is
 // folded into General as a "Color mode" control rather than a nav item.
-export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
+const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { label: "General", to: "/settings/general", icon: SettingsIcon },
   {
     label: "Spaces",
@@ -55,7 +59,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
-    label: "Skills",
+    label: "Skill Library",
     to: "/settings/skills",
     icon: Sparkles,
     operatorOnly: true,
@@ -69,7 +73,13 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   {
     label: "MCP Servers",
     to: "/settings/mcp-servers",
-    icon: Plug,
+    icon: ModelContextProtocol,
+    operatorOnly: true,
+  },
+  {
+    label: "Activity",
+    to: "/settings/activity",
+    icon: History,
     operatorOnly: true,
   },
   {
@@ -79,10 +89,18 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
+    label: "CRM",
+    to: "/settings/crm",
+    icon: BriefcaseBusiness,
+    operatorOnly: true,
+    managedAppKey: "twenty",
+  },
+  {
     label: "Knowledge Graph",
     to: "/settings/knowledge-graph",
     icon: IconTopologyStar3,
     operatorOnly: true,
+    managedAppKey: "cognee",
   },
   {
     label: "Knowledge Bases",
@@ -100,7 +118,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   {
     label: "Automations",
     to: "/settings/automations",
-    icon: Zap,
+    icon: Clock,
     operatorOnly: true,
   },
   {
@@ -123,6 +141,16 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   },
 ];
 
+// "General" stays pinned at the top; the remaining sections are alphabetised by
+// label so the growing operator list stays scannable. Sorting at export keeps
+// the source list above free-form — new items can be added in any order.
+export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
+  ...RAW_SETTINGS_NAV_ITEMS.filter((item) => item.label === "General"),
+  ...RAW_SETTINGS_NAV_ITEMS.filter((item) => item.label !== "General").sort(
+    (a, b) => a.label.localeCompare(b.label),
+  ),
+];
+
 /**
  * Visible settings sections for the current caller. Operator-only sections need
  * a resolved operator role; desktop-only sections (the local-workspace
@@ -133,17 +161,21 @@ export function visibleSettingsNavItems(opts: {
   isOperator: boolean;
   roleResolved: boolean;
   isDesktop: boolean;
+  managedApplications?: Partial<Record<"cognee" | "twenty", boolean>>;
 }): SettingsNavItem[] {
   return SETTINGS_NAV_ITEMS.filter(
     (item) =>
       (!item.operatorOnly || (opts.roleResolved && opts.isOperator)) &&
-      (!item.desktopOnly || opts.isDesktop),
+      (!item.desktopOnly || opts.isDesktop) &&
+      (!item.managedAppKey ||
+        opts.managedApplications?.[item.managedAppKey] === true),
   );
 }
 
 export interface SettingsCrumb {
   label: string;
   href?: string;
+  search?: Record<string, unknown>;
 }
 
 /**

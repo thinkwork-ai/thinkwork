@@ -17,6 +17,7 @@ export interface ThreadMentionTarget extends MentionTarget {
   id: string;
   avatarUrl?: string | null;
   role?: string | null;
+  email?: string | null;
   isDefaultAgent?: boolean;
 }
 
@@ -69,9 +70,7 @@ export async function loadTenantMentionTargets(
   return repository.loadTenantTargets(input);
 }
 
-class DrizzleThreadMentionTargetsRepository
-  implements ThreadMentionTargetsRepository
-{
+class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepository {
   private readonly db = getDb();
 
   async loadThread(input: { tenantId: string; threadId: string }) {
@@ -177,6 +176,7 @@ class DrizzleThreadMentionTargetsRepository
           displayName: row.userName ?? row.userEmail ?? "User",
           aliases: [row.userName, row.userEmail].filter(isString),
           avatarUrl: row.userImage,
+          email: row.userEmail,
           role: row.role,
         });
       }
@@ -239,6 +239,7 @@ class DrizzleThreadMentionTargetsRepository
           displayName: row.userName ?? row.userEmail ?? "User",
           aliases: [row.userName, row.userEmail].filter(isString),
           avatarUrl: row.userImage,
+          email: row.userEmail,
           role: row.role,
         });
       }
@@ -321,6 +322,7 @@ class DrizzleThreadMentionTargetsRepository
         displayName: row.userName ?? row.userEmail ?? "User",
         aliases: [row.userName, row.userEmail].filter(isString),
         avatarUrl: row.userImage,
+        email: row.userEmail,
         role: row.role,
       });
     }
@@ -436,6 +438,7 @@ function targetFromRow(row: {
       displayName: row.userName ?? row.userEmail ?? "User",
       aliases: [row.userName, row.userEmail].filter(isString),
       avatarUrl: row.userImage,
+      email: row.userEmail,
       role: row.role,
     };
   }
@@ -464,6 +467,7 @@ function addTarget(
     ]),
     avatarUrl: existing.avatarUrl ?? target.avatarUrl,
     role: existing.role ?? target.role,
+    email: existing.email ?? target.email,
     isDefaultAgent: existing.isDefaultAgent || target.isDefaultAgent,
   });
 }

@@ -28,6 +28,7 @@ import {
 } from "@/lib/settings-queries";
 import {
   SettingsPageTitle,
+  SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 
@@ -45,13 +46,37 @@ export function SettingsSpaceConfig() {
   const spaceName =
     space?.name?.trim() || (result.fetching ? "Space" : "Space");
 
-  // Title lives in the settings header as nested breadcrumbs.
+  // Title lives in the settings header as nested breadcrumbs; the SPACE.md
+  // files shortcut sits as an icon action on the right (matching how other
+  // surfaces expose their workspace files).
   usePageHeaderActions({
     title: spaceName,
     breadcrumbs: [
       { label: "Spaces", href: "/settings/spaces" },
       { label: spaceName },
     ],
+    action: (
+      <Button
+        asChild
+        size="icon-sm"
+        variant="ghost"
+        title="Open SPACE.md"
+        aria-label="Open SPACE.md"
+      >
+        <Link
+          to="/spaces/$spaceId"
+          params={{ spaceId }}
+          state={(prev) => ({
+            ...prev,
+            openSpaceFiles: true,
+            defaultOpenFile: "SPACE.md",
+          })}
+        >
+          <FileText className="size-4" />
+        </Link>
+      </Button>
+    ),
+    actionKey: `space-files:${spaceId}`,
   });
 
   if (result.fetching && !result.data) {
@@ -91,7 +116,6 @@ export function SettingsSpaceConfig() {
           onSaved={() => refetch({ requestPolicy: "network-only" })}
         />
         <ManifestOverviewSection
-          spaceId={spaceId}
           manifest={manifest}
           diagnostics={manifestDiagnostics}
         />
@@ -159,68 +183,67 @@ function InformationSection({
 
   return (
     <SettingsSection label="Information">
-      <div className="space-y-4 p-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[2fr_1fr_1fr]">
-          <Labeled label="Name">
-            <Input
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-          </Labeled>
-          <Labeled label="Access">
-            <Select
-              value={form.accessMode}
-              onValueChange={(v) =>
-                setForm((f) => ({ ...f, accessMode: v as SpaceAccessMode }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SpaceAccessMode.Public}>Public</SelectItem>
-                <SelectItem value={SpaceAccessMode.Private}>Private</SelectItem>
-              </SelectContent>
-            </Select>
-          </Labeled>
-          <div className="space-y-1.5">
-            <span className="text-sm font-medium text-foreground">Status</span>
-            <div className="flex h-9 items-center">
-              <Badge variant="secondary">{titleCase(status)}</Badge>
-            </div>
-          </div>
-        </div>
-        <Labeled label="Description">
-          <Textarea
-            rows={3}
-            value={form.description}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, description: e.target.value }))
-            }
-          />
-        </Labeled>
-        <div className="flex items-center justify-end gap-3 pt-4">
-          {saved ? (
-            <span className="text-sm text-muted-foreground">Saved</span>
-          ) : null}
-          {errorMsg ? (
-            <span className="text-sm text-destructive">{errorMsg}</span>
-          ) : null}
-          <Button onClick={onSave} disabled={saving || !form.name.trim()}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
+      <SettingsRow label="Name" description="Display name for this Space.">
+        <Input
+          className="w-72"
+          value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+        />
+      </SettingsRow>
+      <SettingsRow label="Access" description="Who can see and use this Space.">
+        <Select
+          value={form.accessMode}
+          onValueChange={(v) =>
+            setForm((f) => ({ ...f, accessMode: v as SpaceAccessMode }))
+          }
+        >
+          <SelectTrigger className="w-72">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SpaceAccessMode.Public}>Public</SelectItem>
+            <SelectItem value={SpaceAccessMode.Private}>Private</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingsRow>
+      <SettingsRow
+        label="Status"
+        description="Current lifecycle state of the Space."
+      >
+        <Badge variant="secondary">{titleCase(status)}</Badge>
+      </SettingsRow>
+      <SettingsRow
+        label="Description"
+        description="What this Space is for; shown to its members."
+      >
+        <Textarea
+          className="w-72"
+          rows={3}
+          value={form.description}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, description: e.target.value }))
+          }
+        />
+      </SettingsRow>
+      <div className="flex items-center justify-end gap-3 px-4 py-3.5">
+        {saved ? (
+          <span className="text-sm text-muted-foreground">Saved</span>
+        ) : null}
+        {errorMsg ? (
+          <span className="text-sm text-destructive">{errorMsg}</span>
+        ) : null}
+        <Button onClick={onSave} disabled={saving || !form.name.trim()}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
       </div>
     </SettingsSection>
   );
 }
 
 function ManifestOverviewSection({
-  spaceId,
   manifest,
   diagnostics,
 }: {
-  spaceId: string;
   manifest: SpaceManifestOverview | null;
   diagnostics: SpaceManifestDiagnostics | null;
 }) {
@@ -241,25 +264,7 @@ function ManifestOverviewSection({
   const bashPolicy = manifest?.runtimePolicy?.bash ?? "default";
 
   return (
-    <SettingsSection
-      label="SPACE.md overview"
-      action={
-        <Button asChild size="sm" variant="outline">
-          <Link
-            to="/spaces/$spaceId"
-            params={{ spaceId }}
-            state={(prev) => ({
-              ...prev,
-              openSpaceFiles: true,
-              defaultOpenFile: "SPACE.md",
-            })}
-          >
-            <FileText className="size-4" />
-            <span>Open SPACE.md</span>
-          </Link>
-        </Button>
-      }
-    >
+    <SettingsSection label="SPACE.md overview">
       <div className="divide-y divide-border">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
           <div className="min-w-0">
@@ -404,21 +409,6 @@ function OverviewPanel({
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function Labeled({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">{label}</label>
-      {children}
     </div>
   );
 }

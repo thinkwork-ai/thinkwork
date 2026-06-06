@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { cn } from "@thinkwork/ui";
+import { cn, useIsMobile } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
 import {
@@ -18,6 +18,7 @@ import {
  */
 export function SettingsHeaderBar() {
   const isDesktop = isDesktopBuild();
+  const isMobile = useIsMobile();
   const { actions } = usePageHeader();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const crumbs: SettingsCrumb[] =
@@ -30,8 +31,11 @@ export function SettingsHeaderBar() {
       className={cn(
         "flex shrink-0 items-center gap-2 border-b border-border text-foreground",
         isDesktop
-          ? "desktop-app-header h-[var(--desktop-app-header-height)] bg-background pl-4 pr-3"
-          : "h-12 bg-background pl-4 pr-4",
+          ? "desktop-app-header h-[var(--desktop-app-header-height)] bg-background pr-3"
+          : "h-12 bg-background pr-4",
+        // Clear the floating nav trigger the layout renders at top-left when
+        // the docked sidebar is collapsed.
+        isMobile ? (isDesktop ? "pl-28" : "pl-14") : "pl-4",
       )}
     >
       <nav
@@ -61,6 +65,7 @@ export function SettingsHeaderBar() {
               ) : (
                 <Link
                   to={crumb.href}
+                  search={crumb.search}
                   className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {crumb.label}

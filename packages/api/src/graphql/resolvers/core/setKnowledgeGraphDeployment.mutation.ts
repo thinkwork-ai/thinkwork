@@ -53,7 +53,7 @@ export function deploymentControlConfig() {
   };
 }
 
-async function readGithubToken(secretId: string): Promise<string> {
+export async function readGithubToken(secretId: string): Promise<string> {
   const response = await sm.send(
     new GetSecretValueCommand({ SecretId: secretId }),
   );
@@ -78,7 +78,7 @@ async function readGithubToken(secretId: string): Promise<string> {
   return raw;
 }
 
-async function upsertGithubActionsVariable(args: {
+export async function upsertGithubActionsVariable(args: {
   token: string;
   repository: string;
   name: string;
@@ -105,7 +105,7 @@ async function upsertGithubActionsVariable(args: {
   }
 }
 
-async function dispatchDeployWorkflow(args: {
+export async function dispatchDeployWorkflow(args: {
   token: string;
   repository: string;
   workflowFile: string;
@@ -118,7 +118,7 @@ async function dispatchDeployWorkflow(args: {
   });
 }
 
-async function githubRequest(
+export async function githubRequest(
   token: string,
   repository: string,
   request: { method: string; path: string; body?: unknown },
@@ -160,7 +160,9 @@ function parseJsonOrText(text: string): unknown {
   }
 }
 
-async function requirePlatformOperator(ctx: GraphQLContext): Promise<void> {
+export async function requirePlatformOperator(
+  ctx: GraphQLContext,
+): Promise<void> {
   const allowlist = (process.env.THINKWORK_PLATFORM_OPERATOR_EMAILS ?? "")
     .split(",")
     .map((email) => email.trim().toLowerCase())

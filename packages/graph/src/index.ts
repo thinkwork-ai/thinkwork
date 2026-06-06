@@ -3,6 +3,7 @@
 // Hosts:
 //   - MemoryGraph — Hindsight memory + entity graph (used by Brain).
 //   - WikiGraph — compiled wiki-page graph (used by Pages).
+//   - KnowledgeGraph — Cognee thread graph with trust/provenance styling.
 //
 // The two components were ported from apps/admin/src/components/{Memory,Wiki}Graph.tsx
 // in U2 of plan docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md
@@ -17,6 +18,35 @@ export type { MemoryGraphHandle, MemoryGraphNode } from "./MemoryGraph.js";
 
 export { WikiGraph, buildConnectedWikiGraphData } from "./WikiGraph.js";
 export type { WikiGraphHandle, WikiGraphNode } from "./WikiGraph.js";
+
+export {
+  KnowledgeGraph,
+  buildKnowledgeGraphData,
+  knowledgeGraphTrustColor,
+  knowledgeGraphTrustState,
+} from "./KnowledgeGraph.js";
+export type {
+  KnowledgeGraphConnectedEdge,
+  KnowledgeGraphEdge,
+  KnowledgeGraphGroundingStatus,
+  KnowledgeGraphHandle,
+  KnowledgeGraphNode,
+  KnowledgeGraphProvenanceStatus,
+  KnowledgeGraphTrustState,
+} from "./KnowledgeGraph.js";
+
+export {
+  classifyNode,
+  connectedGraphEdges,
+  deriveGraphClassification,
+  endpointId,
+  normalizeGraphSearch,
+} from "./graph-utils.js";
+export type {
+  GraphClassification,
+  GraphEndpoint,
+  NodeVisualState,
+} from "./graph-utils.js";
 
 export {
   MEMORY_COLOR,
@@ -36,4 +66,8 @@ export {
 } from "./palettes/wiki-palette.js";
 export type { WikiPageType } from "./palettes/wiki-palette.js";
 
-export { MemoryGraphQuery, WikiGraphQuery } from "./queries.js";
+export {
+  KnowledgeGraphQuery,
+  MemoryGraphQuery,
+  WikiGraphQuery,
+} from "./queries.js";

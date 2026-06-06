@@ -130,6 +130,38 @@ type DeploymentStatus {
   cogneeBackendMode: String
   cogneeClusterArn: String
   cogneeServiceName: String
+  twentyProvisioned: Boolean!
+  twentyRuntimeEnabled: Boolean!
+  twentyUrl: String
+  twentyClusterArn: String
+  twentyServerServiceName: String
+  twentyWorkerServiceName: String
+  twentyServerLogGroupName: String
+  twentyWorkerLogGroupName: String
+  twentyAlbArn: String
+  twentyTargetGroupArn: String
+  managedApplications: [ManagedApplicationDeployment!]!
+}
+
+type ManagedApplicationDeployment {
+  key: String!
+  displayName: String!
+  description: String!
+  status: String!
+  enabled: Boolean!
+  provisioned: Boolean!
+  runtimeEnabled: Boolean!
+  url: String
+  endpoint: String
+  backendMode: String
+  logGroupName: String
+  logGroupNames: [String!]!
+  clusterArn: String
+  serviceName: String
+  serviceNames: [String!]!
+  albArn: String
+  targetGroupArn: String
+  message: String
 }
 
 type KnowledgeGraphDeploymentChange {
@@ -139,6 +171,26 @@ type KnowledgeGraphDeploymentChange {
 }
 
 type KnowledgeGraphHealthCheck {
+  healthy: Boolean!
+  statusCode: Int
+  latencyMs: Int!
+  endpoint: String
+  checkedAt: AWSDateTime!
+  message: String!
+}
+
+type ManagedApplicationDeploymentChange {
+  key: String!
+  action: String!
+  desiredEnabled: Boolean!
+  provisioned: Boolean!
+  runtimeEnabled: Boolean!
+  workflowUrl: String!
+  message: String!
+}
+
+type ManagedApplicationHealthCheck {
+  key: String!
   healthy: Boolean!
   statusCode: Int
   latencyMs: Int!
@@ -178,6 +230,18 @@ input UpdateTenantSettingsInput {
 
 input SetKnowledgeGraphDeploymentInput {
   enabled: Boolean!
+}
+
+input SetManagedApplicationDeploymentInput {
+  key: String!
+  enabled: Boolean
+  action: ManagedApplicationDeploymentAction
+}
+
+enum ManagedApplicationDeploymentAction {
+  ENABLE
+  PARK
+  DESTROY
 }
 
 """
@@ -244,6 +308,7 @@ extend type Query {
   tenantMembers(tenantId: ID!): [TenantMember!]!
   deploymentStatus: DeploymentStatus!
   knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck!
+  managedApplicationHealthCheck(key: String!): ManagedApplicationHealthCheck!
   """
   Returns the caller's own role on the caller's own tenant.
 
@@ -296,6 +361,9 @@ extend type Mutation {
   setKnowledgeGraphDeployment(
     input: SetKnowledgeGraphDeploymentInput!
   ): KnowledgeGraphDeploymentChange!
+  setManagedApplicationDeployment(
+    input: SetManagedApplicationDeploymentInput!
+  ): ManagedApplicationDeploymentChange!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
   updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!
   "Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey."

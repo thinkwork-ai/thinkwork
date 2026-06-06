@@ -84,6 +84,18 @@ variable "include_api" {
   default     = false
 }
 
+variable "include_crm" {
+  description = "When true, create a Cloudflare CNAME for the Twenty CRM public ALB. The CRM ALB uses its own certificate."
+  type        = bool
+  default     = false
+}
+
+variable "crm_alb_dns_name" {
+  description = "Public ALB DNS name for the Twenty CRM app. Used as the target for the crm.<domain> Cloudflare CNAME when include_crm is true."
+  type        = string
+  default     = ""
+}
+
 variable "api_gateway_id" {
   description = "aws_apigatewayv2_api.id of the HTTP API to expose at api.<domain>. Required when include_api is true."
   type        = string

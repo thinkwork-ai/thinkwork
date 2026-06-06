@@ -33,3 +33,33 @@ extend type Mutation {
     dryRun: Boolean = false
   ): [SkillCatalogRebuildResult!]!
 }
+
+"""
+One entry in a tenant's skill catalog, read from the derived skill_catalog
+index. Powers pickers like the composer slash-command (force-pin a skill onto
+a message). The `installed` flag is annotated relative to the `agentId`
+argument; skills blocked on that agent are omitted from results entirely.
+"""
+type SkillCatalogEntry {
+  "Folder slug under skill-catalog/. Stable identifier used to pin the skill."
+  slug: String!
+  "From SKILL.md frontmatter display_name; null → render falls back to slug."
+  displayName: String
+  description: String
+  category: String
+  icon: String
+  tags: [String!]
+  "True when this skill is installed on the agent named by `agentId`."
+  installed: Boolean!
+}
+
+extend type Query {
+  """
+  List the caller-tenant's skill catalog (the derived skill_catalog index) for
+  composer/skill pickers. When `agentId` is provided, entries are annotated
+  with `installed` and skills blocked on that agent (agent.blocked_tools) are
+  omitted — the popup never offers a blocked skill. The authoritative blocklist
+  guardrail is also enforced server-side at dispatch.
+  """
+  tenantSkillCatalog(agentId: ID): [SkillCatalogEntry!]!
+}

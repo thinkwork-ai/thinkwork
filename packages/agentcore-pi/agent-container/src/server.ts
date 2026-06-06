@@ -145,6 +145,11 @@ import {
   discoverWorkspaceSkills,
   type WorkspaceSkill,
 } from "./runtime/workspace-skills.js";
+import {
+  loadPinnedSkills,
+  mergeWorkspaceSkills,
+  parsePinnedSkillRefs,
+} from "./runtime/pinned-skills.js";
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -1334,7 +1339,42 @@ export async function handleInvocation(
     });
   }
 
-  const workspaceSkills = await discoverSkills(env.workspaceDir);
+  const discoveredSkills = await discoverSkills(env.workspaceDir);
+
+  // Ephemeral force-pinned skills (plan 2026-06-04-004 U4). The composer
+  // slash-command can pin a tenant-catalog skill the agent has NOT installed;
+  // fetch each pin's SKILL.md from the catalog for this turn only and merge it
+  // into the discovered set, marking pinned slugs for system-prompt emphasis.
+  // Fetch-per-turn keeps pins ephemeral — nothing is written to the workspace.
+  const pinnedSkillRefs = parsePinnedSkillRefs(args.payload.pinned_skills);
+  let pinnedEmphasizedSlugs = new Set<string>();
+  let workspaceSkills = discoveredSkills;
+  if (pinnedSkillRefs.length > 0 && workspaceBucket) {
+    const pinnedSkills = await loadPinnedSkills({
+      refs: pinnedSkillRefs,
+      bucket: workspaceBucket,
+      s3: deps.s3ClientFactory(env.awsRegion),
+      log: (event, fields) =>
+        logStructured({
+          level: "warn",
+          event,
+          tenantId: identity.tenantId,
+          ...fields,
+        }),
+    });
+    const merged = mergeWorkspaceSkills(discoveredSkills, pinnedSkills);
+    workspaceSkills = merged.skills;
+    pinnedEmphasizedSlugs = merged.emphasizedSlugs;
+    logStructured({
+      level: "info",
+      event: "pinned_skills_loaded",
+      tenantId: identity.tenantId,
+      agentSlug: identity.agentSlug,
+      requested: pinnedSkillRefs.length,
+      loaded: pinnedSkills.length,
+      emphasized: [...pinnedEmphasizedSlugs],
+    });
+  }
 
   // Plan §006 U4 — read mcp.json from the bootstrapped workspace. A
   // malformed file aborts the invocation with a structured 500 (same
@@ -1561,7 +1601,10 @@ export async function handleInvocation(
           ...bundle.tools.map((tool) => tool.name),
           ...bundle.extensionToolNames,
         ],
-        workspaceSkillsBlock: formatWorkspaceSkills(workspaceSkills),
+        workspaceSkillsBlock: formatWorkspaceSkills(
+          workspaceSkills,
+          pinnedEmphasizedSlugs,
+        ),
         suffix: attachmentPreamble || undefined,
         onComposed: (prompt) => {
           composedSystemPrompt = prompt;

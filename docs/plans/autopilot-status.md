@@ -6,6 +6,542 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Twenty CRM Lifecycle Actions - 2026-06-05
+
+- Plan:
+  `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`.
+- Target branch: `main`.
+- Current unit: Twenty ECS runtime restart after database prep.
+- Current branch: `codex/twenty-crm-runtime-restart`.
+- Current worktree: `.Codex/worktrees/twenty-crm-general-deploy`.
+- Status: in progress.
+
+| Unit                                           | Branch                               | PR                                                           | State  | Notes                                                                                                                                  |
+| ---------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Deploy, park, and destructive cleanup flow     | `codex/twenty-crm-lifecycle-actions` | [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) | Merged | Adds explicit Deploy, Park, and Destroy actions; Destroy removes retained Twenty DB/role/secrets after Terraform.                      |
+| Managed Applications configuration-link polish | `codex/managed-app-config-link`      | [#2136](https://github.com/thinkwork-ai/thinkwork/pull/2136) | Merged | General now links Twenty to CRM configuration; CRM detail owns Deploy plus bottom Teardown controls for Park and destructive Destroy.  |
+| E2E deploy-readiness UI/allowlist workflow     | `codex/twenty-crm-e2e-fixes`         | [#2137](https://github.com/thinkwork-ai/thinkwork/pull/2137) | Merged | Wires CI operator email input and makes CRM Deploy show immediate queued/error state before lifecycle proof.                           |
+| Greenfield operator allowlist variable         | `codex/twenty-crm-root-operator-var` | [#2139](https://github.com/thinkwork-ai/thinkwork/pull/2139) | Merged | Declares and forwards the root Terraform variable required by the merged deploy workflow.                                              |
+| CRM DNS hosted-zone guard                      | `codex/twenty-crm-dns-fix`           | [#2141](https://github.com/thinkwork-ai/thinkwork/pull/2141) | Merged | Keeps CRM DNS records plan-safe before the ALB exists.                                                                                 |
+| Dedicated CRM certificate                      | `codex/twenty-crm-cert-fix`          | [#2142](https://github.com/thinkwork-ai/thinkwork/pull/2142) | Merged | Issues a dedicated `crm.thinkwork.ai` ACM certificate.                                                                                 |
+| CRM certificate validation state               | `codex/twenty-crm-cert-state-fix`    | [#2143](https://github.com/thinkwork-ai/thinkwork/pull/2143) | Merged | Moves the CRM ACM validation state to the correct Terraform module address.                                                            |
+| Lambda env budget fix                          | `codex/twenty-crm-status-env-budget` | [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144) | Merged | Keeps deployment-status env vars below Lambda's 4 KB limit.                                                                            |
+| Aurora URL psql compatibility                  | `codex/twenty-crm-db-url-ssl-fix`    | [#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147) | Merged | Uses `sslmode=require` so the deploy workflow's `psql` DB prep succeeds.                                                               |
+| Twenty Node TLS runtime fix                    | `codex/twenty-crm-node-tls-runtime`  | [#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148) | Merged | Adds the Node TLS setting needed for Twenty's migration process to accept the Aurora RDS certificate in dev.                           |
+| Twenty DB owner grants                         | `codex/twenty-crm-db-owner-grants`   | [#2149](https://github.com/thinkwork-ai/thinkwork/pull/2149) | Merged | Gives the dedicated Twenty database user enough rights to create schemas, extensions, and migration-owned objects.                     |
+| Twenty DB setup role switch                    | `codex/twenty-crm-db-setup-role`     | [#2150](https://github.com/thinkwork-ai/thinkwork/pull/2150) | Merged | Runs Twenty schema and extension setup under the app DB role so Postgres ownership checks pass.                                        |
+| General toggle and CRM route polish            | `codex/twenty-crm-general-deploy`    | [#2152](https://github.com/thinkwork-ai/thinkwork/pull/2152) | Merged | Moves deploy to the General toggle, persists pending deploy state, and shows Configure only after Twenty is provisioned.               |
+| CRM backend bootstrap fix                      | `codex/twenty-crm-route-guard`       | [#2153](https://github.com/thinkwork-ai/thinkwork/pull/2153) | Merged | Disables Twenty database-backed config at bootstrap and prevents the CRM settings guard from redirecting before deployment data loads. |
+| Twenty database init detection fix             | `codex/twenty-crm-db-init-bootstrap` | [#2154](https://github.com/thinkwork-ai/thinkwork/pull/2154) | Merged | Stops deploy prep from pre-creating an empty `core` schema that makes Twenty skip `database:init:prod`.                                |
+| Twenty ECS restart after database prep         | `codex/twenty-crm-runtime-restart`   | Pending                                                      | Active | Forces a Twenty ECS deployment after database prep so schema initialization changes take effect immediately.                           |
+
+### Progress Log
+
+- Confirmed desktop canary `desktop-v0.1.0-canary.107` was released from
+  `ee33bbcc`, but it only covers Deploy/Park and does not expose a destructive
+  data cleanup action.
+- Created isolated worktree
+  `.Codex/worktrees/twenty-crm-lifecycle-actions` from `origin/main`.
+- Added `ManagedApplicationDeploymentAction` with `ENABLE`, `PARK`, and
+  `DESTROY`; kept the legacy `enabled` input as a compatibility fallback.
+- Updated Spaces Managed Applications UI so Twenty exposes separate Deploy,
+  Park, and Destroy buttons. Park retains data; Destroy has separate
+  destructive confirmation copy.
+- Updated the deploy and verify workflows to parse `TWENTY_DESTROY_DATA`.
+  Deploy now drops the dedicated Twenty database and role and deletes Twenty
+  Secrets Manager entries only after Terraform teardown is requested.
+- Added stale-secret-ARN fallback in deploy prep so a future Deploy can recover
+  cleanly after a prior destructive Destroy.
+- Merged PR [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) and
+  released desktop canary `desktop-v0.1.0-canary.108`.
+- Started follow-up branch `codex/managed-app-config-link` after UI review.
+- Replaced the inline Twenty Deploy/Park/Destroy button cluster in General
+  with a single Configure link to `/settings/crm`.
+- Moved Twenty Park and destructive Destroy controls to a bottom Teardown
+  section on the CRM detail page, while keeping Deploy and queued workflow
+  status near the top of the detail page.
+- Confirmed the first live Twenty Deploy request failed before queueing because
+  the deployed `graphql-http` Lambda had an empty
+  `THINKWORK_PLATFORM_OPERATOR_EMAILS` environment variable. Direct GraphQL
+  mutation returned `FAILED_PRECONDITION`.
+- Set repository variable `THINKWORK_PLATFORM_OPERATOR_EMAILS` to
+  `eric@thinkwork.ai` and opened branch `codex/twenty-crm-e2e-fixes` to wire
+  that value into Terraform apply/verify.
+- Updated the CRM detail page so Deploy calls the mutation directly, shows
+  `queued` immediately while the request is in flight, and renders mutation
+  failures inline as `Last deployment request`.
+- PR [#2137](https://github.com/thinkwork-ai/thinkwork/pull/2137) passed
+  required CI and was squash merged as `76a3a8e2`.
+- The `main` deploy run
+  [27048917485](https://github.com/thinkwork-ai/thinkwork/actions/runs/27048917485)
+  failed before applying AWS changes because the workflow passed
+  `-var platform_operator_emails=...`, but
+  `terraform/examples/greenfield` did not declare or forward that root
+  variable.
+- Started follow-up branch `codex/twenty-crm-root-operator-var` to declare the
+  root variable and pass it through to `module.thinkwork` before retrying the
+  live Twenty lifecycle proof.
+- PR [#2139](https://github.com/thinkwork-ai/thinkwork/pull/2139) merged and
+  the following deploy surfaced successive AWS readiness fixes: plan-safe CRM
+  DNS, a dedicated `crm.thinkwork.ai` certificate, certificate validation state
+  placement, Lambda environment size, and Aurora connection-string
+  compatibility.
+- PRs [#2141](https://github.com/thinkwork-ai/thinkwork/pull/2141),
+  [#2142](https://github.com/thinkwork-ai/thinkwork/pull/2142),
+  [#2143](https://github.com/thinkwork-ai/thinkwork/pull/2143),
+  [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144), and
+  [#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147) merged and
+  deployed far enough to create the Twenty ECS service and
+  `https://crm.thinkwork.ai`.
+- The post-[#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147)
+  server task reached the Twenty migration phase, proving the database URL is
+  now accepted by `psql`, but Twenty's Node migration process failed with
+  `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` against Aurora. Started branch
+  `codex/twenty-crm-node-tls-runtime` to unblock the service boot.
+- PR [#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148) passed CI,
+  was squash merged as `af6d549c`, and rolled ECS task definition
+  `thinkwork-dev-twenty-server:3`.
+- The post-[#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148)
+  server logs proved the Aurora TLS fix worked, then failed on dedicated DB
+  privileges: Twenty could not create the `core` schema or install
+  `uuid-ossp`/`unaccent` as the `thinkwork_twenty` role. Started branch
+  `codex/twenty-crm-db-owner-grants`.
+- PR [#2149](https://github.com/thinkwork-ai/thinkwork/pull/2149) passed CI
+  and merged as `61c095af`, but the main deploy failed inside the Twenty DB
+  prep step because `thinkwork_admin` was not a member of `thinkwork_twenty`
+  when creating schemas with `AUTHORIZATION`. Started branch
+  `codex/twenty-crm-db-setup-role` to grant role membership and run the setup
+  SQL under `SET ROLE thinkwork_twenty`.
+- PR [#2150](https://github.com/thinkwork-ai/thinkwork/pull/2150) passed CI,
+  was squash merged as `22ae261c`, and deployed through main workflow run
+  [27053615405](https://github.com/thinkwork-ai/thinkwork/actions/runs/27053615405).
+- Verified phase 1 through the UI and AWS: Twenty Deploy reached `running`,
+  ECS services `thinkwork-dev-twenty-server` and `thinkwork-dev-twenty-worker`
+  were desired/running `1/1`, the target group was healthy, and
+  `https://crm.thinkwork.ai` returned HTTP 200.
+- Created a Postgres proof row in the dedicated Twenty database:
+  `public.thinkwork_lifecycle_probe` with id `twenty-crm-e2e`.
+- Verified phase 2 through the UI: Park queued workflow
+  [27053792609](https://github.com/thinkwork-ai/thinkwork/actions/runs/27053792609),
+  completed successfully, set both ECS services to desired/running `0/0`, and
+  preserved the `twenty-crm-e2e` database proof row.
+- Verified phase 3 through the UI: redeploy from the parked state queued
+  workflow
+  [27054063926](https://github.com/thinkwork-ai/thinkwork/actions/runs/27054063926),
+  completed successfully, restored both ECS services to desired/running `1/1`,
+  restored healthy target health, returned HTTP 200 from
+  `https://crm.thinkwork.ai`, and preserved the `twenty-crm-e2e` proof row.
+- Verified phase 4 through the UI: destructive Destroy queued workflow
+  [27054477535](https://github.com/thinkwork-ai/thinkwork/actions/runs/27054477535),
+  completed successfully, showed Twenty as `disabled` / not provisioned in
+  Settings CRM, removed the target group, left the ECS cluster and services
+  `INACTIVE` with zero tasks, deleted the Twenty DB URL secret, removed
+  `crm.thinkwork.ai` DNS resolution, and removed both the `thinkwork_twenty`
+  database and `thinkwork_twenty` role from Postgres.
+- PR [#2152](https://github.com/thinkwork-ai/thinkwork/pull/2152) passed CI,
+  was squash merged as `dd46b423`, and shipped the General Settings toggle UX.
+- After redeploying through the General toggle, `crm.thinkwork.ai` returned the
+  Twenty frontend and `/healthz` returned `ok`, but the browser showed
+  `Unable to Reach Back-end` on `/welcome`.
+- CloudWatch logs for `/thinkwork/dev/twenty/server` showed repeated
+  `DatabaseConfigDriver` failures reading `core.keyValuePair`; direct database
+  inspection showed `core` existed with zero tables. Twenty source confirms
+  `IS_CONFIG_VARIABLES_IN_DB_ENABLED` defaults to enabled unless explicitly
+  set to `false`, while the official Docker Compose file does not enable the
+  database-backed config path for first boot.
+- Opened branch `codex/twenty-crm-route-guard` to set
+  `IS_CONFIG_VARIABLES_IN_DB_ENABLED=false` for Twenty tasks and to keep the
+  CRM detail route from redirecting before deployment data finishes loading.
+- PR [#2153](https://github.com/thinkwork-ai/thinkwork/pull/2153) passed CI
+  and merged as `c4828d02`; main deploy run
+  [27060694010](https://github.com/thinkwork-ai/thinkwork/actions/runs/27060694010)
+  rolled server task definition `thinkwork-dev-twenty-server:7`.
+- The new task definition had `IS_CONFIG_VARIABLES_IN_DB_ENABLED=false`, but
+  the dedicated database still had zero `core`/`metadata` tables. Inspecting
+  the Twenty image entrypoint showed it only runs `yarn database:init:prod`
+  when the `core` schema does not exist; ThinkWork's deploy prep was creating
+  an empty `core` schema first, so Twenty skipped first-run initialization.
+- Opened branch `codex/twenty-crm-db-init-bootstrap` to stop creating `core`
+  in deploy prep and to drop an existing empty `core` schema so the next
+  service rollout can run Twenty's real database initialization.
+- PR [#2154](https://github.com/thinkwork-ai/thinkwork/pull/2154) passed CI
+  and merged as `6f8510c4`; main deploy run
+  [27061105098](https://github.com/thinkwork-ai/thinkwork/actions/runs/27061105098)
+  ran the corrected database prep and removed the empty `core` schema.
+- The deploy did not register a new Twenty task definition, so the already
+  running server process did not restart and could not run the image entrypoint
+  against the now-empty database. Opened branch
+  `codex/twenty-crm-runtime-restart` to force a server/worker ECS deployment
+  after database prep when Twenty runtime is enabled.
+
+### CI / Verification
+
+- `pnpm schema:build` passed.
+- Codegen passed for `@thinkwork/spaces`, `thinkwork-cli`, `@thinkwork/admin`,
+  and `@thinkwork/mobile`.
+- `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts src/__tests__/graphql-contract.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/ManagedApplicationsSection.test.tsx`
+  passed.
+- `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/spaces typecheck` passed.
+- `pnpm --filter @thinkwork/spaces build` passed with existing sourcemap and
+  chunk-size warnings.
+- Workflow YAML parse and `git diff --check` passed.
+- Follow-up local verification:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/ManagedApplicationsSection.test.tsx src/components/settings/SettingsCrm.test.tsx src/components/settings/settings-nav.test.ts`
+  passed with 15 tests.
+- Follow-up local verification:
+  `pnpm --filter @thinkwork/spaces typecheck` passed.
+- Follow-up local verification: `git diff --check` passed.
+- Started Spaces locally on `http://127.0.0.1:5175/`; Playwright screenshots
+  reached the expected unauthenticated login screen in a fresh browser context.
+- E2E-readiness verification:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsCrm.test.tsx src/components/settings/ManagedApplicationsSection.test.tsx`
+  passed with 9 tests.
+- E2E-readiness verification:
+  `pnpm --filter @thinkwork/spaces typecheck` passed.
+- E2E-readiness verification: `git diff --check` passed.
+- Runtime TLS follow-up verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`
+  passed with 20 tests; `terraform fmt -check terraform/modules/app/twenty/main.tf`
+  passed; `git diff --check` passed.
+- DB owner grant follow-up verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`
+  passed with 20 tests; `.github/workflows/deploy.yml` parsed as YAML; `git diff --check`
+  passed.
+- DB setup role follow-up verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
+  passed with 45 tests; `.github/workflows/deploy.yml` parsed as YAML;
+  `git diff --check` passed.
+- End-to-end UI lifecycle proof passed on `http://localhost:5175/settings/crm`:
+  Deploy new Twenty CRM, Park runtime while preserving the dedicated database,
+  redeploy from the existing database, and destructive Destroy including
+  database cleanup.
+- Live AWS/database verification passed after destructive Destroy: GraphQL
+  `deploymentStatus` reported Twenty `disabled`, ECS services were inactive
+  with zero tasks, Secrets Manager could not find `thinkwork/dev/twenty/db-url`,
+  and Postgres returned `database=not found` and `role=not found` for the
+  dedicated Twenty resources.
+
+### Blockers
+
+- None.
+
+## Spaces Settings Activity - 2026-06-05
+
+- Plan:
+  `docs/plans/2026-06-05-004-feat-spaces-settings-activity-plan.md`.
+- Target branch: `main`.
+- Current unit: Complete.
+- Current branch: none.
+- Current worktree: `.Codex/worktrees/spaces-settings-activity-preview`.
+- Status: complete.
+
+| Unit group                                               | Branch                                     | PR                                                           | State  | Notes                                                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| U1-U5 Settings Activity, breadcrumbs, detail QA          | `codex/spaces-settings-activity`           | [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) | Merged | Squash merged as `e066a825`; local verification and required PR checks passed.                                          |
+| Feedback polish: Activity layout and detail port         | `codex/spaces-activity-feedback`           | [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135) | Merged | Squash merged as `b6a46790`; moved refresh/search/count layout and added a Settings-owned read-only detail route.       |
+| Follow-up: identical Admin activity execution trace port | `codex/spaces-activity-identical-timeline` | [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138) | Merged | Squash merged as `81681826`; replaced the approximate Settings timeline with the Admin `ExecutionTrace` implementation. |
+
+### Progress Log
+
+- Started autopilot workflow, read `AGENTS.md`, the Spaces Settings Activity
+  plan, the origin requirements doc, and relevant prior solution docs about
+  Spaces urql document-cache invalidation and Settings/admin-to-Spaces ports.
+- Created isolated worktree `.Codex/worktrees/spaces-settings-activity` from
+  `origin/main` on branch `codex/spaces-settings-activity`.
+- Copied the locally-authored requirements and plan docs into the worktree so
+  the implementation PR carries its source context.
+- Implemented the Settings Activity route, operator nav entry, Activity
+  chart/table, inline date-filter controls, Settings-hosted thread detail route,
+  query-preserving Activity/date breadcrumbs, and shared thread-detail
+  breadcrumb support.
+- Regenerated `apps/spaces/src/routeTree.gen.ts` through the Spaces Vite build.
+
+### CI / Verification
+
+- `pnpm install` populated the worktree dependencies. The optional `canvas`
+  native build reported missing `pkg-config` under local Node 25, but pnpm
+  completed successfully.
+- `pnpm --filter @thinkwork/spaces test -- src/lib/settings-activity.test.ts src/components/settings/settings-nav.test.ts src/components/settings/SettingsHeaderBar.test.tsx src/components/settings/SettingsActivity.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx`
+  passed.
+- `pnpm --filter @thinkwork/spaces typecheck` passed.
+- `pnpm --filter @thinkwork/spaces build` passed.
+- `pnpm --filter @thinkwork/spaces test` passed: 118 test files, 848 tests.
+- `git diff --check` passed.
+- Opened PR [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130).
+- PR [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) CI passed:
+  CLA, lint, verify, typecheck, and test all green.
+- PR [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) was squash
+  merged into `main` as `e066a825` at 2026-06-05 22:46 UTC. The remote branch
+  and local feature worktree were removed.
+- `pnpm format:check` could not run because the root package script references
+  `prettier`, but the root package does not currently declare a local
+  `prettier` dependency. `pnpm exec prettier --version` fails with
+  `Command "prettier" not found`.
+- Follow-up feedback branch `codex/spaces-activity-feedback` created from
+  `origin/main` in `.Codex/worktrees/spaces-settings-activity-preview`.
+- Moved Settings Activity refresh into the Settings header as an icon-only
+  action and moved Search Activity below the chart while keeping date filter
+  controls on the same line.
+- Replaced the Settings Activity thread detail route's workbench/composer view
+  with a Settings-owned Admin-style read-only detail page: title, activity
+  timeline, properties panel, system prompt sheet, and traces table.
+- Added Spaces-side thread turns/traces queries and focused tests to prevent
+  this route from pointing back at `SpacesThreadDetailRoute`.
+- Local preview remains available at `http://localhost:5175/settings/activity`.
+- Opened feedback PR
+  [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135).
+- Feedback verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsActivity.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx src/routes/_authed/-settings.activity-routing.test.ts`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces build`;
+  `./node_modules/.pnpm/node_modules/.bin/prettier --check <touched files>`;
+  `git diff --check`;
+  `curl -I --max-time 5 http://localhost:5175/settings/activity`.
+- Second feedback pass moved the Activity item count into the search row,
+  tightened the Activity title-to-chart spacing, and lowered the thread detail
+  properties rail breakpoint from `xl` to `md` so it stays on the right in the
+  Settings shell. Verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsActivity.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx`;
+  `pnpm --filter @thinkwork/spaces typecheck`; `git diff --check`;
+  `curl -I --max-time 5 http://localhost:5174/settings/activity`.
+- PR [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135) was squash
+  merged into `main` as `b6a46790`.
+- Started follow-up branch `codex/spaces-activity-identical-timeline` from
+  `origin/main` in `.Codex/worktrees/spaces-settings-activity-preview` after
+  local review showed the Spaces thread detail still used an approximate
+  activity timeline.
+- Ported the Admin `ExecutionTrace` implementation into Spaces with only
+  Settings-specific imports and GraphQL query adapters, then wired the Settings
+  thread detail Activity section to that component so tool timelines and
+  expanded turn execution rows match Admin behavior.
+- Opened follow-up PR
+  [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138).
+- Follow-up verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsActivityThreadDetail.test.tsx src/components/settings/SettingsActivity.test.tsx src/routes/_authed/-settings.activity-routing.test.ts`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces build`;
+  `./node_modules/.pnpm/node_modules/.bin/prettier --check <touched files>`;
+  `git diff --check`; `curl -I --max-time 5 http://localhost:5174/settings/activity`.
+- PR [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138) CI passed:
+  CLA, lint, verify, typecheck, and test all green.
+- PR [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138) was squash
+  merged into `main` as `81681826`. The remote branch was deleted and the
+  preview worktree was synced to the merged commit.
+
+### Blockers
+
+- None.
+
+## Knowledge Graph Demo Relationship Density - 2026-06-05
+
+- Plan: Follow-up to Knowledge Graph duplicate canonicalization and ontology
+  demo readiness.
+- Target branch: `main`.
+- Current unit: Increase trusted source relationship density for demo graph.
+- Current branch: `codex/kg-demo-relationships`.
+- Current worktree: `.Codex/worktrees/kg-demo-relationships`.
+
+| Unit                                            | Branch                        | PR                                                           | State  | Notes                                                                                  |
+| ----------------------------------------------- | ----------------------------- | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
+| Expand trusted Wiki/Brain linked target packets | `codex/kg-demo-relationships` | [#2113](https://github.com/thinkwork-ai/thinkwork/pull/2113) | Active | Source loaders now include one-hop linked target pages before ontology-gated fallback. |
+
+### Progress Log
+
+- Confirmed deployed duplicate canonicalization is live and `app.thinkwork.ai`
+  responds at `/settings/knowledge-graph`.
+- Inspected dev KG persistence: tenant-wide rows currently contain 28
+  canonical entities and 19 canonical edges, but the Brain source has only 3
+  persisted relationship rows.
+- Implemented one-hop linked target page expansion for trusted Wiki and Brain
+  source bundles so ontology-approved relationships have both endpoints
+  available before normalization/fallback.
+- Dry-run against dev Company Brain data showed the patched loader would
+  increase the Brain source bundle to 23 packets and 16 persisted
+  ontology-approved relationships after endpoint checks.
+
+### CI / Verification
+
+- `pnpm --filter @thinkwork/api exec vitest run src/__tests__/knowledge-graph-resolvers.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts src/lib/knowledge-graph/brain-source.test.ts src/lib/knowledge-graph/wiki-source.test.ts src/lib/knowledge-graph/source-fallback.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/admin build`
+- `bash scripts/build-lambdas.sh graphql-http`
+- `pnpm dlx prettier --check packages/api/src/lib/knowledge-graph/brain-source.ts packages/api/src/lib/knowledge-graph/wiki-source.ts packages/api/src/lib/knowledge-graph/brain-source.test.ts packages/api/src/lib/knowledge-graph/wiki-source.test.ts`
+- `git diff --check`
+- Local dev server is running from this worktree at
+  `http://localhost:5174/settings/knowledge-graph`.
+
+## User Cost Attribution and Budgets - 2026-06-05
+
+- Plan:
+  `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md`.
+- Target branch: `main`.
+- Current unit: Complete.
+- Current branch: none.
+- Current worktree: none.
+- Status: complete.
+
+| Unit                                                   | Branch               | PR                                                           | State  | Notes                                                                             |
+| ------------------------------------------------------ | -------------------- | ------------------------------------------------------------ | ------ | --------------------------------------------------------------------------------- |
+| U1 Extend cost and budget data model                   | `codex/user-cost-u1` | [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112) | Merged | Squash merged as `35cbe18d`; dev migration `0148` applied and drift check passed. |
+| U2 Create user attribution and budget enforcement APIs | `codex/user-cost-u2` | [#2115](https://github.com/thinkwork-ai/thinkwork/pull/2115) | Merged | Squash merged as `3a5a6d3`; reusable cost owner and user-budget helpers landed.   |
+| U3 Propagate user ownership through runtime paths      | `codex/user-cost-u3` | [#2117](https://github.com/thinkwork-ai/thinkwork/pull/2117) | Merged | Squash merged as `d045346f`; runtime paths propagate user ownership and gates.    |
+| U4 Add user-first GraphQL cost and budget APIs         | `codex/user-cost-u4` | [#2118](https://github.com/thinkwork-ai/thinkwork/pull/2118) | Merged | Squash merged as `b92e6585`; user-first cost and budget GraphQL APIs landed.      |
+| U5 Update Settings/Admin analytics user cost surfaces  | `codex/user-cost-u5` | [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121) | Merged | Squash merged as `8b14d9bd`; user analytics and budget reporting landed.          |
+| U6 Update CLI reporting, codegen, docs, compatibility  | `codex/user-cost-u6` | [#2123](https://github.com/thinkwork-ai/thinkwork/pull/2123) | Merged | Squash merged as `d9ba1110`; CLI and docs now use the user-first cost model.      |
+
+### Progress Log
+
+- Created U1 worktree from `origin/main`.
+- Read migration drift guidance in `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md`.
+- Added nullable user ownership columns for cost events and budget policies, explicit scheduled-job budget pause state, user cost GraphQL fields, manual migration and rollback files, and focused migration/schema tests.
+- Compound review found migration lock-safety and generated-client drift issues. Fixed by switching the migration to `ON_ERROR_STOP`, session timeouts, `NOT VALID` constraints, batched cost-event backfill, and concurrent indexes; regenerated CLI/Admin/Spaces/Mobile GraphQL clients; added scheduled-job budget pause fields to GraphQL; and added the checked-in plan/deployment checklist.
+- Applied the revised `0148_user_cost_attribution.sql` migration to dev. It backfilled 0 additional rows on the second run, added `budget_policies_scope_shape_check`, and the scoped drift reporter passed.
+- Local verification so far:
+  `pnpm --filter @thinkwork/database-pg exec vitest run migration-0148.test.ts` passed;
+  `pnpm --filter @thinkwork/database-pg test` passed;
+  `pnpm --filter @thinkwork/database-pg typecheck` passed;
+  `pnpm --filter @thinkwork/api typecheck` passed;
+  `pnpm --filter thinkwork-cli typecheck` passed;
+  `pnpm --filter @thinkwork/spaces typecheck` passed;
+  `pnpm --filter @thinkwork/admin build` passed;
+  `pnpm --filter @thinkwork/mobile test` passed;
+  `pnpm schema:build` passed;
+  codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/spaces`, and `@thinkwork/mobile`;
+  `node node_modules/.pnpm/prettier@3.8.2/node_modules/prettier/bin/prettier.cjs --check <changed supported files>` passed;
+  `git diff --check` passed.
+
+### CI / PR
+
+- Opened [#2112](https://github.com/thinkwork-ai/thinkwork/pull/2112).
+- Initial CI Migration Drift Precheck failed before the migration was applied to dev. Applied the migration to dev and reran; the drift check passed. Subsequent code changes will rerun CI.
+- Rebasing onto `origin/main` after PR #2113 merged produced a status-ledger
+  conflict only; preserved both workstream entries, reran the focused migration
+  test and database typecheck, and pushed the rebased branch.
+- U1 CI passed, PR #2112 was squash merged as `35cbe18d`, the remote branch was
+  deleted, and the local U1 worktree/branch were removed.
+- Created U2 worktree from merged `origin/main`.
+- U2 added `RecordCostParams.userId` / Hindsight `userId` cost attribution,
+  optional user fields for `notifyCostRecorded`, and
+  `user-budget-enforcement` helpers for tenant-owned user validation,
+  month-to-date user budget status, scheduled-job owner resolution, and
+  budget-pausing user-owned scheduled work.
+- Tightened cost writers so supplied user owners are recorded only when the
+  user belongs to the cost event tenant; invalid or cross-tenant user IDs remain
+  tenant spend without user attribution.
+- U2 local verification so far:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/user-budget-enforcement.test.ts src/__tests__/cost-recording.test.ts src/lib/chat-finalize/process-finalize.test.ts` passed;
+  `pnpm --filter @thinkwork/lambda exec vitest run __tests__/job-trigger.skill-run.test.ts` passed;
+  `pnpm --filter @thinkwork/api typecheck` passed;
+  `pnpm --filter @thinkwork/api test` passed;
+  `node node_modules/.pnpm/prettier@3.8.2/node_modules/prettier/bin/prettier.cjs --write <changed supported files>` completed;
+  `git diff --check` passed.
+- U2 CI passed on the first push, but the branch went `BEHIND` after `main`
+  advanced. Rebasing onto `origin/main` was conflict-free; the focused
+  user-budget/cost tests, API typecheck, and `git diff --check` passed before
+  the force-with-lease push.
+- U2 CI passed after the rebase; PR #2115 was squash merged as `3a5a6d3`, the
+  remote branch was deleted, and the local U2 worktree/branch were removed.
+- Created U3 worktree from merged `origin/main`.
+- U3 propagates the resolved cost owner into chat invoke finalize payloads,
+  `processFinalize` cost/Hindsight/tool-cost recording, wakeup processor cost
+  and notifications, and scheduled job-trigger user-budget preflight checks.
+- U3 adds a foreground user budget gate before chat runtime dispatch and a
+  wakeup user budget gate before AgentCore invocation. Over-budget foreground
+  turns fail cleanly with an assistant-visible budget message; user-owned
+  scheduled work is marked `budget_paused` without flipping admin-managed
+  `enabled` state.
+- U3 extends the monthly budget reset cron to clear scheduled-job budget pause
+  fields alongside legacy agent budget pause fields.
+- U3 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/handlers/chat-agent-invoke.identity.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts src/lib/chat-finalize/process-finalize.test.ts src/handlers/wakeup-processor.system-prompt.test.ts src/handlers/crons/budget-reset.test.ts`;
+  `pnpm --filter @thinkwork/lambda exec vitest run __tests__/job-trigger.skill-run.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter @thinkwork/lambda typecheck`;
+  `pnpm --filter @thinkwork/api test`;
+  `pnpm --filter @thinkwork/lambda test`;
+  `node node_modules/.pnpm/prettier@3.8.2/node_modules/prettier/bin/prettier.cjs --write <changed supported files>`;
+  and `git diff --check`.
+- U3 PR #2117 CI passed after a clean rebase onto `origin/main`; it was squash
+  merged as `d045346f`, the remote branch was deleted, and the local U3
+  worktree/branch were removed.
+- Created U4 worktree from merged `origin/main`.
+- U4 adds user-first GraphQL APIs for cost reporting and budget controls:
+  `costByUser`, `userBudgetStatus`, user-scoped `upsertBudgetPolicy`, and
+  `unpauseUserBudget`.
+- U4 local verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/costs/costByUser.query.test.ts src/graphql/resolvers/costs/budgetStatus.query.test.ts src/graphql/resolvers/costs/upsertBudgetPolicy.mutation.test.ts src/graphql/resolvers/costs/userBudgetStatus.query.test.ts src/graphql/resolvers/costs/unpauseUserBudget.mutation.test.ts src/__tests__/graphql-contract.test.ts`;
+  `pnpm --filter @thinkwork/api typecheck`;
+  `pnpm --filter thinkwork-cli typecheck`;
+  `pnpm --filter @thinkwork/admin build`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/mobile test`;
+  `pnpm --filter @thinkwork/api test`;
+  `pnpm schema:build`;
+  codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/spaces`,
+  and `@thinkwork/mobile`;
+  generated GraphQL clients were formatted with Prettier; and
+  `git diff --check` passed.
+- Opened U4 PR [#2118](https://github.com/thinkwork-ai/thinkwork/pull/2118).
+  Initial CI test failed because the migration 0148 GraphQL contract still
+  asserted the U1-only API shape. Updated it to expect the U4 user reporting
+  and budget fields; `pnpm --filter @thinkwork/database-pg exec vitest run
+__tests__/migration-0148.test.ts` and
+  `pnpm --filter @thinkwork/database-pg test` passed locally before pushing
+  the fix.
+- U4 CI passed after the fix; PR #2118 was squash merged as `b92e6585`, the
+  remote branch was deleted, and the local U4 worktree/branch were removed.
+- Created U5 worktree from merged `origin/main`.
+- U5 updates Spaces Settings Analytics and Admin Analytics from agent
+  chargeback to user cost reporting, including user budget progress and a
+  visible system/unattributed row for unowned spend.
+- U5 local verification passed:
+  `pnpm --filter @thinkwork/admin exec vitest run src/stores/cost-store.test.ts src/routes/_authed/_tenant/-analytics/CostView.test.ts`;
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsAnalytics.test.tsx`;
+  `pnpm --filter @thinkwork/admin test`;
+  `pnpm --filter @thinkwork/spaces test`;
+  `pnpm --filter @thinkwork/admin build`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces build`;
+  codegen passed for `@thinkwork/admin` and `@thinkwork/spaces`;
+  generated GraphQL type outputs and changed source files were formatted with
+  Prettier;
+  `curl -I --max-time 10 http://localhost:5174/settings/analytics` returned
+  `200 OK` from the Spaces dev server; and `git diff --check` passed.
+- Opened U5 PR [#2121](https://github.com/thinkwork-ai/thinkwork/pull/2121).
+- U5 CI passed after two clean rebases onto `origin/main`; PR #2121 was squash
+  merged as `8b14d9bd`, the remote branch was deleted, and the local U5
+  worktree/branch were removed.
+- Created U6 worktree from merged `origin/main`.
+- U6 adds CLI `cost by-user`, keeps `cost by-agent` as a legacy audit command,
+  updates `budget upsert --scope user --user <id>`, refreshes CLI GraphQL
+  artifacts, and updates Admin/CLI/Control docs for user-first cost and budget
+  reporting.
+- U6 local verification passed:
+  `pnpm schema:build`;
+  codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/spaces`,
+  and `@thinkwork/mobile`;
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/cost.test.ts __tests__/budget.test.ts`;
+  `pnpm --filter thinkwork-cli typecheck`;
+  `pnpm --filter thinkwork-cli test`;
+  `pnpm --filter thinkwork-cli build`;
+  `pnpm --filter @thinkwork/docs build`;
+  and `git diff --check`.
+- Opened U6 PR [#2123](https://github.com/thinkwork-ai/thinkwork/pull/2123).
+- U6 CI passed; PR #2123 was squash merged as `d9ba1110`, the remote branch was
+  deleted, and the local U6 worktree/branch were removed.
+- All implementation units from
+  `docs/plans/2026-06-05-002-feat-user-cost-budgets-plan.md` are implemented
+  and merged.
+
+### Blockers
+
+- None.
+
 ## Firecrawl Web Extraction - 2026-06-04
 
 - Plan:
@@ -7353,3 +7889,271 @@ None.
 ## Blockers
 
 None.
+
+# Twenty CRM Managed Application Autopilot - 2026-06-05
+
+## Run Scope
+
+- Plan: `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`
+- Origin requirements: `docs/brainstorms/2026-06-05-twenty-crm-managed-application-requirements.md`
+- Status: complete.
+- Autopilot contract: one isolated branch/worktree per implementation unit,
+  one PR per unit unless grouping is required, CI pass before squash merge,
+  delete branch/worktree after merge, then sync from `origin/main`.
+
+## Progress Log
+
+- 2026-06-05T19:50:40Z: Started U1 on branch
+  `codex/twenty-crm-u1-terraform` in worktree
+  `.Codex/worktrees/twenty-crm-u1-terraform`.
+- Read `AGENTS.md`, the Twenty CRM plan, Cognee Terraform module patterns,
+  Cognee fixture tests, and prior solution/plan notes referenced by the plan.
+- Copied the untracked Twenty CRM plan and brainstorm requirement docs into the
+  U1 branch so the implementation PR carries the source specification forward.
+- Implemented initial `terraform/modules/app/twenty` with public HTTPS ALB,
+  ECS/Fargate server and worker services, EFS storage, ElastiCache
+  Valkey/Redis OSS, Secrets Manager indirection, and runtime parking through
+  desired-count zero.
+- Added `apps/cli/__tests__/terraform-twenty-fixture.test.ts` structural
+  coverage for public HTTPS, retained storage/cache, parked runtime semantics,
+  secret indirection, guardrails, and operational outputs.
+- Local review pass found one production-runtime polish item and added
+  `NODE_ENV=production` to the Twenty task environment. Compound sub-agent
+  review was not used because the available `spawn_agent` tool is explicitly
+  restricted to user-requested sub-agent/delegation work.
+- Opened PR [#2120](https://github.com/thinkwork-ai/thinkwork/pull/2120) for
+  U1.
+- GitHub checks on PR [#2120](https://github.com/thinkwork-ai/thinkwork/pull/2120)
+  passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.
+- PR [#2120](https://github.com/thinkwork-ai/thinkwork/pull/2120) was squash
+  merged as `99dd3b3e`, the remote branch was deleted, and the local U1
+  worktree/branch were removed.
+- 2026-06-05T20:21:41Z: Started U2 on branch
+  `codex/twenty-crm-u2-composite` in worktree
+  `.Codex/worktrees/twenty-crm-u2-composite`.
+- Implemented composite Twenty variables, guardrails, module wiring, nullable
+  outputs, compact `TWENTY` API status env, `crm.<domain>` DNS/SAN support,
+  and greenfield example wiring.
+- Local review tightened the runtime/provisioned state guard so
+  `twenty_runtime_enabled = true` cannot silently pass when
+  `twenty_provisioned = false`.
+- Opened PR [#2122](https://github.com/thinkwork-ai/thinkwork/pull/2122) for
+  U2.
+- PR [#2122](https://github.com/thinkwork-ai/thinkwork/pull/2122) was squash
+  merged as `44109597`, the remote branch was already deleted, and the local
+  U2 worktree/branch were removed.
+- 2026-06-05T20:56:05Z: Started U3 on branch
+  `codex/twenty-crm-u3-workflows` in worktree
+  `.Codex/worktrees/twenty-crm-u3-workflows`.
+- Implemented Twenty CRM deploy/verify workflow inputs, deploy-time
+  database/role/secret preparation, read-only verify secret checks, generated
+  init wrapper defaults, enterprise deploy template variables, and structural
+  fixture coverage.
+- Opened PR [#2125](https://github.com/thinkwork-ai/thinkwork/pull/2125) for
+  U3.
+- PR [#2125](https://github.com/thinkwork-ai/thinkwork/pull/2125) was squash
+  merged as `37854e42`, the remote branch was already deleted, and the local
+  U3 worktree/branch were removed.
+- 2026-06-05T21:16:00Z: Started U4 on branch
+  `codex/twenty-crm-u4-graphql` in worktree
+  `.Codex/worktrees/twenty-crm-u4-graphql`.
+- Implemented managed application GraphQL status, Twenty/Cognee deployment
+  controls, Twenty `/healthz` health checks, and managed-app schema contract
+  coverage.
+- Opened PR [#2126](https://github.com/thinkwork-ai/thinkwork/pull/2126) for
+  U4.
+- PR [#2126](https://github.com/thinkwork-ai/thinkwork/pull/2126) was squash
+  merged as `c08e5595`, the remote branch was deleted, and the local U4
+  worktree/branch were removed.
+- 2026-06-05T21:36:00Z: Started U5 on branch
+  `codex/twenty-crm-u5-ui` in worktree
+  `.Codex/worktrees/twenty-crm-u5-ui`.
+- Implemented Settings -> General Managed Applications for Cognee and Twenty,
+  moved Cognee deployment control out of the Knowledge Graph page, added CRM
+  settings with launch URL/service/health details, gated Knowledge Graph and
+  CRM navigation by managed-app runtime status, and guarded direct CRM/KG
+  routes.
+- Grouped the U6 Spaces generated artifacts with U5 because the new CRM route
+  and managed-app GraphQL documents must be regenerated for the UI branch to
+  typecheck and build.
+- Local browser smoke used the Spaces dev server at `http://localhost:5175`;
+  unauthenticated local state rendered the login screen, so operator-only visual
+  content was verified through component tests rather than an authenticated
+  browser session.
+- Rebasing onto `origin/main` after PR #2127 merged produced generated Spaces
+  GraphQL overlap only; reran `pnpm --filter @thinkwork/spaces codegen`,
+  preserved both the new user-budget documents and managed-app documents, then
+  reran Spaces verification.
+- Opened PR [#2128](https://github.com/thinkwork-ai/thinkwork/pull/2128) for
+  U5/U6.
+- PR [#2128](https://github.com/thinkwork-ai/thinkwork/pull/2128) was squash
+  merged as `065e2e56`, the remote branch was deleted, and the local U5
+  worktree/branch were removed.
+- 2026-06-05T22:04:00Z: Started U7 on branch
+  `codex/twenty-crm-u7-docs-smoke` in worktree
+  `.Codex/worktrees/twenty-crm-u7-docs-smoke`.
+- Implemented Managed Applications docs for Cognee/Twenty, linked the docs
+  from Desktop/Admin settings surfaces, and added a dry-run-by-default Twenty
+  managed-app smoke script.
+- Marked the Twenty CRM managed-app plan complete in the final U7 branch; U7
+  is the closeout PR for docs, runbook notes, and read-only smoke coverage.
+- Opened PR [#2129](https://github.com/thinkwork-ai/thinkwork/pull/2129) for
+  U7.
+- PR [#2129](https://github.com/thinkwork-ai/thinkwork/pull/2129) passed
+  `cla`, `lint`, `test`, `typecheck`, and `verify`; it was squash merged as
+  `ee9e4555`, the remote branch was deleted, and the local U7 worktree/branch
+  were removed.
+- All implementation units from
+  `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md` are
+  implemented and merged.
+
+## Unit Status
+
+| Unit                                                   | Branch                           | PR                                                           | Status | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Notes                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------ | -------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 - Twenty Terraform app module                       | `codex/twenty-crm-u1-terraform`  | [#2120](https://github.com/thinkwork-ai/thinkwork/pull/2120) | Merged | `terraform -chdir=terraform/modules/app/twenty fmt -check` passed; `terraform -chdir=terraform/modules/app/twenty init -backend=false && terraform -chdir=terraform/modules/app/twenty validate` passed with AWS provider deprecation warnings for `data.aws_region.current.name`; `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts` passed; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter thinkwork-cli test` passed (54 files, 363 tests); `pnpm dlx prettier@3.8.2 --check ...` passed; `git diff --check` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Squash merged as `99dd3b3e`. `pnpm install` exited successfully but logged an optional `canvas` native build failure under Node 25 because `pkg-config`/pixman were unavailable after the prebuilt binary 404. `pnpm --filter thinkwork-cli test -- --runInBand` failed because that flag is not supported by this package's Vitest command; reran the package's normal `pnpm --filter thinkwork-cli test`, which passed. |
+| U2 - Composite module and public DNS wiring            | `codex/twenty-crm-u2-composite`  | [#2122](https://github.com/thinkwork-ai/thinkwork/pull/2122) | Merged | `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts` passed; `terraform -chdir=terraform/modules/app/lambda-api init -backend=false && terraform -chdir=terraform/modules/app/lambda-api validate` passed; `terraform -chdir=terraform/modules/app/www-dns init -backend=false && terraform -chdir=terraform/modules/app/www-dns validate` passed; `terraform -chdir=terraform/modules/app/twenty init -backend=false && terraform -chdir=terraform/modules/app/twenty validate` passed with AWS provider deprecation warnings for `data.aws_region.current.name`; `terraform -chdir=terraform/modules/thinkwork init -backend=false && terraform -chdir=terraform/modules/thinkwork validate` passed with existing AWS provider deprecation warnings; `terraform -chdir=terraform/examples/greenfield init -backend=false && terraform -chdir=terraform/examples/greenfield validate` passed; `terraform fmt -check` passed for touched Terraform roots; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter thinkwork-cli test` passed (54 files, 368 tests); `pnpm dlx prettier@3.8.2 --check --ignore-unknown ...` passed; `git diff --check` passed; GitHub checks passed after rebasing twice: `cla`, `lint`, `verify`, `typecheck`, and `test`. | Squash merged as `44109597`. `pnpm install` exited successfully but logged the same optional `canvas` native build failure under Node 25 because `pkg-config`/pixman were unavailable after the prebuilt binary 404. Prettier cannot infer a parser for Terraform files without `--ignore-unknown`; Terraform files were checked with `terraform fmt -check`.                                                             |
+| U3 - Deploy workflow and generated templates           | `codex/twenty-crm-u3-workflows`  | [#2125](https://github.com/thinkwork-ai/thinkwork/pull/2125) | Merged | `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts` passed; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter thinkwork-cli test` passed (56 files, 379 tests); `pnpm dlx prettier@3.8.2 --check --ignore-unknown ...` passed; `terraform -chdir=apps/cli/src/commands/enterprise/templates/deploy-repo/terraform fmt -check` passed; `git diff --check` passed; Ruby YAML parse passed for `.github/workflows/deploy.yml` and `.github/workflows/verify.yml`; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Squash merged as `37854e42`. `pnpm install` exited successfully but logged the same optional `canvas` native build failure under Node 25 because `pkg-config`/pixman were unavailable after the prebuilt binary 404. Adds GitHub deploy/verify wiring and generated Terraform template propagation for Twenty.                                                                                                            |
+| U4 - Managed application GraphQL API                   | `codex/twenty-crm-u4-graphql`    | [#2126](https://github.com/thinkwork-ai/thinkwork/pull/2126) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; focused API resolver/contract suite passed (143 tests); full `pnpm --filter @thinkwork/api test` passed (419 files, 3621 tests); `pnpm --filter @thinkwork/api typecheck` passed; `pnpm schema:build` passed; codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/mobile`, and `@thinkwork/spaces`; generated GraphQL files were formatted with Prettier; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter @thinkwork/admin build` passed; `pnpm --filter @thinkwork/spaces typecheck` passed; `pnpm --filter @thinkwork/mobile test` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Squash merged as `c08e5595`. Adds managed app status for Cognee and Twenty, Twenty deploy variable mutation semantics, and Twenty public `/healthz` probe.                                                                                                                                                                                                                                                                |
+| U5/U6 - Spaces managed apps UI and generated artifacts | `codex/twenty-crm-u5-ui`         | [#2128](https://github.com/thinkwork-ai/thinkwork/pull/2128) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; `pnpm --filter @thinkwork/spaces codegen` passed; focused/rebase settings suite passed (6 files, 23 tests); `pnpm --filter @thinkwork/spaces typecheck` passed; `pnpm --filter @thinkwork/spaces build` passed; full `pnpm --filter @thinkwork/spaces test` passed after rebase (117 files, 842 tests); `git diff --check` passed; `curl -I --max-time 10 http://localhost:5175/settings/general` returned `200 OK`; headless Chrome captured `http://localhost:5175/settings/general` to `/tmp/thinkwork-u5-screens-localhost/settings-general.png` and confirmed the unauthenticated login screen renders without route crash; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Squash merged as `065e2e56`. Groups U6 generated Spaces GraphQL and TanStack route artifacts with U5 because the UI route/query changes require them. Browser verification could not reach operator settings content without an authenticated localhost session; component/source tests cover Managed Applications, CRM, and nav/route gating behavior.                                                                   |
+| U7 - Docs, runbook notes, and deployment smoke         | `codex/twenty-crm-u7-docs-smoke` | [#2129](https://github.com/thinkwork-ai/thinkwork/pull/2129) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; `node --check scripts/smoke/twenty-managed-app-smoke.mjs` passed; `node scripts/smoke/twenty-managed-app-smoke.mjs` dry-run passed; `SMOKE_ENABLE_TWENTY_MANAGED_APP=1 SMOKE_TERRAFORM_DIR=/tmp/thinkwork-no-such-terraform node scripts/smoke/twenty-managed-app-smoke.mjs` skipped unprovisioned state clearly; `SMOKE_ENABLE_TWENTY_MANAGED_APP=1 SMOKE_TWENTY_URL=http://example.com node scripts/smoke/twenty-managed-app-smoke.mjs` failed as expected with the HTTPS guard; `pnpm --filter @thinkwork/docs build` passed; `git diff --check` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Squash merged as `ee9e4555`. Adds operator docs and read-only post-deploy smoke coverage for Twenty CRM managed-app deployments.                                                                                                                                                                                                                                                                                          |
+
+## Open Blockers
+
+None.
+
+## End-to-End Dev Proof
+
+- 2026-06-06T02:20:00Z: Started UI lifecycle proof on branch
+  `codex/twenty-crm-e2e-proof` in worktree
+  `.Codex/worktrees/twenty-crm-e2e-fixes`.
+- The first `ENABLE` click from the logged-in `http://localhost:5175/settings/crm`
+  UI failed before workflow dispatch because the deployed API did not have
+  `THINKWORK_PLATFORM_OPERATOR_EMAILS` wired into the greenfield root module.
+  Opened and merged PR
+  [#2139](https://github.com/thinkwork-ai/thinkwork/pull/2139) as
+  `817ef26b`; the main deploy run
+  [27049619327](https://github.com/thinkwork-ai/thinkwork/actions/runs/27049619327)
+  completed successfully and the deployed Lambda now reports the operator
+  allowlist.
+- The next UI `ENABLE` click failed before workflow dispatch because the dev
+  GitHub deploy token secret `thinkwork/dev/github/deploy-token` did not exist.
+  Created the missing dev Secrets Manager secret from the current GitHub auth
+  token without printing the token.
+- The next UI `ENABLE` click succeeded in the browser: the CRM page showed
+  `queued` with "Deploy queued" copy and an "Open workflow" link. It set repo
+  variables to `TWENTY_PROVISIONED=true`, `TWENTY_RUNTIME_ENABLED=true`, and
+  `TWENTY_DESTROY_DATA=false`, then dispatched workflow run
+  [27049866903](https://github.com/thinkwork-ai/thinkwork/actions/runs/27049866903).
+- Run 27049866903 failed in Terraform Apply because
+  `cloudflare_record.crm.count` depended on `crm_alb_dns_name`, an ALB output
+  unknown during first deploy planning:
+  `Invalid count argument` in `terraform/modules/app/www-dns/main.tf`.
+- Fix in progress: gate the CRM DNS record count only on the static
+  `include_crm` flag and keep the ALB DNS name as the record content. Local
+  verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`,
+  `terraform -chdir=terraform/modules/app/www-dns fmt -check`,
+  `terraform -chdir=terraform/modules/app/www-dns init -backend=false &&
+terraform -chdir=terraform/modules/app/www-dns validate`,
+  `terraform -chdir=terraform/examples/greenfield fmt -check`, and
+  `git diff --check`.
+- PR [#2141](https://github.com/thinkwork-ai/thinkwork/pull/2141) merged as
+  `dd77328f`; its main deploy run
+  [27050233677](https://github.com/thinkwork-ai/thinkwork/actions/runs/27050233677)
+  reached Terraform Apply and confirmed the plan would set
+  `twenty_url=https://crm.thinkwork.ai`, but failed when adding CRM to the
+  shared site certificate forced ACM validation records for existing hosts to
+  be recreated in Cloudflare.
+- Follow-up fix in progress: keep `www-dns` responsible only for the
+  `crm.<domain>` CNAME, remove CRM from the shared site ACM SANs, and create a
+  dedicated greenfield ACM certificate for `crm.thinkwork.ai` when Twenty is
+  provisioned without an explicit `twenty_certificate_arn`. Local verification
+  passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`,
+  `terraform -chdir=terraform/modules/app/www-dns fmt -check`,
+  `terraform -chdir=terraform/modules/app/www-dns validate`,
+  `terraform -chdir=terraform/examples/greenfield init -backend=false &&
+terraform -chdir=terraform/examples/greenfield validate`, and
+  `git diff --check`.
+- PR [#2142](https://github.com/thinkwork-ai/thinkwork/pull/2142) merged as
+  `8de0bbff`; its main deploy run
+  [27050610649](https://github.com/thinkwork-ai/thinkwork/actions/runs/27050610649)
+  created the dedicated Twenty ACM certificate but failed because the
+  `crm.thinkwork.ai` validation CNAME had already been created under the old
+  `module.www_dns[0].cloudflare_record.acm_validation` state address during
+  the previous failed shared-cert deploy.
+- Follow-up fix in progress: add a Terraform `moved` block from the old
+  `www_dns` CRM validation record address to the dedicated
+  `cloudflare_record.twenty_acm_validation["crm.thinkwork.ai"]` address so the
+  next apply adopts the existing CNAME instead of trying to recreate it. Local
+  verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`,
+  `terraform -chdir=terraform/examples/greenfield fmt -check`,
+  `terraform -chdir=terraform/examples/greenfield validate`,
+  `terraform -chdir=terraform/modules/app/www-dns validate`,
+  `pnpm dlx prettier@3.8.2 --check apps/cli/__tests__/terraform-twenty-fixture.test.ts docs/plans/autopilot-status.md`,
+  and `git diff --check`.
+- PR [#2143](https://github.com/thinkwork-ai/thinkwork/pull/2143) merged as
+  `43806255`; its main deploy run
+  [27050982386](https://github.com/thinkwork-ai/thinkwork/actions/runs/27050982386)
+  adopted the CRM ACM validation record and created the Twenty CRM ALB, DNS
+  record, ElastiCache group, ECS task definitions, and ECS services, but failed
+  while updating API Lambda configuration because the full `TWENTY` deployment
+  status payload pushed `graphql-http` and `job-trigger` over Lambda's 4 KB
+  environment variable limit.
+- Follow-up fix in progress on branch `codex/twenty-crm-env-budget`: keep the
+  `TWENTY` deployment-status env var only on `graphql-http`, shrink it to
+  provisioned/runtime/url, and derive stable Twenty ECS service/log details from
+  stage/account in the API resolver. Local verification passed:
+  `terraform fmt terraform/modules/app/lambda-api/handlers.tf`,
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`,
+  and
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/managedApplications.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts`.
+- PR [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144) merged as
+  `abbb713a`; its main deploy run
+  [27051568752](https://github.com/thinkwork-ai/thinkwork/actions/runs/27051568752)
+  completed successfully. Post-deploy GraphQL status reported Twenty CRM as
+  `running` at `https://crm.thinkwork.ai`, but direct public reachability
+  returned ALB `503` because the ECS server task was boot-looping on
+  `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` while connecting to Aurora through the
+  workflow-created `PG_DATABASE_URL`.
+- Follow-up fix in progress on branch `codex/twenty-crm-db-sslmode`: write the
+  Twenty `PG_DATABASE_URL` secret with `sslmode=no-verify`, matching the
+  existing ThinkWork API Lambda's Aurora connection mode for Node/Postgres.
+- PR [#2145](https://github.com/thinkwork-ai/thinkwork/pull/2145) merged as
+  `d6366452`; its main deploy run
+  [27052003345](https://github.com/thinkwork-ai/thinkwork/actions/runs/27052003345)
+  completed successfully and rewrote the retained Twenty DB URL secret with
+  `sslmode=no-verify`, but the public endpoint still returned ALB `503`.
+  Follow-up ECS inspection showed the worker reached the database while the
+  server task still exited on RDS TLS verification. Twenty's own documented
+  env surface includes `PG_SSL_ALLOW_SELF_SIGNED=true` for this case, so the
+  next fix branch `codex/twenty-crm-rds-tls-runtime` adds that task environment
+  flag to the Terraform module and fixture tests.
+- PR [#2146](https://github.com/thinkwork-ai/thinkwork/pull/2146) merged as
+  `63593687`; its main deploy run
+  [27052357899](https://github.com/thinkwork-ai/thinkwork/actions/runs/27052357899)
+  reached Terraform Apply and rolled server task definition revision 2, but
+  the container's pre-Nest migration wrapper failed first with
+  `psql: error: invalid sslmode value: "no-verify"`. Follow-up branch
+  `codex/twenty-crm-psql-sslmode` restores the workflow-created DB URL to
+  `sslmode=require` for `psql` compatibility while retaining
+  `PG_SSL_ALLOW_SELF_SIGNED=true` for the Twenty Node/Postgres runtime.
+- PR [#2155](https://github.com/thinkwork-ai/thinkwork/pull/2155) merged as
+  `6f8510c4`; its main deploy run
+  [27061400747](https://github.com/thinkwork-ai/thinkwork/actions/runs/27061400747)
+  reached the new post-prep ECS restart step but failed because the
+  greenfield root module did not expose `twenty_cluster_arn`,
+  `twenty_server_service_name`, or `twenty_worker_service_name` as Terraform
+  outputs. Follow-up branch `codex/twenty-crm-root-ecs-outputs` exposes those
+  outputs so the deploy workflow can restart the actual Twenty ECS services
+  after database prep.
+- Post-deploy browser verification on `crm.thinkwork.ai` reached the Twenty UI
+  and loaded GraphQL successfully, but first-user sign-up failed with
+  `EACCES` while creating `/app/packages/twenty-server/.local-storage/...`.
+  Server logs showed the failure in `SignUpInWorkspace` while uploading default
+  workspace application files. Follow-up branch
+  `codex/twenty-crm-efs-access-point` switches the retained EFS mount to an
+  access point rooted at `/local-storage` with explicit writable POSIX
+  ownership and IAM mount/write authorization for the task role.

@@ -78,6 +78,7 @@ export function SettingsRoutines() {
   return (
     <SettingsTablePane
       title="Routines"
+      description="Manage cron-scheduled remote agents and review their runs."
       loading={result.fetching && !result.data}
       toolbar={
         <Input

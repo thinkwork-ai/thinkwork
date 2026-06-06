@@ -39,6 +39,7 @@ import {
   checkBudgetAndPause,
   notifyCostRecorded,
 } from "../lib/cost-recording.js";
+import { checkUserBudgetAndPauseWork } from "../lib/user-budget-enforcement.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { loadTenantBuiltinTools } from "./skills.js";
 import {
@@ -82,6 +83,10 @@ import {
   applyAgentSkillMetadata,
   loadWorkspaceSkillConfigs,
 } from "../lib/resolve-agent-runtime-config.js";
+import {
+  filterBlockedSkills,
+  resolveDispatchPinnedSkills,
+} from "../lib/skills/message-pinned-skills.js";
 import {
   prependThreadProgressPromptBlock,
   readThreadProgressMarkdown,
@@ -605,6 +610,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   let currentUserEmail = "";
   let currentUserName = "";
+  let costOwnerUserId: string | undefined;
   if (invokerUserId) {
     const [currentUser] = await db
       .select({ email: users.email, name: users.name })
@@ -614,6 +620,30 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       );
     currentUserEmail = currentUser?.email || "";
     currentUserName = currentUser?.name || "";
+    costOwnerUserId = currentUser ? invokerUserId : undefined;
+  }
+
+  if (costOwnerUserId) {
+    const budgetStatus = await checkUserBudgetAndPauseWork({
+      tenantId: wakeup.tenant_id,
+      userId: costOwnerUserId,
+    });
+    if (budgetStatus.overBudget) {
+      const error =
+        budgetStatus.pauseReason ??
+        "User budget exceeded; wakeup was not dispatched.";
+      console.log(
+        `[wakeup-processor] User ${invokerUserId} is over budget, skipping wakeup ${wakeup.id}`,
+      );
+      await failWakeupBeforeRun({
+        wakeup,
+        payload,
+        error,
+        runtimeType,
+        model: agentModel,
+      });
+      return;
+    }
   }
 
   // Resolve Bedrock guardrail: class-level → tenant default → none
@@ -1429,7 +1459,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         spaceId: runSpaceId,
         threadId: runThreadId ?? null,
         threadSlug: runThreadId ?? null,
-        userId: invokerUserId ?? null,
+        userId: costOwnerUserId ?? null,
         agentBlockedTools: blockedTools,
       });
       if (renderedWorkspace.rendered) {
@@ -1718,6 +1748,36 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           thread_attachments_manifest:
             attachmentContext.threadAttachmentManifest,
         });
+      }
+
+      // Force-pinned skills parity with the direct chat-agent-invoke path
+      // (plan 2026-06-04-004 U3). The wakeup fallback re-resolves
+      // `messages.metadata.skills` for the same user message and builds the
+      // ephemeral `pinned_skills` branch, dropping any blocked slug (KD4) using
+      // the resolved blocked_tools for this turn.
+      try {
+        const pinnedSlugs = filterBlockedSkills(
+          await resolveDispatchPinnedSkills({
+            db,
+            tenantId: wakeup.tenant_id,
+            threadId: runThreadId,
+            messageId,
+          }),
+          effectiveBlockedTools,
+        );
+        if (pinnedSlugs.length > 0 && tenantSlug) {
+          Object.assign(agentCorePayload, {
+            pinned_skills: pinnedSlugs.map((slug) => ({
+              skillId: slug,
+              s3Key: tenantCatalogSkillS3Key(tenantSlug, slug),
+            })),
+          });
+        }
+      } catch (err) {
+        console.error(
+          "[wakeup-processor] Failed to resolve pinned skills:",
+          err,
+        );
       }
     }
 
@@ -2069,6 +2129,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       const costResult = await recordCostEvents({
         tenantId: wakeup.tenant_id,
         agentId: wakeup.agent_id,
+        userId: costOwnerUserId ?? null,
         requestId: wakeup.id,
         model: usage.model || agentModel,
         inputTokens: usage.inputTokens,
@@ -2081,7 +2142,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         traceId,
         runtimeType,
       });
-      await checkBudgetAndPause(wakeup.tenant_id, wakeup.agent_id);
+      await checkBudgetAndPause(
+        wakeup.tenant_id,
+        wakeup.agent_id,
+        costOwnerUserId ?? null,
+      );
 
       // Notify subscribers that cost was recorded
       if (costResult.totalUsd > 0) {
@@ -2089,6 +2154,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           tenantId: wakeup.tenant_id,
           agentId: wakeup.agent_id,
           agentName: agent.name,
+          userId: costOwnerUserId ?? null,
+          userName: currentUserName || null,
+          userEmail: currentUserEmail || null,
           eventType: "invocation",
           amountUsd: costResult.totalUsd,
           model: usage.model || agentModel,
@@ -2111,6 +2179,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             .values({
               tenant_id: wakeup.tenant_id,
               agent_id: wakeup.agent_id,
+              user_id: costOwnerUserId || undefined,
               thread_id: runThreadId || undefined,
               request_id: crypto.randomUUID(),
               event_type: String(tc.event_type || "tool_cost"),
@@ -2250,6 +2319,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           await recordCostEvents({
             tenantId: wakeup.tenant_id,
             agentId: wakeup.agent_id,
+            userId: costOwnerUserId ?? null,
             requestId: `${wakeup.id}-loop-${loopTurn}`,
             model: loopUsage.model || agentModel,
             inputTokens: loopUsage.inputTokens,

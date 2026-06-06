@@ -1,6 +1,6 @@
 ---
 title: Admin — Analytics
-description: Activity, Cost, and Performance views for the tenant — thread turns over time, LLM/infra/tools cost breakdowns, platform-agent and Space spend, and budget tracking.
+description: Activity, Cost, and Performance views for the tenant — thread turns over time, LLM/infra/tools cost breakdowns, user spend, and budget tracking.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -12,7 +12,7 @@ The Analytics page is the operator's tenant-wide view into what the tenant is do
 
 ## Layout
 
-A single top-of-page tab toggle switches between the three views. Some deployments still expose an agent selector for legacy cost/performance rows; current managed work should be interpreted through the tenant platform agent and Space context. All charts are rendered with [Recharts](https://recharts.org).
+A single top-of-page tab toggle switches between the three views. Some deployments still expose an agent selector for legacy performance rows; current cost reporting should be interpreted through the user who initiated or owns the work, with tenant totals preserved. All charts are rendered with [Recharts](https://recharts.org).
 
 ## Activity view
 
@@ -50,7 +50,11 @@ A stacked bar chart across the last 30 days, split into LLM / Infra / Tools band
 
 ### Budget table
 
-A budget table shows the configured spending scopes that the backend exposes for the tenant. In current Space-aware deployments, Space budget rows are the most useful local signal; legacy rows may still show the tenant platform agent or historical agent/template scopes.
+A budget table shows user-attributed spend next to user-scoped budget policies. Users with configured budgets show percent used and remaining headroom; users without a policy remain visible as unbudgeted spend. System or unattributed cost is shown separately instead of being assigned to an arbitrary human. Tenant-level budget totals remain available as the overall cap for the period.
+
+### Cost by user
+
+The primary chargeback table is **Cost by User**: user name, email, event count, budget usage, and spend for the period. Legacy agent identifiers remain useful for trace and audit context, but the current operator question is "which user is responsible for this spend?"
 
 ### Cost by model
 
@@ -58,14 +62,14 @@ A breakdown table: model name, total spend, input tokens, output tokens. Model n
 
 ### Queries
 
-| Query                                   | Purpose                                                    |
-| --------------------------------------- | ---------------------------------------------------------- |
-| `CostSummaryQuery($tenantId)`           | Top-of-page metric cards                                   |
-| `CostByAgentQuery($tenantId)`           | Legacy agent/platform-agent cost table where still exposed |
-| `CostByModelQuery($tenantId)`           | Cost by model table                                        |
-| `CostTimeSeriesQuery($tenantId, $days)` | Trend chart                                                |
-| `BudgetStatusQuery($tenantId)`          | Budget percent used / status badges                        |
-| `ModelCatalogQuery`                     | Human-readable model labels                                |
+| Query                                   | Purpose                             |
+| --------------------------------------- | ----------------------------------- |
+| `CostSummaryQuery($tenantId)`           | Top-of-page metric cards            |
+| `CostByUserQuery($tenantId)`            | User chargeback and system spend    |
+| `CostByModelQuery($tenantId)`           | Cost by model table                 |
+| `CostTimeSeriesQuery($tenantId, $days)` | Trend chart                         |
+| `BudgetStatusQuery($tenantId)`          | Budget percent used / status badges |
+| `ModelCatalogQuery`                     | Human-readable model labels         |
 
 ### Zustand caching
 
@@ -89,10 +93,10 @@ Queries for performance pull from thread traces or the audit log's cost events d
 
 1. Open Analytics → Cost
 2. Look at the Total Spend metric card and compare to the tenant's monthly budget
-3. Check the budget table for any row in `warning` or `over` status
-4. If a Space is over budget, open [Spaces](/applications/admin/spaces/) and adjust or pause that Space's runtime budget; if the tenant baseline is over budget, review [Tenant Agent](/applications/admin/agents/)
+3. Check the user budget table for any row in `warning` or `exceeded` status
+4. If a user is over budget, raise that user's budget or wait for the billing-period reset before resuming user-owned scheduled work; if the tenant baseline is over budget, review tenant-level budget policy.
 
-### Answer "which Space is eating tokens?"
+### Answer "which user is eating tokens?"
 
 1. Open Analytics → Cost
 2. Scroll to the cost breakdown table
@@ -112,21 +116,21 @@ Queries for performance pull from thread traces or the audit log's cost events d
 
 - **Cost aggregates** — computed server-side from a `cost_events` or similar per-turn table, rolled up into `cost_aggregates` materialized views. The UI never sees raw cost rows.
 - **Activity counts** — client-side aggregation from the thread and turn queries
-- **Budget status** — derived server-side from Space, tenant-agent, and tenant budget policies where available
+- **Budget status** — derived server-side from user and tenant budget policies where available
 - **Model catalog** — a static catalog maintained alongside the tenant configuration
 
 ## Known limits
 
 - **Activity is client-computed.** For tenants with tens of thousands of daily turns, the Activity view can be slow to render. A server-side activity aggregate is on the [Roadmap](/roadmap/).
 - **Performance view is shallow.** It shows one scope at a time and lacks a full cross-Space comparison. A fuller performance dashboard is a future improvement.
-- **Cost attribution is still evolving.** Some deployments expose legacy per-agent rows before full Space chargeback is available; see [Roadmap → Holistic cost tracking](/roadmap/#holistic-cost-tracking).
+- **Cost attribution is still evolving.** System and historical spend without a deterministic user owner appears as system/unattributed cost instead of being assigned speculatively.
 - **No custom date ranges.** The trend chart is fixed to 30 days; longer or shorter windows aren't exposed in the UI.
 
 ## Related pages
 
 - [Dashboard](/applications/admin/dashboard/) — the quick-glance metric cards that the Analytics page backs
 - [Threads](/applications/admin/threads/) — drill into the specific turns that drove a number
-- [Tenant Agent](/applications/admin/agents/) — platform-agent defaults
+- [Tenant Agent](/applications/admin/agents/) — platform-agent defaults and legacy agent context
 - [Spaces](/applications/admin/spaces/) — Space runtime budget overrides
 - [Budgets, Usage, and Audit (concept)](/concepts/control/budgets-usage-and-audit/) — the control layer
 - [Roadmap](/roadmap/) — what's coming next in cost tracking and eval UI

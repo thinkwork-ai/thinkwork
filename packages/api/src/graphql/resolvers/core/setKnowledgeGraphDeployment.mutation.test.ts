@@ -11,6 +11,7 @@ vi.mock("@aws-sdk/client-secrets-manager", () => ({
 }));
 
 let mod: typeof import("./setKnowledgeGraphDeployment.mutation.js");
+let managedMod: typeof import("./setManagedApplicationDeployment.mutation.js");
 
 const operatorCtx = {
   auth: { authType: "cognito", email: "ops@example.com" },
@@ -27,6 +28,7 @@ beforeEach(async () => {
   vi.stubEnv("KNOWLEDGE_GRAPH_DEPLOY_REF", "main");
   vi.unstubAllGlobals();
   mod = await import("./setKnowledgeGraphDeployment.mutation.js");
+  managedMod = await import("./setManagedApplicationDeployment.mutation.js");
 });
 
 describe("setKnowledgeGraphDeployment", () => {
@@ -102,6 +104,187 @@ describe("setKnowledgeGraphDeployment", () => {
       mod.setKnowledgeGraphDeployment(null, { input: { enabled: true } }, {
         auth: { authType: "cognito", email: "member@example.com" },
       } as any),
+    ).rejects.toThrow(/platform-operator/);
+  });
+});
+
+describe("setManagedApplicationDeployment", () => {
+  it("enables Twenty by setting provisioned and runtime deploy variables", async () => {
+    mockSend.mockResolvedValueOnce({
+      SecretString: JSON.stringify({ token: "gh-token" }),
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await managedMod.setManagedApplicationDeployment(
+      null,
+      { input: { key: "twenty", action: "ENABLE" } },
+      operatorCtx,
+    );
+
+    expect(result).toMatchObject({
+      key: "twenty",
+      action: "ENABLE",
+      desiredEnabled: true,
+      provisioned: true,
+      runtimeEnabled: true,
+      message: "Twenty CRM enable deployment queued.",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_PROVISIONED",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ name: "TWENTY_PROVISIONED", value: "true" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_RUNTIME_ENABLED",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          name: "TWENTY_RUNTIME_ENABLED",
+          value: "true",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_DESTROY_DATA",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          name: "TWENTY_DESTROY_DATA",
+          value: "false",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/workflows/deploy.yml/dispatches",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ ref: "main" }),
+      }),
+    );
+  });
+
+  it("parks Twenty runtime while retaining the provisioned resources", async () => {
+    mockSend.mockResolvedValueOnce({ SecretString: "plain-token" });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await managedMod.setManagedApplicationDeployment(
+      null,
+      { input: { key: "crm", enabled: false } },
+      operatorCtx,
+    );
+
+    expect(result).toMatchObject({
+      key: "twenty",
+      action: "PARK",
+      desiredEnabled: false,
+      provisioned: true,
+      runtimeEnabled: false,
+    });
+    expect(result.message).toMatch(/retained/i);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_PROVISIONED",
+      expect.objectContaining({
+        body: JSON.stringify({ name: "TWENTY_PROVISIONED", value: "true" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_RUNTIME_ENABLED",
+      expect.objectContaining({
+        body: JSON.stringify({
+          name: "TWENTY_RUNTIME_ENABLED",
+          value: "false",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_DESTROY_DATA",
+      expect.objectContaining({
+        body: JSON.stringify({
+          name: "TWENTY_DESTROY_DATA",
+          value: "false",
+        }),
+      }),
+    );
+  });
+
+  it("destroys Twenty runtime and retained data when explicitly requested", async () => {
+    mockSend.mockResolvedValueOnce({ SecretString: "plain-token" });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await managedMod.setManagedApplicationDeployment(
+      null,
+      { input: { key: "twenty", action: "DESTROY" } },
+      operatorCtx,
+    );
+
+    expect(result).toMatchObject({
+      key: "twenty",
+      action: "DESTROY",
+      desiredEnabled: false,
+      provisioned: false,
+      runtimeEnabled: false,
+    });
+    expect(result.message).toMatch(/destructive cleanup/i);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_PROVISIONED",
+      expect.objectContaining({
+        body: JSON.stringify({ name: "TWENTY_PROVISIONED", value: "false" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_RUNTIME_ENABLED",
+      expect.objectContaining({
+        body: JSON.stringify({
+          name: "TWENTY_RUNTIME_ENABLED",
+          value: "false",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/TWENTY_DESTROY_DATA",
+      expect.objectContaining({
+        body: JSON.stringify({ name: "TWENTY_DESTROY_DATA", value: "true" }),
+      }),
+    );
+  });
+
+  it("rejects non-platform operators before updating managed apps", async () => {
+    await expect(
+      managedMod.setManagedApplicationDeployment(
+        null,
+        { input: { key: "twenty", enabled: true } },
+        { auth: { authType: "cognito", email: "member@example.com" } } as any,
+      ),
     ).rejects.toThrow(/platform-operator/);
   });
 });

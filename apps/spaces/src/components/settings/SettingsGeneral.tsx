@@ -37,6 +37,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { ManagedApplicationsSection } from "@/components/settings/ManagedApplicationsSection";
 
 export function SettingsGeneral() {
   const { isOperator, roleResolved } = useTenant();
@@ -44,7 +45,7 @@ export function SettingsGeneral() {
   // Operators only — members never issue the deployment query (it is also
   // gated server-side in U8).
   const showOperator = roleResolved && isOperator;
-  const [deployResult] = useQuery({
+  const [deployResult, refetchDeployment] = useQuery({
     query: SettingsDeploymentStatusQuery,
     pause: !showOperator,
   });
@@ -54,7 +55,10 @@ export function SettingsGeneral() {
 
   return (
     <SettingsPane>
-      <SettingsHeader title="General" />
+      <SettingsHeader
+        title="General"
+        description="Configure agent runtime, default model, appearance, and deployment."
+      />
 
       {showOperator ? <AgentConfigSection /> : null}
 
@@ -76,6 +80,15 @@ export function SettingsGeneral() {
 
       {showOperator ? (
         <>
+          <ManagedApplicationsSection
+            deployment={deployment}
+            loading={deployResult.fetching}
+            unavailable={deploymentFailed}
+            onQueued={() =>
+              refetchDeployment({ requestPolicy: "network-only" })
+            }
+          />
+
           <SettingsSection label="Deployment">
             {deploymentFailed ? (
               <div className="p-4 text-sm text-muted-foreground">
@@ -83,16 +96,28 @@ export function SettingsGeneral() {
               </div>
             ) : (
               <>
-                <SettingsRow label="Stage">
+                <SettingsRow
+                  label="Stage"
+                  description="Deployment stage this console is connected to."
+                >
                   {deployment?.stage ?? "…"}
                 </SettingsRow>
-                <SettingsRow label="Region">
+                <SettingsRow
+                  label="Region"
+                  description="AWS region hosting this deployment."
+                >
                   {deployment?.region ?? "…"}
                 </SettingsRow>
-                <SettingsRow label="Account">
+                <SettingsRow
+                  label="Account"
+                  description="AWS account ID hosting this deployment."
+                >
                   {deployment?.accountId ?? "…"}
                 </SettingsRow>
-                <SettingsRow label="AgentCore">
+                <SettingsRow
+                  label="AgentCore"
+                  description="Bedrock AgentCore runtime status."
+                >
                   {deployment?.agentcoreStatus ?? "…"}
                 </SettingsRow>
               </>
@@ -101,14 +126,31 @@ export function SettingsGeneral() {
 
           {!deploymentFailed ? (
             <SettingsSection label="Resources & URLs">
-              <ResourceRow label="S3 bucket" value={deployment?.bucketName} />
+              <ResourceRow
+                label="S3 bucket"
+                description="Workspace and artifact storage bucket."
+                value={deployment?.bucketName}
+              />
               <ResourceRow
                 label="Database"
+                description="Aurora Postgres cluster endpoint."
                 value={deployment?.databaseEndpoint}
               />
-              <ResourceRow label="ECR" value={deployment?.ecrUrl} />
-              <ResourceRow label="API" value={deployment?.apiEndpoint} />
-              <ResourceRow label="AppSync" value={deployment?.appsyncUrl} />
+              <ResourceRow
+                label="ECR"
+                description="Container image registry for agent runtimes."
+                value={deployment?.ecrUrl}
+              />
+              <ResourceRow
+                label="API"
+                description="GraphQL HTTP API endpoint."
+                value={deployment?.apiEndpoint}
+              />
+              <ResourceRow
+                label="AppSync"
+                description="Realtime subscriptions endpoint."
+                value={deployment?.appsyncUrl}
+              />
             </SettingsSection>
           ) : null}
         </>
@@ -174,7 +216,10 @@ function AgentConfigSection() {
         ) : undefined
       }
     >
-      <SettingsRow label="Runtime">
+      <SettingsRow
+        label="Runtime"
+        description="Execution runtime that powers this tenant's agent."
+      >
         <Select
           value={runtime ?? undefined}
           onValueChange={(v) => {
@@ -196,7 +241,10 @@ function AgentConfigSection() {
         </Select>
       </SettingsRow>
 
-      <SettingsRow label="Default model">
+      <SettingsRow
+        label="Default model"
+        description="Model used when a thread doesn't specify its own."
+      >
         {catalogFailed ? (
           <div className="text-sm text-muted-foreground">
             {model ?? "—"}{" "}
@@ -232,13 +280,15 @@ function AgentConfigSection() {
 
 function ResourceRow({
   label,
+  description,
   value,
 }: {
   label: string;
+  description?: string;
   value?: string | null;
 }) {
   return (
-    <SettingsRow label={label}>
+    <SettingsRow label={label} description={description}>
       <span className="max-w-[22rem] truncate font-mono text-xs">
         {value ?? "—"}
       </span>
@@ -249,7 +299,10 @@ function ResourceRow({
 function EditorWrapRow() {
   const wrap = useEditorWrap();
   return (
-    <SettingsRow label="Editor Wrap Text">
+    <SettingsRow
+      label="Editor Wrap Text"
+      description="Soft-wrap long lines in the workspace editor."
+    >
       <Switch
         checked={wrap}
         onCheckedChange={(next) => setEditorWrap(next)}
@@ -262,7 +315,10 @@ function EditorWrapRow() {
 function EditorFontSizeRow() {
   const fontSize = useEditorFontSize();
   return (
-    <SettingsRow label="Editor Font size">
+    <SettingsRow
+      label="Editor Font size"
+      description="Text size for the workspace code/markdown editor."
+    >
       <Select
         value={String(fontSize)}
         onValueChange={(v) => setEditorFontSize(Number(v))}
@@ -300,7 +356,10 @@ function ThreadNotificationsRow() {
   }
 
   return (
-    <SettingsRow label="Thread notifications">
+    <SettingsRow
+      label="Thread notifications"
+      description="Show a desktop notification when a thread updates."
+    >
       <Switch
         checked={enabled}
         onCheckedChange={(next) => void onToggle(next)}
@@ -313,7 +372,10 @@ function ThreadNotificationsRow() {
 function ThemeRow() {
   const { theme, setTheme } = useTheme();
   return (
-    <SettingsRow label="Theme">
+    <SettingsRow
+      label="Theme"
+      description="Light or dark appearance on this device."
+    >
       <Select
         value={theme}
         onValueChange={(v) => setTheme(v as "light" | "dark")}

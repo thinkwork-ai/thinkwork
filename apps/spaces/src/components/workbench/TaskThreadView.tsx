@@ -54,11 +54,14 @@ import {
   PromptInputFooter,
   PromptInputSpeechButton,
   PromptInputSubmit,
-  PromptInputTextarea,
   PromptInputTools,
   usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import {
+  SkillTokenInput,
+  type SkillTokenInputHandle,
+} from "@/components/workbench/SkillTokenInput";
 import { IconCircleCheckFilled, IconPaperclip } from "@tabler/icons-react";
 import {
   Reasoning,
@@ -107,6 +110,11 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
+import { SkillMenu, type SkillOption } from "@/components/spaces/SkillMenu";
+import {
+  extractPinnedSkillSlugs,
+  useComposerSkillPins,
+} from "@/components/workbench/useComposerSkillPins";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 
 const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
@@ -190,12 +198,14 @@ interface TaskThreadViewProps {
   runbookQueues?: RunbookQueueData[];
   isSending?: boolean;
   mentionTargets?: MentionTarget[];
+  skillCatalog?: SkillOption[];
   currentUser?: CurrentUserIdentity | null;
   onSendFollowUp?: (
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
+    pinnedSkills?: string[],
   ) => Promise<void> | void;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
@@ -318,6 +328,7 @@ export function TaskThreadView({
   runbookQueues = [],
   isSending = false,
   mentionTargets = [],
+  skillCatalog = [],
   currentUser,
   onSendFollowUp,
   artifactPanelState,
@@ -491,6 +502,7 @@ export function TaskThreadView({
               disabled={!onSendFollowUp || isSending}
               isSending={isSending}
               mentionTargets={mentionTargets}
+              skillCatalog={skillCatalog}
               threadMessages={thread.messages}
               currentUserId={currentUser?.id ?? null}
               prefill={composerPrefill}
@@ -2235,6 +2247,7 @@ function FollowUpComposer({
   disabled,
   isSending,
   mentionTargets,
+  skillCatalog = [],
   threadMessages,
   currentUserId,
   prefill,
@@ -2245,6 +2258,7 @@ function FollowUpComposer({
   disabled?: boolean;
   isSending?: boolean;
   mentionTargets: MentionTarget[];
+  skillCatalog?: SkillOption[];
   threadMessages?: TaskThreadMessage[];
   currentUserId?: string | null;
   prefill?: { text: string; token: number } | null;
@@ -2253,11 +2267,17 @@ function FollowUpComposer({
     files?: File[],
     mentions?: ComposerMention[],
     agentRequested?: boolean,
+    pinnedSkills?: string[],
   ) => Promise<void> | void;
 }) {
   const composer = useComposerState(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<SkillTokenInputHandle | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
+  const skillPins = useComposerSkillPins({
+    value: composer.text,
+    onChange: composer.setText,
+    catalog: skillCatalog,
+  });
   const agentDefaultOn = useMemo(
     () =>
       deriveAgentDefault({
@@ -2348,15 +2368,20 @@ function FollowUpComposer({
     if (!prefillText) return;
     composer.setText(prefillText);
     const focusPrefilledComposer = () => {
-      const textarea =
-        textareaRef.current ??
-        document.querySelector<HTMLTextAreaElement>(
-          'textarea[aria-label="Follow up"]',
-        );
-      if (!textarea) return;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(prefillText.length, prefillText.length);
-      return document.activeElement === textarea;
+      // Focus through the editor handle (the contenteditable token field).
+      textareaRef.current?.focus();
+      const node = document.querySelector<HTMLElement>(
+        '[aria-label="Follow up"]',
+      );
+      if (!node) return document.activeElement != null;
+      // Place the caret at the end of the contenteditable token field.
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      return document.activeElement === node;
     };
     const timeoutIds: number[] = [];
     const scheduleTimeout = (delay: number) => {
@@ -2399,7 +2424,13 @@ function FollowUpComposer({
       const submittedMentions = mentions.filter((mention) =>
         content.includes(mention.rawText),
       );
-      await onSubmit(content, files, submittedMentions, effectiveAgentEnabled);
+      await onSubmit(
+        content,
+        files,
+        submittedMentions,
+        effectiveAgentEnabled,
+        extractPinnedSkillSlugs(content, skillCatalog),
+      );
       composer.clear();
       setMentions([]);
     } catch (err) {
@@ -2444,8 +2475,13 @@ function FollowUpComposer({
     }
   }
 
-  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (!mentionMenuOpen) return;
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
+    // `@` and `/` menus are mutually exclusive. When the mention menu isn't
+    // open, hand navigation to the skill-pin menu.
+    if (!mentionMenuOpen) {
+      skillPins.handleKeyDown(event);
+      return;
+    }
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -2496,6 +2532,15 @@ function FollowUpComposer({
             onSelect={selectMention}
           />
         ) : null}
+        {!mentionMenuOpen && skillPins.menuOpen ? (
+          <SkillMenu
+            options={skillPins.options}
+            query={skillPins.slashQuery ?? ""}
+            activeIndex={skillPins.activeIndex}
+            placement="top"
+            onSelect={skillPins.selectSkill}
+          />
+        ) : null}
         <PromptInput
           className={cn(
             "text-white motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:!ring-0 [&_[data-slot=input-group]]:focus-within:border-white/10 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
@@ -2514,12 +2559,14 @@ function FollowUpComposer({
             <PromptInputAttachments>
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
-            <PromptInputTextarea
+            <SkillTokenInput
               ref={textareaRef}
               aria-label="Follow up"
               className="min-h-12 max-h-24 py-3 text-base text-white placeholder:text-white/75"
               value={composer.text}
-              onChange={(event) => composer.setText(event.target.value)}
+              onChange={composer.setText}
+              catalog={skillCatalog}
+              mentions={mentions}
               onKeyDown={handleComposerKeyDown}
               placeholder="Type a command, attach a file..."
               disabled={disabled}
@@ -2550,7 +2597,9 @@ function FollowUpComposer({
             </PromptInputTools>
             <div className="flex items-center gap-1">
               <PromptInputSpeechButton
-                textareaRef={textareaRef}
+                textareaRef={
+                  textareaRef as React.RefObject<HTMLTextAreaElement | null>
+                }
                 onTranscriptionChange={composer.setText}
                 aria-label="Voice input"
                 title="Voice input"

@@ -2,7 +2,7 @@ import { useCallback, useEffect } from "react";
 import { useQuery } from "urql";
 import {
   CostSummaryQuery,
-  CostByAgentQuery,
+  CostByUserQuery,
   CostByModelQuery,
   CostTimeSeriesQuery,
   BudgetStatusQuery,
@@ -18,7 +18,7 @@ import { useCostStore } from "@/stores/cost-store";
 export function useCostData(tenantId: string | null | undefined) {
   const {
     setSummary,
-    setByAgent,
+    setByUser,
     setByModel,
     setTimeSeries,
     setBudgets,
@@ -33,8 +33,8 @@ export function useCostData(tenantId: string | null | undefined) {
     pause: !tenantId,
   });
 
-  const [agentResult, refetchAgent] = useQuery({
-    query: CostByAgentQuery,
+  const [userResult, refetchUser] = useQuery({
+    query: CostByUserQuery,
     variables: { tenantId: tenantId! },
     pause: !tenantId,
   });
@@ -60,7 +60,7 @@ export function useCostData(tenantId: string | null | undefined) {
   // Populate store whenever query data arrives (partial results are OK)
   const anyFetching =
     summaryResult.fetching ||
-    agentResult.fetching ||
+    userResult.fetching ||
     modelResult.fetching ||
     timeSeriesResult.fetching ||
     budgetResult.fetching;
@@ -75,8 +75,8 @@ export function useCostData(tenantId: string | null | undefined) {
           "[costs] costSummary error:",
           summaryResult.error.message,
         );
-      if (agentResult.error)
-        console.error("[costs] costByAgent error:", agentResult.error.message);
+      if (userResult.error)
+        console.error("[costs] costByUser error:", userResult.error.message);
       if (modelResult.error)
         console.error("[costs] costByModel error:", modelResult.error.message);
       if (timeSeriesResult.error)
@@ -93,7 +93,7 @@ export function useCostData(tenantId: string | null | undefined) {
 
     const s = (summaryResult.data as any)?.costSummary;
     if (s) setSummary(s);
-    setByAgent((agentResult.data as any)?.costByAgent ?? []);
+    setByUser((userResult.data as any)?.costByUser ?? []);
     setByModel((modelResult.data as any)?.costByModel ?? []);
     setTimeSeries((timeSeriesResult.data as any)?.costTimeSeries ?? []);
     setBudgets((budgetResult.data as any)?.budgetStatus ?? []);
@@ -101,7 +101,7 @@ export function useCostData(tenantId: string | null | undefined) {
   }, [
     anyFetching,
     summaryResult.data,
-    agentResult.data,
+    userResult.data,
     modelResult.data,
     timeSeriesResult.data,
     budgetResult.data,
@@ -110,13 +110,13 @@ export function useCostData(tenantId: string | null | undefined) {
   // Refetch all queries from the server
   const refetchAll = useCallback(() => {
     refetchSummary({ requestPolicy: "network-only" });
-    refetchAgent({ requestPolicy: "network-only" });
+    refetchUser({ requestPolicy: "network-only" });
     refetchModel({ requestPolicy: "network-only" });
     refetchTimeSeries({ requestPolicy: "network-only" });
     refetchBudget({ requestPolicy: "network-only" });
   }, [
     refetchSummary,
-    refetchAgent,
+    refetchUser,
     refetchModel,
     refetchTimeSeries,
     refetchBudget,

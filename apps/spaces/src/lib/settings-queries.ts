@@ -49,6 +49,36 @@ export const SettingsDeploymentStatusQuery = graphql(`
       cogneeBackendMode
       cogneeClusterArn
       cogneeServiceName
+      twentyProvisioned
+      twentyRuntimeEnabled
+      twentyUrl
+      twentyClusterArn
+      twentyServerServiceName
+      twentyWorkerServiceName
+      twentyServerLogGroupName
+      twentyWorkerLogGroupName
+      twentyAlbArn
+      twentyTargetGroupArn
+      managedApplications {
+        key
+        displayName
+        description
+        status
+        enabled
+        provisioned
+        runtimeEnabled
+        url
+        endpoint
+        backendMode
+        logGroupName
+        logGroupNames
+        clusterArn
+        serviceName
+        serviceNames
+        albArn
+        targetGroupArn
+        message
+      }
     }
   }
 `);
@@ -57,6 +87,23 @@ export const SettingsSetKnowledgeGraphDeploymentMutation = graphql(`
   mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {
     setKnowledgeGraphDeployment(input: { enabled: $enabled }) {
       desiredEnabled
+      workflowUrl
+      message
+    }
+  }
+`);
+
+export const SettingsSetManagedApplicationDeploymentMutation = graphql(`
+  mutation SettingsSetManagedApplicationDeployment(
+    $key: String!
+    $action: ManagedApplicationDeploymentAction!
+  ) {
+    setManagedApplicationDeployment(input: { key: $key, action: $action }) {
+      key
+      action
+      desiredEnabled
+      provisioned
+      runtimeEnabled
       workflowUrl
       message
     }
@@ -72,6 +119,260 @@ export const SettingsKnowledgeGraphHealthCheckQuery = graphql(`
       endpoint
       checkedAt
       message
+    }
+  }
+`);
+
+export const SettingsManagedApplicationHealthCheckQuery = graphql(`
+  query SettingsManagedApplicationHealthCheck($key: String!) {
+    managedApplicationHealthCheck(key: $key) {
+      key
+      healthy
+      statusCode
+      latencyMs
+      endpoint
+      checkedAt
+      message
+    }
+  }
+`);
+
+export const SettingsKnowledgeGraphOntologyQuery = graphql(`
+  query SettingsKnowledgeGraphOntology($tenantId: ID!) {
+    ontologyDefinitions(tenantId: $tenantId) {
+      activeVersion {
+        id
+        versionNumber
+        status
+        activatedAt
+      }
+      entityTypes {
+        id
+        slug
+        name
+        description
+        broadType
+        aliases
+        lifecycleStatus
+        externalMappings {
+          id
+          mappingKind
+          vocabulary
+          externalUri
+          externalLabel
+        }
+      }
+      relationshipTypes {
+        id
+        slug
+        name
+        description
+        sourceTypeSlugs
+        targetTypeSlugs
+        aliases
+        lifecycleStatus
+        externalMappings {
+          id
+          mappingKind
+          vocabulary
+          externalUri
+          externalLabel
+        }
+      }
+      externalMappings {
+        id
+        subjectKind
+        subjectId
+        mappingKind
+        vocabulary
+        externalUri
+        externalLabel
+      }
+    }
+  }
+`);
+
+export const SettingsKnowledgeGraphThreadCandidatesQuery = graphql(`
+  query SettingsKnowledgeGraphThreadCandidates(
+    $tenantId: ID!
+    $query: String
+    $limit: Int
+  ) {
+    knowledgeGraphThreadCandidates(
+      tenantId: $tenantId
+      query: $query
+      limit: $limit
+    ) {
+      threadId
+      tenantId
+      title
+      number
+      requesterUserId
+      requesterName
+      spaceId
+      spaceName
+      messageCount
+      lastMessageAt
+      lastIngestRun {
+        id
+        threadId
+        status
+        entityCount
+        relationshipCount
+        evidenceCount
+        diagnosticCount
+        messageCount
+        metrics
+        durationMs
+        error
+        createdAt
+        startedAt
+        finishedAt
+      }
+    }
+  }
+`);
+
+export const SettingsKnowledgeGraphIngestRunsQuery = graphql(`
+  query SettingsKnowledgeGraphIngestRuns(
+    $tenantId: ID!
+    $threadId: ID
+    $limit: Int
+  ) {
+    knowledgeGraphIngestRuns(
+      tenantId: $tenantId
+      threadId: $threadId
+      limit: $limit
+    ) {
+      id
+      threadId
+      status
+      trigger
+      cogneeDatasetName
+      cogneeDatasetId
+      entityCount
+      relationshipCount
+      evidenceCount
+      diagnosticCount
+      messageCount
+      metrics
+      durationMs
+      error
+      createdAt
+      updatedAt
+      startedAt
+      finishedAt
+    }
+  }
+`);
+
+export const SettingsKnowledgeGraphEntitiesQuery = graphql(`
+  query SettingsKnowledgeGraphEntities(
+    $tenantId: ID!
+    $threadId: ID
+    $runId: ID
+    $search: String
+    $ontologyType: String
+    $groundingStatus: KnowledgeGraphGroundingStatus
+    $provenanceStatus: KnowledgeGraphProvenanceStatus
+    $limit: Int
+  ) {
+    knowledgeGraphEntities(
+      tenantId: $tenantId
+      threadId: $threadId
+      runId: $runId
+      search: $search
+      ontologyType: $ontologyType
+      groundingStatus: $groundingStatus
+      provenanceStatus: $provenanceStatus
+      limit: $limit
+    ) {
+      id
+      label
+      normalizedLabel
+      typeLabel
+      ontologyTypeSlug
+      groundingStatus
+      provenanceStatus
+      summary
+      aliases
+      relationshipCount
+      evidenceCount
+      lastSeenAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsKnowledgeGraphEntityQuery = graphql(`
+  query SettingsKnowledgeGraphEntity($tenantId: ID!, $entityId: ID!) {
+    knowledgeGraphEntity(tenantId: $tenantId, entityId: $entityId) {
+      id
+      label
+      normalizedLabel
+      typeLabel
+      ontologyTypeSlug
+      groundingStatus
+      provenanceStatus
+      summary
+      aliases
+      properties
+      diagnostics
+      relationshipCount
+      evidenceCount
+      lastSeenAt
+      relationships {
+        id
+        sourceEntityId
+        targetEntityId
+        label
+        ontologyTypeSlug
+        groundingStatus
+        provenanceStatus
+        confidence
+        evidenceCount
+        lastSeenAt
+        evidence {
+          id
+          snippet
+          messageId
+          messageRole
+          messageCreatedAt
+          speakerLabel
+        }
+      }
+      evidence {
+        id
+        snippet
+        messageId
+        messageRole
+        messageCreatedAt
+        speakerLabel
+      }
+    }
+  }
+`);
+
+export const SettingsStartKnowledgeGraphThreadIngestMutation = graphql(`
+  mutation SettingsStartKnowledgeGraphThreadIngest(
+    $input: StartKnowledgeGraphThreadIngestInput!
+  ) {
+    startKnowledgeGraphThreadIngest(input: $input) {
+      id
+      status
+      threadId
+      entityCount
+      relationshipCount
+      evidenceCount
+      diagnosticCount
+      messageCount
+      metrics
+      durationMs
+      error
+      createdAt
+      startedAt
+      finishedAt
     }
   }
 `);
@@ -288,6 +589,52 @@ export const SettingsUpdateUserProfileMutation = graphql(`
   }
 `);
 
+export const SettingsUserBudgetStatusQuery = graphql(`
+  query SettingsUserBudgetStatus($tenantId: ID!, $userId: ID!) {
+    userBudgetStatus(tenantId: $tenantId, userId: $userId) {
+      policy {
+        id
+        tenantId
+        userId
+        scope
+        period
+        limitUsd
+        actionOnExceed
+        enabled
+      }
+      spentUsd
+      remainingUsd
+      percentUsed
+      status
+    }
+  }
+`);
+
+export const SettingsUpsertBudgetPolicyMutation = graphql(`
+  mutation SettingsUpsertBudgetPolicy(
+    $tenantId: ID!
+    $input: UpsertBudgetPolicyInput!
+  ) {
+    upsertBudgetPolicy(tenantId: $tenantId, input: $input) {
+      id
+      tenantId
+      userId
+      scope
+      period
+      limitUsd
+      actionOnExceed
+      enabled
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsDeleteBudgetPolicyMutation = graphql(`
+  mutation SettingsDeleteBudgetPolicy($id: ID!) {
+    deleteBudgetPolicy(id: $id)
+  }
+`);
+
 export const SettingsUpdateTenantMemberMutation = graphql(`
   mutation SettingsUpdateTenantMember(
     $id: ID!
@@ -336,13 +683,36 @@ export const SettingsCostSummaryQuery = graphql(`
   }
 `);
 
-export const SettingsCostByAgentQuery = graphql(`
-  query SettingsCostByAgent($tenantId: ID!) {
-    costByAgent(tenantId: $tenantId) {
-      agentId
-      agentName
+export const SettingsCostByUserQuery = graphql(`
+  query SettingsCostByUser($tenantId: ID!) {
+    costByUser(tenantId: $tenantId) {
+      userId
+      userName
+      userEmail
       totalUsd
       eventCount
+      isSystem
+    }
+  }
+`);
+
+export const SettingsBudgetStatusQuery = graphql(`
+  query SettingsBudgetStatus($tenantId: ID!) {
+    budgetStatus(tenantId: $tenantId) {
+      policy {
+        id
+        tenantId
+        userId
+        scope
+        period
+        limitUsd
+        actionOnExceed
+        enabled
+      }
+      spentUsd
+      remainingUsd
+      percentUsed
+      status
     }
   }
 `);
@@ -398,6 +768,67 @@ export const SettingsWebhooksQuery = graphql(`
       invocationCount
       lastInvokedAt
       createdAt
+    }
+  }
+`);
+
+export const SettingsWebhookQuery = graphql(`
+  query SettingsWebhook($id: ID!) {
+    webhook(id: $id) {
+      id
+      name
+      description
+      token
+      targetType
+      prompt
+      enabled
+      rateLimit
+      invocationCount
+      lastInvokedAt
+      createdAt
+    }
+  }
+`);
+
+export const SettingsWebhookDeliveriesQuery = graphql(`
+  query SettingsWebhookDeliveries($webhookId: ID!, $limit: Int) {
+    webhookDeliveries(webhookId: $webhookId, limit: $limit) {
+      id
+      receivedAt
+      providerName
+      normalizedKind
+      signatureStatus
+      resolutionStatus
+      statusCode
+      threadCreated
+    }
+  }
+`);
+
+export const SettingsUpdateWebhookMutation = graphql(`
+  mutation SettingsUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {
+    updateWebhook(id: $id, input: $input) {
+      id
+      name
+      description
+      prompt
+      enabled
+      rateLimit
+    }
+  }
+`);
+
+export const SettingsDeleteWebhookMutation = graphql(`
+  mutation SettingsDeleteWebhook($id: ID!) {
+    deleteWebhook(id: $id)
+  }
+`);
+
+export const SettingsRegenerateWebhookTokenMutation = graphql(`
+  mutation SettingsRegenerateWebhookToken($id: ID!) {
+    regenerateWebhookToken(id: $id) {
+      id
+      token
     }
   }
 `);

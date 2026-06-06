@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Extracted pure functions from cost-recording.ts for unit testing.
@@ -261,5 +261,102 @@ describe("LLM cost calculation", () => {
   it("returns zero cost for zero tokens", () => {
     const llmCost = (0 * 3.0 + 0 * 15.0) / 1_000_000;
     expect(llmCost).toBe(0);
+  });
+});
+
+describe("recordCostEvents user attribution", () => {
+  async function importCostRecorder(selectRows: unknown[][]) {
+    vi.resetModules();
+    const insertedValues: unknown[] = [];
+
+    vi.doMock("@thinkwork/database-pg", () => ({
+      getDb: () => ({
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              limit: () => Promise.resolve(selectRows.shift() ?? []),
+            }),
+          }),
+        }),
+        insert: () => ({
+          values: (value: unknown) => {
+            insertedValues.push(value);
+            return {
+              onConflictDoNothing: () => Promise.resolve(),
+            };
+          },
+        }),
+        update: () => ({
+          set: () => ({
+            where: () => Promise.resolve(),
+          }),
+        }),
+      }),
+    }));
+
+    const { recordCostEvents } = await import("../lib/cost-recording");
+    return { recordCostEvents, insertedValues };
+  }
+
+  it("writes user_id on every emitted cost row when userId is supplied", async () => {
+    const { recordCostEvents, insertedValues } = await importCostRecorder([
+      [{ id: "user-1" }],
+      [],
+    ]);
+
+    await recordCostEvents({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      userId: "user-1",
+      requestId: "request-1",
+      model: "claude-sonnet-4-5",
+      inputTokens: 10_000,
+      outputTokens: 2_000,
+      cachedReadTokens: 0,
+      durationMs: 1000,
+      threadId: "thread-1",
+      traceId: "trace-1",
+    });
+
+    expect(insertedValues).toHaveLength(1);
+    const rows = insertedValues[0] as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(2);
+    expect(rows).toEqual([
+      expect.objectContaining({
+        event_type: "llm",
+        user_id: "user-1",
+      }),
+      expect.objectContaining({
+        event_type: "agentcore_compute",
+        user_id: "user-1",
+      }),
+    ]);
+  });
+
+  it("leaves user_id unset when the supplied user is not tenant-owned", async () => {
+    const { recordCostEvents, insertedValues } = await importCostRecorder([
+      [],
+      [],
+    ]);
+
+    await recordCostEvents({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      userId: "cross-tenant-user",
+      requestId: "request-2",
+      model: "claude-sonnet-4-5",
+      inputTokens: 10_000,
+      outputTokens: 2_000,
+      cachedReadTokens: 0,
+      durationMs: 1000,
+    });
+
+    const rows = insertedValues[0] as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(2);
+    expect(rows).toEqual([
+      expect.not.objectContaining({ user_id: "cross-tenant-user" }),
+      expect.not.objectContaining({ user_id: "cross-tenant-user" }),
+    ]);
+    expect(rows.every((row) => row.user_id === undefined)).toBe(true);
   });
 });

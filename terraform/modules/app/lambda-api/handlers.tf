@@ -15,6 +15,12 @@ locals {
     # status in one compact value; stable names are derived in the resolver.
     COGNEE = "${var.cognee_backend_mode}|${var.cognee_endpoint}"
   } : {}
+  twenty_env = var.twenty_provisioned ? {
+    # Keep Twenty managed-app status compact for graphql-http. The resolver
+    # derives stable ECS service/log identifiers from stage + account instead
+    # of carrying long ARNs in Lambda env vars.
+    TWENTY = "${var.twenty_provisioned ? "1" : "0"}|${var.twenty_runtime_enabled ? "1" : "0"}|${var.twenty_url}"
+  } : {}
 
   # Common environment variables shared by all API handlers
   common_env = merge({
@@ -155,6 +161,11 @@ locals {
       KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
       DATABASE_CLUSTER_ARN = var.db_cluster_arn
     }
+    "knowledge-graph-thread-ingest" = {
+      COGNEE_ENDPOINT     = var.cognee_endpoint
+      COGNEE_BACKEND_MODE = var.cognee_backend_mode
+      COGNEE_INGEST_MODE  = "remember"
+    }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
     # provisioned by the agentcore-code-interpreter module and exposed via
@@ -169,7 +180,7 @@ locals {
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
     # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B
     # U8) which invokes routine-resume via the AWS SDK.
-    "graphql-http" = {
+    "graphql-http" = merge({
       ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
       ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
       AWS_ACCOUNT_ID              = var.account_id
@@ -201,7 +212,7 @@ locals {
       # + AWS_ACCOUNT_ID, which the Lambda already has. The runner
       # Lambda (separate function below) keeps an explicit
       # COMPLIANCE_EXPORTS_QUEUE_URL because its env is small.
-    }
+    }, local.twenty_env)
     # U2 eval fan-out substrate. eval-runner does not dispatch to this
     # queue until U3; eval-worker is a throwing inert stub that redrives
     # accidental traffic to the DLQ.
@@ -341,6 +352,7 @@ resource "aws_lambda_function" "handler" {
     "memory",
     "memory-retain",
     "wiki-compile",
+    "knowledge-graph-thread-ingest",
     "ontology-scan",
     "ontology-reprocess",
     "wiki-lint",
@@ -499,8 +511,8 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-thread-ingest" ? 300 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-thread-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -520,6 +532,15 @@ resource "aws_lambda_function" "handler" {
       { FUNCTION_NAME = each.key },
       lookup(local.handler_extra_env, each.key, {}),
     )
+  }
+
+  dynamic "vpc_config" {
+    for_each = each.key == "knowledge-graph-thread-ingest" && length(var.cognee_worker_subnet_ids) > 0 && length(var.cognee_worker_security_group_ids) > 0 ? [1] : []
+
+    content {
+      subnet_ids         = var.cognee_worker_subnet_ids
+      security_group_ids = var.cognee_worker_security_group_ids
+    }
   }
 
   tags = {

@@ -16,6 +16,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agentSkills,
+  budgetPolicies,
+  costEvents,
   evalRuns,
   routineExecutions,
   routines,
@@ -27,7 +29,7 @@ import {
   threadTurns,
   users,
 } from "@thinkwork/database-pg/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 
 const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
@@ -74,6 +76,90 @@ type ThreadIdleMemoryLearningWorkerResult = {
   budget?: unknown;
   metadata?: unknown;
 };
+
+function startOfMonth(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+function resolveScheduledJobOwner(row: {
+  created_by_type?: string | null;
+  created_by_id?: string | null;
+  config?: unknown;
+}): string | null {
+  const config =
+    row.config && typeof row.config === "object"
+      ? (row.config as Record<string, unknown>)
+      : {};
+  const invokerUserId = config.invokerUserId;
+  if (typeof invokerUserId === "string" && invokerUserId.trim()) {
+    return invokerUserId;
+  }
+  if (row.created_by_type === "user" && row.created_by_id) {
+    return row.created_by_id;
+  }
+  return null;
+}
+
+async function pauseJobIfUserBudgetExceeded(args: {
+  db: ReturnType<typeof getDb>;
+  tenantId: string;
+  triggerId: string;
+  userId: string | null;
+}): Promise<boolean> {
+  if (!args.userId) return false;
+
+  const [user] = await args.db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.id, args.userId), eq(users.tenant_id, args.tenantId)))
+    .limit(1);
+  if (!user) return false;
+
+  const [policy] = await args.db
+    .select()
+    .from(budgetPolicies)
+    .where(
+      and(
+        eq(budgetPolicies.tenant_id, args.tenantId),
+        eq(budgetPolicies.scope, "user"),
+        eq(budgetPolicies.user_id, args.userId),
+        eq(budgetPolicies.enabled, true),
+      ),
+    )
+    .limit(1);
+  if (!policy) return false;
+
+  const [spend] = await args.db
+    .select({ total: sql<number>`COALESCE(SUM(amount_usd), 0)::float` })
+    .from(costEvents)
+    .where(
+      and(
+        eq(costEvents.tenant_id, args.tenantId),
+        eq(costEvents.user_id, args.userId),
+        gte(costEvents.created_at, startOfMonth()),
+      ),
+    );
+  const spentUsd = Number(spend?.total ?? 0);
+  const limitUsd = Number(policy.limit_usd);
+  if (limitUsd <= 0 || spentUsd < limitUsd) return false;
+
+  const now = new Date();
+  const reason = `User budget exceeded: $${spentUsd.toFixed(2)} >= $${limitUsd.toFixed(2)}`;
+  await args.db
+    .update(scheduledJobs)
+    .set({
+      budget_paused: true,
+      budget_paused_at: now,
+      budget_paused_reason: reason,
+      updated_at: now,
+    })
+    .where(eq(scheduledJobs.id, args.triggerId));
+  console.log(
+    `[job-trigger] user budget paused job ${args.triggerId}: ${reason}`,
+  );
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // skill_run branch helpers (Unit 6)
@@ -351,6 +437,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         name: scheduledJobs.name,
         space_id: scheduledJobs.space_id,
         config: scheduledJobs.config,
+        budget_paused: scheduledJobs.budget_paused,
         created_by_type: scheduledJobs.created_by_type,
         created_by_id: scheduledJobs.created_by_id,
       })
@@ -360,6 +447,23 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       console.log(
         `[job-trigger] Job ${triggerId} is disabled, skipping execution`,
       );
+      return;
+    }
+    if (job?.budget_paused) {
+      console.log(
+        `[job-trigger] Job ${triggerId} is budget-paused, skipping execution`,
+      );
+      return;
+    }
+    const ownerUserId = job ? resolveScheduledJobOwner(job) : null;
+    if (
+      await pauseJobIfUserBudgetExceeded({
+        db,
+        tenantId,
+        triggerId,
+        userId: ownerUserId,
+      })
+    ) {
       return;
     }
     const jobSpaceId = job?.space_id ?? event.spaceId ?? null;

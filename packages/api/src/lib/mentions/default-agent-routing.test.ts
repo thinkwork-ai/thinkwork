@@ -72,6 +72,7 @@ describe("default agent routing", () => {
           },
         },
         async () => [],
+        async () => [],
       ),
     ).resolves.toEqual({
       agentId: "agent-1",
@@ -123,6 +124,7 @@ describe("default agent routing", () => {
         },
       },
       async () => [attachment],
+      async () => [],
     );
 
     expect(invoked).toEqual([
@@ -133,6 +135,41 @@ describe("default agent routing", () => {
         messageId: "message-1",
         userMessage: "What can you tell me about the Budget attached?",
         messageAttachments: [attachment],
+      },
+    ]);
+  });
+
+  it("forwards resolved pinned skills to the direct chat invoke", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const invoked: unknown[] = [];
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "/crm-dashboard pull up the account",
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input);
+          return true;
+        },
+      },
+      async () => [],
+      async () => ["crm-dashboard", "invoice-parser"],
+    );
+
+    expect(invoked).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        messageId: "message-1",
+        userMessage: "/crm-dashboard pull up the account",
+        pinnedSkills: ["crm-dashboard", "invoice-parser"],
       },
     ]);
   });
@@ -154,6 +191,7 @@ describe("default agent routing", () => {
             return false;
           },
         },
+        async () => [],
         async () => [],
       ),
     ).resolves.toEqual({

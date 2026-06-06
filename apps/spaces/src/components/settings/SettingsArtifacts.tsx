@@ -1,5 +1,6 @@
 import { ArtifactsListBody } from "@/components/artifacts/ArtifactsListBody";
 import { SetAppStyleButton } from "@/components/artifacts/SetAppStyleDialog";
+import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 
 /**
@@ -19,7 +20,15 @@ export function SettingsArtifacts() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ArtifactsListBody detailPathFor={(id) => `/settings/artifacts/${id}`} />
+      <ArtifactsListBody
+        detailPathFor={(id) => `/settings/artifacts/${id}`}
+        headerSlot={
+          <SettingsPageTitle
+            title="Artifacts"
+            description="Browse and manage the apps and artifacts generated in this Space."
+          />
+        }
+      />
     </div>
   );
 }

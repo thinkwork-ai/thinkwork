@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
     notifyNewMessage: vi.fn(),
     insertAssistantMessage: vi.fn(),
     markComputerTaskFailedFromFinalize: vi.fn(),
+    checkUserBudgetAndPauseWork: vi.fn(),
   };
 });
 
@@ -58,6 +59,8 @@ vi.mock("@aws-sdk/client-lambda", () => ({
 vi.mock("../lib/resolve-agent-runtime-config.js", () => ({
   AgentNotFoundError: mocks.FakeAgentNotFoundError,
   resolveAgentRuntimeConfig: mocks.resolveAgentRuntimeConfig,
+  tenantCatalogSkillS3Key: (tenantSlug: string, skillId: string) =>
+    `tenants/${tenantSlug}/skill-catalog/${skillId}`,
 }));
 
 vi.mock("../lib/sandbox-preflight.js", () => ({
@@ -71,6 +74,10 @@ vi.mock("../lib/chat-finalize/notify.js", () => ({
   markComputerTaskFailedFromFinalize: mocks.markComputerTaskFailedFromFinalize,
   notifyNewMessage: mocks.notifyNewMessage,
   notifyThreadTurnUpdate: mocks.notifyThreadTurnUpdate,
+}));
+
+vi.mock("../lib/user-budget-enforcement.js", () => ({
+  checkUserBudgetAndPauseWork: mocks.checkUserBudgetAndPauseWork,
 }));
 
 function queryRows() {
@@ -112,6 +119,17 @@ beforeEach(() => {
   mocks.insertValues = [];
   mocks.updateValues = [];
   mocks.lambdaSend.mockResolvedValue({});
+  mocks.checkUserBudgetAndPauseWork.mockResolvedValue({
+    overBudget: false,
+    pauseReason: null,
+    status: {
+      hasPolicy: false,
+      overBudget: false,
+      limitUsd: null,
+      spentUsd: 0,
+      remainingUsd: null,
+    },
+  });
   mocks.resolveAgentRuntimeConfig.mockResolvedValue({
     tenantId: "tenant-1",
     agentId: "agent-1",
@@ -193,7 +211,62 @@ describe("chat-agent-invoke runtime routing", () => {
       finalize_callback_url:
         "https://api.example.com/api/threads/thread-1/finalize",
       finalize_callback_secret: "test-secret",
+      cost_owner_user_id: "user-1",
     });
+  });
+
+  it("blocks dispatch when the initiating user is already over budget", async () => {
+    mocks.checkUserBudgetAndPauseWork.mockResolvedValueOnce({
+      overBudget: true,
+      pauseReason: "User budget exceeded: $12.50 >= $10.00",
+      status: {
+        hasPolicy: true,
+        overBudget: true,
+        limitUsd: 10,
+        spentUsd: 12.5,
+        remainingUsd: 0,
+      },
+    });
+    mocks.insertAssistantMessage.mockResolvedValueOnce({
+      id: "message-budget-1",
+    });
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    const result = await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "run something expensive",
+      messageId: "message-1",
+    });
+
+    expect(result).toEqual({ ok: false, threadTurnId: "turn-pi-1" });
+    expect(mocks.checkUserBudgetAndPauseWork).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      userId: "user-1",
+    });
+    expect(mocks.lambdaSend).not.toHaveBeenCalled();
+    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "tenant-1",
+      "agent-1",
+      "User budget exceeded: $12.50 >= $10.00",
+    );
+    expect(mocks.notifyNewMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: "message-budget-1",
+        content: "User budget exceeded: $12.50 >= $10.00",
+      }),
+    );
+    expect(mocks.updateValues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "failed",
+          error: "User budget exceeded: $12.50 >= $10.00",
+          error_code: "agentcore_setup_failed",
+        }),
+      ]),
+    );
   });
 
   it("passes active Space context even when workspace rendering is skipped", async () => {

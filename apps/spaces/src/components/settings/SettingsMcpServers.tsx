@@ -142,6 +142,7 @@ export function SettingsMcpServers() {
   return (
     <SettingsTablePane
       title="MCP Servers"
+      description="Connect MCP tool servers and manage the tools they expose to agents."
       loading={!servers && !error}
       toolbar={
         error ? (

@@ -248,6 +248,78 @@ variable "cognee_service_name" {
   default     = ""
 }
 
+variable "cognee_worker_subnet_ids" {
+  description = "Subnet IDs for the Knowledge Graph ingest worker Lambda VPC attachment. Leave empty to deploy the worker without VPC access."
+  type        = list(string)
+  default     = []
+}
+
+variable "cognee_worker_security_group_ids" {
+  description = "Security group IDs for the Knowledge Graph ingest worker Lambda VPC attachment. Leave empty to deploy the worker without VPC access."
+  type        = list(string)
+  default     = []
+}
+
+variable "twenty_provisioned" {
+  description = "Whether the Twenty CRM retained managed-app substrate is provisioned."
+  type        = bool
+  default     = false
+}
+
+variable "twenty_runtime_enabled" {
+  description = "Whether the Twenty CRM server/worker runtime is enabled."
+  type        = bool
+  default     = false
+}
+
+variable "twenty_url" {
+  description = "Public Twenty CRM URL (empty when not provisioned)."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_alb_arn" {
+  description = "Public Twenty ALB ARN (empty when not provisioned)."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_target_group_arn" {
+  description = "Twenty server target group ARN (empty when not provisioned)."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_cluster_arn" {
+  description = "ECS cluster ARN for Twenty (empty when not provisioned)."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_server_service_name" {
+  description = "ECS service name for the Twenty server (empty when not provisioned)."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_worker_service_name" {
+  description = "ECS service name for the Twenty worker (empty when not provisioned)."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_server_log_group_name" {
+  description = "CloudWatch log group for the Twenty server (empty when not provisioned)."
+  type        = string
+  default     = ""
+}
+
+variable "twenty_worker_log_group_name" {
+  description = "CloudWatch log group for the Twenty worker (empty when not provisioned)."
+  type        = string
+  default     = ""
+}
+
 variable "agentcore_pi_function_name" {
   description = "Pi AgentCore Lambda function name (for direct SDK invoke); empty until the Pi runtime is provisioned for the stage."
   type        = string

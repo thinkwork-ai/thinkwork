@@ -11,13 +11,17 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Switch,
   Textarea,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
+  SettingsDeleteBudgetPolicyMutation,
+  SettingsUserBudgetStatusQuery,
   SettingsTenantMembersQuery,
+  SettingsUpsertBudgetPolicyMutation,
   SettingsUpdateTenantMemberMutation,
   SettingsUpdateUserMutation,
   SettingsUpdateUserProfileMutation,
@@ -25,6 +29,7 @@ import {
 import {
   SettingsPageTitle,
   SettingsPane,
+  SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 
@@ -101,6 +106,7 @@ export function SettingsUserDetail() {
         profile={user.profile ?? null}
         memberId={member.id}
         currentRole={member.role}
+        tenantId={tenantId ?? ""}
         isSelf={isSelf}
         callerIsOwner={callerIsOwner}
         onSaved={() => refetch({ requestPolicy: "network-only" })}
@@ -127,6 +133,7 @@ function ProfileSection({
   profile,
   memberId,
   currentRole,
+  tenantId,
   isSelf,
   callerIsOwner,
   onSaved,
@@ -136,6 +143,7 @@ function ProfileSection({
   profile: Profile;
   memberId: string;
   currentRole: string;
+  tenantId: string;
   isSelf: boolean;
   callerIsOwner: boolean;
   onSaved: () => void;
@@ -146,13 +154,29 @@ function ProfileSection({
     timezone: profile?.timezone ?? "",
     notes: profile?.notes ?? "",
   });
+  const [budgetForm, setBudgetForm] = useState({
+    unlimited: true,
+    amount: "",
+  });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [budgetResult, refetchBudget] = useQuery({
+    query: SettingsUserBudgetStatusQuery,
+    variables: { tenantId, userId },
+    pause: !tenantId || !userId,
+  });
+  const budgetStatus = budgetResult.data?.userBudgetStatus ?? null;
   const [{ fetching: savingUser }, updateUser] = useMutation(
     SettingsUpdateUserMutation,
   );
   const [{ fetching: savingProfile }, updateProfile] = useMutation(
     SettingsUpdateUserProfileMutation,
+  );
+  const [{ fetching: savingBudget }, upsertBudget] = useMutation(
+    SettingsUpsertBudgetPolicyMutation,
+  );
+  const [{ fetching: deletingBudget }, deleteBudget] = useMutation(
+    SettingsDeleteBudgetPolicyMutation,
   );
 
   // Role change auto-saves on its own mutation state, independent of the
@@ -183,14 +207,35 @@ function ProfileSection({
     });
   }, [name, profile]);
 
+  useEffect(() => {
+    setBudgetForm({
+      unlimited: !budgetStatus,
+      amount: budgetStatus ? String(budgetStatus.policy.limitUsd) : "",
+    });
+  }, [budgetStatus]);
+
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
-  const saving = savingUser || savingProfile;
+  const saving = savingUser || savingProfile || savingBudget || deletingBudget;
+
+  function parseBudgetLimit(): number | null {
+    const trimmed = budgetForm.amount.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  }
 
   async function onSave() {
     setErrorMsg(null);
     setSaved(false);
-    const [u, p] = await Promise.all([
+    const budgetLimit = budgetForm.unlimited ? null : parseBudgetLimit();
+    if (!budgetForm.unlimited && budgetLimit == null) {
+      setErrorMsg("Budget must be a positive number.");
+      return;
+    }
+
+    const mutations: Array<Promise<{ error?: { message?: string } }>> = [
       updateUser({ id: userId, input: { name: form.name } }),
       updateProfile({
         userId,
@@ -200,103 +245,163 @@ function ProfileSection({
           notes: form.notes,
         },
       }),
-    ]);
-    if (u.error || p.error) {
-      setErrorMsg(u.error?.message ?? p.error?.message ?? "Save failed");
+    ];
+    if (budgetForm.unlimited) {
+      const policyId = budgetStatus?.policy.id;
+      if (policyId) mutations.push(deleteBudget({ id: policyId }));
+    } else {
+      const limitUsd = budgetLimit;
+      if (limitUsd == null) return;
+      mutations.push(
+        upsertBudget({
+          tenantId,
+          input: {
+            scope: "user",
+            userId,
+            agentId: null,
+            limitUsd,
+            period: "monthly",
+            actionOnExceed: "PAUSE",
+          },
+        }),
+      );
+    }
+
+    const results = await Promise.all(mutations);
+    const failed = results.find((r) => r.error);
+    if (failed?.error) {
+      setErrorMsg(failed.error.message ?? "Save failed");
       return;
     }
+
     setSaved(true);
+    refetchBudget({ requestPolicy: "network-only" });
     onSaved();
   }
 
   return (
     <SettingsSection label="Profile">
-      <div className="space-y-4 p-4">
-        <Labeled label="User ID">
+      <SettingsRow
+        label="User ID"
+        description="Unique identifier for this member."
+      >
+        <div className="w-72">
           <CopyableId value={userId} />
-        </Labeled>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Labeled label="Name">
-            <Input
-              value={form.name}
-              onChange={(e) => set("name")(e.target.value)}
-            />
-          </Labeled>
-          <Labeled label="Role">
-            <div className="flex items-center gap-3">
-              <Select
-                value={currentRole}
-                onValueChange={onRoleChange}
-                disabled={isSelf || roleState.fetching}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {roleState.fetching ? (
-                <span className="text-sm text-muted-foreground">Saving…</span>
-              ) : roleErrorMsg ? (
-                <span className="text-sm text-destructive">{roleErrorMsg}</span>
-              ) : null}
-            </div>
-          </Labeled>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Labeled label="Title">
-            <Input
-              value={form.title}
-              onChange={(e) => set("title")(e.target.value)}
-            />
-          </Labeled>
-          <Labeled label="Timezone">
-            <Input
-              value={form.timezone}
-              onChange={(e) => set("timezone")(e.target.value)}
-            />
-          </Labeled>
-        </div>
-        <Labeled label="Notes">
-          <Textarea
-            rows={3}
-            value={form.notes}
-            onChange={(e) => set("notes")(e.target.value)}
+      </SettingsRow>
+      <SettingsRow
+        label="Name"
+        description="Display name shown across the workspace."
+      >
+        <Input
+          className="w-72"
+          value={form.name}
+          onChange={(e) => set("name")(e.target.value)}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="Role"
+        description="Permission level within this tenant."
+      >
+        {roleState.fetching ? (
+          <span className="text-sm text-muted-foreground">Saving…</span>
+        ) : roleErrorMsg ? (
+          <span className="text-sm text-destructive">{roleErrorMsg}</span>
+        ) : null}
+        <Select
+          value={currentRole}
+          onValueChange={onRoleChange}
+          disabled={isSelf || roleState.fetching}
+        >
+          <SelectTrigger className="w-72">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {roleOptions.map((r) => (
+              <SelectItem key={r} value={r}>
+                {r}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </SettingsRow>
+      <SettingsRow
+        label="Monthly budget"
+        description="Monthly spend limit. Off is unlimited."
+      >
+        <div className="flex w-72 items-center gap-3">
+          <Switch
+            checked={!budgetForm.unlimited}
+            onCheckedChange={(checked) =>
+              setBudgetForm((f) => ({
+                unlimited: !checked,
+                amount: checked ? f.amount : "",
+              }))
+            }
+            aria-label="Enable user budget"
           />
-        </Labeled>
-        <div className="flex items-center justify-end gap-3 pt-1">
-          {saved ? (
-            <span className="text-sm text-muted-foreground">Saved</span>
-          ) : null}
-          {errorMsg ? (
-            <span className="text-sm text-destructive">{errorMsg}</span>
-          ) : null}
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="text-sm text-muted-foreground">$</span>
+            <Input
+              value={budgetForm.amount}
+              disabled={budgetForm.unlimited}
+              inputMode="decimal"
+              placeholder={budgetForm.unlimited ? "Unlimited" : "0.00"}
+              aria-invalid={
+                !budgetForm.unlimited && parseBudgetLimit() == null
+                  ? true
+                  : undefined
+              }
+              onChange={(e) =>
+                setBudgetForm((f) => ({ ...f, amount: e.target.value }))
+              }
+            />
+          </div>
         </div>
+      </SettingsRow>
+      <SettingsRow
+        label="Title"
+        description="Job title or role at the company."
+      >
+        <Input
+          className="w-72"
+          value={form.title}
+          onChange={(e) => set("title")(e.target.value)}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="Timezone"
+        description="Used to localize dates and times for this user."
+      >
+        <Input
+          className="w-72"
+          value={form.timezone}
+          onChange={(e) => set("timezone")(e.target.value)}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="Notes"
+        description="Freeform notes about this member, visible to operators."
+      >
+        <Textarea
+          className="w-72"
+          rows={3}
+          value={form.notes}
+          onChange={(e) => set("notes")(e.target.value)}
+        />
+      </SettingsRow>
+      <div className="flex items-center justify-end gap-3 px-4 py-3.5">
+        {saved ? (
+          <span className="text-sm text-muted-foreground">Saved</span>
+        ) : null}
+        {errorMsg ? (
+          <span className="text-sm text-destructive">{errorMsg}</span>
+        ) : null}
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
       </div>
     </SettingsSection>
-  );
-}
-
-function Labeled({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">{label}</label>
-      {children}
-    </div>
   );
 }
 

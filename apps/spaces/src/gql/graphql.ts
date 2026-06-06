@@ -609,6 +609,7 @@ export type BudgetPolicy = {
   scope: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+  userId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type BudgetStatus = {
@@ -783,6 +784,7 @@ export type CostEvent = {
   provider?: Maybe<Scalars["String"]["output"]>;
   requestId: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
+  userId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type CostRecordedEvent = {
@@ -794,6 +796,9 @@ export type CostRecordedEvent = {
   model?: Maybe<Scalars["String"]["output"]>;
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+  userEmail?: Maybe<Scalars["String"]["output"]>;
+  userId?: Maybe<Scalars["ID"]["output"]>;
+  userName?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type CostSummary = {
@@ -1060,10 +1065,21 @@ export type DeploymentStatus = {
   ecrUrl?: Maybe<Scalars["String"]["output"]>;
   hindsightEnabled: Scalars["Boolean"]["output"];
   hindsightEndpoint?: Maybe<Scalars["String"]["output"]>;
+  managedApplications: Array<ManagedApplicationDeployment>;
   managedMemoryEnabled: Scalars["Boolean"]["output"];
   region: Scalars["String"]["output"];
   source: Scalars["String"]["output"];
   stage: Scalars["String"]["output"];
+  twentyAlbArn?: Maybe<Scalars["String"]["output"]>;
+  twentyClusterArn?: Maybe<Scalars["String"]["output"]>;
+  twentyProvisioned: Scalars["Boolean"]["output"];
+  twentyRuntimeEnabled: Scalars["Boolean"]["output"];
+  twentyServerLogGroupName?: Maybe<Scalars["String"]["output"]>;
+  twentyServerServiceName?: Maybe<Scalars["String"]["output"]>;
+  twentyTargetGroupArn?: Maybe<Scalars["String"]["output"]>;
+  twentyUrl?: Maybe<Scalars["String"]["output"]>;
+  twentyWorkerLogGroupName?: Maybe<Scalars["String"]["output"]>;
+  twentyWorkerServiceName?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type DisableSkillInput = {
@@ -1338,6 +1354,109 @@ export type KnowledgeGraphDeploymentChange = {
   workflowUrl: Scalars["String"]["output"];
 };
 
+export type KnowledgeGraphEntity = {
+  __typename?: "KnowledgeGraphEntity";
+  aliases: Array<Scalars["String"]["output"]>;
+  cogneeNodeId: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  diagnostics: Scalars["AWSJSON"]["output"];
+  evidence: Array<KnowledgeGraphEvidence>;
+  evidenceCount: Scalars["Int"]["output"];
+  groundingStatus: KnowledgeGraphGroundingStatus;
+  id: Scalars["ID"]["output"];
+  ingestRunId: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  lastSeenAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  normalizedLabel: Scalars["String"]["output"];
+  ontologyEntityTypeId?: Maybe<Scalars["ID"]["output"]>;
+  ontologyTypeSlug?: Maybe<Scalars["String"]["output"]>;
+  properties: Scalars["AWSJSON"]["output"];
+  provenanceStatus: KnowledgeGraphProvenanceStatus;
+  relationshipCount: Scalars["Int"]["output"];
+  relationships: Array<KnowledgeGraphRelationship>;
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceRef: Scalars["String"]["output"];
+  summary?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  typeLabel?: Maybe<Scalars["String"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type KnowledgeGraphEvidence = {
+  __typename?: "KnowledgeGraphEvidence";
+  charEnd?: Maybe<Scalars["Int"]["output"]>;
+  charStart?: Maybe<Scalars["Int"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  entityId?: Maybe<Scalars["ID"]["output"]>;
+  evidenceSourceKind: KnowledgeGraphEvidenceSourceKind;
+  evidenceSourceRef?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  ingestRunId: Scalars["ID"]["output"];
+  messageCreatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  messageId?: Maybe<Scalars["ID"]["output"]>;
+  messageRole?: Maybe<Scalars["String"]["output"]>;
+  metadata: Scalars["AWSJSON"]["output"];
+  observedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  relationshipId?: Maybe<Scalars["ID"]["output"]>;
+  snippet: Scalars["String"]["output"];
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceRef: Scalars["String"]["output"];
+  speakerLabel?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+};
+
+export enum KnowledgeGraphEvidenceSourceKind {
+  BrainPage = "BRAIN_PAGE",
+  BrainSection = "BRAIN_SECTION",
+  CogneePayload = "COGNEE_PAYLOAD",
+  Normalizer = "NORMALIZER",
+  ThreadMessage = "THREAD_MESSAGE",
+  WikiPage = "WIKI_PAGE",
+  WikiSection = "WIKI_SECTION",
+}
+
+export type KnowledgeGraphGraph = {
+  __typename?: "KnowledgeGraphGraph";
+  edges: Array<KnowledgeGraphGraphEdge>;
+  nodes: Array<KnowledgeGraphGraphNode>;
+};
+
+export type KnowledgeGraphGraphEdge = {
+  __typename?: "KnowledgeGraphGraphEdge";
+  evidenceCount: Scalars["Int"]["output"];
+  groundingStatus: KnowledgeGraphGroundingStatus;
+  id: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  ontologyTypeSlug?: Maybe<Scalars["String"]["output"]>;
+  provenanceStatus: KnowledgeGraphProvenanceStatus;
+  relationshipId: Scalars["ID"]["output"];
+  source: Scalars["ID"]["output"];
+  target: Scalars["ID"]["output"];
+};
+
+export type KnowledgeGraphGraphNode = {
+  __typename?: "KnowledgeGraphGraphNode";
+  entityId: Scalars["ID"]["output"];
+  evidenceCount: Scalars["Int"]["output"];
+  groundingStatus: KnowledgeGraphGroundingStatus;
+  id: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  ontologyTypeSlug?: Maybe<Scalars["String"]["output"]>;
+  provenanceStatus: KnowledgeGraphProvenanceStatus;
+  relationshipCount: Scalars["Int"]["output"];
+  typeLabel?: Maybe<Scalars["String"]["output"]>;
+};
+
+export enum KnowledgeGraphGroundingStatus {
+  Conflict = "CONFLICT",
+  Grounded = "GROUNDED",
+  UnapprovedType = "UNAPPROVED_TYPE",
+  Ungrounded = "UNGROUNDED",
+  Unknown = "UNKNOWN",
+}
+
 export type KnowledgeGraphHealthCheck = {
   __typename?: "KnowledgeGraphHealthCheck";
   checkedAt: Scalars["AWSDateTime"]["output"];
@@ -1346,6 +1465,97 @@ export type KnowledgeGraphHealthCheck = {
   latencyMs: Scalars["Int"]["output"];
   message: Scalars["String"]["output"];
   statusCode?: Maybe<Scalars["Int"]["output"]>;
+};
+
+export type KnowledgeGraphIngestRun = {
+  __typename?: "KnowledgeGraphIngestRun";
+  cogneeDatasetId?: Maybe<Scalars["String"]["output"]>;
+  cogneeDatasetName: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  diagnosticCount: Scalars["Int"]["output"];
+  durationMs?: Maybe<Scalars["Int"]["output"]>;
+  entityCount: Scalars["Int"]["output"];
+  error?: Maybe<Scalars["String"]["output"]>;
+  evidenceCount: Scalars["Int"]["output"];
+  finishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  id: Scalars["ID"]["output"];
+  input: Scalars["AWSJSON"]["output"];
+  messageCount: Scalars["Int"]["output"];
+  metadata: Scalars["AWSJSON"]["output"];
+  metrics: Scalars["AWSJSON"]["output"];
+  relationshipCount: Scalars["Int"]["output"];
+  requestedByUserId?: Maybe<Scalars["ID"]["output"]>;
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceLabel?: Maybe<Scalars["String"]["output"]>;
+  sourceRef: Scalars["String"]["output"];
+  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  status: KnowledgeGraphIngestStatus;
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  trigger: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export enum KnowledgeGraphIngestStatus {
+  Canceled = "CANCELED",
+  Failed = "FAILED",
+  Queued = "QUEUED",
+  Running = "RUNNING",
+  StaleNoop = "STALE_NOOP",
+  Succeeded = "SUCCEEDED",
+}
+
+export enum KnowledgeGraphProvenanceStatus {
+  Missing = "MISSING",
+  Strong = "STRONG",
+  Weak = "WEAK",
+}
+
+export type KnowledgeGraphRelationship = {
+  __typename?: "KnowledgeGraphRelationship";
+  cogneeEdgeId?: Maybe<Scalars["String"]["output"]>;
+  confidence?: Maybe<Scalars["Float"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  diagnostics: Scalars["AWSJSON"]["output"];
+  evidence: Array<KnowledgeGraphEvidence>;
+  evidenceCount: Scalars["Int"]["output"];
+  groundingStatus: KnowledgeGraphGroundingStatus;
+  id: Scalars["ID"]["output"];
+  ingestRunId: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  lastSeenAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  ontologyRelationshipTypeId?: Maybe<Scalars["ID"]["output"]>;
+  ontologyTypeSlug?: Maybe<Scalars["String"]["output"]>;
+  properties: Scalars["AWSJSON"]["output"];
+  provenanceStatus: KnowledgeGraphProvenanceStatus;
+  sourceEntityId: Scalars["ID"]["output"];
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceRef: Scalars["String"]["output"];
+  targetEntityId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export enum KnowledgeGraphSourceKind {
+  Brain = "BRAIN",
+  Thread = "THREAD",
+  Wiki = "WIKI",
+}
+
+export type KnowledgeGraphThreadCandidate = {
+  __typename?: "KnowledgeGraphThreadCandidate";
+  lastIngestRun?: Maybe<KnowledgeGraphIngestRun>;
+  lastMessageAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  messageCount: Scalars["Int"]["output"];
+  number: Scalars["Int"]["output"];
+  requesterName?: Maybe<Scalars["String"]["output"]>;
+  requesterUserId?: Maybe<Scalars["ID"]["output"]>;
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
+  spaceName?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
+  title: Scalars["String"]["output"];
 };
 
 export type LinkedTask = {
@@ -1431,6 +1641,56 @@ export type LinkedThread = {
   number: Scalars["Int"]["output"];
   status: Scalars["String"]["output"];
   title: Scalars["String"]["output"];
+};
+
+export type ManagedApplicationDeployment = {
+  __typename?: "ManagedApplicationDeployment";
+  albArn?: Maybe<Scalars["String"]["output"]>;
+  backendMode?: Maybe<Scalars["String"]["output"]>;
+  clusterArn?: Maybe<Scalars["String"]["output"]>;
+  description: Scalars["String"]["output"];
+  displayName: Scalars["String"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  endpoint?: Maybe<Scalars["String"]["output"]>;
+  key: Scalars["String"]["output"];
+  logGroupName?: Maybe<Scalars["String"]["output"]>;
+  logGroupNames: Array<Scalars["String"]["output"]>;
+  message?: Maybe<Scalars["String"]["output"]>;
+  provisioned: Scalars["Boolean"]["output"];
+  runtimeEnabled: Scalars["Boolean"]["output"];
+  serviceName?: Maybe<Scalars["String"]["output"]>;
+  serviceNames: Array<Scalars["String"]["output"]>;
+  status: Scalars["String"]["output"];
+  targetGroupArn?: Maybe<Scalars["String"]["output"]>;
+  url?: Maybe<Scalars["String"]["output"]>;
+};
+
+export enum ManagedApplicationDeploymentAction {
+  Destroy = "DESTROY",
+  Enable = "ENABLE",
+  Park = "PARK",
+}
+
+export type ManagedApplicationDeploymentChange = {
+  __typename?: "ManagedApplicationDeploymentChange";
+  action: Scalars["String"]["output"];
+  desiredEnabled: Scalars["Boolean"]["output"];
+  key: Scalars["String"]["output"];
+  message: Scalars["String"]["output"];
+  provisioned: Scalars["Boolean"]["output"];
+  runtimeEnabled: Scalars["Boolean"]["output"];
+  workflowUrl: Scalars["String"]["output"];
+};
+
+export type ManagedApplicationHealthCheck = {
+  __typename?: "ManagedApplicationHealthCheck";
+  checkedAt: Scalars["AWSDateTime"]["output"];
+  endpoint?: Maybe<Scalars["String"]["output"]>;
+  healthy: Scalars["Boolean"]["output"];
+  key: Scalars["String"]["output"];
+  latencyMs: Scalars["Int"]["output"];
+  message: Scalars["String"]["output"];
+  statusCode?: Maybe<Scalars["Int"]["output"]>;
 };
 
 /**
@@ -1838,6 +2098,13 @@ export type Mutation = {
   promoteDraftApplet: SaveAppletPayload;
   publishRoutineVersion: RoutineAslVersion;
   rebuildRoutineVersion: RoutineAslVersion;
+  /**
+   * Reconcile the skill_catalog index from the S3 catalog. For one tenant
+   * (`tenantId`, defaults to the caller's tenant; requires tenant admin), or
+   * every tenant (`all: true`, requires platform-operator). `dryRun` reports
+   * the counts it would write without mutating. Returns one result per tenant.
+   */
+  rebuildSkillCatalogIndex: Array<SkillCatalogRebuildResult>;
   refreshGenUI?: Maybe<Message>;
   refreshThreadProgress: RefreshThreadProgressPayload;
   regenerateApplet: SaveAppletPayload;
@@ -1877,6 +2144,7 @@ export type Mutation = {
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
+  setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
   setSpaceEmailTriggers: Space;
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
@@ -1884,6 +2152,8 @@ export type Mutation = {
   setSpaceTools: Space;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startEvalRun: EvalRun;
+  startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
+  startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
   startOntologySuggestionScan: OntologySuggestionScanJob;
   startSkillRun: SkillRun;
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
@@ -1903,6 +2173,7 @@ export type Mutation = {
   uninstallSlackWorkspace: SlackWorkspace;
   unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
+  unpauseUserBudget: Scalars["Int"]["output"];
   unpinThread: Scalars["Boolean"]["output"];
   unregisterPushToken: Scalars["Boolean"]["output"];
   updateArtifact: Artifact;
@@ -2242,6 +2513,9 @@ export type MutationNotifyCostRecordedArgs = {
   eventType: Scalars["String"]["input"];
   model?: InputMaybe<Scalars["String"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+  userEmail?: InputMaybe<Scalars["String"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
+  userName?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type MutationNotifyEvalRunUpdateArgs = {
@@ -2358,6 +2632,12 @@ export type MutationPublishRoutineVersionArgs = {
 
 export type MutationRebuildRoutineVersionArgs = {
   input: RebuildRoutineVersionInput;
+};
+
+export type MutationRebuildSkillCatalogIndexArgs = {
+  all?: InputMaybe<Scalars["Boolean"]["input"]>;
+  dryRun?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationRefreshGenUiArgs = {
@@ -2514,6 +2794,10 @@ export type MutationSetKnowledgeGraphDeploymentArgs = {
   input: SetKnowledgeGraphDeploymentInput;
 };
 
+export type MutationSetManagedApplicationDeploymentArgs = {
+  input: SetManagedApplicationDeploymentInput;
+};
+
 export type MutationSetRoutineTriggerArgs = {
   input: RoutineTriggerInput;
   routineId: Scalars["ID"]["input"];
@@ -2544,6 +2828,14 @@ export type MutationStartCustomerOnboardingArgs = {
 export type MutationStartEvalRunArgs = {
   input: StartEvalRunInput;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationStartKnowledgeGraphIngestArgs = {
+  input: StartKnowledgeGraphIngestInput;
+};
+
+export type MutationStartKnowledgeGraphThreadIngestArgs = {
+  input: StartKnowledgeGraphThreadIngestInput;
 };
 
 export type MutationStartOntologySuggestionScanArgs = {
@@ -2585,6 +2877,11 @@ export type MutationUnlinkSlackIdentityArgs = {
 
 export type MutationUnpauseAgentArgs = {
   agentId: Scalars["ID"]["input"];
+};
+
+export type MutationUnpauseUserBudgetArgs = {
+  tenantId: Scalars["ID"]["input"];
+  userId: Scalars["ID"]["input"];
 };
 
 export type MutationUnpinThreadArgs = {
@@ -3116,6 +3413,7 @@ export type Query = {
   concurrencySnapshot: ConcurrencySnapshot;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
+  costByUser: Array<UserCostSummary>;
   costSummary: CostSummary;
   costTimeSeries: Array<DailyCostPoint>;
   customerOnboardingSpace?: Maybe<Space>;
@@ -3134,7 +3432,13 @@ export type Query = {
   inboxItems: Array<InboxItem>;
   knowledgeBase?: Maybe<KnowledgeBase>;
   knowledgeBases: Array<KnowledgeBase>;
+  knowledgeGraphEntities: Array<KnowledgeGraphEntity>;
+  knowledgeGraphEntity?: Maybe<KnowledgeGraphEntity>;
+  knowledgeGraphGraph: KnowledgeGraphGraph;
   knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
+  knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
+  knowledgeGraphThreadCandidates: Array<KnowledgeGraphThreadCandidate>;
+  managedApplicationHealthCheck: ManagedApplicationHealthCheck;
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
@@ -3209,6 +3513,14 @@ export type Query = {
   tenantEntityPage?: Maybe<TenantEntityPage>;
   tenantMembers: Array<TenantMember>;
   tenantMentionTargets: Array<ThreadMentionTarget>;
+  /**
+   * List the caller-tenant's skill catalog (the derived skill_catalog index) for
+   * composer/skill pickers. When `agentId` is provided, entries are annotated
+   * with `installed` and skills blocked on that agent (agent.blocked_tools) are
+   * omitted — the popup never offers a blocked skill. The authoritative blocklist
+   * guardrail is also enforced server-side at dispatch.
+   */
+  tenantSkillCatalog: Array<SkillCatalogEntry>;
   tenantToolInventory: TenantToolInventory;
   testKnowledgeBaseRetrieval: KnowledgeBaseRetrievalResult;
   thread?: Maybe<Thread>;
@@ -3231,6 +3543,7 @@ export type Query = {
   turnInvocationLogs: Array<ModelInvocation>;
   unreadThreadCount: Scalars["Int"]["output"];
   user?: Maybe<User>;
+  userBudgetStatus?: Maybe<BudgetStatus>;
   userQuickActions: Array<UserQuickAction>;
   webhook?: Maybe<Webhook>;
   /**
@@ -3420,6 +3733,12 @@ export type QueryCostByModelArgs = {
   to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
 };
 
+export type QueryCostByUserArgs = {
+  from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+};
+
 export type QueryCostSummaryArgs = {
   from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
   tenantId: Scalars["ID"]["input"];
@@ -3496,6 +3815,55 @@ export type QueryKnowledgeBaseArgs = {
 
 export type QueryKnowledgeBasesArgs = {
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryKnowledgeGraphEntitiesArgs = {
+  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  ontologyType?: InputMaybe<Scalars["String"]["input"]>;
+  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
+  runId?: InputMaybe<Scalars["ID"]["input"]>;
+  search?: InputMaybe<Scalars["String"]["input"]>;
+  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
+  sourceRef?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryKnowledgeGraphEntityArgs = {
+  entityId: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryKnowledgeGraphGraphArgs = {
+  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
+  ontologyType?: InputMaybe<Scalars["String"]["input"]>;
+  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
+  runId?: InputMaybe<Scalars["ID"]["input"]>;
+  search?: InputMaybe<Scalars["String"]["input"]>;
+  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
+  sourceRef?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryKnowledgeGraphIngestRunsArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
+  sourceRef?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryKnowledgeGraphThreadCandidatesArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  query?: InputMaybe<Scalars["String"]["input"]>;
+  requesterUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryManagedApplicationHealthCheckArgs = {
+  key: Scalars["String"]["input"];
 };
 
 export type QueryMemoryGraphArgs = {
@@ -3736,6 +4104,10 @@ export type QueryTenantMentionTargetsArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type QueryTenantSkillCatalogArgs = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
 export type QueryTenantToolInventoryArgs = {
   tenantId: Scalars["ID"]["input"];
 };
@@ -3861,6 +4233,11 @@ export type QueryUnreadThreadCountArgs = {
 
 export type QueryUserArgs = {
   id: Scalars["ID"]["input"];
+};
+
+export type QueryUserBudgetStatusArgs = {
+  tenantId: Scalars["ID"]["input"];
+  userId: Scalars["ID"]["input"];
 };
 
 export type QueryUserQuickActionsArgs = {
@@ -4339,6 +4716,9 @@ export type SaveAppletStateInput = {
 export type ScheduledJob = {
   __typename?: "ScheduledJob";
   agentId?: Maybe<Scalars["ID"]["output"]>;
+  budgetPaused: Scalars["Boolean"]["output"];
+  budgetPausedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  budgetPausedReason?: Maybe<Scalars["String"]["output"]>;
   config?: Maybe<Scalars["AWSJSON"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   createdById?: Maybe<Scalars["String"]["output"]>;
@@ -4388,6 +4768,12 @@ export type SetKnowledgeGraphDeploymentInput = {
   enabled: Scalars["Boolean"]["input"];
 };
 
+export type SetManagedApplicationDeploymentInput = {
+  action?: InputMaybe<ManagedApplicationDeploymentAction>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  key: Scalars["String"]["input"];
+};
+
 export type SetSpaceKnowledgeBasesInput = {
   knowledgeBases: Array<SpaceKnowledgeBaseInput>;
   spaceId: Scalars["ID"]["input"];
@@ -4407,6 +4793,49 @@ export type SetSpaceToolsInput = {
   mcpServerIds: Array<Scalars["ID"]["input"]>;
   spaceId: Scalars["ID"]["input"];
   tenantId: Scalars["ID"]["input"];
+};
+
+/**
+ * One entry in a tenant's skill catalog, read from the derived skill_catalog
+ * index. Powers pickers like the composer slash-command (force-pin a skill onto
+ * a message). The `installed` flag is annotated relative to the `agentId`
+ * argument; skills blocked on that agent are omitted from results entirely.
+ */
+export type SkillCatalogEntry = {
+  __typename?: "SkillCatalogEntry";
+  category?: Maybe<Scalars["String"]["output"]>;
+  description?: Maybe<Scalars["String"]["output"]>;
+  /** From SKILL.md frontmatter display_name; null → render falls back to slug. */
+  displayName?: Maybe<Scalars["String"]["output"]>;
+  icon?: Maybe<Scalars["String"]["output"]>;
+  /** True when this skill is installed on the agent named by `agentId`. */
+  installed: Scalars["Boolean"]["output"];
+  /** Folder slug under skill-catalog/. Stable identifier used to pin the skill. */
+  slug: Scalars["String"]["output"];
+  tags?: Maybe<Array<Scalars["String"]["output"]>>;
+};
+
+/**
+ * Per-tenant skill catalog index maintenance.
+ *
+ * The skill_catalog table is a derived read cache of the S3 skill catalog,
+ * kept fresh by write-through on catalog put/delete. This mutation reconciles
+ * it from S3 wholesale — used for the launch backfill and operator-invoked
+ * drift recovery. Powers `thinkwork skill catalog rebuild`.
+ */
+export type SkillCatalogRebuildResult = {
+  __typename?: "SkillCatalogRebuildResult";
+  dryRun: Scalars["Boolean"]["output"];
+  /** Stale rows removed (slugs no longer in S3). */
+  rowsDeleted: Scalars["Int"]["output"];
+  /** Skills skipped because their folder had no SKILL.md (partial/mid-upload). */
+  rowsSkipped: Scalars["Int"]["output"];
+  /** Rows inserted or updated (SKILL.md-backed skills). */
+  rowsUpserted: Scalars["Int"]["output"];
+  /** Skills present in the tenant's S3 catalog at rebuild time. */
+  skillsInS3: Scalars["Int"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  tenantSlug: Scalars["String"]["output"];
 };
 
 export type SkillRun = {
@@ -4695,6 +5124,25 @@ export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
   model?: InputMaybe<Scalars["String"]["input"]>;
   testCaseIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
+};
+
+export type StartKnowledgeGraphIngestInput = {
+  force?: InputMaybe<Scalars["Boolean"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  pageIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
+  sourceKind: KnowledgeGraphSourceKind;
+  sourceLabel?: InputMaybe<Scalars["String"]["input"]>;
+  sourceRef?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type StartKnowledgeGraphThreadIngestInput = {
+  force?: InputMaybe<Scalars["Boolean"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId: Scalars["ID"]["input"];
 };
 
 export type StartOntologySuggestionScanInput = {
@@ -5219,6 +5667,8 @@ export type ThreadMentionTarget = {
   aliases: Array<Scalars["String"]["output"]>;
   avatarUrl?: Maybe<Scalars["String"]["output"]>;
   displayName: Scalars["String"]["output"];
+  /** User email — shown as the picker's secondary row. Null for agents. */
+  email?: Maybe<Scalars["String"]["output"]>;
   id: Scalars["ID"]["output"];
   isDefaultAgent: Scalars["Boolean"]["output"];
   role?: Maybe<Scalars["String"]["output"]>;
@@ -5666,6 +6116,7 @@ export type UpsertBudgetPolicyInput = {
   limitUsd: Scalars["Float"]["input"];
   period?: InputMaybe<Scalars["String"]["input"]>;
   scope: Scalars["String"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type User = {
@@ -5679,6 +6130,16 @@ export type User = {
   profile?: Maybe<UserProfile>;
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type UserCostSummary = {
+  __typename?: "UserCostSummary";
+  eventCount: Scalars["Int"]["output"];
+  isSystem: Scalars["Boolean"]["output"];
+  totalUsd: Scalars["Float"]["output"];
+  userEmail?: Maybe<Scalars["String"]["output"]>;
+  userId?: Maybe<Scalars["ID"]["output"]>;
+  userName: Scalars["String"]["output"];
 };
 
 export type UserProfile = {
@@ -6987,6 +7448,37 @@ export type SettingsDeploymentStatusQuery = {
     cogneeBackendMode?: string | null;
     cogneeClusterArn?: string | null;
     cogneeServiceName?: string | null;
+    twentyProvisioned: boolean;
+    twentyRuntimeEnabled: boolean;
+    twentyUrl?: string | null;
+    twentyClusterArn?: string | null;
+    twentyServerServiceName?: string | null;
+    twentyWorkerServiceName?: string | null;
+    twentyServerLogGroupName?: string | null;
+    twentyWorkerLogGroupName?: string | null;
+    twentyAlbArn?: string | null;
+    twentyTargetGroupArn?: string | null;
+    managedApplications: Array<{
+      __typename?: "ManagedApplicationDeployment";
+      key: string;
+      displayName: string;
+      description: string;
+      status: string;
+      enabled: boolean;
+      provisioned: boolean;
+      runtimeEnabled: boolean;
+      url?: string | null;
+      endpoint?: string | null;
+      backendMode?: string | null;
+      logGroupName?: string | null;
+      logGroupNames: Array<string>;
+      clusterArn?: string | null;
+      serviceName?: string | null;
+      serviceNames: Array<string>;
+      albArn?: string | null;
+      targetGroupArn?: string | null;
+      message?: string | null;
+    }>;
   };
 };
 
@@ -6999,6 +7491,25 @@ export type SettingsSetKnowledgeGraphDeploymentMutation = {
   setKnowledgeGraphDeployment: {
     __typename?: "KnowledgeGraphDeploymentChange";
     desiredEnabled: boolean;
+    workflowUrl: string;
+    message: string;
+  };
+};
+
+export type SettingsSetManagedApplicationDeploymentMutationVariables = Exact<{
+  key: Scalars["String"]["input"];
+  action: ManagedApplicationDeploymentAction;
+}>;
+
+export type SettingsSetManagedApplicationDeploymentMutation = {
+  __typename?: "Mutation";
+  setManagedApplicationDeployment: {
+    __typename?: "ManagedApplicationDeploymentChange";
+    key: string;
+    action: string;
+    desiredEnabled: boolean;
+    provisioned: boolean;
+    runtimeEnabled: boolean;
     workflowUrl: string;
     message: string;
   };
@@ -7018,6 +7529,274 @@ export type SettingsKnowledgeGraphHealthCheckQuery = {
     endpoint?: string | null;
     checkedAt: any;
     message: string;
+  };
+};
+
+export type SettingsManagedApplicationHealthCheckQueryVariables = Exact<{
+  key: Scalars["String"]["input"];
+}>;
+
+export type SettingsManagedApplicationHealthCheckQuery = {
+  __typename?: "Query";
+  managedApplicationHealthCheck: {
+    __typename?: "ManagedApplicationHealthCheck";
+    key: string;
+    healthy: boolean;
+    statusCode?: number | null;
+    latencyMs: number;
+    endpoint?: string | null;
+    checkedAt: any;
+    message: string;
+  };
+};
+
+export type SettingsKnowledgeGraphOntologyQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsKnowledgeGraphOntologyQuery = {
+  __typename?: "Query";
+  ontologyDefinitions: {
+    __typename?: "OntologyDefinitions";
+    activeVersion?: {
+      __typename?: "OntologyVersion";
+      id: string;
+      versionNumber: number;
+      status: string;
+      activatedAt?: any | null;
+    } | null;
+    entityTypes: Array<{
+      __typename?: "OntologyEntityType";
+      id: string;
+      slug: string;
+      name: string;
+      description?: string | null;
+      broadType: string;
+      aliases: Array<string>;
+      lifecycleStatus: OntologyLifecycleStatus;
+      externalMappings: Array<{
+        __typename?: "OntologyExternalMapping";
+        id: string;
+        mappingKind: OntologyMappingKind;
+        vocabulary: string;
+        externalUri: string;
+        externalLabel?: string | null;
+      }>;
+    }>;
+    relationshipTypes: Array<{
+      __typename?: "OntologyRelationshipType";
+      id: string;
+      slug: string;
+      name: string;
+      description?: string | null;
+      sourceTypeSlugs: Array<string>;
+      targetTypeSlugs: Array<string>;
+      aliases: Array<string>;
+      lifecycleStatus: OntologyLifecycleStatus;
+      externalMappings: Array<{
+        __typename?: "OntologyExternalMapping";
+        id: string;
+        mappingKind: OntologyMappingKind;
+        vocabulary: string;
+        externalUri: string;
+        externalLabel?: string | null;
+      }>;
+    }>;
+    externalMappings: Array<{
+      __typename?: "OntologyExternalMapping";
+      id: string;
+      subjectKind: string;
+      subjectId: string;
+      mappingKind: OntologyMappingKind;
+      vocabulary: string;
+      externalUri: string;
+      externalLabel?: string | null;
+    }>;
+  };
+};
+
+export type SettingsKnowledgeGraphThreadCandidatesQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  query?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+}>;
+
+export type SettingsKnowledgeGraphThreadCandidatesQuery = {
+  __typename?: "Query";
+  knowledgeGraphThreadCandidates: Array<{
+    __typename?: "KnowledgeGraphThreadCandidate";
+    threadId: string;
+    tenantId: string;
+    title: string;
+    number: number;
+    requesterUserId?: string | null;
+    requesterName?: string | null;
+    spaceId?: string | null;
+    spaceName?: string | null;
+    messageCount: number;
+    lastMessageAt?: any | null;
+    lastIngestRun?: {
+      __typename?: "KnowledgeGraphIngestRun";
+      id: string;
+      threadId?: string | null;
+      status: KnowledgeGraphIngestStatus;
+      entityCount: number;
+      relationshipCount: number;
+      evidenceCount: number;
+      diagnosticCount: number;
+      messageCount: number;
+      metrics: any;
+      durationMs?: number | null;
+      error?: string | null;
+      createdAt: any;
+      startedAt?: any | null;
+      finishedAt?: any | null;
+    } | null;
+  }>;
+};
+
+export type SettingsKnowledgeGraphIngestRunsQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+}>;
+
+export type SettingsKnowledgeGraphIngestRunsQuery = {
+  __typename?: "Query";
+  knowledgeGraphIngestRuns: Array<{
+    __typename?: "KnowledgeGraphIngestRun";
+    id: string;
+    threadId?: string | null;
+    status: KnowledgeGraphIngestStatus;
+    trigger: string;
+    cogneeDatasetName: string;
+    cogneeDatasetId?: string | null;
+    entityCount: number;
+    relationshipCount: number;
+    evidenceCount: number;
+    diagnosticCount: number;
+    messageCount: number;
+    metrics: any;
+    durationMs?: number | null;
+    error?: string | null;
+    createdAt: any;
+    updatedAt: any;
+    startedAt?: any | null;
+    finishedAt?: any | null;
+  }>;
+};
+
+export type SettingsKnowledgeGraphEntitiesQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  runId?: InputMaybe<Scalars["ID"]["input"]>;
+  search?: InputMaybe<Scalars["String"]["input"]>;
+  ontologyType?: InputMaybe<Scalars["String"]["input"]>;
+  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
+  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+}>;
+
+export type SettingsKnowledgeGraphEntitiesQuery = {
+  __typename?: "Query";
+  knowledgeGraphEntities: Array<{
+    __typename?: "KnowledgeGraphEntity";
+    id: string;
+    label: string;
+    normalizedLabel: string;
+    typeLabel?: string | null;
+    ontologyTypeSlug?: string | null;
+    groundingStatus: KnowledgeGraphGroundingStatus;
+    provenanceStatus: KnowledgeGraphProvenanceStatus;
+    summary?: string | null;
+    aliases: Array<string>;
+    relationshipCount: number;
+    evidenceCount: number;
+    lastSeenAt?: any | null;
+    createdAt: any;
+    updatedAt: any;
+  }>;
+};
+
+export type SettingsKnowledgeGraphEntityQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  entityId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsKnowledgeGraphEntityQuery = {
+  __typename?: "Query";
+  knowledgeGraphEntity?: {
+    __typename?: "KnowledgeGraphEntity";
+    id: string;
+    label: string;
+    normalizedLabel: string;
+    typeLabel?: string | null;
+    ontologyTypeSlug?: string | null;
+    groundingStatus: KnowledgeGraphGroundingStatus;
+    provenanceStatus: KnowledgeGraphProvenanceStatus;
+    summary?: string | null;
+    aliases: Array<string>;
+    properties: any;
+    diagnostics: any;
+    relationshipCount: number;
+    evidenceCount: number;
+    lastSeenAt?: any | null;
+    relationships: Array<{
+      __typename?: "KnowledgeGraphRelationship";
+      id: string;
+      sourceEntityId: string;
+      targetEntityId: string;
+      label: string;
+      ontologyTypeSlug?: string | null;
+      groundingStatus: KnowledgeGraphGroundingStatus;
+      provenanceStatus: KnowledgeGraphProvenanceStatus;
+      confidence?: number | null;
+      evidenceCount: number;
+      lastSeenAt?: any | null;
+      evidence: Array<{
+        __typename?: "KnowledgeGraphEvidence";
+        id: string;
+        snippet: string;
+        messageId?: string | null;
+        messageRole?: string | null;
+        messageCreatedAt?: any | null;
+        speakerLabel?: string | null;
+      }>;
+    }>;
+    evidence: Array<{
+      __typename?: "KnowledgeGraphEvidence";
+      id: string;
+      snippet: string;
+      messageId?: string | null;
+      messageRole?: string | null;
+      messageCreatedAt?: any | null;
+      speakerLabel?: string | null;
+    }>;
+  } | null;
+};
+
+export type SettingsStartKnowledgeGraphThreadIngestMutationVariables = Exact<{
+  input: StartKnowledgeGraphThreadIngestInput;
+}>;
+
+export type SettingsStartKnowledgeGraphThreadIngestMutation = {
+  __typename?: "Mutation";
+  startKnowledgeGraphThreadIngest: {
+    __typename?: "KnowledgeGraphIngestRun";
+    id: string;
+    status: KnowledgeGraphIngestStatus;
+    threadId?: string | null;
+    entityCount: number;
+    relationshipCount: number;
+    evidenceCount: number;
+    diagnosticCount: number;
+    messageCount: number;
+    metrics: any;
+    durationMs?: number | null;
+    error?: string | null;
+    createdAt: any;
+    startedAt?: any | null;
+    finishedAt?: any | null;
   };
 };
 
@@ -7278,6 +8057,63 @@ export type SettingsUpdateUserProfileMutation = {
   };
 };
 
+export type SettingsUserBudgetStatusQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  userId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsUserBudgetStatusQuery = {
+  __typename?: "Query";
+  userBudgetStatus?: {
+    __typename?: "BudgetStatus";
+    spentUsd: number;
+    remainingUsd: number;
+    percentUsed: number;
+    status: string;
+    policy: {
+      __typename?: "BudgetPolicy";
+      id: string;
+      tenantId: string;
+      userId?: string | null;
+      scope: string;
+      period: string;
+      limitUsd: number;
+      actionOnExceed: string;
+      enabled: boolean;
+    };
+  } | null;
+};
+
+export type SettingsUpsertBudgetPolicyMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  input: UpsertBudgetPolicyInput;
+}>;
+
+export type SettingsUpsertBudgetPolicyMutation = {
+  __typename?: "Mutation";
+  upsertBudgetPolicy: {
+    __typename?: "BudgetPolicy";
+    id: string;
+    tenantId: string;
+    userId?: string | null;
+    scope: string;
+    period: string;
+    limitUsd: number;
+    actionOnExceed: string;
+    enabled: boolean;
+    updatedAt: any;
+  };
+};
+
+export type SettingsDeleteBudgetPolicyMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SettingsDeleteBudgetPolicyMutation = {
+  __typename?: "Mutation";
+  deleteBudgetPolicy: boolean;
+};
+
 export type SettingsUpdateTenantMemberMutationVariables = Exact<{
   id: Scalars["ID"]["input"];
   input: UpdateTenantMemberInput;
@@ -7336,18 +8172,46 @@ export type SettingsCostSummaryQuery = {
   };
 };
 
-export type SettingsCostByAgentQueryVariables = Exact<{
+export type SettingsCostByUserQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
 }>;
 
-export type SettingsCostByAgentQuery = {
+export type SettingsCostByUserQuery = {
   __typename?: "Query";
-  costByAgent: Array<{
-    __typename?: "AgentCostSummary";
-    agentId?: string | null;
-    agentName: string;
+  costByUser: Array<{
+    __typename?: "UserCostSummary";
+    userId?: string | null;
+    userName: string;
+    userEmail?: string | null;
     totalUsd: number;
     eventCount: number;
+    isSystem: boolean;
+  }>;
+};
+
+export type SettingsBudgetStatusQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsBudgetStatusQuery = {
+  __typename?: "Query";
+  budgetStatus: Array<{
+    __typename?: "BudgetStatus";
+    spentUsd: number;
+    remainingUsd: number;
+    percentUsed: number;
+    status: string;
+    policy: {
+      __typename?: "BudgetPolicy";
+      id: string;
+      tenantId: string;
+      userId?: string | null;
+      scope: string;
+      period: string;
+      limitUsd: number;
+      actionOnExceed: string;
+      enabled: boolean;
+    };
   }>;
 };
 
@@ -7418,6 +8282,104 @@ export type SettingsWebhooksQuery = {
     invocationCount: number;
     lastInvokedAt?: any | null;
     createdAt: any;
+  }>;
+};
+
+export type SettingsWebhookQueryVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SettingsWebhookQuery = {
+  __typename?: "Query";
+  webhook?: {
+    __typename?: "Webhook";
+    id: string;
+    name: string;
+    description?: string | null;
+    token: string;
+    targetType: string;
+    prompt?: string | null;
+    enabled: boolean;
+    rateLimit?: number | null;
+    invocationCount: number;
+    lastInvokedAt?: any | null;
+    createdAt: any;
+  } | null;
+};
+
+export type SettingsWebhookDeliveriesQueryVariables = Exact<{
+  webhookId: Scalars["ID"]["input"];
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+}>;
+
+export type SettingsWebhookDeliveriesQuery = {
+  __typename?: "Query";
+  webhookDeliveries: Array<{
+    __typename?: "WebhookDelivery";
+    id: string;
+    receivedAt: any;
+    providerName?: string | null;
+    normalizedKind?: string | null;
+    signatureStatus: string;
+    resolutionStatus: string;
+    statusCode?: number | null;
+    threadCreated?: boolean | null;
+  }>;
+};
+
+export type SettingsUpdateWebhookMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+  input: UpdateWebhookInput;
+}>;
+
+export type SettingsUpdateWebhookMutation = {
+  __typename?: "Mutation";
+  updateWebhook: {
+    __typename?: "Webhook";
+    id: string;
+    name: string;
+    description?: string | null;
+    prompt?: string | null;
+    enabled: boolean;
+    rateLimit?: number | null;
+  };
+};
+
+export type SettingsDeleteWebhookMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SettingsDeleteWebhookMutation = {
+  __typename?: "Mutation";
+  deleteWebhook: boolean;
+};
+
+export type SettingsRegenerateWebhookTokenMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SettingsRegenerateWebhookTokenMutation = {
+  __typename?: "Mutation";
+  regenerateWebhookToken?: {
+    __typename?: "Webhook";
+    id: string;
+    token: string;
+  } | null;
+};
+
+export type TenantSkillCatalogQueryVariables = Exact<{
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+}>;
+
+export type TenantSkillCatalogQuery = {
+  __typename?: "Query";
+  tenantSkillCatalog: Array<{
+    __typename?: "SkillCatalogEntry";
+    slug: string;
+    displayName?: string | null;
+    description?: string | null;
+    icon?: string | null;
+    installed: boolean;
   }>;
 };
 
@@ -10998,6 +11960,118 @@ export const SettingsDeploymentStatusDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "cogneeServiceName" },
                 },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyProvisioned" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyRuntimeEnabled" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "twentyUrl" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyClusterArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyServerServiceName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyWorkerServiceName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyServerLogGroupName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyWorkerLogGroupName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyAlbArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "twentyTargetGroupArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "managedApplications" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "key" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "displayName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "description" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "provisioned" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "runtimeEnabled" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "url" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "endpoint" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "backendMode" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "logGroupName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "logGroupNames" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "clusterArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "serviceName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "serviceNames" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "albArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "targetGroupArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "message" },
+                      },
+                    ],
+                  },
+                },
               ],
             },
           },
@@ -11077,6 +12151,103 @@ export const SettingsSetKnowledgeGraphDeploymentDocument = {
   SettingsSetKnowledgeGraphDeploymentMutation,
   SettingsSetKnowledgeGraphDeploymentMutationVariables
 >;
+export const SettingsSetManagedApplicationDeploymentDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsSetManagedApplicationDeployment" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "key" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "action" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: {
+                kind: "Name",
+                value: "ManagedApplicationDeploymentAction",
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "setManagedApplicationDeployment" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "ObjectValue",
+                  fields: [
+                    {
+                      kind: "ObjectField",
+                      name: { kind: "Name", value: "key" },
+                      value: {
+                        kind: "Variable",
+                        name: { kind: "Name", value: "key" },
+                      },
+                    },
+                    {
+                      kind: "ObjectField",
+                      name: { kind: "Name", value: "action" },
+                      value: {
+                        kind: "Variable",
+                        name: { kind: "Name", value: "action" },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "key" } },
+                { kind: "Field", name: { kind: "Name", value: "action" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredEnabled" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "provisioned" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "runtimeEnabled" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "workflowUrl" } },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsSetManagedApplicationDeploymentMutation,
+  SettingsSetManagedApplicationDeploymentMutationVariables
+>;
 export const SettingsKnowledgeGraphHealthCheckDocument = {
   kind: "Document",
   definitions: [
@@ -11109,6 +12280,1057 @@ export const SettingsKnowledgeGraphHealthCheckDocument = {
 } as unknown as DocumentNode<
   SettingsKnowledgeGraphHealthCheckQuery,
   SettingsKnowledgeGraphHealthCheckQueryVariables
+>;
+export const SettingsManagedApplicationHealthCheckDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsManagedApplicationHealthCheck" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "key" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "managedApplicationHealthCheck" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "key" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "key" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "key" } },
+                { kind: "Field", name: { kind: "Name", value: "healthy" } },
+                { kind: "Field", name: { kind: "Name", value: "statusCode" } },
+                { kind: "Field", name: { kind: "Name", value: "latencyMs" } },
+                { kind: "Field", name: { kind: "Name", value: "endpoint" } },
+                { kind: "Field", name: { kind: "Name", value: "checkedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsManagedApplicationHealthCheckQuery,
+  SettingsManagedApplicationHealthCheckQueryVariables
+>;
+export const SettingsKnowledgeGraphOntologyDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphOntology" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "ontologyDefinitions" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "activeVersion" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "versionNumber" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "activatedAt" },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "entityTypes" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "description" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "broadType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "aliases" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lifecycleStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "externalMappings" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "mappingKind" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "vocabulary" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "externalUri" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "externalLabel" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationshipTypes" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "description" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sourceTypeSlugs" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "targetTypeSlugs" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "aliases" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lifecycleStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "externalMappings" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "mappingKind" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "vocabulary" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "externalUri" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "externalLabel" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "externalMappings" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "subjectKind" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "subjectId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "mappingKind" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "vocabulary" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "externalUri" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "externalLabel" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphOntologyQuery,
+  SettingsKnowledgeGraphOntologyQueryVariables
+>;
+export const SettingsKnowledgeGraphThreadCandidatesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphThreadCandidates" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "query" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "knowledgeGraphThreadCandidates" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "query" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "query" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "threadId" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "title" } },
+                { kind: "Field", name: { kind: "Name", value: "number" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "requesterUserId" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "requesterName" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "spaceId" } },
+                { kind: "Field", name: { kind: "Name", value: "spaceName" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "messageCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastMessageAt" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastIngestRun" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "threadId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "entityCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "relationshipCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidenceCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "diagnosticCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "messageCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "metrics" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "durationMs" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "error" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "createdAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "startedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "finishedAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphThreadCandidatesQuery,
+  SettingsKnowledgeGraphThreadCandidatesQueryVariables
+>;
+export const SettingsKnowledgeGraphIngestRunsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphIngestRuns" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "threadId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "knowledgeGraphIngestRuns" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "threadId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "threadId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "threadId" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "trigger" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeDatasetName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cogneeDatasetId" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "entityCount" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationshipCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "diagnosticCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "messageCount" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "metrics" } },
+                { kind: "Field", name: { kind: "Name", value: "durationMs" } },
+                { kind: "Field", name: { kind: "Name", value: "error" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "startedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "finishedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphIngestRunsQuery,
+  SettingsKnowledgeGraphIngestRunsQueryVariables
+>;
+export const SettingsKnowledgeGraphEntitiesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphEntities" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "threadId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "runId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "search" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "ontologyType" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "groundingStatus" },
+          },
+          type: {
+            kind: "NamedType",
+            name: { kind: "Name", value: "KnowledgeGraphGroundingStatus" },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "provenanceStatus" },
+          },
+          type: {
+            kind: "NamedType",
+            name: { kind: "Name", value: "KnowledgeGraphProvenanceStatus" },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "knowledgeGraphEntities" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "threadId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "threadId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "runId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "runId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "search" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "search" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "ontologyType" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "ontologyType" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "groundingStatus" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "groundingStatus" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "provenanceStatus" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "provenanceStatus" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "label" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "normalizedLabel" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "typeLabel" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "ontologyTypeSlug" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "groundingStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "provenanceStatus" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "summary" } },
+                { kind: "Field", name: { kind: "Name", value: "aliases" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationshipCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceCount" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "lastSeenAt" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphEntitiesQuery,
+  SettingsKnowledgeGraphEntitiesQueryVariables
+>;
+export const SettingsKnowledgeGraphEntityDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsKnowledgeGraphEntity" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "entityId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "knowledgeGraphEntity" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "entityId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "entityId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "label" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "normalizedLabel" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "typeLabel" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "ontologyTypeSlug" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "groundingStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "provenanceStatus" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "summary" } },
+                { kind: "Field", name: { kind: "Name", value: "aliases" } },
+                { kind: "Field", name: { kind: "Name", value: "properties" } },
+                { kind: "Field", name: { kind: "Name", value: "diagnostics" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationshipCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceCount" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "lastSeenAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationships" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sourceEntityId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "targetEntityId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "ontologyTypeSlug" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "groundingStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "provenanceStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "confidence" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidenceCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastSeenAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidence" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "snippet" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "messageId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "messageRole" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "messageCreatedAt" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "speakerLabel" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidence" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "snippet" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "messageId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "messageRole" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "messageCreatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "speakerLabel" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsKnowledgeGraphEntityQuery,
+  SettingsKnowledgeGraphEntityQueryVariables
+>;
+export const SettingsStartKnowledgeGraphThreadIngestDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsStartKnowledgeGraphThreadIngest" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: {
+                kind: "Name",
+                value: "StartKnowledgeGraphThreadIngestInput",
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "startKnowledgeGraphThreadIngest" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "threadId" } },
+                { kind: "Field", name: { kind: "Name", value: "entityCount" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationshipCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "diagnosticCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "messageCount" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "metrics" } },
+                { kind: "Field", name: { kind: "Name", value: "durationMs" } },
+                { kind: "Field", name: { kind: "Name", value: "error" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "startedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "finishedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsStartKnowledgeGraphThreadIngestMutation,
+  SettingsStartKnowledgeGraphThreadIngestMutationVariables
 >;
 export const SettingsRenameTenantSlugDocument = {
   kind: "Document",
@@ -12063,6 +14285,243 @@ export const SettingsUpdateUserProfileDocument = {
   SettingsUpdateUserProfileMutation,
   SettingsUpdateUserProfileMutationVariables
 >;
+export const SettingsUserBudgetStatusDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsUserBudgetStatus" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "userId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "userBudgetStatus" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "userId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "userId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "policy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "tenantId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "userId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "scope" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "period" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "limitUsd" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "actionOnExceed" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "spentUsd" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "remainingUsd" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "percentUsed" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUserBudgetStatusQuery,
+  SettingsUserBudgetStatusQueryVariables
+>;
+export const SettingsUpsertBudgetPolicyDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsUpsertBudgetPolicy" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpsertBudgetPolicyInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "upsertBudgetPolicy" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                { kind: "Field", name: { kind: "Name", value: "scope" } },
+                { kind: "Field", name: { kind: "Name", value: "period" } },
+                { kind: "Field", name: { kind: "Name", value: "limitUsd" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "actionOnExceed" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUpsertBudgetPolicyMutation,
+  SettingsUpsertBudgetPolicyMutationVariables
+>;
+export const SettingsDeleteBudgetPolicyDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsDeleteBudgetPolicy" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "deleteBudgetPolicy" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsDeleteBudgetPolicyMutation,
+  SettingsDeleteBudgetPolicyMutationVariables
+>;
 export const SettingsUpdateTenantMemberDocument = {
   kind: "Document",
   definitions: [
@@ -12292,13 +14751,13 @@ export const SettingsCostSummaryDocument = {
   SettingsCostSummaryQuery,
   SettingsCostSummaryQueryVariables
 >;
-export const SettingsCostByAgentDocument = {
+export const SettingsCostByUserDocument = {
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "query",
-      name: { kind: "Name", value: "SettingsCostByAgent" },
+      name: { kind: "Name", value: "SettingsCostByUser" },
       variableDefinitions: [
         {
           kind: "VariableDefinition",
@@ -12317,7 +14776,7 @@ export const SettingsCostByAgentDocument = {
         selections: [
           {
             kind: "Field",
-            name: { kind: "Name", value: "costByAgent" },
+            name: { kind: "Name", value: "costByUser" },
             arguments: [
               {
                 kind: "Argument",
@@ -12331,10 +14790,12 @@ export const SettingsCostByAgentDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                { kind: "Field", name: { kind: "Name", value: "agentId" } },
-                { kind: "Field", name: { kind: "Name", value: "agentName" } },
+                { kind: "Field", name: { kind: "Name", value: "userId" } },
+                { kind: "Field", name: { kind: "Name", value: "userName" } },
+                { kind: "Field", name: { kind: "Name", value: "userEmail" } },
                 { kind: "Field", name: { kind: "Name", value: "totalUsd" } },
                 { kind: "Field", name: { kind: "Name", value: "eventCount" } },
+                { kind: "Field", name: { kind: "Name", value: "isSystem" } },
               ],
             },
           },
@@ -12343,8 +14804,100 @@ export const SettingsCostByAgentDocument = {
     },
   ],
 } as unknown as DocumentNode<
-  SettingsCostByAgentQuery,
-  SettingsCostByAgentQueryVariables
+  SettingsCostByUserQuery,
+  SettingsCostByUserQueryVariables
+>;
+export const SettingsBudgetStatusDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsBudgetStatus" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "budgetStatus" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "policy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "tenantId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "userId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "scope" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "period" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "limitUsd" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "actionOnExceed" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "spentUsd" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "remainingUsd" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "percentUsed" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsBudgetStatusQuery,
+  SettingsBudgetStatusQueryVariables
 >;
 export const SettingsCostByModelDocument = {
   kind: "Document",
@@ -12592,4 +15145,375 @@ export const SettingsWebhooksDocument = {
 } as unknown as DocumentNode<
   SettingsWebhooksQuery,
   SettingsWebhooksQueryVariables
+>;
+export const SettingsWebhookDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsWebhook" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "webhook" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+                { kind: "Field", name: { kind: "Name", value: "token" } },
+                { kind: "Field", name: { kind: "Name", value: "targetType" } },
+                { kind: "Field", name: { kind: "Name", value: "prompt" } },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "rateLimit" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "invocationCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastInvokedAt" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsWebhookQuery,
+  SettingsWebhookQueryVariables
+>;
+export const SettingsWebhookDeliveriesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsWebhookDeliveries" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "webhookId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "webhookDeliveries" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "webhookId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "webhookId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "receivedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "providerName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "normalizedKind" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "signatureStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "resolutionStatus" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "statusCode" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "threadCreated" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsWebhookDeliveriesQuery,
+  SettingsWebhookDeliveriesQueryVariables
+>;
+export const SettingsUpdateWebhookDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsUpdateWebhook" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpdateWebhookInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updateWebhook" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+                { kind: "Field", name: { kind: "Name", value: "prompt" } },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "rateLimit" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUpdateWebhookMutation,
+  SettingsUpdateWebhookMutationVariables
+>;
+export const SettingsDeleteWebhookDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsDeleteWebhook" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "deleteWebhook" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsDeleteWebhookMutation,
+  SettingsDeleteWebhookMutationVariables
+>;
+export const SettingsRegenerateWebhookTokenDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsRegenerateWebhookToken" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "regenerateWebhookToken" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "token" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsRegenerateWebhookTokenMutation,
+  SettingsRegenerateWebhookTokenMutationVariables
+>;
+export const TenantSkillCatalogDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "TenantSkillCatalog" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "agentId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "tenantSkillCatalog" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "agentId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "agentId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "displayName" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+                { kind: "Field", name: { kind: "Name", value: "icon" } },
+                { kind: "Field", name: { kind: "Name", value: "installed" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  TenantSkillCatalogQuery,
+  TenantSkillCatalogQueryVariables
 >;

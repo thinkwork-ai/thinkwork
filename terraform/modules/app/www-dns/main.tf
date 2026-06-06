@@ -12,6 +12,8 @@
 #   6. Optional admin.<domain> CNAME → admin CloudFront distribution.
 #   7. Optional app.<domain> CNAME → end-user app CloudFront distribution.
 #   8. Optional computer.<domain> → app.<domain> 301 compatibility redirect.
+#   9. Optional crm.<domain> CNAME → Twenty CRM public ALB. The CRM ALB uses
+#      its own certificate; this module only owns the public CNAME.
 #
 # Cloudflare records MUST be DNS-only (grey cloud). CloudFront terminates TLS
 # with the ACM cert and needs the real Host header.
@@ -39,11 +41,12 @@ locals {
   computer = "computer.${var.domain}"
   sandbox  = "sandbox.${var.domain}"
   api      = "api.${var.domain}"
+  crm      = "crm.${var.domain}"
   name_id  = replace(var.domain, ".", "-")
 
   # ACM SANs: always include www, conditionally include docs, admin, computer,
-  # and api. The Computer iframe sandbox uses its own certificate so adding or
-  # rotating the sandbox host never forces a replacement of this shared
+  # and api. The Computer iframe sandbox and CRM ALB use their own certificates
+  # so adding or rotating those hosts never forces a replacement of this shared
   # production certificate.
   # Gated on plain bool vars (not on CloudFront/API Gateway outputs) to keep
   # the dependency graph acyclic — distributions / custom domain names
@@ -59,14 +62,15 @@ locals {
 
   # Existing CNAME records stay gated on non-empty targets because their target
   # outputs are already known in the deployed stack. Newly bootstrapped records
-  # such as app/computer compatibility/sandbox CNAMEs must gate only on explicit
-  # booleans so Terraform can plan the resource count before the new CloudFront
-  # distribution exists.
+  # such as app/computer compatibility/sandbox/crm CNAMEs must gate only on
+  # explicit booleans so Terraform can plan the resource count before the new
+  # load balancer exists.
   create_docs_record     = var.include_docs && var.docs_cloudfront_domain_name != ""
   create_admin_record    = var.include_admin && var.admin_cloudfront_domain_name != ""
   create_app_record      = var.include_app
   create_computer_record = var.include_computer
   create_api_record      = var.include_api && var.api_gateway_id != ""
+  create_crm_record      = var.include_crm
 }
 
 ################################################################################
@@ -372,4 +376,20 @@ resource "cloudflare_record" "api" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} api → API Gateway v2 regional domain"
+}
+
+################################################################################
+# crm.<domain> → Twenty CRM public ALB (optional)
+################################################################################
+
+resource "cloudflare_record" "crm" {
+  count = local.create_crm_record ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = local.crm
+  content = var.crm_alb_dns_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${var.stage} crm → Twenty CRM public ALB"
 }

@@ -7,11 +7,14 @@ import {
   PromptInputFooter,
   PromptInputSpeechButton,
   PromptInputSubmit,
-  PromptInputTextarea,
   PromptInputTools,
   usePromptInputAttachments,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import {
+  SkillTokenInput,
+  type SkillTokenInputHandle,
+} from "@/components/workbench/SkillTokenInput";
 import { IconPaperclip, IconPlanet } from "@tabler/icons-react";
 import {
   useEffect,
@@ -35,6 +38,11 @@ import {
   MentionMenu,
   type MentionTarget,
 } from "@/components/spaces/MentionMenu";
+import { SkillMenu, type SkillOption } from "@/components/spaces/SkillMenu";
+import {
+  extractPinnedSkillSlugs,
+  useComposerSkillPins,
+} from "@/components/workbench/useComposerSkillPins";
 import { toast } from "sonner";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { cn } from "@/lib/utils";
@@ -64,8 +72,11 @@ interface SpacesComposerProps {
     files: File[],
     mentions: SpacesComposerMention[],
     agentRequested: boolean,
+    pinnedSkills: string[],
   ) => void;
   mentionTargets?: MentionTarget[];
+  /** Tenant skill catalog for the `/skill` force-pin popup. */
+  skillCatalog?: SkillOption[];
   spaces?: SpacesComposerSpaceOption[];
   selectedSpaceId?: string | null;
   selectedSpaceIsDefault?: boolean;
@@ -94,6 +105,7 @@ export function SpacesComposer({
   onChange,
   onSubmit,
   mentionTargets = [],
+  skillCatalog = [],
   spaces = [],
   selectedSpaceId,
   selectedSpaceIsDefault = true,
@@ -103,7 +115,12 @@ export function SpacesComposer({
   error,
 }: SpacesComposerProps) {
   const [mentions, setMentions] = useState<SpacesComposerMention[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const skillPins = useComposerSkillPins({
+    value,
+    onChange,
+    catalog: skillCatalog,
+  });
+  const textareaRef = useRef<SkillTokenInputHandle | null>(null);
   const spacePickerColorClass = selectedSpaceIsDefault
     ? "text-muted-foreground hover:text-foreground"
     : "text-foreground hover:text-foreground/80";
@@ -167,8 +184,8 @@ export function SpacesComposer({
   const isComposerDisabled = disabled || isSubmitting;
   useEffect(() => {
     function focusComposerInput() {
-      const input = document.querySelector<HTMLTextAreaElement>(
-        'textarea[aria-label="Send message"]',
+      const input = document.querySelector<HTMLElement>(
+        '[aria-label="Send message"]',
       );
       input?.focus();
     }
@@ -201,7 +218,12 @@ export function SpacesComposer({
     const submittedMentions = mentions.filter((mention) =>
       value.includes(mention.rawText),
     );
-    onSubmit(files, submittedMentions, effectiveAgentEnabled);
+    onSubmit(
+      files,
+      submittedMentions,
+      effectiveAgentEnabled,
+      extractPinnedSkillSlugs(value, skillCatalog),
+    );
     setMentions([]);
     // Fresh draft after send: drop the manual override so the next new thread
     // starts from the derived default again.
@@ -230,8 +252,13 @@ export function SpacesComposer({
     ]);
   }
 
-  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (!mentionMenuOpen) return;
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
+    // `@` and `/` menus are mutually exclusive (different trigger chars). When
+    // the mention menu isn't open, let the skill-pin menu handle navigation.
+    if (!mentionMenuOpen) {
+      skillPins.handleKeyDown(event);
+      return;
+    }
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -279,6 +306,15 @@ export function SpacesComposer({
             onSelect={selectMention}
           />
         ) : null}
+        {!mentionMenuOpen && skillPins.menuOpen ? (
+          <SkillMenu
+            options={skillPins.options}
+            query={skillPins.slashQuery ?? ""}
+            activeIndex={skillPins.activeIndex}
+            placement="bottom"
+            onSelect={skillPins.selectSkill}
+          />
+        ) : null}
         <PromptInput
           // One consistent "normal" look in every state — same visible border
           // whether empty, filled, or focused, no dim fill, and no focus ring.
@@ -301,13 +337,15 @@ export function SpacesComposer({
             <PromptInputAttachments>
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
-            <PromptInputTextarea
+            <SkillTokenInput
               ref={textareaRef}
               aria-label="Send message"
               value={value}
-              onChange={(event) => onChange(event.target.value)}
+              onChange={onChange}
+              catalog={skillCatalog}
+              mentions={mentions}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type @ to mention a person or agent"
+              placeholder="Type @ to mention or / to pin a skill"
               disabled={isComposerDisabled}
               autoFocus
             />
@@ -385,7 +423,9 @@ export function SpacesComposer({
             </PromptInputTools>
             <div className="flex items-center gap-1">
               <PromptInputSpeechButton
-                textareaRef={textareaRef}
+                textareaRef={
+                  textareaRef as React.RefObject<HTMLTextAreaElement | null>
+                }
                 onTranscriptionChange={onChange}
                 aria-label="Voice input"
                 title="Voice input"

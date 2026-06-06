@@ -22,3 +22,8 @@ output "api_custom_domain_target" {
   description = "API Gateway regional target domain to CNAME to (useful for external DNS configuration). Empty string when include_api is false."
   value       = var.include_api ? aws_apigatewayv2_domain_name.api[0].domain_name_configuration[0].target_domain_name : ""
 }
+
+output "crm_custom_domain_name" {
+  description = "Custom domain name for Twenty CRM (e.g. crm.thinkwork.ai). Empty string when include_crm is false."
+  value       = var.include_crm ? "crm.${var.domain}" : ""
+}

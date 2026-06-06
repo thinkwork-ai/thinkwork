@@ -119,7 +119,10 @@ export function SettingsSpaces() {
   if (result.error) {
     return (
       <SettingsPane className="max-w-none">
-        <SettingsHeader title="Spaces" />
+        <SettingsHeader
+          title="Spaces"
+          description="Create and manage the Spaces your team works in."
+        />
         <div className="flex items-center justify-between rounded-xl border border-border p-6">
           <span className="text-sm text-muted-foreground">
             Couldn’t load spaces.
@@ -139,6 +142,7 @@ export function SettingsSpaces() {
   return (
     <SettingsTablePane
       title="Spaces"
+      description="Create and manage the Spaces your team works in."
       loading={result.fetching && !result.data}
       actions={
         <button

@@ -7,6 +7,17 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { serializeEditor } from "./SkillTokenInput";
+
+// The follow-up composer is a contenteditable token field, not a <textarea>:
+// drive it by setting text + firing `input`, and read it back via serialize.
+function setFollowUpText(el: HTMLElement, value: string) {
+  el.textContent = value;
+  fireEvent.input(el);
+}
+function followUpValue(el: HTMLElement) {
+  return serializeEditor(el);
+}
 
 vi.mock("@/components/apps/InlineAppletEmbed", () => ({
   InlineAppletEmbed: ({ appId }: { appId: string }) => (
@@ -475,7 +486,7 @@ describe("TaskThreadView", () => {
     );
 
     const input = screen.getByLabelText("Follow up");
-    fireEvent.change(input, { target: { value: "Please continue" } });
+    setFollowUpText(input, "Please continue");
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() =>
@@ -484,6 +495,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         true,
+        [],
       ),
     );
   });
@@ -694,16 +706,17 @@ describe("TaskThreadView", () => {
         name: /update enter customer information into p21/i,
       }),
     );
-    const followUpInput = screen.getByLabelText(
-      "Follow up",
-    ) as HTMLTextAreaElement;
-    expect(followUpInput).toHaveProperty(
-      "value",
+    const followUpInput = screen.getByLabelText("Follow up");
+    expect(followUpValue(followUpInput)).toBe(
       "Enter customer information into P21: ",
     );
     await waitFor(() => expect(document.activeElement).toBe(followUpInput));
-    expect(followUpInput.selectionStart).toBe(followUpInput.value.length);
-    expect(followUpInput.selectionEnd).toBe(followUpInput.value.length);
+    // Caret is placed at the end of the contenteditable field on prefill.
+    const selection = window.getSelection();
+    expect(
+      Boolean(selection?.focusNode) &&
+        followUpInput.contains(selection!.focusNode),
+    ).toBe(true);
     fireEvent.click(
       within(panel).getByRole("button", { name: /general-ledger/i }),
     );
@@ -3178,9 +3191,7 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "Add detail" },
-    });
+    setFollowUpText(screen.getByLabelText("Follow up"), "Add detail");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -3188,7 +3199,13 @@ describe("TaskThreadView", () => {
       // (empty when no attachments) alongside the text. The route
       // uploads files before sendMessage and embeds attachmentId refs
       // in metadata.attachments.
-      expect(onSendFollowUp).toHaveBeenCalledWith("Add detail", [], [], true);
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "Add detail",
+        [],
+        [],
+        true,
+        [],
+      );
     });
   });
 
@@ -3211,9 +3228,7 @@ describe("TaskThreadView", () => {
 
     fireEvent.click(agentToggle);
     expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "For humans only" },
-    });
+    setFollowUpText(screen.getByLabelText("Follow up"), "For humans only");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -3222,13 +3237,12 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
+        [],
       );
     });
     expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "Still just humans" },
-    });
+    setFollowUpText(screen.getByLabelText("Follow up"), "Still just humans");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -3237,6 +3251,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
+        [],
       );
     });
   });
@@ -3403,9 +3418,7 @@ describe("TaskThreadView", () => {
 
     const agentToggle = screen.getByRole("button", { name: "Send to agent" });
     fireEvent.click(agentToggle);
-    fireEvent.change(screen.getByLabelText("Follow up"), {
-      target: { value: "Try once" },
-    });
+    setFollowUpText(screen.getByLabelText("Follow up"), "Try once");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     expect(await screen.findByText("Message failed")).toBeTruthy();
@@ -3419,6 +3432,7 @@ describe("TaskThreadView", () => {
         [],
         [],
         false,
+        [],
       );
     });
   });
@@ -3459,14 +3473,14 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
-    fireEvent.change(input, { target: { value: "@cot" } });
+    const input = screen.getByLabelText("Follow up");
+    setFollowUpText(input, "@cot");
 
     expect(screen.getByText("Scott Odom")).toBeTruthy();
     expect(screen.queryByText("Marco")).toBeNull();
 
     fireEvent.click(screen.getByRole("option", { name: /Scott Odom/ }));
-    expect(input.value).toBe("@Scott Odom ");
+    expect(followUpValue(input)).toBe("@Scott Odom ");
 
     // Mentioning another user makes the thread multi-player, so the agent
     // toggle auto-derives OFF (single -> on, multi -> off).
@@ -3491,6 +3505,7 @@ describe("TaskThreadView", () => {
           },
         ],
         false,
+        [],
       );
     });
   });
@@ -3553,25 +3568,25 @@ describe("TaskThreadView", () => {
       );
 
     const { unmount } = renderMentionComposer();
-    let input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
+    let input = screen.getByLabelText("Follow up");
 
     // Tab commits the highlighted mention (same as Enter).
-    fireEvent.change(input, { target: { value: "@cot" } });
+    setFollowUpText(input, "@cot");
     expect(screen.getByRole("option", { name: /Scott Odom/ })).toBeTruthy();
     const tabEvent = fireEvent.keyDown(input, { key: "Tab" });
     expect(tabEvent).toBe(false); // preventDefault was called
-    expect(input.value).toBe("@Scott Odom ");
+    expect(followUpValue(input)).toBe("@Scott Odom ");
 
     unmount();
 
     // Escape closes the menu without committing.
     renderMentionComposer();
-    input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
-    fireEvent.change(input, { target: { value: "@cot" } });
+    input = screen.getByLabelText("Follow up");
+    setFollowUpText(input, "@cot");
     expect(screen.getByRole("option", { name: /Scott Odom/ })).toBeTruthy();
     fireEvent.keyDown(input, { key: "Escape" });
     expect(screen.queryByRole("option", { name: /Scott Odom/ })).toBeNull();
-    expect(input.value).toBe("@cot");
+    expect(followUpValue(input)).toBe("@cot");
   });
 
   it("selects the pinned agent mention and forces agent handling back on", async () => {
@@ -3603,13 +3618,13 @@ describe("TaskThreadView", () => {
     fireEvent.click(agentToggle);
     expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
 
-    const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
-    fireEvent.change(input, { target: { value: "@" } });
+    const input = screen.getByLabelText("Follow up");
+    setFollowUpText(input, "@");
     const options = screen.getAllByRole("option");
     expect(options[0]?.textContent).toContain("agent");
     fireEvent.click(options[0]!);
 
-    expect(input.value).toBe("@agent ");
+    expect(followUpValue(input)).toBe("@agent ");
     expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
@@ -3626,6 +3641,7 @@ describe("TaskThreadView", () => {
           },
         ],
         true,
+        [],
       );
     });
   });
@@ -3647,13 +3663,13 @@ describe("TaskThreadView", () => {
     fireEvent.click(agentToggle);
     expect(agentToggle.getAttribute("aria-pressed")).toBe("false");
 
-    const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
-    fireEvent.change(input, { target: { value: "@think please" } });
+    const input = screen.getByLabelText("Follow up");
+    setFollowUpText(input, "@think please");
 
     expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
     expect(agentToggle).toHaveProperty("disabled", true);
 
-    fireEvent.change(input, { target: { value: "please" } });
+    setFollowUpText(input, "please");
     expect(agentToggle.getAttribute("aria-pressed")).toBe("true");
     expect(agentToggle).toHaveProperty("disabled", false);
   });
@@ -3693,8 +3709,8 @@ describe("TaskThreadView", () => {
       />,
     );
 
-    const input = screen.getByLabelText("Follow up") as HTMLTextAreaElement;
-    fireEvent.change(input, { target: { value: "@o" } });
+    const input = screen.getByLabelText("Follow up");
+    setFollowUpText(input, "@o");
 
     let options = screen.getAllByRole("option");
     expect(options[0].getAttribute("aria-selected")).toBe("true");
@@ -3704,7 +3720,7 @@ describe("TaskThreadView", () => {
     expect(options[1].getAttribute("aria-selected")).toBe("true");
 
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(input.value).toBe("@Marco ");
+    expect(followUpValue(input)).toBe("@Marco ");
   });
 
   describe("collapsible user message body", () => {

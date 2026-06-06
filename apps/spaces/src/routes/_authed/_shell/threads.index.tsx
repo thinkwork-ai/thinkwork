@@ -15,6 +15,7 @@ import {
   formatRelativeDate,
   threadTitle,
 } from "@/components/shell/chat-sidebar-types";
+import { DEFAULT_SPACE_LABEL } from "@/components/spaces/space-utils";
 import { useTenant } from "@/context/TenantContext";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -191,7 +192,13 @@ function ThreadListPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   usePageHeaderActions({
-    title: spaceName ? `${spaceName} · Threads` : "Thread List",
+    // The default space surfaces as "Chats" everywhere (spaceCrumbLabel), but
+    // its thread list should read just "Thread List" — not "Chats · Threads".
+    // Named spaces still get "<Name> · Threads".
+    title:
+      spaceName && spaceName !== DEFAULT_SPACE_LABEL
+        ? `${spaceName} · Threads`
+        : "Thread List",
   });
 
   // Scoped to a Space (opened from its section menu) → the space-scoped query,

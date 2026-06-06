@@ -13,6 +13,8 @@ import {
   SpacesComposer,
   type SpacesComposerMention,
 } from "@/components/workbench/SpacesComposer";
+import { TenantSkillCatalogQuery } from "@/lib/skill-catalog-queries";
+import type { SkillOption } from "@/components/spaces/SkillMenu";
 import type { SpaceSummary } from "@/components/spaces/space-types";
 import { isDefaultSpace } from "@/components/spaces/space-utils";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
@@ -68,6 +70,7 @@ interface NewThreadMentionTargetsData {
     isDefaultAgent?: boolean | null;
     avatarUrl?: string | null;
     role?: string | null;
+    email?: string | null;
   }>;
 }
 
@@ -111,6 +114,18 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  // Tenant skill catalog for the `/skill` force-pin popup. No agent context yet
+  // on the new-thread surface, so `installed` is unannotated and the picker
+  // shows the full catalog; the blocklist guardrail is enforced at dispatch.
+  const [{ data: skillCatalogData }] = useQuery({
+    query: TenantSkillCatalogQuery,
+    variables: { agentId: null },
+    pause: !tenantId,
+  });
+  const skillCatalog = useMemo<SkillOption[]>(
+    () => skillCatalogData?.tenantSkillCatalog ?? [],
+    [skillCatalogData],
+  );
   // Surface a failed mention-targets fetch instead of silently rendering an
   // empty @-menu — a swallowed GraphQL error here previously hid a broken
   // query for the entire new-thread composer.
@@ -198,6 +213,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     files: File[],
     mentions: SpacesComposerMention[],
     agentRequested: boolean,
+    pinnedSkills: string[] = [],
   ) {
     const trimmed = prompt.trim();
     if (!trimmed && files.length === 0) return;
@@ -307,8 +323,13 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         content: trimmed,
         mentions,
       };
-      if (attachmentRefs.length > 0) {
-        sendInput.metadata = JSON.stringify({ attachments: attachmentRefs });
+      const metadata: Record<string, unknown> = {};
+      if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;
+      if (pinnedSkills.length > 0) {
+        metadata.skills = pinnedSkills.map((slug) => ({ slug }));
+      }
+      if (Object.keys(metadata).length > 0) {
+        sendInput.metadata = JSON.stringify(metadata);
       }
       if (agentRequested === false) {
         sendInput.agentRequested = false;
@@ -373,6 +394,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           onChange={setPrompt}
           onSubmit={handleSubmit}
           mentionTargets={mentionTargets}
+          skillCatalog={skillCatalog}
           spaces={composerSpaces}
           selectedSpaceId={selectedSpace?.id ?? defaultSpaceId ?? null}
           selectedSpaceIsDefault={selectedSpaceIsDefault}
@@ -437,6 +459,7 @@ function buildNewThreadMentionTargets(
     isDefaultAgent: target.isDefaultAgent ?? undefined,
     avatarUrl: target.avatarUrl,
     role: target.role,
+    email: target.email,
   }));
 
   return targets.sort((a, b) => {

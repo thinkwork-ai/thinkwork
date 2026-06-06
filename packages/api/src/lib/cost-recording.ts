@@ -14,6 +14,10 @@ import {
   agents,
   modelCatalog,
 } from "@thinkwork/database-pg/schema";
+import {
+  checkUserBudgetAndPauseWork,
+  resolveTenantUserCostOwner,
+} from "./user-budget-enforcement.js";
 
 const db = getDb();
 
@@ -161,6 +165,7 @@ function estimateTokens(text: string): number {
 export interface RecordCostParams {
   tenantId: string;
   agentId?: string | null;
+  userId?: string | null;
   requestId: string;
   model: string | null;
   inputTokens: number;
@@ -190,6 +195,10 @@ export interface RecordCostResult {
 export async function recordCostEvents(
   params: RecordCostParams,
 ): Promise<RecordCostResult> {
+  const userId = await resolveTenantUserCostOwner({
+    tenantId: params.tenantId,
+    userId: params.userId,
+  });
   const pricing = await lookupModelPricing(params.model);
 
   // Use real tokens if available, otherwise estimate from text as fallback
@@ -232,6 +241,7 @@ export async function recordCostEvents(
     values.push({
       tenant_id: params.tenantId,
       agent_id: params.agentId || undefined,
+      user_id: userId || undefined,
       request_id: params.requestId,
       event_type: "llm",
       runtime_type: params.runtimeType || undefined,
@@ -258,6 +268,7 @@ export async function recordCostEvents(
     values.push({
       tenant_id: params.tenantId,
       agent_id: params.agentId || undefined,
+      user_id: userId || undefined,
       request_id: params.requestId,
       event_type: "agentcore_compute",
       runtime_type: params.runtimeType || undefined,
@@ -295,6 +306,7 @@ function getStartOfMonth(): Date {
 export async function checkBudgetAndPause(
   tenantId: string,
   agentId: string,
+  userId?: string | null,
 ): Promise<void> {
   const startOfMonth = getStartOfMonth();
 
@@ -382,6 +394,10 @@ export async function checkBudgetAndPause(
       );
     }
   }
+
+  if (userId) {
+    await checkUserBudgetAndPauseWork({ tenantId, userId });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -393,8 +409,11 @@ const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
 
 export async function notifyCostRecorded(payload: {
   tenantId: string;
-  agentId: string;
-  agentName: string;
+  agentId?: string | null;
+  agentName?: string | null;
+  userId?: string | null;
+  userName?: string | null;
+  userEmail?: string | null;
   eventType: string;
   amountUsd: number;
   model: string | null;
@@ -406,6 +425,9 @@ export async function notifyCostRecorded(payload: {
 			$tenantId: ID!
 			$agentId: ID
 			$agentName: String
+			$userId: ID
+			$userName: String
+			$userEmail: String
 			$eventType: String!
 			$amountUsd: Float!
 			$model: String
@@ -414,6 +436,9 @@ export async function notifyCostRecorded(payload: {
 				tenantId: $tenantId
 				agentId: $agentId
 				agentName: $agentName
+				userId: $userId
+				userName: $userName
+				userEmail: $userEmail
 				eventType: $eventType
 				amountUsd: $amountUsd
 				model: $model
@@ -421,6 +446,9 @@ export async function notifyCostRecorded(payload: {
 				tenantId
 				agentId
 				agentName
+				userId
+				userName
+				userEmail
 				eventType
 				amountUsd
 				model

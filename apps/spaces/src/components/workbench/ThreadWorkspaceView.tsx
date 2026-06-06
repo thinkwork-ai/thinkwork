@@ -22,13 +22,14 @@ export function ThreadWorkspaceView({
   );
 
   return (
-    <main className="flex h-full min-h-0 w-full flex-col bg-background p-4">
+    <main className="flex h-full min-h-0 w-full flex-col bg-background">
       <WorkspaceFileEditor
         key={targetKey}
         target={target}
         targetKey={targetKey}
         client={client}
         defaultOpenFile="GOAL.md"
+        bordered={false}
         className="min-h-0 flex-1"
       />
     </main>

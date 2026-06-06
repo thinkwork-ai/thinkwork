@@ -4,6 +4,7 @@ type CostEvent {
   id: ID!
   tenantId: ID!
   agentId: ID
+  userId: ID
   requestId: String!
   eventType: String!
   amountUsd: Float!
@@ -36,6 +37,15 @@ type AgentCostSummary {
   eventCount: Int!
 }
 
+type UserCostSummary {
+  userId: ID
+  userName: String!
+  userEmail: String
+  totalUsd: Float!
+  eventCount: Int!
+  isSystem: Boolean!
+}
+
 type ModelCostSummary {
   model: String!
   totalUsd: Float!
@@ -56,6 +66,7 @@ type BudgetPolicy {
   id: ID!
   tenantId: ID!
   agentId: ID
+  userId: ID
   scope: String!
   period: String!
   limitUsd: Float!
@@ -78,6 +89,7 @@ type BudgetStatus {
 input UpsertBudgetPolicyInput {
   scope: String!
   agentId: ID
+  userId: ID
   limitUsd: Float!
   actionOnExceed: String
   period: String
@@ -87,16 +99,34 @@ input UpsertBudgetPolicyInput {
 
 extend type Query {
   costSummary(tenantId: ID!, from: AWSDateTime, to: AWSDateTime): CostSummary!
-  costByAgent(tenantId: ID!, from: AWSDateTime, to: AWSDateTime): [AgentCostSummary!]!
-  costByModel(tenantId: ID!, from: AWSDateTime, to: AWSDateTime): [ModelCostSummary!]!
+  costByAgent(
+    tenantId: ID!
+    from: AWSDateTime
+    to: AWSDateTime
+  ): [AgentCostSummary!]!
+  costByUser(
+    tenantId: ID!
+    from: AWSDateTime
+    to: AWSDateTime
+  ): [UserCostSummary!]!
+  costByModel(
+    tenantId: ID!
+    from: AWSDateTime
+    to: AWSDateTime
+  ): [ModelCostSummary!]!
   costTimeSeries(tenantId: ID!, days: Int): [DailyCostPoint!]!
   budgetPolicies(tenantId: ID!): [BudgetPolicy!]!
   budgetStatus(tenantId: ID!): [BudgetStatus!]!
+  userBudgetStatus(tenantId: ID!, userId: ID!): BudgetStatus
   agentBudgetStatus(agentId: ID!): BudgetStatus
 }
 
 extend type Mutation {
-  upsertBudgetPolicy(tenantId: ID!, input: UpsertBudgetPolicyInput!): BudgetPolicy!
+  upsertBudgetPolicy(
+    tenantId: ID!
+    input: UpsertBudgetPolicyInput!
+  ): BudgetPolicy!
   deleteBudgetPolicy(id: ID!): Boolean!
   unpauseAgent(agentId: ID!): Agent!
+  unpauseUserBudget(tenantId: ID!, userId: ID!): Int!
 }

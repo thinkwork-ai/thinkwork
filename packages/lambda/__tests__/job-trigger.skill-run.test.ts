@@ -19,6 +19,7 @@ const {
   mockInsert,
   mockInsertValues,
   mockUpdate,
+  mockUpdateSet,
   mockEnsureThreadForWork,
   mockLambdaSend,
   mockSfnSend,
@@ -27,6 +28,7 @@ const {
   mockInsert: vi.fn(),
   mockInsertValues: vi.fn(),
   mockUpdate: vi.fn(),
+  mockUpdateSet: vi.fn(),
   mockEnsureThreadForWork: vi.fn(),
   mockLambdaSend: vi.fn(),
   mockSfnSend: vi.fn(),
@@ -64,10 +66,13 @@ const insertChain = (rows: Rows) => ({
 });
 
 const updateChain = () => ({
-  set: () => ({
-    where: () => Promise.resolve(),
-    returning: () => Promise.resolve([]),
-  }),
+  set: (value: Record<string, unknown>) => {
+    mockUpdateSet(value);
+    return {
+      where: () => Promise.resolve(),
+      returning: () => Promise.resolve([]),
+    };
+  },
 });
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -90,6 +95,18 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     agent_id: "agent_skills.agent_id",
     skill_id: "agent_skills.skill_id",
     enabled: "agent_skills.enabled",
+  },
+  budgetPolicies: {
+    tenant_id: "budget_policies.tenant_id",
+    scope: "budget_policies.scope",
+    user_id: "budget_policies.user_id",
+    enabled: "budget_policies.enabled",
+    limit_usd: "budget_policies.limit_usd",
+  },
+  costEvents: {
+    tenant_id: "cost_events.tenant_id",
+    user_id: "cost_events.user_id",
+    created_at: "cost_events.created_at",
   },
   evalRuns: { id: "eval_runs.id" },
   computers: {
@@ -116,6 +133,9 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   scheduledJobs: {
     id: "scheduled_jobs.id",
     enabled: "scheduled_jobs.enabled",
+    budget_paused: "scheduled_jobs.budget_paused",
+    budget_paused_at: "scheduled_jobs.budget_paused_at",
+    budget_paused_reason: "scheduled_jobs.budget_paused_reason",
     name: "scheduled_jobs.name",
     config: "scheduled_jobs.config",
     created_by_type: "scheduled_jobs.created_by_type",
@@ -149,12 +169,14 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   threadTurns: { id: "thread_turns.id" },
   users: {
     id: "users.id",
+    tenant_id: "users.tenant_id",
   },
 }));
 
 vi.mock("drizzle-orm", () => ({
   and: (...args: unknown[]) => ({ _and: args }),
   eq: (...args: unknown[]) => ({ _eq: args }),
+  gte: (...args: unknown[]) => ({ _gte: args }),
   sql: (...args: unknown[]) => ({ _sql: args }),
 }));
 
@@ -200,8 +222,12 @@ const pushJobLookup = (
 ): void => {
   // 1st select: fetch scheduledJobs row — the handler always runs this.
   mockSelect.mockReturnValueOnce([
-    { enabled: true, name: "Sales prep daily", config },
+    { enabled: true, budget_paused: false, name: "Sales prep daily", config },
   ]);
+  if (typeof config.invokerUserId === "string" && config.invokerUserId) {
+    mockSelect.mockReturnValueOnce([{ id: config.invokerUserId }]);
+    mockSelect.mockReturnValueOnce([]);
+  }
 };
 
 const pushInvokerLookup = (found: boolean): void => {
@@ -440,6 +466,35 @@ describe("job-trigger skill_run deprovisioned path", () => {
   });
 });
 
+describe("job-trigger skill_run user budget path", () => {
+  it("budget-pauses the scheduled job and does not insert or invoke when the owner is over budget", async () => {
+    mockSelect
+      .mockReturnValueOnce([
+        {
+          enabled: true,
+          budget_paused: false,
+          name: "Sales prep daily",
+          config: JOB_CONFIG(),
+        },
+      ])
+      .mockReturnValueOnce([{ id: "U1" }])
+      .mockReturnValueOnce([{ id: "policy-1", limit_usd: "10.00" }])
+      .mockReturnValueOnce([{ total: 12.5 }]);
+
+    await handler(BASE_EVENT as never);
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        budget_paused: true,
+        budget_paused_reason: "User budget exceeded: $12.50 >= $10.00",
+      }),
+    );
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+});
+
 describe("job-trigger skill_run invalid-binding path", () => {
   it("writes invalid_binding audit row and does not invoke", async () => {
     pushJobLookup(
@@ -502,8 +557,9 @@ describe("job-trigger skill_run no-agent path", () => {
 
     await handler(BASE_EVENT as never);
 
-    // Three selects: scheduledJobs + users + tenantSettings. No agent_skills.
-    expect(mockSelect).toHaveBeenCalledTimes(3);
+    // Five selects: scheduledJobs + budget user/policy + invoker +
+    // tenantSettings. No agent_skills.
+    expect(mockSelect).toHaveBeenCalledTimes(5);
     expect(mockLambdaSend).toHaveBeenCalledTimes(1);
   });
 });

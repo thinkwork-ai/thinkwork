@@ -168,6 +168,7 @@ export const NewThreadMentionTargetsQuery = gql`
       isDefaultAgent
       avatarUrl
       role
+      email
     }
   }
 `;
@@ -529,6 +530,7 @@ export const ComputerThreadQuery = gql`
             id
             role
             content
+            tokenCount
             parts
             metadata
             toolCalls
@@ -559,6 +561,94 @@ export const ComputerThreadQuery = gql`
           }
         }
       }
+    }
+  }
+`;
+
+export const SettingsActivityThreadTurnsQuery = gql`
+  query SettingsActivityThreadTurns(
+    $tenantId: ID!
+    $threadId: ID!
+    $limit: Int
+  ) {
+    threadTurns(tenantId: $tenantId, threadId: $threadId, limit: $limit) {
+      id
+      tenantId
+      agentId
+      invocationSource
+      triggerDetail
+      triggerName
+      threadId
+      turnNumber
+      runtimeType
+      status
+      startedAt
+      finishedAt
+      error
+      errorCode
+      resultJson
+      usageJson
+      totalCost
+      retryAttempt
+      originTurnId
+      systemPrompt
+      createdAt
+    }
+  }
+`;
+
+export const ThreadTurnEventsQuery = gql`
+  query ThreadTurnEvents($runId: ID!, $limit: Int) {
+    threadTurnEvents(runId: $runId, limit: $limit) {
+      id
+      runId
+      agentId
+      seq
+      eventType
+      stream
+      level
+      message
+      payload
+      createdAt
+    }
+  }
+`;
+
+export const TurnInvocationLogsQuery = gql`
+  query TurnInvocationLogs($tenantId: ID!, $turnId: ID!) {
+    turnInvocationLogs(tenantId: $tenantId, turnId: $turnId) {
+      requestId
+      modelId
+      timestamp
+      inputTokenCount
+      outputTokenCount
+      cacheReadTokenCount
+      inputPreview
+      outputPreview
+      toolCount
+      costUsd
+      toolUses
+      hasToolResult
+      branch
+    }
+  }
+`;
+
+export const SettingsActivityThreadTracesQuery = gql`
+  query SettingsActivityThreadTraces($threadId: ID!, $tenantId: ID!) {
+    threadTraces(threadId: $threadId, tenantId: $tenantId) {
+      traceId
+      threadId
+      agentId
+      agentName
+      runtimeType
+      model
+      inputTokens
+      outputTokens
+      durationMs
+      costUsd
+      estimated
+      createdAt
     }
   }
 `;
@@ -648,6 +738,7 @@ export const ThreadMentionTargetsQuery = gql`
       isDefaultAgent
       avatarUrl
       role
+      email
     }
   }
 `;

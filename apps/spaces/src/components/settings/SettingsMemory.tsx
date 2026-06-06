@@ -213,7 +213,10 @@ export function SettingsMemory() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
-      <SettingsPageTitle title="Memory" />
+      <SettingsPageTitle
+        title="Memory"
+        description="Inspect and manage what your agents remember across threads."
+      />
       <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="relative w-fit min-w-56 max-w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

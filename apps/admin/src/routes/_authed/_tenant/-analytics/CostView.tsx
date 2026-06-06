@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { useQuery } from "urql";
-import { BrainCircuit, Bot } from "lucide-react";
+import { BrainCircuit, UserRound } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis } from "recharts";
 import { useTenant } from "@/context/TenantContext";
 import { MetricCard } from "@/components/MetricCard";
@@ -31,7 +30,7 @@ import { Progress } from "@/components/ui/progress";
 import { formatUsd, formatTokens } from "@/lib/utils";
 import { useCostData } from "@/hooks/useCostData";
 import { useCostStore } from "@/stores/cost-store";
-import { ModelCatalogQuery, AgentsListQuery } from "@/lib/graphql-queries";
+import { ModelCatalogQuery } from "@/lib/graphql-queries";
 
 const trendChartConfig = {
   llmUsd: { label: "LLM", color: "hsl(142, 71%, 45%)" },
@@ -67,7 +66,7 @@ export function CostView() {
       <TrendChart />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <AgentBudgetTable />
+        <UserBudgetTable />
         <CostByModelCard />
       </div>
     </div>
@@ -229,136 +228,121 @@ function TrendChart() {
   );
 }
 
-function AgentBudgetTable() {
-  const { tenantId } = useTenant();
-  const agentCosts = useCostStore((s) => s.byAgent);
+function UserBudgetTable() {
+  const userCosts = useCostStore((s) => s.byUser);
   const budgets = useCostStore((s) => s.budgets);
   const summary = useCostStore((s) => s.summary);
-  const [showArchived, setShowArchived] = useState(false);
 
-  const [agentsResult] = useQuery({
-    query: AgentsListQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId,
-  });
-  const activeAgentIds = new Set(
-    (agentsResult.data?.agent ? [agentsResult.data.agent] : []).map(
-      (a: { id: string }) => a.id,
-    ),
-  );
-
-  const agentBudgetMap = new Map(
+  const userBudgetMap = new Map(
     budgets
-      .filter((b) => b.policy.scope === "agent" && b.policy.agentId)
-      .map((b) => [b.policy.agentId!, b]),
+      .filter((b) => b.policy.scope === "user" && b.policy.userId)
+      .map((b) => [b.policy.userId!, b]),
   );
   const tenantBudget = budgets.find((b) => b.policy.scope === "tenant");
 
-  const allRows = [...agentCosts]
+  const rows = [...userCosts]
     .sort((a, b) => b.totalUsd - a.totalUsd)
-    .map((agent) => {
-      const budget = agentBudgetMap.get(agent.agentId);
+    .map((user) => {
+      const budget = user.userId ? userBudgetMap.get(user.userId) : null;
       return {
-        agentId: agent.agentId,
-        agentName: agent.agentName,
-        spent: agent.totalUsd,
-        eventCount: agent.eventCount,
-        avgCost: agent.eventCount > 0 ? agent.totalUsd / agent.eventCount : 0,
+        userId: user.userId,
+        userName: user.userName,
+        userEmail: user.userEmail,
+        spent: user.totalUsd,
+        eventCount: user.eventCount,
+        isSystem: user.isSystem,
         limit: budget?.policy.limitUsd ?? null,
-        percent: budget
-          ? (agent.totalUsd / budget.policy.limitUsd) * 100
-          : null,
-        isActive: activeAgentIds.has(agent.agentId),
+        percent: budget ? budget.percentUsed : null,
       };
     });
 
-  const hasArchived = allRows.some((r) => !r.isActive);
-  const rows = showArchived ? allRows : allRows.filter((r) => r.isActive);
-
   const totalSpent = summary?.totalUsd ?? 0;
-  const agentLimitsSum = rows.reduce((sum, r) => sum + (r.limit ?? 0), 0);
-  const totalLimit = agentLimitsSum > 0 ? agentLimitsSum : null;
+  const userLimitsSum = rows.reduce((sum, r) => sum + (r.limit ?? 0), 0);
+  const totalLimit = tenantBudget?.policy.limitUsd ?? (userLimitsSum || null);
 
-  if (allRows.length === 0 && !tenantBudget) return null;
+  if (rows.length === 0 && !tenantBudget) return null;
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-muted-foreground" />
-              Cost by Agent
-            </CardTitle>
-            <CardDescription>
-              Per-agent spend over the selected period. Computer-owned cost is
-              not yet broken out separately.
-            </CardDescription>
-          </div>
-          {hasArchived && (
-            <button
-              type="button"
-              onClick={() => setShowArchived((v) => !v)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showArchived ? "Hide" : "Show"} archived
-            </button>
-          )}
-        </div>
+        <CardTitle className="flex items-center gap-2">
+          <UserRound className="h-4 w-4 text-muted-foreground" />
+          Cost by User
+        </CardTitle>
+        <CardDescription>
+          User-attributed spend and budget usage over the selected period.
+          System or unattributed spend remains visible separately.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Table className="table-fixed">
           <colgroup>
-            <col className="w-28" />
+            <col className="w-40" />
             <col />
             <col className="w-28" />
           </colgroup>
           <TableHeader className="[&_tr]:border-0">
             <TableRow>
-              <TableHead>Agent</TableHead>
+              <TableHead>User</TableHead>
               <TableHead>Budget Used</TableHead>
               <TableHead>Cost</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="[&_tr]:border-0">
-            {rows.map((row) => (
-              <TableRow key={row.agentId} className="border-0">
-                <TableCell>
-                  <p className="text-sm font-medium truncate">
-                    {row.agentName}
-                  </p>
-                </TableCell>
-                <TableCell>
-                  {row.limit != null ? (
-                    <Progress
-                      value={Math.min(100, row.percent ?? 0)}
-                      className={
-                        (row.percent ?? 0) >= 100
-                          ? "[&>[data-slot=progress-indicator]]:bg-red-500"
-                          : (row.percent ?? 0) >= 80
-                            ? "[&>[data-slot=progress-indicator]]:bg-yellow-500"
-                            : ""
-                      }
-                    />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      No budget
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  <span className="text-sm font-medium tabular-nums">
-                    {formatUsd(row.spent)}
-                  </span>
-                  {row.limit != null && (
-                    <span className="text-sm text-muted-foreground tabular-nums">
-                      {" "}
-                      / {formatUsd(row.limit, 0)}
-                    </span>
-                  )}
+            {rows.length === 0 ? (
+              <TableRow className="border-0">
+                <TableCell colSpan={3} className="text-muted-foreground">
+                  No user cost data yet.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              rows.map((row) => (
+                <TableRow key={row.userId ?? "system"} className="border-0">
+                  <TableCell>
+                    <p className="text-sm font-medium truncate">
+                      {row.userName}
+                    </p>
+                    {!row.isSystem && row.userEmail ? (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {row.userEmail}
+                      </p>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {row.eventCount} events
+                    </p>
+                  </TableCell>
+                  <TableCell>
+                    {row.limit != null ? (
+                      <Progress
+                        value={Math.min(100, row.percent ?? 0)}
+                        className={
+                          (row.percent ?? 0) >= 100
+                            ? "[&>[data-slot=progress-indicator]]:bg-red-500"
+                            : (row.percent ?? 0) >= 80
+                              ? "[&>[data-slot=progress-indicator]]:bg-yellow-500"
+                              : ""
+                        }
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {row.isSystem ? "Not assigned" : "No budget"}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <span className="text-sm font-medium tabular-nums">
+                      {formatUsd(row.spent)}
+                    </span>
+                    {row.limit != null && (
+                      <span className="text-sm text-muted-foreground tabular-nums">
+                        {" "}
+                        / {formatUsd(row.limit, 0)}
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
           <TableFooter className="border-t-0">
             <TableRow>
@@ -400,7 +384,7 @@ function CostByModelCard() {
           Cost by Model
         </CardTitle>
         <CardDescription>
-          Spend by model across all agents and Computers.
+          Spend by model across all user and system activity.
         </CardDescription>
       </CardHeader>
       <CardContent>

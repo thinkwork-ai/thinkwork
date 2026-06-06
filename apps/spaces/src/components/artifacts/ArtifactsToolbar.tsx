@@ -56,7 +56,7 @@ export function ArtifactsToolbar({
 }: ArtifactsToolbarProps) {
   return (
     <div
-      className="relative z-10 flex shrink-0 items-center gap-3 px-4 py-3"
+      className="relative z-10 flex shrink-0 flex-wrap items-center gap-3 px-6 py-3"
       data-testid="artifacts-toolbar"
     >
       <div className="relative w-fit min-w-56 max-w-full">
@@ -71,57 +71,55 @@ export function ArtifactsToolbar({
         />
       </div>
 
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-        <div className="pointer-events-auto">
-          <Tabs value={tab} onValueChange={onTabChange}>
-            <TabsList data-testid="artifacts-tabs">
-              {ARTIFACT_TABS.map((entry) => (
-                <TabsTrigger
-                  key={entry.value}
-                  value={entry.value}
-                  className="px-3 text-xs"
-                >
-                  {entry.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-      </div>
-
-      <Select value={kind} onValueChange={onKindChange}>
-        <SelectTrigger
-          className="ml-auto h-8 min-w-[10rem]"
-          data-testid="artifacts-kind"
-        >
-          <SelectValue placeholder="All kinds" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL_KINDS}>All kinds</SelectItem>
-          {kinds.map((k) => (
-            <SelectItem key={k} value={k}>
-              {k}
-            </SelectItem>
+      <Tabs value={tab} onValueChange={onTabChange}>
+        <TabsList data-testid="artifacts-tabs">
+          {ARTIFACT_TABS.map((entry) => (
+            <TabsTrigger
+              key={entry.value}
+              value={entry.value}
+              className="px-3 text-xs"
+            >
+              {entry.label}
+            </TabsTrigger>
           ))}
-        </SelectContent>
-      </Select>
+        </TabsList>
+      </Tabs>
 
-      {showUserFilter ? (
-        <div
-          className="relative w-fit min-w-52"
-          data-testid="artifacts-user-filter"
-        >
-          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Filter by user ID"
-            value={userIdFilter}
-            onChange={(event) => onUserIdFilterChange?.(event.target.value)}
-            className="h-8 pl-9"
-            data-testid="artifacts-user-filter-input"
-          />
-        </div>
-      ) : null}
+      <div className="ml-auto flex items-center gap-3">
+        <Select value={kind} onValueChange={onKindChange}>
+          <SelectTrigger
+            className="h-8 min-w-[10rem]"
+            data-testid="artifacts-kind"
+          >
+            <SelectValue placeholder="All kinds" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_KINDS}>All kinds</SelectItem>
+            {kinds.map((k) => (
+              <SelectItem key={k} value={k}>
+                {k}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {showUserFilter ? (
+          <div
+            className="relative w-fit min-w-52"
+            data-testid="artifacts-user-filter"
+          >
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Filter by user ID"
+              value={userIdFilter}
+              onChange={(event) => onUserIdFilterChange?.(event.target.value)}
+              className="h-8 pl-9"
+              data-testid="artifacts-user-filter-input"
+            />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

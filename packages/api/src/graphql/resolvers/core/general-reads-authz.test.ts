@@ -81,6 +81,16 @@ describe("deploymentStatus authz", () => {
     );
     expect(result).toMatchObject({ source: "AWS" });
     expect(result).toHaveProperty("accountId");
+    expect(result.managedApplications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "cognee", enabled: false }),
+        expect.objectContaining({
+          key: "twenty",
+          status: "disabled",
+          enabled: false,
+        }),
+      ]),
+    );
   });
 
   it("derives Cognee enabled state from deployed Cognee details", async () => {
@@ -103,6 +113,87 @@ describe("deploymentStatus authz", () => {
         "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-cognee-cluster",
       cogneeServiceName: "thinkwork-dev-cognee",
     });
+  });
+
+  it("expands Twenty compact deployment status into managed app fields", async () => {
+    mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
+    vi.stubEnv(
+      "TWENTY",
+      [
+        "1",
+        "1",
+        "https://crm.example.com",
+        "cluster-arn",
+        "server-service",
+        "worker-service",
+        "/thinkwork/dev/twenty/server",
+        "/thinkwork/dev/twenty/worker",
+        "alb-arn",
+        "target-group-arn",
+      ].join("|"),
+    );
+
+    const result = await deploymentStatusMod.deploymentStatus(
+      null,
+      {},
+      service,
+    );
+
+    expect(result).toMatchObject({
+      twentyProvisioned: true,
+      twentyRuntimeEnabled: true,
+      twentyUrl: "https://crm.example.com",
+      twentyClusterArn: "cluster-arn",
+      twentyServerServiceName: "server-service",
+      twentyWorkerServiceName: "worker-service",
+      twentyServerLogGroupName: "/thinkwork/dev/twenty/server",
+      twentyWorkerLogGroupName: "/thinkwork/dev/twenty/worker",
+      twentyAlbArn: "alb-arn",
+      twentyTargetGroupArn: "target-group-arn",
+    });
+    expect(result.managedApplications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "twenty",
+          displayName: "Twenty CRM",
+          status: "running",
+          enabled: true,
+          provisioned: true,
+          runtimeEnabled: true,
+          url: "https://crm.example.com",
+          logGroupNames: [
+            "/thinkwork/dev/twenty/server",
+            "/thinkwork/dev/twenty/worker",
+          ],
+          serviceNames: ["server-service", "worker-service"],
+        }),
+      ]),
+    );
+  });
+
+  it("reports malformed Twenty compact status as unknown without throwing", async () => {
+    mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
+    vi.stubEnv("TWENTY", "not-a-compact-status");
+
+    const result = await deploymentStatusMod.deploymentStatus(
+      null,
+      {},
+      service,
+    );
+
+    expect(result.twentyProvisioned).toBe(false);
+    expect(result.twentyRuntimeEnabled).toBe(false);
+    expect(result.managedApplications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "twenty",
+          status: "unknown",
+          enabled: false,
+          provisioned: false,
+          runtimeEnabled: false,
+        }),
+      ]),
+    );
   });
 });
 

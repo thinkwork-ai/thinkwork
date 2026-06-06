@@ -27,6 +27,10 @@ import { threadMutations } from "./threads/index.js";
 import { inboxMutations } from "./inbox/index.js";
 import { costMutations } from "./costs/index.js";
 import { knowledgeMutations } from "./knowledge/index.js";
+import {
+  knowledgeGraphMutations,
+  knowledgeGraphQueries,
+} from "./knowledge-graph/index.js";
 import { artifactMutations } from "./artifacts/index.js";
 import { orchestrationMutations } from "./orchestration/index.js";
 import { webhookMutations } from "./webhooks/index.js";
@@ -36,7 +40,10 @@ import {
 } from "./evaluations/index.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
-import { skillCatalogMutations } from "./skill-catalog/index.js";
+import {
+  skillCatalogMutations,
+  skillCatalogQueries,
+} from "./skill-catalog/index.js";
 import { runtimeQueries } from "./runtime/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 import { brainQueries, brainMutations } from "./brain/index.js";
@@ -77,6 +84,7 @@ export const queryResolvers: Record<string, any> = {
   ...triggerQueries,
   ...costQueries,
   ...knowledgeQueries,
+  ...knowledgeGraphQueries,
   ...artifactQueries,
   ...appletQueries,
   ...orchestrationQueries,
@@ -87,6 +95,7 @@ export const queryResolvers: Record<string, any> = {
   ...evaluationsQueries,
   ...wikiQueries,
   ...skillRunsQueries,
+  ...skillCatalogQueries,
   ...runtimeQueries,
   ...workspaceQueries,
   ...brainQueries,
@@ -112,6 +121,7 @@ export const mutationResolvers: Record<string, any> = {
   ...inboxMutations,
   ...costMutations,
   ...knowledgeMutations,
+  ...knowledgeGraphMutations,
   ...artifactMutations,
   ...appletMutations,
   ...orchestrationMutations,

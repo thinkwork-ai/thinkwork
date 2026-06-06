@@ -125,19 +125,24 @@ export function DesktopNavigationControls({
 
 export function DesktopApplicationHeader() {
   const { actions } = usePageHeader();
-  const { open } = useSidebar();
+  const { open, isMobile } = useSidebar();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const headerActions = actions?.hideTopBar ? null : actions;
   const tabs = headerActions?.tabs ?? [];
   const hasContent = Boolean(headerActions || tabs.length > 0);
+  // On narrow screens the docked sidebar collapses into a Sheet, so render the
+  // collapsed chrome (nav controls incl. the sidebar trigger) even while the
+  // provider's `open` flag is still true — that trigger is the only way to
+  // reopen the nav once it's a Sheet.
+  const showCollapsedChrome = !open || isMobile;
   const activeTab =
     [...tabs]
       .reverse()
       .find((tab) => pathname === tab.to || pathname.startsWith(`${tab.to}/`))
       ?.to ?? "";
 
-  if (open && !hasContent) {
+  if (!showCollapsedChrome && !hasContent) {
     return (
       <div
         aria-hidden="true"
@@ -149,9 +154,9 @@ export function DesktopApplicationHeader() {
 
   return (
     <header
-      className={`desktop-app-header flex h-11 shrink-0 items-center gap-2 border-b border-border pr-3 text-foreground ${open ? "bg-background pl-3" : "bg-background/95 pl-20"}`}
+      className={`desktop-app-header flex h-11 shrink-0 items-center gap-2 border-b border-border pr-3 text-foreground ${showCollapsedChrome ? "bg-background/95 pl-20" : "bg-background pl-3"}`}
     >
-      {open ? null : (
+      {showCollapsedChrome ? (
         <DesktopNavigationControls
           className="shrink-0"
           onBackFallback={() => {
@@ -160,7 +165,7 @@ export function DesktopApplicationHeader() {
             }
           }}
         />
-      )}
+      ) : null}
       <div
         className={`flex min-w-0 flex-1 items-center gap-2 ${headerActions || tabs.length > 0 ? "" : "pointer-events-none"}`}
       >

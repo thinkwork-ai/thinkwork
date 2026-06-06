@@ -18,16 +18,37 @@ export interface SkillsExtensionOptions {
   skills: WorkspaceSkill[];
 }
 
-export function formatWorkspaceSkills(skills: WorkspaceSkill[]): string {
+export function formatWorkspaceSkills(
+  skills: WorkspaceSkill[],
+  emphasizedSlugs?: Iterable<string>,
+): string {
   if (!skills.length) return "";
-  return [
+  const emphasized = new Set(emphasizedSlugs ?? []);
+  const pinnedPresent = skills.filter((skill) => emphasized.has(skill.slug));
+  const lines = [
     "Workspace skills are available from the copied local workspace tree.",
     "Use the workspace_skill tool to read the full instructions before applying one.",
     "",
     ...skills.map(
-      (skill) => `- ${skill.slug}: ${skill.description || skill.name}`,
+      (skill) =>
+        `- ${skill.slug}${emphasized.has(skill.slug) ? " (pinned)" : ""}: ${
+          skill.description || skill.name
+        }`,
     ),
-  ].join("\n");
+  ];
+  if (pinnedPresent.length > 0) {
+    lines.push(
+      "",
+      `The user explicitly invoked these skills for this turn: ${pinnedPresent
+        .map((skill) => skill.slug)
+        .join(
+          ", ",
+        )}. Prioritize them — read their instructions with the workspace_skill ` +
+        "tool and apply them unless they are clearly irrelevant to the request. " +
+        "Your other skills remain available.",
+    );
+  }
+  return lines.join("\n");
 }
 
 export function createSkillsExtension(

@@ -620,10 +620,10 @@ describe("ChatSidebar", () => {
     expect(
       screen.getByRole("link", { name: "General" }).getAttribute("href"),
     ).toBe("/spaces/space-general");
-    expect(screen.getByRole("button", { name: /toggle chats/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /toggle threads/i })).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: "New thread in Chats" })
+        .getByRole("link", { name: "New thread in Threads" })
         .getAttribute("href"),
     ).toBe("/new?spaceId=space-default");
     expect(
@@ -647,7 +647,7 @@ describe("ChatSidebar", () => {
           screen.getByRole("link", { name: /automations/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Chats" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Threads" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Spaces" })).toBeNull();
     expect(container.querySelector(".tabler-icon-planet")).toBeNull();
     expect(container.querySelector(".lucide-folder")).toBeNull();
@@ -1062,7 +1062,7 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     // The Chats controls cluster shows "2" (the two unread, not the read one).
-    expect(within(sectionToggle(/toggle chats/i)).getByText("2")).toBeTruthy();
+    expect(within(sectionToggle(/toggle threads/i)).getByText("2")).toBeTruthy();
   });
 
   it("puts no badge or options menu on action items or the Pinned section (R7)", () => {
@@ -1087,7 +1087,7 @@ describe("ChatSidebar", () => {
       screen.queryByRole("button", { name: /pinned options/i }),
     ).toBeNull();
     // Chats does get one.
-    expect(screen.getByRole("button", { name: /chats options/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /threads options/i })).toBeTruthy();
   });
 
   it("marks the Chats section's unread ids read optimistically (R2, R4)", async () => {
@@ -1111,7 +1111,7 @@ describe("ChatSidebar", () => {
 
     render(<ChatSidebar />);
 
-    const menu = sectionMenu(/chats options/i);
+    const menu = sectionMenu(/threads options/i);
     fireEvent.click(
       within(menu).getByRole("button", { name: /mark all as read/i }),
     );
@@ -1122,7 +1122,7 @@ describe("ChatSidebar", () => {
       }),
     );
     // Optimistic: the badge clears immediately to 0 (no "2" left in the cluster).
-    expect(within(sectionToggle(/toggle chats/i)).queryByText("2")).toBeNull();
+    expect(within(sectionToggle(/toggle threads/i)).queryByText("2")).toBeNull();
     await waitFor(() =>
       expect(recentReexecuteMock).toHaveBeenCalledWith({
         requestPolicy: "network-only",
@@ -1155,7 +1155,7 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     fireEvent.click(
-      within(sectionMenu(/chats options/i)).getByRole("button", {
+      within(sectionMenu(/threads options/i)).getByRole("button", {
         name: /mark all as read/i,
       }),
     );
@@ -1168,7 +1168,7 @@ describe("ChatSidebar", () => {
     );
     await waitFor(() =>
       expect(
-        within(sectionToggle(/toggle chats/i)).getByText("2"),
+        within(sectionToggle(/toggle threads/i)).getByText("2"),
       ).toBeTruthy(),
     );
   });
@@ -1196,7 +1196,7 @@ describe("ChatSidebar", () => {
 
     expect(screen.getByText("Read one")).toBeTruthy();
     fireEvent.click(
-      within(sectionMenu(/chats options/i)).getByRole("button", {
+      within(sectionMenu(/threads options/i)).getByRole("button", {
         name: /show unread/i,
       }),
     );
@@ -1230,7 +1230,7 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     fireEvent.click(
-      within(sectionMenu(/chats options/i)).getByRole("button", {
+      within(sectionMenu(/threads options/i)).getByRole("button", {
         name: /show unread/i,
       }),
     );

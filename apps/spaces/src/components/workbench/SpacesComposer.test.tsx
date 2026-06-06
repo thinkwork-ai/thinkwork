@@ -10,12 +10,27 @@ import { SpacesComposer } from "./SpacesComposer";
 import { useState } from "react";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
+import { serializeEditor } from "./SkillTokenInput";
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   delete window.thinkworkBridge;
 });
+
+// The composer input is a contenteditable token field, not a <textarea> — drive
+// it by setting text content and firing `input` (what the editor listens for),
+// and read it back from `textContent`.
+function setComposerText(value: string) {
+  const el = screen.getByLabelText("Send message");
+  el.textContent = value;
+  fireEvent.input(el);
+  return el;
+}
+function composerText() {
+  // The canonical value (with @name / /slug tokens), not the rendered pill text.
+  return serializeEditor(screen.getByLabelText("Send message"));
+}
 
 const mentionTargets: MentionTarget[] = [
   {
@@ -134,8 +149,8 @@ describe("SpacesComposer", () => {
       />,
     );
 
-    const input = screen.getByLabelText("Send message") as HTMLTextAreaElement;
-    expect(input.disabled).toBe(true);
+    const input = screen.getByLabelText("Send message");
+    expect(input.getAttribute("contenteditable")).toBe("false");
     expect(document.activeElement).not.toBe(input);
 
     rerender(
@@ -211,7 +226,7 @@ describe("SpacesComposer", () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
-    expect(onSubmit).toHaveBeenCalledWith([], [], true);
+    expect(onSubmit).toHaveBeenCalledWith([], [], true, []);
   });
 
   it("passes agent opt-out through submit", async () => {
@@ -228,7 +243,7 @@ describe("SpacesComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
 
     await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith([], [], false);
+      expect(onSubmit).toHaveBeenCalledWith([], [], false, []);
     });
   });
 
@@ -284,29 +299,24 @@ describe("SpacesComposer", () => {
   it("shows mention suggestions and inserts the selected target", () => {
     render(<ControlledComposer />);
 
-    fireEvent.change(screen.getByLabelText("Send message"), {
-      target: { value: "@mar" },
-    });
+    setComposerText("@mar");
 
     expect(screen.getByRole("option", { name: /Marco/ })).toBeTruthy();
     expect(screen.queryByText("@Marco")).toBeNull();
-    expect(screen.queryByText("agent")).toBeNull();
+    // Only Marco matches "@mar" — no spurious default-agent shortcut option.
+    expect(screen.getAllByRole("option")).toHaveLength(1);
 
     fireEvent.keyDown(screen.getByLabelText("Send message"), {
       key: "Enter",
     });
 
-    expect(
-      (screen.getByLabelText("Send message") as HTMLTextAreaElement).value,
-    ).toBe("@Marco ");
+    expect(composerText()).toBe("@Marco ");
   });
 
   it("commits the highlighted mention on Tab", () => {
     render(<ControlledComposer />);
 
-    fireEvent.change(screen.getByLabelText("Send message"), {
-      target: { value: "@mar" },
-    });
+    setComposerText("@mar");
     expect(screen.getByRole("option", { name: /Marco/ })).toBeTruthy();
 
     const event = fireEvent.keyDown(screen.getByLabelText("Send message"), {
@@ -316,17 +326,13 @@ describe("SpacesComposer", () => {
     // Tab is intercepted (returns false = preventDefault was called) and
     // commits the mention rather than moving focus.
     expect(event).toBe(false);
-    expect(
-      (screen.getByLabelText("Send message") as HTMLTextAreaElement).value,
-    ).toBe("@Marco ");
+    expect(composerText()).toBe("@Marco ");
   });
 
   it("closes the mention menu on Escape without committing", () => {
     render(<ControlledComposer />);
 
-    fireEvent.change(screen.getByLabelText("Send message"), {
-      target: { value: "@mar" },
-    });
+    setComposerText("@mar");
     expect(screen.getByRole("option", { name: /Marco/ })).toBeTruthy();
 
     fireEvent.keyDown(screen.getByLabelText("Send message"), {
@@ -335,9 +341,7 @@ describe("SpacesComposer", () => {
 
     expect(screen.queryByRole("option", { name: /Marco/ })).toBeNull();
     // Text is unchanged — nothing was committed.
-    expect(
-      (screen.getByLabelText("Send message") as HTMLTextAreaElement).value,
-    ).toBe("@mar");
+    expect(composerText()).toBe("@mar");
   });
 
   it("does not intercept Tab when the mention menu is closed", () => {
@@ -359,9 +363,7 @@ describe("SpacesComposer", () => {
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
 
     // Mention a user -> multi-player -> auto-derives OFF.
-    fireEvent.change(screen.getByLabelText("Send message"), {
-      target: { value: "@eri" },
-    });
+    setComposerText("@eri");
     fireEvent.click(screen.getByRole("option", { name: /Eric Odom/ }));
 
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
@@ -370,9 +372,7 @@ describe("SpacesComposer", () => {
   it("keeps the agent toggle ON when only an agent is mentioned", () => {
     render(<ControlledComposer />);
 
-    fireEvent.change(screen.getByLabelText("Send message"), {
-      target: { value: "@mar" },
-    });
+    setComposerText("@mar");
     fireEvent.click(screen.getByRole("option", { name: /Marco/ }));
 
     expect(

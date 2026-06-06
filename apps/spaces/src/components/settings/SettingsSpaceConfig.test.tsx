@@ -2,14 +2,15 @@ import { cleanup, render, screen } from "@testing-library/react";
 import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { queryDocs, updateSpaceMock, refetchMock, spaceRecord } = vi.hoisted(
-  () => ({
+const { queryDocs, updateSpaceMock, refetchMock, pageHeaderMock, spaceRecord } =
+  vi.hoisted(() => ({
     queryDocs: {
       SettingsSpaceQuery: Symbol("space"),
       SettingsUpdateSpaceMutation: Symbol("updateSpace"),
     },
     updateSpaceMock: vi.fn(),
     refetchMock: vi.fn(),
+    pageHeaderMock: vi.fn(),
     spaceRecord: {
       id: "space-1",
       tenantId: "tenant-1",
@@ -56,8 +57,7 @@ const { queryDocs, updateSpaceMock, refetchMock, spaceRecord } = vi.hoisted(
       mcpPolicy: null,
       builtInTools: [],
     } as Record<string, unknown>,
-  }),
-);
+  }));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -85,7 +85,7 @@ vi.mock("urql", () => ({
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
-  usePageHeaderActions: () => {},
+  usePageHeaderActions: (args: unknown) => pageHeaderMock(args),
 }));
 
 vi.mock("@/lib/settings-queries", () => queryDocs);
@@ -95,6 +95,7 @@ import { SettingsSpaceConfig } from "./SettingsSpaceConfig";
 beforeEach(() => {
   updateSpaceMock.mockReset();
   refetchMock.mockReset();
+  pageHeaderMock.mockReset();
 });
 
 afterEach(cleanup);
@@ -114,10 +115,15 @@ describe("SettingsSpaceConfig", () => {
     expect(screen.getByText("finance-audit-xls")).toBeTruthy();
     expect(screen.getByText("Review required")).toBeTruthy();
     expect(screen.getByText("Bash restricted")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: /open space\.md/i })
-        .getAttribute("href"),
-    ).toBe("/spaces/space-1");
+  });
+
+  it("publishes the SPACE.md shortcut as a page-header action", () => {
+    render(<SettingsSpaceConfig />);
+
+    const lastCall = pageHeaderMock.mock.calls.at(-1)?.[0] as
+      | { action?: unknown; actionKey?: string }
+      | undefined;
+    expect(lastCall?.action).toBeTruthy();
+    expect(lastCall?.actionKey).toBe("space-files:space-1");
   });
 });

@@ -48,6 +48,8 @@ import {
   ReviewGoalMutation,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
+import { TenantSkillCatalogQuery } from "@/lib/skill-catalog-queries";
+import type { SkillOption } from "@/components/spaces/SkillMenu";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import { createAppSyncChatTransport } from "@/lib/use-chat-appsync-transport";
 import {
@@ -69,6 +71,11 @@ interface SpacesThreadDetailRouteProps {
   threadId: string;
   backHref?: string;
   documentTitlePrefix?: string;
+  breadcrumbParents?: Array<{
+    label: string;
+    href?: string;
+    search?: Record<string, unknown>;
+  }>;
 }
 
 interface OptimisticAttachmentPreview {
@@ -277,6 +284,7 @@ export function SpacesThreadDetailRoute({
   threadId,
   backHref,
   documentTitlePrefix = "Thread",
+  breadcrumbParents,
 }: SpacesThreadDetailRouteProps) {
   const { tenantId, userId } = useTenant();
   const [optimisticMessage, setOptimisticMessage] =
@@ -349,6 +357,16 @@ export function SpacesThreadDetailRoute({
     pause: !threadId,
     requestPolicy: "cache-and-network",
   });
+  // Tenant skill catalog for the `/skill` force-pin popup (plan 2026-06-04-004
+  // U5). The blocklist guardrail is enforced server-side at dispatch.
+  const [{ data: skillCatalogData }] = useQuery({
+    query: TenantSkillCatalogQuery,
+    variables: { agentId: null },
+  });
+  const skillCatalog = useMemo<SkillOption[]>(
+    () => skillCatalogData?.tenantSkillCatalog ?? [],
+    [skillCatalogData],
+  );
 
   const computerId = routeThread?.computerId ?? null;
   // ComputerThreadTasks / ComputerEvents / RunbookRuns are vestigial: the
@@ -1153,16 +1171,18 @@ export function SpacesThreadDetailRoute({
   // titleContent (see AppTopBar/DesktopApplicationHeader). Degrades to the
   // title-only header when the thread has no resolved space yet (R4).
   const spaceLabel = spaceCrumbLabel(routeThread?.space ?? null);
-  const spaceBreadcrumbs = routeThread?.spaceId
-    ? [
-        {
-          label: spaceLabel,
-          href: "/threads",
-          search: { spaceId: routeThread.spaceId, spaceName: spaceLabel },
-        },
-        { label: threadTitle },
-      ]
-    : undefined;
+  const spaceBreadcrumbs = breadcrumbParents
+    ? [...breadcrumbParents, { label: threadTitle }]
+    : routeThread?.spaceId
+      ? [
+          {
+            label: spaceLabel,
+            href: "/threads",
+            search: { spaceId: routeThread.spaceId, spaceName: spaceLabel },
+          },
+          { label: threadTitle },
+        ]
+      : undefined;
 
   usePageHeaderActions({
     backHref,
@@ -1371,6 +1391,7 @@ export function SpacesThreadDetailRoute({
       streamState={hasDurableAssistant ? undefined : streamState}
       isSending={sending}
       mentionTargets={mentionTargetsData?.threadMentionTargets ?? []}
+      skillCatalog={skillCatalog}
       currentUser={{
         id: userId,
       }}
@@ -1381,6 +1402,7 @@ export function SpacesThreadDetailRoute({
         files,
         mentions = [],
         agentRequested = true,
+        pinnedSkills = [],
       ) => {
         setOptimisticMessage({
           content,
@@ -1454,8 +1476,13 @@ export function SpacesThreadDetailRoute({
           role: "USER",
           content,
         };
-        if (attachmentRefs.length > 0) {
-          sendInput.metadata = JSON.stringify({ attachments: attachmentRefs });
+        const metadata: Record<string, unknown> = {};
+        if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;
+        if (pinnedSkills.length > 0) {
+          metadata.skills = pinnedSkills.map((slug) => ({ slug }));
+        }
+        if (Object.keys(metadata).length > 0) {
+          sendInput.metadata = JSON.stringify(metadata);
         }
         if (mentions.length > 0) {
           sendInput.mentions = mentions.map(toSendMention);

@@ -19,9 +19,20 @@ export interface ThreadGoalFileFallback {
   content?: string | null;
 }
 
+export interface SkillSummary {
+  slug: string;
+  displayName: string | null;
+  description: string | null;
+  category: string | null;
+  icon: string | null;
+  tags: string[] | null;
+  sha: string;
+}
+
 interface WorkspaceFilesResponse {
   ok?: boolean;
   files?: WorkspaceFileMeta[];
+  skills?: SkillSummary[];
   content?: string | null;
   source?: WorkspaceFileSource;
   sha256?: string;
@@ -98,6 +109,18 @@ export async function listSkillSlugs(): Promise<string[]> {
     if (top && f.path.includes("/")) slugs.add(top);
   }
   return [...slugs].sort();
+}
+
+/**
+ * Index-backed per-skill summary for the Skills list — one cheap DB query
+ * server-side instead of scanning S3 + reading every file (plan U4). Rows carry
+ * the parsed display metadata; the list renders names instead of raw slugs.
+ */
+export async function listSkillSummaries(): Promise<SkillSummary[]> {
+  const data = await request({ action: "list", catalog: true, summary: true });
+  return (data.skills ?? [])
+    .slice()
+    .sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 /**

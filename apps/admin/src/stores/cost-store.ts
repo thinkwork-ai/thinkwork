@@ -14,11 +14,13 @@ export type CostSummary = {
   eventCount: number;
 };
 
-export type AgentCost = {
-  agentId: string;
-  agentName: string;
+export type UserCost = {
+  userId: string | null;
+  userName: string;
+  userEmail: string | null;
   totalUsd: number;
   eventCount: number;
+  isSystem: boolean;
 };
 
 export type ModelCost = {
@@ -41,6 +43,7 @@ export type BudgetStatusItem = {
   policy: {
     id: string;
     agentId: string | null;
+    userId: string | null;
     scope: string;
     limitUsd: number;
     actionOnExceed: string;
@@ -55,6 +58,9 @@ export type CostEvent = {
   tenantId: string;
   agentId: string;
   agentName: string;
+  userId?: string | null;
+  userName?: string | null;
+  userEmail?: string | null;
   eventType: string;
   amountUsd: number;
   model: string;
@@ -68,7 +74,7 @@ export type CostEvent = {
 type CostStore = {
   // Data
   summary: CostSummary | null;
-  byAgent: AgentCost[];
+  byUser: UserCost[];
   byModel: ModelCost[];
   timeSeries: DailyCost[];
   budgets: BudgetStatusItem[];
@@ -76,7 +82,7 @@ type CostStore = {
 
   // Actions — bulk set from initial query
   setSummary: (s: CostSummary) => void;
-  setByAgent: (a: AgentCost[]) => void;
+  setByUser: (a: UserCost[]) => void;
   setByModel: (m: ModelCost[]) => void;
   setTimeSeries: (t: DailyCost[]) => void;
   setBudgets: (b: BudgetStatusItem[]) => void;
@@ -93,14 +99,14 @@ const today = () => {
 
 export const useCostStore = create<CostStore>((set) => ({
   summary: null,
-  byAgent: [],
+  byUser: [],
   byModel: [],
   timeSeries: [],
   budgets: [],
   loaded: false,
 
   setSummary: (s) => set({ summary: s }),
-  setByAgent: (a) => set({ byAgent: a }),
+  setByUser: (a) => set({ byUser: a }),
   setByModel: (m) => set({ byModel: m }),
   setTimeSeries: (t) => set({ timeSeries: t }),
   setBudgets: (b) => set({ budgets: b }),
@@ -133,21 +139,26 @@ export const useCostStore = create<CostStore>((set) => ({
         eventCount: prev.eventCount + 1,
       };
 
-      // --- byAgent ---
-      const byAgent = [...state.byAgent];
-      const agentIdx = byAgent.findIndex((a) => a.agentId === event.agentId);
-      if (agentIdx >= 0) {
-        byAgent[agentIdx] = {
-          ...byAgent[agentIdx],
-          totalUsd: byAgent[agentIdx].totalUsd + amt,
-          eventCount: byAgent[agentIdx].eventCount + 1,
+      // --- byUser ---
+      const byUser = [...state.byUser];
+      const userKey = event.userId ?? null;
+      const userIdx = byUser.findIndex((u) => u.userId === userKey);
+      if (userIdx >= 0) {
+        byUser[userIdx] = {
+          ...byUser[userIdx],
+          totalUsd: byUser[userIdx].totalUsd + amt,
+          eventCount: byUser[userIdx].eventCount + 1,
         };
       } else {
-        byAgent.push({
-          agentId: event.agentId,
-          agentName: event.agentName,
+        byUser.push({
+          userId: userKey,
+          userName: userKey
+            ? (event.userName ?? event.userEmail ?? "Unknown user")
+            : "System / unattributed",
+          userEmail: userKey ? (event.userEmail ?? null) : null,
           totalUsd: amt,
           eventCount: 1,
+          isSystem: !userKey,
         });
       }
 
@@ -196,6 +207,11 @@ export const useCostStore = create<CostStore>((set) => ({
 
       // --- budgets (increment spent) ---
       const budgets = state.budgets.map((b) => {
+        const shouldIncrement =
+          b.policy.scope === "tenant" ||
+          (b.policy.scope === "user" && b.policy.userId === event.userId);
+        if (!shouldIncrement) return b;
+
         const newSpent = b.spentUsd + amt;
         return {
           ...b,
@@ -212,6 +228,6 @@ export const useCostStore = create<CostStore>((set) => ({
         };
       });
 
-      return { summary, byAgent, byModel, timeSeries, budgets };
+      return { summary, byUser, byModel, timeSeries, budgets };
     }),
 }));
