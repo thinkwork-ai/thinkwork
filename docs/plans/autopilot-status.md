@@ -386,19 +386,19 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-003-feat-twenty-crm-mcp-oauth-plan.md`.
 - Target branch: `main`.
-- Current unit: U6 E2E docs, runtime tool import, and smoke proof.
-- Current branch: `codex/twenty-mcp-u6-e2e-proof`.
-- Current worktree: `.Codex/worktrees/twenty-mcp-u6-e2e-proof`.
-- Status: local implementation and live proof complete; PR pending.
+- Current unit: none.
+- Current branch: none.
+- Current worktree: none.
+- Status: complete.
 
-| Unit                              | Branch                               | PR                                                           | State  | Notes                                                                                                                                              |
-| --------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema`         | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Merged | Squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`; required checks passed after scoped dev migration application for the drift precheck. |
-| U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile`      | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Merged | Squash merged as `e918df560c451daf2340a79ba808d753c9e37858`; required checks passed.                                                               |
-| U3 Desktop/web MCP OAuth          | `codex/twenty-mcp-u3-oauth`          | [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) | Merged | Squash merged as `828a51f238492540c67f47746b8732b8657d0e45`; required checks passed.                                                               |
-| U4 Spaces MCP auth UI             | `codex/twenty-mcp-u4-auth-ui`        | [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168) | Merged | Squash merged as `f8428a38432429e627cb776dfe160c4940568a6e`; required checks passed.                                                               |
-| U5 Auth status and runtime safety | `codex/twenty-mcp-u5-runtime-safety` | [#2170](https://github.com/thinkwork-ai/thinkwork/pull/2170) | Merged | Squash merged as `2ef9d59252e3fd7ab78b8224c40a2001a9051816`; required checks passed.                                                               |
-| U6 E2E docs and smoke proof       | `codex/twenty-mcp-u6-e2e-proof`      | [#2176](https://github.com/thinkwork-ai/thinkwork/pull/2176) | Active | Adds smoke tooling/docs, default-agent assignment, runtime tool import/search UI, and live assigned-opportunities proof.                           |
+| Unit                              | Branch                               | PR                                                           | State  | Notes                                                                                                                                                                                 |
+| --------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Managed MCP ownership schema   | `codex/twenty-mcp-u1-schema`         | [#2162](https://github.com/thinkwork-ai/thinkwork/pull/2162) | Merged | Squash merged as `0d22cda0579ce3ecd2a5d73525b019cf13d78861`; required checks passed after scoped dev migration application for the drift precheck.                                    |
+| U2 Managed app MCP reconciliation | `codex/twenty-mcp-u2-reconcile`      | [#2164](https://github.com/thinkwork-ai/thinkwork/pull/2164) | Merged | Squash merged as `e918df560c451daf2340a79ba808d753c9e37858`; required checks passed.                                                                                                  |
+| U3 Desktop/web MCP OAuth          | `codex/twenty-mcp-u3-oauth`          | [#2167](https://github.com/thinkwork-ai/thinkwork/pull/2167) | Merged | Squash merged as `828a51f238492540c67f47746b8732b8657d0e45`; required checks passed.                                                                                                  |
+| U4 Spaces MCP auth UI             | `codex/twenty-mcp-u4-auth-ui`        | [#2168](https://github.com/thinkwork-ai/thinkwork/pull/2168) | Merged | Squash merged as `f8428a38432429e627cb776dfe160c4940568a6e`; required checks passed.                                                                                                  |
+| U5 Auth status and runtime safety | `codex/twenty-mcp-u5-runtime-safety` | [#2170](https://github.com/thinkwork-ai/thinkwork/pull/2170) | Merged | Squash merged as `2ef9d59252e3fd7ab78b8224c40a2001a9051816`; required checks passed.                                                                                                  |
+| U6 E2E docs and smoke proof       | `codex/twenty-mcp-u6-e2e-proof`      | [#2176](https://github.com/thinkwork-ai/thinkwork/pull/2176) | Merged | Squash merged as `969e4be9bcdc07778082e0e8141e6ebf21a4b2a2`; adds smoke tooling/docs, default-agent assignment, runtime tool import/search UI, and live assigned-opportunities proof. |
 
 ### Progress Log
 
