@@ -13,9 +13,9 @@ status: in_progress
 - Requirements:
   `docs/brainstorms/2026-06-06-model-stacking-tool-routing-requirements.md`.
 - Target branch: `main`.
-- Current unit: U8 Surface evidence in Settings Activity thread detail.
-- Current branch: `codex/u8-activity-model-routing-evidence`.
-- Current worktree: `.Codex/worktrees/u8-activity-model-routing-evidence`.
+- Current unit: U9 Add end-to-end layered `TOOLS.md` proof.
+- Current branch: `codex/u9-model-stacking-e2e-proof`.
+- Current worktree: `.Codex/worktrees/u9-model-stacking-e2e-proof`.
 - Status: in progress.
 
 | Unit                                                        | Branch                                     | PR                                                           | State  | Notes                        |
@@ -27,8 +27,8 @@ status: in_progress
 | U5 Extend `TOOLS.md` effective policy with model routing    | `codex/u5-tools-policy-model-routing`      | [#2185](https://github.com/thinkwork-ai/thinkwork/pull/2185) | Merged | Squash merged as `ed7aed80`. |
 | U6 Implement model-routed `workspace_skill` child execution | `codex/u6-model-routed-workspace-skill`    | [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189) | Merged | Squash merged as `5ac9a4c3`. |
 | U7 Record trace and cost evidence                           | `codex/u7-model-routing-trace-cost`        | [#2191](https://github.com/thinkwork-ai/thinkwork/pull/2191) | Merged | Squash merged as `bc66e94f`. |
-| U8 Surface evidence in Settings Activity thread detail      | `codex/u8-activity-model-routing-evidence` | [#2192](https://github.com/thinkwork-ai/thinkwork/pull/2192) | Active |                              |
-| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                        | TBD                                                          | Todo   |                              |
+| U8 Surface evidence in Settings Activity thread detail      | `codex/u8-activity-model-routing-evidence` | [#2192](https://github.com/thinkwork-ai/thinkwork/pull/2192) | Merged | Squash merged as `3060d2c0`. |
+| U9 Add end-to-end layered `TOOLS.md` proof                  | `codex/u9-model-stacking-e2e-proof`        | [#2193](https://github.com/thinkwork-ai/thinkwork/pull/2193) | Active |                              |
 | U10 Regenerate schemas and add demo policy documentation    | TBD                                        | TBD                                                          | Todo   |                              |
 
 ### Progress Log
@@ -172,6 +172,23 @@ status: in_progress
   tool discovery in this thread, so local visual verification used component
   tests and the Spaces production build.
 - Opened PR [#2192](https://github.com/thinkwork-ai/thinkwork/pull/2192).
+- PR [#2192](https://github.com/thinkwork-ai/thinkwork/pull/2192) passed CLA,
+  lint, verify, typecheck, and test, then was squash merged as
+  `3060d2c0bc5ef0a227b2967c8ab598ea016b8f98`. The remote branch was already
+  deleted by GitHub; the local U8 worktree and branch were removed.
+- Created isolated U9 worktree `.Codex/worktrees/u9-model-stacking-e2e-proof`
+  from `origin/main` at `3060d2c0`.
+- Started U9 proof work: added a hermetic model-stacking e2e suite that starts
+  from layered `TOOLS.md` policy content, composes effective precedence,
+  executes `workspace_skill` through a routed child model helper, verifies Pi
+  runtime tool metadata, and checks the unapproved override rejection path.
+- U9 local verification passed: `bash scripts/model-stacking-e2e.sh`,
+  `pnpm --filter @thinkwork/api exec vitest run test/integration/model-stacking/tool-model-routing.e2e.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, full
+  `pnpm --filter @thinkwork/api test` (430 files passed, 3 skipped; 3682 tests
+  passed, 9 skipped), `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, and `git diff --check`.
+- Opened PR [#2193](https://github.com/thinkwork-ai/thinkwork/pull/2193).
 - Created isolated U3 worktree `.Codex/worktrees/u3-approved-model-composers`
   from `origin/main` at `e0a43844`.
 - Implemented U3 approved model selection in Spaces: shared approved-model
