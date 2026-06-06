@@ -535,10 +535,15 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(workflow).toMatch(/ALTER ROLE %I LOGIN PASSWORD %L/);
     expect(workflow).toMatch(/CREATE DATABASE %I/);
     expect(workflow).not.toMatch(/CREATE DATABASE %I OWNER %I/);
-    expect(workflow).not.toMatch(/ALTER DATABASE %I OWNER TO %I/);
-    expect(workflow).toMatch(/GRANT CONNECT ON DATABASE :\"twenty_db\"/);
+    expect(workflow).toMatch(/ALTER DATABASE %I OWNER TO %I/);
+    expect(workflow).toMatch(/GRANT CONNECT, CREATE ON DATABASE :\"twenty_db\"/);
     expect(workflow).toMatch(/\\connect :\"twenty_db\"/);
+    expect(workflow).toMatch(/CREATE SCHEMA IF NOT EXISTS core AUTHORIZATION/);
+    expect(workflow).toMatch(/ALTER SCHEMA public OWNER TO/);
+    expect(workflow).toMatch(/CREATE EXTENSION IF NOT EXISTS "uuid-ossp"/);
+    expect(workflow).toMatch(/CREATE EXTENSION IF NOT EXISTS "unaccent"/);
     expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);
+    expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA core/);
   });
 
   it("destroys Twenty retained database and secrets only after Terraform teardown is requested", () => {
