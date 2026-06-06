@@ -62,3 +62,4 @@ export * from "./compliance";
 export * from "./slack";
 export * from "./spaces";
 export * from "./goals";
+export * from "./deployments";

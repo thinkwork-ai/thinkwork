@@ -250,6 +250,7 @@ input UpdateTenantSettingsInput {
 
 input SetKnowledgeGraphDeploymentInput {
   enabled: Boolean!
+  idempotencyKey: String
 }
 
 input SetManagedApplicationDeploymentInput {

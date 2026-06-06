@@ -4,6 +4,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
+import { startManagedApplicationPlan } from "../deployments/startManagedApplicationPlan.mutation.js";
 
 const sm = new SecretsManagerClient({});
 
@@ -12,32 +13,39 @@ export const setKnowledgeGraphDeployment = async (
   args: any,
   ctx: GraphQLContext,
 ) => {
-  await requirePlatformOperator(ctx);
-
   const desiredEnabled = Boolean(args.input?.enabled);
-  const config = deploymentControlConfig();
-  const token = await readGithubToken(config.tokenSecretId);
-
-  await upsertGithubActionsVariable({
-    token,
-    repository: config.repository,
-    name: "COGNEE_ENABLED",
-    value: desiredEnabled ? "true" : "false",
-  });
-
-  await dispatchDeployWorkflow({
-    token,
-    repository: config.repository,
-    workflowFile: config.workflowFile,
-    ref: config.ref,
-  });
+  const idempotencyKey =
+    typeof args.input?.idempotencyKey === "string" &&
+    args.input.idempotencyKey.trim()
+      ? args.input.idempotencyKey.trim()
+      : defaultKnowledgeGraphIdempotencyKey(ctx, desiredEnabled);
+  const deployment = await startManagedApplicationPlan(
+    _parent,
+    {
+      input: {
+        key: "cognee",
+        operation: desiredEnabled ? "ENABLE" : "DESTROY",
+        idempotencyKey,
+      },
+    },
+    ctx,
+  );
 
   return {
     desiredEnabled,
-    workflowUrl: `https://github.com/${config.repository}/actions/workflows/${config.workflowFile}`,
-    message: `Knowledge Graph ${desiredEnabled ? "enable" : "disable"} deployment queued.`,
+    workflowUrl: deployment.planExecutionArn ?? "",
+    message: `Knowledge Graph ${desiredEnabled ? "enable" : "disable"} deployment plan queued.`,
   };
 };
+
+function defaultKnowledgeGraphIdempotencyKey(
+  ctx: GraphQLContext,
+  desiredEnabled: boolean,
+): string {
+  const principal = ctx.auth.principalId ?? "anonymous";
+  const minute = new Date().toISOString().slice(0, 16);
+  return `knowledge-graph:${principal}:${desiredEnabled ? "enable" : "destroy"}:${minute}`;
+}
 
 export function deploymentControlConfig() {
   const stage = process.env.STAGE || "dev";
