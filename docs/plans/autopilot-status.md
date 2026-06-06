@@ -7934,3 +7934,21 @@ None.
 terraform -chdir=terraform/modules/app/www-dns validate`,
   `terraform -chdir=terraform/examples/greenfield fmt -check`, and
   `git diff --check`.
+- PR [#2141](https://github.com/thinkwork-ai/thinkwork/pull/2141) merged as
+  `dd77328f`; its main deploy run
+  [27050233677](https://github.com/thinkwork-ai/thinkwork/actions/runs/27050233677)
+  reached Terraform Apply and confirmed the plan would set
+  `twenty_url=https://crm.thinkwork.ai`, but failed when adding CRM to the
+  shared site certificate forced ACM validation records for existing hosts to
+  be recreated in Cloudflare.
+- Follow-up fix in progress: keep `www-dns` responsible only for the
+  `crm.<domain>` CNAME, remove CRM from the shared site ACM SANs, and create a
+  dedicated greenfield ACM certificate for `crm.thinkwork.ai` when Twenty is
+  provisioned without an explicit `twenty_certificate_arn`. Local verification
+  passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`,
+  `terraform -chdir=terraform/modules/app/www-dns fmt -check`,
+  `terraform -chdir=terraform/modules/app/www-dns validate`,
+  `terraform -chdir=terraform/examples/greenfield init -backend=false &&
+terraform -chdir=terraform/examples/greenfield validate`, and
+  `git diff --check`.

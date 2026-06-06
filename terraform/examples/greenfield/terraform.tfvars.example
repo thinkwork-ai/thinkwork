@@ -37,7 +37,7 @@ database_engine = "rds-postgres"
 # twenty_db_url_secret_arn          = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/twenty/db-url-..."
 # twenty_encryption_key_secret_arn  = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/twenty/encryption-key-..."
 # twenty_public_url                 = "" # empty derives https://crm.<www_domain>
-# twenty_certificate_arn            = "" # empty reuses the www-dns certificate
+# twenty_certificate_arn            = "" # empty creates a dedicated crm.<www_domain> certificate
 
 # Database master password — use a strong password
 db_password = "CHANGE_ME_strong_password_here"

@@ -12,7 +12,8 @@
 #   6. Optional admin.<domain> CNAME → admin CloudFront distribution.
 #   7. Optional app.<domain> CNAME → end-user app CloudFront distribution.
 #   8. Optional computer.<domain> → app.<domain> 301 compatibility redirect.
-#   9. Optional crm.<domain> CNAME → Twenty CRM public ALB.
+#   9. Optional crm.<domain> CNAME → Twenty CRM public ALB. The CRM ALB uses
+#      its own certificate; this module only owns the public CNAME.
 #
 # Cloudflare records MUST be DNS-only (grey cloud). CloudFront terminates TLS
 # with the ACM cert and needs the real Host header.
@@ -44,8 +45,8 @@ locals {
   name_id  = replace(var.domain, ".", "-")
 
   # ACM SANs: always include www, conditionally include docs, admin, computer,
-  # and api. The Computer iframe sandbox uses its own certificate so adding or
-  # rotating the sandbox host never forces a replacement of this shared
+  # and api. The Computer iframe sandbox and CRM ALB use their own certificates
+  # so adding or rotating those hosts never forces a replacement of this shared
   # production certificate.
   # Gated on plain bool vars (not on CloudFront/API Gateway outputs) to keep
   # the dependency graph acyclic — distributions / custom domain names
@@ -57,14 +58,13 @@ locals {
     var.include_app ? [local.app] : [],
     var.include_computer ? [local.computer] : [],
     var.include_api ? [local.api] : [],
-    var.include_crm ? [local.crm] : [],
   )
 
   # Existing CNAME records stay gated on non-empty targets because their target
   # outputs are already known in the deployed stack. Newly bootstrapped records
   # such as app/computer compatibility/sandbox/crm CNAMEs must gate only on
   # explicit booleans so Terraform can plan the resource count before the new
-  # distribution or load balancer exists.
+  # load balancer exists.
   create_docs_record     = var.include_docs && var.docs_cloudfront_domain_name != ""
   create_admin_record    = var.include_admin && var.admin_cloudfront_domain_name != ""
   create_app_record      = var.include_app
