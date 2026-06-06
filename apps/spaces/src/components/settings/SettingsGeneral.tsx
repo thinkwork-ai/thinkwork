@@ -11,6 +11,7 @@ import {
   useTheme,
 } from "@thinkwork/ui";
 import { AgentRuntime } from "@/gql/graphql";
+import { APP_VERSION_LABEL } from "@/lib/app-version";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktop } from "@/lib/desktop-detection";
 import { requestDesktopNotificationPermission } from "@/lib/desktop-notifications";
@@ -64,12 +65,17 @@ export function SettingsGeneral() {
 
       <SettingsSection label="Appearance">
         <ThemeRow />
-        {isDesktop() ? (
-          <>
-            <EditorFontSizeRow />
-            <EditorWrapRow />
-          </>
-        ) : null}
+        <EditorFontSizeRow />
+        <EditorWrapRow />
+      </SettingsSection>
+
+      <SettingsSection label="About">
+        <SettingsRow
+          label="App version"
+          description="The ThinkWork build running on this device."
+        >
+          {APP_VERSION_LABEL}
+        </SettingsRow>
       </SettingsSection>
 
       {isDesktop() ? (

@@ -162,7 +162,7 @@ describe("SpacesSidebar", () => {
 
     expect(screen.getByTestId("sidebar-header")).toBeTruthy();
     expect(screen.getByText("ThinkWork")).toBeTruthy();
-    expect(screen.getByText("Spaces")).toBeTruthy();
+    expect(screen.getByAltText("ThinkWork")).toBeTruthy();
   });
 
   it("removes the brand area in the Electron shell", () => {

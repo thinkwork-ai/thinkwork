@@ -39,10 +39,10 @@
  * `:not(.desktop-vibrancy)` so the desktop build keeps its own treatment.
  */
 .dark:not(.desktop-vibrancy) {
-  --background: oklch(0.155 0.004 65);
-  --card: oklch(0.205 0.006 65);
-  --sidebar: oklch(0.205 0.006 65);
-  --sidebar-accent: oklch(0.269 0.006 65);
+  --background: #1a1a1a;
+  --card: #171717;
+  --sidebar: #2c3032;
+  --sidebar-accent: #505455;
 }
 
 /*
@@ -98,6 +98,13 @@
 }
 .ai-response [data-streamdown="code-block-header"] {
   display: none;
+}
+
+/* Tailwind Typography (prose) gives every <table> a large vertical margin
+   (~2em top/bottom), which shows as empty bands above the header and below the
+   last row inside Streamdown's table card. Tighten it. */
+.ai-response [data-streamdown="table"] {
+  margin-block: 6px;
 }
 
 /* Streamdown wraps tables in an outer card plus a top-right control bar

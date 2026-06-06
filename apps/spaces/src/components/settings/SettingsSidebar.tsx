@@ -97,16 +97,11 @@ export function SettingsSidebar({
             <img
               src="/logo.png"
               alt="ThinkWork"
-              className="h-9 w-9 shrink-0 object-contain"
+              className="h-7 w-7 shrink-0 object-contain"
             />
-            <div className="flex min-w-0 flex-col">
-              <span className="truncate text-base font-semibold leading-none tracking-tight">
-                ThinkWork
-              </span>
-              <span className="truncate text-xs text-sidebar-foreground/55">
-                Spaces
-              </span>
-            </div>
+            <span className="truncate text-base font-semibold leading-none tracking-tight">
+              ThinkWork
+            </span>
           </Link>
         </div>
       )}
