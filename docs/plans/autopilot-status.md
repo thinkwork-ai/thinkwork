@@ -25,7 +25,7 @@ status: in_progress
 | U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers`     | [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) | Merged | Squash merged as `8bf03028`. |
 | U4 Propagate and validate selected parent model             | `codex/u4-parent-model-dispatch`        | [#2181](https://github.com/thinkwork-ai/thinkwork/pull/2181) | Merged | Squash merged as `015bc739`. |
 | U5 Extend `TOOLS.md` effective policy with model routing    | `codex/u5-tools-policy-model-routing`   | [#2185](https://github.com/thinkwork-ai/thinkwork/pull/2185) | Merged | Squash merged as `ed7aed80`. |
-| U6 Implement model-routed `workspace_skill` child execution | `codex/u6-model-routed-workspace-skill` | TBD                                                          | Active |                              |
+| U6 Implement model-routed `workspace_skill` child execution | `codex/u6-model-routed-workspace-skill` | [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189) | Active |                              |
 | U7 Record trace and cost evidence                           | TBD                                     | TBD                                                          | Todo   |                              |
 | U8 Surface evidence in Settings Activity thread detail      | TBD                                     | TBD                                                          | Todo   |                              |
 | U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                     | TBD                                                          | Todo   |                              |
@@ -126,6 +126,7 @@ status: in_progress
   `api`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present lint`,
   `git diff --check`, `bash scripts/verify-supply-chain.sh`, full
   `pi-runtime-core`, `pi-extensions`, `agentcore-pi`, and `api` test suites.
+- Opened PR [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189).
 - Created isolated U3 worktree `.Codex/worktrees/u3-approved-model-composers`
   from `origin/main` at `e0a43844`.
 - Implemented U3 approved model selection in Spaces: shared approved-model
