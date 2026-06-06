@@ -661,6 +661,14 @@ export const SettingsActivityThreadTracesQuery = gql`
       durationMs
       costUsd
       estimated
+      source
+      parentRequestId
+      toolCallId
+      toolName
+      modelRoutingStatus
+      ruleSource
+      match
+      metadata
       createdAt
     }
   }

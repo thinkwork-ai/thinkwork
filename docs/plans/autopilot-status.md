@@ -13,23 +13,23 @@ status: in_progress
 - Requirements:
   `docs/brainstorms/2026-06-06-model-stacking-tool-routing-requirements.md`.
 - Target branch: `main`.
-- Current unit: U7 Record trace and cost evidence.
-- Current branch: `codex/u7-model-routing-trace-cost`.
-- Current worktree: `.Codex/worktrees/u7-model-routing-trace-cost`.
+- Current unit: U8 Surface evidence in Settings Activity thread detail.
+- Current branch: `codex/u8-activity-model-routing-evidence`.
+- Current worktree: `.Codex/worktrees/u8-activity-model-routing-evidence`.
 - Status: in progress.
 
-| Unit                                                        | Branch                                  | PR                                                           | State  | Notes                        |
-| ----------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------- |
-| U1 Add per-user model approval data and API                 | `codex/u1-model-approvals`              | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Merged | Squash merged as `efdf8549`. |
-| U2 Add the admin Models section on user profile settings    | `codex/u2-user-model-settings`          | [#2175](https://github.com/thinkwork-ai/thinkwork/pull/2175) | Merged | Squash merged as `e0a43844`. |
-| U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers`     | [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) | Merged | Squash merged as `8bf03028`. |
-| U4 Propagate and validate selected parent model             | `codex/u4-parent-model-dispatch`        | [#2181](https://github.com/thinkwork-ai/thinkwork/pull/2181) | Merged | Squash merged as `015bc739`. |
-| U5 Extend `TOOLS.md` effective policy with model routing    | `codex/u5-tools-policy-model-routing`   | [#2185](https://github.com/thinkwork-ai/thinkwork/pull/2185) | Merged | Squash merged as `ed7aed80`. |
-| U6 Implement model-routed `workspace_skill` child execution | `codex/u6-model-routed-workspace-skill` | [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189) | Merged | Squash merged as `5ac9a4c3`. |
-| U7 Record trace and cost evidence                           | `codex/u7-model-routing-trace-cost`     | [#2191](https://github.com/thinkwork-ai/thinkwork/pull/2191) | Active |                              |
-| U8 Surface evidence in Settings Activity thread detail      | TBD                                     | TBD                                                          | Todo   |                              |
-| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                     | TBD                                                          | Todo   |                              |
-| U10 Regenerate schemas and add demo policy documentation    | TBD                                     | TBD                                                          | Todo   |                              |
+| Unit                                                        | Branch                                     | PR                                                           | State  | Notes                        |
+| ----------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ---------------------------- |
+| U1 Add per-user model approval data and API                 | `codex/u1-model-approvals`                 | [#2171](https://github.com/thinkwork-ai/thinkwork/pull/2171) | Merged | Squash merged as `efdf8549`. |
+| U2 Add the admin Models section on user profile settings    | `codex/u2-user-model-settings`             | [#2175](https://github.com/thinkwork-ai/thinkwork/pull/2175) | Merged | Squash merged as `e0a43844`. |
+| U3 Add approved model pickers to composers                  | `codex/u3-approved-model-composers`        | [#2179](https://github.com/thinkwork-ai/thinkwork/pull/2179) | Merged | Squash merged as `8bf03028`. |
+| U4 Propagate and validate selected parent model             | `codex/u4-parent-model-dispatch`           | [#2181](https://github.com/thinkwork-ai/thinkwork/pull/2181) | Merged | Squash merged as `015bc739`. |
+| U5 Extend `TOOLS.md` effective policy with model routing    | `codex/u5-tools-policy-model-routing`      | [#2185](https://github.com/thinkwork-ai/thinkwork/pull/2185) | Merged | Squash merged as `ed7aed80`. |
+| U6 Implement model-routed `workspace_skill` child execution | `codex/u6-model-routed-workspace-skill`    | [#2189](https://github.com/thinkwork-ai/thinkwork/pull/2189) | Merged | Squash merged as `5ac9a4c3`. |
+| U7 Record trace and cost evidence                           | `codex/u7-model-routing-trace-cost`        | [#2191](https://github.com/thinkwork-ai/thinkwork/pull/2191) | Merged | Squash merged as `bc66e94f`. |
+| U8 Surface evidence in Settings Activity thread detail      | `codex/u8-activity-model-routing-evidence` | [#2192](https://github.com/thinkwork-ai/thinkwork/pull/2192) | Active |                              |
+| U9 Add end-to-end layered `TOOLS.md` proof                  | TBD                                        | TBD                                                          | Todo   |                              |
+| U10 Regenerate schemas and add demo policy documentation    | TBD                                        | TBD                                                          | Todo   |                              |
 
 ### Progress Log
 
@@ -149,6 +149,29 @@ status: in_progress
   `pnpm --filter @thinkwork/pi-runtime-core test`, and full
   `pnpm --filter @thinkwork/agentcore-pi test`.
 - Opened PR [#2191](https://github.com/thinkwork-ai/thinkwork/pull/2191).
+- PR [#2191](https://github.com/thinkwork-ai/thinkwork/pull/2191) passed CLA,
+  lint, verify, typecheck, and test, then was squash merged as
+  `bc66e94f804957b2566b432db2ea89affbb664b9`. The remote branch was already
+  deleted by GitHub; the local U7 worktree and branch were removed.
+- Created isolated U8 worktree
+  `.Codex/worktrees/u8-activity-model-routing-evidence` from `origin/main` at
+  `bc66e94f`.
+- Started U8 Settings Activity evidence work: the Spaces Activity trace query
+  now requests model-routing trace metadata, Settings Activity tool rows show
+  routed model, input/output tokens, and route status, the tool detail dialog
+  includes a model-routing evidence block, unmatched route events such as
+  rejected routes are included in the timeline, and the shared workbench turn
+  parser surfaces finalized tool routing evidence.
+- U8 local verification passed:
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsActivityThreadDetail.test.tsx src/components/workbench/TaskThreadView.convergence.test.ts`,
+  `pnpm --filter @thinkwork/spaces typecheck`,
+  `pnpm --filter @thinkwork/spaces build`, `pnpm -r --if-present typecheck`,
+  `pnpm -r --if-present lint`, full `pnpm --filter @thinkwork/spaces test`
+  (129 files passed; 893 tests passed), and `git diff --check`.
+- U8 browser note: the Codex in-app Browser control tool was not exposed by
+  tool discovery in this thread, so local visual verification used component
+  tests and the Spaces production build.
+- Opened PR [#2192](https://github.com/thinkwork-ai/thinkwork/pull/2192).
 - Created isolated U3 worktree `.Codex/worktrees/u3-approved-model-composers`
   from `origin/main` at `e0a43844`.
 - Implemented U3 approved model selection in Spaces: shared approved-model

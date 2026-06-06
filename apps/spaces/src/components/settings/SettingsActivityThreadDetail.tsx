@@ -114,6 +114,8 @@ interface ThreadTracesResult {
 
 interface ThreadTrace {
   traceId?: string | null;
+  requestId?: string | null;
+  eventType?: string | null;
   agentName?: string | null;
   runtimeType?: string | null;
   model?: string | null;
@@ -122,6 +124,14 @@ interface ThreadTrace {
   durationMs?: number | null;
   costUsd?: number | null;
   estimated?: boolean | null;
+  source?: string | null;
+  parentRequestId?: string | null;
+  toolCallId?: string | null;
+  toolName?: string | null;
+  modelRoutingStatus?: string | null;
+  ruleSource?: unknown;
+  match?: unknown;
+  metadata?: unknown;
   createdAt?: string | null;
 }
 

@@ -197,4 +197,35 @@ describe("actionRowsForTurn — live/finalized convergence", () => {
     expect(rows[0].detail).not.toContain('\\"content\\"');
     expect(rows[0].detail).not.toContain('\\\\\\"provider');
   });
+
+  it("surfaces model routing evidence from finalized tool invocations", () => {
+    const rows = actionRowsForTurn(turnWith([], "succeeded"), {
+      tool_invocations: [
+        {
+          tool_name: "workspace_skill",
+          model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+          input_tokens: 1234,
+          output_tokens: 56,
+          cached_read_tokens: 20,
+          model_routing_status: "succeeded",
+          model_routing_rule_source: {
+            scope: "user",
+            path: "users/eric/TOOLS.md",
+          },
+          model_routing_match: {
+            skill: "research",
+          },
+          output_preview: "done",
+        },
+      ],
+    });
+
+    expect(rows[0].detail).toContain("Model routing");
+    expect(rows[0].detail).toContain("Model: claude-haiku-4-5-20251001");
+    expect(rows[0].detail).toContain("Tokens: 1.2K in / 56 out");
+    expect(rows[0].detail).toContain("(20 cached)");
+    expect(rows[0].detail).toContain("Routing status: succeeded");
+    expect(rows[0].detail).toContain('"scope": "user"');
+    expect(rows[0].detail).toContain('"skill": "research"');
+  });
 });
