@@ -163,6 +163,11 @@ export async function runEnterpriseBootstrap(
   }
 
   const plan = buildEnterpriseBootstrapPlan(options, identity);
+  if (!options.dryRun && !plan.release.manifestSha256) {
+    throw new Error(
+      "Release manifest SHA-256 is required before mutating bootstrap. Pass --manifest-sha256 or use `thinkwork enterprise deploy --bootstrap` so the CLI fetches the manifest digest.",
+    );
+  }
   const template = renderEnterpriseDeployRepoTemplate({
     targetDir: plan.targetDir,
     customerSlug: plan.customerSlug,

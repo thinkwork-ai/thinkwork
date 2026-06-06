@@ -6,6 +6,51 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## GitHub-Free Customer Deployments - 2026-06-06
+
+- Plan:
+  `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
+- Target branch: `main`.
+- Current unit: U1 Release Manifest and Artifact Contract.
+- Current branch: `codex/u1-release-manifest`.
+- Current worktree: `.Codex/worktrees/u1-release-manifest`.
+- Status: in progress.
+
+| Unit                                      | Branch                      | PR      | State  | Notes                                                                                                                                                 |
+| ----------------------------------------- | --------------------------- | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Release Manifest and Artifact Contract | `codex/u1-release-manifest` | Pending | Active | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests. |
+
+### Progress Log
+
+- Created isolated worktree `.Codex/worktrees/u1-release-manifest` from
+  `origin/main`.
+- Read AGENTS.md, the GitHub-free customer deployments plan, the inert-first
+  seam-swap solution note, the Twenty managed-app plan, existing enterprise
+  release pin code, release asset scripts, and enterprise CLI tests.
+- Implemented `@thinkwork/release-manifest` with v1 schema validation,
+  canonical manifest hashing, detached Ed25519 signing/verification, key
+  rotation/revocation checks, compatibility checks, artifact hash validation,
+  and managed-app descriptor support.
+- Extended the existing release manifest build script instead of creating a
+  parallel implementation, matching repo-local TypeScript release tooling.
+- Added `scripts/release/verify-release-manifest.ts` as the fail-closed
+  verifier entrypoint for CI and runner usage.
+- Updated CLI release pin behavior so mutating bootstrap requires a resolved
+  manifest SHA-256 instead of silently writing `CHANGE_ME`.
+
+### CI / Verification
+
+- `pnpm --filter @thinkwork/release-manifest test` passed.
+- `pnpm test:release` passed.
+- `pnpm --filter thinkwork-cli exec vitest run __tests__/enterprise-release.test.ts __tests__/enterprise-bootstrap.test.ts __tests__/enterprise-template.test.ts __tests__/enterprise-deploy-bootstrap.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/release-manifest typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm dlx prettier --check <touched TS/JSON/MD/YAML files>` passed.
+- Repo-wide `pnpm format:check` is not locally runnable in this checkout
+  because the root script invokes `prettier`, but the root package does not
+  declare a `prettier` dependency.
+
 ## Twenty CRM MCP OAuth - 2026-06-06
 
 - Plan:

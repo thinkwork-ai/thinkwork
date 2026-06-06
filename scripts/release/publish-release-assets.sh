@@ -34,6 +34,10 @@ if [[ ! -f "$MANIFEST" ]]; then
 fi
 
 ASSETS=("$MANIFEST")
+SIGNATURE="$RELEASE_DIR/thinkwork-release.sig.json"
+if [[ -f "$SIGNATURE" ]]; then
+  ASSETS+=("$SIGNATURE")
+fi
 
 if compgen -G "$RELEASE_DIR/lambdas/*.zip" >/dev/null; then
   while IFS= read -r asset; do

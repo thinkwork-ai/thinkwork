@@ -42,6 +42,8 @@ const identity = {
   region: "us-west-2",
   arn: "arn:aws:sts::111122223333:assumed-role/Admin/session",
 };
+const manifestSha256 =
+  "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
 
 describe("enterprise bootstrap plan", () => {
   it("defaults the release pin to the running CLI version", () => {
@@ -49,6 +51,7 @@ describe("enterprise bootstrap plan", () => {
 
     expect(release.version).toBe(`v${VERSION}`);
     expect(release.terraformModuleVersion).toBe(VERSION);
+    expect(release.manifestSha256).toBeUndefined();
   });
 
   it("plans AWS, GitHub, repo files, environments, and workflow dispatch in dry-run mode", async () => {
@@ -109,6 +112,7 @@ describe("enterprise bootstrap plan", () => {
         customerSlug: "acme",
         repository: "acme/thinkwork-deploy",
         stages: ["dev"],
+        manifestSha256,
         dryRun: false,
       },
       {
@@ -124,6 +128,7 @@ describe("enterprise bootstrap plan", () => {
         customerSlug: "acme",
         repository: "acme/thinkwork-deploy",
         stages: ["dev"],
+        manifestSha256,
         dryRun: false,
       },
       {
@@ -215,6 +220,7 @@ describe("enterprise bootstrap plan", () => {
           customerSlug: "acme",
           repository: "acme/thinkwork-deploy",
           stages: ["dev"],
+          manifestSha256,
           dryRun: false,
         },
         {
