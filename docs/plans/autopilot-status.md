@@ -89,7 +89,7 @@ status: in_progress
 | Unit group                                       | Branch                           | PR                                                           | State  | Notes                                                                                                                        |
 | ------------------------------------------------ | -------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | U1-U5 Settings Activity, breadcrumbs, detail QA  | `codex/spaces-settings-activity` | [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) | Merged | Squash merged as `e066a825`; local verification and required PR checks passed.                                               |
-| Feedback polish: Activity layout and detail port | `codex/spaces-activity-feedback` | Pending                                                      | Active | Moves refresh to header, moves search below chart, and replaces Settings detail with an Admin-style read-only thread detail. |
+| Feedback polish: Activity layout and detail port | `codex/spaces-activity-feedback` | [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135) | Active | Moves refresh to header, moves search below chart, and replaces Settings detail with an Admin-style read-only thread detail. |
 
 ### Progress Log
 
@@ -138,6 +138,8 @@ status: in_progress
 - Added Spaces-side thread turns/traces queries and focused tests to prevent
   this route from pointing back at `SpacesThreadDetailRoute`.
 - Local preview remains available at `http://localhost:5175/settings/activity`.
+- Opened feedback PR
+  [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135).
 - Feedback verification passed:
   `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsActivity.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx src/routes/_authed/-settings.activity-routing.test.ts`;
   `pnpm --filter @thinkwork/spaces typecheck`;
