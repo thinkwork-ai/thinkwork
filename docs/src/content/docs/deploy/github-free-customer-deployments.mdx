@@ -1,0 +1,136 @@
+---
+title: GitHub-Free Customer Deployments
+description: Bootstrap ThinkWork into a customer AWS account without requiring a customer GitHub repository or GitHub Actions.
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+GitHub-free deployment is the default enterprise path for new customer-owned
+ThinkWork environments. The customer runs one guided CLI bootstrap with
+temporary AWS administrator access. After bootstrap, deployment authority lives
+inside the customer's AWS account through Step Functions, CodeBuild, SSM,
+AppConfig, Secrets Manager, S3 evidence, and the deployed ThinkWork API.
+
+No customer source fork, customer GitHub repository, or customer GitHub Actions
+workflow is required.
+
+<Aside type="note">
+  The older customer deployment repository flow remains available as legacy
+  compatibility. Use it only for environments that already depend on that
+  operating model.
+</Aside>
+
+## Deployment Model
+
+```text
+operator laptop -> guided CLI bootstrap -> customer AWS foundation
+customer AWS Step Functions -> CodeBuild runner -> Terraform plan/apply/destroy
+Spaces Managed Applications -> ThinkWork API -> deployment job evidence
+release manifest -> verified artifacts -> customer AWS resources
+deployment profile -> desktop/mobile clients
+```
+
+Bootstrap installs only the foundation needed to sign in and operate the
+environment:
+
+- Cognito auth and configured identity providers
+- API Gateway and AppSync GraphQL endpoints
+- Aurora database and app secrets
+- Spaces web app
+- Deployment control plane for plan/apply/destroy jobs
+- Release selection and customer-owned config storage
+- First-admin claim metadata
+- Deployment profile outputs for desktop and mobile clients
+
+## First Bootstrap
+
+<Steps>
+
+1. **Prepare AWS access**
+
+   Use an AWS identity in the customer account with temporary administrator
+   access for the first bootstrap.
+
+   ```bash
+   aws sts get-caller-identity
+   ```
+
+2. **Run guided bootstrap**
+
+   ```bash
+   thinkwork deploy --bootstrap
+   ```
+
+   The CLI asks for customer slug, stage, AWS account, region, first-admin
+   email, release selection, and identity-provider inputs. It does not ask for
+   a GitHub repository on the GitHub-free path.
+
+3. **Record bootstrap outputs**
+
+   Save the generated Spaces URL, API URL, AppSync URLs, Cognito domain, and
+   deployment profile JSON. These are also stored in customer AWS config.
+
+4. **Run the foundation smoke**
+
+   ```bash
+   node scripts/smoke/foundation-bootstrap-smoke.mjs
+
+   SMOKE_ENABLE_FOUNDATION_BOOTSTRAP=1 \
+     SMOKE_TERRAFORM_DIR=terraform/examples/greenfield \
+     SMOKE_EVIDENCE_FILE=deploy-artifacts/foundation-smoke.json \
+     node scripts/smoke/foundation-bootstrap-smoke.mjs
+   ```
+
+5. **Sign in as first admin**
+
+   Open the generated Spaces URL and sign in with the bootstrap first-admin
+   email. The Cognito email must be verified before the pending first-admin
+   claim completes.
+
+6. **Operate from Spaces**
+
+   Use Settings -> Managed Applications for Cognee, Twenty CRM, and later
+   optional applications. Use CLI recovery commands only for support or
+   bootstrap repair.
+
+</Steps>
+
+## Evidence Contract
+
+Each bootstrap, managed-app, and release-upgrade smoke writes a JSON evidence
+envelope when `SMOKE_EVIDENCE_FILE`, `SMOKE_WRITE_EVIDENCE=1`, or
+`SMOKE_EVIDENCE_S3_URI` is set.
+
+Evidence includes:
+
+- release version and manifest digest
+- Step Functions execution ARN
+- CodeBuild build ARN and id
+- Terraform plan/apply artifact keys when provided
+- smoke result and endpoint status
+- CloudWatch Logs URL when provided
+- app-specific status, URL, and health result
+
+Evidence must not include plaintext secrets, bearer tokens, API keys, database
+passwords, or raw Terraform variable files.
+
+## Failure Triage
+
+| Symptom                             | First checks                                                                                                                                          |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bootstrap fails before Terraform    | Re-run CLI validation, AWS identity, region, release manifest verification, and required IdP fields.                                                  |
+| Terraform plan fails                | Open the CodeBuild build link from the deployment job and inspect the plan artifact.                                                                  |
+| Apply fails                         | Compare the approved plan digest, manifest digest, and CodeBuild logs. Retry only after the root cause is understood.                                 |
+| Smoke fails                         | Use the smoke evidence JSON plus CloudWatch links. Do not treat an infrastructure apply as successful until smoke passes or records an explicit skip. |
+| First-admin claim does not complete | Verify Cognito email, first-admin pending email, tenant claim status, and identity-provider email mapping.                                            |
+| Managed-app job is stuck            | Inspect Step Functions execution state, CodeBuild build status, and deployment job events in Spaces.                                                  |
+
+## Recovery Posture
+
+Normal operation is Spaces-first. Recovery CLI commands exist for support when
+the browser cannot complete an operation, but the customer AWS account remains
+the deployment authority.
+
+Do not run local Terraform against production as a shortcut around a failed
+deployment job. Use the customer control plane so evidence, approvals, and
+selected release digests stay aligned.

@@ -5,6 +5,12 @@ description: "Exact steps for deploying ThinkWork into a customer AWS account wi
 
 import { Aside, Steps } from "@astrojs/starlight/components";
 
+<Aside type="caution">
+  This is the legacy compatibility path for customers that already operate a
+  deployment repository. New customer-owned deployments should use [GitHub-Free
+  Customer Deployments](/deploy/github-free-customer-deployments/).
+</Aside>
+
 For enterprise customers, deploy ThinkWork from a **customer-owned deployment
 repository**, not from a fork of the ThinkWork source repository. The deployment
 repo pins a released ThinkWork manifest, stores customer-specific overlays, and

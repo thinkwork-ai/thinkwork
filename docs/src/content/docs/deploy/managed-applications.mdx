@@ -1,0 +1,103 @@
+---
+title: Managed Applications
+description: Deploy, destroy, and diagnose ThinkWork-managed applications such as Cognee and Twenty CRM without customer GitHub Actions.
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+Managed applications are optional applications operated inside the customer
+ThinkWork AWS deployment. V1 proves the lifecycle with Cognee Knowledge Graph
+and Twenty CRM.
+
+Operators use Spaces Settings -> Managed Applications for the normal path:
+plan, review impact, approve, watch progress, and inspect evidence.
+
+## Lifecycle
+
+```text
+request -> plan -> approval -> apply or destroy -> smoke -> evidence
+```
+
+Every mutating action is represented by a deployment job. Jobs preserve the
+selected release manifest digest, requested action, approval decision, plan
+summary, destructive impact, Step Functions execution ARN, CodeBuild build id,
+artifact keys, and smoke evidence.
+
+## Cognee
+
+Cognee is the optional Knowledge Graph runtime. Deploying Cognee provisions the
+runtime resources required for graph enrichment and health reporting. Destroying
+Cognee is destructive in v1 and removes app-owned runtime resources and data.
+
+Run the smoke after deploy or destroy:
+
+```bash
+node scripts/smoke/cognee-managed-app-smoke.mjs
+
+SMOKE_ENABLE_COGNEE_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/cognee-smoke.json \
+  node scripts/smoke/cognee-managed-app-smoke.mjs
+```
+
+The smoke skips cleanly when Cognee is not enabled. When Cognee is enabled, it
+requires either GraphQL health credentials or explicit private endpoint probing.
+
+## Twenty CRM
+
+Twenty CRM is a self-hosted CRM runtime managed by ThinkWork. Deploying Twenty
+provisions the public CRM endpoint, server and worker ECS services, database
+state, cache, secrets, and the managed MCP registration path. Destroying Twenty
+is destructive in v1 and removes the managed runtime and app-owned state.
+
+Run the smoke after deploy, park, redeploy, or destroy:
+
+```bash
+node scripts/smoke/twenty-managed-app-smoke.mjs
+
+SMOKE_ENABLE_TWENTY_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/twenty-smoke.json \
+  node scripts/smoke/twenty-managed-app-smoke.mjs
+```
+
+The smoke skips cleanly when Twenty is unprovisioned or parked. When the runtime
+is enabled, it requires an HTTPS Twenty URL and a successful `/healthz`
+response.
+
+## Evidence Fields
+
+Managed-app evidence should include:
+
+- app key and requested action
+- release version and manifest digest
+- Step Functions execution ARN
+- CodeBuild build ARN/id
+- Terraform plan/apply/destroy artifact keys
+- app endpoint and runtime status
+- destructive impact summary for destroy
+- smoke result
+- CloudWatch Logs URL when available
+
+<Aside type="caution">
+  Evidence is support data, not a secret store. Never paste API keys, OAuth
+  tokens, database passwords, Terraform tfvars, or raw secret values into
+  evidence fields.
+</Aside>
+
+## Support Runbook
+
+| Failure                | Action                                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| Plan failed            | Inspect CodeBuild logs and the plan artifact. Fix configuration before retrying.                   |
+| Awaiting approval      | Confirm the plan digest, release manifest digest, action, and destructive impact before approving. |
+| Apply failed           | Inspect Step Functions event history first, then CodeBuild logs. Keep the failed job for evidence. |
+| Smoke failed           | Use the app smoke JSON and endpoint status. Do not mark the app healthy until a smoke passes.      |
+| App not enabled        | Treat explicit skip evidence as success for stages where the app is intentionally disabled.        |
+| Destroy impact changed | Re-plan and require a fresh approval before destroy.                                               |
+
+## Recovery CLI
+
+The CLI may expose recovery commands for support, but the default operator path
+remains Spaces. Use CLI recovery to inspect or retry customer AWS jobs, not to
+bypass approval or evidence capture.
