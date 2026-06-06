@@ -7,6 +7,12 @@ import {
   managedApplicationDeploymentJobs,
   managedApplications,
 } from "@thinkwork/database-pg/schema";
+import {
+  dataImpactForManagedApp,
+  managedAppRegistry,
+  type ManagedAppKey,
+  type ManagedAppOperation,
+} from "@thinkwork/deployment-runner/apps/registry";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
@@ -16,26 +22,13 @@ import {
 } from "../core/resolve-auth-user.js";
 
 export const MANAGED_APP_CATALOG = [
-  {
-    key: "cognee",
-    displayName: "Cognee",
-    destructiveImpact: [
-      "Destroys Cognee runtime resources.",
-      "Deletes app-owned graph/vector data when the runner applies destroy.",
-    ],
-  },
-  {
-    key: "twenty",
-    displayName: "Twenty CRM",
-    destructiveImpact: [
-      "Destroys Twenty runtime resources.",
-      "Deletes the dedicated Twenty database, role, and generated secrets.",
-    ],
-  },
+  ...managedAppRegistry.map((adapter) => ({
+    key: adapter.appKey,
+    displayName: adapter.displayName,
+  })),
 ] as const;
 
-export type ManagedAppKey = (typeof MANAGED_APP_CATALOG)[number]["key"];
-export type DeploymentOperation = "ENABLE" | "PARK" | "DESTROY" | "UPGRADE";
+export type DeploymentOperation = ManagedAppOperation;
 
 export interface DeploymentStartResult {
   executionArn: string | null;
@@ -276,21 +269,7 @@ export function dataImpactFor(
   appKey: ManagedAppKey,
   operation: DeploymentOperation,
 ) {
-  if (operation !== "DESTROY") {
-    return {
-      destructive: false,
-      summary: "No destructive teardown requested.",
-      resources: [],
-    };
-  }
-  const app = MANAGED_APP_CATALOG.find(
-    (candidate) => candidate.key === appKey,
-  )!;
-  return {
-    destructive: true,
-    summary: `${app.displayName} destroy deletes app resources and app-owned data.`,
-    resources: app.destructiveImpact,
-  };
+  return dataImpactForManagedApp(appKey, operation);
 }
 
 export function executionName(jobId: string, phase: "plan" | "apply") {

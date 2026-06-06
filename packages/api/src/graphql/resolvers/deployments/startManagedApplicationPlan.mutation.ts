@@ -151,6 +151,7 @@ export async function startManagedApplicationPlan(
         releaseVersion,
         manifestDigest,
         desiredConfigVersion,
+        desiredConfig,
       },
     });
     const [updated] = await db

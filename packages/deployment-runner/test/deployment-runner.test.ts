@@ -44,6 +44,14 @@ describe("deployment runner contract", () => {
         manifestDigest: digest,
         desiredConfigVersion: "v1",
         planDigest,
+        desiredConfig: {
+          imageUri: `123456789012.dkr.ecr.us-east-1.amazonaws.com/cognee@sha256:${"1".repeat(64)}`,
+          dbPasswordSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
+          bedrockModelResourceArns: [
+            "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+          ],
+        },
       },
     });
 
