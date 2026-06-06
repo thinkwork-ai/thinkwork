@@ -12,7 +12,7 @@ status: in_progress
   `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`.
 - Target branch: `main`.
 - Current unit: End-to-end lifecycle proof and deploy-readiness fix.
-- Current branch: `codex/twenty-crm-e2e-fixes`.
+- Current branch: `codex/twenty-crm-root-operator-var`.
 - Current worktree: `.Codex/worktrees/twenty-crm-e2e-fixes`.
 - Status: active.
 
@@ -20,7 +20,8 @@ status: in_progress
 | ---------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Deploy, park, and destructive cleanup flow     | `codex/twenty-crm-lifecycle-actions` | [#2133](https://github.com/thinkwork-ai/thinkwork/pull/2133) | Merged | Adds explicit Deploy, Park, and Destroy actions; Destroy removes retained Twenty DB/role/secrets after Terraform.                     |
 | Managed Applications configuration-link polish | `codex/managed-app-config-link`      | [#2136](https://github.com/thinkwork-ai/thinkwork/pull/2136) | Merged | General now links Twenty to CRM configuration; CRM detail owns Deploy plus bottom Teardown controls for Park and destructive Destroy. |
-| E2E deploy-readiness and proof                 | `codex/twenty-crm-e2e-fixes`         | TBD                                                          | Active | Fixes the live platform-operator allowlist wiring and makes CRM Deploy show immediate queued/error state before lifecycle proof.      |
+| E2E deploy-readiness UI/allowlist workflow     | `codex/twenty-crm-e2e-fixes`         | [#2137](https://github.com/thinkwork-ai/thinkwork/pull/2137) | Merged | Wires CI operator email input and makes CRM Deploy show immediate queued/error state before lifecycle proof.                          |
+| Greenfield operator allowlist variable         | `codex/twenty-crm-root-operator-var` | TBD                                                          | Active | Declares and forwards the root Terraform variable required by the merged deploy workflow.                                             |
 
 ### Progress Log
 
@@ -57,6 +58,17 @@ status: in_progress
 - Updated the CRM detail page so Deploy calls the mutation directly, shows
   `queued` immediately while the request is in flight, and renders mutation
   failures inline as `Last deployment request`.
+- PR [#2137](https://github.com/thinkwork-ai/thinkwork/pull/2137) passed
+  required CI and was squash merged as `76a3a8e2`.
+- The `main` deploy run
+  [27048917485](https://github.com/thinkwork-ai/thinkwork/actions/runs/27048917485)
+  failed before applying AWS changes because the workflow passed
+  `-var platform_operator_emails=...`, but
+  `terraform/examples/greenfield` did not declare or forward that root
+  variable.
+- Started follow-up branch `codex/twenty-crm-root-operator-var` to declare the
+  root variable and pass it through to `module.thinkwork` before retrying the
+  live Twenty lifecycle proof.
 
 ### CI / Verification
 
@@ -91,8 +103,8 @@ status: in_progress
 
 ### Blockers
 
-- Waiting for the allowlist/UI fix PR to merge and deploy before rerunning the
-  Twenty lifecycle proof against dev.
+- Waiting for the greenfield root-variable fix to merge and deploy before
+  rerunning the Twenty lifecycle proof against dev.
 
 ## Spaces Settings Activity - 2026-06-05
 

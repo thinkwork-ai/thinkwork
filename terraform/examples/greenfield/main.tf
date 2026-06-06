@@ -346,6 +346,12 @@ variable "api_auth_secret" {
   default     = ""
 }
 
+variable "platform_operator_emails" {
+  description = "Comma-separated email allowlist for operator-gated GraphQL mutations."
+  type        = string
+  default     = ""
+}
+
 variable "www_domain" {
   description = "Public website apex domain (e.g. thinkwork.ai). Leave empty to skip the custom domain and DNS wiring."
   type        = string
@@ -646,6 +652,7 @@ module "thinkwork" {
   require_lambda_artifacts                   = var.require_lambda_artifacts
   enable_workspace_orchestration             = var.enable_workspace_orchestration
   api_auth_secret                            = var.api_auth_secret
+  platform_operator_emails                   = var.platform_operator_emails
 
   # Public website custom domain (optional — wired only when www_domain is set)
   www_domain          = var.www_domain
