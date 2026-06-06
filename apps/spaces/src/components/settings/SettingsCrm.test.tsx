@@ -1,8 +1,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsDeploymentStatusQuery } from "@/gql/graphql";
+import { ManagedApplicationDeploymentAction } from "@/gql/graphql";
 
 const { queryDocs, runHealthCheckMock, setDeploymentMock, useQueryMock } =
   vi.hoisted(() => ({
@@ -75,6 +82,52 @@ describe("SettingsCrm", () => {
     expect(screen.queryByText("Teardown")).toBeNull();
     expect(screen.queryByRole("button", { name: /park/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /destroy/i })).toBeNull();
+  });
+
+  it("queues deploy directly from the CRM detail page", async () => {
+    mockDeployment(deploymentWithTwentyDisabled);
+    setDeploymentMock.mockResolvedValue({
+      data: {
+        setManagedApplicationDeployment: {
+          workflowUrl:
+            "https://github.com/thinkwork-ai/thinkwork/actions/runs/1",
+          message: "Twenty CRM deployment queued.",
+        },
+      },
+    });
+
+    render(<SettingsCrm />);
+
+    fireEvent.click(screen.getByRole("button", { name: /deploy/i }));
+
+    expect(setDeploymentMock).toHaveBeenCalledWith({
+      key: "twenty",
+      action: ManagedApplicationDeploymentAction.Enable,
+    });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getByText("queued")).toBeTruthy();
+    await screen.findByRole("link", { name: /open workflow/i });
+  });
+
+  it("shows deployment request failures inline", async () => {
+    mockDeployment(deploymentWithTwentyDisabled);
+    setDeploymentMock.mockResolvedValue({
+      error: {
+        message: "THINKWORK_PLATFORM_OPERATOR_EMAILS must be configured",
+      },
+    });
+
+    render(<SettingsCrm />);
+
+    fireEvent.click(screen.getByRole("button", { name: /deploy/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Last deployment request")).toBeTruthy();
+    });
+    expect(screen.getByText("failed")).toBeTruthy();
+    expect(
+      screen.getByText("THINKWORK_PLATFORM_OPERATOR_EMAILS must be configured"),
+    ).toBeTruthy();
   });
 
   it("moves park and destroy controls to the bottom teardown section once provisioned", () => {

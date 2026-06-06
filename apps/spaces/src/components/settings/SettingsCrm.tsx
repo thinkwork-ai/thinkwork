@@ -52,6 +52,7 @@ export function SettingsCrm() {
   const [confirmAction, setConfirmAction] =
     useState<ManagedApplicationDeploymentAction | null>(null);
   const [workflowUrl, setWorkflowUrl] = useState<string | null>(null);
+  const [deploymentError, setDeploymentError] = useState<string | null>(null);
 
   const deployment = statusResult.data?.deploymentStatus;
   const crm = deployment?.managedApplications.find(
@@ -72,17 +73,21 @@ export function SettingsCrm() {
     : (crm?.message ?? "Runtime state from deployment status.");
 
   async function requestDeployment(action: ManagedApplicationDeploymentAction) {
+    setPendingAction(action);
+    setDeploymentError(null);
+    setConfirmAction(null);
+
     const result = await setManagedDeployment({ key: "twenty", action });
     if (result.error) {
+      setPendingAction(null);
+      setDeploymentError(result.error.message);
       toast.error(`Could not update Twenty CRM: ${result.error.message}`);
       return;
     }
 
-    setPendingAction(action);
     setWorkflowUrl(
       result.data?.setManagedApplicationDeployment.workflowUrl ?? null,
     );
-    setConfirmAction(null);
     toast.success(
       result.data?.setManagedApplicationDeployment.message ??
         "Twenty CRM deployment queued.",
@@ -119,9 +124,24 @@ export function SettingsCrm() {
                 runtimeEnabled={crm?.runtimeEnabled ?? false}
                 queued={queued}
                 fetching={deploymentState.fetching || statusResult.fetching}
-                onAction={setConfirmAction}
+                onDeploy={() =>
+                  void requestDeployment(
+                    ManagedApplicationDeploymentAction.Enable,
+                  )
+                }
               />
             </SettingsRow>
+            {deploymentError ? (
+              <SettingsRow
+                label="Last deployment request"
+                description="Twenty CRM was not queued."
+              >
+                <Badge variant="destructive">failed</Badge>
+                <span className="max-w-md text-sm text-muted-foreground">
+                  {deploymentError}
+                </span>
+              </SettingsRow>
+            ) : null}
             {workflowUrl ? (
               <SettingsRow
                 label="Workflow"
@@ -302,13 +322,13 @@ function CrmDeployAction({
   runtimeEnabled,
   queued,
   fetching,
-  onAction,
+  onDeploy,
 }: {
   provisioned: boolean;
   runtimeEnabled: boolean;
   queued: boolean;
   fetching: boolean;
-  onAction: (action: ManagedApplicationDeploymentAction) => void;
+  onDeploy: () => void;
 }) {
   if (provisioned && runtimeEnabled) {
     return null;
@@ -319,7 +339,7 @@ function CrmDeployAction({
       type="button"
       size="sm"
       disabled={queued || fetching}
-      onClick={() => onAction(ManagedApplicationDeploymentAction.Enable)}
+      onClick={onDeploy}
     >
       <Play className="size-4" />
       {queued ? "Queued" : "Deploy"}
