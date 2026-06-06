@@ -597,6 +597,43 @@ export const SettingsActivityThreadTurnsQuery = gql`
   }
 `;
 
+export const ThreadTurnEventsQuery = gql`
+  query ThreadTurnEvents($runId: ID!, $limit: Int) {
+    threadTurnEvents(runId: $runId, limit: $limit) {
+      id
+      runId
+      agentId
+      seq
+      eventType
+      stream
+      level
+      message
+      payload
+      createdAt
+    }
+  }
+`;
+
+export const TurnInvocationLogsQuery = gql`
+  query TurnInvocationLogs($tenantId: ID!, $turnId: ID!) {
+    turnInvocationLogs(tenantId: $tenantId, turnId: $turnId) {
+      requestId
+      modelId
+      timestamp
+      inputTokenCount
+      outputTokenCount
+      cacheReadTokenCount
+      inputPreview
+      outputPreview
+      toolCount
+      costUsd
+      toolUses
+      hasToolResult
+      branch
+    }
+  }
+`;
+
 export const SettingsActivityThreadTracesQuery = gql`
   query SettingsActivityThreadTraces($threadId: ID!, $tenantId: ID!) {
     threadTraces(threadId: $threadId, tenantId: $tenantId) {

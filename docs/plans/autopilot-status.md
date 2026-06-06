@@ -99,15 +99,16 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-05-004-feat-spaces-settings-activity-plan.md`.
 - Target branch: `main`.
-- Current unit: Feedback polish.
-- Current branch: `codex/spaces-activity-feedback`.
+- Current unit: Identical Admin activity timeline follow-up.
+- Current branch: `codex/spaces-activity-identical-timeline`.
 - Current worktree: `.Codex/worktrees/spaces-settings-activity-preview`.
 - Status: active.
 
-| Unit group                                       | Branch                           | PR                                                           | State  | Notes                                                                                                                        |
-| ------------------------------------------------ | -------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| U1-U5 Settings Activity, breadcrumbs, detail QA  | `codex/spaces-settings-activity` | [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) | Merged | Squash merged as `e066a825`; local verification and required PR checks passed.                                               |
-| Feedback polish: Activity layout and detail port | `codex/spaces-activity-feedback` | [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135) | Active | Moves refresh to header, moves search below chart, and replaces Settings detail with an Admin-style read-only thread detail. |
+| Unit group                                               | Branch                                     | PR                                                           | State  | Notes                                                                                                                |
+| -------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------- |
+| U1-U5 Settings Activity, breadcrumbs, detail QA          | `codex/spaces-settings-activity`           | [#2130](https://github.com/thinkwork-ai/thinkwork/pull/2130) | Merged | Squash merged as `e066a825`; local verification and required PR checks passed.                                       |
+| Feedback polish: Activity layout and detail port         | `codex/spaces-activity-feedback`           | [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135) | Merged | Squash merged as `b6a46790`; moved refresh/search/count layout and added a Settings-owned read-only detail route.    |
+| Follow-up: identical Admin activity execution trace port | `codex/spaces-activity-identical-timeline` | [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138) | Active | Replaces the approximate Settings timeline with the Admin `ExecutionTrace` implementation and Spaces query adapters. |
 
 ### Progress Log
 
@@ -172,6 +173,24 @@ status: in_progress
   `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsActivity.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx`;
   `pnpm --filter @thinkwork/spaces typecheck`; `git diff --check`;
   `curl -I --max-time 5 http://localhost:5174/settings/activity`.
+- PR [#2135](https://github.com/thinkwork-ai/thinkwork/pull/2135) was squash
+  merged into `main` as `b6a46790`.
+- Started follow-up branch `codex/spaces-activity-identical-timeline` from
+  `origin/main` in `.Codex/worktrees/spaces-settings-activity-preview` after
+  local review showed the Spaces thread detail still used an approximate
+  activity timeline.
+- Ported the Admin `ExecutionTrace` implementation into Spaces with only
+  Settings-specific imports and GraphQL query adapters, then wired the Settings
+  thread detail Activity section to that component so tool timelines and
+  expanded turn execution rows match Admin behavior.
+- Opened follow-up PR
+  [#2138](https://github.com/thinkwork-ai/thinkwork/pull/2138).
+- Follow-up verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsActivityThreadDetail.test.tsx src/components/settings/SettingsActivity.test.tsx src/routes/_authed/-settings.activity-routing.test.ts`;
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces build`;
+  `./node_modules/.pnpm/node_modules/.bin/prettier --check <touched files>`;
+  `git diff --check`; `curl -I --max-time 5 http://localhost:5174/settings/activity`.
 
 ### Blockers
 

@@ -49,6 +49,32 @@ vi.mock("@thinkwork/ui", () => ({
       {children}
     </button>
   ),
+  Collapsible: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  CollapsibleContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  CollapsibleTrigger: ({
+    children,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" {...props}>
+      {children}
+    </button>
+  ),
+  Dialog: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogHeader: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogTitle: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   Separator: (props: React.HTMLAttributes<HTMLHRElement>) => <hr {...props} />,
 }));
 
@@ -97,7 +123,18 @@ const turn = {
   status: "succeeded",
   startedAt: "2026-06-04T16:55:01.000Z",
   finishedAt: "2026-06-04T16:55:09.300Z",
-  usageJson: JSON.stringify({ input_tokens: 5500, output_tokens: 269 }),
+  usageJson: JSON.stringify({
+    input_tokens: 5500,
+    output_tokens: 269,
+    tool_invocations: [
+      {
+        tool_name: "web_search",
+        type: "tool",
+        input_preview: '{"query":"SpaceX"}',
+        output_preview: "Search results",
+      },
+    ],
+  }),
   totalCost: 0.0076,
   systemPrompt: "You are Pi.",
   createdAt: "2026-06-04T16:55:01.000Z",
@@ -108,6 +145,16 @@ beforeEach(() => {
   vi.mocked(useQuery).mockReset();
   vi.mocked(useSubscription).mockReset();
   vi.mocked(useQuery)
+    .mockReturnValue([
+      {
+        data: {},
+        fetching: false,
+        error: undefined,
+        stale: false,
+        hasNext: false,
+      },
+      vi.fn(),
+    ])
     .mockReturnValueOnce([
       {
         data: { thread },
@@ -151,6 +198,16 @@ beforeEach(() => {
         hasNext: false,
       },
       vi.fn(),
+    ])
+    .mockReturnValueOnce([
+      {
+        data: { threadTurns: [turn] },
+        fetching: false,
+        error: undefined,
+        stale: false,
+        hasNext: false,
+      },
+      vi.fn(),
     ]);
   vi.mocked(useSubscription).mockReturnValue([
     { data: null, fetching: false, stale: false },
@@ -176,6 +233,7 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.getByRole("heading", { name: "Activity" })).toBeTruthy();
     expect(screen.getByText("Properties")).toBeTruthy();
     expect(screen.getByText("Thinking")).toBeTruthy();
+    expect(screen.getByText("Tool: web_search")).toBeTruthy();
     expect(screen.getByText("Eric Odom")).toBeTruthy();
     expect(screen.getByText("ThinkWork")).toBeTruthy();
     expect(screen.queryByText(/Type a command/i)).toBeNull();
