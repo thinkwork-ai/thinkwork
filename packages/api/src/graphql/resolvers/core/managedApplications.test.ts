@@ -55,4 +55,26 @@ describe("managed application status helpers", () => {
       runtimeEnabled: false,
     });
   });
+
+  it("derives Twenty service and log details from compact status", () => {
+    vi.stubEnv("STAGE", "dev");
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
+    vi.stubEnv("TWENTY", "1|1|https://crm.example.com");
+
+    expect(mod.readManagedApplication("twenty")).toMatchObject({
+      key: "twenty",
+      status: "running",
+      clusterArn:
+        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-twenty-cluster",
+      serviceNames: [
+        "thinkwork-dev-twenty-server",
+        "thinkwork-dev-twenty-worker",
+      ],
+      logGroupNames: [
+        "/thinkwork/dev/twenty/server",
+        "/thinkwork/dev/twenty/worker",
+      ],
+    });
+  });
 });
