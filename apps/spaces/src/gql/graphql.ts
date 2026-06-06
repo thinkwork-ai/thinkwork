@@ -7705,6 +7705,207 @@ export type SettingsInstallManagedApplicationMcpServerMutation = {
   };
 };
 
+export type SettingsManagedApplicationsQueryVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type SettingsManagedApplicationsQuery = {
+  __typename?: "Query";
+  managedApplications: Array<{
+    __typename?: "ManagedApplication";
+    id: string;
+    key: string;
+    displayName: string;
+    desiredStatus: string;
+    currentStatus: string;
+    selectedReleaseVersion?: string | null;
+    selectedManifestDigest?: string | null;
+    lastJobId?: string | null;
+    updatedAt: any;
+  }>;
+};
+
+export type SettingsManagedApplicationDeploymentQueryVariables = Exact<{
+  jobId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsManagedApplicationDeploymentQuery = {
+  __typename?: "Query";
+  managedApplicationDeployment?: {
+    __typename?: "ManagedApplicationDeploymentJob";
+    id: string;
+    appKey: string;
+    operation: string;
+    status: string;
+    releaseVersion: string;
+    manifestDigest: string;
+    desiredConfigVersion: string;
+    stateMachineArn?: string | null;
+    planExecutionArn?: string | null;
+    applyExecutionArn?: string | null;
+    codebuildBuildArn?: string | null;
+    planDigest?: string | null;
+    planSummary: any;
+    dataImpact: any;
+    evidenceBucket?: string | null;
+    evidencePrefix?: string | null;
+    approvalRequired: boolean;
+    approvedAt?: any | null;
+    rejectedAt?: any | null;
+    errorMessage?: string | null;
+    createdAt: any;
+    updatedAt: any;
+    events: Array<{
+      __typename?: "ManagedApplicationDeploymentEvent";
+      id: string;
+      eventType: string;
+      message: string;
+      payload: any;
+      createdAt: any;
+    }>;
+  } | null;
+};
+
+export type SettingsDeploymentEvidenceQueryVariables = Exact<{
+  jobId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsDeploymentEvidenceQuery = {
+  __typename?: "Query";
+  deploymentEvidence: {
+    __typename?: "DeploymentEvidence";
+    jobId: string;
+    bucket?: string | null;
+    prefix?: string | null;
+    urls: Array<string>;
+  };
+};
+
+export type SettingsStartManagedApplicationPlanMutationVariables = Exact<{
+  input: StartManagedApplicationPlanInput;
+}>;
+
+export type SettingsStartManagedApplicationPlanMutation = {
+  __typename?: "Mutation";
+  startManagedApplicationPlan: {
+    __typename?: "ManagedApplicationDeploymentJob";
+    id: string;
+    appKey: string;
+    operation: string;
+    status: string;
+    releaseVersion: string;
+    manifestDigest: string;
+    desiredConfigVersion: string;
+    stateMachineArn?: string | null;
+    planExecutionArn?: string | null;
+    applyExecutionArn?: string | null;
+    codebuildBuildArn?: string | null;
+    planDigest?: string | null;
+    planSummary: any;
+    dataImpact: any;
+    evidenceBucket?: string | null;
+    evidencePrefix?: string | null;
+    approvalRequired: boolean;
+    approvedAt?: any | null;
+    rejectedAt?: any | null;
+    errorMessage?: string | null;
+    createdAt: any;
+    updatedAt: any;
+    events: Array<{
+      __typename?: "ManagedApplicationDeploymentEvent";
+      id: string;
+      eventType: string;
+      message: string;
+      payload: any;
+      createdAt: any;
+    }>;
+  };
+};
+
+export type SettingsApproveManagedApplicationDeploymentMutationVariables =
+  Exact<{
+    input: ApproveManagedApplicationDeploymentInput;
+  }>;
+
+export type SettingsApproveManagedApplicationDeploymentMutation = {
+  __typename?: "Mutation";
+  approveManagedApplicationDeployment: {
+    __typename?: "ManagedApplicationDeploymentJob";
+    id: string;
+    appKey: string;
+    operation: string;
+    status: string;
+    releaseVersion: string;
+    manifestDigest: string;
+    desiredConfigVersion: string;
+    stateMachineArn?: string | null;
+    planExecutionArn?: string | null;
+    applyExecutionArn?: string | null;
+    codebuildBuildArn?: string | null;
+    planDigest?: string | null;
+    planSummary: any;
+    dataImpact: any;
+    evidenceBucket?: string | null;
+    evidencePrefix?: string | null;
+    approvalRequired: boolean;
+    approvedAt?: any | null;
+    rejectedAt?: any | null;
+    errorMessage?: string | null;
+    createdAt: any;
+    updatedAt: any;
+    events: Array<{
+      __typename?: "ManagedApplicationDeploymentEvent";
+      id: string;
+      eventType: string;
+      message: string;
+      payload: any;
+      createdAt: any;
+    }>;
+  };
+};
+
+export type SettingsRejectManagedApplicationDeploymentMutationVariables =
+  Exact<{
+    input: RejectManagedApplicationDeploymentInput;
+  }>;
+
+export type SettingsRejectManagedApplicationDeploymentMutation = {
+  __typename?: "Mutation";
+  rejectManagedApplicationDeployment: {
+    __typename?: "ManagedApplicationDeploymentJob";
+    id: string;
+    appKey: string;
+    operation: string;
+    status: string;
+    releaseVersion: string;
+    manifestDigest: string;
+    desiredConfigVersion: string;
+    stateMachineArn?: string | null;
+    planExecutionArn?: string | null;
+    applyExecutionArn?: string | null;
+    codebuildBuildArn?: string | null;
+    planDigest?: string | null;
+    planSummary: any;
+    dataImpact: any;
+    evidenceBucket?: string | null;
+    evidencePrefix?: string | null;
+    approvalRequired: boolean;
+    approvedAt?: any | null;
+    rejectedAt?: any | null;
+    errorMessage?: string | null;
+    createdAt: any;
+    updatedAt: any;
+    events: Array<{
+      __typename?: "ManagedApplicationDeploymentEvent";
+      id: string;
+      eventType: string;
+      message: string;
+      payload: any;
+      createdAt: any;
+    }>;
+  };
+};
+
 export type SettingsKnowledgeGraphHealthCheckQueryVariables = Exact<{
   [key: string]: never;
 }>;
@@ -12518,6 +12719,656 @@ export const SettingsInstallManagedApplicationMcpServerDocument = {
 } as unknown as DocumentNode<
   SettingsInstallManagedApplicationMcpServerMutation,
   SettingsInstallManagedApplicationMcpServerMutationVariables
+>;
+export const SettingsManagedApplicationsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsManagedApplications" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "managedApplications" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "key" } },
+                { kind: "Field", name: { kind: "Name", value: "displayName" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "currentStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "selectedReleaseVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "selectedManifestDigest" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "lastJobId" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsManagedApplicationsQuery,
+  SettingsManagedApplicationsQueryVariables
+>;
+export const SettingsManagedApplicationDeploymentDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsManagedApplicationDeployment" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "jobId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "managedApplicationDeployment" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "jobId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "jobId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "appKey" } },
+                { kind: "Field", name: { kind: "Name", value: "operation" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releaseVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "manifestDigest" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredConfigVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "stateMachineArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "planExecutionArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "applyExecutionArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "codebuildBuildArn" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "planDigest" } },
+                { kind: "Field", name: { kind: "Name", value: "planSummary" } },
+                { kind: "Field", name: { kind: "Name", value: "dataImpact" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceBucket" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidencePrefix" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "approvalRequired" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "approvedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "rejectedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "errorMessage" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "events" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "eventType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "message" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "payload" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "createdAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsManagedApplicationDeploymentQuery,
+  SettingsManagedApplicationDeploymentQueryVariables
+>;
+export const SettingsDeploymentEvidenceDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsDeploymentEvidence" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "jobId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "deploymentEvidence" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "jobId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "jobId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "jobId" } },
+                { kind: "Field", name: { kind: "Name", value: "bucket" } },
+                { kind: "Field", name: { kind: "Name", value: "prefix" } },
+                { kind: "Field", name: { kind: "Name", value: "urls" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsDeploymentEvidenceQuery,
+  SettingsDeploymentEvidenceQueryVariables
+>;
+export const SettingsStartManagedApplicationPlanDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsStartManagedApplicationPlan" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "StartManagedApplicationPlanInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "startManagedApplicationPlan" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "appKey" } },
+                { kind: "Field", name: { kind: "Name", value: "operation" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releaseVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "manifestDigest" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredConfigVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "stateMachineArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "planExecutionArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "applyExecutionArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "codebuildBuildArn" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "planDigest" } },
+                { kind: "Field", name: { kind: "Name", value: "planSummary" } },
+                { kind: "Field", name: { kind: "Name", value: "dataImpact" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceBucket" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidencePrefix" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "approvalRequired" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "approvedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "rejectedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "errorMessage" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "events" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "eventType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "message" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "payload" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "createdAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsStartManagedApplicationPlanMutation,
+  SettingsStartManagedApplicationPlanMutationVariables
+>;
+export const SettingsApproveManagedApplicationDeploymentDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: {
+        kind: "Name",
+        value: "SettingsApproveManagedApplicationDeployment",
+      },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: {
+                kind: "Name",
+                value: "ApproveManagedApplicationDeploymentInput",
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: {
+              kind: "Name",
+              value: "approveManagedApplicationDeployment",
+            },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "appKey" } },
+                { kind: "Field", name: { kind: "Name", value: "operation" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releaseVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "manifestDigest" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredConfigVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "stateMachineArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "planExecutionArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "applyExecutionArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "codebuildBuildArn" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "planDigest" } },
+                { kind: "Field", name: { kind: "Name", value: "planSummary" } },
+                { kind: "Field", name: { kind: "Name", value: "dataImpact" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceBucket" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidencePrefix" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "approvalRequired" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "approvedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "rejectedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "errorMessage" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "events" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "eventType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "message" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "payload" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "createdAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsApproveManagedApplicationDeploymentMutation,
+  SettingsApproveManagedApplicationDeploymentMutationVariables
+>;
+export const SettingsRejectManagedApplicationDeploymentDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: {
+        kind: "Name",
+        value: "SettingsRejectManagedApplicationDeployment",
+      },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: {
+                kind: "Name",
+                value: "RejectManagedApplicationDeploymentInput",
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "rejectManagedApplicationDeployment" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "appKey" } },
+                { kind: "Field", name: { kind: "Name", value: "operation" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releaseVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "manifestDigest" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredConfigVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "stateMachineArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "planExecutionArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "applyExecutionArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "codebuildBuildArn" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "planDigest" } },
+                { kind: "Field", name: { kind: "Name", value: "planSummary" } },
+                { kind: "Field", name: { kind: "Name", value: "dataImpact" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceBucket" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidencePrefix" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "approvalRequired" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "approvedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "rejectedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "errorMessage" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "events" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "eventType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "message" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "payload" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "createdAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsRejectManagedApplicationDeploymentMutation,
+  SettingsRejectManagedApplicationDeploymentMutationVariables
 >;
 export const SettingsKnowledgeGraphHealthCheckDocument = {
   kind: "Document",

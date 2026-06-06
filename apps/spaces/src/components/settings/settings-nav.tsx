@@ -7,6 +7,7 @@ import {
   Clock,
   FolderTree,
   History,
+  Layers3,
   NotebookText,
   Repeat,
   Settings as SettingsIcon,
@@ -74,6 +75,12 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "MCP Servers",
     to: "/settings/mcp-servers",
     icon: ModelContextProtocol,
+    operatorOnly: true,
+  },
+  {
+    label: "Managed Applications",
+    to: "/settings/managed-applications",
+    icon: Layers3,
     operatorOnly: true,
   },
   {

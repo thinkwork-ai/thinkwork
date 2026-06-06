@@ -87,10 +87,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-06-001-feat-github-free-customer-deployments-plan.md`.
 - Target branch: `main`.
-- Current unit: U5 Cognee and Twenty Managed-App Adapters.
-- Current branch: `codex/u5-managed-app-adapters`.
-- Current worktree: `.Codex/worktrees/u5-managed-app-adapters`.
-- Status: in progress.
+- Current unit: U6 Spaces Managed Applications UX.
+- Current branch: `codex/u6-managed-applications-ux`.
+- Current worktree: `.Codex/worktrees/u6-managed-applications-ux`.
+- Status: U6 locally verified; PR preparation in progress.
 
 | Unit                                                      | Branch                             | PR                                                           | State  | Notes                                                                                                                                                 |
 | --------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -98,7 +98,8 @@ status: in_progress
 | U2 GitHub-Free Bootstrap and AWS Control Plane Substrate  | `codex/u2-bootstrap-control-plane` | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                 |
 | U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`    | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Merged | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                |
 | U4 Deployment Job Domain, API, and Runner Orchestration   | `codex/u4-deployment-job-api`      | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Merged | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                       |
-| U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`    | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Active | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.    |
+| U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`    | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Merged | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.    |
+| U6 Spaces Managed Applications UX                         | `codex/u6-managed-applications-ux` | [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) | Active | Locally verified; replaces switch-style lifecycle controls with Spaces plan preview, approval, progress, evidence, and destructive impact UX.         |
 
 ### Progress Log
 
@@ -298,6 +299,30 @@ status: in_progress
   `pnpm dlx prettier@3.8.2 --check --ignore-unknown <touched U5 files>` and
   `git diff --check` passed.
 - Opened PR [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172).
+- PR [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) passed CLA,
+  lint, verify, typecheck, and test, was rebased after `main` moved, passed the
+  required checks again, and was squash merged as
+  `0f75216bfd968214964c2b65f4c4fbe6a9ea3adf`.
+- Removed local worktree `.Codex/worktrees/u5-managed-app-adapters` and deleted
+  local branch `codex/u5-managed-app-adapters`; the remote branch was already
+  deleted by the merge workflow.
+- Created isolated worktree `.Codex/worktrees/u6-managed-applications-ux` from
+  `origin/main` at `0f75216b`.
+- Implemented U6 local slice: added Settings -> Managed Applications as the
+  lifecycle surface, replaced General/CRM switch-style deployment controls with
+  links into the plan/approval surface, gated direct Knowledge Graph routing on
+  Cognee runtime availability, added plan/evidence/timeline/destructive
+  confirmation UI, and regenerated Spaces GraphQL/router artifacts.
+- U6 local verification passed:
+  `pnpm --filter @thinkwork/spaces codegen`;
+  focused managed-app settings tests (7 files, 29 tests);
+  `pnpm --filter @thinkwork/spaces typecheck`;
+  `pnpm --filter @thinkwork/spaces test` (128 files, 875 tests);
+  `pnpm --filter @thinkwork/spaces build`; touched-file Prettier via
+  `pnpm dlx prettier@3.6.2 --write ...`; and `git diff --check`. The build
+  emitted existing sourcemap and chunk-size warnings only.
+- Opened PR [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) for
+  U6.
 
 ## Twenty CRM MCP OAuth - 2026-06-06
 

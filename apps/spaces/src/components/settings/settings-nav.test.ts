@@ -6,6 +6,7 @@ const ACTIVITY = "/settings/activity";
 const KNOWLEDGE_GRAPH = "/settings/knowledge-graph";
 const KNOWLEDGE_BASES = "/settings/knowledge-bases";
 const CRM = "/settings/crm";
+const MANAGED_APPLICATIONS = "/settings/managed-applications";
 
 describe("visibleSettingsNavItems", () => {
   it("declares Workspace as a non-operator, non-desktop-gated section", () => {
@@ -97,6 +98,27 @@ describe("visibleSettingsNavItems", () => {
 
     expect(operatorWithoutTwenty.some((i) => i.to === CRM)).toBe(false);
     expect(operatorWithTwenty.some((i) => i.to === CRM)).toBe(true);
+  });
+
+  it("shows Managed Applications to operators without app-runtime gating", () => {
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === MANAGED_APPLICATIONS);
+    expect(item).toBeDefined();
+    expect(item?.operatorOnly).toBe(true);
+    expect(item?.managedAppKey).toBeUndefined();
+
+    const operatorWeb = visibleSettingsNavItems({
+      isOperator: true,
+      roleResolved: true,
+      isDesktop: false,
+    });
+    const memberWeb = visibleSettingsNavItems({
+      isOperator: false,
+      roleResolved: true,
+      isDesktop: false,
+    });
+
+    expect(operatorWeb.some((i) => i.to === MANAGED_APPLICATIONS)).toBe(true);
+    expect(memberWeb.some((i) => i.to === MANAGED_APPLICATIONS)).toBe(false);
   });
 
   it("places Activity in Spaces settings for operators on web and desktop", () => {

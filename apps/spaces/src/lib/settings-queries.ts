@@ -127,6 +127,183 @@ export const SettingsInstallManagedApplicationMcpServerMutation = graphql(`
   }
 `);
 
+export const SettingsManagedApplicationsQuery = graphql(`
+  query SettingsManagedApplications {
+    managedApplications {
+      id
+      key
+      displayName
+      desiredStatus
+      currentStatus
+      selectedReleaseVersion
+      selectedManifestDigest
+      lastJobId
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsManagedApplicationDeploymentQuery = graphql(`
+  query SettingsManagedApplicationDeployment($jobId: ID!) {
+    managedApplicationDeployment(jobId: $jobId) {
+      id
+      appKey
+      operation
+      status
+      releaseVersion
+      manifestDigest
+      desiredConfigVersion
+      stateMachineArn
+      planExecutionArn
+      applyExecutionArn
+      codebuildBuildArn
+      planDigest
+      planSummary
+      dataImpact
+      evidenceBucket
+      evidencePrefix
+      approvalRequired
+      approvedAt
+      rejectedAt
+      errorMessage
+      createdAt
+      updatedAt
+      events {
+        id
+        eventType
+        message
+        payload
+        createdAt
+      }
+    }
+  }
+`);
+
+export const SettingsDeploymentEvidenceQuery = graphql(`
+  query SettingsDeploymentEvidence($jobId: ID!) {
+    deploymentEvidence(jobId: $jobId) {
+      jobId
+      bucket
+      prefix
+      urls
+    }
+  }
+`);
+
+export const SettingsStartManagedApplicationPlanMutation = graphql(`
+  mutation SettingsStartManagedApplicationPlan(
+    $input: StartManagedApplicationPlanInput!
+  ) {
+    startManagedApplicationPlan(input: $input) {
+      id
+      appKey
+      operation
+      status
+      releaseVersion
+      manifestDigest
+      desiredConfigVersion
+      stateMachineArn
+      planExecutionArn
+      applyExecutionArn
+      codebuildBuildArn
+      planDigest
+      planSummary
+      dataImpact
+      evidenceBucket
+      evidencePrefix
+      approvalRequired
+      approvedAt
+      rejectedAt
+      errorMessage
+      createdAt
+      updatedAt
+      events {
+        id
+        eventType
+        message
+        payload
+        createdAt
+      }
+    }
+  }
+`);
+
+export const SettingsApproveManagedApplicationDeploymentMutation = graphql(`
+  mutation SettingsApproveManagedApplicationDeployment(
+    $input: ApproveManagedApplicationDeploymentInput!
+  ) {
+    approveManagedApplicationDeployment(input: $input) {
+      id
+      appKey
+      operation
+      status
+      releaseVersion
+      manifestDigest
+      desiredConfigVersion
+      stateMachineArn
+      planExecutionArn
+      applyExecutionArn
+      codebuildBuildArn
+      planDigest
+      planSummary
+      dataImpact
+      evidenceBucket
+      evidencePrefix
+      approvalRequired
+      approvedAt
+      rejectedAt
+      errorMessage
+      createdAt
+      updatedAt
+      events {
+        id
+        eventType
+        message
+        payload
+        createdAt
+      }
+    }
+  }
+`);
+
+export const SettingsRejectManagedApplicationDeploymentMutation = graphql(`
+  mutation SettingsRejectManagedApplicationDeployment(
+    $input: RejectManagedApplicationDeploymentInput!
+  ) {
+    rejectManagedApplicationDeployment(input: $input) {
+      id
+      appKey
+      operation
+      status
+      releaseVersion
+      manifestDigest
+      desiredConfigVersion
+      stateMachineArn
+      planExecutionArn
+      applyExecutionArn
+      codebuildBuildArn
+      planDigest
+      planSummary
+      dataImpact
+      evidenceBucket
+      evidencePrefix
+      approvalRequired
+      approvedAt
+      rejectedAt
+      errorMessage
+      createdAt
+      updatedAt
+      events {
+        id
+        eventType
+        message
+        payload
+        createdAt
+      }
+    }
+  }
+`);
+
 export const SettingsKnowledgeGraphHealthCheckQuery = graphql(`
   query SettingsKnowledgeGraphHealthCheck {
     knowledgeGraphHealthCheck {
