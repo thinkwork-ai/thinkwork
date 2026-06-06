@@ -28,7 +28,8 @@ status: in_progress
 | Lambda env budget fix                          | `codex/twenty-crm-status-env-budget` | [#2144](https://github.com/thinkwork-ai/thinkwork/pull/2144) | Merged | Keeps deployment-status env vars below Lambda's 4 KB limit.                                                                          |
 | Aurora URL psql compatibility                  | `codex/twenty-crm-db-url-ssl-fix`    | [#2147](https://github.com/thinkwork-ai/thinkwork/pull/2147) | Merged | Uses `sslmode=require` so the deploy workflow's `psql` DB prep succeeds.                                                            |
 | Twenty Node TLS runtime fix                    | `codex/twenty-crm-node-tls-runtime`  | [#2148](https://github.com/thinkwork-ai/thinkwork/pull/2148) | Merged | Adds the Node TLS setting needed for Twenty's migration process to accept the Aurora RDS certificate in dev.                         |
-| Twenty DB owner grants                         | `codex/twenty-crm-db-owner-grants`   | TBD                                                          | Active | Gives the dedicated Twenty database user enough rights to create schemas, extensions, and migration-owned objects.                   |
+| Twenty DB owner grants                         | `codex/twenty-crm-db-owner-grants`   | [#2149](https://github.com/thinkwork-ai/thinkwork/pull/2149) | Merged | Gives the dedicated Twenty database user enough rights to create schemas, extensions, and migration-owned objects.                   |
+| Twenty DB setup role switch                    | `codex/twenty-crm-db-setup-role`     | TBD                                                          | Active | Runs Twenty schema and extension setup under the app DB role so Postgres ownership checks pass.                                      |
 
 ### Progress Log
 
@@ -101,6 +102,12 @@ status: in_progress
   privileges: Twenty could not create the `core` schema or install
   `uuid-ossp`/`unaccent` as the `thinkwork_twenty` role. Started branch
   `codex/twenty-crm-db-owner-grants`.
+- PR [#2149](https://github.com/thinkwork-ai/thinkwork/pull/2149) passed CI
+  and merged as `61c095af`, but the main deploy failed inside the Twenty DB
+  prep step because `thinkwork_admin` was not a member of `thinkwork_twenty`
+  when creating schemas with `AUTHORIZATION`. Started branch
+  `codex/twenty-crm-db-setup-role` to grant role membership and run the setup
+  SQL under `SET ROLE thinkwork_twenty`.
 
 ### CI / Verification
 
@@ -140,11 +147,15 @@ status: in_progress
   `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts`
   passed with 20 tests; `.github/workflows/deploy.yml` parsed as YAML; `git diff --check`
   passed.
+- DB setup role follow-up verification passed:
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
+  passed with 45 tests; `.github/workflows/deploy.yml` parsed as YAML;
+  `git diff --check` passed.
 
 ### Blockers
 
-- Twenty's Node migration process now reaches the database, but the dedicated
-  database role needs owner/create privileges before first boot can complete.
+- Twenty database prep needs the deploy admin to become a member of the Twenty
+  app role before creating app-owned schemas and extensions.
 
 ## Spaces Settings Activity - 2026-06-05
 
