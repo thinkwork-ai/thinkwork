@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useMutation } from "urql";
 import { toast } from "sonner";
 import {
@@ -11,10 +12,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   Badge,
-  Button,
   Switch,
 } from "@thinkwork/ui";
-import { ExternalLink, Settings } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import {
   ManagedApplicationDeploymentAction,
   type SettingsDeploymentStatusQuery,
@@ -209,53 +209,28 @@ export function ManagedApplicationsSection({
           return (
             <SettingsRow
               key={key}
-              label={app.displayName}
+              label={<ManagedApplicationLabel app={app} />}
               description={deploymentErrors[key] ?? managedAppDescription(app)}
             >
-              <Badge variant={statusVariant(statusLabel)}>{statusLabel}</Badge>
-              {app.url && app.runtimeEnabled ? (
-                <Button
-                  asChild
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Open ${app.displayName}`}
-                  title={`Open ${app.displayName}`}
-                >
-                  <a href={app.url} target="_blank" rel="noreferrer">
-                    <ExternalLink className="size-4" />
-                  </a>
-                </Button>
-              ) : null}
+              <Badge
+                variant="outline"
+                className={statusBadgeClassName(statusLabel)}
+              >
+                {statusLabel}
+              </Badge>
               {key === "twenty" ? (
-                <>
-                  {app.provisioned ? (
-                    <Button
-                      asChild
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={disabled}
-                    >
-                      <a href="/settings/crm">
-                        <Settings className="size-4" />
-                        Configure
-                      </a>
-                    </Button>
-                  ) : null}
-                  <Switch
-                    checked={desiredEnabled}
-                    disabled={disabled || queued || app.provisioned}
-                    aria-label={`Toggle ${app.displayName}`}
-                    onCheckedChange={(checked) => {
-                      if (!checked) return;
-                      void requestDeployment(
-                        key,
-                        ManagedApplicationDeploymentAction.Enable,
-                      );
-                    }}
-                  />
-                </>
+                <Switch
+                  checked={desiredEnabled}
+                  disabled={disabled || queued || app.provisioned}
+                  aria-label={`Toggle ${app.displayName}`}
+                  onCheckedChange={(checked) => {
+                    if (!checked) return;
+                    void requestDeployment(
+                      key,
+                      ManagedApplicationDeploymentAction.Enable,
+                    );
+                  }}
+                />
               ) : (
                 <Switch
                   checked={desiredEnabled}
@@ -307,6 +282,33 @@ export function ManagedApplicationsSection({
   );
 }
 
+function ManagedApplicationLabel({ app }: { app: ManagedApplication }) {
+  if (app.key !== "twenty") return app.displayName;
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Link
+        to="/settings/crm"
+        className="rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {app.displayName}
+      </Link>
+      {app.url && app.runtimeEnabled ? (
+        <a
+          href={app.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Open ${app.displayName}`}
+          title={`Open ${app.displayName}`}
+        >
+          <ExternalLink className="size-4" />
+        </a>
+      ) : null}
+    </span>
+  );
+}
+
 function appFromDeployment(
   deployment: DeploymentStatus | undefined,
   key: ManagedAppKey,
@@ -322,12 +324,20 @@ function managedAppDescription(app: ManagedApplication): string {
   return app.description;
 }
 
-function statusVariant(status: string) {
-  if (status === "running" || status === "deploying" || status === "queued") {
-    return "default";
+function statusBadgeClassName(status: string) {
+  if (status === "running") {
+    return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
   }
-  if (status === "unknown") return "destructive";
-  return "secondary";
+  if (status === "deploying" || status === "queued") {
+    return "border-sky-500/40 bg-sky-500/10 text-sky-300";
+  }
+  if (status === "parked") {
+    return "border-amber-500/40 bg-amber-500/10 text-amber-300";
+  }
+  if (status === "unknown" || status === "failed") {
+    return "border-destructive/40 bg-destructive/10 text-destructive";
+  }
+  return "border-border bg-muted/30 text-muted-foreground";
 }
 
 function queuedStatus(action: ManagedAppAction | undefined): string {
