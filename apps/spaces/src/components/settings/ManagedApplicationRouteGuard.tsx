@@ -6,9 +6,11 @@ import { SettingsDeploymentStatusQuery } from "@/lib/settings-queries";
 
 export function ManagedApplicationRouteGuard({
   appKey,
+  requireProvisioned,
   children,
 }: {
   appKey: "cognee" | "twenty";
+  requireProvisioned?: boolean;
   children: ReactNode;
 }) {
   const { isOperator, roleResolved } = useTenant();
@@ -27,13 +29,18 @@ export function ManagedApplicationRouteGuard({
   }
 
   const deployment = result.data?.deploymentStatus;
-  const enabled =
-    deployment?.managedApplications.find((app) => app.key === appKey)
-      ?.runtimeEnabled ??
-    (appKey === "cognee"
-      ? deployment?.cogneeEnabled
-      : deployment?.twentyRuntimeEnabled) ??
-    false;
+  const app = deployment?.managedApplications.find(
+    (item) => item.key === appKey,
+  );
+  const enabled = requireProvisioned
+    ? (app?.provisioned ??
+      (appKey === "twenty" ? deployment?.twentyProvisioned : undefined) ??
+      false)
+    : (app?.runtimeEnabled ??
+      (appKey === "cognee"
+        ? deployment?.cogneeEnabled
+        : deployment?.twentyRuntimeEnabled) ??
+      false);
 
   if (result.error || !enabled) {
     return <Navigate to="/settings/general" />;

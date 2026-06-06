@@ -330,7 +330,7 @@ function CrmDeployAction({
   fetching: boolean;
   onDeploy: () => void;
 }) {
-  if (provisioned && runtimeEnabled) {
+  if (!provisioned || runtimeEnabled) {
     return null;
   }
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "urql";
 import { toast } from "sonner";
 import {
@@ -30,6 +30,8 @@ type ManagedAppAction = ManagedApplicationDeploymentAction;
 type DeploymentStatus = SettingsDeploymentStatusQuery["deploymentStatus"];
 type ManagedApplication =
   SettingsDeploymentStatusQuery["deploymentStatus"]["managedApplications"][number];
+
+const PENDING_DEPLOYMENT_TTL_MS = 2 * 60 * 60 * 1000;
 
 const FALLBACK_APPS: Record<ManagedAppKey, ManagedApplication> = {
   cognee: {
@@ -93,6 +95,9 @@ export function ManagedApplicationsSection({
   const [pendingAction, setPendingAction] = useState<
     Partial<Record<ManagedAppKey, ManagedAppAction>>
   >({});
+  const [deploymentErrors, setDeploymentErrors] = useState<
+    Partial<Record<ManagedAppKey, string>>
+  >({});
   const [confirm, setConfirm] = useState<{
     key: ManagedAppKey;
     action: ManagedAppAction;
@@ -106,22 +111,70 @@ export function ManagedApplicationsSection({
     appFromDeployment(deployment, "twenty"),
   ];
 
+  useEffect(() => {
+    if (!deployment) return;
+
+    const restoredPendingAction: Partial<
+      Record<ManagedAppKey, ManagedAppAction>
+    > = {};
+    const restoredPendingEnabled: Partial<Record<ManagedAppKey, boolean>> = {};
+
+    for (const app of apps) {
+      const key = app.key as ManagedAppKey;
+      const pending = readStoredPendingDeployment(deployment.stage, key);
+      if (!pending) continue;
+
+      if (managedActionSatisfied(app, pending.action)) {
+        clearStoredPendingDeployment(deployment.stage, key);
+        continue;
+      }
+
+      restoredPendingAction[key] = pending.action;
+      restoredPendingEnabled[key] =
+        pending.action === ManagedApplicationDeploymentAction.Enable;
+    }
+
+    setPendingAction((current) => ({
+      ...restoredPendingAction,
+      ...current,
+    }));
+    setPendingEnabled((current) => ({
+      ...restoredPendingEnabled,
+      ...current,
+    }));
+  }, [deployment?.stage, deployment?.managedApplications]);
+
   async function requestDeployment(
     key: ManagedAppKey,
     action: ManagedAppAction,
   ) {
-    const result = await setManagedDeployment({ key, action });
-    if (result.error) {
-      toast.error(`Could not update ${appLabel(key)}: ${result.error.message}`);
-      return;
-    }
-
+    setDeploymentErrors((current) => ({ ...current, [key]: undefined }));
+    setPendingAction((current) => ({ ...current, [key]: action }));
     setPendingEnabled((current) => ({
       ...current,
       [key]: action === ManagedApplicationDeploymentAction.Enable,
     }));
-    setPendingAction((current) => ({ ...current, [key]: action }));
     setConfirm(null);
+    if (deployment) {
+      storePendingDeployment(deployment.stage, key, action);
+    }
+
+    const result = await setManagedDeployment({ key, action });
+    if (result.error) {
+      if (deployment) {
+        clearStoredPendingDeployment(deployment.stage, key);
+      }
+      const errorMessage = result.error.message;
+      setPendingAction((current) => ({ ...current, [key]: undefined }));
+      setPendingEnabled((current) => ({ ...current, [key]: undefined }));
+      setDeploymentErrors((current) => ({
+        ...current,
+        [key]: errorMessage,
+      }));
+      toast.error(`Could not update ${appLabel(key)}: ${errorMessage}`);
+      return;
+    }
+
     toast.success(
       result.data?.setManagedApplicationDeployment.message ??
         `${appLabel(key)} deployment queued.`,
@@ -148,17 +201,18 @@ export function ManagedApplicationsSection({
             activeQueuedAction !== undefined ||
             (pendingEnabled[key] !== undefined &&
               pendingEnabled[key] !== app.runtimeEnabled);
+          const statusLabel = queued
+            ? queuedStatus(activeQueuedAction)
+            : app.status;
           const disabled = loading || deploymentState.fetching || !deployment;
 
           return (
             <SettingsRow
               key={key}
               label={app.displayName}
-              description={managedAppDescription(app)}
+              description={deploymentErrors[key] ?? managedAppDescription(app)}
             >
-              <Badge variant={statusVariant(queued ? "queued" : app.status)}>
-                {queued ? "queued" : app.status}
-              </Badge>
+              <Badge variant={statusVariant(statusLabel)}>{statusLabel}</Badge>
               {app.url && app.runtimeEnabled ? (
                 <Button
                   asChild
@@ -174,18 +228,34 @@ export function ManagedApplicationsSection({
                 </Button>
               ) : null}
               {key === "twenty" ? (
-                <Button
-                  asChild
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={disabled}
-                >
-                  <a href="/settings/crm">
-                    <Settings className="size-4" />
-                    Configure
-                  </a>
-                </Button>
+                <>
+                  {app.provisioned ? (
+                    <Button
+                      asChild
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={disabled}
+                    >
+                      <a href="/settings/crm">
+                        <Settings className="size-4" />
+                        Configure
+                      </a>
+                    </Button>
+                  ) : null}
+                  <Switch
+                    checked={desiredEnabled}
+                    disabled={disabled || queued || app.provisioned}
+                    aria-label={`Toggle ${app.displayName}`}
+                    onCheckedChange={(checked) => {
+                      if (!checked) return;
+                      void requestDeployment(
+                        key,
+                        ManagedApplicationDeploymentAction.Enable,
+                      );
+                    }}
+                  />
+                </>
               ) : (
                 <Switch
                   checked={desiredEnabled}
@@ -253,9 +323,72 @@ function managedAppDescription(app: ManagedApplication): string {
 }
 
 function statusVariant(status: string) {
-  if (status === "running" || status === "queued") return "default";
+  if (status === "running" || status === "deploying" || status === "queued") {
+    return "default";
+  }
   if (status === "unknown") return "destructive";
   return "secondary";
+}
+
+function queuedStatus(action: ManagedAppAction | undefined): string {
+  if (action === ManagedApplicationDeploymentAction.Enable) return "deploying";
+  if (action === ManagedApplicationDeploymentAction.Park) return "parking";
+  if (action === ManagedApplicationDeploymentAction.Destroy) return "removing";
+  return "queued";
+}
+
+function pendingDeploymentStorageKey(
+  stage: string,
+  key: ManagedAppKey,
+): string {
+  return `thinkwork:${stage}:managed-app:${key}:pending-action`;
+}
+
+function storePendingDeployment(
+  stage: string,
+  key: ManagedAppKey,
+  action: ManagedAppAction,
+) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    pendingDeploymentStorageKey(stage, key),
+    JSON.stringify({ action, createdAt: Date.now() }),
+  );
+}
+
+function readStoredPendingDeployment(
+  stage: string,
+  key: ManagedAppKey,
+): { action: ManagedAppAction } | null {
+  if (typeof window === "undefined") return null;
+
+  const storageKey = pendingDeploymentStorageKey(stage, key);
+  const raw = window.localStorage.getItem(storageKey);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      action?: ManagedAppAction;
+      createdAt?: number;
+    };
+    if (
+      !parsed.action ||
+      typeof parsed.createdAt !== "number" ||
+      Date.now() - parsed.createdAt > PENDING_DEPLOYMENT_TTL_MS
+    ) {
+      window.localStorage.removeItem(storageKey);
+      return null;
+    }
+    return { action: parsed.action };
+  } catch {
+    window.localStorage.removeItem(storageKey);
+    return null;
+  }
+}
+
+function clearStoredPendingDeployment(stage: string, key: ManagedAppKey) {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(pendingDeploymentStorageKey(stage, key));
 }
 
 function appLabel(key: ManagedAppKey): string {
