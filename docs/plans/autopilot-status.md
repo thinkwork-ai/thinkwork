@@ -38,6 +38,13 @@ status: in_progress
 - Updated CLI release pin behavior so mutating bootstrap requires a resolved
   manifest SHA-256 instead of silently writing `CHANGE_ME`.
 - Opened PR [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163).
+- CI test job
+  [27067600404](https://github.com/thinkwork-ai/thinkwork/actions/runs/27067600404)
+  failed because the npm-published CLI package manifest exposed
+  `@thinkwork/release-manifest` as a `workspace:*` runtime dependency.
+- Fixed the CI failure by keeping the shared release manifest package out of
+  `thinkwork-cli` runtime dependencies and inlining the tiny version normalizer
+  used by the CLI release pin helper.
 
 ### CI / Verification
 
@@ -45,6 +52,8 @@ status: in_progress
 - `pnpm test:release` passed.
 - `pnpm --filter thinkwork-cli exec vitest run __tests__/enterprise-release.test.ts __tests__/enterprise-bootstrap.test.ts __tests__/enterprise-template.test.ts __tests__/enterprise-deploy-bootstrap.test.ts`
   passed.
+- `pnpm --filter thinkwork-cli exec vitest run __tests__/package-manifest.test.ts __tests__/enterprise-release.test.ts __tests__/enterprise-bootstrap.test.ts __tests__/enterprise-template.test.ts __tests__/enterprise-deploy-bootstrap.test.ts`
+  passed after the CI fix.
 - `pnpm --filter @thinkwork/release-manifest typecheck` passed.
 - `pnpm --filter thinkwork-cli typecheck` passed.
 - `pnpm dlx prettier --check <touched TS/JSON/MD/YAML files>` passed.

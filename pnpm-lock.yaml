@@ -276,9 +276,6 @@ importers:
       '@inquirer/prompts':
         specifier: ^8.4.1
         version: 8.4.1(@types/node@25.6.0)
-      '@thinkwork/release-manifest':
-        specifier: workspace:*
-        version: link:../../packages/release-manifest
       '@urql/core':
         specifier: ^6.0.0
         version: 6.0.1(graphql@16.13.2)

@@ -1,5 +1,4 @@
 import { VERSION } from "../../version.js";
-import { normalizeVersion } from "@thinkwork/release-manifest";
 
 export interface EnterpriseReleasePin {
   version: string;
@@ -24,4 +23,8 @@ export function resolveEnterpriseReleasePin(options: {
     manifestSha256: options.manifestSha256,
     terraformModuleVersion: options.terraformModuleVersion ?? normalizedVersion,
   };
+}
+
+function normalizeVersion(version: string): string {
+  return version.startsWith("v") ? version.slice(1) : version;
 }
