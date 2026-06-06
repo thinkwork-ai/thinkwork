@@ -275,7 +275,7 @@ export function SettingsActivityThreadDetail({
 
   return (
     <div className="h-full min-h-0 overflow-y-auto">
-      <div className="grid gap-8 p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-6 p-6 md:grid-cols-[minmax(0,1fr)_320px]">
         <main className="min-w-0">
           <div className="mb-8">
             <p className="mb-3 font-mono text-sm uppercase tracking-wide text-muted-foreground">
@@ -341,7 +341,7 @@ export function SettingsActivityThreadDetail({
           <ThreadTraces traces={tracesData?.threadTraces ?? []} />
         </main>
 
-        <aside className="xl:pt-8">
+        <aside className="md:pt-8">
           <ThreadProperties
             thread={thread}
             latestSystemPrompt={latestSystemPrompt}

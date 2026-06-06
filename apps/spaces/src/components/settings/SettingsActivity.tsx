@@ -15,7 +15,6 @@ import {
   type ChartConfig,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
-import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -222,10 +221,14 @@ export function SettingsActivity({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
-      <SettingsPageTitle
-        title="Activity"
-        description="Recent thread activity across this workspace."
-      />
+      <div className="mb-4 shrink-0">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          Activity
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Recent thread activity across this workspace.
+        </p>
+      </div>
       <div className="min-h-0 flex-1">
         {loading ? (
           <div className="flex h-full items-center justify-center">
@@ -233,9 +236,6 @@ export function SettingsActivity({
           </div>
         ) : (
           <div className="flex h-full min-h-0 flex-col gap-3">
-            <div className="mb-1 text-xs text-muted-foreground">
-              {allItems.length} item{allItems.length === 1 ? "" : "s"}
-            </div>
             <ActivityChart
               items={allItems}
               selectedDay={selectedDay}
@@ -244,6 +244,7 @@ export function SettingsActivity({
             <ActivityToolbar
               search={search}
               onSearchChange={setSearch}
+              itemCount={allItems.length}
               selectedDay={selectedDay}
               onClearDay={() => handleSelectDay(null)}
             />
@@ -280,11 +281,13 @@ export function SettingsActivity({
 function ActivityToolbar({
   search,
   onSearchChange,
+  itemCount,
   selectedDay,
   onClearDay,
 }: {
   search: string;
   onSearchChange: (value: string) => void;
+  itemCount: number;
   selectedDay: string | null;
   onClearDay: () => void;
 }) {
@@ -303,6 +306,9 @@ function ActivityToolbar({
           aria-label="Search activity"
         />
       </label>
+      <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+        {itemCount} item{itemCount === 1 ? "" : "s"}
+      </span>
       {selectedDay ? (
         <span className="flex shrink-0 items-center gap-2">
           <Badge variant="secondary" className="whitespace-nowrap text-xs">

@@ -209,6 +209,9 @@ describe("SettingsActivity", () => {
         .compareDocumentPosition(screen.getByTestId("activity-toolbar")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(screen.getByTestId("activity-toolbar").textContent).toContain(
+      "2 items",
+    );
     expect(screen.getByText("May 31")).toBeTruthy();
     expect(screen.getByText("Clear date filter")).toBeTruthy();
     expect(screen.getByText("CHAT-979: AgentCore retry")).toBeTruthy();

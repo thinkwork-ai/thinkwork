@@ -147,6 +147,13 @@ status: in_progress
   `./node_modules/.pnpm/node_modules/.bin/prettier --check <touched files>`;
   `git diff --check`;
   `curl -I --max-time 5 http://localhost:5175/settings/activity`.
+- Second feedback pass moved the Activity item count into the search row,
+  tightened the Activity title-to-chart spacing, and lowered the thread detail
+  properties rail breakpoint from `xl` to `md` so it stays on the right in the
+  Settings shell. Verification passed:
+  `pnpm --filter @thinkwork/spaces test -- src/components/settings/SettingsActivity.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx`;
+  `pnpm --filter @thinkwork/spaces typecheck`; `git diff --check`;
+  `curl -I --max-time 5 http://localhost:5174/settings/activity`.
 
 ### Blockers
 
