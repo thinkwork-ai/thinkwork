@@ -1,15 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import {
-  ArrowLeft,
-  Database,
-  GitBranch,
-  Loader2,
-  RefreshCw,
-  Search,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Search, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Badge,
@@ -58,6 +50,26 @@ type ThreadCandidate =
 type IngestRun = NonNullable<ThreadCandidate["lastIngestRun"]>;
 
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
+// Definition tables use auto table layout (no fixed pixel widths). The leading
+// identity column hugs its content; the remaining columns absorb the leftover
+// width and truncate so the table never overflows horizontally. These are driven
+// by per-column `meta` class overrides applied to the <th>/<td> by DataTable.
+// Headers use px-4 so they line up with cell content, which is double-padded
+// (the <td>'s own p-2 plus COMPACT_TABLE_CELL's inner px-2 = 16px).
+const FIT_COLUMN_META = {
+  meta: { cellClassName: "w-px whitespace-nowrap", headClassName: "w-px px-4" },
+};
+const TRUNCATE_COLUMN_META = {
+  meta: { cellClassName: "max-w-0", headClassName: "px-4" },
+};
+// Header padding that lines a column's <th> up with its double-padded cell
+// content (the <td>'s p-2 plus COMPACT_TABLE_CELL's inner px-2 = 16px). Used by
+// the fixed-width Data and Thread Ingest tables, which keep their own sizing.
+const HEADER_PAD_META = { meta: { headClassName: "px-4" } };
+// Center variant for compact columns (badges / counts). Pair with
+// `justify-center` on the cell wrapper so header and content both center.
+const CENTER_COLUMN_META = { meta: { headClassName: "px-4 text-center" } };
+const CENTER_TABLE_CELL = `${COMPACT_TABLE_CELL} justify-center`;
 
 interface DropDiagnostics {
   cogneeNodeCount: number;
@@ -112,6 +124,7 @@ export function KnowledgeGraphExplorer({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  const [definitionsQuery, setDefinitionsQuery] = useState("");
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedEntityTitle, setSelectedEntityTitle] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -185,6 +198,7 @@ export function KnowledgeGraphExplorer({
       {
         accessorKey: "label",
         header: "Entity",
+        ...HEADER_PAD_META,
         cell: ({ row }) => (
           <span className={`${COMPACT_TABLE_CELL} font-medium`}>
             <span className="truncate">{row.original.label}</span>
@@ -195,8 +209,9 @@ export function KnowledgeGraphExplorer({
         accessorKey: "typeLabel",
         header: "Type",
         size: 140,
+        ...CENTER_COLUMN_META,
         cell: ({ row }) => (
-          <span className={COMPACT_TABLE_CELL}>
+          <span className={CENTER_TABLE_CELL}>
             <Badge variant="outline" className="font-normal">
               {row.original.typeLabel ??
                 row.original.ontologyTypeSlug ??
@@ -209,8 +224,9 @@ export function KnowledgeGraphExplorer({
         accessorKey: "relationshipCount",
         header: "Links",
         size: 88,
+        ...CENTER_COLUMN_META,
         cell: ({ row }) => (
-          <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+          <span className={`${CENTER_TABLE_CELL} text-muted-foreground`}>
             {row.original.relationshipCount}
           </span>
         ),
@@ -219,8 +235,9 @@ export function KnowledgeGraphExplorer({
         accessorKey: "evidenceCount",
         header: "Evidence",
         size: 104,
+        ...CENTER_COLUMN_META,
         cell: ({ row }) => (
-          <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+          <span className={`${CENTER_TABLE_CELL} text-muted-foreground`}>
             {row.original.evidenceCount}
           </span>
         ),
@@ -229,6 +246,7 @@ export function KnowledgeGraphExplorer({
         accessorKey: "lastSeenAt",
         header: "Last seen",
         size: 132,
+        ...HEADER_PAD_META,
         cell: ({ row }) => (
           <span
             className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
@@ -298,43 +316,29 @@ export function KnowledgeGraphExplorer({
     );
   }
 
+  const ontologyDefinitions = ontologyResult.data?.ontologyDefinitions ?? null;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex shrink-0 flex-wrap items-center gap-3">
         {mode === "data" ? (
           <>
-            <div className="relative w-fit min-w-56 max-w-full">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search entities..."
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                onKeyDown={(event) =>
-                  event.key === "Enter" && setActiveSearch(searchQuery.trim())
-                }
-                className="pl-9"
-              />
-              {searchQuery ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setActiveSearch("");
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear entity search"
-                >
-                  <X className="size-3.5" />
-                </button>
-              ) : null}
-            </div>
-
+            <ToolbarSearch
+              value={searchQuery}
+              placeholder="Search entities..."
+              clearLabel="Clear entity search"
+              onChange={setSearchQuery}
+              onCommit={() => setActiveSearch(searchQuery.trim())}
+              onClear={() => {
+                setSearchQuery("");
+                setActiveSearch("");
+              }}
+            />
             <ToggleGroup
               type="single"
               value={view}
               onValueChange={(value) => value && setView(value as ExplorerView)}
               variant="outline"
-              className="ml-auto"
             >
               <ToggleGroupItem value="table" className="px-3 text-xs">
                 Table
@@ -344,17 +348,45 @@ export function KnowledgeGraphExplorer({
               </ToggleGroupItem>
             </ToggleGroup>
           </>
-        ) : null}
+        ) : (
+          <>
+            <ToolbarSearch
+              value={definitionsQuery}
+              placeholder="Search definitions..."
+              clearLabel="Clear definitions search"
+              onChange={setDefinitionsQuery}
+              onClear={() => setDefinitionsQuery("")}
+            />
+            <ToggleGroup
+              type="single"
+              value={ontologyView}
+              onValueChange={(value) =>
+                value && setOntologyView(value as OntologyView)
+              }
+              variant="outline"
+            >
+              <ToggleGroupItem value="entities" className="px-3 text-xs">
+                Entities
+              </ToggleGroupItem>
+              <ToggleGroupItem value="relationships" className="px-3 text-xs">
+                Links
+              </ToggleGroupItem>
+              <ToggleGroupItem value="mappings" className="px-3 text-xs">
+                Maps
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </>
+        )}
       </div>
 
       <div className="min-h-0 flex-1">
         {mode === "definitions" ? (
-          <OntologyContractPanel
-            definitions={ontologyResult.data?.ontologyDefinitions ?? null}
+          <OntologyDefinitionsTable
+            definitions={ontologyDefinitions}
             fetching={ontologyResult.fetching && !ontologyResult.data}
             error={ontologyResult.error?.message ?? null}
             view={ontologyView}
-            onViewChange={setOntologyView}
+            query={definitionsQuery}
           />
         ) : (
           <>
@@ -462,18 +494,80 @@ export function KnowledgeGraphExplorer({
   );
 }
 
-function OntologyContractPanel({
+type EntityTypeRow = NonNullable<OntologyDefinitions>["entityTypes"][number];
+type RelationshipTypeRow =
+  NonNullable<OntologyDefinitions>["relationshipTypes"][number];
+type ExternalMappingRow =
+  NonNullable<OntologyDefinitions>["externalMappings"][number];
+
+function ToolbarSearch({
+  value,
+  placeholder,
+  clearLabel,
+  onChange,
+  onCommit,
+  onClear,
+}: {
+  value: string;
+  placeholder: string;
+  clearLabel: string;
+  onChange: (value: string) => void;
+  onCommit?: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="relative w-fit min-w-56 max-w-full">
+      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={
+          onCommit ? (event) => event.key === "Enter" && onCommit() : undefined
+        }
+        className="pl-9"
+      />
+      {value ? (
+        <button
+          type="button"
+          onClick={onClear}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          aria-label={clearLabel}
+        >
+          <X className="size-3.5" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function matchesQuery(haystack: (string | null | undefined)[], query: string) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return haystack.some((value) => (value ?? "").toLowerCase().includes(needle));
+}
+
+function definitionsEmptyState(
+  total: number,
+  query: string,
+  emptyMessage: string,
+) {
+  if (total === 0) return emptyMessage;
+  return query.trim() ? "No definitions match your search." : emptyMessage;
+}
+
+function OntologyDefinitionsTable({
   definitions,
   fetching,
   error,
   view,
-  onViewChange,
+  query,
 }: {
   definitions: OntologyDefinitions | null;
   fetching: boolean;
   error?: string | null;
   view: OntologyView;
-  onViewChange: (view: OntologyView) => void;
+  query: string;
 }) {
   const entityTypes = definitions?.entityTypes ?? [];
   const relationshipTypes = definitions?.relationshipTypes ?? [];
@@ -489,176 +583,309 @@ function OntologyContractPanel({
     return labels;
   }, [entityTypes, relationshipTypes]);
 
-  return (
-    <aside className="flex min-h-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-border/70 pb-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Database className="size-4 text-muted-foreground" />
-              Ontology Definitions
-            </div>
-          </div>
-          {definitions?.activeVersion ? (
-            <Badge variant="outline" className="shrink-0 font-normal">
-              v{definitions.activeVersion.versionNumber}
-            </Badge>
-          ) : null}
-
-          <ToggleGroup
-            type="single"
-            value={view}
-            onValueChange={(value) =>
-              value && onViewChange(value as OntologyView)
-            }
-            variant="outline"
-            className="ml-auto"
-          >
-            <ToggleGroupItem value="entities" className="px-3 text-xs">
-              Entities ({entityTypes.length})
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="relationships"
-              className="px-3 text-xs"
-            >
-              Links ({relationshipTypes.length})
-            </ToggleGroupItem>
-            <ToggleGroupItem value="mappings" className="px-3 text-xs">
-              Maps ({mappings.length})
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto pt-2">
-        {fetching ? (
-          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Loading ontology...
-          </div>
-        ) : error ? (
-          <EmptyState text={error} destructive />
-        ) : view === "entities" ? (
-          <OntologyEntityList rows={entityTypes} />
-        ) : view === "relationships" ? (
-          <OntologyRelationshipList rows={relationshipTypes} />
-        ) : (
-          <OntologyMappingList rows={mappings} subjectLabels={subjectLabels} />
-        )}
-      </div>
-    </aside>
-  );
-}
-
-function OntologyEntityList({
-  rows,
-}: {
-  rows: NonNullable<OntologyDefinitions>["entityTypes"];
-}) {
-  if (!rows.length) {
-    return <EmptyState text="No approved ontology entities are defined." />;
-  }
-  return (
-    <div className="divide-y divide-border/70">
-      {rows.map((entity) => (
-        <div key={entity.id} className="grid min-w-0 gap-1 px-1 py-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate text-sm font-medium">
-              {entity.name}
-            </span>
-            <Badge variant="outline" className="ml-auto shrink-0 font-normal">
-              {entity.broadType}
-            </Badge>
-          </div>
-          <div className="truncate text-xs text-muted-foreground">
-            {entity.description || entity.slug}
-          </div>
-          <OntologyAliasLine values={entity.aliases} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function OntologyRelationshipList({
-  rows,
-}: {
-  rows: NonNullable<OntologyDefinitions>["relationshipTypes"];
-}) {
-  if (!rows.length) {
+  if (fetching) {
     return (
-      <EmptyState text="No approved ontology relationships are defined." />
+      <div className="flex h-full items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" /> Loading ontology...
+      </div>
+    );
+  }
+  if (error) {
+    return <EmptyState text={error} destructive />;
+  }
+  if (view === "entities") {
+    return <EntityDefinitionsTable rows={entityTypes} query={query} />;
+  }
+  if (view === "relationships") {
+    return (
+      <RelationshipDefinitionsTable rows={relationshipTypes} query={query} />
     );
   }
   return (
-    <div className="divide-y divide-border/70">
-      {rows.map((relationship) => (
-        <div key={relationship.id} className="grid min-w-0 gap-1 px-1 py-2">
-          <div className="min-w-0 truncate text-sm font-medium">
-            {relationship.name}
-          </div>
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 text-xs text-muted-foreground">
-            <span className="truncate">
-              {relationship.sourceTypeSlugs.join(", ") || "any"}
-            </span>
-            <GitBranch className="size-3 shrink-0" />
-            <span className="truncate">
-              {relationship.targetTypeSlugs.join(", ") || "any"}
-            </span>
-          </div>
-          <OntologyAliasLine values={relationship.aliases} />
-        </div>
-      ))}
-    </div>
+    <MappingDefinitionsTable
+      rows={mappings}
+      subjectLabels={subjectLabels}
+      query={query}
+    />
   );
 }
 
-function OntologyMappingList({
+function EntityDefinitionsTable({
+  rows,
+  query,
+}: {
+  rows: EntityTypeRow[];
+  query: string;
+}) {
+  const filtered = useMemo(
+    () =>
+      rows.filter((entity) =>
+        matchesQuery(
+          [entity.name, entity.slug, entity.description, ...entity.aliases],
+          query,
+        ),
+      ),
+    [rows, query],
+  );
+  const columns: ColumnDef<EntityTypeRow>[] = useMemo(
+    () => [
+      {
+        accessorKey: "name",
+        header: "Name",
+        ...FIT_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={`${COMPACT_TABLE_CELL} font-medium`}>
+            <span className="whitespace-nowrap">{row.original.name}</span>
+          </span>
+        ),
+      },
+      {
+        accessorKey: "broadType",
+        header: "Type",
+        ...FIT_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={COMPACT_TABLE_CELL}>
+            <Badge variant="outline" className="font-normal">
+              {row.original.broadType}
+            </Badge>
+          </span>
+        ),
+      },
+      {
+        accessorKey: "description",
+        header: "Description",
+        ...TRUNCATE_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+            <span className="truncate">
+              {row.original.description || row.original.slug}
+            </span>
+          </span>
+        ),
+      },
+      {
+        id: "aliases",
+        header: "Aliases",
+        ...TRUNCATE_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+            <span className="truncate">
+              {row.original.aliases.join(", ") || "—"}
+            </span>
+          </span>
+        ),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <DataTable
+      columns={columns}
+      data={filtered}
+      scrollable
+      allowHorizontalScroll={false}
+      pageSize={25}
+      emptyState={definitionsEmptyState(
+        rows.length,
+        query,
+        "No approved ontology entities are defined.",
+      )}
+    />
+  );
+}
+
+function RelationshipDefinitionsTable({
+  rows,
+  query,
+}: {
+  rows: RelationshipTypeRow[];
+  query: string;
+}) {
+  const filtered = useMemo(
+    () =>
+      rows.filter((relationship) =>
+        matchesQuery(
+          [
+            relationship.name,
+            ...relationship.sourceTypeSlugs,
+            ...relationship.targetTypeSlugs,
+            ...relationship.aliases,
+          ],
+          query,
+        ),
+      ),
+    [rows, query],
+  );
+  const columns: ColumnDef<RelationshipTypeRow>[] = useMemo(
+    () => [
+      {
+        accessorKey: "name",
+        header: "Name",
+        ...FIT_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={`${COMPACT_TABLE_CELL} font-medium`}>
+            <span className="whitespace-nowrap">{row.original.name}</span>
+          </span>
+        ),
+      },
+      {
+        id: "source",
+        header: "Source",
+        ...TRUNCATE_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+            <span className="truncate">
+              {row.original.sourceTypeSlugs.join(", ") || "any"}
+            </span>
+          </span>
+        ),
+      },
+      {
+        id: "target",
+        header: "Target",
+        ...TRUNCATE_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+            <span className="truncate">
+              {row.original.targetTypeSlugs.join(", ") || "any"}
+            </span>
+          </span>
+        ),
+      },
+      {
+        id: "aliases",
+        header: "Aliases",
+        ...TRUNCATE_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+            <span className="truncate">
+              {row.original.aliases.join(", ") || "—"}
+            </span>
+          </span>
+        ),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <DataTable
+      columns={columns}
+      data={filtered}
+      scrollable
+      allowHorizontalScroll={false}
+      pageSize={25}
+      emptyState={definitionsEmptyState(
+        rows.length,
+        query,
+        "No approved ontology relationships are defined.",
+      )}
+    />
+  );
+}
+
+function MappingDefinitionsTable({
   rows,
   subjectLabels,
+  query,
 }: {
-  rows: NonNullable<OntologyDefinitions>["externalMappings"];
+  rows: ExternalMappingRow[];
   subjectLabels: Map<string, string>;
+  query: string;
 }) {
-  if (!rows.length) {
-    return <EmptyState text="No external vocabulary mappings are defined." />;
-  }
-  return (
-    <div className="divide-y divide-border/70">
-      {rows.map((mapping) => {
+  const filtered = useMemo(
+    () =>
+      rows.filter((mapping) => {
         const subject =
           subjectLabels.get(`${mapping.subjectKind}:${mapping.subjectId}`) ??
           mapping.subjectKind.replace(/_/g, " ");
-        return (
-          <div key={mapping.id} className="grid min-w-0 gap-1 px-1 py-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 truncate text-sm font-medium">
-                {subject}
-              </span>
-              <Badge variant="outline" className="ml-auto shrink-0 font-normal">
-                {formatEnum(mapping.mappingKind)}
-              </Badge>
-            </div>
-            <div className="truncate text-xs text-muted-foreground">
-              {mapping.vocabulary}
-              {mapping.externalLabel ? ` · ${mapping.externalLabel}` : ""}
-            </div>
-            <div className="truncate font-mono text-[11px] text-muted-foreground">
-              {mapping.externalUri}
-            </div>
-          </div>
+        return matchesQuery(
+          [
+            subject,
+            mapping.vocabulary,
+            mapping.externalLabel,
+            mapping.externalUri,
+          ],
+          query,
         );
-      })}
-    </div>
+      }),
+    [rows, subjectLabels, query],
   );
-}
+  const columns: ColumnDef<ExternalMappingRow>[] = useMemo(
+    () => [
+      {
+        id: "subject",
+        header: "Subject",
+        ...FIT_COLUMN_META,
+        cell: ({ row }) => {
+          const subject =
+            subjectLabels.get(
+              `${row.original.subjectKind}:${row.original.subjectId}`,
+            ) ?? row.original.subjectKind.replace(/_/g, " ");
+          return (
+            <span className={`${COMPACT_TABLE_CELL} font-medium`}>
+              <span className="whitespace-nowrap">{subject}</span>
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "mappingKind",
+        header: "Kind",
+        ...FIT_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={COMPACT_TABLE_CELL}>
+            <Badge variant="outline" className="font-normal">
+              {formatEnum(row.original.mappingKind)}
+            </Badge>
+          </span>
+        ),
+      },
+      {
+        accessorKey: "vocabulary",
+        header: "Vocabulary",
+        ...TRUNCATE_COLUMN_META,
+        cell: ({ row }) => (
+          <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+            <span className="truncate">
+              {row.original.vocabulary}
+              {row.original.externalLabel
+                ? ` · ${row.original.externalLabel}`
+                : ""}
+            </span>
+          </span>
+        ),
+      },
+      {
+        accessorKey: "externalUri",
+        header: "External URI",
+        ...TRUNCATE_COLUMN_META,
+        cell: ({ row }) => (
+          <span
+            className={`${COMPACT_TABLE_CELL} font-mono text-[11px] text-muted-foreground`}
+          >
+            <span className="truncate">{row.original.externalUri}</span>
+          </span>
+        ),
+      },
+    ],
+    [subjectLabels],
+  );
 
-function OntologyAliasLine({ values }: { values: string[] }) {
-  if (!values.length) return null;
   return (
-    <div className="truncate text-xs text-muted-foreground">
-      Aliases: {values.slice(0, 4).join(", ")}
-      {values.length > 4 ? ` +${values.length - 4}` : ""}
-    </div>
+    <DataTable
+      columns={columns}
+      data={filtered}
+      scrollable
+      allowHorizontalScroll={false}
+      pageSize={25}
+      emptyState={definitionsEmptyState(
+        rows.length,
+        query,
+        "No external vocabulary mappings are defined.",
+      )}
+    />
   );
 }
 
@@ -689,6 +916,7 @@ function ThreadIngestDetailView({
     {
       accessorKey: "label",
       header: "Entity",
+      ...HEADER_PAD_META,
       cell: ({ row }) => (
         <span className={`${COMPACT_TABLE_CELL} font-medium`}>
           <span className="truncate">{row.original.label}</span>
@@ -699,8 +927,9 @@ function ThreadIngestDetailView({
       accessorKey: "typeLabel",
       header: "Type",
       size: 128,
+      ...CENTER_COLUMN_META,
       cell: ({ row }) => (
-        <span className={COMPACT_TABLE_CELL}>
+        <span className={CENTER_TABLE_CELL}>
           <Badge variant="outline" className="font-normal">
             {row.original.typeLabel ??
               row.original.ontologyTypeSlug ??
@@ -713,8 +942,9 @@ function ThreadIngestDetailView({
       accessorKey: "relationshipCount",
       header: "Links",
       size: 72,
+      ...CENTER_COLUMN_META,
       cell: ({ row }) => (
-        <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+        <span className={`${CENTER_TABLE_CELL} text-muted-foreground`}>
           {row.original.relationshipCount}
         </span>
       ),
@@ -723,8 +953,9 @@ function ThreadIngestDetailView({
       accessorKey: "evidenceCount",
       header: "Evidence",
       size: 92,
+      ...CENTER_COLUMN_META,
       cell: ({ row }) => (
-        <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+        <span className={`${CENTER_TABLE_CELL} text-muted-foreground`}>
           {row.original.evidenceCount}
         </span>
       ),

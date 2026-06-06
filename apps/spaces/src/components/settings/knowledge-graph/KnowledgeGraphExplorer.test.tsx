@@ -54,6 +54,22 @@ describe("KnowledgeGraphExplorer", () => {
     expect(explorerSource).toContain("DataTable");
   });
 
+  it("gives definitions a searchable DataTable matching the data toolbar", () => {
+    // Definitions renders a DataTable, not stacked multi-line rows.
+    expect(explorerSource).toContain("OntologyDefinitionsTable");
+    expect(explorerSource).not.toContain("OntologyContractPanel");
+    expect(explorerSource).not.toContain("OntologyEntityList");
+    // The "Ontology Definitions" header label is gone.
+    expect(explorerSource).not.toContain("Ontology Definitions");
+    // Toggle groups carry no counts.
+    expect(explorerSource).not.toMatch(/Entities \(\{/);
+    expect(explorerSource).not.toMatch(/Links \(\{/);
+    expect(explorerSource).not.toMatch(/Maps \(\{/);
+    // Definitions has its own search box.
+    expect(explorerSource).toContain("Search definitions...");
+    expect(explorerSource).toContain("definitionsQuery");
+  });
+
   it("opens entity details from rows, graph nodes, and neighbor links", () => {
     expect(explorerSource).toContain("onRowClick");
     expect(explorerSource).toContain("onNodeClick");
