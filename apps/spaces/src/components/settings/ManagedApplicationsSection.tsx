@@ -14,7 +14,7 @@ import {
   Button,
   Switch,
 } from "@thinkwork/ui";
-import { ExternalLink, PauseCircle, Play, Trash2 } from "lucide-react";
+import { ExternalLink, Settings } from "lucide-react";
 import {
   ManagedApplicationDeploymentAction,
   type SettingsDeploymentStatusQuery,
@@ -174,14 +174,18 @@ export function ManagedApplicationsSection({
                 </Button>
               ) : null}
               {key === "twenty" ? (
-                <TwentyLifecycleControls
-                  app={app}
+                <Button
+                  asChild
+                  type="button"
+                  variant="outline"
+                  size="sm"
                   disabled={disabled}
-                  queuedAction={
-                    key === "twenty" ? activeQueuedAction : undefined
-                  }
-                  onAction={(action) => setConfirm({ key, action })}
-                />
+                >
+                  <a href="/settings/crm">
+                    <Settings className="size-4" />
+                    Configure
+                  </a>
+                </Button>
               ) : (
                 <Switch
                   checked={desiredEnabled}
@@ -233,53 +237,6 @@ export function ManagedApplicationsSection({
   );
 }
 
-function TwentyLifecycleControls({
-  app,
-  disabled,
-  queuedAction,
-  onAction,
-}: {
-  app: ManagedApplication;
-  disabled: boolean;
-  queuedAction?: ManagedAppAction;
-  onAction: (action: ManagedAppAction) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <Button
-        type="button"
-        variant={app.runtimeEnabled ? "secondary" : "default"}
-        size="sm"
-        disabled={disabled || app.runtimeEnabled || queuedAction !== undefined}
-        onClick={() => onAction(ManagedApplicationDeploymentAction.Enable)}
-      >
-        <Play className="size-4" />
-        Deploy
-      </Button>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        disabled={disabled || !app.runtimeEnabled || queuedAction !== undefined}
-        onClick={() => onAction(ManagedApplicationDeploymentAction.Park)}
-      >
-        <PauseCircle className="size-4" />
-        Park
-      </Button>
-      <Button
-        type="button"
-        variant="destructive"
-        size="sm"
-        disabled={disabled || !app.provisioned || queuedAction !== undefined}
-        onClick={() => onAction(ManagedApplicationDeploymentAction.Destroy)}
-      >
-        <Trash2 className="size-4" />
-        Destroy
-      </Button>
-    </div>
-  );
-}
-
 function appFromDeployment(
   deployment: DeploymentStatus | undefined,
   key: ManagedAppKey,
@@ -322,15 +279,6 @@ function confirmTitle(
   confirm: { key: ManagedAppKey; action: ManagedAppAction } | null,
 ): string {
   if (!confirm) return "Update managed application?";
-  if (confirm.key === "twenty") {
-    if (confirm.action === ManagedApplicationDeploymentAction.Enable) {
-      return "Deploy Twenty CRM?";
-    }
-    if (confirm.action === ManagedApplicationDeploymentAction.Park) {
-      return "Park Twenty CRM?";
-    }
-    return "Destroy Twenty CRM and delete data?";
-  }
   return confirm.action === ManagedApplicationDeploymentAction.Enable
     ? "Enable Cognee?"
     : "Disable Cognee?";
@@ -340,21 +288,6 @@ function confirmDescription(
   confirm: { key: ManagedAppKey; action: ManagedAppAction } | null,
 ): string {
   if (!confirm) return "";
-  if (
-    confirm.key === "twenty" &&
-    confirm.action === ManagedApplicationDeploymentAction.Enable
-  ) {
-    return "This queues the deploy workflow. CRM settings remain hidden until deployment status reports Twenty CRM running.";
-  }
-  if (
-    confirm.key === "twenty" &&
-    confirm.action === ManagedApplicationDeploymentAction.Park
-  ) {
-    return "This queues the deploy workflow to stop the CRM runtime while retaining the dedicated database, secrets, files, and re-enable path.";
-  }
-  if (confirm.key === "twenty") {
-    return "This queues a destructive deploy workflow that removes the Twenty runtime, storage, cache, app secrets, and dedicated database. This cannot be undone from ThinkWork.";
-  }
   if (confirm.action === ManagedApplicationDeploymentAction.Enable) {
     return "This queues the deploy workflow to provision the Cognee Knowledge Graph service.";
   }
@@ -371,5 +304,5 @@ function confirmActionLabel(
   if (confirm.action === ManagedApplicationDeploymentAction.Park) {
     return "Park";
   }
-  return confirm.key === "twenty" ? "Destroy and delete data" : "Disable";
+  return "Disable";
 }
