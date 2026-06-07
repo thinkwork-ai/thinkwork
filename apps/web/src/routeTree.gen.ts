@@ -46,6 +46,7 @@ import { Route as AuthedSettingsKnowledgeBasesIndexRouteImport } from "./routes/
 import { Route as AuthedSettingsEvaluationsIndexRouteImport } from "./routes/_authed/settings.evaluations.index";
 import { Route as AuthedSettingsAutomationsIndexRouteImport } from "./routes/_authed/settings.automations.index";
 import { Route as AuthedSettingsArtifactsIndexRouteImport } from "./routes/_authed/settings.artifacts.index";
+import { Route as AuthedSettingsAgentsIndexRouteImport } from "./routes/_authed/settings.agents.index";
 import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_shell/threads.index";
 import { Route as AuthedShellSpacesIndexRouteImport } from "./routes/_authed/_shell/spaces.index";
 import { Route as AuthedShellMemoryIndexRouteImport } from "./routes/_authed/_shell/memory.index";
@@ -63,6 +64,7 @@ import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
 import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./routes/_authed/settings.automations.$scheduledJobId";
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
+import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
 import { Route as AuthedSettingsActivityThreadIdRouteImport } from "./routes/_authed/settings.activity_.$threadId";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
 import { Route as AuthedShellSpacesSpaceIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId";
@@ -279,6 +281,12 @@ const AuthedSettingsArtifactsIndexRoute =
     path: "/",
     getParentRoute: () => AuthedSettingsArtifactsRoute,
   } as any);
+const AuthedSettingsAgentsIndexRoute =
+  AuthedSettingsAgentsIndexRouteImport.update({
+    id: "/agents/",
+    path: "/agents/",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedShellThreadsIndexRoute = AuthedShellThreadsIndexRouteImport.update({
   id: "/threads/",
   path: "/threads/",
@@ -377,6 +385,12 @@ const AuthedSettingsArtifactsIdRoute =
     id: "/$id",
     path: "/$id",
     getParentRoute: () => AuthedSettingsArtifactsRoute,
+  } as any);
+const AuthedSettingsAgentsProfileIdRoute =
+  AuthedSettingsAgentsProfileIdRouteImport.update({
+    id: "/agents/$profileId",
+    path: "/agents/$profileId",
+    getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsActivityThreadIdRoute =
   AuthedSettingsActivityThreadIdRouteImport.update({
@@ -526,6 +540,7 @@ export interface FileRoutesByFullPath {
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
+  "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -543,6 +558,7 @@ export interface FileRoutesByFullPath {
   "/memory/": typeof AuthedShellMemoryIndexRoute;
   "/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/settings/agents/": typeof AuthedSettingsAgentsIndexRoute;
   "/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
   "/settings/automations/": typeof AuthedSettingsAutomationsIndexRoute;
   "/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
@@ -594,6 +610,7 @@ export interface FileRoutesByTo {
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
+  "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -611,6 +628,7 @@ export interface FileRoutesByTo {
   "/memory": typeof AuthedShellMemoryIndexRoute;
   "/spaces": typeof AuthedShellSpacesIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
+  "/settings/agents": typeof AuthedSettingsAgentsIndexRoute;
   "/settings/artifacts": typeof AuthedSettingsArtifactsIndexRoute;
   "/settings/automations": typeof AuthedSettingsAutomationsIndexRoute;
   "/settings/evaluations": typeof AuthedSettingsEvaluationsIndexRoute;
@@ -670,6 +688,7 @@ export interface FileRoutesById {
   "/_authed/_shell/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/settings/activity_/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
+  "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/_authed/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -687,6 +706,7 @@ export interface FileRoutesById {
   "/_authed/_shell/memory/": typeof AuthedShellMemoryIndexRoute;
   "/_authed/_shell/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/_authed/settings/agents/": typeof AuthedSettingsAgentsIndexRoute;
   "/_authed/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
   "/_authed/settings/automations/": typeof AuthedSettingsAutomationsIndexRoute;
   "/_authed/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
@@ -745,6 +765,7 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId"
     | "/threads/$id"
     | "/settings/activity/$threadId"
+    | "/settings/agents/$profileId"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -762,6 +783,7 @@ export interface FileRouteTypes {
     | "/memory/"
     | "/spaces/"
     | "/threads/"
+    | "/settings/agents/"
     | "/settings/artifacts/"
     | "/settings/automations/"
     | "/settings/evaluations/"
@@ -813,6 +835,7 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId"
     | "/threads/$id"
     | "/settings/activity/$threadId"
+    | "/settings/agents/$profileId"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -830,6 +853,7 @@ export interface FileRouteTypes {
     | "/memory"
     | "/spaces"
     | "/threads"
+    | "/settings/agents"
     | "/settings/artifacts"
     | "/settings/automations"
     | "/settings/evaluations"
@@ -888,6 +912,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/spaces/$spaceId"
     | "/_authed/_shell/threads/$id"
     | "/_authed/settings/activity_/$threadId"
+    | "/_authed/settings/agents/$profileId"
     | "/_authed/settings/artifacts/$id"
     | "/_authed/settings/automations/$scheduledJobId"
     | "/_authed/settings/evaluations/$runId"
@@ -905,6 +930,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory/"
     | "/_authed/_shell/spaces/"
     | "/_authed/_shell/threads/"
+    | "/_authed/settings/agents/"
     | "/_authed/settings/artifacts/"
     | "/_authed/settings/automations/"
     | "/_authed/settings/evaluations/"
@@ -1196,6 +1222,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsArtifactsIndexRouteImport;
       parentRoute: typeof AuthedSettingsArtifactsRoute;
     };
+    "/_authed/settings/agents/": {
+      id: "/_authed/settings/agents/";
+      path: "/agents";
+      fullPath: "/settings/agents/";
+      preLoaderRoute: typeof AuthedSettingsAgentsIndexRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/_shell/threads/": {
       id: "/_authed/_shell/threads/";
       path: "/threads";
@@ -1314,6 +1347,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/artifacts/$id";
       preLoaderRoute: typeof AuthedSettingsArtifactsIdRouteImport;
       parentRoute: typeof AuthedSettingsArtifactsRoute;
+    };
+    "/_authed/settings/agents/$profileId": {
+      id: "/_authed/settings/agents/$profileId";
+      path: "/agents/$profileId";
+      fullPath: "/settings/agents/$profileId";
+      preLoaderRoute: typeof AuthedSettingsAgentsProfileIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/activity_/$threadId": {
       id: "/_authed/settings/activity_/$threadId";
@@ -1593,6 +1633,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsWikiRoute: typeof AuthedSettingsWikiRoute;
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
   AuthedSettingsActivityThreadIdRoute: typeof AuthedSettingsActivityThreadIdRoute;
+  AuthedSettingsAgentsProfileIdRoute: typeof AuthedSettingsAgentsProfileIdRoute;
   AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   AuthedSettingsEvaluationsRunIdRoute: typeof AuthedSettingsEvaluationsRunIdRoute;
   AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
@@ -1602,6 +1643,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsSpacesSpaceIdRoute: typeof AuthedSettingsSpacesSpaceIdRoute;
   AuthedSettingsUsersUserIdRoute: typeof AuthedSettingsUsersUserIdRoute;
   AuthedSettingsWebhooksWebhookIdRoute: typeof AuthedSettingsWebhooksWebhookIdRoute;
+  AuthedSettingsAgentsIndexRoute: typeof AuthedSettingsAgentsIndexRoute;
   AuthedSettingsAutomationsIndexRoute: typeof AuthedSettingsAutomationsIndexRoute;
   AuthedSettingsEvaluationsIndexRoute: typeof AuthedSettingsEvaluationsIndexRoute;
   AuthedSettingsKnowledgeBasesIndexRoute: typeof AuthedSettingsKnowledgeBasesIndexRoute;
@@ -1634,6 +1676,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsWikiRoute: AuthedSettingsWikiRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
   AuthedSettingsActivityThreadIdRoute: AuthedSettingsActivityThreadIdRoute,
+  AuthedSettingsAgentsProfileIdRoute: AuthedSettingsAgentsProfileIdRoute,
   AuthedSettingsAutomationsScheduledJobIdRoute:
     AuthedSettingsAutomationsScheduledJobIdRoute,
   AuthedSettingsEvaluationsRunIdRoute: AuthedSettingsEvaluationsRunIdRoute,
@@ -1644,6 +1687,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsSpacesSpaceIdRoute: AuthedSettingsSpacesSpaceIdRoute,
   AuthedSettingsUsersUserIdRoute: AuthedSettingsUsersUserIdRoute,
   AuthedSettingsWebhooksWebhookIdRoute: AuthedSettingsWebhooksWebhookIdRoute,
+  AuthedSettingsAgentsIndexRoute: AuthedSettingsAgentsIndexRoute,
   AuthedSettingsAutomationsIndexRoute: AuthedSettingsAutomationsIndexRoute,
   AuthedSettingsEvaluationsIndexRoute: AuthedSettingsEvaluationsIndexRoute,
   AuthedSettingsKnowledgeBasesIndexRoute:

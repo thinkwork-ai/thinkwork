@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-07-002-feat-agent-profiles-pi-subagents-plan.md`.
 - Target branch: `main`.
-- Current unit: U1 Agent Profile Schema, Seeds, And GraphQL.
-- Current branch: `codex/agent-profiles-u1-schema-graphql`.
-- Current worktree: `.Codex/worktrees/agent-profiles-u1`.
+- Current unit: U2 Settings -> Agents Page And Profile Editor.
+- Current branch: `codex/agent-profiles-u2-settings-agents`.
+- Current worktree: `.Codex/worktrees/agent-profiles-u2`.
 - Status: in progress.
 - Notes:
   - Created branch from `origin/main` at `c61921b3e`.
@@ -49,11 +49,69 @@ status: complete
       with `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ...`.
     - `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0152_agent_profiles.sql`
       now reports all table/index/constraint markers present.
+  - U1 was squash merged as `6956a0b4`; local worktree/branch were removed and
+    the remote branch was deleted.
+  - Created isolated U2 worktree `.Codex/worktrees/agent-profiles-u2` from
+    `origin/main` at `6956a0b4`.
+  - Started U2 Settings -> Agents work: moving default Agent configuration out
+    of General, adding the operator-only Agents route/nav item, and wiring the
+    Agent Profiles editor to the U1 GraphQL substrate.
+  - U2 local verification passed so far:
+    - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/settings-nav.test.ts src/components/settings/SettingsAgents.test.tsx`
+      -> 14 tests passed.
+    - `pnpm --filter @thinkwork/web typecheck` -> passed.
+    - `pnpm --filter @thinkwork/web test` -> 134 test files passed; 917 tests
+      passed.
+    - `pnpm --filter @thinkwork/web build` -> passed.
+    - `git diff --check` -> passed.
+    - Direct Prettier check over changed files -> passed.
+    - Browser verification on `http://localhost:5174`: after copying the
+      existing dev Vite env into `apps/web/.env.local`, the Settings sidebar
+      showed the operator-only Agents item; clicking it navigated to
+      `/settings/agents` and rendered Default Agent plus built-in Analyst,
+      Coding, and Research Agent Profiles. General no longer renders the old
+      Default model control.
+    - Final pre-PR check on `http://localhost:5174`: no missing Vite env
+      warning, `/settings/general` title rendered as `General · ThinkWork`,
+      the sidebar exposed exactly one Agents link, clicking it landed on
+      `/settings/agents`, and the page rendered `Default Agent`,
+      `Agent Profiles`, `Research`, `Coding`, and `Analyst`.
+    - Final pre-PR focused verification rerun:
+      `pnpm --filter @thinkwork/web typecheck`,
+      `pnpm --filter @thinkwork/web exec vitest run src/components/settings/settings-nav.test.ts src/components/settings/SettingsAgents.test.tsx`,
+      direct Prettier check over changed files, and `git diff --check` all
+      passed.
+    - Post-feedback browser verification on `http://localhost:5174`: the
+      Agent Profiles overview no longer renders an inline editor; it shows
+      three clickable profile rows, clicking `Analyst` navigates to
+      `/settings/agents/<profile-id>`, and the detail route renders the profile
+      editor with `Routing guidance`, `Instructions`, and `Save` while the
+      overview-only `Default Agent` section is absent.
+    - Follow-up detail-page browser verification on `http://localhost:5174`:
+      after navigating Settings sidebar -> Agents -> Analyst, the `Save`
+      button rendered below the profile form fields and below the `Skills`
+      section at the bottom-right of the card.
+    - Follow-up section-layout browser verification on `http://localhost:5174`:
+      the profile detail page now renders General-style `Profile`,
+      `Instructions`, `Execution`, and `Capabilities` sections; Spaces, Tools,
+      MCP Servers, and Skills use chip multi-select controls with add/remove
+      dropdowns; there are zero checkbox controls in those category sections;
+      and `Save` renders below the `Capabilities` section.
+    - Follow-up multi-select browser verification on `http://localhost:5174`:
+      selected four Spaces in the profile detail multi-select and confirmed the
+      row stayed readable, the selector remained inside the row, and the
+      control rendered two chips plus `+ 2 more` instead of overflowing.
+  - U2 browser note: direct full-page loads of existing operator Settings
+    routes such as `/settings/tools`, `/settings/analytics`, and the new
+    `/settings/agents` land on `/settings/general`; in-app Settings sidebar
+    navigation works. This appears to be existing Settings deep-link behavior,
+    not specific to Agents.
 
-| Unit                                        | Branch                                     | PR                                                           | State  | Notes                                                                                             |
-| ------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
-| U0 Pi Profile Adapter Spike                 | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
-| U1 Agent Profile Schema, Seeds, And GraphQL | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | open   | Dev migration applied after drift failure; rerunning CI.                                          |
+| Unit                                          | Branch                                     | PR                                                           | State  | Notes                                                                                             |
+| --------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
+| U0 Pi Profile Adapter Spike                   | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
+| U1 Agent Profile Schema, Seeds, And GraphQL   | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | merged | Squash merged as `6956a0b4`; dev migration applied after drift failure and rerun CI passed.       |
+| U2 Settings -> Agents Page And Profile Editor | `codex/agent-profiles-u2-settings-agents`  | TBD                                                          | active | Moving default Agent config from General and adding profile list/editor UI.                       |
 
 ## Model Stacking Tool Routing - 2026-06-06
 

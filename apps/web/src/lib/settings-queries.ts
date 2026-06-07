@@ -728,6 +728,109 @@ export const SettingsUpdateTenantAgentMutation = graphql(`
   }
 `);
 
+// ─── Agent Profiles (operator-only section) ─────────────────────────────
+
+export const SettingsAgentProfilesQuery = graphql(`
+  query SettingsAgentProfiles($tenantId: ID!) {
+    agentProfiles(tenantId: $tenantId, includeDisabled: true) {
+      id
+      tenantId
+      slug
+      name
+      description
+      routingGuidance
+      instructions
+      modelId
+      model {
+        id
+        modelId
+        provider
+        displayName
+        inputCostPerMillion
+        outputCostPerMillion
+      }
+      enabled
+      builtInKey
+      toolPolicy
+      skillPolicy
+      executionControls
+      spaces {
+        id
+        name
+        slug
+      }
+      createdAt
+      updatedAt
+    }
+    agentProfileEditorCatalog(tenantId: $tenantId) {
+      models {
+        id
+        modelId
+        provider
+        displayName
+        inputCostPerMillion
+        outputCostPerMillion
+      }
+      spaces {
+        id
+        name
+        slug
+      }
+      skills {
+        slug
+        displayName
+        description
+        category
+      }
+      builtInTools
+      mcpServers {
+        id
+        name
+        slug
+        enabled
+        status
+        tools
+      }
+    }
+  }
+`);
+
+export const SettingsCreateAgentProfileMutation = graphql(`
+  mutation SettingsCreateAgentProfile(
+    $tenantId: ID!
+    $input: AgentProfileInput!
+  ) {
+    createAgentProfile(tenantId: $tenantId, input: $input) {
+      id
+      slug
+      name
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsUpdateAgentProfileMutation = graphql(`
+  mutation SettingsUpdateAgentProfile(
+    $tenantId: ID!
+    $id: ID!
+    $input: UpdateAgentProfileInput!
+  ) {
+    updateAgentProfile(tenantId: $tenantId, id: $id, input: $input) {
+      id
+      slug
+      name
+      enabled
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsDeleteAgentProfileMutation = graphql(`
+  mutation SettingsDeleteAgentProfile($tenantId: ID!, $id: ID!) {
+    deleteAgentProfile(tenantId: $tenantId, id: $id)
+  }
+`);
+
 // ─── Users (operator-only section) ───────────────────────────────────────
 
 export const SettingsTenantMembersQuery = graphql(`

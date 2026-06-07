@@ -8524,6 +8524,126 @@ export type SettingsUpdateTenantAgentMutation = {
   };
 };
 
+export type SettingsAgentProfilesQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsAgentProfilesQuery = {
+  __typename?: "Query";
+  agentProfiles: Array<{
+    __typename?: "AgentProfile";
+    id: string;
+    tenantId: string;
+    slug: string;
+    name: string;
+    description?: string | null;
+    routingGuidance?: string | null;
+    instructions: string;
+    modelId: string;
+    enabled: boolean;
+    builtInKey?: string | null;
+    toolPolicy: any;
+    skillPolicy: any;
+    executionControls: any;
+    createdAt: any;
+    updatedAt: any;
+    model?: {
+      __typename?: "ModelCatalogEntry";
+      id: string;
+      modelId: string;
+      provider: string;
+      displayName: string;
+      inputCostPerMillion?: number | null;
+      outputCostPerMillion?: number | null;
+    } | null;
+    spaces: Array<{
+      __typename?: "Space";
+      id: string;
+      name: string;
+      slug: string;
+    }>;
+  }>;
+  agentProfileEditorCatalog: {
+    __typename?: "AgentProfileEditorCatalog";
+    builtInTools: Array<string>;
+    models: Array<{
+      __typename?: "ModelCatalogEntry";
+      id: string;
+      modelId: string;
+      provider: string;
+      displayName: string;
+      inputCostPerMillion?: number | null;
+      outputCostPerMillion?: number | null;
+    }>;
+    spaces: Array<{
+      __typename?: "Space";
+      id: string;
+      name: string;
+      slug: string;
+    }>;
+    skills: Array<{
+      __typename?: "AgentProfileSkillOption";
+      slug: string;
+      displayName?: string | null;
+      description?: string | null;
+      category?: string | null;
+    }>;
+    mcpServers: Array<{
+      __typename?: "AgentProfileMcpServerOption";
+      id: string;
+      name: string;
+      slug: string;
+      enabled: boolean;
+      status: string;
+      tools?: any | null;
+    }>;
+  };
+};
+
+export type SettingsCreateAgentProfileMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  input: AgentProfileInput;
+}>;
+
+export type SettingsCreateAgentProfileMutation = {
+  __typename?: "Mutation";
+  createAgentProfile: {
+    __typename?: "AgentProfile";
+    id: string;
+    slug: string;
+    name: string;
+    updatedAt: any;
+  };
+};
+
+export type SettingsUpdateAgentProfileMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  id: Scalars["ID"]["input"];
+  input: UpdateAgentProfileInput;
+}>;
+
+export type SettingsUpdateAgentProfileMutation = {
+  __typename?: "Mutation";
+  updateAgentProfile: {
+    __typename?: "AgentProfile";
+    id: string;
+    slug: string;
+    name: string;
+    enabled: boolean;
+    updatedAt: any;
+  };
+};
+
+export type SettingsDeleteAgentProfileMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SettingsDeleteAgentProfileMutation = {
+  __typename?: "Mutation";
+  deleteAgentProfile: boolean;
+};
+
 export type SettingsTenantMembersQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
 }>;
@@ -15311,6 +15431,465 @@ export const SettingsUpdateTenantAgentDocument = {
 } as unknown as DocumentNode<
   SettingsUpdateTenantAgentMutation,
   SettingsUpdateTenantAgentMutationVariables
+>;
+export const SettingsAgentProfilesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsAgentProfiles" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "agentProfiles" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "includeDisabled" },
+                value: { kind: "BooleanValue", value: true },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "routingGuidance" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "instructions" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "modelId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "model" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "modelId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "provider" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "displayName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "inputCostPerMillion" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "outputCostPerMillion" },
+                      },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "builtInKey" } },
+                { kind: "Field", name: { kind: "Name", value: "toolPolicy" } },
+                { kind: "Field", name: { kind: "Name", value: "skillPolicy" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "executionControls" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "spaces" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "agentProfileEditorCatalog" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "models" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "modelId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "provider" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "displayName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "inputCostPerMillion" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "outputCostPerMillion" },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "spaces" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "skills" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "displayName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "description" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "category" },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "builtInTools" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "mcpServers" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "tools" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsAgentProfilesQuery,
+  SettingsAgentProfilesQueryVariables
+>;
+export const SettingsCreateAgentProfileDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsCreateAgentProfile" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "AgentProfileInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "createAgentProfile" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsCreateAgentProfileMutation,
+  SettingsCreateAgentProfileMutationVariables
+>;
+export const SettingsUpdateAgentProfileDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsUpdateAgentProfile" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpdateAgentProfileInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updateAgentProfile" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUpdateAgentProfileMutation,
+  SettingsUpdateAgentProfileMutationVariables
+>;
+export const SettingsDeleteAgentProfileDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsDeleteAgentProfile" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "deleteAgentProfile" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsDeleteAgentProfileMutation,
+  SettingsDeleteAgentProfileMutationVariables
 >;
 export const SettingsTenantMembersDocument = {
   kind: "Document",
