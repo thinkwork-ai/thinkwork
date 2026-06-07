@@ -254,7 +254,6 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
           value={view}
           onValueChange={(v) => v && setView(v as BrainView)}
           variant="outline"
-          className="ml-auto"
         >
           <ToggleGroupItem value="table" className="px-3 text-xs">
             Table

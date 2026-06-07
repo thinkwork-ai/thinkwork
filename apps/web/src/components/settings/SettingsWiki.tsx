@@ -198,7 +198,6 @@ export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
           value={view}
           onValueChange={(v) => v && setView(v as PagesView)}
           variant="outline"
-          className="ml-auto"
         >
           <ToggleGroupItem value="table" className="px-3 text-xs">
             Table
