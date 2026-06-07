@@ -20,6 +20,14 @@ export interface ToolInvocationRecord {
   args?: unknown;
   result?: unknown;
   is_error?: boolean;
+  model?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  cached_read_tokens?: number;
+  cost_usd?: number;
+  model_routing_status?: string;
+  model_routing_rule_source?: Record<string, unknown>;
+  model_routing_match?: Record<string, unknown>;
   /** Short string previews the thread UI renders as Input/Output/Status. */
   input_preview?: string;
   output_preview?: string;

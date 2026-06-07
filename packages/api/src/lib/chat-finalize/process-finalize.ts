@@ -259,6 +259,7 @@ export async function processFinalize(
       }
     : extractUsage({ usage: undefined });
   const bedrockRequestIds = invokeResult.bedrock_request_ids;
+  let parentCostUsd: number | null = null;
 
   try {
     const costResult = await recordCostEvents({
@@ -278,6 +279,7 @@ export async function processFinalize(
       bedrockRequestIds,
       runtimeType,
     });
+    parentCostUsd = costResult.totalUsd;
     await checkBudgetAndPause(tenantId, agentId, costOwnerUserId);
 
     if (costResult.totalUsd > 0) {
@@ -307,6 +309,13 @@ export async function processFinalize(
     modelRoutedToolCalls,
   });
   applyModelRoutedToolCosts(toolInvocations, modelRoutedToolCalls);
+  applyParentModelFallbackToolEvidence(toolInvocations, {
+    model: usage.model || agentModel || null,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cachedReadTokens: usage.cachedReadTokens,
+    costUsd: parentCostUsd,
+  });
 
   // 3. Record Hindsight phase costs
   const hindsightUsage = invokeResult.hindsight_usage ?? [];
@@ -379,11 +388,13 @@ export async function processFinalize(
     reconcileDurationMs,
   );
   const turnUsage = {
+    model: usage.model || agentModel || null,
     duration_ms: durationMs,
     runtime_type: runtimeType,
     input_tokens: usage.inputTokens,
     output_tokens: usage.outputTokens,
     cached_read_tokens: usage.cachedReadTokens,
+    cost_usd: parentCostUsd,
     diagnostics,
     tools_called: invokeResult.tools_called ?? [],
     tool_costs: toolCosts.map((tc) => ({
@@ -794,6 +805,106 @@ function applyModelRoutedToolCosts(
       };
     }
   }
+}
+
+function splitIntegerTotal(total: number, count: number): number[] {
+  if (count <= 0) return [];
+  const normalizedTotal = Math.max(0, Math.trunc(total));
+  const base = Math.floor(normalizedTotal / count);
+  let remainder = normalizedTotal - base * count;
+  return Array.from({ length: count }, () => {
+    const value = base + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder -= 1;
+    return value;
+  });
+}
+
+function splitMoneyTotal(total: number | null, count: number): number[] {
+  if (count <= 0 || total == null || !Number.isFinite(total) || total < 0) {
+    return [];
+  }
+  const base = total / count;
+  const values = Array.from({ length: count }, () => base);
+  const assigned = values
+    .slice(0, -1)
+    .reduce((sum, value) => sum + value, 0);
+  values[count - 1] = total - assigned;
+  return values;
+}
+
+function hasToolModelEvidence(invocation: Record<string, unknown>): boolean {
+  if (stringValue(invocation.model ?? invocation.model_id ?? invocation.modelId)) {
+    return true;
+  }
+  return normalizeModelRoutedToolCall(
+    invocation.model_routing ?? invocation.modelRouting,
+    {
+      toolCallId: stringValue(invocation.id),
+      toolName:
+        stringValue(invocation.tool_name) ??
+        stringValue(invocation.toolName) ??
+        stringValue(invocation.name),
+    },
+  )
+    ? true
+    : false;
+}
+
+function applyParentModelFallbackToolEvidence(
+  toolInvocations: Array<Record<string, unknown>>,
+  parent: {
+    model?: string | null;
+    inputTokens: number;
+    outputTokens: number;
+    cachedReadTokens: number;
+    costUsd: number | null;
+  },
+): void {
+  const model = parent.model?.trim();
+  if (!model) return;
+
+  const fallbackInvocations = toolInvocations.filter(
+    (invocation) => !hasToolModelEvidence(invocation),
+  );
+  if (fallbackInvocations.length === 0) return;
+
+  const inputSplits = splitIntegerTotal(
+    parent.inputTokens,
+    fallbackInvocations.length,
+  );
+  const outputSplits = splitIntegerTotal(
+    parent.outputTokens,
+    fallbackInvocations.length,
+  );
+  const cachedReadSplits = splitIntegerTotal(
+    parent.cachedReadTokens,
+    fallbackInvocations.length,
+  );
+  const costSplits = splitMoneyTotal(parent.costUsd, fallbackInvocations.length);
+
+  fallbackInvocations.forEach((invocation, index) => {
+    const toolName =
+      stringValue(invocation.tool_name) ??
+      stringValue(invocation.toolName) ??
+      stringValue(invocation.name) ??
+      "tool";
+    invocation.model = model;
+    invocation.input_tokens = inputSplits[index] ?? 0;
+    invocation.output_tokens = outputSplits[index] ?? 0;
+    invocation.cached_read_tokens = cachedReadSplits[index] ?? 0;
+    if (costSplits[index] !== undefined) {
+      invocation.cost_usd = costSplits[index];
+    }
+    invocation.model_routing_status = "parent_model";
+    invocation.model_routing_rule_source = {
+      owner: "composer",
+      path: "composer model selection",
+    };
+    invocation.model_routing_match = {
+      tool: toolName,
+      fallback: "composer_model",
+    };
+  });
 }
 
 async function recordModelRoutedToolEvidence(input: {

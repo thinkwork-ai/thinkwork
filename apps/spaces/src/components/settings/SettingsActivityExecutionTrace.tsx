@@ -991,18 +991,24 @@ function ExecutionTimeline({
 
   if (events.length === 0) return null;
 
-  const totalCost = invocations.reduce(
-    (sum: number, inv: any) => sum + (inv.costUsd || 0),
-    0,
-  );
-  const totalInputTokens = invocations.reduce(
-    (sum: number, inv: any) => sum + (inv.inputTokenCount || 0),
-    0,
-  );
-  const totalOutputTokens = invocations.reduce(
-    (sum: number, inv: any) => sum + (inv.outputTokenCount || 0),
-    0,
-  );
+  const totalCost =
+    invocations.length > 0
+      ? invocations.reduce((sum: number, inv: any) => sum + (inv.costUsd || 0), 0)
+      : (totalCostFromTurn ?? 0);
+  const totalInputTokens =
+    invocations.length > 0
+      ? invocations.reduce(
+          (sum: number, inv: any) => sum + (inv.inputTokenCount || 0),
+          0,
+        )
+      : (inputTokens ?? 0);
+  const totalOutputTokens =
+    invocations.length > 0
+      ? invocations.reduce(
+          (sum: number, inv: any) => sum + (inv.outputTokenCount || 0),
+          0,
+        )
+      : (outputTokens ?? 0);
   const svgHeight = events.length * ROW_H;
 
   const branches = buildBranches(events);
