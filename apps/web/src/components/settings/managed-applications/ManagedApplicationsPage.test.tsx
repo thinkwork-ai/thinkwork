@@ -91,6 +91,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ManagedApplicationsPage", () => {
+  it("drills into the Cognee Application page from the Cognee row", () => {
+    render(<ManagedApplicationsPage />);
+
+    expect(
+      screen.getByRole("link", { name: /open cognee/i }).getAttribute("href"),
+    ).toBe("/settings/applications/cognee");
+  });
+
   it("starts a Cognee deploy plan and opens the plan preview", async () => {
     render(<ManagedApplicationsPage />);
 

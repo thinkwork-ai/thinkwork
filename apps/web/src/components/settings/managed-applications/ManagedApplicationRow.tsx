@@ -1,5 +1,6 @@
+import { Link } from "@tanstack/react-router";
 import { Badge, Button } from "@thinkwork/ui";
-import { ExternalLink, Play, RotateCw, Trash2 } from "lucide-react";
+import { ArrowRight, ExternalLink, Play, RotateCw, Trash2 } from "lucide-react";
 import type {
   ManagedAppKey,
   ManagedApplication,
@@ -33,6 +34,10 @@ export function ManagedApplicationRow({
   const canDeploy = !runtimeEnabled;
   const canDestroy = provisioned || runtimeEnabled;
   const hasJob = !!latestJob || !!app.lastJobId;
+  // Drill-in destination for the app's dedicated detail surface.
+  const detailPath =
+    key === "twenty" ? "/settings/crm" : "/settings/applications/cognee";
+  const detailLabel = key === "twenty" ? "Open CRM" : "Open Cognee";
 
   return (
     <div className="border-b border-border px-4 py-4 last:border-b-0">
@@ -76,6 +81,12 @@ export function ManagedApplicationRow({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link to={detailPath} aria-label={detailLabel} title={detailLabel}>
+              Open
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
           {hasJob ? (
             <Button
               type="button"
