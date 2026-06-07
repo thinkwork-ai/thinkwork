@@ -35,14 +35,15 @@ export function ArtifactsTable({
         ),
       },
       {
-        accessorKey: "kind",
-        header: "Kind",
-        size: 100,
+        accessorKey: "userName",
+        header: "User",
+        size: 160,
         cell: ({ row }) => (
-          <span className={COMPACT_TABLE_CELL}>
-            <Badge variant="outline" className="uppercase tracking-wide">
-              {row.original.kind}
-            </Badge>
+          <span
+            className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}
+            title={row.original.userName ?? undefined}
+          >
+            <span className="truncate">{row.original.userName ?? "—"}</span>
           </span>
         ),
       },

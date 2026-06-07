@@ -4,6 +4,7 @@ import {
   type IframeControllerStatus,
 } from "@/applets/iframe-controller";
 import { parseShadcnThemeCss } from "@/applets/theme-tokens";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import type { AppletPayload } from "@/lib/app-artifacts";
 
 const THEME_VARIABLES = [
@@ -180,14 +181,10 @@ function IframeAppletMount({
     <div
       className={
         fitContentHeight
-          ? "grid min-h-0 min-w-0"
-          : "grid h-full min-h-0 min-w-0"
+          ? "relative grid min-h-0 min-w-0"
+          : "relative grid h-full min-h-0 min-w-0"
       }
     >
-      {status === "loading" || status === "pending" ? <AppletLoading /> : null}
-      {status === "errored" ? (
-        <AppletFailure>{error ?? "App mount failed."}</AppletFailure>
-      ) : null}
       {/* The iframe element is appended into this div by the
           controller's lifecycle. Always render the host so the
           element has a stable mount point even before the controller
@@ -206,6 +203,23 @@ function IframeAppletMount({
             : "h-full min-h-0 min-w-0 overflow-x-hidden"
         }
       />
+      {/* Cover the iframe while it loads or after it fails. A freshly
+          mounted iframe paints its own white document before the applet
+          renders; an opaque `bg-background` overlay hides that white flash
+          (and a stuck handshake) behind the monospace shimmer instead. */}
+      {status === "loading" || status === "pending" ? (
+        <div
+          className="absolute inset-0 z-10 flex min-h-[120px] items-center justify-center bg-background"
+          data-testid="applet-loading-overlay"
+        >
+          <AppletLoading />
+        </div>
+      ) : null}
+      {status === "errored" ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background p-6">
+          <AppletFailure>{error ?? "App mount failed."}</AppletFailure>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -236,9 +250,7 @@ function storedAppletInstanceId(appId: string) {
 
 export function AppletLoading() {
   return (
-    <div className="rounded-lg border border-border/70 bg-background p-6 text-sm text-muted-foreground">
-      Loading artifact...
-    </div>
+    <LoadingShimmer text="Loading artifact..." ariaLabel="Loading artifact" />
   );
 }
 

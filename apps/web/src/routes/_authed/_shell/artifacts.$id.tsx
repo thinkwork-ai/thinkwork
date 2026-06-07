@@ -166,11 +166,13 @@ export function AppletRouteContent({
   if (!applet) {
     return (
       <main className="flex h-svh items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">
-          {fetching
-            ? "Loading artifact..."
-            : error?.message || "Artifact not found."}
-        </p>
+        {fetching ? (
+          <AppletLoading />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {error?.message || "Artifact not found."}
+          </p>
+        )}
       </main>
     );
   }
@@ -268,7 +270,7 @@ export function AppletRouteContent({
 }
 
 const APPLET_TABS = [
-  { value: "app", label: "App" },
+  { value: "app", label: "Artifact" },
   { value: "source", label: "Source" },
   { value: "config", label: "Config" },
 ] as const;

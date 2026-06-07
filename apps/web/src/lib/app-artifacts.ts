@@ -28,6 +28,10 @@ export interface AppArtifactPreview {
   stdlibVersionAtGeneration?: string | null;
   modelId?: string | null;
   agentVersion?: string | null;
+  /** Id of the user who generated the artifact (via the source thread). */
+  userId?: string | null;
+  /** Display name of the generating user; null when none is associated. */
+  userName?: string | null;
 }
 
 export interface AppletPreviewNode {
@@ -41,6 +45,8 @@ export interface AppletPreviewNode {
   modelId?: string | null;
   generatedAt?: string | null;
   stdlibVersionAtGeneration?: string | null;
+  userId?: string | null;
+  userName?: string | null;
   artifact?: {
     id: string;
     favoritedAt?: string | null;
@@ -132,5 +138,7 @@ export function toAppletPreview(applet: AppletPreviewNode): AppArtifactPreview {
     stdlibVersionAtGeneration: applet.stdlibVersionAtGeneration ?? null,
     modelId: applet.modelId ?? null,
     agentVersion: applet.agentVersion ?? null,
+    userId: applet.userId ?? null,
+    userName: applet.userName ?? null,
   };
 }

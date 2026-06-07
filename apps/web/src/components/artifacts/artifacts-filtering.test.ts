@@ -1,14 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  ALL_KINDS,
   DEFAULT_SORT_BY,
   SORT_GENERATED,
   SORT_NAME,
-  TAB_ALL,
   filterArtifactItems,
   sortArtifactItems,
   toArtifactItem,
-  uniqueKinds,
   type ArtifactItem,
 } from "./artifacts-filtering";
 import type { AppArtifactPreview } from "@/lib/app-artifacts";
@@ -18,7 +15,7 @@ const items: ArtifactItem[] = [
     id: "a1",
     artifactId: "artifact-a1",
     title: "LastMile CRM pipeline risk",
-    kind: "applet",
+    userName: "Ada Lovelace",
     modelId: "claude-opus-4-7",
     stdlibVersion: "0.1.0",
     generatedAt: "2026-05-09T10:00:00.000Z",
@@ -29,7 +26,7 @@ const items: ArtifactItem[] = [
     id: "a2",
     artifactId: "artifact-a2",
     title: "Austin Map",
-    kind: "applet",
+    userName: "Grace Hopper",
     modelId: "claude-sonnet-4-6",
     stdlibVersion: "0.1.0",
     generatedAt: "2026-05-09T11:00:00.000Z",
@@ -40,7 +37,7 @@ const items: ArtifactItem[] = [
     id: "c1",
     artifactId: "artifact-c1",
     title: "Pipeline chart",
-    kind: "chart",
+    userName: null,
     modelId: null,
     stdlibVersion: null,
     generatedAt: "",
@@ -50,91 +47,36 @@ const items: ArtifactItem[] = [
 ];
 
 describe("filterArtifactItems", () => {
-  it("returns all items when no filters are active", () => {
-    expect(
-      filterArtifactItems({
-        items,
-        search: "",
-        kind: ALL_KINDS,
-        tab: TAB_ALL,
-      }),
-    ).toHaveLength(3);
+  it("returns all items when the search is empty", () => {
+    expect(filterArtifactItems({ items, search: "" })).toHaveLength(3);
   });
 
   it("matches title case-insensitively", () => {
     expect(
-      filterArtifactItems({
-        items,
-        search: "lastmile",
-        kind: ALL_KINDS,
-        tab: TAB_ALL,
-      }).map((r) => r.id),
+      filterArtifactItems({ items, search: "lastmile" }).map((r) => r.id),
     ).toEqual(["a1"]);
   });
 
   it("matches modelId substring even when title does not contain it", () => {
     expect(
-      filterArtifactItems({
-        items,
-        search: "sonnet",
-        kind: ALL_KINDS,
-        tab: TAB_ALL,
-      }).map((r) => r.id),
+      filterArtifactItems({ items, search: "sonnet" }).map((r) => r.id),
     ).toEqual(["a2"]);
   });
 
-  it("tab filter excludes non-matching kinds", () => {
+  it("matches the generating user's name", () => {
     expect(
-      filterArtifactItems({
-        items,
-        search: "",
-        kind: ALL_KINDS,
-        tab: "applet",
-      }).map((r) => r.id),
-    ).toEqual(["a1", "a2"]);
+      filterArtifactItems({ items, search: "grace" }).map((r) => r.id),
+    ).toEqual(["a2"]);
   });
 
-  it("kind dropdown filter applies on top of tab=all", () => {
-    expect(
-      filterArtifactItems({
-        items,
-        search: "",
-        kind: "chart",
-        tab: TAB_ALL,
-      }).map((r) => r.id),
-    ).toEqual(["c1"]);
-  });
-
-  it("returns empty when filters exclude everything", () => {
-    expect(
-      filterArtifactItems({
-        items,
-        search: "nothing-matches",
-        kind: ALL_KINDS,
-        tab: TAB_ALL,
-      }),
-    ).toEqual([]);
+  it("returns empty when the search excludes everything", () => {
+    expect(filterArtifactItems({ items, search: "nothing-matches" })).toEqual(
+      [],
+    );
   });
 
   it("handles an empty input list", () => {
-    expect(
-      filterArtifactItems({
-        items: [],
-        search: "anything",
-        kind: ALL_KINDS,
-        tab: TAB_ALL,
-      }),
-    ).toEqual([]);
-  });
-});
-
-describe("uniqueKinds", () => {
-  it("returns sorted unique kinds", () => {
-    expect(uniqueKinds(items)).toEqual(["applet", "chart"]);
-  });
-
-  it("returns [] for empty input", () => {
-    expect(uniqueKinds([])).toEqual([]);
+    expect(filterArtifactItems({ items: [], search: "anything" })).toEqual([]);
   });
 });
 
@@ -144,7 +86,7 @@ describe("sortArtifactItems", () => {
       id: overrides.id ?? "id-1",
       artifactId: overrides.artifactId ?? null,
       title: overrides.title ?? "Untitled",
-      kind: overrides.kind ?? "applet",
+      userName: overrides.userName ?? null,
       modelId: overrides.modelId ?? null,
       stdlibVersion: overrides.stdlibVersion ?? null,
       generatedAt: overrides.generatedAt ?? "",
@@ -158,12 +100,12 @@ describe("sortArtifactItems", () => {
   });
 
   it("sorts by title ascending, case-insensitive", () => {
-    const items = [
+    const rows = [
       row({ id: "a", title: "Beta" }),
       row({ id: "b", title: "alpha" }),
       row({ id: "c", title: "Charlie" }),
     ];
-    expect(sortArtifactItems(items, SORT_NAME).map((i) => i.title)).toEqual([
+    expect(sortArtifactItems(rows, SORT_NAME).map((i) => i.title)).toEqual([
       "alpha",
       "Beta",
       "Charlie",
@@ -171,12 +113,12 @@ describe("sortArtifactItems", () => {
   });
 
   it("sorts by generatedAt descending, newest first", () => {
-    const items = [
+    const rows = [
       row({ id: "old", generatedAt: "2026-05-08T10:00:00Z" }),
       row({ id: "new", generatedAt: "2026-05-10T10:00:00Z" }),
       row({ id: "mid", generatedAt: "2026-05-09T10:00:00Z" }),
     ];
-    expect(sortArtifactItems(items, SORT_GENERATED).map((i) => i.id)).toEqual([
+    expect(sortArtifactItems(rows, SORT_GENERATED).map((i) => i.id)).toEqual([
       "new",
       "mid",
       "old",
@@ -184,15 +126,12 @@ describe("sortArtifactItems", () => {
   });
 
   it("distinguishes time-of-day on the same calendar date", () => {
-    // U4 acceptance: even though the table only renders the date, the
-    // sort uses the full ISO timestamp so two items on the same day are
-    // ordered by hour:minute:second.
-    const items = [
+    const rows = [
       row({ id: "morning", generatedAt: "2026-05-10T08:00:00Z" }),
       row({ id: "evening", generatedAt: "2026-05-10T20:00:00Z" }),
       row({ id: "midday", generatedAt: "2026-05-10T12:30:00Z" }),
     ];
-    expect(sortArtifactItems(items, SORT_GENERATED).map((i) => i.id)).toEqual([
+    expect(sortArtifactItems(rows, SORT_GENERATED).map((i) => i.id)).toEqual([
       "evening",
       "midday",
       "morning",
@@ -200,12 +139,12 @@ describe("sortArtifactItems", () => {
   });
 
   it("places items with empty generatedAt last in date-desc order", () => {
-    const items = [
+    const rows = [
       row({ id: "missing", generatedAt: "" }),
       row({ id: "old", generatedAt: "2026-05-08T10:00:00Z" }),
       row({ id: "new", generatedAt: "2026-05-10T10:00:00Z" }),
     ];
-    expect(sortArtifactItems(items, SORT_GENERATED).map((i) => i.id)).toEqual([
+    expect(sortArtifactItems(rows, SORT_GENERATED).map((i) => i.id)).toEqual([
       "new",
       "old",
       "missing",
@@ -224,7 +163,7 @@ describe("sortArtifactItems", () => {
 });
 
 describe("toArtifactItem", () => {
-  it("preserves identifying fields and coerces missing optionals to null/empty", () => {
+  it("preserves identifying fields including the generating user name", () => {
     const preview: AppArtifactPreview = {
       id: "33333333-3333-4333-8333-333333333333",
       artifactId: "artifact-3333",
@@ -237,12 +176,13 @@ describe("toArtifactItem", () => {
       version: 1,
       modelId: "claude-opus-4-7",
       stdlibVersionAtGeneration: "0.1.0",
+      userName: "Ada Lovelace",
     };
     expect(toArtifactItem(preview)).toEqual({
       id: preview.id,
       artifactId: "artifact-3333",
       title: preview.title,
-      kind: "applet",
+      userName: "Ada Lovelace",
       modelId: "claude-opus-4-7",
       stdlibVersion: "0.1.0",
       generatedAt: "2026-05-08T16:00:00.000Z",
@@ -263,6 +203,7 @@ describe("toArtifactItem", () => {
       favoritedAt: null,
     };
     const item = toArtifactItem(preview);
+    expect(item.userName).toBeNull();
     expect(item.modelId).toBeNull();
     expect(item.stdlibVersion).toBeNull();
     expect(item.version).toBeNull();

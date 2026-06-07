@@ -1,32 +1,9 @@
 import { Search, User } from "lucide-react";
-import {
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@thinkwork/ui";
-import { ALL_KINDS, TAB_ALL } from "./artifacts-filtering";
-
-export const ARTIFACT_TABS = [
-  { value: TAB_ALL, label: "All" },
-  { value: "applet", label: "Apps" },
-] as const;
-
-export type ArtifactTabValue = (typeof ARTIFACT_TABS)[number]["value"];
+import { Input } from "@thinkwork/ui";
 
 export interface ArtifactsToolbarProps {
   search: string;
   onSearchChange: (value: string) => void;
-  tab: string;
-  onTabChange: (value: string) => void;
-  kind: string;
-  kinds: string[];
-  onKindChange: (value: string) => void;
   searchPlaceholder?: string;
   /**
    * Operator-only: show a "filter by user ID" input. Distinct from the
@@ -38,17 +15,11 @@ export interface ArtifactsToolbarProps {
   onUserIdFilterChange?: (value: string) => void;
 }
 
-// Tabs are in-page state (not route children like Customize) because
-// Artifacts has only the `applet` kind today — promote to routes when a
-// second kind ships and each tab needs distinct data fetching.
+// Artifacts has a single kind (`applet`) today, so the toolbar carries only
+// content search plus the operator user-ID filter — no kind tabs or dropdown.
 export function ArtifactsToolbar({
   search,
   onSearchChange,
-  tab,
-  onTabChange,
-  kind,
-  kinds,
-  onKindChange,
   searchPlaceholder = "Search artifacts…",
   showUserFilter = false,
   userIdFilter = "",
@@ -71,55 +42,22 @@ export function ArtifactsToolbar({
         />
       </div>
 
-      <Tabs value={tab} onValueChange={onTabChange}>
-        <TabsList data-testid="artifacts-tabs">
-          {ARTIFACT_TABS.map((entry) => (
-            <TabsTrigger
-              key={entry.value}
-              value={entry.value}
-              className="px-3 text-xs"
-            >
-              {entry.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      <div className="ml-auto flex items-center gap-3">
-        <Select value={kind} onValueChange={onKindChange}>
-          <SelectTrigger
-            className="h-8 min-w-[10rem]"
-            data-testid="artifacts-kind"
-          >
-            <SelectValue placeholder="All kinds" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_KINDS}>All kinds</SelectItem>
-            {kinds.map((k) => (
-              <SelectItem key={k} value={k}>
-                {k}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {showUserFilter ? (
-          <div
-            className="relative w-fit min-w-52"
-            data-testid="artifacts-user-filter"
-          >
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Filter by user ID"
-              value={userIdFilter}
-              onChange={(event) => onUserIdFilterChange?.(event.target.value)}
-              className="h-8 pl-9"
-              data-testid="artifacts-user-filter-input"
-            />
-          </div>
-        ) : null}
-      </div>
+      {showUserFilter ? (
+        <div
+          className="relative w-fit min-w-52"
+          data-testid="artifacts-user-filter"
+        >
+          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Filter by user ID"
+            value={userIdFilter}
+            onChange={(event) => onUserIdFilterChange?.(event.target.value)}
+            className="pl-9"
+            data-testid="artifacts-user-filter-input"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

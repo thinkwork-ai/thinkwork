@@ -26,7 +26,7 @@ const items: ArtifactItem[] = [
     id: "a1",
     artifactId: "artifact-a1",
     title: "LastMile CRM pipeline risk",
-    kind: "applet",
+    userName: "Ada Lovelace",
     modelId: "claude-opus-4-7",
     stdlibVersion: "0.1.0",
     generatedAt: "2026-05-08T16:00:00.000Z",
@@ -37,7 +37,7 @@ const items: ArtifactItem[] = [
     id: "a2",
     artifactId: "artifact-a2",
     title: "Austin Map",
-    kind: "applet",
+    userName: "Grace Hopper",
     modelId: "claude-sonnet-4-6",
     stdlibVersion: "0.1.0",
     generatedAt: "2026-05-09T11:00:00.000Z",
@@ -48,7 +48,7 @@ const items: ArtifactItem[] = [
     id: "c1",
     artifactId: "artifact-c1",
     title: "Pipeline chart",
-    kind: "chart",
+    userName: null,
     modelId: null,
     stdlibVersion: null,
     generatedAt: "",
@@ -135,18 +135,21 @@ describe("ArtifactsListBody", () => {
     expect(rows[0]?.textContent).toMatch(/Austin Map/);
   });
 
-  it("renders the toolbar with search left, tabs centered, kind dropdown right", () => {
+  it("renders the toolbar with search and no kind tabs/dropdown", () => {
     render(<ArtifactsListBody items={items} />);
     const toolbar = screen.getByTestId("artifacts-toolbar");
     expect(
       toolbar.querySelector('[data-testid="artifacts-search"]'),
     ).not.toBeNull();
-    expect(
-      toolbar.querySelector('[data-testid="artifacts-tabs"]'),
-    ).not.toBeNull();
-    expect(
-      toolbar.querySelector('[data-testid="artifacts-kind"]'),
-    ).not.toBeNull();
+    // Artifacts has a single kind today — the All/Apps tabs and the kind
+    // dropdown were removed.
+    expect(toolbar.querySelector('[data-testid="artifacts-tabs"]')).toBeNull();
+    expect(toolbar.querySelector('[data-testid="artifacts-kind"]')).toBeNull();
+  });
+
+  it("renders the generating user's name in a row", () => {
+    render(<ArtifactsListBody items={items} />);
+    expect(rowFor("Austin Map").textContent).toMatch(/Grace Hopper/);
   });
 
   it("forwards row clicks to the artifact viewer route", () => {

@@ -89,7 +89,18 @@ export interface IframeControllerOptions {
    * of creating a nested iframe scrollbar. Full artifact pages leave this
    * false so the iframe fills the viewport canvas. */
   fitContentHeight?: boolean;
+  /** Milliseconds to wait for the iframe `ready-with-component` handshake
+   * before failing closed with a diagnostic error. Defaults to
+   * `DEFAULT_HANDSHAKE_TIMEOUT_MS`. Pass `<= 0` to disable (tests drive the
+   * handshake manually and would otherwise leak a pending timer). */
+  handshakeTimeoutMs?: number;
 }
+
+/** Default handshake timeout. Generous enough to cover a cold iframe-shell
+ * boot (loading React + @thinkwork/ui + recharts + leaflet host externals)
+ * on a slow connection, while still surfacing a hard failure in seconds
+ * rather than spinning forever. */
+export const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 
 export type IframeControllerStatus =
   | "pending"
@@ -201,6 +212,7 @@ export class IframeAppletController {
   private theme: "light" | "dark" | undefined;
   private lastReportedContentHeight = 0;
   private fitContentHeight: boolean;
+  private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: IframeControllerOptions) {
     this.opts = opts;
@@ -242,6 +254,48 @@ export class IframeAppletController {
 
     this.installMessageListener();
     this.installLoadHandshake();
+    this.installHandshakeTimeout();
+  }
+
+  /**
+   * Fail closed on a stalled handshake. Without this, a sandbox iframe that
+   * loads its document but never returns `ready-with-component` — because it
+   * dropped our `init` (parent origin not in its allowlist), failed to boot,
+   * or never served the shell — leaves the host spinning on the loading state
+   * forever behind a blank white iframe. After the timeout we reject `ready`
+   * with a diagnostic that names the parent origin, so the operator can see
+   * whether the origin allowlist (`computer_sandbox_allowed_parent_origins` /
+   * the iframe-shell's `VITE_ALLOWED_PARENT_ORIGINS`) is the culprit. Pass
+   * `handshakeTimeoutMs <= 0` to disable (tests drive the handshake manually).
+   */
+  private installHandshakeTimeout(): void {
+    const timeoutMs =
+      this.opts.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
+    if (timeoutMs <= 0) return;
+    this.handshakeTimer = setTimeout(() => {
+      this.handshakeTimer = null;
+      if (this.status !== "pending") return;
+      const parentOrigin =
+        typeof window !== "undefined" && window.location
+          ? window.location.origin
+          : "unknown";
+      const payload: ErrorPayload = {
+        code: "RUNTIME_ERROR",
+        message: `The sandbox iframe did not respond within ${Math.round(
+          timeoutMs / 1000,
+        )}s. The applet may have failed to load, or this app's origin (${parentOrigin}) is not in the sandbox iframe-shell's allowed-parent-origins allowlist.`,
+      };
+      this.status = "errored";
+      this.opts.onError?.(payload);
+      this.readyReject?.(new Error(payload.message));
+    }, timeoutMs);
+  }
+
+  private clearHandshakeTimeout(): void {
+    if (this.handshakeTimer !== null) {
+      clearTimeout(this.handshakeTimer);
+      this.handshakeTimer = null;
+    }
   }
 
   get statusValue(): IframeControllerStatus {
@@ -295,6 +349,7 @@ export class IframeAppletController {
       case "ready-with-component": {
         const payload = envelope.payload as ReadyWithComponentPayload;
         if (payload?.rendered === true) {
+          this.clearHandshakeTimeout();
           this.element.setAttribute("data-ready", "true");
           this.status = "ready";
           this.readyResolve?.();
@@ -401,6 +456,7 @@ export class IframeAppletController {
       }
       case "error": {
         const payload = envelope.payload as ErrorPayload;
+        this.clearHandshakeTimeout();
         this.opts.onError?.(payload);
         if (this.status === "pending") {
           this.status = "errored";
@@ -535,6 +591,7 @@ export class IframeAppletController {
 
   dispose(): void {
     if (this.status === "disposed") return;
+    this.clearHandshakeTimeout();
     if (this.messageListener) {
       window.removeEventListener("message", this.messageListener);
       this.messageListener = null;

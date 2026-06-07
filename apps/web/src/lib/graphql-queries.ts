@@ -876,6 +876,10 @@ const AppletPreviewFields = gql`
     modelId
     generatedAt
     stdlibVersionAtGeneration
+    # User who generated the artifact (resolved through the source thread),
+    # shown in the Artifacts list "User" column.
+    userId
+    userName
     # Surface the underlying Artifact id + favoritedAt so the artifact
     # detail page can wire favorite/delete actions without a second
     # round-trip to fetch the artifact by appId.
