@@ -51,13 +51,25 @@ async function loadPiModules() {
     "../../../../pi-extensions/src/define-extension.js";
   const skillsPath = "../../../../pi-extensions/src/skills.js";
   const agentLoopPath = "../../../../pi-runtime-core/src/agent-loop.js";
-  const [{ toExtensionFactory }, { createSkillsExtension }, { runAgentLoop }] =
-    await Promise.all([
+  const mcpPath = "../../../../agentcore-pi/agent-container/src/mcp.js";
+  const [
+    { toExtensionFactory },
+    { createSkillsExtension },
+    { runAgentLoop },
+    { buildMcpTools, HandleStore },
+  ] = await Promise.all([
       import(defineExtensionPath),
       import(skillsPath),
       import(agentLoopPath),
+      import(mcpPath),
     ]);
-  return { createSkillsExtension, runAgentLoop, toExtensionFactory };
+  return {
+    buildMcpTools,
+    createSkillsExtension,
+    HandleStore,
+    runAgentLoop,
+    toExtensionFactory,
+  };
 }
 
 const financialAnalysisSkill: WorkspaceSkillLike = {
@@ -78,6 +90,19 @@ modelRouting:
   - tool: workspace_skill
     match:
       slug: ${SKILL_SLUG}
+    model: ${model}
+    reason: ${reason}
+---
+# Tools
+`;
+}
+
+function mcpToolsMd(model: string, reason: string): string {
+  return `---
+modelRouting:
+  - tool: mcp
+    match:
+      serverName: twenty-crm
     model: ${model}
     reason: ${reason}
 ---
@@ -205,6 +230,42 @@ function makeSessionWithWorkspaceSkillResult(
     },
     get messages() {
       return [assistantMessage("The routed helper found a margin risk.")];
+    },
+    dispose: vi.fn(),
+  } as unknown as AgentSessionLike;
+}
+
+function makeSessionWithToolResult(input: {
+  toolName: string;
+  toolCallId: string;
+  args: unknown;
+  result: unknown;
+}): AgentSessionLike {
+  let listener: ((event: any) => void) | undefined;
+  return {
+    subscribe(fn: (event: unknown) => void) {
+      listener = fn;
+      return () => {
+        listener = undefined;
+      };
+    },
+    async prompt() {
+      listener?.({
+        type: "tool_execution_start",
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        args: input.args,
+      });
+      listener?.({
+        type: "tool_execution_end",
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        result: input.result,
+        isError: false,
+      });
+    },
+    get messages() {
+      return [assistantMessage("The routed MCP helper summarized the result.")];
     },
     dispose: vi.fn(),
   } as unknown as AgentSessionLike;
@@ -398,5 +459,147 @@ describe("model stacking layered TOOLS.md proof", () => {
       model: UNAPPROVED_MODEL,
       sourceOwner: "user",
     });
+  });
+
+  it("routes an MCP server as one tool surface and records child model evidence for each MCP call", async () => {
+    const { buildMcpTools, HandleStore, runAgentLoop } = await loadPiModules();
+    const effectivePolicy = composeWorkspacePolicy({
+      modelRoutingSources: [
+        sourceFromToolsMd({
+          owner: "user",
+          sourcePath: "User/TOOLS.md",
+          precedence: 40,
+          content: mcpToolsMd(USER_MODEL, "user Twenty CRM MCP override wins"),
+        }),
+      ],
+    });
+
+    expect(effectivePolicy.modelRouting).toEqual([
+      expect.objectContaining({
+        tool: "mcp",
+        match: { serverName: "twenty-crm" },
+        model: USER_MODEL,
+        sourceOwner: "user",
+        sourcePath: "User/TOOLS.md",
+        precedence: 40,
+      }),
+    ]);
+
+    const childModelCaller = vi.fn(async () => ({
+      text: "summarized routed Twenty CRM result",
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 91,
+        outputTokens: 13,
+        cachedReadTokens: 7,
+        totalTokens: 111,
+      },
+    }));
+
+    const mcpTools = await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "twenty-crm",
+          url: "https://twenty.example/mcp",
+          bearer: "Bearer demo-token",
+        },
+      ],
+      handleStore: new HandleStore(),
+      connectMcpServer: async () => [
+        {
+          name: "mcp_twenty-crm_execute_tool",
+          label: "Twenty CRM",
+          description: "Execute a Twenty CRM operation.",
+          parameters: {},
+          execute: async () => ({
+            content: [{ type: "text", text: "raw opportunity rows" }],
+            details: {
+              mcp_server: "twenty-crm",
+              mcp_tool_name: "execute_tool",
+            },
+          }),
+        },
+      ],
+      modelRoutingPolicy: { routes: effectivePolicy.modelRouting },
+      approvedModelIds: [PARENT_MODEL, USER_MODEL],
+      childModelCaller,
+    });
+
+    const mcpArgs = {
+      toolName: "find_many_opportunities",
+      arguments: { limit: 5 },
+    };
+    const toolResult = await mcpTools[0]!.execute(
+      "call-mcp-1",
+      mcpArgs,
+      undefined,
+      undefined,
+    );
+
+    expect(childModelCaller).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: USER_MODEL,
+        metadata: expect.objectContaining({
+          toolName: "mcp_twenty-crm_execute_tool",
+          sourceOwner: "user",
+          mcpServer: "twenty-crm",
+        }),
+      }),
+    );
+    expect(toolResult.details).toMatchObject({
+      mcp_server: "twenty-crm",
+      mcp_tool_name: "execute_tool",
+      modelRouting: {
+        toolName: "mcp_twenty-crm_execute_tool",
+        match: {
+          serverName: "twenty-crm",
+          mcpServer: "twenty-crm",
+          tool: "mcp_twenty-crm_execute_tool",
+          toolName: "find_many_opportunities",
+        },
+        model: USER_MODEL,
+        ruleSource: {
+          path: "User/TOOLS.md",
+          owner: "user",
+          precedence: 40,
+        },
+        status: "completed",
+        inputTokens: 91,
+        outputTokens: 13,
+        cachedReadTokens: 7,
+        totalTokens: 111,
+      },
+    });
+
+    const runResult = await runAgentLoop(baseRunArgs(), {
+      openSession: async () => ({
+        session: makeSessionWithToolResult({
+          toolName: "mcp_twenty-crm_execute_tool",
+          toolCallId: "call-mcp-1",
+          args: mcpArgs,
+          result: toolResult,
+        }),
+        modelId: PARENT_MODEL,
+      }),
+    });
+
+    expect(runResult.modelId).toBe(PARENT_MODEL);
+    expect(runResult.toolInvocations[0]).toMatchObject({
+      tool_name: "mcp_twenty-crm_execute_tool",
+      model_routing: {
+        model: USER_MODEL,
+        inputTokens: 91,
+        outputTokens: 13,
+        cachedReadTokens: 7,
+        ruleSource: { owner: "user", path: "User/TOOLS.md" },
+        match: expect.objectContaining({
+          serverName: "twenty-crm",
+          toolName: "find_many_opportunities",
+        }),
+      },
+    });
+    expect(runResult.modelRoutedToolCalls).toEqual([
+      runResult.toolInvocations[0].model_routing,
+    ]);
   });
 });

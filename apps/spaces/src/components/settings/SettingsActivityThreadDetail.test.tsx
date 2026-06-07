@@ -152,7 +152,45 @@ const turn = {
   createdAt: "2026-06-04T16:55:01.000Z",
 };
 
-function mockActivityQueries() {
+function mockActivityQueries(options?: {
+  turn?: typeof turn;
+  traces?: Array<Record<string, unknown>>;
+}) {
+  const activeTurn = options?.turn ?? turn;
+  const traces = options?.traces ?? [
+    {
+      traceId: "trace-1",
+      agentName: "Pi",
+      runtimeType: "pi",
+      model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      inputTokens: 5500,
+      outputTokens: 269,
+      durationMs: 8300,
+      costUsd: 0.0076,
+      createdAt: "2026-06-04T16:55:09.300Z",
+    },
+    {
+      traceId: "trace-tool-1",
+      parentRequestId: "turn-1",
+      toolCallId: "tool-call-1",
+      toolName: "web_search",
+      agentName: "Pi",
+      runtimeType: "pi",
+      model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      inputTokens: 1234,
+      outputTokens: 34,
+      costUsd: 0.0012,
+      modelRoutingStatus: "succeeded",
+      ruleSource: {
+        scope: "space",
+        path: "spaces/sales/TOOLS.md",
+      },
+      match: {
+        tool: "web_search",
+      },
+      createdAt: "2026-06-04T16:55:08.000Z",
+    },
+  ];
   vi.mocked(useQuery)
     .mockReturnValue([
       {
@@ -176,7 +214,7 @@ function mockActivityQueries() {
     ])
     .mockReturnValueOnce([
       {
-        data: { threadTurns: [turn] },
+        data: { threadTurns: [activeTurn] },
         fetching: false,
         error: undefined,
         stale: false,
@@ -186,42 +224,7 @@ function mockActivityQueries() {
     ])
     .mockReturnValueOnce([
       {
-        data: {
-          threadTraces: [
-            {
-              traceId: "trace-1",
-              agentName: "Pi",
-              runtimeType: "pi",
-              model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-              inputTokens: 5500,
-              outputTokens: 269,
-              durationMs: 8300,
-              costUsd: 0.0076,
-              createdAt: "2026-06-04T16:55:09.300Z",
-            },
-            {
-              traceId: "trace-tool-1",
-              parentRequestId: "turn-1",
-              toolCallId: "tool-call-1",
-              toolName: "web_search",
-              agentName: "Pi",
-              runtimeType: "pi",
-              model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-              inputTokens: 1234,
-              outputTokens: 34,
-              costUsd: 0.0012,
-              modelRoutingStatus: "succeeded",
-              ruleSource: {
-                scope: "space",
-                path: "spaces/sales/TOOLS.md",
-              },
-              match: {
-                tool: "web_search",
-              },
-              createdAt: "2026-06-04T16:55:08.000Z",
-            },
-          ],
-        },
+        data: { threadTraces: traces },
         fetching: false,
         error: undefined,
         stale: false,
@@ -231,7 +234,7 @@ function mockActivityQueries() {
     ])
     .mockReturnValueOnce([
       {
-        data: { threadTurns: [turn] },
+        data: { threadTurns: [activeTurn] },
         fetching: false,
         error: undefined,
         stale: false,
@@ -294,5 +297,61 @@ describe("SettingsActivityThreadDetail", () => {
       screen.getByRole("button", { name: "Open thread properties" }),
     );
     expect(screen.getByText("Properties")).toBeTruthy();
+  });
+
+  it("renders MCP route evidence from usage_json model_routed_tool_calls", () => {
+    const mcpTurn = {
+      ...turn,
+      usageJson: JSON.stringify({
+        input_tokens: 12,
+        output_tokens: 727,
+        tool_invocations: [
+          {
+            id: "mcp-call-1",
+            tool_name: "mcp_twenty-crm_execute_tool",
+            type: "mcp_tool",
+            input_preview: '{"name":"find_many_opportunities"}',
+            output_preview: "Found opportunities",
+          },
+        ],
+        model_routed_tool_calls: [
+          {
+            toolCallId: "mcp-call-1",
+            toolName: "mcp_twenty-crm_execute_tool",
+            model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+            inputTokens: 91,
+            outputTokens: 13,
+            cachedReadTokens: 7,
+            costUsd: 0.0004,
+            status: "completed",
+            ruleSource: {
+              owner: "workspace",
+              path: "TOOLS.md",
+            },
+            match: {
+              serverName: "twenty-crm",
+              tool: "mcp_twenty-crm_execute_tool",
+            },
+          },
+        ],
+      }),
+    };
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({ turn: mcpTurn, traces: [] });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    expect(
+      screen.getByText("Tool: mcp_twenty-crm_execute_tool"),
+    ).toBeTruthy();
+    expect(screen.getByText("claude-haiku-4-5-20251001")).toBeTruthy();
+    expect(screen.getByText("91->13 (7 cached)")).toBeTruthy();
+    expect(screen.getByText("$0.0004")).toBeTruthy();
+    expect(screen.getByText("completed")).toBeTruthy();
   });
 });

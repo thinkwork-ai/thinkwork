@@ -306,6 +306,51 @@ function mcpToolRouteMatch(input: {
   };
 }
 
+const MCP_SERVER_MODEL_ROUTING_TOOL = "mcp";
+
+function modelRoutingDecisionRank(decision: ModelRoutingDecision): {
+  specificity: number;
+  precedence: number;
+  exactTool: number;
+} {
+  return {
+    specificity: Object.keys(decision.route.match).length,
+    precedence: decision.route.precedence ?? 0,
+    exactTool:
+      decision.route.tool === MCP_SERVER_MODEL_ROUTING_TOOL ? 0 : 1,
+  };
+}
+
+function compareModelRoutingDecisions(
+  left: ModelRoutingDecision,
+  right: ModelRoutingDecision,
+): number {
+  const leftRank = modelRoutingDecisionRank(left);
+  const rightRank = modelRoutingDecisionRank(right);
+  return (
+    rightRank.specificity - leftRank.specificity ||
+    rightRank.precedence - leftRank.precedence ||
+    rightRank.exactTool - leftRank.exactTool
+  );
+}
+
+function findMcpModelRoutingDecision(
+  policy: ModelRoutingPolicy,
+  input: { toolName: string; match: Record<string, string> },
+): ModelRoutingDecision | null {
+  const decisions = [
+    findModelRoutingDecision(policy, {
+      toolName: MCP_SERVER_MODEL_ROUTING_TOOL,
+      match: input.match,
+    }),
+    findModelRoutingDecision(policy, input),
+  ].filter((decision): decision is ModelRoutingDecision =>
+    Boolean(decision),
+  );
+  if (!decisions.length) return null;
+  return [...decisions].sort(compareModelRoutingDecisions)[0]!;
+}
+
 function childModelPrompt(input: {
   toolName: string;
   params: unknown;
@@ -381,7 +426,7 @@ function wrapMcpToolForModelRouting(input: {
         toolName: tool.name,
         params,
       });
-      const decision = findModelRoutingDecision(modelRoutingPolicy, {
+      const decision = findMcpModelRoutingDecision(modelRoutingPolicy, {
         toolName: tool.name,
         match,
       });

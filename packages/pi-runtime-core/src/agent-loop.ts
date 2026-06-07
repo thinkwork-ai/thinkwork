@@ -225,14 +225,55 @@ function optionalNumberValue(value: unknown): number | undefined {
     : undefined;
 }
 
+function parseJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    return recordValue(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function findModelRoutingRecord(
+  value: unknown,
+  depth = 0,
+): Record<string, unknown> | null {
+  if (depth > 4) return null;
+  const record = recordValue(value);
+  if (!record) return null;
+
+  const direct = recordValue(record.modelRouting ?? record.model_routing);
+  if (direct) return direct;
+
+  const details = recordValue(record.details);
+  const detailsRouting = recordValue(
+    details?.modelRouting ?? details?.model_routing,
+  );
+  if (detailsRouting) return detailsRouting;
+
+  for (const key of ["result", "toolResult", "rawToolResult", "output"]) {
+    const nested = findModelRoutingRecord(record[key], depth + 1);
+    if (nested) return nested;
+  }
+
+  const content = Array.isArray(record.content) ? record.content : [];
+  for (const item of content) {
+    const itemRecord = recordValue(item);
+    const text = optionalStringValue(itemRecord?.text);
+    if (!text || text.length > 200_000) continue;
+    const parsed = parseJsonRecord(text);
+    const nested = findModelRoutingRecord(parsed, depth + 1);
+    if (nested) return nested;
+  }
+
+  return null;
+}
+
 function extractModelRoutingRecord(input: {
   toolCallId: string;
   toolName: string;
   result: unknown;
 }): ModelRoutedToolCallRecord | undefined {
-  const result = recordValue(input.result);
-  const details = recordValue(result?.details);
-  const routing = recordValue(details?.modelRouting);
+  const routing = findModelRoutingRecord(input.result);
   const model = optionalStringValue(routing?.model);
   if (!routing || !model) return undefined;
   const rawRuleSource = recordValue(routing.ruleSource);

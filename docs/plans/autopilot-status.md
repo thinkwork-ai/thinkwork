@@ -17,6 +17,7 @@ status: complete
 - Current branch: none.
 - Current worktree: none.
 - Status: complete.
+- Follow-up fix branch: `codex/fix-activity-tool-routing-evidence`.
 
 | Unit                                                        | Branch                                     | PR                                                           | State  | Notes                        |
 | ----------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ---------------------------- |
@@ -218,6 +219,23 @@ status: complete
   `cfcc0521a3f22138aba6d9ff20d9eed82d78eb2c`. The remote branch was already
   deleted by GitHub; the local U10 worktree and branch were removed.
 - All model-stacking implementation units U1-U10 are complete and merged into
+  `main`.
+- Post-demo local validation found that fresh Twenty CRM MCP turns still lacked
+  per-tool model/tokens/cost evidence because the v1 policy treated individual
+  generated MCP operation names as the route target. The follow-up fix changes
+  MCP routing to the server-level `tool: mcp` + `match.serverName` contract,
+  keeps exact generated-tool routes as backward-compatible overrides, preserves
+  nested MCP routing evidence in Pi tool invocations, and lets Settings
+  Activity render finalized `model_routed_tool_calls` even when live traces are
+  absent.
+- Follow-up verification passed:
+  `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp.test.ts`,
+  `pnpm --filter @thinkwork/pi-runtime-core exec vitest run test/agent-loop.test.ts`,
+  `pnpm --filter @thinkwork/api model-stacking:e2e`,
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/chat-finalize/process-finalize.test.ts`,
+  `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsActivityThreadDetail.test.tsx`,
+  package typechecks for `agentcore-pi`, `pi-runtime-core`, `api`, `spaces`,
+  and `workspace-defaults`, workspace defaults parity, and `git diff --check`.
   `origin/main`.
 - Created isolated U3 worktree `.Codex/worktrees/u3-approved-model-composers`
   from `origin/main` at `e0a43844`.

@@ -992,6 +992,19 @@ modelRouting:
     reason: Use the cheaper model for the analyst subtask.
 \`\`\`
 
+MCP servers route as the server-level \`mcp\` tool surface. Use \`serverName\` to
+target a configured MCP server; the runtime will still record the concrete MCP
+operation (\`match.toolName\`) that ran under the route.
+
+\`\`\`yaml
+modelRouting:
+  - tool: mcp
+    match:
+      serverName: twenty-crm
+    model: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    reason: Use the cheaper model for Twenty CRM MCP calls.
+\`\`\`
+
 Routes layer by folder policy: agent root, active Space, active workspace, then
 user workspace. Higher-precedence files replace lower-precedence entries with
 the same \`tool\` and \`match\` signature. The runtime still validates that the
@@ -1026,7 +1039,7 @@ selected model is approved for the user before a routed tool call runs.
  *     `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 23;
+export const DEFAULTS_VERSION = 24;
 
 // ---------------------------------------------------------------------------
 // Aggregator
