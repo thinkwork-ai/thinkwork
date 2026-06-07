@@ -34,6 +34,15 @@ describe("settings-nav", () => {
     expect(labels()).not.toContain("CRM");
   });
 
+  // U5: Wiki Memory and Knowledge Bases fold into the single Memory entry
+  it("folds Wiki Memory and Knowledge Bases into the Memory entry", () => {
+    expect(paths()).toContain("/settings/memory");
+    expect(paths()).not.toContain("/settings/wiki");
+    expect(paths()).not.toContain("/settings/knowledge-bases");
+    expect(labels()).not.toContain("Wiki Memory");
+    expect(labels()).not.toContain("Knowledge Bases");
+  });
+
   it("filters operator-only items for non-operators", () => {
     const visible = visibleSettingsNavItems({
       isOperator: false,

@@ -1,11 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsWiki } from "@/components/settings/SettingsWiki";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// Wiki Memory folded into the unified Memory page (Wiki tab).
 export const Route = createFileRoute("/_authed/settings/wiki")({
-  component: () => (
-    <OperatorGuard>
-      <SettingsWiki />
-    </OperatorGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/memory" });
+  },
 });

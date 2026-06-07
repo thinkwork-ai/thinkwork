@@ -43,6 +43,16 @@ type WikiRow = {
   updatedAt: string | null;
 };
 
+// Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
+// as a child so the embedded variant can suppress it without a conditional hook.
+function WikiHeader() {
+  usePageHeaderActions({
+    title: "Wiki Memory",
+    breadcrumbs: [{ label: "Wiki Memory" }],
+  });
+  return null;
+}
+
 function PageTypeBadge({ type }: { type: WikiPageType }) {
   return (
     <Badge variant="outline" className="text-xs font-normal">
@@ -51,16 +61,12 @@ function PageTypeBadge({ type }: { type: WikiPageType }) {
   );
 }
 
-export function SettingsWiki() {
+export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
   const { tenantId } = useTenant();
   const [view, setView] = useState<PagesView>("table");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<WikiGraphHandle>(null);
-  usePageHeaderActions({
-    title: "Wiki Memory",
-    breadcrumbs: [{ label: "Wiki Memory" }],
-  });
 
   const requesterUserId = null;
   const effectiveTenantId = tenantId ?? null;
@@ -157,6 +163,7 @@ export function SettingsWiki() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
+      {embedded ? null : <WikiHeader />}
       <SettingsPageTitle
         title="Wiki Memory"
         description="Browse the wiki compounded from your agents' memories."

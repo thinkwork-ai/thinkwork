@@ -1,14 +1,12 @@
 import type { ComponentType } from "react";
 import {
   AppWindow,
-  BookOpen,
   Bot,
   Brain,
   Clock,
   CreditCard,
   FolderTree,
   History,
-  NotebookText,
   Repeat,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -109,19 +107,7 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
     managedAppKey: "cognee",
   },
-  {
-    label: "Knowledge Bases",
-    to: "/settings/knowledge-bases",
-    icon: BookOpen,
-    operatorOnly: true,
-  },
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
-  {
-    label: "Wiki Memory",
-    to: "/settings/wiki",
-    icon: NotebookText,
-    operatorOnly: true,
-  },
   {
     label: "Automations",
     to: "/settings/automations",

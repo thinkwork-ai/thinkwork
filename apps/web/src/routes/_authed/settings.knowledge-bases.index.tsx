@@ -1,11 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsKnowledgeBases } from "@/components/settings/SettingsKnowledgeBases";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// Knowledge Bases folded into the unified Memory page (Knowledge Bases tab).
+// The per-knowledge-base detail route (`$kbId`) stays a standalone page.
 export const Route = createFileRoute("/_authed/settings/knowledge-bases/")({
-  component: () => (
-    <OperatorGuard>
-      <SettingsKnowledgeBases />
-    </OperatorGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/memory" });
+  },
 });

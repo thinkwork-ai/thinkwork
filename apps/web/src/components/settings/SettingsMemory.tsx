@@ -42,6 +42,13 @@ import {
 type BrainView = "table" | "graph";
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
 
+// Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
+// as a child so the embedded variant can suppress it without a conditional hook.
+function MemoryHeader() {
+  usePageHeaderActions({ title: "Memory", breadcrumbs: [{ label: "Memory" }] });
+  return null;
+}
+
 function StrategyBadge({ strategy }: { strategy: string | null }) {
   if (!strategy) return null;
   const colors = STRATEGY_COLORS[strategy] || "bg-muted text-muted-foreground";
@@ -52,13 +59,12 @@ function StrategyBadge({ strategy }: { strategy: string | null }) {
   );
 }
 
-export function SettingsMemory() {
+export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
   const { tenantId } = useTenant();
   const [view, setView] = useState<BrainView>("table");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<MemoryGraphHandle>(null);
-  usePageHeaderActions({ title: "Memory", breadcrumbs: [{ label: "Memory" }] });
 
   const effectiveTenantId = tenantId ?? null;
   const requesterUserId = null;
@@ -213,6 +219,7 @@ export function SettingsMemory() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
+      {embedded ? null : <MemoryHeader />}
       <SettingsPageTitle
         title="Memory"
         description="Inspect and manage what your agents remember across threads."

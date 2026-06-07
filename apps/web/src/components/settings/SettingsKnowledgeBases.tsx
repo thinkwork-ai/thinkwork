@@ -34,7 +34,11 @@ function statusVariant(
   return "outline";
 }
 
-export function SettingsKnowledgeBases() {
+export function SettingsKnowledgeBases({
+  embedded,
+}: {
+  embedded?: boolean;
+} = {}) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -108,6 +112,7 @@ export function SettingsKnowledgeBases() {
       <SettingsTablePane
         title="Knowledge Bases"
         description="Manage the knowledge bases your agents can search and cite."
+        embedded={embedded}
         loading={result.fetching && !result.data}
         toolbar={
           <Input
