@@ -119,7 +119,7 @@ export function SettingsKnowledgeBases({
             placeholder="Search knowledge bases…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="max-w-sm"
+            className="w-56"
           />
         }
         actions={
