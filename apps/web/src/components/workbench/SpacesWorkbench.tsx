@@ -26,6 +26,7 @@ import {
   SendMessageMutation,
   SpacesQuery,
 } from "@/lib/graphql-queries";
+import { SettingsTenantDetailQuery } from "@/lib/settings-queries";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
@@ -135,6 +136,15 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       pause: !tenantId,
       requestPolicy: "cache-and-network",
     });
+  // Tenant's configured default model (Settings > Agents > Default model). New
+  // threads fall back to this instead of the first approved model in the list.
+  const [{ data: tenantDetailData, fetching: tenantDetailFetching }] = useQuery({
+    query: SettingsTenantDetailQuery,
+    variables: { id: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const tenantDefaultModelId =
+    tenantDetailData?.tenant?.settings?.defaultModel ?? null;
   // Tenant skill catalog for the `/skill` force-pin popup. No agent context yet
   // on the new-thread surface, so `installed` is unannotated and the picker
   // shows the full catalog; the blocklist guardrail is enforced at dispatch.
@@ -225,14 +235,33 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
   const approvedModels = approvedModelData?.myApprovedModelCatalog;
   useEffect(() => {
     if (!approvedModels) return;
-    const nextModelId = chooseApprovedModelId(approvedModels, selectedModelId);
+    // Wait for the tenant default to resolve before auto-picking, so a fast
+    // approved-models response can't lock in the first model before the
+    // configured default arrives.
+    if (tenantDetailFetching) return;
+    // `||` (not `??`) so an empty-string selection — which the Select control
+    // can briefly emit on mount — still falls through to the tenant default.
+    const nextModelId = chooseApprovedModelId(
+      approvedModels,
+      selectedModelId || tenantDefaultModelId,
+    );
+    // Only set state here; don't persist. Storage holds explicit user choices
+    // (handleSelectedModelChange), so a fresh session always reflects the
+    // tenant's configured default rather than a previously auto-picked model.
     if (nextModelId !== selectedModelId) {
       setSelectedModelId(nextModelId);
-      writeStoredModelId(nextModelId);
     }
-  }, [approvedModels, selectedModelId]);
+  }, [
+    approvedModels,
+    selectedModelId,
+    tenantDefaultModelId,
+    tenantDetailFetching,
+  ]);
 
   function handleSelectedModelChange(modelId: string) {
+    // The Select control can emit an empty value during mount/teardown; ignore
+    // it so it can't wipe a valid selection (and reset to the first model).
+    if (!modelId) return;
     setSelectedModelId(modelId);
     writeStoredModelId(modelId);
   }

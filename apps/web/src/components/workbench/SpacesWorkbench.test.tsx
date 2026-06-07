@@ -22,6 +22,7 @@ import {
   SendMessageMutation,
   SpacesQuery,
 } from "@/lib/graphql-queries";
+import { SettingsTenantDetailQuery } from "@/lib/settings-queries";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 import {
   clearPendingThreadStart,
@@ -69,6 +70,7 @@ let approvedModels:
       outputCostPerMillion: number;
     }>
   | undefined;
+let tenantDefaultModel: string | null;
 
 beforeEach(() => {
   vi.stubGlobal("__DESKTOP_BUILD__", true);
@@ -76,6 +78,7 @@ beforeEach(() => {
   createThread.mockReset();
   sendMessage.mockReset();
   approvedModels = undefined;
+  tenantDefaultModel = null;
   window.localStorage.clear();
   clearPendingThreadStart("thread-1");
   createThread.mockResolvedValue({
@@ -155,6 +158,20 @@ beforeEach(() => {
             approvedModels === undefined
               ? undefined
               : { myApprovedModelCatalog: approvedModels },
+          error: undefined,
+          fetching: false,
+          stale: false,
+          hasNext: false,
+        },
+        vi.fn(),
+      ];
+    }
+    if (query === SettingsTenantDetailQuery) {
+      return [
+        {
+          data: {
+            tenant: { settings: { defaultModel: tenantDefaultModel } },
+          },
           error: undefined,
           fetching: false,
           stale: false,
@@ -267,6 +284,37 @@ describe("SpacesWorkbench", () => {
     resolveSend?.({ data: { sendMessage: { id: "message-1" } } });
     await waitFor(() => {
       expect(sendMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("defaults a new thread to the tenant's configured default model", async () => {
+    approvedModels = [
+      {
+        id: "model-oss",
+        modelId: "gpt-oss-120b",
+        displayName: "GPT OSS 120B",
+        provider: "openai",
+        inputCostPerMillion: 0.1,
+        outputCostPerMillion: 0.3,
+      },
+      {
+        id: "model-kimi",
+        modelId: "kimi-k2-5",
+        displayName: "Kimi K2.5",
+        provider: "moonshot",
+        inputCostPerMillion: 0.2,
+        outputCostPerMillion: 0.5,
+      },
+    ];
+    // Tenant default points at the second model, not the first in the list.
+    tenantDefaultModel = "kimi-k2-5";
+
+    render(<SpacesWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select model").textContent).toContain(
+        "Kimi K2.5",
+      );
     });
   });
 
