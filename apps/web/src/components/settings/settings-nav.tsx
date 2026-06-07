@@ -4,7 +4,6 @@ import {
   Bot,
   Brain,
   Clock,
-  CreditCard,
   FolderTree,
   History,
   Repeat,
@@ -63,12 +62,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Built-in Tools",
     to: "/settings/tools",
     icon: Wrench,
-    operatorOnly: true,
-  },
-  {
-    label: "Billing",
-    to: "/settings/billing",
-    icon: CreditCard,
     operatorOnly: true,
   },
   {

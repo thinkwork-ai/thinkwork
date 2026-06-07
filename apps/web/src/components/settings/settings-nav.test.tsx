@@ -45,6 +45,12 @@ describe("settings-nav", () => {
     expect(labels()).not.toContain("Knowledge Graph");
   });
 
+  // U8: Billing removed from navigation (route kept, hidden from sidebar)
+  it("does not list a Billing nav entry", () => {
+    expect(paths()).not.toContain("/settings/billing");
+    expect(labels()).not.toContain("Billing");
+  });
+
   it("filters operator-only items for non-operators", () => {
     const visible = visibleSettingsNavItems({
       isOperator: false,
