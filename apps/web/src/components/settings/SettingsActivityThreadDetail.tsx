@@ -131,6 +131,12 @@ interface ThreadTrace {
   parentRequestId?: string | null;
   toolCallId?: string | null;
   toolName?: string | null;
+  profileRunId?: string | null;
+  profileId?: string | null;
+  profileSlug?: string | null;
+  profileName?: string | null;
+  laneKey?: string | null;
+  profileStatus?: string | null;
   modelRoutingStatus?: string | null;
   ruleSource?: unknown;
   match?: unknown;
@@ -484,7 +490,15 @@ function ThreadTraces({ traces }: { traces: ThreadTrace[] }) {
                       {trace.createdAt ? relativeTime(trace.createdAt) : "--"}
                     </td>
                     <td className="truncate px-3 py-2 text-xs font-medium">
-                      {trace.agentName || "--"}
+                      {trace.profileName || trace.agentName || "--"}
+                      {trace.laneKey ? (
+                        <Badge
+                          variant="outline"
+                          className="ml-1 px-1 text-[10px] text-muted-foreground"
+                        >
+                          {trace.laneKey}
+                        </Badge>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2 text-xs">
                       <Badge

@@ -190,9 +190,9 @@ function EventBadge({ type, level }: { type: string; level?: string }) {
 // ─── Execution Timeline (unified LLM calls + tool calls) ─────────────────────
 
 type TimelineEvent = {
-  type: "llm" | "tool_call" | "tool_result" | "response";
+  type: "llm" | "tool_call" | "tool_result" | "profile_run" | "response";
   timestamp: string;
-  branch: string; // "parent" | "sub-agent:<name>" | "sub-agent"
+  branch: string; // "parent" | "sub-agent:<name>" | "profile:<slug>"
   // LLM fields
   modelId?: string;
   inputTokens?: number;
@@ -219,6 +219,20 @@ type TimelineEvent = {
   routeRuleSource?: unknown;
   routeMatch?: unknown;
   routeUnavailableReason?: string;
+  // Agent Profile fields
+  profileRunId?: string;
+  profileId?: string;
+  profileSlug?: string;
+  profileName?: string;
+  profileStatus?: string;
+  profileModelId?: string;
+  profileInputTokens?: number;
+  profileOutputTokens?: number;
+  profileCacheReadTokens?: number;
+  profileCostUsd?: number;
+  profileDurationMs?: number;
+  profileHandoffSummary?: string;
+  profileToolInvocations?: Record<string, unknown>[];
   // Response
   responseText?: string;
 };
@@ -260,8 +274,17 @@ function getSubAgentName(branch: string): string | null {
   return null;
 }
 
-function isSubAgentBranch(branch: string): boolean {
-  return branch.startsWith("sub-agent");
+function getProfileBranchName(branch: string): string | null {
+  if (branch.startsWith("profile:")) return branch.slice("profile:".length);
+  return null;
+}
+
+function getBranchName(branch: string): string | null {
+  return getSubAgentName(branch) ?? getProfileBranchName(branch);
+}
+
+function isBranchLane(branch: string): boolean {
+  return branch.startsWith("sub-agent") || branch.startsWith("profile:");
 }
 
 function shortModelId(modelId: string): string {
@@ -276,10 +299,79 @@ function numberValue(value: unknown): number | null {
   return Number.isFinite(num) && num >= 0 ? num : null;
 }
 
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function arrayOfRecords(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === "object" && !Array.isArray(item),
+      )
+    : [];
+}
+
 function modelRoutingRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function profileRunField(run: Record<string, unknown>, key: string) {
+  const snakeKey = key.replace(
+    /[A-Z]/g,
+    (letter) => `_${letter.toLowerCase()}`,
+  );
+  return run[key] ?? run[snakeKey];
+}
+
+function profileRunName(run: Record<string, unknown>): string {
+  return (
+    stringValue(profileRunField(run, "profileName")) ??
+    stringValue(profileRunField(run, "profileSlug")) ??
+    "Agent Profile"
+  );
+}
+
+function profileRunSlug(run: Record<string, unknown>): string {
+  return (
+    stringValue(profileRunField(run, "profileSlug")) ??
+    normalizeName(profileRunName(run)).toLowerCase()
+  );
+}
+
+function profileRunStatus(run: Record<string, unknown>): string {
+  return stringValue(profileRunField(run, "status")) ?? "completed";
+}
+
+function profileRunModel(run: Record<string, unknown>): string {
+  return stringValue(profileRunField(run, "model")) ?? "";
+}
+
+function profileRunTokens(
+  run: Record<string, unknown>,
+  key: "inputTokens" | "outputTokens" | "cachedReadTokens",
+): number {
+  return numberValue(profileRunField(run, key)) ?? 0;
+}
+
+function profileRunCost(run: Record<string, unknown>): number {
+  return numberValue(profileRunField(run, "costUsd")) ?? 0;
+}
+
+function profileRunDuration(run: Record<string, unknown>): number {
+  return numberValue(profileRunField(run, "durationMs")) ?? 0;
+}
+
+function profileRunHandoff(run: Record<string, unknown>): string {
+  return stringValue(profileRunField(run, "handoffSummary")) ?? "";
+}
+
+function profileRunTools(
+  run: Record<string, unknown>,
+): Record<string, unknown>[] {
+  return arrayOfRecords(profileRunField(run, "toolInvocations"));
 }
 
 function extractToolModelEvidence(
@@ -368,7 +460,10 @@ function extractToolModelEvidence(
 function extractToolModelEvidenceFromEvent(event: any): TimelineEvent | null {
   if (event?.eventType !== "model_routed_tool_call") return null;
   const payload = parseJsonField(event.payload) ?? {};
-  return extractToolModelEvidenceFromRouteRecord(payload, event.createdAt ?? "");
+  return extractToolModelEvidenceFromRouteRecord(
+    payload,
+    event.createdAt ?? "",
+  );
 }
 
 function extractToolModelEvidenceFromRouteRecord(
@@ -377,10 +472,7 @@ function extractToolModelEvidenceFromRouteRecord(
 ): TimelineEvent | null {
   const toolName =
     String(
-      record.tool_name ??
-        record.toolName ??
-        record.name ??
-        "workspace_skill",
+      record.tool_name ?? record.toolName ?? record.name ?? "workspace_skill",
     ).trim() || "workspace_skill";
   const evidence = extractToolModelEvidence({
     ...record,
@@ -425,7 +517,9 @@ function traceToolCallId(trace: ExecutionTraceModelRouteTrace): string | null {
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 
-function traceEvidence(trace: ExecutionTraceModelRouteTrace): ToolModelEvidence {
+function traceEvidence(
+  trace: ExecutionTraceModelRouteTrace,
+): ToolModelEvidence {
   return {
     routeModelId: trace.model?.trim() || undefined,
     routeInputTokens: numberValue(trace.inputTokens),
@@ -650,6 +744,7 @@ type BranchSpan = {
  * LLM entry from the turn's aggregate token/cost stats. */
 function buildTimelineFromUsage(
   toolInvocations: any[],
+  agentProfileRuns: Record<string, unknown>[],
   modelRoutedToolCalls: Record<string, unknown>[],
   responseText: string,
   model?: string,
@@ -677,6 +772,68 @@ function buildTimelineFromUsage(
       costUsd: totalCost || 0,
       toolUses: toolInvocations.map((ti: any) => ti.tool_name).filter(Boolean),
     });
+  }
+
+  for (const run of agentProfileRuns) {
+    const profileName = profileRunName(run);
+    const profileSlug = profileRunSlug(run);
+    const branch = `profile:${profileSlug}`;
+    const childTools = profileRunTools(run);
+    const profileInputTokens = profileRunTokens(run, "inputTokens");
+    const profileOutputTokens = profileRunTokens(run, "outputTokens");
+    const profileCacheReadTokens = profileRunTokens(run, "cachedReadTokens");
+    const profileCostUsd = profileRunCost(run);
+    const profileDurationMs = profileRunDuration(run);
+
+    events.push({
+      type: "profile_run",
+      timestamp:
+        stringValue(profileRunField(run, "startedAt")) ??
+        stringValue(profileRunField(run, "finishedAt")) ??
+        "",
+      branch,
+      profileRunId: stringValue(profileRunField(run, "profileRunId")),
+      profileId: stringValue(profileRunField(run, "profileId")),
+      profileSlug,
+      profileName,
+      profileStatus: profileRunStatus(run),
+      profileModelId: profileRunModel(run),
+      profileInputTokens,
+      profileOutputTokens,
+      profileCacheReadTokens,
+      profileCostUsd,
+      profileDurationMs,
+      profileHandoffSummary: profileRunHandoff(run),
+      profileToolInvocations: childTools,
+    });
+
+    for (const childTool of childTools) {
+      const childToolName =
+        stringValue(childTool.tool_name) ??
+        stringValue(childTool.toolName) ??
+        stringValue(childTool.name) ??
+        "tool";
+      events.push({
+        type: "tool_call",
+        timestamp: "",
+        branch,
+        toolName: childToolName,
+        toolCallId:
+          stringValue(childTool.id) ??
+          stringValue(childTool.tool_call_id) ??
+          stringValue(childTool.toolCallId),
+        toolType: stringValue(childTool.type) ?? "tool",
+        toolInput:
+          stringValue(childTool.input_preview) ??
+          stringValue(childTool.inputPreview) ??
+          "",
+        toolOutput:
+          stringValue(childTool.output_preview) ??
+          stringValue(childTool.outputPreview) ??
+          "",
+        ...extractToolModelEvidence(modelRoutingRecord(childTool)),
+      });
+    }
   }
 
   // Add tool call events from usage data
@@ -829,7 +986,7 @@ function reparentSubAgentEvents(events: TimelineEvent[]): void {
       const inner = events[j];
 
       if (inner.type === "tool_call" && inner.toolType === "sub_agent") break;
-      if (isSubAgentBranch(inner.branch)) break;
+      if (isBranchLane(inner.branch)) break;
 
       if (inner.type === "llm") {
         if (inner.hasToolResult) {
@@ -873,14 +1030,24 @@ function buildBranches(events: TimelineEvent[]): BranchSpan[] {
 
   for (let i = 0; i < events.length; i++) {
     const ev = events[i];
-    if (ev.type !== "tool_call" || ev.toolType !== "sub_agent") continue;
+    if (
+      !(
+        (ev.type === "tool_call" && ev.toolType === "sub_agent") ||
+        ev.type === "profile_run"
+      )
+    ) {
+      continue;
+    }
 
-    const name = ev.toolName?.toLowerCase() || "unknown";
+    const name =
+      ev.type === "profile_run"
+        ? (ev.profileSlug ?? "profile").toLowerCase()
+        : ev.toolName?.toLowerCase() || "unknown";
 
     const eventIndices = [i];
     for (let j = i + 1; j < events.length; j++) {
-      const subName = getSubAgentName(events[j].branch);
-      if (subName && normalizeName(subName) === normalizeName(name)) {
+      const branchName = getBranchName(events[j].branch);
+      if (branchName && normalizeName(branchName) === normalizeName(name)) {
         eventIndices.push(j);
       }
     }
@@ -888,7 +1055,7 @@ function buildBranches(events: TimelineEvent[]): BranchSpan[] {
     const lastBranchIdx = eventIndices[eventIndices.length - 1];
     let mergeIdx = events.length - 1;
     for (let j = lastBranchIdx + 1; j < events.length; j++) {
-      if (!isSubAgentBranch(events[j].branch)) {
+      if (!isBranchLane(events[j].branch)) {
         mergeIdx = j;
         break;
       }
@@ -929,10 +1096,12 @@ function ExecutionTimeline({
   agentName,
   modelRouteTraces,
   modelRoutedToolCalls = [],
+  agentProfileRuns = [],
   onViewDetail,
 }: {
   turnId: string;
   toolInvocations: any[];
+  agentProfileRuns?: Record<string, unknown>[];
   model?: string;
   inputTokens?: number;
   outputTokens?: number;
@@ -978,6 +1147,7 @@ function ExecutionTimeline({
         )
       : buildTimelineFromUsage(
           toolInvocations,
+          agentProfileRuns,
           modelRoutedToolCalls,
           responseText,
           model,
@@ -993,7 +1163,10 @@ function ExecutionTimeline({
 
   const totalCost =
     invocations.length > 0
-      ? invocations.reduce((sum: number, inv: any) => sum + (inv.costUsd || 0), 0)
+      ? invocations.reduce(
+          (sum: number, inv: any) => sum + (inv.costUsd || 0),
+          0,
+        )
       : (totalCostFromTurn ?? 0);
   const totalInputTokens =
     invocations.length > 0
@@ -1029,7 +1202,7 @@ function ExecutionTimeline({
   let lastParentBeforeFork = 0;
   if (hasBranches) {
     for (let i = firstFork - 1; i >= 0; i--) {
-      if (!isSubAgentBranch(events[i].branch)) {
+      if (!isBranchLane(events[i].branch)) {
         lastParentBeforeFork = i;
         break;
       }
@@ -1184,6 +1357,65 @@ function ExecutionTimeline({
               parts.push(`── OUTPUT ──\n\n${ev.outputPreview}`);
             clickTitle = `${ev.modelId}${isOnBranch ? ` (${branch!.name})` : ""}`;
             clickContent = parts.join("\n\n");
+          } else if (ev.type === "profile_run") {
+            icon = (
+              <Brain
+                className="h-3.5 w-3.5"
+                style={{ color: branch?.color || "rgb(168, 85, 247)" }}
+              />
+            );
+            label = ev.profileName || "Agent Profile";
+            const tokenLabel = `${formatTokens(ev.profileInputTokens || 0)}→${formatTokens(ev.profileOutputTokens || 0)}${
+              ev.profileCacheReadTokens
+                ? ` (${formatTokens(ev.profileCacheReadTokens)} cached)`
+                : ""
+            }`;
+            rightDetail = (
+              <span className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+                {ev.profileModelId ? (
+                  <span className="max-w-40 truncate font-mono">
+                    {shortModelId(ev.profileModelId)}
+                  </span>
+                ) : null}
+                <span className="tabular-nums">{tokenLabel}</span>
+                <span className="tabular-nums">
+                  {formatDuration(ev.profileDurationMs)}
+                </span>
+                <span className="tabular-nums">
+                  {formatCost(ev.profileCostUsd || 0)}
+                </span>
+                <Badge
+                  variant="outline"
+                  className="px-1.5 py-0 text-[9px] text-muted-foreground"
+                >
+                  {routeStatusLabel(ev.profileStatus) || "profile"}
+                </Badge>
+              </span>
+            );
+            const parts: string[] = [];
+            parts.push(`Agent Profile  ·  ${ev.profileName || "Profile"}`);
+            parts.push(
+              [
+                "── PROFILE RUN ──",
+                "",
+                `Profile run: ${ev.profileRunId || "--"}`,
+                `Model: ${ev.profileModelId ? shortModelId(ev.profileModelId) : "--"}`,
+                `Tokens: ${tokenLabel}`,
+                `Duration: ${formatDuration(ev.profileDurationMs)}`,
+                `Cost: ${formatCost(ev.profileCostUsd || 0)}`,
+                `Status: ${routeStatusLabel(ev.profileStatus) || "--"}`,
+              ].join("\n"),
+            );
+            if (ev.profileHandoffSummary) {
+              parts.push(`── HANDOFF ──\n\n${ev.profileHandoffSummary}`);
+            }
+            if (ev.profileToolInvocations?.length) {
+              parts.push(
+                `── CHILD TOOLS ──\n\n${JSON.stringify(ev.profileToolInvocations, null, 2)}`,
+              );
+            }
+            clickTitle = `Agent Profile: ${ev.profileName || "Profile"}`;
+            clickContent = parts.join("\n\n");
           } else if (ev.type === "tool_call") {
             const isSub = ev.toolType === "sub_agent";
             const skillName = extractSkillName(ev.toolName, ev.toolInput);
@@ -1336,6 +1568,9 @@ function TurnRow({
   const modelRoutedToolCalls = Array.isArray(usage?.model_routed_tool_calls)
     ? (usage.model_routed_tool_calls as Record<string, unknown>[])
     : [];
+  const agentProfileRuns = Array.isArray(usage?.agent_profile_runs)
+    ? (usage.agent_profile_runs as Record<string, unknown>[])
+    : [];
   const title = "Thinking";
   const sourceLabel = formatInvocationSource(
     turn.triggerName || turn.invocationSource,
@@ -1463,6 +1698,7 @@ function TurnRow({
               agentName={agentName}
               modelRouteTraces={modelRouteTraces}
               modelRoutedToolCalls={modelRoutedToolCalls}
+              agentProfileRuns={agentProfileRuns}
               onViewDetail={(t, c) => setDetailDialog({ title: t, content: c })}
             />
           )}
