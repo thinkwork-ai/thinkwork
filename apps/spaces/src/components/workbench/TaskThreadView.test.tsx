@@ -3475,6 +3475,8 @@ describe("TaskThreadView", () => {
     const actionControls = screen.getByTestId("follow-up-action-controls");
     const trigger = screen.getByLabelText("Select model");
     const voiceInput = screen.getByRole("button", { name: "Voice input" });
+    expect(actionControls.className).toContain("ml-auto");
+    expect(actionControls.className).toContain("justify-end");
     expect(actionControls.contains(trigger)).toBe(true);
     expect(actionControls.contains(voiceInput)).toBe(true);
     expect(trigger.compareDocumentPosition(voiceInput)).toBe(
