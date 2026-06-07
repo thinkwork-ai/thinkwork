@@ -105,51 +105,57 @@ export function SettingsSidebar({
           </Link>
         </div>
       )}
-      <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-0">
-        <button
-          type="button"
-          // shrink-0 so the row keeps its h-8 even when the nav below overflows
-          // — otherwise flexbox compresses it and "Back to app" drifts off the
-          // "New thread" line, shifting content when switching Settings <-> Main.
-          className={cn(
-            itemClassName,
-            "mb-2 shrink-0 text-sidebar-foreground/65",
-          )}
-          onClick={() => {
-            onNavigate?.();
-            navigate({ to: getSettingsReturnTo() });
-          }}
-        >
-          <ArrowLeft />
-          <span>Back to app</span>
-        </button>
-        {/* Block (not flex) scroll container — mirrors the main sidebar's
-            thread list. A flex-col here would let the items flex-shrink to fit,
-            compressing the list instead of scrolling. Block flow keeps each
-            item at its natural h-8 and overflows into a scroll. */}
+      <div className="flex min-h-0 flex-1 flex-col pb-2 pt-0">
+        {/* Horizontal padding lives on the inner content, not on the scroll
+            container, so the scrollbar rides the panel's right edge (matching
+            the main nav) instead of being inset by the padding. */}
+        <div className="shrink-0 px-3">
+          <button
+            type="button"
+            // shrink-0 so the row keeps its h-8 even when the nav below overflows
+            // — otherwise flexbox compresses it and "Back to app" drifts off the
+            // "New thread" line, shifting content when switching Settings <-> Main.
+            className={cn(
+              itemClassName,
+              "mb-2 shrink-0 text-sidebar-foreground/65",
+            )}
+            onClick={() => {
+              onNavigate?.();
+              navigate({ to: getSettingsReturnTo() });
+            }}
+          >
+            <ArrowLeft />
+            <span>Back to app</span>
+          </button>
+        </div>
+        {/* Full-width block scroll container so the scrollbar sits outboard at
+            the panel edge. Block (not flex) flow keeps each item at its natural
+            h-8 and overflows into a scroll rather than flex-shrinking to fit. */}
         <nav
-          className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
           aria-label="Settings sections"
         >
-          {items.map((item) => {
-            const active = pathname.startsWith(item.to);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={() => onNavigate?.()}
-                className={cn(
-                  itemClassName,
-                  "shrink-0",
-                  active &&
-                    "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
-                )}
-              >
-                <item.icon />
-                <span className="truncate">{item.label}</span>
-              </Link>
-            );
-          })}
+          <div className="space-y-0.5 px-3">
+            {items.map((item) => {
+              const active = pathname.startsWith(item.to);
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => onNavigate?.()}
+                  className={cn(
+                    itemClassName,
+                    "shrink-0",
+                    active &&
+                      "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+                  )}
+                >
+                  <item.icon />
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
         </nav>
       </div>
     </aside>
