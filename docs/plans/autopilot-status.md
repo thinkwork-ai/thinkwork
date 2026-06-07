@@ -168,6 +168,8 @@ status: complete
     `origin/main` at `17b2b36a`.
   - Copied local Vite auth/API configuration into `apps/web/.env` for the
     `http://localhost:5174` dev server; active web work targets `apps/web`.
+  - Opened U4 PR
+    [#2214](https://github.com/thinkwork-ai/thinkwork/pull/2214).
   - U4 implemented constrained Pi profile delegation: runtime `agent_profiles`
     become a `delegate_to_agent_profile` tool plus `/agent <profile> <task>`
     slash path, child profile runs use the profile model/capability allowlist,
@@ -193,7 +195,7 @@ status: complete
 | U1 Agent Profile Schema, Seeds, And GraphQL       | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | merged | Squash merged as `6956a0b4`; dev migration applied after drift failure and rerun CI passed.       |
 | U2 Settings -> Agents Page And Profile Editor     | `codex/agent-profiles-u2-settings-agents`  | [#2211](https://github.com/thinkwork-ai/thinkwork/pull/2211) | merged | Squash merged as `4f8b7792`; local worktree/branch removed and remote branch was deleted.         |
 | U3 Resolve Profiles Into AgentCore Runtime Config | `codex/agent-profiles-u3-runtime-config`   | [#2213](https://github.com/thinkwork-ai/thinkwork/pull/2213) | merged | Squash merged as `17b2b36a`; runtime config now includes file-backed Agent Profile projections.   |
-| U4 Pi Subagent Execution And Slash Invocation     | `codex/agent-profiles-u4-pi-subagents`     | TBD                                                          | active | Implementing constrained profile delegation inside the Pi AgentCore runtime.                      |
+| U4 Pi Subagent Execution And Slash Invocation     | `codex/agent-profiles-u4-pi-subagents`     | [#2214](https://github.com/thinkwork-ai/thinkwork/pull/2214) | active | Implemented constrained profile delegation inside the Pi AgentCore runtime; CI pending.           |
 
 ## Model Stacking Tool Routing - 2026-06-06
 
