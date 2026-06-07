@@ -288,8 +288,6 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
 }
 
 resource "aws_iam_role_policy" "ecs_execution_secrets" {
-  count = length(local.secret_arns) > 0 ? 1 : 0
-
   name = "twenty-secrets"
   role = aws_iam_role.ecs_execution.id
 
