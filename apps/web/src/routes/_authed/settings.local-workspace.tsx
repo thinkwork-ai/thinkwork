@@ -9,5 +9,19 @@ import { WorkspaceSettingsView } from "@/components/workspace-settings/Workspace
 // history controls). The route path is kept as `local-workspace` to avoid
 // breaking existing deep links.
 export const Route = createFileRoute("/_authed/settings/local-workspace")({
-  component: WorkspaceSettingsView,
+  validateSearch: (search: Record<string, unknown>): { file?: string } => ({
+    file: isSafeWorkspaceFile(search.file) ? search.file : undefined,
+  }),
+  component: WorkspaceSettingsRoute,
 });
+
+function WorkspaceSettingsRoute() {
+  const { file } = Route.useSearch();
+  return <WorkspaceSettingsView defaultOpenFile={file} />;
+}
+
+function isSafeWorkspaceFile(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const clean = value.trim();
+  return Boolean(clean) && !clean.split("/").some((part) => part === "..");
+}

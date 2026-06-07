@@ -16,7 +16,7 @@ Run the Vite dev server on a Cognito-allowed callback port:
 pnpm --filter @thinkwork/web dev -- --host 127.0.0.1 --port 5180
 ```
 
-Use `5174` instead when you need the admin-compatible callback port locally.
+Use `5174` instead when you need the operator/web callback port locally.
 
 ## Deployed Smoke
 

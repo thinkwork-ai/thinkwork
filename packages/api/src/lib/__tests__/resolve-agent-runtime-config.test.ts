@@ -139,6 +139,44 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     budget_paused_override: "spaces.budget_paused_override",
     sandbox_override: "spaces.sandbox_override",
   },
+  agentProfiles: {
+    id: "agentProfiles.id",
+    tenant_id: "agentProfiles.tenant_id",
+    slug: "agentProfiles.slug",
+    name: "agentProfiles.name",
+    description: "agentProfiles.description",
+    routing_guidance: "agentProfiles.routing_guidance",
+    instructions: "agentProfiles.instructions",
+    model_id: "agentProfiles.model_id",
+    enabled: "agentProfiles.enabled",
+    built_in_key: "agentProfiles.built_in_key",
+    tool_policy: "agentProfiles.tool_policy",
+    skill_policy: "agentProfiles.skill_policy",
+    execution_controls: "agentProfiles.execution_controls",
+  },
+  agentProfileSpaceAssignments: {
+    profile_id: "agentProfileSpaceAssignments.profile_id",
+    tenant_id: "agentProfileSpaceAssignments.tenant_id",
+    space_id: "agentProfileSpaceAssignments.space_id",
+  },
+  modelCatalog: {
+    model_id: "modelCatalog.model_id",
+    is_available: "modelCatalog.is_available",
+  },
+  userModelApprovals: {
+    tenant_id: "userModelApprovals.tenant_id",
+    user_id: "userModelApprovals.user_id",
+    model_id: "userModelApprovals.model_id",
+  },
+  tenantMcpServers: {
+    id: "tenantMcpServers.id",
+    tenant_id: "tenantMcpServers.tenant_id",
+    slug: "tenantMcpServers.slug",
+    name: "tenantMcpServers.name",
+    tools: "tenantMcpServers.tools",
+    status: "tenantMcpServers.status",
+    enabled: "tenantMcpServers.enabled",
+  },
 }));
 
 vi.mock("@aws-sdk/client-s3", () => ({
@@ -185,6 +223,8 @@ import {
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "22222222-2222-2222-2222-222222222222";
 const TEMPLATE_ID = "33333333-3333-3333-3333-333333333333";
+const USER_ID = "44444444-4444-4444-4444-444444444444";
+const PROFILE_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 
 function stageAgentRow(overrides?: Record<string, unknown>) {
   rowsQueue.push([
@@ -223,6 +263,12 @@ function stageTemplateRow(overrides?: Record<string, unknown>) {
 
 function stageTenantSlug(slug = "acme") {
   rowsQueue.push([{ slug }]);
+}
+
+function stageProfileRows(rows: Array<Record<string, unknown>>) {
+  rowsQueue.push(rows);
+  if (rows.length === 0) return;
+  rowsQueue.push([{ model_id: PROFILE_MODEL_ID }]); // available model catalog
 }
 
 beforeEach(() => {
@@ -846,6 +892,263 @@ describe("resolveAgentRuntimeConfig", () => {
       null,
       expect.stringContaining("agent-runtime-config"),
     );
+  });
+
+  it("includes an enabled global Research profile in the runtime config", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    stageProfileRows([
+      {
+        id: "profile-research",
+        slug: "research",
+        name: "Research",
+        description: "Find sources.",
+        routing_guidance: "Use for cited research.",
+        instructions: "Research and cite sources.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: "research",
+        tool_policy: { builtInTools: ["web-search", "web-extract"] },
+        skill_policy: { skillSlugs: [] },
+        execution_controls: { clarify: false, maxRuntimeMs: 30_000 },
+      },
+    ]);
+    rowsQueue.push([]); // space assignments
+    rowsQueue.push([]); // MCP server catalog
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.agentProfilesConfig).toEqual([
+      expect.objectContaining({
+        slug: "research",
+        modelId: PROFILE_MODEL_ID,
+        availability: { scope: "global", spaceIds: [] },
+        builtInTools: ["web-search", "web-extract"],
+        executionControls: expect.objectContaining({
+          foreground: true,
+          clarify: false,
+          maxSubagentDepth: 0,
+          maxRuntimeMs: 30_000,
+        }),
+      }),
+    ]);
+  });
+
+  it("excludes a Space-restricted Coding profile when the invocation Space is not assigned", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    rowsQueue.push([]); // Space overrides lookup
+    stageProfileRows([
+      {
+        id: "profile-coding",
+        slug: "coding",
+        name: "Coding",
+        description: null,
+        routing_guidance: null,
+        instructions: "Code carefully.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: "coding",
+        tool_policy: { builtInTools: ["bash"] },
+        skill_policy: { skillSlugs: [] },
+        execution_controls: {},
+      },
+    ]);
+    rowsQueue.push([
+      { profile_id: "profile-coding", space_id: "space-engineering" },
+    ]); // space assignments
+    rowsQueue.push([]); // MCP server catalog
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      spaceId: "space-finance",
+    });
+
+    expect(cfg.agentProfilesConfig).toEqual([]);
+  });
+
+  it("includes a Space-restricted Coding profile when the invocation Space is assigned", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    rowsQueue.push([]); // Space overrides lookup
+    stageProfileRows([
+      {
+        id: "profile-coding",
+        slug: "coding",
+        name: "Coding",
+        description: null,
+        routing_guidance: null,
+        instructions: "Code carefully.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: "coding",
+        tool_policy: { builtInTools: ["bash", "execute_code"] },
+        skill_policy: { skillSlugs: ["repo-review"] },
+        execution_controls: {},
+      },
+    ]);
+    rowsQueue.push([
+      { profile_id: "profile-coding", space_id: "space-engineering" },
+    ]); // space assignments
+    rowsQueue.push([]); // MCP server catalog
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      spaceId: "space-engineering",
+    });
+
+    expect(cfg.agentProfilesConfig).toEqual([
+      expect.objectContaining({
+        slug: "coding",
+        builtInTools: ["bash", "execute_code"],
+        skillSlugs: ["repo-review"],
+        availability: {
+          scope: "space_restricted",
+          spaceIds: ["space-engineering"],
+        },
+      }),
+    ]);
+  });
+
+  it("compiles profile MCP server access into server display data and operation allowlists", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    mockBuildMcpConfigs.mockResolvedValueOnce([
+      {
+        name: "twenty-crm",
+        url: "https://twenty.example/mcp",
+        availableTools: ["find_many_opportunities", "search_accounts"],
+        tools: ["find_many_opportunities"],
+      },
+    ]);
+    stageProfileRows([
+      {
+        id: "profile-analyst",
+        slug: "analyst",
+        name: "Analyst",
+        description: null,
+        routing_guidance: "Use for CRM analysis.",
+        instructions: "Analyze the CRM data.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: "analyst",
+        tool_policy: { builtInTools: [], mcpServers: ["twenty-crm"] },
+        skill_policy: { skillSlugs: [] },
+        execution_controls: {},
+      },
+    ]);
+    rowsQueue.push([]); // space assignments
+    rowsQueue.push([
+      {
+        id: "mcp-twenty",
+        slug: "twenty-crm",
+        name: "Twenty CRM",
+        tools: [
+          { name: "find_many_opportunities" },
+          { name: "search_accounts" },
+        ],
+      },
+    ]); // MCP server catalog
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.agentProfilesConfig[0]?.mcpServers).toEqual([
+      {
+        id: "mcp-twenty",
+        slug: "twenty-crm",
+        name: "Twenty CRM",
+        availableTools: ["find_many_opportunities", "search_accounts"],
+        allowedTools: ["find_many_opportunities"],
+      },
+    ]);
+    expect(cfg.agentProfilesConfig[0]?.mcpToolAllowlist).toEqual({
+      "twenty-crm": ["find_many_opportunities"],
+    });
+  });
+
+  it("excludes disabled profiles and profiles with unavailable or unapproved models", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    rowsQueue.push([
+      {
+        id: "profile-disabled",
+        slug: "disabled",
+        name: "Disabled",
+        description: null,
+        routing_guidance: null,
+        instructions: "Nope.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: false,
+        built_in_key: null,
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+      {
+        id: "profile-missing-model",
+        slug: "missing-model",
+        name: "Missing Model",
+        description: null,
+        routing_guidance: null,
+        instructions: "No model.",
+        model_id: "missing-model",
+        enabled: true,
+        built_in_key: null,
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+      {
+        id: "profile-unapproved",
+        slug: "unapproved",
+        name: "Unapproved",
+        description: null,
+        routing_guidance: null,
+        instructions: "Not approved.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: null,
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+    ]);
+    rowsQueue.push([{ model_id: PROFILE_MODEL_ID }]); // available model catalog
+    rowsQueue.push([]); // approved models for user
+    rowsQueue.push([]); // space assignments
+    rowsQueue.push([]); // MCP server catalog
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      currentUserId: USER_ID,
+      currentUserEmail: "rep@acme.test",
+    });
+
+    expect(cfg.agentProfilesConfig).toEqual([]);
   });
 
   it("overlays Space runtime overrides when spaceId is provided", async () => {

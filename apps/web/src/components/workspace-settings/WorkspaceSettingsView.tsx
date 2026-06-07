@@ -23,7 +23,11 @@ function Centered({ children }: { children: React.ReactNode }) {
  * former desktop-only, read-only local-cache inspector — this works in any
  * build because it reads and writes S3 through the workspace-files API.
  */
-export function WorkspaceSettingsView() {
+export function WorkspaceSettingsView({
+  defaultOpenFile = "Agent/AGENTS.md",
+}: {
+  defaultOpenFile?: string;
+}) {
   const { subTargets, isAdmin, loading, error } = useConsolidatedSources();
   const client = useMemo(() => createConsolidatedWorkspaceClient(), []);
 
@@ -69,7 +73,7 @@ export function WorkspaceSettingsView() {
       targetKey={targetKey}
       client={client}
       readOnly={!isAdmin}
-      defaultOpenFile="Agent/AGENTS.md"
+      defaultOpenFile={defaultOpenFile}
       bordered={false}
       className="h-full"
       loadingSlot={<LoadingShimmer />}

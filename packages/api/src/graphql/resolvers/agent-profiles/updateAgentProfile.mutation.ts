@@ -1,5 +1,16 @@
 import type { GraphQLContext } from "../../context.js";
-import { agentProfiles, and, db, eq } from "../../utils.js";
+import {
+  agentProfiles,
+  agentProfileSpaceAssignments,
+  and,
+  db,
+  eq,
+} from "../../utils.js";
+import {
+  deleteAgentProfileFileForTenant,
+  serializeAgentProfileFile,
+  writeAgentProfileFileForTenant,
+} from "../../../lib/agent-profile-workspace-files.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   assertAvailableModel,
@@ -79,6 +90,8 @@ export async function updateAgentProfile(
   if (input.spaceIds !== undefined) {
     spaceIds = await assertSpacesBelongToTenant(args.tenantId, input.spaceIds);
   }
+  const effectiveSpaceIds =
+    spaceIds ?? (await loadAgentProfileSpaceIds(args.id));
 
   const [row] = await db
     .update(agentProfiles)
@@ -99,5 +112,43 @@ export async function updateAgentProfile(
     });
   }
 
+  const finalSlug = String(row.slug);
+  if (String(existing.slug) !== finalSlug) {
+    await deleteAgentProfileFileForTenant({
+      tenantId: args.tenantId,
+      slug: String(existing.slug),
+    });
+  }
+  await writeAgentProfileFileForTenant({
+    tenantId: args.tenantId,
+    slug: finalSlug,
+    content: serializeAgentProfileFile({
+      slug: finalSlug,
+      name: String(row.name),
+      description: nullableString(row.description),
+      routingGuidance: nullableString(row.routing_guidance),
+      instructions: String(row.instructions ?? ""),
+      modelId: String(row.model_id),
+      enabled: row.enabled !== false,
+      builtInKey: nullableString(row.built_in_key),
+      toolPolicy: row.tool_policy ?? {},
+      skillPolicy: row.skill_policy ?? {},
+      executionControls: row.execution_controls ?? {},
+      spaceIds: effectiveSpaceIds,
+    }),
+  });
+
   return toAgentProfileGraphql(row);
+}
+
+async function loadAgentProfileSpaceIds(profileId: string): Promise<string[]> {
+  const rows = await db
+    .select({ spaceId: agentProfileSpaceAssignments.space_id })
+    .from(agentProfileSpaceAssignments)
+    .where(eq(agentProfileSpaceAssignments.profile_id, profileId));
+  return rows.map((row) => row.spaceId);
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
 }

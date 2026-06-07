@@ -22,6 +22,10 @@ const detailRouteSource = readFileSync(
   join(process.cwd(), "src/routes/_authed/settings.agents.$profileId.tsx"),
   "utf8",
 );
+const workspaceRouteSource = readFileSync(
+  join(process.cwd(), "src/routes/_authed/settings.local-workspace.tsx"),
+  "utf8",
+);
 
 describe("SettingsAgents page", () => {
   it("owns the default Agent configuration that used to live in General", () => {
@@ -29,6 +33,7 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain('label="Default Agent"');
     expect(agentsSource).toContain("SettingsTenantAgentQuery");
     expect(agentsSource).toContain("SettingsUpdateTenantAgentMutation");
+    expect(agentsSource).toContain('search={{ file: "Agent/AGENTS.md" }}');
 
     expect(generalSource).not.toContain("AgentConfigSection");
     expect(generalSource).not.toContain("SettingsTenantAgentQuery");
@@ -47,6 +52,17 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain("spaceIds");
     expect(agentsSource).toContain("maxRuntimeMs");
     expect(agentsSource).toContain("maxTokens");
+    expect(agentsSource).toContain("agentProfileWorkspacePath");
+    expect(agentsSource).toContain("Agent/agents/${profile.slug}.md");
+  });
+
+  it("keeps Agent Profile multi-select chips bounded inside settings rows", () => {
+    expect(agentsSource).toContain(
+      'className="w-[min(42rem,60vw)] min-w-[20rem]"',
+    );
+    expect(agentsSource).toContain("maxCount={3}");
+    expect(agentsSource).toContain('maxWidth="42rem"');
+    expect(agentsSource).not.toContain("singleLine");
   });
 
   it("queries the editor catalog and protects the route for operators", () => {
@@ -60,5 +76,7 @@ describe("SettingsAgents page", () => {
     expect(detailRouteSource).toContain(
       '"/_authed/settings/agents/$profileId"',
     );
+    expect(workspaceRouteSource).toContain("validateSearch");
+    expect(workspaceRouteSource).toContain("defaultOpenFile={file}");
   });
 });

@@ -11,11 +11,14 @@ status: complete
 - Plan:
   `docs/plans/2026-06-07-002-feat-agent-profiles-pi-subagents-plan.md`.
 - Target branch: `main`.
-- Current unit: U2 Settings -> Agents Page And Profile Editor.
-- Current branch: `codex/agent-profiles-u2-settings-agents`.
-- Current worktree: `.Codex/worktrees/agent-profiles-u2`.
+- Current unit: U3 Resolve Profiles Into AgentCore Runtime Config.
+- Current branch: `codex/agent-profiles-u3-runtime-config`.
+- Current worktree: `.Codex/worktrees/agent-profiles-u3`.
 - Status: in progress.
 - Notes:
+  - Active web work targets `apps/web` / `@thinkwork/web` only. Historical
+    `apps/admin` and `@thinkwork/admin` references in older ledger entries are
+    obsolete and must not be used for this Agent Profiles branch.
   - Created branch from `origin/main` at `c61921b3e`.
   - Cherry-picked amended plan constraints into the U0 branch because
     `origin/main` did not yet include the local plan amendment.
@@ -106,12 +109,64 @@ status: complete
     `/settings/agents` land on `/settings/general`; in-app Settings sidebar
     navigation works. This appears to be existing Settings deep-link behavior,
     not specific to Agents.
+  - U2 was squash merged in PR
+    [#2211](https://github.com/thinkwork-ai/thinkwork/pull/2211) as
+    `4f8b7792`; local worktree/branch were removed and the remote branch was
+    deleted.
+  - Created isolated U3 worktree `.Codex/worktrees/agent-profiles-u3` from
+    `origin/main` at `4f8b7792`.
+  - Copied local Vite auth/API configuration into `apps/web/.env` for the
+    `http://localhost:5174` dev server; there is no `apps/admin` in this
+    worktree.
+  - Started U3 runtime config work: compiling enabled Agent Profiles into the
+    resolved AgentCore runtime payload with Space availability, model
+    availability/user approval checks, capability bundles, and MCP operation
+    allowlists.
+  - Course correction recorded after local product review: Agent Profile and
+    Default Agent capability authoring must write Agent workspace source files
+    first. Settings forms are structured editors over those files, and the
+    Settings -> Workspace CodeMirror editor is the advanced editor for the same
+    source. `agent_profiles` and related tables remain acceptable only as
+    indexed projections refreshed from those workspace files.
+  - Amended the plan so U1/U2 require profile markdown files under
+    `Agent/agents/<slug>.md`, Default Agent capability policy in the Agent
+    workspace source, workspace-file writes before projection refresh, and
+    advanced editor affordances from Settings -> Agents.
+  - Added current-branch UI affordances for the hybrid model: Default Agent
+    links to `Agent/AGENTS.md`, each profile detail links to
+    `Agent/agents/<slug>.md`, and `/settings/local-workspace?file=...` opens
+    that file in the workspace editor.
+  - Implemented the file-backed profile bridge: profile creates/updates/deletes
+    serialize to Agent workspace markdown files when `WORKSPACE_BUCKET` is
+    configured, workspace-file writes to `agents/*.md` refresh the derived
+    `agent_profiles` projection, and workspace-file deletes remove the
+    projection.
+  - U3 local verification passed:
+    - `pnpm --filter @thinkwork/api test -- src/lib/agent-profile-workspace-files.test.ts`
+      -> 2 tests passed.
+    - `pnpm --filter @thinkwork/api test -- src/__tests__/workspace-files-handler.test.ts`
+      -> 144 tests passed.
+    - `pnpm --filter @thinkwork/api test -- src/lib/agent-profile-workspace-files.test.ts src/__tests__/workspace-files-handler.test.ts src/graphql/resolvers/agent-profiles/agentProfiles.resolver.test.ts src/lib/__tests__/resolve-agent-runtime-config.test.ts src/handlers/agents-runtime-config.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts src/lib/evals/agentcore-direct.test.ts`
+      -> 214 tests passed.
+    - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsAgents.test.tsx src/components/workspace-settings/WorkspaceSettingsView.test.tsx`
+      -> 9 tests passed.
+    - `pnpm --filter @thinkwork/api typecheck` -> passed.
+    - `pnpm --filter @thinkwork/web typecheck` -> passed.
+    - `git diff --check` -> passed.
+  - U3 local browser note on `http://localhost:5174`: the `apps/web/.env`
+    configuration is present and the missing-Vite-env screen is gone, but the
+    current in-app browser session resolves without operator/workspace access
+    and redirects operator-only `/settings/agents` to `/settings/general`.
+    `/settings/local-workspace?file=Agent%2Fagents%2Fresearch.md` renders
+    "No workspace is available for your account." Browser validation needs an
+    authenticated operator/workspace session on the web app.
 
-| Unit                                          | Branch                                     | PR                                                           | State  | Notes                                                                                             |
-| --------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
-| U0 Pi Profile Adapter Spike                   | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
-| U1 Agent Profile Schema, Seeds, And GraphQL   | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | merged | Squash merged as `6956a0b4`; dev migration applied after drift failure and rerun CI passed.       |
-| U2 Settings -> Agents Page And Profile Editor | `codex/agent-profiles-u2-settings-agents`  | TBD                                                          | active | Moving default Agent config from General and adding profile list/editor UI.                       |
+| Unit                                              | Branch                                     | PR                                                           | State  | Notes                                                                                             |
+| ------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
+| U0 Pi Profile Adapter Spike                       | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
+| U1 Agent Profile Schema, Seeds, And GraphQL       | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | merged | Squash merged as `6956a0b4`; dev migration applied after drift failure and rerun CI passed.       |
+| U2 Settings -> Agents Page And Profile Editor     | `codex/agent-profiles-u2-settings-agents`  | [#2211](https://github.com/thinkwork-ai/thinkwork/pull/2211) | merged | Squash merged as `4f8b7792`; local worktree/branch removed and remote branch was deleted.         |
+| U3 Resolve Profiles Into AgentCore Runtime Config | `codex/agent-profiles-u3-runtime-config`   | TBD                                                          | active | Compiling enabled, Space-scoped Agent Profiles into AgentCore runtime config.                     |
 
 ## Model Stacking Tool Routing - 2026-06-06
 

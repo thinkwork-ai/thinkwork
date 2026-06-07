@@ -53,6 +53,11 @@ import {
   knowledgeBases,
   guardrails,
   spaces,
+  agentProfiles,
+  agentProfileSpaceAssignments,
+  modelCatalog,
+  userModelApprovals,
+  tenantMcpServers,
 } from "@thinkwork/database-pg/schema";
 import { buildSkillEnvOverrides } from "./oauth-token.js";
 import { buildMcpConfigs } from "./mcp-configs.js";
@@ -108,6 +113,7 @@ export interface McpConfig {
   transport?: string;
   auth?: unknown;
   tools?: string[];
+  availableTools?: string[];
 }
 
 export type WebSearchConfig = WebSearchRuntimeConfig;
@@ -124,6 +130,42 @@ export interface SendEmailConfig {
 export interface GuardrailPayload {
   guardrailIdentifier: string;
   guardrailVersion: string;
+}
+
+export interface AgentProfileRuntimeMcpServer {
+  id: string;
+  slug: string;
+  name: string;
+  availableTools: string[];
+  allowedTools: string[];
+}
+
+export interface AgentProfileRuntimeConfig {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  routingGuidance: string | null;
+  instructions: string;
+  modelId: string;
+  builtInKey: string | null;
+  enabled: true;
+  availability: {
+    scope: "global" | "space_restricted";
+    spaceIds: string[];
+  };
+  builtInTools: string[];
+  mcpServers: AgentProfileRuntimeMcpServer[];
+  mcpToolAllowlist: Record<string, string[]>;
+  skillSlugs: string[];
+  executionControls: {
+    foreground: true;
+    clarify: boolean;
+    maxSubagentDepth: number;
+    maxRuntimeMs?: number;
+    maxTokens?: number;
+    thinking?: string;
+  };
 }
 
 export interface AgentRuntimeConfig {
@@ -158,6 +200,7 @@ export interface AgentRuntimeConfig {
   sendEmailConfig?: SendEmailConfig;
   knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined;
   mcpConfigs: McpConfig[];
+  agentProfilesConfig: AgentProfileRuntimeConfig[];
 }
 
 export class AgentNotFoundError extends Error {
@@ -641,6 +684,7 @@ export async function resolveAgentRuntimeConfig(
     sendEmailConfig,
     knowledgeBasesConfig,
     mcpConfigs,
+    agentProfilesConfig: [],
   };
 
   const overrides = await resolveSpaceRuntimeOverrides({
@@ -649,7 +693,254 @@ export async function resolveAgentRuntimeConfig(
     logPrefix,
   });
 
-  return applyRuntimeOverrides(resolvedConfig, overrides);
+  const overriddenConfig = applyRuntimeOverrides(resolvedConfig, overrides);
+  overriddenConfig.agentProfilesConfig = await loadAgentProfileRuntimeConfigs({
+    tenantId: opts.tenantId,
+    currentUserId: opts.currentUserId,
+    spaceId: opts.spaceId ?? null,
+    mcpConfigs,
+    logPrefix,
+  });
+  return overriddenConfig;
+}
+
+async function loadAgentProfileRuntimeConfigs(input: {
+  tenantId: string;
+  currentUserId?: string;
+  spaceId: string | null;
+  mcpConfigs: McpConfig[];
+  logPrefix: string;
+}): Promise<AgentProfileRuntimeConfig[]> {
+  const db = getDb();
+  const profileRows = await db
+    .select({
+      id: agentProfiles.id,
+      slug: agentProfiles.slug,
+      name: agentProfiles.name,
+      description: agentProfiles.description,
+      routing_guidance: agentProfiles.routing_guidance,
+      instructions: agentProfiles.instructions,
+      model_id: agentProfiles.model_id,
+      enabled: agentProfiles.enabled,
+      built_in_key: agentProfiles.built_in_key,
+      tool_policy: agentProfiles.tool_policy,
+      skill_policy: agentProfiles.skill_policy,
+      execution_controls: agentProfiles.execution_controls,
+    })
+    .from(agentProfiles)
+    .where(
+      and(
+        eq(agentProfiles.tenant_id, input.tenantId),
+        eq(agentProfiles.enabled, true),
+      ),
+    );
+
+  if (profileRows.length === 0) return [];
+
+  const availableModelRows = await db
+    .select({ model_id: modelCatalog.model_id })
+    .from(modelCatalog)
+    .where(eq(modelCatalog.is_available, true));
+  const availableModelIds = new Set(
+    availableModelRows.map((row) => row.model_id),
+  );
+
+  let approvedModelIds: Set<string> | null = null;
+  if (input.currentUserId) {
+    const approvalRows = await db
+      .select({ model_id: userModelApprovals.model_id })
+      .from(userModelApprovals)
+      .where(
+        and(
+          eq(userModelApprovals.tenant_id, input.tenantId),
+          eq(userModelApprovals.user_id, input.currentUserId),
+        ),
+      );
+    approvedModelIds = new Set(approvalRows.map((row) => row.model_id));
+  }
+
+  const assignmentRows = await db
+    .select({
+      profile_id: agentProfileSpaceAssignments.profile_id,
+      space_id: agentProfileSpaceAssignments.space_id,
+    })
+    .from(agentProfileSpaceAssignments)
+    .where(eq(agentProfileSpaceAssignments.tenant_id, input.tenantId));
+  const spaceIdsByProfileId = new Map<string, string[]>();
+  for (const row of assignmentRows) {
+    const list = spaceIdsByProfileId.get(row.profile_id) ?? [];
+    list.push(row.space_id);
+    spaceIdsByProfileId.set(row.profile_id, list);
+  }
+
+  const mcpRows = await db
+    .select({
+      id: tenantMcpServers.id,
+      slug: tenantMcpServers.slug,
+      name: tenantMcpServers.name,
+      tools: tenantMcpServers.tools,
+    })
+    .from(tenantMcpServers)
+    .where(
+      and(
+        eq(tenantMcpServers.tenant_id, input.tenantId),
+        eq(tenantMcpServers.status, "approved"),
+        eq(tenantMcpServers.enabled, true),
+      ),
+    );
+  const mcpRowsBySlug = new Map(mcpRows.map((row) => [row.slug, row]));
+  const mcpConfigByName = new Map(
+    input.mcpConfigs.map((cfg) => [cfg.name, cfg]),
+  );
+
+  const configs: AgentProfileRuntimeConfig[] = [];
+  for (const profile of profileRows) {
+    if (profile.enabled !== true) continue;
+    if (!availableModelIds.has(profile.model_id)) {
+      console.warn(
+        `${input.logPrefix} Agent Profile ${profile.slug} skipped: model ${profile.model_id} is not available`,
+      );
+      continue;
+    }
+    if (approvedModelIds && !approvedModelIds.has(profile.model_id)) {
+      console.warn(
+        `${input.logPrefix} Agent Profile ${profile.slug} skipped: model ${profile.model_id} is not approved for user ${input.currentUserId}`,
+      );
+      continue;
+    }
+
+    const assignedSpaceIds = [
+      ...new Set(spaceIdsByProfileId.get(profile.id) ?? []),
+    ];
+    if (
+      assignedSpaceIds.length > 0 &&
+      (!input.spaceId || !assignedSpaceIds.includes(input.spaceId))
+    ) {
+      continue;
+    }
+
+    const toolPolicy = normalizeRecord(profile.tool_policy);
+    const skillPolicy = normalizeRecord(profile.skill_policy);
+    const executionControls = normalizeRecord(profile.execution_controls);
+    const builtInTools = normalizeStringArray(toolPolicy.builtInTools);
+    const mcpServerSlugs = normalizeStringArray(toolPolicy.mcpServers);
+    const skillSlugs = normalizeStringArray(skillPolicy.skillSlugs);
+    const mcpServers = mcpServerSlugs
+      .map((slug) => {
+        const row = mcpRowsBySlug.get(slug);
+        const runtimeConfig = mcpConfigByName.get(slug);
+        if (!row || !runtimeConfig) return null;
+        const availableTools = normalizeMcpToolNames(
+          runtimeConfig.availableTools ?? row.tools,
+        );
+        const allowedTools =
+          runtimeConfig.tools && runtimeConfig.tools.length > 0
+            ? normalizeStringArray(runtimeConfig.tools)
+            : availableTools;
+        return {
+          id: row.id,
+          slug: row.slug,
+          name: row.name,
+          availableTools,
+          allowedTools,
+        };
+      })
+      .filter((server): server is AgentProfileRuntimeMcpServer =>
+        Boolean(server),
+      );
+    const mcpToolAllowlist = Object.fromEntries(
+      mcpServers.map((server) => [server.slug, server.allowedTools]),
+    );
+
+    configs.push({
+      id: profile.id,
+      slug: profile.slug,
+      name: profile.name,
+      description: profile.description ?? null,
+      routingGuidance: profile.routing_guidance ?? null,
+      instructions: profile.instructions,
+      modelId: profile.model_id,
+      builtInKey: profile.built_in_key ?? null,
+      enabled: true,
+      availability: {
+        scope: assignedSpaceIds.length > 0 ? "space_restricted" : "global",
+        spaceIds: assignedSpaceIds,
+      },
+      builtInTools,
+      mcpServers,
+      mcpToolAllowlist,
+      skillSlugs,
+      executionControls: {
+        foreground: true,
+        clarify: executionControls.clarify === true,
+        maxSubagentDepth: 0,
+        ...optionalPositiveInt(
+          "maxRuntimeMs",
+          executionControls.maxRuntimeMs ??
+            executionControls.maxRunTimeMs ??
+            executionControls.maxExecutionTimeMs,
+        ),
+        ...optionalPositiveInt("maxTokens", executionControls.maxTokens),
+        ...optionalString("thinking", executionControls.thinking),
+      },
+    });
+  }
+
+  return configs;
+}
+
+function normalizeRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter((item) => item.length > 0),
+    ),
+  ];
+}
+
+function normalizeMcpToolNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value
+        .map((tool) => {
+          if (typeof tool === "string") return tool.trim();
+          if (!tool || typeof tool !== "object" || Array.isArray(tool)) {
+            return "";
+          }
+          const name = (tool as Record<string, unknown>).name;
+          return typeof name === "string" ? name.trim() : "";
+        })
+        .filter((name) => name.length > 0),
+    ),
+  ];
+}
+
+function optionalPositiveInt(
+  key: string,
+  value: unknown,
+): Record<string, number> {
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : NaN;
+  if (!Number.isSafeInteger(numberValue) || numberValue <= 0) return {};
+  return { [key]: numberValue };
+}
+
+function optionalString(key: string, value: unknown): Record<string, string> {
+  if (typeof value !== "string") return {};
+  const trimmed = value.trim();
+  return trimmed ? { [key]: trimmed } : {};
 }
 
 export async function loadWorkspaceSkillConfigs(input: {

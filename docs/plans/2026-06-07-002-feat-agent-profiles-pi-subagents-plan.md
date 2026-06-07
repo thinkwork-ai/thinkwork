@@ -81,7 +81,7 @@ Out of scope:
 - R13-R15, AE4: parent Pi agent delegates to a profile subagent inside the same
   AgentCore thread/turn and receives summary-only handoff.
 - R16-R17, AE5: natural-language delegation and the ThinkWork `/agent <profile>
-  <task>` alias invoke an available profile and fail clearly when unavailable,
+<task>` alias invoke an available profile and fail clearly when unavailable,
   disabled, or unknown.
 - R18-R22, AE4-AE6: Activity shows nested profile steps; Traces preserve
   profile lanes; raw tool/MCP calls remain inspectable as child details.
@@ -90,8 +90,8 @@ Out of scope:
 
 ## Current-State Findings
 
-- `apps/web` is now the tracked settings app. `apps/admin` and `apps/spaces`
-  are stale ignored leftovers and should not be targeted.
+- `apps/web` is the tracked settings app. Historical `apps/admin` and
+  `apps/spaces` paths are obsolete and must not be targeted for this work.
 - `apps/web/src/components/settings/SettingsGeneral.tsx` still contains
   `AgentConfigSection`. That component is the source to move to the new Agents
   page.
@@ -183,10 +183,12 @@ availability.
 
 ### Pi Profile Adapter Contract
 
-ThinkWork remains the source of truth for profile configuration. The managed
-runtime may materialize generated Pi custom-agent files/frontmatter or use a
-structured provider, but user/project-discovered agent files must not override
-database policy.
+ThinkWork workspace files remain the source of truth for profile configuration.
+Settings -> Agents is a hybrid editor over those files: the normal form edits
+structured frontmatter/managed sections, and advanced users can open the same
+file in the workspace CodeMirror editor. Database rows may exist as indexed
+projections for fast listing, filtering, and runtime resolution, but they must
+be derived from workspace files rather than becoming the authored source.
 
 The runtime adapter must prove and document this mapping before schema/UI work
 locks in:
@@ -207,9 +209,12 @@ locks in:
 - cost budget -> ThinkWork-side policy and telemetry in v1, not assumed to be
   Pi-enforced until proven.
 
-Generated profile materialization, if used, should live in an isolated runtime
-directory such as `.thinkwork/generated-pi-agents` or `.pi/agents` inside the
-container workspace. The adapter must reject unrecognized frontmatter fields,
+Authored Agent Profile files should live in the Agent workspace tree, for
+example `Agent/agents/<profile-slug>.md` in the consolidated editor view
+(`agents/<profile-slug>.md` relative to the Agent source). The runtime adapter
+may also materialize generated Pi files in an isolated runtime directory such as
+`.thinkwork/generated-pi-agents` or `.pi/agents` inside the container
+workspace. The adapter/indexer must reject unrecognized frontmatter fields,
 unapproved models/fallbacks, unapproved tools/extensions, unsafe output paths,
 and prompt-supplied attempts to override model/tools/skills.
 
@@ -369,6 +374,12 @@ Settings -> Agents has two sections:
 
 1. Default Agent
    - Move the existing runtime/default model settings from General.
+   - Add a Capabilities section for the parent Agent's default tools, MCP
+     servers, and skills. These controls edit the Agent workspace source files,
+     not tenant-agent DB rows directly, so the parent capability envelope is
+     visible in the same files the runtime reads.
+   - Provide an advanced editor affordance that opens the underlying Agent
+     workspace file in the Settings -> Workspace CodeMirror editor.
 2. Agent Profiles
    - list ThinkWork built-in profiles Research, Coding, Analyst, and custom
      profiles
@@ -378,7 +389,10 @@ Settings -> Agents has two sections:
      concise capability summary
    - advanced controls for routing guidance, instructions, capabilities,
      execution controls, and Space availability
-   - an "open workspace/editor" path for richer profile instructions/context
+   - every profile has a corresponding workspace markdown file with frontmatter
+     for structured fields and markdown body for richer instructions/context
+   - an "open workspace/editor" path for richer profile instructions/context;
+     the form and editor must round-trip the same file
 
 ThinkWork built-in profile mapping:
 
@@ -447,12 +461,14 @@ Test scenarios:
   resource-limit-exceeded outcomes.
 - Raw credentials and tool secrets do not appear in extracted telemetry.
 
-### U1: Agent Profile Schema, Seeds, And GraphQL
+### U1: Agent Profile Workspace Files, Projection, And GraphQL
 
 Files:
 
+- Add Agent Profile workspace file parsing/serialization helpers
 - Modify `packages/database-pg/src/schema/agents.ts` or add
-  `packages/database-pg/src/schema/agent-profiles.ts`
+  `packages/database-pg/src/schema/agent-profiles.ts` only for indexed
+  projections of authored workspace files
 - Modify `packages/database-pg/src/schema/index.ts`
 - Add Drizzle migration under `packages/database-pg/drizzle/`
 - Modify `packages/database-pg/graphql/types/agents.graphql` or add
@@ -468,26 +484,34 @@ Files:
 
 Approach:
 
-- Add profile tables and the Space assignment table.
-- Seed ThinkWork built-in Research, Coding, and Analyst profiles for each tenant
-  during bootstrap or first resolver access, matching existing tenant-agent
-  bootstrap conventions.
+- Define the Agent Profile file format. V1 uses markdown files under the Agent
+  workspace, such as `agents/research.md`, with YAML-style frontmatter for
+  structured fields (name, model, enabled, Space availability, tools, MCP
+  servers, skills, execution controls) and the markdown body for instructions.
+- Add projection tables only as derived/indexed state for fast listing,
+  filtering, and runtime resolution.
+- Seed ThinkWork built-in Research, Coding, and Analyst profile files for each
+  tenant during bootstrap or first resolver access, matching existing
+  tenant-agent workspace bootstrap conventions.
 - Add GraphQL types for `AgentProfile`, `AgentProfileSpaceAssignment`,
   `AgentProfileToolPolicy`, and `AgentProfileExecutionControls`.
 - Add queries for listing profiles, fetching one profile, and listing editor
   source data: model catalog, Spaces, skills, built-in tools, MCP servers.
-- Add mutations to create, update, enable/disable, delete custom profiles, and
-  update built-in profile settings without losing the built-in identity.
+- Add mutations or workspace-file operations to create, update, enable/disable,
+  delete custom profiles, and update built-in profile settings without losing
+  the built-in identity. The write path must write the profile workspace file
+  first and then refresh any derived projection.
 - Enforce tenant scoping and operator-only mutations.
 
 Test scenarios:
 
 - Listing profiles returns Research, Coding, and Analyst for a tenant with no
   existing rows.
-- Creating a custom profile persists model, instructions, tool policy, skill
-  policy, execution controls, and Space assignments.
-- Updating a built-in profile can change model/status/policies but cannot change
-  its built-in key into a custom profile.
+- Creating a custom profile writes the workspace markdown file and refreshes the
+  indexed projection for model, instructions, tool policy, skill policy,
+  execution controls, and Space assignments.
+- Updating a built-in profile can change model/status/policies in the
+  frontmatter but cannot change its built-in key into a custom profile.
 - A profile with no Space assignments is marked globally available.
 - A profile with assigned Spaces is only available for those Space ids.
 - Non-operators cannot mutate profile configuration.
@@ -518,6 +542,15 @@ Approach:
   summary, and execution limits.
 - Make profile capability selectors reuse existing catalog data instead of
   duplicating management surfaces.
+- Make the Default Agent capabilities section use the same selector pattern for
+  parent default tools, MCP servers, and skills.
+- Save structured profile/default-capability edits through the workspace-file
+  API so they update the underlying Agent workspace files. Do not write profile
+  or capability policy directly to tenant-agent DB rows from the UI.
+- Add an advanced CodeMirror/editor affordance that opens the same underlying
+  Agent workspace file used by the form. For profiles, this is the profile
+  markdown file; for parent capabilities, this is the Agent map/capabilities
+  file.
 - Support built-in profiles as editable but not destructively removable; custom
   profiles can be deleted or disabled per product conventions.
 - Add an "open workspace/editor" affordance for richer instructions/context, but
@@ -530,7 +563,10 @@ Test scenarios:
 - Settings -> Agents renders Default Agent and Agent Profiles sections.
 - Built-in profiles appear with status, model, and capability summaries.
 - Editing profile model, routing guidance, execution controls, and Space
-  assignments calls the correct mutation.
+  assignments writes the profile workspace file and refreshes the structured
+  projection.
+- Editing parent default tools, MCP servers, and skills writes the Agent
+  workspace source file and is visible through the advanced editor path.
 - Capability summaries distinguish default tools, explicit built-in tools, MCP
   servers, and skills.
 
@@ -878,17 +914,21 @@ Manual/browser proof for the demo:
   provider as the safer production materialization path.
 - Which execution controls are enforceable immediately by Pi and which must be
   displayed as disabled/future until runtime support exists?
-- Whether profile instructions should be stored entirely in the database for v1
-  or synchronized to workspace files for the editor path. The structured
-  settings record remains the source of truth either way.
-- Whether profile skills/MCP/tool access should be normalized into join tables
-  or stored as JSON policies. The plan permits either as long as GraphQL and
-  runtime config expose the same behavior.
+- The exact section/file names for parent Agent capability policy, as long as
+  the source is authored in the Agent workspace and visible through Settings ->
+  Workspace.
+- Whether derived profile projections use normalized join tables or JSON
+  policies. The plan permits either as long as they are derived from workspace
+  files and GraphQL/runtime config expose the same behavior.
 
 ## Done Criteria
 
 - Settings -> Agents exists in `apps/web` and owns default Agent configuration.
+- Default Agent capabilities for parent tools, MCP servers, and skills are
+  editable in Settings -> Agents and persist to Agent workspace files.
 - Research, Coding, and Analyst profiles are present and configurable.
+- Profile forms and the advanced CodeMirror workspace editor round-trip the same
+  profile markdown files.
 - Profile Space availability works for global and restricted profiles.
 - Parent auto-delegation and `/agent <profile> <task>` execute profiles as Pi
   subagents inside the existing AgentCore turn.

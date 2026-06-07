@@ -40,6 +40,7 @@ const runtimeConfig: AgentRuntimeConfig = {
   },
   knowledgeBasesConfig: undefined,
   mcpConfigs: [],
+  agentProfilesConfig: [],
 };
 
 describe("direct AgentCore eval payload", () => {
