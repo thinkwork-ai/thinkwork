@@ -100,7 +100,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client jq
 
       - name: Run Computer thread streaming smoke
-        run: bash scripts/smoke-spaces.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
+        run: bash scripts/smoke-web.sh --stage ${{ env.STAGE }} --region ${{ env.AWS_REGION }}
 
   # ── Compliance Anchor smoke ─────────────────────────────────────
   # Invokes both the anchor Lambda and the watchdog Lambda, asserting
