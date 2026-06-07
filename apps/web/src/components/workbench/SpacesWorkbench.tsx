@@ -138,11 +138,13 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     });
   // Tenant's configured default model (Settings > Agents > Default model). New
   // threads fall back to this instead of the first approved model in the list.
-  const [{ data: tenantDetailData, fetching: tenantDetailFetching }] = useQuery({
-    query: SettingsTenantDetailQuery,
-    variables: { id: tenantId ?? "" },
-    pause: !tenantId,
-  });
+  const [{ data: tenantDetailData, fetching: tenantDetailFetching }] = useQuery(
+    {
+      query: SettingsTenantDetailQuery,
+      variables: { id: tenantId ?? "" },
+      pause: !tenantId,
+    },
+  );
   const tenantDefaultModelId =
     tenantDetailData?.tenant?.settings?.defaultModel ?? null;
   // Tenant skill catalog for the `/skill` force-pin popup. No agent context yet

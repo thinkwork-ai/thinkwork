@@ -82,7 +82,9 @@ describe("visibleSettingsNavItems", () => {
   it("no longer lists a standalone Knowledge Graph nav entry", () => {
     // The Knowledge Graph explorer is now a tab of the Memory page; Cognee's
     // config lives at Applications > Cognee.
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(false);
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(
+      false,
+    );
     expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Knowledge Graph")).toBe(
       false,
     );
@@ -92,7 +94,9 @@ describe("visibleSettingsNavItems", () => {
     // CRM is reached by drilling in from Applications; Knowledge Bases is a tab
     // of the Memory page.
     expect(SETTINGS_NAV_ITEMS.some((i) => i.to === CRM)).toBe(false);
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_BASES)).toBe(false);
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_BASES)).toBe(
+      false,
+    );
   });
 
   it("collapses the memory family to a single Memory entry", () => {
@@ -111,9 +115,9 @@ describe("visibleSettingsNavItems", () => {
     const item = SETTINGS_NAV_ITEMS.find((i) => i.to === MANAGED_APPLICATIONS);
     expect(item).toBeDefined();
     expect(item?.label).toBe("Applications");
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Managed Applications")).toBe(
-      false,
-    );
+    expect(
+      SETTINGS_NAV_ITEMS.some((i) => i.label === "Managed Applications"),
+    ).toBe(false);
     // Breadcrumb root derives from the renamed nav label.
     expect(settingsCrumbForPath(MANAGED_APPLICATIONS)).toEqual([
       { label: "Applications" },

@@ -3,7 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(
-  resolve(process.cwd(), "src/components/settings/SettingsCogneeApplication.tsx"),
+  resolve(
+    process.cwd(),
+    "src/components/settings/SettingsCogneeApplication.tsx",
+  ),
   "utf8",
 );
 const routeSource = readFileSync(

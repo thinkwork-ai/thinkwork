@@ -131,7 +131,9 @@ export function ManagedApplicationsPage() {
             aria-label="Refresh"
             title="Refresh"
           >
-            <RefreshCw className={`size-4${refreshing ? " animate-spin" : ""}`} />
+            <RefreshCw
+              className={`size-4${refreshing ? " animate-spin" : ""}`}
+            />
           </Button>
         }
       />
