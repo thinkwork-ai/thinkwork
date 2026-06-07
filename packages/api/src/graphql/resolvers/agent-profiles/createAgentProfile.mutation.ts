@@ -1,5 +1,9 @@
 import type { GraphQLContext } from "../../context.js";
 import { agentProfiles, db } from "../../utils.js";
+import {
+  serializeAgentProfileFile,
+  writeAgentProfileFileForTenant,
+} from "../../../lib/agent-profile-workspace-files.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   assertAvailableModel,
@@ -77,6 +81,24 @@ export async function createAgentProfile(
     tenantId: args.tenantId,
     profileId: row.id,
     spaceIds,
+  });
+
+  await writeAgentProfileFileForTenant({
+    tenantId: args.tenantId,
+    slug,
+    content: serializeAgentProfileFile({
+      slug,
+      name: input.name,
+      description: input.description,
+      routingGuidance: input.routingGuidance,
+      instructions: input.instructions,
+      modelId: input.modelId,
+      enabled: input.enabled ?? true,
+      toolPolicy: parseJsonInput(input.toolPolicy) ?? {},
+      skillPolicy: parseJsonInput(input.skillPolicy) ?? {},
+      executionControls: parseJsonInput(input.executionControls) ?? {},
+      spaceIds,
+    }),
   });
 
   return toAgentProfileGraphql(row);

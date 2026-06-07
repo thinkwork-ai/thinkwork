@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, FileCode, FolderOpen, Plus, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
@@ -332,6 +332,17 @@ export function SettingsAgentProfileDetail() {
             <Badge variant="outline">custom</Badge>
           )
         }
+        actions={
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link
+              to="/settings/local-workspace"
+              search={{ file: agentProfileWorkspacePath(profile) }}
+            >
+              <FileCode className="mr-2 h-4 w-4" />
+              Advanced editor
+            </Link>
+          </Button>
+        }
       />
       <AgentProfileEditor
         key={profile.id}
@@ -393,7 +404,17 @@ function AgentConfigSection() {
           <span className="text-sm text-muted-foreground">Saving…</span>
         ) : errorMsg ? (
           <span className="text-sm text-destructive">{errorMsg}</span>
-        ) : undefined
+        ) : (
+          <Button asChild type="button" variant="ghost" size="sm">
+            <Link
+              to="/settings/local-workspace"
+              search={{ file: "Agent/AGENTS.md" }}
+            >
+              <FileCode className="mr-2 h-4 w-4" />
+              Edit AGENTS.md
+            </Link>
+          </Button>
+        )
       }
     >
       <SettingsRow
@@ -456,6 +477,10 @@ function AgentConfigSection() {
       </SettingsRow>
     </SettingsSection>
   );
+}
+
+function agentProfileWorkspacePath(profile: AgentProfileRow): string {
+  return `Agent/agents/${profile.slug}.md`;
 }
 
 function ProfileListItem({
@@ -817,19 +842,22 @@ function ChipMultiSelect({
   placeholder: string;
 }) {
   return (
-    <MultiSelect
-      options={options}
-      defaultValue={values}
-      onValueChange={onChange}
-      placeholder={placeholder}
-      maxCount={2}
-      searchable
-      hideSelectAll
-      singleLine
-      deduplicateOptions
-      className="w-80 max-w-[min(20rem,70vw)] justify-between bg-background"
-      popoverClassName="w-80 max-w-[85vw]"
-    />
+    <div className="w-[min(42rem,60vw)] min-w-[20rem]">
+      <MultiSelect
+        options={options}
+        defaultValue={values}
+        onValueChange={onChange}
+        placeholder={placeholder}
+        maxCount={3}
+        minWidth="0px"
+        maxWidth="42rem"
+        searchable
+        hideSelectAll
+        deduplicateOptions
+        className="w-full justify-between bg-background"
+        popoverClassName="w-[min(42rem,85vw)]"
+      />
+    </div>
   );
 }
 

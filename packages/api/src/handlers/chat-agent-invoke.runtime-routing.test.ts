@@ -176,6 +176,7 @@ beforeEach(() => {
     skillsConfig: [],
     knowledgeBasesConfig: undefined,
     mcpConfigs: [],
+    agentProfilesConfig: [],
   });
 });
 
@@ -616,6 +617,7 @@ describe("chat-agent-invoke runtime routing", () => {
       ],
       knowledgeBasesConfig: undefined,
       mcpConfigs: [],
+      agentProfilesConfig: [],
     });
     mocks.lambdaSend
       .mockResolvedValueOnce({

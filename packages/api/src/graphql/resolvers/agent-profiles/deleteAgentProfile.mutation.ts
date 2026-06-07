@@ -1,5 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { agentProfiles, and, db, eq } from "../../utils.js";
+import { deleteAgentProfileFileForTenant } from "../../../lib/agent-profile-workspace-files.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   badInput,
@@ -32,5 +33,9 @@ export async function deleteAgentProfile(
         eq(agentProfiles.id, args.id),
       ),
     );
+  await deleteAgentProfileFileForTenant({
+    tenantId: args.tenantId,
+    slug: String(existing.slug),
+  });
   return true;
 }

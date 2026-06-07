@@ -1271,6 +1271,10 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       model: agentModel,
       model_routing_policy: modelRoutingPolicy,
       approved_model_ids: approvedModelIds,
+      agent_profiles:
+        runtimeConfig.agentProfilesConfig.length > 0
+          ? runtimeConfig.agentProfilesConfig
+          : undefined,
       budget_monthly_cents: runtimeConfig.budgetMonthlyCents,
       budget_paused: runtimeConfig.budgetPaused,
       skills:

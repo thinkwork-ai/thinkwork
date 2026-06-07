@@ -88,6 +88,12 @@ describe("agents-runtime-config handler", () => {
       tenantId: GOOD_TENANT,
       agentId: GOOD_AGENT,
       agentName: "Ada",
+      agentProfilesConfig: [
+        {
+          slug: "research",
+          modelId: "us.anthropic.claude-haiku-4-5",
+        },
+      ],
     });
     const res = await handler(
       makeEvent({
@@ -101,6 +107,12 @@ describe("agents-runtime-config handler", () => {
       tenantId: GOOD_TENANT,
       agentId: GOOD_AGENT,
       agentName: "Ada",
+      agentProfilesConfig: [
+        {
+          slug: "research",
+          modelId: "us.anthropic.claude-haiku-4-5",
+        },
+      ],
     });
     expect(mockResolve).toHaveBeenCalledTimes(1);
     expect(mockResolve).toHaveBeenCalledWith(

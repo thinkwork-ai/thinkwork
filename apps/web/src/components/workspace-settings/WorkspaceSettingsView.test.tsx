@@ -86,6 +86,15 @@ describe("WorkspaceSettingsView", () => {
     expect(props.targetKey).toContain("s-fin");
   });
 
+  it("can open a requested workspace file for structured settings deep links", () => {
+    useConsolidatedSources.mockReturnValue(resolved);
+    render(
+      <WorkspaceSettingsView defaultOpenFile="Agent/agents/research.md" />,
+    );
+    const props = editorSpy.mock.calls[0][0];
+    expect(props.defaultOpenFile).toBe("Agent/agents/research.md");
+  });
+
   it("mounts the editor read-only for a non-admin", () => {
     useConsolidatedSources.mockReturnValue({ ...resolved, isAdmin: false });
     render(<WorkspaceSettingsView />);

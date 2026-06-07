@@ -113,6 +113,11 @@ import {
   replaceAgentsMdIdentityField,
 } from "./src/lib/agents-md-persona-surgery.js";
 import {
+  deleteAgentProfileProjectionForFile,
+  isAgentProfileWorkspacePath,
+  upsertAgentProfileProjectionFromFile,
+} from "./src/lib/agent-profile-workspace-files.js";
+import {
   isProtectedOrchestrationWritePath,
   isSpaceCapabilityWritePath,
   isVisibleUserContextPath,
@@ -1027,6 +1032,7 @@ const GOVERNANCE_FILE_BASENAMES: ReadonlySet<string> = new Set([
 function isGovernanceFilePath(cleanPath: string): boolean {
   // Top-level governance files: exact basename match (no nesting).
   if (GOVERNANCE_FILE_BASENAMES.has(cleanPath)) return true;
+  if (isAgentProfileWorkspacePath(cleanPath)) return true;
   // SKILL.md markers anywhere under skills/<slug>/ are also
   // governance-tier — they change agent capability.
   if (isSkillMarkerPath(cleanPath)) return true;
@@ -1273,6 +1279,22 @@ async function handlePut(
 
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
+    if (isAgentProfileWorkspacePath(cleanPath)) {
+      try {
+        await upsertAgentProfileProjectionFromFile({
+          tenantId,
+          path: cleanPath,
+          content,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return json(400, {
+          ok: false,
+          error: `Agent Profile file saved but projection refresh failed: ${message}`,
+        });
+      }
+    }
+
     if (isSkillMarkerPath(cleanPath)) {
       const derive = await syncDerivedAgentSkills(
         target,
@@ -1506,6 +1528,9 @@ async function handleDelete(
   let indexWarning: string | undefined;
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+    if (isAgentProfileWorkspacePath(cleanPath)) {
+      await deleteAgentProfileProjectionForFile({ tenantId, path: cleanPath });
+    }
     if (isSkillMarkerPath(cleanPath)) {
       const derive = await syncDerivedAgentSkills(
         target,
