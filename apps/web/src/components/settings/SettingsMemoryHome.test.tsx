@@ -8,6 +8,13 @@ const memoryRoute = read("src/routes/_authed/settings.memory.tsx");
 const wikiRoute = read("src/routes/_authed/settings.wiki.tsx");
 const kbRoute = read("src/routes/_authed/settings.knowledge-bases.index.tsx");
 const kgRoute = read("src/routes/_authed/settings.knowledge-graph.tsx");
+const memoryWikiRoute = read("src/routes/_authed/settings.memory.wiki.tsx");
+const memoryKbRoute = read(
+  "src/routes/_authed/settings.memory.knowledge-bases.tsx",
+);
+const memoryKgRoute = read(
+  "src/routes/_authed/settings.memory.knowledge-graph.tsx",
+);
 
 describe("SettingsMemoryHome", () => {
   it("owns a single stable Memory breadcrumb", () => {
@@ -15,28 +22,44 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain('breadcrumbs: [{ label: "Memory" }]');
   });
 
-  it("renders Memory, Knowledge Bases, and Wiki as embedded tabs", () => {
-    expect(source).toContain('value="memory"');
-    expect(source).toContain('value="knowledge-bases"');
-    expect(source).toContain('value="wiki"');
+  it("publishes the Memory tabs into the page header", () => {
+    expect(source).toContain("tabs: [");
+    expect(source).toContain('{ to: MEMORY, label: "Memory" }');
+    expect(source).toContain(
+      '{ to: KNOWLEDGE_BASES, label: "Knowledge Bases" }',
+    );
+    expect(source).toContain('{ to: WIKI, label: "Wiki" }');
+  });
+
+  it("renders the active facet selected by the current route", () => {
+    expect(source).toContain("tabForPath");
     expect(source).toContain("<SettingsMemory embedded");
     expect(source).toContain("<SettingsKnowledgeBases embedded");
     expect(source).toContain("<SettingsWiki embedded");
+    // No in-body tab strip — the tabs live in the header now.
+    expect(source).not.toContain("TabsList");
   });
 
   it("adds a Knowledge Graph tab gated on Cognee being enabled", () => {
-    expect(source).toContain('value="knowledge-graph"');
+    expect(source).toContain("KNOWLEDGE_GRAPH, label:");
     expect(source).toContain("<KnowledgeGraphTab");
     expect(source).toContain("cogneeEnabled");
   });
 
-  it("mounts the combined page at /settings/memory", () => {
+  it("mounts the combined page across the Memory sub-routes", () => {
     expect(memoryRoute).toContain("SettingsMemoryHome");
+    expect(memoryWikiRoute).toContain("SettingsMemoryHome");
+    expect(memoryKbRoute).toContain("SettingsMemoryHome");
+    expect(memoryKgRoute).toContain("SettingsMemoryHome");
   });
 
-  it("redirects retired memory routes into the combined page", () => {
-    expect(wikiRoute).toContain('redirect({ to: "/settings/memory" })');
-    expect(kbRoute).toContain('redirect({ to: "/settings/memory" })');
-    expect(kgRoute).toContain('redirect({ to: "/settings/memory" })');
+  it("redirects retired memory routes into the matching tab", () => {
+    expect(wikiRoute).toContain('redirect({ to: "/settings/memory/wiki" })');
+    expect(kbRoute).toContain(
+      'redirect({ to: "/settings/memory/knowledge-bases" })',
+    );
+    expect(kgRoute).toContain(
+      'redirect({ to: "/settings/memory/knowledge-graph" })',
+    );
   });
 });

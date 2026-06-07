@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useLocation } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { SettingsDeploymentStatusQuery } from "@/lib/settings-queries";
 import { SettingsMemory } from "@/components/settings/SettingsMemory";
@@ -8,18 +7,30 @@ import { SettingsKnowledgeBases } from "@/components/settings/SettingsKnowledgeB
 import { SettingsWiki } from "@/components/settings/SettingsWiki";
 import { KnowledgeGraphTab } from "@/components/settings/knowledge-graph/KnowledgeGraphTab";
 
+const MEMORY = "/settings/memory";
+const KNOWLEDGE_BASES = "/settings/memory/knowledge-bases";
+const WIKI = "/settings/memory/wiki";
+const KNOWLEDGE_GRAPH = "/settings/memory/knowledge-graph";
+
 type MemoryTab = "memory" | "knowledge-bases" | "wiki" | "knowledge-graph";
 
+function tabForPath(pathname: string): MemoryTab {
+  if (pathname.startsWith(KNOWLEDGE_BASES)) return "knowledge-bases";
+  if (pathname.startsWith(WIKI)) return "wiki";
+  if (pathname.startsWith(KNOWLEDGE_GRAPH)) return "knowledge-graph";
+  return "memory";
+}
+
 /**
- * The unified Memory settings page. Memory, Knowledge Bases, and Wiki (and, in
- * a follow-up unit, the Knowledge Graph explorer) are rendered as tabs of a
- * single page. This container owns the page header ("Memory"); each embedded
- * facet suppresses its own header so the breadcrumb stays stable across tab
- * switches. Tab selection is local state — old routes redirect here.
+ * The unified Memory settings page. Memory, Knowledge Bases, Wiki, and (when
+ * Cognee is enabled) the Knowledge Graph explorer are sibling tabs rendered in
+ * the AppTopBar — driven by the route so each tab is deep-linkable. This page
+ * owns the page header and renders the active facet's body; each embedded facet
+ * suppresses its own header so the "Memory" breadcrumb stays stable.
  */
 export function SettingsMemoryHome() {
-  const [tab, setTab] = useState<MemoryTab>("memory");
-  usePageHeaderActions({ title: "Memory", breadcrumbs: [{ label: "Memory" }] });
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const activeTab = tabForPath(pathname);
 
   // The Knowledge Graph tab only applies when Cognee is running for this
   // deployment — mirrors the old standalone route's `managedAppKey` gating.
@@ -31,54 +42,27 @@ export function SettingsMemoryHome() {
     deployment?.cogneeEnabled ??
     false;
 
+  usePageHeaderActions({
+    title: "Memory",
+    breadcrumbs: [{ label: "Memory" }],
+    tabs: [
+      { to: MEMORY, label: "Memory" },
+      { to: KNOWLEDGE_BASES, label: "Knowledge Bases" },
+      { to: WIKI, label: "Wiki" },
+      ...(cogneeEnabled
+        ? [{ to: KNOWLEDGE_GRAPH, label: "Knowledge Graph" }]
+        : []),
+    ],
+  });
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      <Tabs
-        value={tab}
-        onValueChange={(value) => setTab(value as MemoryTab)}
-        className="flex h-full min-h-0 flex-col"
-      >
-        <TabsList
-          variant="line"
-          className="w-full shrink-0 justify-start border-b px-6 pt-4"
-        >
-          <TabsTrigger value="memory" className="flex-none px-3">
-            Memory
-          </TabsTrigger>
-          <TabsTrigger value="knowledge-bases" className="flex-none px-3">
-            Knowledge Bases
-          </TabsTrigger>
-          <TabsTrigger value="wiki" className="flex-none px-3">
-            Wiki
-          </TabsTrigger>
-          {cogneeEnabled ? (
-            <TabsTrigger value="knowledge-graph" className="flex-none px-3">
-              Knowledge Graph
-            </TabsTrigger>
-          ) : null}
-        </TabsList>
-
-        <TabsContent value="memory" className="min-h-0 flex-1 overflow-hidden">
-          <SettingsMemory embedded />
-        </TabsContent>
-        <TabsContent
-          value="knowledge-bases"
-          className="min-h-0 flex-1 overflow-hidden"
-        >
-          <SettingsKnowledgeBases embedded />
-        </TabsContent>
-        <TabsContent value="wiki" className="min-h-0 flex-1 overflow-hidden">
-          <SettingsWiki embedded />
-        </TabsContent>
-        {cogneeEnabled ? (
-          <TabsContent
-            value="knowledge-graph"
-            className="min-h-0 flex-1 overflow-hidden"
-          >
-            <KnowledgeGraphTab />
-          </TabsContent>
-        ) : null}
-      </Tabs>
+      {activeTab === "memory" ? <SettingsMemory embedded /> : null}
+      {activeTab === "knowledge-bases" ? (
+        <SettingsKnowledgeBases embedded />
+      ) : null}
+      {activeTab === "wiki" ? <SettingsWiki embedded /> : null}
+      {activeTab === "knowledge-graph" ? <KnowledgeGraphTab /> : null}
     </div>
   );
 }
