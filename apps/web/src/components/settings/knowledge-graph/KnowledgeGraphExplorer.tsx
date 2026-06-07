@@ -377,6 +377,15 @@ export function KnowledgeGraphExplorer({
             </ToggleGroup>
           </>
         )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="ml-auto"
+          onClick={() => onThreadSheetOpenChange(!threadSheetOpen)}
+        >
+          Threads
+        </Button>
       </div>
 
       <div className="min-h-0 flex-1">

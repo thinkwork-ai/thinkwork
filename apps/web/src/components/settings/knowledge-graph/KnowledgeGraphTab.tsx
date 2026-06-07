@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
+import { ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { KnowledgeGraphExplorer } from "./KnowledgeGraphExplorer";
 
@@ -21,31 +21,21 @@ export function KnowledgeGraphTab() {
         title="Ontology"
         description="Inspect Cognee entities, relationships, diagnostics, and message evidence."
         actions={
-          <div className="flex items-center gap-2">
-            <ToggleGroup
-              type="single"
-              value={explorerMode}
-              onValueChange={(value) =>
-                value && setExplorerMode(value as ExplorerMode)
-              }
-              variant="outline"
-            >
-              <ToggleGroupItem value="data" className="px-3 text-xs">
-                Data
-              </ToggleGroupItem>
-              <ToggleGroupItem value="definitions" className="px-3 text-xs">
-                Definitions
-              </ToggleGroupItem>
-            </ToggleGroup>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setThreadSheetOpen((value) => !value)}
-            >
-              Threads
-            </Button>
-          </div>
+          <ToggleGroup
+            type="single"
+            value={explorerMode}
+            onValueChange={(value) =>
+              value && setExplorerMode(value as ExplorerMode)
+            }
+            variant="outline"
+          >
+            <ToggleGroupItem value="data" className="px-3 text-xs">
+              Data
+            </ToggleGroupItem>
+            <ToggleGroupItem value="definitions" className="px-3 text-xs">
+              Definitions
+            </ToggleGroupItem>
+          </ToggleGroup>
         }
       />
       <div className="min-h-0 flex-1">
