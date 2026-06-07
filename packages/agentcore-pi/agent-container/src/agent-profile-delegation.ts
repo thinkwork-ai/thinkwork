@@ -276,12 +276,14 @@ function childResultFromRunLoop(
             "cached_read_tokens",
             "cachedReadTokens",
             "cacheReadInputTokens",
+            "cacheRead",
           ),
           cachedWriteTokens: numberField(
             usage,
             "cached_write_tokens",
             "cachedWriteTokens",
             "cacheWriteInputTokens",
+            "cacheWrite",
           ),
           totalTokens: numberField(usage, "total_tokens", "totalTokens"),
         }

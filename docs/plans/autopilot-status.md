@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-07-002-feat-agent-profiles-pi-subagents-plan.md`.
 - Target branch: `main`.
-- Current unit: U6 Activity Nested Profile Step And Multi-Lane Trace UI.
-- Current branch: `codex/agent-profiles-u6-activity-ui`.
-- Current worktree: `.Codex/worktrees/agent-profiles-u6`.
+- Current unit: U7 End-To-End Demo Fixtures, Docs, And Rollout Proof.
+- Current branch: `codex/agent-profiles-u7-proof`.
+- Current worktree: `.Codex/worktrees/agent-profiles-u7`.
 - Status: in progress.
 - Notes:
   - Active web work targets `apps/web` / `@thinkwork/web` only.
@@ -236,6 +236,28 @@ status: complete
     callable in this turn, and Playwright is not installed in this workspace,
     so visual validation is currently covered by the focused React render test
     plus local :5174 HTTP smoke.
+  - U6 was squash merged in PR
+    [#2216](https://github.com/thinkwork-ai/thinkwork/pull/2216) as
+    `2ae0df7d`; CI passed (`cla`, `lint`, `test`, `typecheck`, `verify`), the
+    remote branch was deleted, and the local worktree/branch were removed.
+  - Created isolated U7 worktree `.Codex/worktrees/agent-profiles-u7` from
+    `origin/main` at `2ae0df7d`.
+  - Started U7 proof work: superseding the retired `TOOLS.md` model-routing
+    docs, adding the Agent Profiles demo runbook, and adding a Research
+    profile proof fixture with child `web_search` / `web_extract` tool
+    evidence.
+  - U7 local verification passed:
+    - `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/agent-profile-delegation.test.ts agent-container/tests/server.test.ts`
+      -> 63 tests passed.
+    - `pnpm --filter @thinkwork/api exec vitest run src/lib/chat-finalize/process-finalize.test.ts src/graphql/resolvers/observability/threadTraces.query.test.ts`
+      -> 20 tests passed.
+    - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsActivityThreadDetail.test.tsx`
+      -> 4 tests passed.
+    - `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+      `pnpm --filter @thinkwork/api typecheck`, and
+      `pnpm --filter @thinkwork/web typecheck` -> passed.
+    - Direct Prettier formatting over changed files -> passed.
+    - `git diff --check` -> passed.
 
 | Unit                                                    | Branch                                     | PR                                                           | State  | Notes                                                                                             |
 | ------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
@@ -245,7 +267,8 @@ status: complete
 | U3 Resolve Profiles Into AgentCore Runtime Config       | `codex/agent-profiles-u3-runtime-config`   | [#2213](https://github.com/thinkwork-ai/thinkwork/pull/2213) | merged | Squash merged as `17b2b36a`; runtime config now includes file-backed Agent Profile projections.   |
 | U4 Pi Subagent Execution And Slash Invocation           | `codex/agent-profiles-u4-pi-subagents`     | [#2214](https://github.com/thinkwork-ai/thinkwork/pull/2214) | merged | Squash merged as `b5bba6d7`; local worktree/branch removed and remote branch was deleted.         |
 | U5 Finalize, Cost, Activity Events, Trace Metadata      | `codex/agent-profiles-u5-observability`    | [#2215](https://github.com/thinkwork-ai/thinkwork/pull/2215) | merged | Squash merged as `5a985517`; profile run evidence now lands in usage, cost rows, events, traces.  |
-| U6 Activity Nested Profile Step And Multi-Lane Trace UI | `codex/agent-profiles-u6-activity-ui`      | TBD                                                          | active | Rendering Agent Profile runs as nested Activity steps and profile lanes in trace metadata.        |
+| U6 Activity Nested Profile Step And Multi-Lane Trace UI | `codex/agent-profiles-u6-activity-ui`      | [#2216](https://github.com/thinkwork-ai/thinkwork/pull/2216) | merged | Squash merged as `2ae0df7d`; Activity now renders nested profile rows and trace lane metadata.    |
+| U7 End-To-End Demo Fixtures, Docs, And Rollout Proof    | `codex/agent-profiles-u7-proof`            | TBD                                                          | active | Superseding `TOOLS.md` proof docs and recording Agent Profiles demo validation.                   |
 
 ## Model Stacking Tool Routing - 2026-06-06
 
