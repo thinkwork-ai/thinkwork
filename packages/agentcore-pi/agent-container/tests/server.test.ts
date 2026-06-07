@@ -226,16 +226,18 @@ describe("handleInvocation — happy path", () => {
     expect(fetchCalled).toBe(0);
   });
 
-  it("executes /agent profile commands and returns agent_profile_runs evidence", async () => {
+  it("executes requested profile mentions and returns agent_profile_runs evidence", async () => {
     let childModel: unknown;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
-        message: "/agent research Find current sources",
+        message: "#Research Find current sources",
+        requested_agent_profile_slug: "research",
         model: "anthropic/claude-sonnet-4-5",
         approved_model_ids: [
           "anthropic/claude-sonnet-4-5",
           "anthropic/claude-haiku-4-5",
         ],
+        web_search_config: { provider: "exa", apiKey: "exa-key" },
         agent_profiles: [
           {
             id: "profile-research",
@@ -244,16 +246,22 @@ describe("handleInvocation — happy path", () => {
             modelId: "anthropic/claude-haiku-4-5",
             builtInKey: "research",
             instructions: "Research with sources.",
-            builtInTools: ["read"],
+            builtInTools: ["read", "web-search"],
             executionControls: { maxRuntimeMs: 10_000 },
           },
         ],
       }),
       deps: makeDeps({
-        runAgentLoop: async ({ modelId, message, builtinToolNames }) => {
+        runAgentLoop: async ({
+          modelId,
+          message,
+          builtinToolNames,
+          extensionToolNames,
+        }) => {
           childModel = modelId;
           expect(message).toBe("Find current sources");
           expect(builtinToolNames).toEqual(["read"]);
+          expect(extensionToolNames).toEqual(["web_search"]);
           return {
             content: "Research handoff",
             modelId: String(modelId),

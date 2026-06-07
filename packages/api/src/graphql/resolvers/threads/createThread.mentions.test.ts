@@ -26,7 +26,8 @@ describe("createThread opening message mention routing", () => {
     expect(source).toContain("hasOpeningAgentMentions");
     expect(source).toContain("dispatchAgentMentions");
     expect(source).toContain("dispatchDefaultAgentChatTurn");
-    expect(source).toContain("parsedOpeningMentions.length === 0");
+    expect(source).toContain("!hasOpeningAgentMentions");
+    expect(source).toContain("requestedProfileSlug");
   });
 
   it("marks the thread creator read for the opening message", () => {

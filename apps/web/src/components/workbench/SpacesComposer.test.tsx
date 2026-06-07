@@ -8,7 +8,7 @@ import {
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SpacesComposer } from "./SpacesComposer";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { serializeEditor } from "./SkillTokenInput";
@@ -47,6 +47,15 @@ const mentionTargets: MentionTarget[] = [
     targetId: "a1",
     displayName: "Marco",
     role: "agent",
+  },
+  {
+    id: "agent_profile:p1",
+    targetType: "AGENT_PROFILE",
+    targetId: "p1",
+    displayName: "Research",
+    aliases: ["research"],
+    role: "Agent Profile",
+    description: "Searches the web and cites sources.",
   },
 ];
 
@@ -434,6 +443,32 @@ describe("SpacesComposer", () => {
     expect(composerText()).toBe("@Marco ");
   });
 
+  it("opens mention suggestions for a bare @ trigger", () => {
+    render(<ControlledComposer />);
+
+    setComposerText("@");
+
+    const options = screen.getAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      expect.stringContaining("Eric Odom"),
+      expect.stringContaining("Marco"),
+    ]);
+  });
+
+  it("opens Agent Profile suggestions for a bare # trigger", () => {
+    render(<ControlledComposer />);
+
+    setComposerText("#");
+
+    const options = screen.getAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      expect.stringContaining("Research"),
+    ]);
+    expect(options[0]?.textContent).toContain(
+      "Searches the web and cites sources.",
+    );
+  });
+
   it("commits the highlighted mention on Tab", () => {
     render(<ControlledComposer />);
 
@@ -502,15 +537,48 @@ describe("SpacesComposer", () => {
         .getAttribute("aria-pressed"),
     ).toBe("true");
   });
+
+  it("shows Agent Profiles in the mention picker and submits structured profile mentions", async () => {
+    const onSubmit = vi.fn();
+    render(<ControlledComposer onSubmit={onSubmit} />);
+
+    setComposerText("#rese");
+    const option = screen.getByRole("option", { name: /Research/ });
+    expect(option.textContent).toContain("Searches the web and cites sources.");
+    fireEvent.click(option);
+    setComposerText(`${composerText()} Who is the CEO of Stripe?`);
+
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        [],
+        [
+          {
+            targetType: "AGENT_PROFILE",
+            targetId: "p1",
+            displayName: "Research",
+            rawText: "#Research",
+          },
+        ],
+        true,
+        [],
+      );
+    });
+  });
 });
 
-function ControlledComposer() {
+function ControlledComposer({
+  onSubmit = () => {},
+}: {
+  onSubmit?: ComponentProps<typeof SpacesComposer>["onSubmit"];
+}) {
   const [value, setValue] = useState("");
   return (
     <SpacesComposer
       value={value}
       onChange={setValue}
-      onSubmit={() => {}}
+      onSubmit={onSubmit}
       mentionTargets={mentionTargets}
     />
   );

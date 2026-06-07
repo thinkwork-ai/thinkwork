@@ -57,6 +57,26 @@ describe("parseValueToSegments", () => {
     ]);
   });
 
+  it("renders #displayName as an Agent Profile mention pill", () => {
+    const segs = parseValueToSegments("delegate #Research now", catalog, [
+      {
+        displayName: "Research",
+        targetType: "AGENT_PROFILE",
+        rawText: "#Research",
+      },
+    ]);
+    expect(segs).toEqual([
+      { type: "text", text: "delegate " },
+      {
+        type: "mention",
+        displayName: "Research",
+        targetType: "AGENT_PROFILE",
+        trigger: "#",
+      },
+      { type: "text", text: " now" },
+    ]);
+  });
+
   it("interleaves skill and mention pills in order", () => {
     const segs = parseValueToSegments(
       "use /crm-dashboard with @Marco",
@@ -100,6 +120,21 @@ describe("renderSegments + serializeEditor round-trip", () => {
 
   it("serializes a mention pill back to its @name token", () => {
     expect(roundTrip("hi @Brett Odom there")).toBe("hi @Brett Odom there");
+  });
+
+  it("serializes an Agent Profile mention pill back to its #name token", () => {
+    const el = document.createElement("div");
+    renderSegments(
+      el,
+      parseValueToSegments("delegate #Research", catalog, [
+        {
+          displayName: "Research",
+          targetType: "AGENT_PROFILE",
+          rawText: "#Research",
+        },
+      ]),
+    );
+    expect(serializeEditor(el)).toBe("delegate #Research");
   });
 
   it("round-trips mixed skill + mention tokens", () => {

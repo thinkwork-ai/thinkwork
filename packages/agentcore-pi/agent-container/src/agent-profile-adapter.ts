@@ -210,6 +210,24 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+function normalizeToolNameForRuntime(
+  value: string,
+  availableToolNames: readonly string[],
+): string {
+  if (availableToolNames.includes(value)) return value;
+  const underscored = value.replace(/-/g, "_");
+  return availableToolNames.includes(underscored) ? underscored : value;
+}
+
+function normalizeToolNamesForRuntime(
+  values: readonly string[],
+  availableToolNames: readonly string[],
+): string[] {
+  return unique(values).map((value) =>
+    normalizeToolNameForRuntime(value, availableToolNames),
+  );
+}
+
 function assertApprovedModel(
   modelId: string,
   approvedModelIds: readonly string[],
@@ -257,9 +275,20 @@ function compileToolAllowlist(input: {
   policy: AgentProfileToolPolicy | undefined;
   availableToolNames: readonly string[];
 }): string[] {
-  const defaults = unique(input.policy?.defaultTools ?? []);
-  const explicit = unique(input.policy?.builtInTools ?? []);
-  const disabled = new Set(unique(input.policy?.disabledDefaultTools ?? []));
+  const defaults = normalizeToolNamesForRuntime(
+    input.policy?.defaultTools ?? [],
+    input.availableToolNames,
+  );
+  const explicit = normalizeToolNamesForRuntime(
+    input.policy?.builtInTools ?? [],
+    input.availableToolNames,
+  );
+  const disabled = new Set(
+    normalizeToolNamesForRuntime(
+      input.policy?.disabledDefaultTools ?? [],
+      input.availableToolNames,
+    ),
+  );
   const tools = unique([
     ...defaults.filter((tool) => !disabled.has(tool)),
     ...explicit,

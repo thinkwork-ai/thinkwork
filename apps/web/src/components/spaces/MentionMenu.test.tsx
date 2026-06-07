@@ -25,6 +25,15 @@ const targets: MentionTarget[] = [
     displayName: "Alex Finance",
     role: "finance",
   },
+  {
+    id: "agent_profile:p1",
+    targetType: "AGENT_PROFILE",
+    targetId: "p1",
+    displayName: "Research",
+    aliases: ["research"],
+    role: "Agent Profile",
+    description: "Searches the web and cites sources.",
+  },
 ];
 
 describe("MentionMenu", () => {
@@ -134,5 +143,21 @@ describe("MentionMenu", () => {
         isDefaultAgent: true,
       }),
     );
+  });
+
+  it("can scope suggestions to Agent Profiles for the # trigger", () => {
+    expect(
+      filterMentionTargets(targets, "", {
+        targetTypes: ["AGENT_PROFILE"],
+      }).map((target) => target.displayName),
+    ).toEqual(["Research"]);
+  });
+
+  it("renders Agent Profiles with the robot icon and description row", () => {
+    render(<MentionMenu targets={targets} query="research" onSelect={vi.fn()} />);
+
+    const option = screen.getByRole("option", { name: /Research/ });
+    expect(option.textContent).toContain("Searches the web and cites sources.");
+    expect(option.querySelector(".lucide-bot")).toBeTruthy();
   });
 });

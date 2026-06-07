@@ -545,6 +545,7 @@ describe("GraphQL Schema Contract", () => {
         "avatarUrl",
         "role",
         "email",
+        "description",
       ]);
 
       const participant = schema.getType("ThreadParticipant") as any;

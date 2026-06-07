@@ -108,7 +108,7 @@ export const messageMentions = pgTable(
     ),
     check(
       "message_mentions_target_type_allowed",
-      sql`${table.target_type} IN ('user','agent')`,
+      sql`${table.target_type} IN ('user','agent','agent_profile')`,
     ),
   ],
 );

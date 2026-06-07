@@ -18,6 +18,10 @@ import type { SkillOption } from "@/components/spaces/SkillMenu";
 import type { SpaceSummary } from "@/components/spaces/space-types";
 import { isDefaultSpace } from "@/components/spaces/space-utils";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
+import {
+  mergeAgentProfileMentionTargets,
+  type AgentProfileMentionSource,
+} from "@/components/workbench/agent-profile-mention-targets";
 import { useTenant } from "@/context/TenantContext";
 import {
   CreateThreadMutation,
@@ -36,6 +40,7 @@ import {
   writeStoredModelId,
   type ApprovedModelOption,
 } from "@/lib/approved-model-selection";
+import { SettingsAgentProfilesQuery } from "@/lib/settings-queries";
 
 interface CreateThreadResult {
   createThread: { id: string; agentId?: string | null };
@@ -75,7 +80,7 @@ interface ApprovedModelsResult {
 interface NewThreadMentionTargetsData {
   tenantMentionTargets?: Array<{
     id: string;
-    targetType: "USER" | "AGENT";
+    targetType: "USER" | "AGENT" | "AGENT_PROFILE";
     targetId: string;
     displayName: string;
     aliases?: string[] | null;
@@ -83,11 +88,16 @@ interface NewThreadMentionTargetsData {
     avatarUrl?: string | null;
     role?: string | null;
     email?: string | null;
+    description?: string | null;
   }>;
 }
 
 interface SpacesResult {
   spaces?: SpaceSummary[] | null;
+}
+
+interface AgentProfilesMentionData {
+  agentProfiles?: AgentProfileMentionSource[] | null;
 }
 
 interface SpacesWorkbenchProps {
@@ -135,6 +145,15 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       pause: !tenantId,
       requestPolicy: "cache-and-network",
     });
+  const [{ data: agentProfilesData }] = useQuery<
+    AgentProfilesMentionData,
+    { tenantId: string }
+  >({
+    query: SettingsAgentProfilesQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
   // Tenant skill catalog for the `/skill` force-pin popup. No agent context yet
   // on the new-thread surface, so `installed` is unannotated and the picker
   // shows the full catalog; the blocklist guardrail is enforced at dispatch.
@@ -219,8 +238,13 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     [spaces, defaultSpaceId],
   );
   const mentionTargets = useMemo(
-    () => buildNewThreadMentionTargets(mentionTargetData),
-    [mentionTargetData],
+    () =>
+      buildNewThreadMentionTargets(
+        mentionTargetData,
+        agentProfilesData?.agentProfiles,
+        selectedSpaceId,
+      ),
+    [agentProfilesData?.agentProfiles, mentionTargetData, selectedSpaceId],
   );
   const approvedModels = approvedModelData?.myApprovedModelCatalog;
   useEffect(() => {
@@ -313,6 +337,12 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           content: trimmed,
           expectAssistantResponse: agentRequested !== false,
           startedAt: new Date().toISOString(),
+          mentions: mentions.map((mention) => ({
+            targetType: mention.targetType,
+            targetId: mention.targetId,
+            displayName: mention.displayName,
+            rawText: mention.rawText,
+          })),
           attachments:
             files.length > 0
               ? files.map((file) => ({
@@ -502,6 +532,8 @@ function isPrimaryDefaultSpace(space: SpaceSummary) {
 
 function buildNewThreadMentionTargets(
   data: NewThreadMentionTargetsData | undefined,
+  agentProfiles?: AgentProfileMentionSource[] | null,
+  selectedSpaceId?: string | null,
 ): MentionTarget[] {
   const targets = (data?.tenantMentionTargets ?? []).map((target) => ({
     id: target.id,
@@ -513,12 +545,8 @@ function buildNewThreadMentionTargets(
     avatarUrl: target.avatarUrl,
     role: target.role,
     email: target.email,
+    description: target.description,
   }));
 
-  return targets.sort((a, b) => {
-    const typeOrder =
-      a.targetType === b.targetType ? 0 : a.targetType === "USER" ? -1 : 1;
-    if (typeOrder !== 0) return typeOrder;
-    return a.displayName.localeCompare(b.displayName);
-  });
+  return mergeAgentProfileMentionTargets(targets, agentProfiles, selectedSpaceId);
 }

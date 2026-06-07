@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS public.message_mentions (
     REFERENCES public.messages(id)
     ON DELETE CASCADE,
   CONSTRAINT message_mentions_target_type_allowed
-    CHECK (target_type IN ('user', 'agent'))
+    CHECK (target_type IN ('user', 'agent', 'agent_profile'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_message_mentions_target

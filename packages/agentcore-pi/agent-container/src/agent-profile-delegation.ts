@@ -6,6 +6,7 @@ import { Type } from "typebox";
 import {
   BUILTIN_TOOL_NAMES,
   runAgentLoop,
+  type ActivityEmitEvent,
   type AgentProfileRunRecord,
   type RunAgentLoopResult,
   type ToolInvocationRecord,
@@ -45,6 +46,7 @@ export interface ProfileDelegationToolOptions {
   gitSha: string;
   identity: unknown;
   runLoop?: typeof runAgentLoop;
+  emitActivity?: (event: ActivityEmitEvent) => void;
   now?: () => Date;
 }
 
@@ -225,28 +227,102 @@ export function createProfileChildRunner(
     async runProfile(
       request: CompiledAgentProfileRunRequest,
     ): Promise<ProfileChildRunResult> {
+      options.emitActivity?.({
+        eventType: "agent_profile_run_started",
+        message: request.profileName,
+        stream: "step",
+        payload: agentProfileActivityPayload(request, {
+          status: "running",
+          task: request.task,
+        }),
+      });
       const childSurface = childToolSurface({
         request,
         tools: options.tools,
         extensionToolNames: options.extensionToolNames,
       });
-      const result = await runLoop({
-        message: request.task,
-        history: [],
-        systemPrompt: profileSystemPrompt(request),
-        tools: childSurface.tools,
-        extensionFactories: options.extensionFactories,
-        extensionToolNames: childSurface.extensionToolNames,
-        builtinToolNames: childSurface.builtinToolNames,
-        modelId: request.model,
-        threadId: `${options.threadId}:profile:${request.profileRunId}`,
-        gitSha: options.gitSha,
-        identity: options.identity,
-        cwd: options.cwd,
-        agentDir: path.join(options.agentDir, "profiles", request.profileRunId),
-      });
-      return childResultFromRunLoop(result);
+      try {
+        const result = await runLoop(
+          {
+            message: request.task,
+            history: [],
+            systemPrompt: profileSystemPrompt(request),
+            tools: childSurface.tools,
+            extensionFactories: options.extensionFactories,
+            extensionToolNames: childSurface.extensionToolNames,
+            builtinToolNames: childSurface.builtinToolNames,
+            modelId: request.model,
+            threadId: `${options.threadId}:profile:${request.profileRunId}`,
+            gitSha: options.gitSha,
+            identity: options.identity,
+            cwd: options.cwd,
+            agentDir: path.join(
+              options.agentDir,
+              "profiles",
+              request.profileRunId,
+            ),
+          },
+          {
+            emitActivity: profileActivityEmitter(options, request),
+          },
+        );
+        options.emitActivity?.({
+          eventType: "agent_profile_run_completed",
+          message: request.profileName,
+          stream: "step",
+          payload: agentProfileActivityPayload(request, {
+            status: "completed",
+            task: request.task,
+          }),
+        });
+        return childResultFromRunLoop(result);
+      } catch (error) {
+        options.emitActivity?.({
+          eventType: "agent_profile_run_failed",
+          message: request.profileName,
+          stream: "step",
+          payload: agentProfileActivityPayload(request, {
+            status: "failed",
+            task: request.task,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        });
+        throw error;
+      }
     },
+  };
+}
+
+function profileActivityEmitter(
+  options: ProfileDelegationToolOptions,
+  request: CompiledAgentProfileRunRequest,
+) {
+  return (event: ActivityEmitEvent) => {
+    options.emitActivity?.({
+      ...event,
+      message: `${request.profileName}: ${event.message}`,
+      payload: agentProfileActivityPayload(request, {
+        child_event_type: event.eventType,
+        child_message: event.message,
+        ...(event.payload ?? {}),
+      }),
+    });
+  };
+}
+
+function agentProfileActivityPayload(
+  request: CompiledAgentProfileRunRequest,
+  payload: Record<string, unknown>,
+) {
+  return {
+    profile_run_id: request.profileRunId,
+    profile_id: request.profileId,
+    profile_slug: request.profileSlug,
+    profile_name: request.profileName,
+    model: request.model,
+    lane_key: request.telemetry.laneKey,
+    source: request.telemetry.source,
+    ...payload,
   };
 }
 

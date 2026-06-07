@@ -48,6 +48,18 @@ describe("deriveAgentMode", () => {
     ).toBe("single");
   });
 
+  it("agent profile mentions never trigger multi-player", () => {
+    expect(
+      deriveAgentMode({
+        currentUserId: me,
+        threadMessages: [{ role: "USER", senderId: me, senderType: "user" }],
+        draftMentions: [
+          { targetType: "AGENT_PROFILE", targetId: "profile-research" },
+        ],
+      }),
+    ).toBe("single");
+  });
+
   it("the current user mentioning themselves stays single-player", () => {
     expect(
       deriveAgentMode({

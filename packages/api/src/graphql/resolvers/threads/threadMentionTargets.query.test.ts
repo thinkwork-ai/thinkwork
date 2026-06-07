@@ -46,6 +46,7 @@ describe("threadMentionTargets", () => {
         avatarUrl: "https://example.com/a.png",
         role: "coordinator",
         email: null,
+        description: null,
       },
       {
         id: "user:u1",
@@ -57,6 +58,7 @@ describe("threadMentionTargets", () => {
         avatarUrl: undefined,
         role: "finance",
         email: null,
+        description: null,
       },
     ]);
   });
