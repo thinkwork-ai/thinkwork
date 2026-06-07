@@ -11,10 +11,10 @@ status: complete
 - Plan:
   `docs/plans/2026-06-07-002-feat-agent-profiles-pi-subagents-plan.md`.
 - Target branch: `main`.
-- Current unit: U7 End-To-End Demo Fixtures, Docs, And Rollout Proof.
-- Current branch: `codex/agent-profiles-u7-proof`.
-- Current worktree: `.Codex/worktrees/agent-profiles-u7`.
-- Status: in progress.
+- Current unit: complete.
+- Current branch: none.
+- Current worktree: none.
+- Status: complete.
 - Notes:
   - Active web work targets `apps/web` / `@thinkwork/web` only.
   - Created branch from `origin/main` at `c61921b3e`.
@@ -258,6 +258,12 @@ status: complete
       `pnpm --filter @thinkwork/web typecheck` -> passed.
     - Direct Prettier formatting over changed files -> passed.
     - `git diff --check` -> passed.
+  - U7 was squash merged in PR
+    [#2217](https://github.com/thinkwork-ai/thinkwork/pull/2217) as
+    `a3e7d98f`; CI passed (`cla`, `lint`, `test`, `typecheck`, `verify`), the
+    remote branch was deleted, and the local worktree/branch were removed.
+  - All Agent Profiles and Pi subagents implementation units U0-U7 are
+    complete and merged into `main`.
 
 | Unit                                                    | Branch                                     | PR                                                           | State  | Notes                                                                                             |
 | ------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
@@ -268,7 +274,7 @@ status: complete
 | U4 Pi Subagent Execution And Slash Invocation           | `codex/agent-profiles-u4-pi-subagents`     | [#2214](https://github.com/thinkwork-ai/thinkwork/pull/2214) | merged | Squash merged as `b5bba6d7`; local worktree/branch removed and remote branch was deleted.         |
 | U5 Finalize, Cost, Activity Events, Trace Metadata      | `codex/agent-profiles-u5-observability`    | [#2215](https://github.com/thinkwork-ai/thinkwork/pull/2215) | merged | Squash merged as `5a985517`; profile run evidence now lands in usage, cost rows, events, traces.  |
 | U6 Activity Nested Profile Step And Multi-Lane Trace UI | `codex/agent-profiles-u6-activity-ui`      | [#2216](https://github.com/thinkwork-ai/thinkwork/pull/2216) | merged | Squash merged as `2ae0df7d`; Activity now renders nested profile rows and trace lane metadata.    |
-| U7 End-To-End Demo Fixtures, Docs, And Rollout Proof    | `codex/agent-profiles-u7-proof`            | TBD                                                          | active | Superseding `TOOLS.md` proof docs and recording Agent Profiles demo validation.                   |
+| U7 End-To-End Demo Fixtures, Docs, And Rollout Proof    | `codex/agent-profiles-u7-proof`            | [#2217](https://github.com/thinkwork-ai/thinkwork/pull/2217) | merged | Squash merged as `a3e7d98f`; proof docs supersede `TOOLS.md` routing for model stacking.          |
 
 ## Model Stacking Tool Routing - 2026-06-06
 
