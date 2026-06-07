@@ -226,6 +226,82 @@ describe("handleInvocation — happy path", () => {
     expect(fetchCalled).toBe(0);
   });
 
+  it("executes /agent profile commands and returns agent_profile_runs evidence", async () => {
+    let childModel: unknown;
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        message: "/agent research Find current sources",
+        model: "anthropic/claude-sonnet-4-5",
+        approved_model_ids: [
+          "anthropic/claude-sonnet-4-5",
+          "anthropic/claude-haiku-4-5",
+        ],
+        agent_profiles: [
+          {
+            id: "profile-research",
+            slug: "research",
+            name: "Research",
+            modelId: "anthropic/claude-haiku-4-5",
+            builtInKey: "research",
+            instructions: "Research with sources.",
+            builtInTools: ["read"],
+            executionControls: { maxRuntimeMs: 10_000 },
+          },
+        ],
+      }),
+      deps: makeDeps({
+        runAgentLoop: async ({ modelId, message, builtinToolNames }) => {
+          childModel = modelId;
+          expect(message).toBe("Find current sources");
+          expect(builtinToolNames).toEqual(["read"]);
+          return {
+            content: "Research handoff",
+            modelId: String(modelId),
+            toolsCalled: [],
+            toolInvocations: [],
+            usage: {
+              input: 8,
+              output: 5,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 13,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+    expect(childModel).toBe("anthropic/claude-haiku-4-5");
+    const body = result.body as Record<string, unknown>;
+    expect(body.agent_profile_runs).toEqual([
+      expect.objectContaining({
+        profileSlug: "research",
+        model: "anthropic/claude-haiku-4-5",
+        handoffSummary: "Research handoff",
+        inputTokens: 8,
+        outputTokens: 5,
+        totalTokens: 13,
+      }),
+    ]);
+    expect(body.response).toMatchObject({
+      content: "Research handoff",
+      agent_profile_runs: [
+        expect.objectContaining({
+          profileSlug: "research",
+          handoffSummary: "Research handoff",
+        }),
+      ],
+    });
+  });
+
   it("creates WORKSPACE_DIR before per-turn staging and the agent loop", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agentcore-pi-root-"));
     const workspaceDir = path.join(root, "workspace");

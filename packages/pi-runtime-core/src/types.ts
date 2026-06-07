@@ -5,6 +5,36 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { SessionStore } from "./durable-session-manager.js";
 import type { ModelRoutedToolCallRecord } from "./model-routing-policy.js";
 
+export type AgentProfileRunStatus =
+  | "completed"
+  | "failed"
+  | "timed_out"
+  | "interrupted"
+  | "resource_limit_exceeded";
+
+export interface AgentProfileRunRecord {
+  profileRunId: string;
+  profileId: string;
+  profileSlug: string;
+  profileName: string;
+  model: string;
+  status: AgentProfileRunStatus;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedReadTokens?: number;
+  cachedWriteTokens?: number;
+  totalTokens?: number;
+  costUsd?: number;
+  parentThreadTurnId: string;
+  handoffSummary: string | null;
+  toolInvocations: ToolInvocationRecord[];
+  laneKey: string;
+  error?: string;
+}
+
 export interface ToolCostRecord {
   provider: string;
   event_type: string;
@@ -33,6 +63,7 @@ export interface ToolInvocationRecord {
   output_preview?: string;
   status?: string;
   model_routing?: ModelRoutedToolCallRecord;
+  agent_profile_run?: AgentProfileRunRecord;
   started_at?: string;
   finished_at?: string;
   runtime: "pi";
@@ -55,6 +86,7 @@ export interface InvocationResponse {
     tools_called?: string[];
     tool_invocations?: ToolInvocationRecord[];
     model_routed_tool_calls?: ModelRoutedToolCallRecord[];
+    agent_profile_runs?: AgentProfileRunRecord[];
     tool_costs?: ToolCostRecord[];
     hindsight_usage?: unknown[];
   };
@@ -66,6 +98,7 @@ export interface InvocationResponse {
   tools_called?: string[];
   tool_invocations?: ToolInvocationRecord[];
   model_routed_tool_calls?: ModelRoutedToolCallRecord[];
+  agent_profile_runs?: AgentProfileRunRecord[];
   tool_costs?: ToolCostRecord[];
   hindsight_usage?: unknown[];
 }
@@ -127,6 +160,11 @@ export interface RunAgentLoopArgs {
    * so extension tools omitted from it register but never reach the model. U6.
    */
   extensionToolNames?: string[];
+  /**
+   * Optional built-in allowlist for child/profile runs. Parent turns omit this
+   * and keep the full ThinkWork Pi built-in set.
+   */
+  builtinToolNames?: string[];
 }
 
 export interface RunAgentLoopResult {
@@ -136,6 +174,7 @@ export interface RunAgentLoopResult {
   toolsCalled: string[];
   toolInvocations: ToolInvocationRecord[];
   modelRoutedToolCalls?: ModelRoutedToolCallRecord[];
+  agentProfileRuns?: AgentProfileRunRecord[];
   toolCosts?: ToolCostRecord[];
   diagnostics?: Record<string, unknown>;
 }
