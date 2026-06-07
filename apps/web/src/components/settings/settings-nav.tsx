@@ -15,12 +15,7 @@ import {
   Webhook,
   Wrench,
 } from "lucide-react";
-import {
-  IconApps,
-  IconChartBar,
-  IconPlanet,
-  IconTopologyStar3,
-} from "@tabler/icons-react";
+import { IconApps, IconChartBar, IconPlanet } from "@tabler/icons-react";
 import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
 export interface SettingsNavItem {
@@ -99,13 +94,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/artifacts",
     icon: AppWindow,
     operatorOnly: true,
-  },
-  {
-    label: "Knowledge Graph",
-    to: "/settings/knowledge-graph",
-    icon: IconTopologyStar3,
-    operatorOnly: true,
-    managedAppKey: "cognee",
   },
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
   {

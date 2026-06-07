@@ -34,13 +34,15 @@ describe("settings-nav", () => {
     expect(labels()).not.toContain("CRM");
   });
 
-  // U5: Wiki Memory and Knowledge Bases fold into the single Memory entry
-  it("folds Wiki Memory and Knowledge Bases into the Memory entry", () => {
+  // U5 + U6: the memory family folds into the single Memory entry
+  it("folds the memory family into a single Memory entry", () => {
     expect(paths()).toContain("/settings/memory");
     expect(paths()).not.toContain("/settings/wiki");
     expect(paths()).not.toContain("/settings/knowledge-bases");
+    expect(paths()).not.toContain("/settings/knowledge-graph");
     expect(labels()).not.toContain("Wiki Memory");
     expect(labels()).not.toContain("Knowledge Bases");
+    expect(labels()).not.toContain("Knowledge Graph");
   });
 
   it("filters operator-only items for non-operators", () => {

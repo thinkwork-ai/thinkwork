@@ -7,6 +7,7 @@ const source = read("src/components/settings/SettingsMemoryHome.tsx");
 const memoryRoute = read("src/routes/_authed/settings.memory.tsx");
 const wikiRoute = read("src/routes/_authed/settings.wiki.tsx");
 const kbRoute = read("src/routes/_authed/settings.knowledge-bases.index.tsx");
+const kgRoute = read("src/routes/_authed/settings.knowledge-graph.tsx");
 
 describe("SettingsMemoryHome", () => {
   it("owns a single stable Memory breadcrumb", () => {
@@ -23,6 +24,12 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain("<SettingsWiki embedded");
   });
 
+  it("adds a Knowledge Graph tab gated on Cognee being enabled", () => {
+    expect(source).toContain('value="knowledge-graph"');
+    expect(source).toContain("<KnowledgeGraphTab");
+    expect(source).toContain("cogneeEnabled");
+  });
+
   it("mounts the combined page at /settings/memory", () => {
     expect(memoryRoute).toContain("SettingsMemoryHome");
   });
@@ -30,5 +37,6 @@ describe("SettingsMemoryHome", () => {
   it("redirects retired memory routes into the combined page", () => {
     expect(wikiRoute).toContain('redirect({ to: "/settings/memory" })');
     expect(kbRoute).toContain('redirect({ to: "/settings/memory" })');
+    expect(kgRoute).toContain('redirect({ to: "/settings/memory" })');
   });
 });

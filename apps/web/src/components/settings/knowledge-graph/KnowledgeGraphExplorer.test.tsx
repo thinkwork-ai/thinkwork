@@ -17,7 +17,10 @@ const ingestSource = readFileSync(
   "utf8",
 );
 const settingsSource = readFileSync(
-  resolve(process.cwd(), "src/components/settings/SettingsKnowledgeGraph.tsx"),
+  resolve(
+    process.cwd(),
+    "src/components/settings/knowledge-graph/KnowledgeGraphTab.tsx",
+  ),
   "utf8",
 );
 const sheetSource = readFileSync(
