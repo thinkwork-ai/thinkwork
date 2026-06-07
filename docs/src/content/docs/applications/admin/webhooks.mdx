@@ -10,7 +10,7 @@ Webhooks are custom HTTP endpoints that external systems can POST to in order to
 ## The list
 
 **Route:** `/webhooks`  
-**File:** `apps/admin/src/routes/_authed/_tenant/webhooks/index.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/webhooks/index.tsx`
 
 A searchable `DataTable` with:
 
@@ -29,7 +29,7 @@ A **New Webhook** button opens the creation dialog.
 ## The detail page
 
 **Route:** `/webhooks/:webhookId`  
-**File:** `apps/admin/src/routes/_authed/_tenant/webhooks/$webhookId.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/webhooks/$webhookId.tsx`
 
 ### Header
 
@@ -159,6 +159,6 @@ The webhook id changes, so the URL also changes. Plan for that in the external s
 
 ## Related pages
 
-- [Automations](/applications/admin/automations/) — the time-based counterpart to webhook-driven triggers, plus the multi-step routines webhooks can launch
-- [Agents](/applications/admin/agents/) — the other target type for webhook invocations
+- [Automations](/applications/web/automations/) — the time-based counterpart to webhook-driven triggers, plus the multi-step routines webhooks can launch
+- [Agents](/applications/web/agents/) — the other target type for webhook invocations
 - [Automations (concept)](/concepts/automations/) — the product model

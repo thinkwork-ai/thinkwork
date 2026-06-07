@@ -325,17 +325,13 @@ module "cognito" {
   saml_identity_providers    = var.saml_identity_providers
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
 
-  # Single ThinkworkAdmin Cognito client serves both admin and end-user SPAs.
-  # apps/spaces reuses this client by design — same humans, same tenant
-  # invitations, single sign-in across both surfaces. Each origin (admin
-  # distribution, admin custom domain, app distribution, app custom domain,
-  # compatibility computer domain, plus localhost dev for both) needs both
-  # bare and /auth/callback entries because the OAuth flow lands on
-  # /auth/callback and the SPA's post-OAuth redirect lands on the bare origin.
+  # Single ThinkworkAdmin Cognito client serves the unified web app. The
+  # historical client name stays for compatibility; the standalone admin
+  # SPA/static site is retired. Each origin needs both bare and /auth/callback
+  # entries because OAuth lands on /auth/callback and the SPA's post-OAuth
+  # redirect lands on the bare origin.
   admin_callback_urls = distinct(concat(
     var.admin_callback_urls,
-    ["https://${module.admin_site.distribution_domain}", "https://${module.admin_site.distribution_domain}/auth/callback"],
-    var.admin_domain != "" ? ["https://${var.admin_domain}", "https://${var.admin_domain}/auth/callback"] : [],
     ["https://${module.computer_site.distribution_domain}", "https://${module.computer_site.distribution_domain}/auth/callback"],
     local.end_user_app_domain != "" ? ["https://${local.end_user_app_domain}", "https://${local.end_user_app_domain}/auth/callback"] : [],
     var.computer_domain != "" ? ["https://${var.computer_domain}", "https://${var.computer_domain}/auth/callback"] : [],
@@ -344,8 +340,6 @@ module "cognito" {
   ))
   admin_logout_urls = distinct(concat(
     var.admin_logout_urls,
-    ["https://${module.admin_site.distribution_domain}"],
-    var.admin_domain != "" ? ["https://${var.admin_domain}"] : [],
     ["https://${module.computer_site.distribution_domain}"],
     local.end_user_app_domain != "" ? ["https://${local.end_user_app_domain}"] : [],
     var.computer_domain != "" ? ["https://${var.computer_domain}"] : [],
@@ -597,7 +591,7 @@ module "api" {
   twenty_worker_service_name                    = local.twenty_provisioned ? module.twenty[0].twenty_worker_service_name : ""
   twenty_server_log_group_name                  = local.twenty_provisioned ? module.twenty[0].twenty_server_log_group_name : ""
   twenty_worker_log_group_name                  = local.twenty_provisioned ? module.twenty[0].twenty_worker_log_group_name : ""
-  admin_url                                     = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
+  admin_url                                     = local.end_user_app_url
   docs_url                                      = "https://${module.docs_site.distribution_domain}"
   www_url                                       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
   stripe_price_ids_json                         = var.stripe_price_ids_json
@@ -881,21 +875,7 @@ module "ses" {
 }
 
 ################################################################################
-# Admin Static Site
-################################################################################
-
-module "admin_site" {
-  source = "../app/static-site"
-
-  stage           = var.stage
-  site_name       = "admin"
-  is_spa          = true
-  custom_domain   = var.admin_domain
-  certificate_arn = var.admin_certificate_arn
-}
-
-################################################################################
-# End-User App Static Site (apps/spaces — canonical surface at app.thinkwork.ai)
+# End-User App Static Site (apps/web — canonical surface at app.thinkwork.ai)
 ################################################################################
 
 locals {
@@ -907,8 +887,6 @@ locals {
   computer_host_frame_src  = local.computer_sandbox_enabled ? "https://${var.computer_sandbox_domain}" : "'none'"
   computer_host_frame_ancestors = join(" ", compact([
     "'self'",
-    var.admin_domain != "" ? "https://${var.admin_domain}" : "",
-    "https://${module.admin_site.distribution_domain}",
   ]))
 
   computer_host_csp = "default-src 'self'; script-src ${local.computer_host_script_src}; style-src 'self' 'unsafe-inline'; worker-src ${local.computer_host_worker_src}; frame-src ${local.computer_host_frame_src}; connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com https://*.appsync-api.${var.region}.amazonaws.com wss://*.appsync-realtime-api.${var.region}.amazonaws.com https://cognito-idp.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com; img-src 'self' data: blob: ${local.computer_sandbox_map_img_src}; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors ${local.computer_host_frame_ancestors};"
@@ -956,7 +934,7 @@ module "computer_site" {
 # channelId nonce + no-secrets-in-payload (see contract v1).
 #
 # Bucket is empty in this PR. U9 populates it with the iframe-shell bundle
-# via scripts/build-spaces.sh.
+# via scripts/build-web.sh.
 #
 # Iframe CSP profile (per contract v1 §CSP profile):
 #   default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:;

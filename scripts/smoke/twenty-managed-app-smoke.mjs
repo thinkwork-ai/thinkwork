@@ -324,8 +324,7 @@ function loadEnvFile() {
   if (explicit === "none") return {};
   const candidates = [
     explicit,
-    "apps/spaces/.env",
-    "apps/admin/.env",
+    "apps/web/.env",
     ".env",
   ].filter(Boolean);
 

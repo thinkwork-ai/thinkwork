@@ -157,7 +157,7 @@ The foundation tier provides identity, networking, and encryption. It changes ra
 | Cognito User Pool     | User authentication and JWT issuance                              |
 | Cognito Identity Pool | Maps Cognito users to IAM roles for direct AWS resource access    |
 | KMS keys              | Encryption at rest for app data, audit logs, and credential vault |
-| Route53 records       | DNS for admin app, API, and email                                 |
+| Route53 records       | DNS for web app, API, and email                                 |
 | ACM certificates      | TLS for CloudFront and API Gateway custom domains                 |
 | SES domain identity   | Verified sending domain for outbound email                        |
 
@@ -189,7 +189,7 @@ The app tier is where computation happens. It depends on both lower tiers.
 | EventBridge              | Triggers for scheduled automations                                                                         |
 | Bedrock AgentCore Memory | Always on — automatic per-turn retention into four strategies (semantic, preferences, summaries, episodes) |
 | ECS Fargate (optional)   | Hindsight memory add-on (if `enable_hindsight = true`)                                                     |
-| CloudFront               | CDN for admin app, end-user app static files                                                               |
+| CloudFront               | CDN for web app static files                                                               |
 | SES (sending)            | Outbound email from agent responses                                                                        |
 
 ## Data flow: agent invoke

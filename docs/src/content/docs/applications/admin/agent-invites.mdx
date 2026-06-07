@@ -8,7 +8,7 @@ import { Aside } from '@astrojs/starlight/components';
 Agent Invites are how BYOB (bring-your-own-runtime) agents register themselves with a ThinkWork tenant. Instead of the admin provisioning the agent directly, the operator generates an invite token, shares it with the external runtime, and the runtime walks through a join flow that ultimately lands as an agent in the tenant.
 
 **Route:** `/agents/invites`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agents/invites.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/agents/invites.tsx`
 
 ## Two tabs
 
@@ -45,7 +45,7 @@ The Join Requests tab shows incoming join requests from runtimes that have start
 | Status | `PENDING`, `APPROVED`, or `REJECTED` |
 | Created | When the request landed |
 
-Pending rows have explicit Approve / Reject actions. Approving creates the agent in the tenant roster (visible in [Agents](/applications/admin/agents/)) and issues the API key. Rejecting marks the invite spent without creating the agent.
+Pending rows have explicit Approve / Reject actions. Approving creates the agent in the tenant roster (visible in [Agents](/applications/web/agents/)) and issues the API key. Rejecting marks the invite spent without creating the agent.
 
 ## State lifecycle
 
@@ -88,11 +88,11 @@ Both tables are REST-driven, not GraphQL.
 6. The runtime walks through adapter selection and creates a join request
 7. The operator sees the pending request on the Join Requests tab
 8. Operator clicks Approve
-9. The agent appears in [Agents](/applications/admin/agents/) and the runtime receives its API key
+9. The agent appears in [Agents](/applications/web/agents/) and the runtime receives its API key
 
 ### Revoke a rogue BYOB agent
 
-1. Find the agent in the [Agents](/applications/admin/agents/) list
+1. Find the agent in the [Agents](/applications/web/agents/) list
 2. Pause or delete it
 3. Also revoke the API key so the paused runtime can't authenticate
 4. The runtime will receive 401s on its next call and stop
@@ -117,5 +117,5 @@ Revoking a BYOB agent does not automatically revoke its API key — those are se
 
 ## Related pages
 
-- [Agents](/applications/admin/agents/) — where approved BYOB agents appear
-- [Authentication & Tenancy](/applications/admin/authentication-and-tenancy/) — how the tenant context is resolved after a BYOB agent authenticates
+- [Agents](/applications/web/agents/) — where approved BYOB agents appear
+- [Authentication & Tenancy](/applications/web/authentication-and-tenancy/) — how the tenant context is resolved after a BYOB agent authenticates

@@ -24,6 +24,7 @@ describe("@thinkwork/computer-stdlib package contract", () => {
     expect(allDependencyNames).toContain("@thinkwork/ui");
     expect(allDependencyNames).not.toContain("@thinkwork/spaces");
     expect(allDependencyNames).not.toContain("@thinkwork/admin");
+    expect(allDependencyNames).not.toContain("@thinkwork/web");
   });
 
   it("does not import from app packages or expose dangerouslySetInnerHTML props", () => {
@@ -35,7 +36,7 @@ describe("@thinkwork/computer-stdlib package contract", () => {
     for (const file of sourceFiles) {
       const source = readFileSync(file, "utf8");
       expect(source, file).not.toMatch(
-        /from ["'](?:@\/|apps\/|@thinkwork\/spaces|@thinkwork\/computer(?!-)|@thinkwork\/admin)/,
+        /from ["'](?:@\/|apps\/|@thinkwork\/spaces|@thinkwork\/web|@thinkwork\/computer(?!-)|@thinkwork\/admin)/,
       );
       expect(source, file).not.toMatch(/dangerouslySetInnerHTML/);
     }

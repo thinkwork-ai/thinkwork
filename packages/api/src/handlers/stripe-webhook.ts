@@ -207,13 +207,17 @@ export async function handler(
         // row already carries pending_owner_email, so the webhook ack's
         // 200 either way (Stripe won't retry, and the operator has a
         // manual-recovery path via the logs).
-        const adminUrl = process.env.ADMIN_URL || "https://admin.thinkwork.ai";
+        const appUrl =
+          process.env.APP_URL ||
+          process.env.WEB_URL ||
+          process.env.ADMIN_URL ||
+          "https://app.thinkwork.ai";
         await sendStripeWelcomeEmail({
           email: result.email,
           plan: result.plan,
           tenantId: result.tenantId,
           sessionId: session.id,
-          adminUrl,
+          appUrl,
         });
 
         return json({ received: true, tenantId: result.tenantId });

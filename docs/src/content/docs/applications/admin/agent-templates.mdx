@@ -5,7 +5,7 @@ description: Reusable and legacy template bundles for agent authoring infrastruc
 
 import { Aside } from "@astrojs/starlight/components";
 
-Templates are reusable configuration bundles for agent authoring infrastructure. They still exist for supported template flows, but they are no longer the primary place operators tune the managed-agent runtime. For day-to-day operation, configure tenant-wide defaults in [Tenant Agent](/applications/admin/agents/) and local context or runtime policy in [Spaces](/applications/admin/spaces/).
+Templates are reusable configuration bundles for agent authoring infrastructure. They still exist for supported template flows, but they are no longer the primary place operators tune the managed-agent runtime. For day-to-day operation, configure tenant-wide defaults in [Tenant Agent](/applications/web/agents/) and local context or runtime policy in [Spaces](/applications/web/spaces/).
 
 <Aside type="note">
   Older template docs described fleet-wide rotation across many top-level
@@ -30,7 +30,7 @@ This is how template-backed authoring flows stay reusable. It is separate from S
 ## The template list
 
 **Route:** `/agent-templates`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agent-templates/index.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/agent-templates/index.tsx`
 
 The list is a searchable table showing every Agent Template in the tenant.
 
@@ -51,7 +51,7 @@ The backing query is `AgentTemplatesListQuery`. Where an Agent Template still ex
 ## The template detail
 
 **Route:** `/agent-templates/:templateId`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/agent-templates/$templateId.tsx`
 
 The detail page has three tabs:
 
@@ -102,7 +102,7 @@ The Configuration tab carries a **Code Sandbox** card that controls the template
 
 The toggle persists to the template's `sandbox` field as JSON: `{ "environment": "default-public" | "internal-only" }` when opted in, `null` when the template doesn't use the sandbox. The shape is validated server-side by `packages/api/src/lib/templates/sandbox-config.ts`.
 
-The `execute_code` tool only registers on a turn when **both** the template is opted in on this card **and** the tenant has `sandbox_enabled` set in tenant policy. Template opt-in without tenant policy is a no-op. See [Spaces -> Built-in Tools](/applications/admin/builtin-tools/#policy-gated-tools) for the tenant-policy side of the gate and the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for how the opt-in flows through to the agent runtime.
+The `execute_code` tool only registers on a turn when **both** the template is opted in on this card **and** the tenant has `sandbox_enabled` set in tenant policy. Template opt-in without tenant policy is a no-op. See [Spaces -> Built-in Tools](/applications/web/builtin-tools/#policy-gated-tools) for the tenant-policy side of the gate and the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for how the opt-in flows through to the agent runtime.
 
 #### Browser Automation card
 
@@ -114,7 +114,7 @@ Agent-level capability rows can still override the template default for individu
 
 #### Web Search card
 
-The **Web Search** card controls whether agents using this template can receive the `web_search` built-in. This is separate from configuring the tenant's provider key under [Spaces -> Built-in Tools](/applications/admin/builtin-tools/).
+The **Web Search** card controls whether agents using this template can receive the `web_search` built-in. This is separate from configuring the tenant's provider key under [Spaces -> Built-in Tools](/applications/web/builtin-tools/).
 
 The toggle persists to the template's `webSearch` GraphQL field / `web_search` database column as JSON: `{ "enabled": true }` when opted in, `null` when disabled. The shape is validated server-side by `packages/api/src/lib/templates/web-search-config.ts`.
 
@@ -122,7 +122,7 @@ The toggle persists to the template's `webSearch` GraphQL field / `web_search` d
 
 #### Web Extraction card
 
-The **Web Extraction** card controls whether agents using this template can receive the `web_extract` built-in. This is separate from configuring the tenant's Firecrawl key under [Spaces -> Built-in Tools](/applications/admin/builtin-tools/).
+The **Web Extraction** card controls whether agents using this template can receive the `web_extract` built-in. This is separate from configuring the tenant's Firecrawl key under [Spaces -> Built-in Tools](/applications/web/builtin-tools/).
 
 The toggle persists to the template's `webExtract` GraphQL field / `web_extract` database column as JSON: `{ "enabled": true }` when opted in, `null` when disabled. The shape is validated server-side by `packages/api/src/lib/templates/web-extract-config.ts`.
 
@@ -176,7 +176,7 @@ For the tenant-wide defaults that every template inherits from, see `/agent-temp
 ## The sync flow
 
 **Route:** `/agent-templates/:templateId/sync`  
-**File:** `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId_.sync.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/agent-templates/$templateId_.sync.tsx`
 
 Sync is **explicit**. When an operator edits a template, the linked agents do not automatically absorb the change. Instead, a **Sync** button on the detail page opens a review page that shows, per linked agent, what would change if the operator confirmed.
 
@@ -216,7 +216,7 @@ Until an operator clicks Sync, linked agents continue running with the pre-edit 
 
 ### Ship a new fleet-wide workspace skill
 
-1. Install the new skill via [Skills Catalog](/applications/admin/skills-catalog/)
+1. Install the new skill via [Skills Catalog](/applications/web/skills-catalog/)
 2. Open the template at `/agent-templates/:templateId`
 3. Confirm the Runtime selector is set to the runtime that supports the skill
 4. Go to the Workspace tab and add or edit `skills/<slug>/SKILL.md`
@@ -231,7 +231,7 @@ Until an operator clicks Sync, linked agents continue running with the pre-edit 
 1. Open the template at `/agent-templates/:templateId/configuration`
 2. Toggle the relevant built-in tool card
 3. Save the template
-4. Verify any tenant-level prerequisite on [Built-in Tools](/applications/admin/builtin-tools/), such as the Web Search provider key, Firecrawl Web Extraction key, or Code Sandbox policy
+4. Verify any tenant-level prerequisite on [Built-in Tools](/applications/web/builtin-tools/), such as the Web Search provider key, Firecrawl Web Extraction key, or Code Sandbox policy
 5. Run one linked agent as a canary before syncing broadly
 
 ### Tune a system prompt across the fleet
@@ -239,7 +239,7 @@ Until an operator clicks Sync, linked agents continue running with the pre-edit 
 1. Open the template detail page
 2. Edit the system prompt in the right-pane CodeMirror editor
 3. Save
-4. (Optional) Pick one linked agent, open its [Agents](/applications/admin/agents/) detail page, and run it through a manual turn to sanity-check
+4. (Optional) Pick one linked agent, open its [Agents](/applications/web/agents/) detail page, and run it through a manual turn to sanity-check
 5. Return to the template, click Sync, and propagate the new prompt across the fleet
 
 ### Roll back a bad template change
@@ -248,7 +248,7 @@ Until an operator clicks Sync, linked agents continue running with the pre-edit 
 2. Save
 3. Sync the revert out to the fleet
 
-Template history is not currently versioned — rollback means editing forward. Per-agent config history **is** versioned (see the Rollback button on the [Agents](/applications/admin/agents/) detail page).
+Template history is not currently versioned — rollback means editing forward. Per-agent config history **is** versioned (see the Rollback button on the [Agents](/applications/web/agents/) detail page).
 
 ## Workflows not to do
 
@@ -265,11 +265,11 @@ Template history is not currently versioned — rollback means editing forward. 
 
 ## Related pages
 
-- [Tenant Agent](/applications/admin/agents/) — tenant-wide platform-agent defaults
-- [Spaces](/applications/admin/spaces/) — Space-specific context, triggers, settings, and members
+- [Tenant Agent](/applications/web/agents/) — tenant-wide platform-agent defaults
+- [Spaces](/applications/web/spaces/) — Space-specific context, triggers, settings, and members
 - [Runtime Configuration](/concepts/agents/runtime-selection/) — tenant-agent defaults and Space overrides
-- [Agent Invites](/applications/admin/agent-invites/) — BYOB agent registration
-- [Skills Catalog](/applications/admin/skills-catalog/) — the skills added to templates
-- [Tenant MCP Servers](/applications/admin/mcp-servers/) — the MCP servers assigned to templates
-- [Security Center](/applications/admin/security-center/) — guardrails assigned to templates
+- [Agent Invites](/applications/web/agent-invites/) — BYOB agent registration
+- [Skills Catalog](/applications/web/skills-catalog/) — the skills added to templates
+- [Tenant MCP Servers](/applications/web/mcp-servers/) — the MCP servers assigned to templates
+- [Security Center](/applications/web/security-center/) — guardrails assigned to templates
 - [Agents (concept)](/concepts/agents/) — the current tenant platform-agent model

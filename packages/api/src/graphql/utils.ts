@@ -100,7 +100,7 @@ import {
   tenantMcpContextTools,
   tenantMcpServers,
   tenantCredentials,
-  // Customize page (apps/spaces)
+  // Customize page (apps/web)
   tenantWorkflowCatalog,
   // Skills settings list — per-tenant index of the S3 skill catalog
   skillCatalog,

@@ -165,7 +165,7 @@ If any check fails, `doctor` prints the specific error and a remediation hint.
 
 ## Step 6 — Review deployment outputs
 
-Before signing in, take a look at what got deployed. `thinkwork outputs` prints the key endpoints you'll need — the AppSync URL, the API Gateway URL, the admin app URL, and the Cognito pool id.
+Before signing in, take a look at what got deployed. `thinkwork outputs` prints the key endpoints you'll need — the AppSync URL, the API Gateway URL, the web app URL, and the Cognito pool id.
 
 ```bash
 thinkwork outputs -s dev
@@ -174,11 +174,11 @@ thinkwork outputs -s dev
 ```
 AppSync API URL:    https://abc123.appsync-api.us-east-1.amazonaws.com/graphql
 API Gateway URL:    https://xyz789.execute-api.us-east-1.amazonaws.com
-Admin App URL:      https://app.thinkwork.dev.example.com
+Web App URL:      https://app.thinkwork.dev.example.com
 Cognito Pool ID:    us-east-1_ABC123XYZ
 ```
 
-Bookmark the Admin App URL — that's your operator console. The AppSync and API Gateway URLs are what your clients (mobile app, SDKs, or custom integrations) will point at.
+Bookmark the Web App URL — that's your operator console. The AppSync and API Gateway URLs are what your clients (mobile app, SDKs, or custom integrations) will point at.
 
 ## Step 7 — Sign in to the deployed stack
 
@@ -257,8 +257,8 @@ curl -X POST https://xyz789.execute-api.us-east-1.amazonaws.com/graphql \
 
 ```
 </TabItem>
-<TabItem label="Admin App">
-Navigate to your Admin App URL, sign in with your Cognito user, click **New Thread**, and type your first message. The agent response streams back in real time via AppSync subscription.
+<TabItem label="Web App">
+Navigate to your Web App URL, sign in with your Cognito user, click **New Thread**, and type your first message. The agent response streams back in real time via AppSync subscription.
 </TabItem>
 </Tabs>
 

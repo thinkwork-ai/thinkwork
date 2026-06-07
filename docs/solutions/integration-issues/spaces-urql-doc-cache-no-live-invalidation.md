@@ -1,6 +1,6 @@
 ---
-title: "apps/spaces urql document cache doesn't auto-invalidate on live events — tagged threads need an explicit refetch"
-module: apps/spaces
+title: "apps/web urql document cache doesn't auto-invalidate on live events — tagged threads need an explicit refetch"
+module: apps/web
 date: 2026-05-29
 problem_type: integration_issue
 component: spaces_chat
@@ -24,11 +24,11 @@ tags:
   - multiplayer
 ---
 
-# apps/spaces urql document cache doesn't auto-invalidate on live events
+# apps/web urql document cache doesn't auto-invalidate on live events
 
 ## Problem
 
-A user @mentioned into a new thread did not see it appear in their `apps/spaces` sidebar. On the desktop (Electron) app it never showed — even after a manual refresh; on web it appeared only after a full page reload.
+A user @mentioned into a new thread did not see it appear in their `apps/web` sidebar. On the desktop (Electron) app it never showed — even after a manual refresh; on web it appeared only after a full page reload.
 
 ## Symptoms
 
@@ -43,13 +43,13 @@ A user @mentioned into a new thread did not see it appear in their `apps/spaces`
 
 ## Why This Works (root cause)
 
-`apps/spaces` configures urql with the **document `cacheExchange`, not `graphcache`** (`apps/spaces/src/lib/graphql-client.ts`). The document cache only updates a query's result when a mutation returns overlapping `__typename`+`id` data or the query is explicitly re-executed. A subscription event arriving on a _different_ document (e.g. `onThreadUpdated`) does **not** invalidate the `ThreadsPagedQuery` result. There is no normalized cache to patch, so nothing refreshes the sidebar on its own. `requestPolicy: "cache-and-network"` only refetches on mount/navigation — not on a live event.
+`apps/web` configures urql with the **document `cacheExchange`, not `graphcache`** (`apps/web/src/lib/graphql-client.ts`). The document cache only updates a query's result when a mutation returns overlapping `__typename`+`id` data or the query is explicitly re-executed. A subscription event arriving on a _different_ document (e.g. `onThreadUpdated`) does **not** invalidate the `ThreadsPagedQuery` result. There is no normalized cache to patch, so nothing refreshes the sidebar on its own. `requestPolicy: "cache-and-network"` only refetches on mount/navigation — not on a live event.
 
 The hand-rolled `AppSyncSubscriptionClient` also has no event replay: events that land while the socket is down (window backgrounded/asleep on desktop) are lost permanently, which is the most likely explanation for the desktop "even after refresh" divergence.
 
 ## Solution
 
-Drive an explicit refetch of the list queries on the two signals that matter, coalesced so a burst triggers at most one network call (`apps/spaces/src/components/shell/ChatSidebar.tsx`):
+Drive an explicit refetch of the list queries on the two signals that matter, coalesced so a burst triggers at most one network call (`apps/web/src/components/shell/ChatSidebar.tsx`):
 
 1. **Window focus / visibility** — refetch on the focus/visible transition so returning to a backgrounded desktop window surfaces anything missed while the socket was down.
 2. **`onThreadUpdated` subscription** — reuse the existing **tenant-scoped** subscription (it fires for the caller on both `createThread` and `sendMessage`, with no participant filter), and on each event call the existing `reexecuteRecentThreadsQuery({ requestPolicy: "network-only" })`.
@@ -80,8 +80,8 @@ Ordering caveat: in `createThread`, `notifyThreadUpdate` fires _before_ the ment
 - **Reuse a tenant-scoped event before adding a new field.** `onThreadUpdated(tenantId)` already fans out to all of a tenant's clients; adding a participant-added field would have cost a `schema:build` + codegen across every consumer for no benefit.
 - **Coalesce live refetches.** Tenant-wide events are chatty; debounce so a burst is one network call.
 
-## Related: multiplayer "Working…" turn attribution (same PR, apps/spaces)
+## Related: multiplayer "Working…" turn attribution (same PR, apps/web)
 
-A separate multiplayer rendering bug shipped in the same change: `mapTurnsToUserMessages` (`apps/spaces/src/components/workbench/TaskThreadView.tsx`) paired the i-th turn to the i-th USER message **by document position**. In a multiplayer thread, other humans' messages are USER messages that trigger no agent turn, so positional pairing pinned the agent's "Working…" row to the wrong (earlier) message. Fix: pair each turn to the **nearest-preceding user message by timestamp** (`turn.startedAt` vs `message.createdAt`), with a positional fallback when message timestamps are absent (older/synthetic threads).
+A separate multiplayer rendering bug shipped in the same change: `mapTurnsToUserMessages` (`apps/web/src/components/workbench/TaskThreadView.tsx`) paired the i-th turn to the i-th USER message **by document position**. In a multiplayer thread, other humans' messages are USER messages that trigger no agent turn, so positional pairing pinned the agent's "Working…" row to the wrong (earlier) message. Fix: pair each turn to the **nearest-preceding user message by timestamp** (`turn.startedAt` vs `message.createdAt`), with a positional fallback when message timestamps are absent (older/synthetic threads).
 
 **Residual:** `turn.startedAt` derives from the task's _claim_ time, not the trigger instant, so two messages fired before the first turn is claimed can still mis-attribute. A turn→triggering-message-id link would remove the timestamp inference entirely — the durable fix if this recurs.

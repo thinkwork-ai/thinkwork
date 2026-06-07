@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./apps/admin/public/logo.png" alt="Thinkwork" width="240" />
+  <img src="./apps/web/public/logo.png" alt="Thinkwork" width="240" />
 </p>
 
 <h1 align="center">ThinkWork</h1>
@@ -39,7 +39,7 @@ The harness remains yours regardless of tier. See [thinkwork.ai](https://www.thi
 ## What ships in v1
 
 - **Six product modules:** Agents, Threads, Connectors, Automations, Control, Memory
-- **Three clients:** an admin/operator web app (`apps/admin`), a mobile client (`apps/mobile`, Expo), and a macOS desktop shell for the end-user Spaces surface (`apps/desktop`)
+- **Three clients:** a unified web/operator app (`apps/web`), a mobile client (`apps/mobile`, Expo), and a macOS desktop shell for the Spaces surface (`apps/desktop`)
 - **A real CLI** (`thinkwork-cli`) with two surfaces: **deploy-side** (`login`, `init`, `plan`, `deploy`, `bootstrap`, `destroy`, `doctor`, `status`, `outputs`, `config`, `update`) and **API-side** (`login --stage`, `logout`, `me`, `user`, `mcp`, `tools`, `eval`, `wiki`, plus a scaffolded roadmap of `thread`, `agent`, `template`, `tenant`, `member`, `team`, `kb`, `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill`, `memory`, `recipe`, `artifact`, `cost`, `budget`, `performance`, `trace`, `inbox`, `dashboard` — see [apps/cli/README.md#roadmap](./apps/cli/README.md#roadmap))
 - **Three connectors at launch:** Slack, GitHub, Google Workspace
 - **Threads with structured channels** (CHAT, AUTO, EMAIL, SLACK, GITHUB) for task intake and execution
@@ -50,13 +50,13 @@ The harness remains yours regardless of tier. See [thinkwork.ai](https://www.thi
 - **Agent Templates** for fleet-wide configuration
 - **Terraform Registry modules** at `thinkwork-ai/thinkwork/aws` — drops into your existing AWS Landing Zone with BYO-everywhere support
 
-## Admin web
+## Web app
 
 <p align="center">
   <img src="./assets/screenshots/admin/dashboard.png" alt="ThinkWork admin dashboard — agents online, open threads, recent activity, recent threads" width="860" />
 </p>
 
-The operator surface. A React SPA at `apps/admin`, authenticated through Cognito and tenant-scoped on every request. Platform operators configure agents and templates, wire up connectors and MCP servers, manage the credential vault, register webhooks, upload knowledge, inspect per-agent memory, and watch activity, cost, and guardrail health — all against the tenant running in their own AWS account. See the [admin docs](https://docs.thinkwork.ai/applications/admin/) for the per-route breakdown.
+The unified web surface. A React SPA at `apps/web`, authenticated through Cognito and tenant-scoped on every request. Users work in Spaces and threads; operators also configure agents and templates, wire up connectors and MCP servers, manage the credential vault, register webhooks, upload knowledge, inspect memory, and watch activity, cost, and guardrail health — all against the tenant running in their own AWS account. See the [web/operator docs](https://docs.thinkwork.ai/applications/admin/) for the per-route breakdown.
 
 ## Mobile app
 

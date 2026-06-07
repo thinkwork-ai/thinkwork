@@ -42,7 +42,7 @@ function lifecycleColor(
 }
 
 // ThreadChannel → operator-facing Trigger label. Mirrors admin U6's
-// TRIGGER_LABELS in apps/admin/src/routes/_authed/_tenant/threads/$threadId.tsx.
+// TRIGGER_LABELS in apps/web/src/routes/_authed/_tenant/threads/$threadId.tsx.
 const TRIGGER_LABELS: Record<string, string> = {
   chat: "Manual chat",
   manual: "Manual chat",

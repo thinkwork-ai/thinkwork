@@ -8,7 +8,7 @@ import { Aside } from "@astrojs/starlight/components";
 The Tenant MCP Servers page is where operators register external MCP servers that the tenant's agents can call at runtime. MCP servers expose tools — CRM lookups, ticket operations, internal API actions, search — through the Model Context Protocol, and ThinkWork connects to them over HTTP streaming or SSE at invocation time.
 
 **Route:** `/mcp-servers`  
-**File:** `apps/admin/src/routes/_authed/_tenant/mcp-servers.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/mcp-servers.tsx`
 
 ## The list view
 
@@ -74,7 +74,7 @@ Test results are not persisted as live state — they're a point-in-time snapsho
 
 ## Assigning MCP servers to agent templates
 
-MCP servers become visible to agents by being **assigned to an agent template**. The assignment flow lives on the [Agent Templates](/applications/admin/agent-templates/) detail page — the Template Detail screen has an MCP Servers table with an "Assign" action that writes through `assignMcpToTemplate(templateId, mcpServerId)`.
+MCP servers become visible to agents by being **assigned to an agent template**. The assignment flow lives on the [Agent Templates](/applications/web/agent-templates/) detail page — the Template Detail screen has an MCP Servers table with an "Assign" action that writes through `assignMcpToTemplate(templateId, mcpServerId)`.
 
 Once assigned to a template, the MCP server flows down to every agent created from that template via the template sync flow.
 
@@ -107,7 +107,7 @@ The user authenticates with the provider, the token is stored against their user
 4. Submits; the key is persisted to SM, the row is created
 5. Operator clicks the row, then "Test Connection"
 6. Tools appear in the dialog's tool list; success
-7. Operator navigates to [Agent Templates](/applications/admin/agent-templates/), opens a template, assigns the new MCP server
+7. Operator navigates to [Agent Templates](/applications/web/agent-templates/), opens a template, assigns the new MCP server
 8. Syncs the template to the fleet
 9. Agents start calling the new MCP tools on their next invocation
 
@@ -137,6 +137,6 @@ The admin UI does not currently expose an in-place rotate button — rotation ha
 ## Related pages
 
 - [Mobile — Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — the per-user token flow that complements this page
-- [Agent Templates](/applications/admin/agent-templates/) — where MCP servers are assigned to templates
+- [Agent Templates](/applications/web/agent-templates/) — where MCP servers are assigned to templates
 - [MCP Tools (concept)](/concepts/mcp-tools/) — the full MCP integration model, token lifecycle, and runtime behavior
-- [Built-in Tools](/applications/admin/builtin-tools/) — the other path for exposing external capabilities (non-MCP provider tools)
+- [Built-in Tools](/applications/web/builtin-tools/) — the other path for exposing external capabilities (non-MCP provider tools)

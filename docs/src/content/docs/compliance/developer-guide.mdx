@@ -35,7 +35,7 @@ How to extend the compliance module. For background read [overview](/compliance/
 
    ```bash
    pnpm --filter @thinkwork/api codegen
-   pnpm --filter @thinkwork/admin codegen
+   pnpm --filter @thinkwork/web codegen
    ```
 
 6. **Verify the drift snapshot test still passes.** [`packages/api/src/__tests__/compliance-event-type-drift.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/__tests__/compliance-event-type-drift.test.ts) asserts the GraphQL enum values match the runtime `COMPLIANCE_EVENT_TYPES` slate exactly. Adding a new type without updating the GraphQL schema fails here.
@@ -135,6 +135,6 @@ The U11.U2 + U11.U3 PRs ([#948](https://github.com/thinkwork-ai/thinkwork/pull/9
 | Anchor + drainer integration       | [`packages/lambda/__tests__/integration/compliance-anchor.integration.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/__tests__/integration/) + `compliance-drainer.integration.test.ts` |
 | Export runner unit                 | [`packages/lambda/__tests__/compliance-export-runner.test.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/lambda/__tests__/compliance-export-runner.test.ts)                                         |
 | Verifier CLI                       | [`packages/audit-verifier/src/`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/audit-verifier/) (`*.test.ts`)                                                                                           |
-| Admin SPA                          | [`apps/admin/src/`](https://github.com/thinkwork-ai/thinkwork/blob/main/apps/admin/) — TanStack route components don't have unit tests; verification happens via the U11.U5 SOC2 walkthrough rehearsal                 |
+| Web app                          | [`apps/web/src/`](https://github.com/thinkwork-ai/thinkwork/blob/main/apps/web/) — TanStack route components don't have unit tests; verification happens via the U11.U5 SOC2 walkthrough rehearsal                 |
 
 When adding a new emit site, the integration test in `packages/api/test/integration/compliance-event-writers/` is the gate that proves the cross-cutting path works (originating mutation → outbox row → drainer → audit_events row). Unit tests of the emit helper alone don't catch wiring regressions.

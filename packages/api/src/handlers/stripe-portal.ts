@@ -114,8 +114,12 @@ export async function handler(
     return error("Server misconfigured", 500);
   }
 
-  const adminUrl = process.env.ADMIN_URL || "https://admin.thinkwork.ai";
-  const returnUrl = `${adminUrl.replace(/\/$/, "")}/settings/billing`;
+  const appUrl =
+    process.env.APP_URL ||
+    process.env.WEB_URL ||
+    process.env.ADMIN_URL ||
+    "https://app.thinkwork.ai";
+  const returnUrl = `${appUrl.replace(/\/$/, "")}/settings/billing`;
 
   const { flow } = parseBody(event);
 

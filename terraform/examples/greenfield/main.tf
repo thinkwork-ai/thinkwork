@@ -483,10 +483,10 @@ variable "google_places_api_key" {
 
 variable "mapbox_public_token" {
   description = <<-EOT
-    Mapbox public pk.* token consumed by the apps/spaces MapView primitive
+    Mapbox public pk.* token consumed by the apps/web MapView primitive
     (in @thinkwork/computer-stdlib) for inline map tile rendering inside
-    generated applets. Flows through to scripts/build-spaces.sh →
-    apps/spaces/.env.production as VITE_MAPBOX_PUBLIC_TOKEN.
+    generated applets. Flows through to scripts/build-web.sh →
+    apps/web/.env.production as VITE_MAPBOX_PUBLIC_TOKEN.
 
     Mapbox tokens are designed to ship in public bundles; URL allowlist
     on the Mapbox dashboard is the security boundary. Restrict the token
@@ -556,7 +556,6 @@ variable "mcp_custom_domain_ready" {
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
-  admin_domain    = var.www_domain != "" ? "admin.${var.www_domain}" : ""
   app_domain      = var.www_domain != "" ? "app.${var.www_domain}" : ""
   computer_domain = var.www_domain != "" ? "computer.${var.www_domain}" : ""
   sandbox_domain  = var.www_domain != "" ? "sandbox.${var.www_domain}" : ""
@@ -726,14 +725,10 @@ module "thinkwork" {
   www_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
   # Docs site custom domain (derived from www_domain — docs.<apex>). The
-  # same ACM cert covers apex + www + docs + admin so every distribution
+  # same ACM cert covers apex + www + docs + app/computer so every distribution
   # shares it.
   docs_domain          = local.www_dns_enabled ? local.docs_domain : ""
   docs_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
-
-  # Admin SPA custom domain (derived from www_domain — admin.<apex>).
-  admin_domain          = local.www_dns_enabled ? local.admin_domain : ""
-  admin_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
   # End-user app custom domain (derived from www_domain — app.<apex>).
   # Same ACM cert covers it via the include_app SAN gate on www_dns.
@@ -748,10 +743,10 @@ module "thinkwork" {
 
   # Computer iframe sandbox (derived from www_domain — sandbox.<apex>).
   # Uses its own ACM certificate so sandbox bootstrap/rotation cannot replace
-  # the shared apex/www/docs/admin/computer/api certificate.
+  # the shared apex/www/docs/app/computer/api certificate.
   computer_sandbox_domain                 = local.www_dns_enabled ? local.sandbox_domain : ""
   computer_sandbox_certificate_arn        = local.www_dns_enabled ? aws_acm_certificate_validation.computer_sandbox[0].certificate_arn : ""
-  computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.app_domain},https://${local.admin_domain}" : ""
+  computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.app_domain}" : ""
 
   # SES inbound email subdomains (delegated Route53 subzones).
   ses_inbound_domain = var.ses_inbound_domain
@@ -773,8 +768,8 @@ module "thinkwork" {
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   agentcore_memory_id                           = var.agentcore_memory_id
 
-  # Mapbox public token for apps/spaces MapView primitive. Flows through
-  # to scripts/build-spaces.sh → VITE_MAPBOX_PUBLIC_TOKEN.
+  # Mapbox public token for apps/web MapView primitive. Flows through
+  # to scripts/build-web.sh → VITE_MAPBOX_PUBLIC_TOKEN.
   mapbox_public_token = var.mapbox_public_token
 
   # Stripe billing — internal-plan → price-id map (per-stage, non-secret).
@@ -811,12 +806,8 @@ module "www_dns" {
   include_docs                = true
   docs_cloudfront_domain_name = module.thinkwork.docs_distribution_domain
 
-  # Admin: same cycle-avoidance pattern.
-  include_admin                = true
-  admin_cloudfront_domain_name = module.thinkwork.admin_distribution_domain
-
   # End-user app: canonical app.<apex> host. The compatibility output names
-  # still use computer_* while the source path is apps/spaces.
+  # still use computer_* while the source path is apps/web.
   include_app                = true
   app_cloudfront_domain_name = module.thinkwork.app_distribution_domain
 
@@ -921,7 +912,7 @@ output "appsync_api_key" {
 }
 
 output "mapbox_public_token" {
-  description = "Mapbox public token used by apps/spaces MapView. Read by scripts/build-spaces.sh to inline VITE_MAPBOX_PUBLIC_TOKEN at build time; empty string lets MapView fall back to OpenStreetMap tiles."
+  description = "Mapbox public token used by apps/web MapView. Read by scripts/build-web.sh to inline VITE_MAPBOX_PUBLIC_TOKEN at build time; empty string lets MapView fall back to OpenStreetMap tiles."
   value       = module.thinkwork.mapbox_public_token
   sensitive   = true
 }
@@ -1047,18 +1038,8 @@ output "agentcore_memory_id" {
 }
 
 output "admin_url" {
-  description = "Admin app URL"
-  value       = local.www_dns_enabled ? "https://${local.admin_domain}" : "https://${module.thinkwork.admin_distribution_domain}"
-}
-
-output "admin_distribution_id" {
-  description = "CloudFront distribution ID for admin (for cache invalidation)"
-  value       = module.thinkwork.admin_distribution_id
-}
-
-output "admin_bucket_name" {
-  description = "S3 bucket for admin app assets"
-  value       = module.thinkwork.admin_bucket_name
+  description = "Deprecated compatibility alias for app_url"
+  value       = local.www_dns_enabled ? "https://${local.app_domain}" : "https://${module.thinkwork.app_distribution_domain}"
 }
 
 output "app_url" {

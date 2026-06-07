@@ -8,7 +8,7 @@ import { Aside } from '@astrojs/starlight/components';
 The Security Center is the operator's home for guardrail management, block statistics, and safety audit. Guardrails are Bedrock Guardrails-backed content filters and topic policies that every agent invocation passes through; when a guardrail activates, the agent's turn is either blocked or logged depending on the policy.
 
 **Route:** `/security`  
-**File:** `apps/admin/src/routes/_authed/_tenant/security/index.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/security/index.tsx`
 
 ## Five tabs
 
@@ -148,7 +148,7 @@ The Bedrock-side guardrail has its own versioning; the row stores the current ve
 1. Open the Dashboard tab
 2. Find the block in the Recent Blocks table
 3. Note the agent id and block type
-4. Cross-reference in [Threads](/applications/admin/threads/) to see the full conversation that triggered the block
+4. Cross-reference in [Threads](/applications/web/threads/) to see the full conversation that triggered the block
 5. If the block was a false positive, consider tuning the filter strength or revising denied topics
 
 ### Soften or tighten after launch
@@ -160,15 +160,15 @@ The Bedrock-side guardrail has its own versioning; the row stores the current ve
 
 ## Known limits
 
-- **Approvals and Audit tabs are Coming Soon.** Approvals will integrate the [Inbox](/applications/admin/inbox/) approval flows; Audit will expose the full `guardrail_blocks` table with filtering. Today, use the Dashboard's Recent Blocks list as the closest approximation.
+- **Approvals and Audit tabs are Coming Soon.** Approvals will integrate the [Inbox](/applications/web/inbox/) approval flows; Audit will expose the full `guardrail_blocks` table with filtering. Today, use the Dashboard's Recent Blocks list as the closest approximation.
 - **Only Bedrock content filter types are visualized.** The dashboard does not yet show custom policy activations (denied topics fire but aren't separated in the "Blocks by Type" card).
 - **Denied topics don't validate uniqueness.** Adding the same topic twice is allowed; it's up to the operator to deduplicate.
 - **No archival / soft delete.** Delete is permanent.
 
 ## Related pages
 
-- [Inbox](/applications/admin/inbox/) — the human-in-the-loop approval queue (Approvals tab will eventually unify with this)
-- [Agent Templates](/applications/admin/agent-templates/) — where guardrails are assigned
-- [Threads](/applications/admin/threads/) — where to look for the conversation that triggered a block
+- [Inbox](/applications/web/inbox/) — the human-in-the-loop approval queue (Approvals tab will eventually unify with this)
+- [Agent Templates](/applications/web/agent-templates/) — where guardrails are assigned
+- [Threads](/applications/web/threads/) — where to look for the conversation that triggered a block
 - [Control (concept)](/concepts/control/) — the product model for controls
 - [Guardrails (concept)](/concepts/control/guardrails/) — the guardrails concept page

@@ -238,8 +238,8 @@ check_verify_traces() {
   fi
 }
 
-check_admin_build() {
-  (cd "$REPO_ROOT" && pnpm --filter @thinkwork/admin build >/dev/null 2>&1)
+check_web_build() {
+  (cd "$REPO_ROOT" && pnpm --filter @thinkwork/web build >/dev/null 2>&1)
 }
 
 check_cli_build() {
@@ -248,7 +248,7 @@ check_cli_build() {
 
 check "thread create + lifecycleStatus=IDLE + channel=CHAT" check_create_and_lifecycle
 check "verify-thread-traces wire works"                     check_verify_traces
-check "admin builds"                                        check_admin_build
+check "web app builds"                                      check_web_build
 check "cli builds"                                          check_cli_build
 
 # ---------------------------------------------------------------------------

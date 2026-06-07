@@ -1,0 +1,82 @@
+# ThinkWork App
+
+End-user ThinkWork surface for blank threads, workspace-owned thread history, generated app artifacts, approvals, and memory.
+
+## Local Dev
+
+Copy the ignored environment file from the main checkout before starting a worktree server:
+
+```bash
+cp /Users/ericodom/Projects/thinkwork/apps/web/.env apps/web/.env
+```
+
+Run the Vite dev server on a Cognito-allowed callback port:
+
+```bash
+pnpm --filter @thinkwork/web dev -- --host 127.0.0.1 --port 5180
+```
+
+Use `5174` instead when you need the admin-compatible callback port locally.
+
+## Deployed Smoke
+
+The plan-facing app smoke command is:
+
+```bash
+scripts/smoke-web.sh dev
+```
+
+It creates a real deployed thread, subscribes to AppSync before sending a prompt, verifies live streamed chunks match the persisted assistant response and completed `computer_tasks` row, then checks the deployed app surface APIs for thread-table loading, approval round-trip, memory listing, and browser-evidence observability.
+
+The same command also runs the applet pipeline smoke:
+
+- saves or regenerates a stable smoke applet through the deployed API and asserts the `ok`, `validated`, and `persisted` pins
+- verifies `/artifacts/$appId` serves the deployed app SPA shell
+- invokes the saved applet's deterministic `refresh()` export and checks per-source statuses
+- round-trips `saveAppletState` / `appletState`
+- seeds the canonical LastMile CRM pipeline-risk applet and opens it through the applet route
+- runs the CRM dashboard prompt smoke in dry-run mode; set `SMOKE_ENABLE_AGENT_APPLET_PROMPT=1` to exercise the live AgentCore/model path and require a newly linked applet
+
+To run the optional live CRM dashboard prompt smoke:
+
+```bash
+SMOKE_ENABLE_AGENT_APPLET_PROMPT=1 scripts/smoke-web.sh dev
+```
+
+The default prompt is `Build a simple CRM pipeline dashboard from the available CRM data.` Override it with `SMOKE_CRM_DASHBOARD_PROMPT` when running post-deploy acceptance prompts.
+
+## Runbook Smoke
+
+Runbooks add Confirmation and Queue UI for published repeatable work. The runbook smoke defaults to an informational dry-run that reports the expected prompts and runbook slugs without validating tenant S3 catalog contents:
+
+```bash
+node scripts/smoke/spaces-runbook-smoke.mjs
+```
+
+To exercise a deployed app, database, GraphQL API, tenant S3 catalog, and runbook lifecycle:
+
+```bash
+SMOKE_ENABLE_COMPUTER_RUNBOOKS=1 node scripts/smoke/spaces-runbook-smoke.mjs
+```
+
+Live mode checks an auto-selected `map-artifact` confirmation, explicit `crm-dashboard` and `research-dashboard` Queue creation, research-run cancellation, and a no-match prompt that must not create a published runbook run.
+
+To run the browser-backed evidence path manually:
+
+```bash
+SMOKE_BROWSER_SCENARIO=1 SMOKE_REQUIRE_BROWSER_EVIDENCE=1 scripts/smoke-web.sh dev
+```
+
+That mode temporarily enables the backing agent's `browser_automation` capability for the smoke turn, waits for durable `browser_automation_*` events, then restores the prior capability state.
+
+To require a successful Nova Act browser run rather than any durable browser event:
+
+```bash
+SMOKE_BROWSER_SCENARIO=1 SMOKE_REQUIRE_BROWSER_EVIDENCE=1 SMOKE_REQUIRE_BROWSER_COMPLETED=1 scripts/smoke-web.sh dev
+```
+
+The Python Strands runtime reads the Nova Act key from `/thinkwork/<stage>/agentcore/nova-act-api-key`. Terraform creates that SecureString with a placeholder; populate the real value out of band:
+
+```bash
+aws ssm put-parameter --overwrite --name /thinkwork/dev/agentcore/nova-act-api-key --type SecureString --value "$NOVA_ACT_API_KEY"
+```

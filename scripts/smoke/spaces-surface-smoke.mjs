@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Smoke test the deployed Computer surface APIs used by apps/spaces.
+ * Smoke test the deployed Computer surface APIs used by apps/web.
  *
  * This complements the live streaming smoke. It exercises the non-streaming
  * surfaces that make the UI useful after a turn completes:
@@ -180,7 +180,7 @@ async function verifyApprovalRoundTrip() {
     emailDraft: {
       to: "smoke@example.com",
       subject: "Computer smoke approval",
-      body: "This approval is created and cancelled by scripts/smoke-spaces.sh.",
+      body: "This approval is created and cancelled by scripts/smoke-web.sh.",
     },
   };
 

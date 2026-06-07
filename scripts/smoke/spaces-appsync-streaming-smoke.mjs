@@ -11,7 +11,7 @@
  *   APPSYNC_REALTIME_URL or VITE_GRAPHQL_WS_URL
  *   APPSYNC_API_KEY, GRAPHQL_API_KEY, or VITE_GRAPHQL_API_KEY
  *
- * By default this also reads apps/spaces/.env when present. Override with
+ * By default this also reads apps/web/.env when present. Override with
  * COMPUTER_ENV_FILE=/path/to/env, or set COMPUTER_ENV_FILE=none to skip.
  */
 
@@ -47,7 +47,7 @@ const apiKey = first(
 
 if (!graphqlUrl || !realtimeUrl || !apiKey) {
   fail(
-    "Missing AppSync config. Set APPSYNC_ENDPOINT, APPSYNC_REALTIME_URL, and APPSYNC_API_KEY, or provide apps/spaces/.env.",
+    "Missing AppSync config. Set APPSYNC_ENDPOINT, APPSYNC_REALTIME_URL, and APPSYNC_API_KEY, or provide apps/web/.env.",
   );
 }
 

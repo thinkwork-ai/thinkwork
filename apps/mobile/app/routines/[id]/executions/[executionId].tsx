@@ -3,7 +3,7 @@
  *
  * /routines/[id]/executions/[executionId]
  *
- * Mirrors apps/admin/src/routes/.../$routineId.executions.$executionId.tsx
+ * Mirrors apps/web/src/routes/.../$routineId.executions.$executionId.tsx
  * — same one-shot RoutineExecutionDetailQuery pull, same 5s poll while
  * non-terminal (gated on AppState.active), same step-event-collapsed
  * graph render. Mobile uses ExecutionGraphMobile (vertical list with

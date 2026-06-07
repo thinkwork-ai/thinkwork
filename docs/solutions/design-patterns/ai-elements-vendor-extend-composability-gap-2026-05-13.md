@@ -2,7 +2,7 @@
 title: "Vendor and extend AI Elements primitives locally when their slot model can't host folder or row actions"
 date: 2026-05-13
 category: design-patterns
-module: apps/admin and apps/spaces ai-elements primitives
+module: apps/admin and apps/web ai-elements primitives
 problem_type: design_pattern
 component: frontend_stimulus
 severity: medium
@@ -23,7 +23,7 @@ tags:
 
 ## Context
 
-Vercel AI Elements (`apps/admin/src/components/ai-elements/*`, `apps/spaces/src/components/ai-elements/*`) follows the shadcn distribution model: source files are dropped into your repo, not consumed as a versioned npm dependency. That means when a component's slot structure doesn't fit your use case — no header-row actions slot, children rendered in the wrong place, etc. — there is no "upgrade and wait for a fix" path. The shadcn philosophy is explicit: **you own the source, you extend it locally**.
+Vercel AI Elements (`apps/admin/src/components/ai-elements/*`, `apps/web/src/components/ai-elements/*`) follows the shadcn distribution model: source files are dropped into your repo, not consumed as a versioned npm dependency. That means when a component's slot structure doesn't fit your use case — no header-row actions slot, children rendered in the wrong place, etc. — there is no "upgrade and wait for a fix" path. The shadcn philosophy is explicit: **you own the source, you extend it locally**.
 
 We hit this in PR #1193 with `FileTreeFolder`, which has no actions slot on the folder header row. Children render inside `<CollapsibleContent>` (i.e., nested files), with no prop or `children` position for trailing content on the header itself.
 

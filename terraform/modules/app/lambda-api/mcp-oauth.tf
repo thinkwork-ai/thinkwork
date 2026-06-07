@@ -2,7 +2,7 @@ locals {
   mcp_oauth_api_base_url       = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
   mcp_oauth_cognito_base_url   = var.cognito_auth_domain != "" ? "https://${var.cognito_auth_domain}.auth.${var.region}.amazoncognito.com" : ""
   mcp_oauth_identity_providers = var.google_oauth_client_id != "" ? ["Google", "COGNITO"] : ["COGNITO"]
-  mcp_oauth_logo_path          = "${path.module}/../../../../apps/admin/public/logo.png"
+  mcp_oauth_logo_path          = "${path.module}/../../../../apps/web/public/logo.png"
 }
 
 resource "aws_dynamodb_table" "mcp_oauth_revocations" {

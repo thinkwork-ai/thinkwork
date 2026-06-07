@@ -28,7 +28,7 @@ import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { COLORS } from "@/lib/theme";
 
 // Lifecycle status → operator-facing label. Mirrors admin's ThreadLifecycleBadge
-// (apps/admin/src/components/threads/ThreadLifecycleBadge.tsx). Read-only;
+// (apps/web/src/components/threads/ThreadLifecycleBadge.tsx). Read-only;
 // lifecycle is derived server-side via thread.lifecycleStatus (U4, #546).
 const LIFECYCLE_LABELS: Record<string, string> = {
   RUNNING: "Running",

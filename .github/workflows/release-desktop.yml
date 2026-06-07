@@ -119,7 +119,7 @@ jobs:
           # Stamp the same release version the desktop build uses so the web
           # sidebar header shows the running build (e.g. "canary 95").
           VITE_APP_VERSION="${GITHUB_REF_NAME#desktop-v}" \
-            bash scripts/build-spaces.sh "${STAGE}"
+            bash scripts/build-web.sh "${STAGE}"
 
       - name: Publish desktop update metadata
         env:

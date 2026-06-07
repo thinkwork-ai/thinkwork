@@ -12,7 +12,7 @@ This is the seam between automation and oversight: agents do work autonomously u
 ## The list
 
 **Route:** `/inbox`  
-**File:** `apps/admin/src/routes/_authed/_tenant/inbox/index.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/inbox/index.tsx`
 
 The list is split into two tabs: **Pending** and **Resolved**. Each row shows:
 
@@ -30,7 +30,7 @@ Revisions are tracked explicitly: if an approver asked for changes and the agent
 ## The item detail
 
 **Route:** `/inbox/:inboxItemId`  
-**File:** `apps/admin/src/routes/_authed/_tenant/inbox/$inboxItemId.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/inbox/$inboxItemId.tsx`
 
 Clicking an item opens the full review screen. The layout is a wide main column (`lg:col-span-2`) with the request details plus a narrow sidebar.
 
@@ -162,8 +162,8 @@ The CLI scaffolds `thinkwork inbox list / get / approve / reject / request-revis
 
 ## Related pages
 
-- [Threads](/applications/admin/threads/) — inbox items usually link back to a parent thread
-- [Tenant Agent](/applications/admin/agents/) — configure platform-agent workspace and folder specialists
-- [Spaces](/applications/admin/spaces/) — configure Space context that can produce review work
-- [Security Center](/applications/admin/security-center/) — policy and guardrail enforcement
+- [Threads](/applications/web/threads/) — inbox items usually link back to a parent thread
+- [Tenant Agent](/applications/web/agents/) — configure platform-agent workspace and folder specialists
+- [Spaces](/applications/web/spaces/) — configure Space context that can produce review work
+- [Security Center](/applications/web/security-center/) — policy and guardrail enforcement
 - [Control (concept)](/concepts/control/) — the product model for approvals and controls

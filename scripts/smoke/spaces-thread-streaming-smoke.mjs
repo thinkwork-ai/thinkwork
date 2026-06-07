@@ -22,7 +22,7 @@
  * and SMOKE_USER_ID. If omitted, the script uses the most recently updated
  * shared Computer with a direct user assignment in the target database.
  *
- * By default this reads apps/spaces/.env when present. Override with
+ * By default this reads apps/web/.env when present. Override with
  * COMPUTER_ENV_FILE=/path/to/env, or set COMPUTER_ENV_FILE=none to skip.
  */
 
@@ -69,7 +69,7 @@ const apiKey = first(
 if (!databaseUrl) fail("Missing DATABASE_URL.");
 if (!apiUrl || !appsyncUrl || !realtimeUrl || !apiKey) {
   fail(
-    "Missing GraphQL/AppSync config. Provide apps/spaces/.env or set the VITE_GRAPHQL_* env vars.",
+    "Missing GraphQL/AppSync config. Provide apps/web/.env or set the VITE_GRAPHQL_* env vars.",
   );
 }
 if (typeof WebSocket !== "function") {

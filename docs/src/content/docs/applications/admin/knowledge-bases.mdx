@@ -10,8 +10,8 @@ Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The Adm
 ## The list view
 
 **Route:** `/knowledge/knowledge-bases`
-**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/knowledge-bases.tsx`
-**Tab implementation:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/index.tsx`
+**Route wrapper:** `apps/web/src/routes/_authed/_tenant/knowledge/knowledge-bases.tsx`
+**Tab implementation:** `apps/web/src/routes/_authed/_tenant/knowledge-bases/index.tsx`
 
 The legacy `/knowledge-bases` route redirects to this tab.
 
@@ -30,8 +30,8 @@ A "Create KB" button in the header fires a creation flow (not deeply visible in 
 ## The detail view
 
 **Route:** `/knowledge/knowledge-bases/:kbId`
-**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/knowledge-bases/$kbId.tsx`
-**Detail implementation:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/$kbId.tsx`
+**Route wrapper:** `apps/web/src/routes/_authed/_tenant/knowledge/knowledge-bases/$kbId.tsx`
+**Detail implementation:** `apps/web/src/routes/_authed/_tenant/knowledge-bases/$kbId.tsx`
 
 The detail page is a two-column grid: Documents on the left, Sync on the right, with a header showing the KB name, slug, status badges, and a delete confirmation flow.
 
@@ -153,9 +153,9 @@ Because the vector index lives in Aurora, a single Aurora snapshot restore bring
 
 ## Related pages
 
-- [Agents](/applications/admin/agents/) — where a KB can be attached to an agent
-- [Admin — Memory](/applications/admin/knowledge/) — the combined Admin surface for Memory, Pages, Knowledge Bases, and Sources
-- [Memory](/applications/admin/memory/) — the Memory tab behavior: stateful memory vs stateless documents
+- [Agents](/applications/web/agents/) — where a KB can be attached to an agent
+- [Admin — Memory](/applications/web/knowledge/) — the combined Admin surface for Memory, Pages, Knowledge Bases, and Sources
+- [Memory](/applications/web/memory/) — the Memory tab behavior: stateful memory vs stateless documents
 - [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — the product model
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — how retrieval is assembled into a turn
 - [Architecture](/architecture/) — the three-tier deployment including Bedrock and Aurora pgvector

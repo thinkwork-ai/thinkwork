@@ -22,7 +22,7 @@ Each step has a "what the auditor sees" line + a "why it proves something" line.
 
 ### 1. Sign in to admin
 
-**See:** Admin SPA loaded; sidebar shows **Compliance** between Settings and Billing.
+**See:** Web app loaded; sidebar shows **Compliance** between Settings and Billing.
 
 **Why it matters:** The Compliance entry is operator-tier only; non-operators do not see it. Permission gating is enforced server-side by `requireComplianceReader` ([`packages/api/src/lib/compliance/resolver-auth.ts`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/api/src/lib/compliance/resolver-auth.ts)) — the sidebar is the visible signal.
 

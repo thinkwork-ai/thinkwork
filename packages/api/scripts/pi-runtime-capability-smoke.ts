@@ -101,7 +101,7 @@ function usage(exitCode = 2): never {
 Environment:
   THINKWORK_GRAPHQL_URL / THINKWORK_GRAPHQL_API_KEY
   THINKWORK_USER_ID or PI_SMOKE_SENDER_ID for sandbox-backed execute_code
-  or apps/admin/.env with VITE_GRAPHQL_HTTP_URL / VITE_GRAPHQL_API_KEY`);
+  or apps/web/.env with VITE_GRAPHQL_HTTP_URL / VITE_GRAPHQL_API_KEY`);
   process.exit(exitCode);
 }
 
@@ -128,7 +128,7 @@ function readDotEnv(path: string): Record<string, string> {
 }
 
 function parseArgs(): Args {
-  const env = readDotEnv(resolve(repoRoot(), "apps/admin/.env"));
+  const env = readDotEnv(resolve(repoRoot(), "apps/web/.env"));
   const args = process.argv.slice(2);
   let tenantId = process.env.THINKWORK_TENANT_ID || "";
   let agentId = process.env.THINKWORK_AGENT_ID || "";

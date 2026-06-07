@@ -9,7 +9,7 @@ severity: medium
 related_components:
   - packages/api
   - packages/graph
-  - apps/spaces
+  - apps/web
   - scripts/smoke
 tags:
   - cognee

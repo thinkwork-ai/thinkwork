@@ -34,7 +34,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   await mkdir(lambdaDir, { recursive: true });
   await mkdir(staticDir, { recursive: true });
   await writeFile(path.join(lambdaDir, "graphql-http.zip"), "lambda-bytes");
-  await writeFile(path.join(staticDir, "admin.tar.gz"), "admin-bytes");
+  await writeFile(path.join(staticDir, "web.tar.gz"), "web-bytes");
 
   const manifest = await buildReleaseManifest({
     version: "v1.2.3",
@@ -46,9 +46,9 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     createdAt: "2026-05-18T00:00:00.000Z",
     artifacts: [
       {
-        name: "admin",
+        name: "web",
         type: "static-site",
-        path: path.join(staticDir, "admin.tar.gz"),
+        path: path.join(staticDir, "web.tar.gz"),
       },
     ],
     runtimeImages: [
@@ -87,7 +87,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     manifest.artifacts.map(
       (artifact) => `${artifact.type}:${artifact.name}:${artifact.fileName}`,
     ),
-    ["lambda:graphql-http:graphql-http.zip", "static-site:admin:admin.tar.gz"],
+    ["lambda:graphql-http:graphql-http.zip", "static-site:web:web.tar.gz"],
   );
   assert.equal(
     manifest.artifacts[0]?.url,
@@ -251,13 +251,13 @@ test("buildReleaseManifest fails when a required artifact is missing", async () 
         artifactRoot: root,
         artifacts: [
           {
-            name: "admin",
+            name: "web",
             type: "static-site",
-            path: path.join(root, "static", "admin.tar.gz"),
+            path: path.join(root, "static", "web.tar.gz"),
           },
         ],
       }),
-    /Required release artifact "admin" is missing/,
+    /Required release artifact "web" is missing/,
   );
 });
 
@@ -284,18 +284,18 @@ test("buildReleaseManifest rejects duplicate logical artifact names", async () =
 test("spec parsers reject incomplete artifact and image definitions", () => {
   assert.deepEqual(
     parseArtifactSpec(
-      "name=admin,type=static-site,path=dist/release/admin.tar.gz",
+      "name=web,type=static-site,path=dist/release/web.tar.gz",
     ),
     {
-      name: "admin",
+      name: "web",
       type: "static-site",
-      path: "dist/release/admin.tar.gz",
+      path: "dist/release/web.tar.gz",
       required: true,
     },
   );
 
   assert.throws(
-    () => parseArtifactSpec("name=admin,path=dist/release/admin.tar.gz"),
+    () => parseArtifactSpec("name=web,path=dist/release/web.tar.gz"),
     /Invalid/,
   );
   assert.throws(

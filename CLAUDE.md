@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Pi AgentCore runtime, deployed by the repo's own CLI via Terraform. There is **no local-only mode** — end-to-end work requires a deployed AWS stack. "Thinkwork supersedes maniflow" — ignore the old `maniflow*` names you may see on stale resources.
 
-- `apps/admin` — React 19 + Vite + TanStack Router operator SPA (dev port **5174**)
+- `apps/web` — React 19 + Vite + TanStack Router web app with operator/admin settings and end-user work surfaces (dev port **5180** by default)
 - `apps/mobile` — Expo + React Native + NativeWind (iOS via TestFlight)
 - `apps/cli` — `thinkwork-cli` (commander.js), published to npm, bundles Terraform modules
 - `packages/database-pg` — Drizzle schema + migrations + canonical GraphQL source (`graphql/types/*.graphql`)
@@ -63,7 +63,7 @@ pnpm db:migrate-manual                              # drift reporter for hand-ro
 
 Some `drizzle/*.sql` files are **hand-rolled** (partial indices, CHECK constraints, precise FK ordering) and not registered in `meta/_journal.json`. They're outside `db:push`'s scope — apply via `psql "$DATABASE_URL" -f <file>`. `pnpm db:migrate-manual` reports which of their declared objects are present in the target DB; every such file must declare `-- creates: public.X` (or `-- creates-column: public.T.C`) markers in its header so the reporter can check. The `deploy.yml` workflow runs the reporter as a gate after `terraform-apply` — missing objects fail the deploy so unapplied migrations can't ship silently. Background: `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md`.
 
-After editing GraphQL types, **regenerate codegen** in every consumer that has a `codegen` script: `apps/cli`, `apps/admin`, `apps/mobile`, `apps/spaces`, `packages/api`. Run `pnpm --filter @thinkwork/<name> codegen`.
+After editing GraphQL types, **regenerate codegen** in every consumer that has a `codegen` script: `apps/cli`, `apps/web`, `apps/mobile`, `packages/api`. Run `pnpm --filter @thinkwork/<name> codegen`.
 
 ### Lambda build
 
@@ -84,25 +84,31 @@ thinkwork login --stage <stage>    # OAuth to the deployed Cognito pool
 thinkwork me                       # identity + tenant sanity check
 ```
 
-### Admin dev server
+### Web dev server
 
 ```bash
-pnpm --filter @thinkwork/admin dev     # port 5174 by default
+pnpm --filter @thinkwork/web dev -- --host 127.0.0.1 --port 5180
 ```
 
-Concurrent admin vite instances (worktrees) must bind to 5175+. **Each port must be listed in the Cognito `ThinkworkAdmin` CallbackURLs** or Google OAuth fails with a generic-looking `redirect_mismatch` page — add the new port in Terraform/Cognito before starting the second server.
+When running the web dev server from a worktree, first copy the ignored env file from the main checkout:
+
+```bash
+cp /Users/ericodom/Projects/thinkwork/apps/web/.env apps/web/.env
+```
+
+Concurrent web Vite instances (worktrees) must bind to Cognito-allowed callback ports such as 5175+ or 5180. **Each port must be listed in the Cognito `ThinkworkAdmin` CallbackURLs** or Google OAuth fails with a generic-looking `redirect_mismatch` page — add the new port in Terraform/Cognito before starting the second server.
 
 ## Architecture: the end-to-end data flow
 
-1. **Clients** — React admin + Expo mobile + CLI. All three auth through **Cognito** (Google OAuth federation supported; Eric signs in via Google, not a password — session-restore must go through the OAuth refresh-token path, not `restoreWithCredentials`).
+1. **Clients** — React web app + Expo mobile + CLI. All three auth through **Cognito** (Google OAuth federation supported; Eric signs in via Google, not a password — session-restore must go through the OAuth refresh-token path, not `restoreWithCredentials`).
 2. **Edge** — AppSync (subscriptions) + HTTP API Gateway fronting `graphql-http` Lambda. The AppSync schema is _subscription-only_ and is generated from the same GraphQL source as the HTTP API by `scripts/schema-build.sh`.
 3. **GraphQL server** — Yoga in `packages/api/src/graphql`. `ctx.auth.tenantId` is **null for Google-federated users** until the Cognito pre-token trigger lands; resolvers must use `resolveCallerTenantId(ctx)` as a fallback.
 4. **Persistence** — Aurora Postgres via Drizzle (`packages/database-pg`). Schema changes flow: edit `src/schema/*` → `db:generate` → PR the new `drizzle/NNNN_*.sql` → `db:push` after deploy. `agent_skills` is **derived** from composed AGENTS.md routing rows: `packages/api/src/lib/derive-agent-skills.ts` runs on every `AGENTS.md` put inside `packages/api/workspace-files.ts`. The legacy `setAgentSkills` GraphQL mutation continues to work but logs a deprecation warning — Plan §008 U21 retires it.
 5. **Agent runtime** — Bedrock AgentCore hosts the **Pi** runtime (`packages/agentcore-pi`). The runtime loads installed skills from materialized workspace `skills/<slug>/` folders and keeps tenant catalog source files in S3 under `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`; MCP tool servers use streamable HTTP. Memory engine is either **AgentCore managed** or **Hindsight**, selected in Terraform by `enable_hindsight` / `memory_engine`.
 6. **Scheduling / background work** — `scheduled_jobs` rows → `job-schedule-manager` Lambda → AWS Scheduler (`rate()` is _creation-time + interval_, not wall-clock) → `job-trigger` Lambda → agent wakeups. User-initiated create/update Lambda invokes must use **`RequestResponse`** and surface errors — never fire-and-forget.
-7. **Connectors** — Slack, GitHub, Google Workspace. Per-user OAuth and MCP tokens live on the **mobile** client; tenant-wide infra config stays in admin (don't add end-user-facing toggles to the admin SPA).
+7. **Connectors** — Slack, GitHub, Google Workspace. Per-user OAuth and MCP tokens live on the **mobile** client; tenant-wide infra config stays in the web app's operator settings (don't add end-user-facing toggles to non-operator surfaces).
 8. **Evaluations** — AWS Bedrock AgentCore Evaluations is the backing store (16 built-in evaluators); the UI adds test-case authoring on top. Don't reintroduce Mastra/promptfoo.
-9. **Compounding Memory (Wiki)** — `wiki-compile` Lambda distills scattered memories into Entity/Topic/Decision pages; admin + mobile both render the graph. `thinkwork wiki {compile,rebuild,status}` are admin-only CLI entry points.
+9. **Compounding Memory (Wiki)** — `wiki-compile` Lambda distills scattered memories into Entity/Topic/Decision pages; web + mobile both render the graph. `thinkwork wiki {compile,rebuild,status}` are operator-only CLI entry points.
 
 ## PR / branch workflow
 

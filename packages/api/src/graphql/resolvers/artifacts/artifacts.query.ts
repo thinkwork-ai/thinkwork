@@ -27,7 +27,7 @@ export const artifacts_ = async (
   if (args.cursor)
     conditions.push(lt(artifacts.created_at, new Date(args.cursor)));
   const limit = Math.min(args.limit || 50, 200);
-  // favoritedOnly callers (apps/spaces sidebar Favorites section) want
+  // favoritedOnly callers (apps/web sidebar Favorites section) want
   // most-recently-favorited first, not most-recently-created. Other
   // callers keep the existing created_at-desc ordering so list paging
   // stays stable.

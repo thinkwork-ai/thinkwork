@@ -5,7 +5,7 @@ description: Step-by-step Terraform deploy of ThinkWork from scratch into a new 
 
 import { Aside, Steps } from "@astrojs/starlight/components";
 
-This guide walks through a full ThinkWork deployment into a fresh AWS account with no existing infrastructure. At the end, you'll have ~260 AWS resources running across three tiers, accessible via the admin app and GraphQL API.
+This guide walks through a full ThinkWork deployment into a fresh AWS account with no existing infrastructure. At the end, you'll have ~260 AWS resources running across three tiers, accessible via the web app and GraphQL API.
 
 ## What gets deployed
 
@@ -34,7 +34,7 @@ ThinkWork is organized into three infrastructure tiers that deploy in order:
 - AgentCore Lambda (container image, 3GB memory, 15min timeout)
 - Integration Lambda functions (Slack, GitHub, Google)
 - Step Functions state machines (automations, routine runner)
-- CloudFront distributions (admin app, end-user app)
+- CloudFront distributions (web app)
 - Bedrock AgentCore Memory (always on — auto-provisioned for managed long-term memory)
 - ECS Fargate (only if `enable_hindsight = true`)
 
@@ -181,7 +181,7 @@ In the AWS console:
    ```
    AppSync API:     https://abc.appsync-api.us-east-1.amazonaws.com/graphql
    API Gateway:     https://xyz.execute-api.us-east-1.amazonaws.com
-   Admin App:       https://d1234.cloudfront.net
+   Web App:       https://d1234.cloudfront.net
    Cognito Pool ID: us-east-1_ABC123
    Cognito Client:  1abc2def3ghi
    ```
@@ -202,9 +202,9 @@ In the AWS console:
      --permanent
    ```
 
-10. **Sign in to the admin app**
+10. **Sign in to the web app**
 
-    Navigate to the Admin App URL, sign in with your Cognito user, and create your first agent.
+    Navigate to the Web App URL, sign in with your Cognito user, and create your first agent.
 
 </Steps>
 
