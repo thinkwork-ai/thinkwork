@@ -28,9 +28,11 @@ locals {
   state_machine_log_group = "/aws/vendedlogs/states/${local.state_machine_name}"
 
   release_parameters = {
-    selected_release_version         = var.release_version
-    selected_release_manifest_url    = var.release_manifest_url
-    selected_release_manifest_sha256 = var.release_manifest_sha256
+    for key, value in {
+      selected_release_version         = var.release_version
+      selected_release_manifest_url    = var.release_manifest_url
+      selected_release_manifest_sha256 = var.release_manifest_sha256
+    } : key => value if value != ""
   }
 
   secret_placeholders = {
