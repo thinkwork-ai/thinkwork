@@ -36,9 +36,12 @@ modelRouting:
 Fields:
 
 - `tool`: required tool name. The v1 true-stacking target is
-  `workspace_skill`.
+  `workspace_skill`. MCP servers are routed as the server-level tool surface
+  `mcp`, not as individual generated MCP operation names.
 - `match`: optional equality matcher. For `workspace_skill`, use `slug` to
-  target one installed skill.
+  target one installed skill. For MCP routes, use `serverName` to target the
+  configured MCP server, for example `twenty-crm`. The trace still records the
+  concrete MCP operation (`match.toolName`) that ran under the server route.
 - `model`: required child model ID.
 - `reason`: optional human-readable explanation shown in policy/source context.
 
@@ -76,6 +79,20 @@ modelRouting:
 Run a turn with a different parent model selected in the composer, such as
 `us.anthropic.claude-sonnet-4-5-20250929-v1:0`. The trace should show the
 parent turn model separately from the routed tool model.
+
+For an MCP server such as Twenty CRM, route the whole server:
+
+```yaml
+---
+modelRouting:
+  - tool: mcp
+    match:
+      serverName: twenty-crm
+    model: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    reason: run Twenty CRM MCP calls through the cheaper child model
+---
+# Tools
+```
 
 After the turn completes, open Settings -> Activity -> Thread Detail -> the
 `Tool: workspace_skill` row. The tool row and detail dialog should show the

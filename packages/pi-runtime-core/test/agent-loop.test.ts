@@ -448,6 +448,98 @@ describe("runAgentLoop", () => {
     ]);
   });
 
+  it("records model-routed MCP metadata from wrapped SDK tool results", async () => {
+    const routing = {
+      toolName: "mcp_twenty-crm_execute_tool",
+      match: {
+        serverName: "twenty-crm",
+        tool: "mcp_twenty-crm_execute_tool",
+      },
+      model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      ruleSource: {
+        path: "/workspace/TOOLS.md",
+        owner: "workspace",
+        precedence: 200,
+      },
+      status: "completed",
+      inputTokens: 91,
+      outputTokens: 13,
+      cachedReadTokens: 7,
+      totalTokens: 111,
+      durationMs: 35,
+    };
+    const resultPayloads = [
+      {
+        content: [{ type: "text", text: "normalized result" }],
+        modelRouting: routing,
+      },
+      {
+        content: [{ type: "text", text: "wrapped result" }],
+        result: { details: { modelRouting: routing } },
+      },
+      {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              content: [{ type: "text", text: "serialized result" }],
+              details: { modelRouting: routing },
+            }),
+          },
+        ],
+      },
+    ];
+
+    for (const resultPayload of resultPayloads) {
+      const session = makeFakeSession({
+        messages: [assistantMessage("done")],
+        events: [
+          {
+            type: "tool_execution_start",
+            toolCallId: "mcp-call-1",
+            toolName: "mcp_twenty-crm_execute_tool",
+            args: { name: "find_many_opportunities" },
+          } as AgentSessionEvent,
+          {
+            type: "tool_execution_end",
+            toolCallId: "mcp-call-1",
+            toolName: "mcp_twenty-crm_execute_tool",
+            result: resultPayload,
+            isError: false,
+          } as AgentSessionEvent,
+        ],
+      });
+
+      const result = await runAgentLoop(baseArgs(), {
+        openSession: async () => ({ session, modelId: "m" }),
+      });
+
+      expect(result.toolInvocations[0].model_routing).toEqual({
+        toolCallId: "mcp-call-1",
+        toolName: "mcp_twenty-crm_execute_tool",
+        match: {
+          serverName: "twenty-crm",
+          tool: "mcp_twenty-crm_execute_tool",
+        },
+        model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        ruleSource: {
+          path: "/workspace/TOOLS.md",
+          owner: "workspace",
+          precedence: 200,
+        },
+        status: "completed",
+        inputTokens: 91,
+        outputTokens: 13,
+        cachedReadTokens: 7,
+        totalTokens: 111,
+        durationMs: 35,
+      });
+      expect(result.modelRoutedToolCalls).toEqual([
+        result.toolInvocations[0].model_routing,
+      ]);
+    }
+  });
+
   it("fires emitActivity on tool start + end with the dedup-contract shape (U5)", async () => {
     const session = makeFakeSession({
       messages: [assistantMessage("done")],

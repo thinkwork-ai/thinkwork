@@ -6,9 +6,22 @@
  * deployed stack; live demo setup/cleanup is documented separately in
  * docs/verification/model-stacking-e2e.md.
  */
+import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@thinkwork/pi-runtime-core": path.resolve(
+        __dirname,
+        "../pi-runtime-core/src/index.ts",
+      ),
+      "@thinkwork/pi-extensions": path.resolve(
+        __dirname,
+        "../pi-extensions/src/index.ts",
+      ),
+    },
+  },
   test: {
     globals: true,
     environment: "node",

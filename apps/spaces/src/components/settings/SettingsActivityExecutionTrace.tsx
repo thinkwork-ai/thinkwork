@@ -319,8 +319,10 @@ function extractToolModelEvidence(
   );
   const cacheReadTokens = numberValue(
     record.cached_read_tokens ??
+      record.cachedReadTokens ??
       record.cacheReadTokens ??
       routing.cached_read_tokens ??
+      routing.cachedReadTokens ??
       routing.cacheReadTokens,
   );
   const costUsd = numberValue(
@@ -366,20 +368,31 @@ function extractToolModelEvidence(
 function extractToolModelEvidenceFromEvent(event: any): TimelineEvent | null {
   if (event?.eventType !== "model_routed_tool_call") return null;
   const payload = parseJsonField(event.payload) ?? {};
+  return extractToolModelEvidenceFromRouteRecord(payload, event.createdAt ?? "");
+}
+
+function extractToolModelEvidenceFromRouteRecord(
+  record: Record<string, unknown>,
+  timestamp = "",
+): TimelineEvent | null {
   const toolName =
     String(
-      payload.tool_name ??
-        payload.toolName ??
-        payload.name ??
+      record.tool_name ??
+        record.toolName ??
+        record.name ??
         "workspace_skill",
     ).trim() || "workspace_skill";
-  const evidence = extractToolModelEvidence(payload);
+  const evidence = extractToolModelEvidence({
+    ...record,
+    model_routing_status:
+      record.model_routing_status ?? record.modelRoutingStatus ?? record.status,
+  });
   return {
     type: "tool_call",
-    timestamp: event.createdAt ?? "",
+    timestamp,
     branch: "parent",
     toolCallId:
-      String(payload.tool_call_id ?? payload.toolCallId ?? "").trim() ||
+      String(record.tool_call_id ?? record.toolCallId ?? "").trim() ||
       undefined,
     toolName,
     toolType: "tool",
@@ -526,6 +539,24 @@ function appendUnmatchedRouteEvents(
     : merged;
 }
 
+function mergeRouteEvidence(
+  events: TimelineEvent[],
+  routeRecords: Record<string, unknown>[] = [],
+  turnEvents: any[] = [],
+): TimelineEvent[] {
+  const syntheticTurnEvents =
+    routeRecords.length === 0
+      ? turnEvents
+      : [
+          ...turnEvents,
+          ...routeRecords.map((record) => ({
+            eventType: "model_routed_tool_call",
+            payload: record,
+          })),
+        ];
+  return appendUnmatchedRouteEvents(events, syntheticTurnEvents);
+}
+
 function hasConcreteRouteEvidence(event: TimelineEvent): boolean {
   return Boolean(
     event.routeModelId ||
@@ -619,6 +650,7 @@ type BranchSpan = {
  * LLM entry from the turn's aggregate token/cost stats. */
 function buildTimelineFromUsage(
   toolInvocations: any[],
+  modelRoutedToolCalls: Record<string, unknown>[],
   responseText: string,
   model?: string,
   inputTokens?: number,
@@ -676,7 +708,7 @@ function buildTimelineFromUsage(
   }
 
   return enrichEventsWithRouteTraces(
-    appendUnmatchedRouteEvents(events, turnEvents),
+    mergeRouteEvidence(events, modelRoutedToolCalls, turnEvents),
     modelRouteTraces,
     turnId,
   );
@@ -685,6 +717,7 @@ function buildTimelineFromUsage(
 function buildTimeline(
   invocations: any[],
   toolInvocations: any[],
+  modelRoutedToolCalls: Record<string, unknown>[],
   userMessage: string,
   responseText: string,
   turnEvents?: any[],
@@ -778,7 +811,7 @@ function buildTimeline(
   reparentSubAgentEvents(events);
 
   return enrichEventsWithRouteTraces(
-    appendUnmatchedRouteEvents(events, turnEvents),
+    mergeRouteEvidence(events, modelRoutedToolCalls, turnEvents),
     modelRouteTraces,
     turnId,
   );
@@ -895,6 +928,7 @@ function ExecutionTimeline({
   responseText,
   agentName,
   modelRouteTraces,
+  modelRoutedToolCalls = [],
   onViewDetail,
 }: {
   turnId: string;
@@ -906,6 +940,7 @@ function ExecutionTimeline({
   responseText: string;
   agentName?: string | null;
   modelRouteTraces?: ExecutionTraceModelRouteTrace[];
+  modelRoutedToolCalls?: Record<string, unknown>[];
   onViewDetail: (title: string, content: string) => void;
 }) {
   const { tenantId } = useTenant();
@@ -934,6 +969,7 @@ function ExecutionTimeline({
       ? buildTimeline(
           invocations,
           toolInvocations,
+          modelRoutedToolCalls,
           "",
           responseText,
           turnEvents,
@@ -942,6 +978,7 @@ function ExecutionTimeline({
         )
       : buildTimelineFromUsage(
           toolInvocations,
+          modelRoutedToolCalls,
           responseText,
           model,
           inputTokens,
@@ -1290,6 +1327,9 @@ function TurnRow({
           status: "success",
         }))
       : [];
+  const modelRoutedToolCalls = Array.isArray(usage?.model_routed_tool_calls)
+    ? (usage.model_routed_tool_calls as Record<string, unknown>[])
+    : [];
   const title = "Thinking";
   const sourceLabel = formatInvocationSource(
     turn.triggerName || turn.invocationSource,
@@ -1416,6 +1456,7 @@ function TurnRow({
               responseText={result?.response ? String(result.response) : ""}
               agentName={agentName}
               modelRouteTraces={modelRouteTraces}
+              modelRoutedToolCalls={modelRoutedToolCalls}
               onViewDetail={(t, c) => setDetailDialog({ title: t, content: c })}
             />
           )}

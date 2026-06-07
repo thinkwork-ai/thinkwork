@@ -10,7 +10,7 @@ This runbook proves the demo-critical model-stacking path:
 
 1. A user selects an approved parent model for the turn.
 2. Layered `TOOLS.md` policy chooses a different approved model for a
-   `workspace_skill` tool call.
+   `workspace_skill` tool call or an MCP server call.
 3. The tool output records the child model plus input/output tokens.
 4. Settings -> Activity -> Thread Detail -> Tool shows that model evidence.
 5. An unapproved override is rejected without silently falling back.
@@ -79,6 +79,20 @@ modelRouting:
 # Tools
 ```
 
+Twenty CRM MCP server route:
+
+```yaml
+---
+modelRouting:
+  - tool: mcp
+    match:
+      serverName: twenty-crm
+    model: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    reason: route every Twenty CRM MCP call through the child model
+---
+# Tools
+```
+
 For the negative case, change only the user-level model to an unapproved model:
 
 ```yaml
@@ -110,8 +124,15 @@ manually mutate production outside approved demo tenant setup.
    - `Rule source` owner `user` and path `User/TOOLS.md`
 9. Confirm the thread/trace evidence still shows the parent turn model as the
    composer-selected parent model.
-10. Change user `TOOLS.md` to the unapproved model and rerun the same prompt.
-11. Confirm the route is rejected visibly and no child model cost row is
+10. For MCP, add the Twenty CRM server route above, then start a new thread with
+    a prompt such as:
+    `what are the last 5 opportunities from the twenty crm?`
+11. Open Settings -> Activity -> the new thread and confirm each routed
+    `mcp_twenty-crm_*` tool row shows the child model, tokens, and cost. The
+    detail dialog should show `match.serverName: twenty-crm` and the concrete
+    MCP operation in `match.toolName`.
+12. Change user `TOOLS.md` to the unapproved model and rerun the same prompt.
+13. Confirm the route is rejected visibly and no child model cost row is
     recorded for the unapproved model.
 
 ## Cleanup
