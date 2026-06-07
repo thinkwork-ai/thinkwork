@@ -47,11 +47,9 @@ export function SettingsMemoryHome() {
     breadcrumbs: [{ label: "Memory" }],
     tabs: [
       { to: MEMORY, label: "Memory" },
-      { to: KNOWLEDGE_BASES, label: "Knowledge Bases" },
+      { to: KNOWLEDGE_BASES, label: "KBs" },
+      ...(cogneeEnabled ? [{ to: KNOWLEDGE_GRAPH, label: "Ontology" }] : []),
       { to: WIKI, label: "Wiki" },
-      ...(cogneeEnabled
-        ? [{ to: KNOWLEDGE_GRAPH, label: "Knowledge Graph" }]
-        : []),
     ],
   });
 

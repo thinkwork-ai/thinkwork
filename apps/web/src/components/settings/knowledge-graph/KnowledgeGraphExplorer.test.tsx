@@ -85,8 +85,9 @@ describe("KnowledgeGraphExplorer", () => {
   });
 
   it("exposes thread search, selection, and manual ingest controls", () => {
-    expect(settingsSource).toContain("IconMessages");
-    expect(settingsSource).toContain("Open thread ingest");
+    // The Ontology tab opens thread ingest via a right-aligned "Threads" link.
+    expect(settingsSource).toContain("Threads");
+    expect(settingsSource).toContain("setThreadSheetOpen");
     expect(explorerSource).toContain("threadSheetOpen");
     expect(explorerSource).toContain("Thread Ingest");
     expect(explorerSource).toContain("Thread Detail");

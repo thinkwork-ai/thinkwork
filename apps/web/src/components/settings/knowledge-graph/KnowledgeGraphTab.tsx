@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { IconMessages } from "@tabler/icons-react";
 import { Button, ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { KnowledgeGraphExplorer } from "./KnowledgeGraphExplorer";
@@ -7,10 +6,10 @@ import { KnowledgeGraphExplorer } from "./KnowledgeGraphExplorer";
 type ExplorerMode = "data" | "definitions";
 
 /**
- * Knowledge Graph explorer as a tab of the unified Memory page. This is the
- * explorer half of the former standalone Knowledge Graph page — the deployment
- * config half now lives on the Cognee Application page (Applications > Cognee),
- * so there is no config/Info toggle here.
+ * Ontology explorer as a tab of the unified Memory page. This is the explorer
+ * half of the former standalone Knowledge Graph page — the deployment config
+ * half now lives on the Cognee Application page (Applications > Cognee), so
+ * there is no config/Info toggle here.
  */
 export function KnowledgeGraphTab() {
   const [threadSheetOpen, setThreadSheetOpen] = useState(false);
@@ -19,10 +18,10 @@ export function KnowledgeGraphTab() {
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
       <SettingsPageTitle
-        title="Knowledge Graph"
+        title="Ontology"
         description="Inspect Cognee entities, relationships, diagnostics, and message evidence."
         actions={
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <ToggleGroup
               type="single"
               value={explorerMode}
@@ -41,11 +40,10 @@ export function KnowledgeGraphTab() {
             <Button
               type="button"
               variant="ghost"
-              size="icon-sm"
-              aria-label="Open thread ingest"
+              size="sm"
               onClick={() => setThreadSheetOpen((value) => !value)}
             >
-              <IconMessages className="size-4" />
+              Threads
             </Button>
           </div>
         }
