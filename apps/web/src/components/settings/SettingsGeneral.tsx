@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "urql";
+import { useQuery } from "urql";
 import { toast } from "sonner";
 import {
   Select,
@@ -10,7 +9,6 @@ import {
   Switch,
   useTheme,
 } from "@thinkwork/ui";
-import { AgentRuntime } from "@/gql/graphql";
 import { APP_VERSION_LABEL } from "@/lib/app-version";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktop } from "@/lib/desktop-detection";
@@ -26,12 +24,7 @@ import {
   useEditorFontSize,
   useEditorWrap,
 } from "@/lib/editor-prefs";
-import {
-  SettingsDeploymentStatusQuery,
-  SettingsModelCatalogQuery,
-  SettingsTenantAgentQuery,
-  SettingsUpdateTenantAgentMutation,
-} from "@/lib/settings-queries";
+import { SettingsDeploymentStatusQuery } from "@/lib/settings-queries";
 import {
   SettingsHeader,
   SettingsPane,
@@ -58,10 +51,8 @@ export function SettingsGeneral() {
     <SettingsPane>
       <SettingsHeader
         title="General"
-        description="Configure agent runtime, default model, appearance, and deployment."
+        description="Configure appearance, notifications, deployment, and app metadata."
       />
-
-      {showOperator ? <AgentConfigSection /> : null}
 
       <SettingsSection label="Appearance">
         <ThemeRow />
@@ -162,125 +153,6 @@ export function SettingsGeneral() {
         </>
       ) : null}
     </SettingsPane>
-  );
-}
-
-const RUNTIME_OPTIONS: { value: AgentRuntime; label: string }[] = [
-  // FLUE is the Pi runtime; surfaced as "Pi" per product naming.
-  { value: AgentRuntime.Flue, label: "Pi" },
-];
-
-/**
- * Tenant agent runtime + default model. Folded into General (operator-only);
- * formerly its own "Agent" settings page. Edits auto-save on change. The
- * AGENTS.md workspace editor now lives solely in Settings → Workspace.
- */
-function AgentConfigSection() {
-  const { tenantId } = useTenant();
-  const [agentResult] = useQuery({
-    query: SettingsTenantAgentQuery,
-    variables: { tenantId: tenantId ?? "" },
-    pause: !tenantId,
-  });
-  const [catalogResult] = useQuery({ query: SettingsModelCatalogQuery });
-  const [saveState, save] = useMutation(SettingsUpdateTenantAgentMutation);
-
-  const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
-  const [model, setModel] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const agent = agentResult.data?.agent;
-
-  useEffect(() => {
-    if (agent) {
-      setRuntime(agent.runtime);
-      setModel(agent.model ?? null);
-    }
-  }, [agent]);
-
-  const catalog = catalogResult.data?.modelCatalog ?? [];
-  const catalogFailed = !!catalogResult.error;
-
-  async function persist(input: {
-    runtime?: AgentRuntime;
-    model?: string | null;
-  }) {
-    if (!tenantId) return;
-    setErrorMsg(null);
-    const result = await save({ tenantId, input });
-    if (result.error) setErrorMsg(result.error.message);
-  }
-
-  return (
-    <SettingsSection
-      label="Agent"
-      action={
-        saveState.fetching ? (
-          <span className="text-sm text-muted-foreground">Saving…</span>
-        ) : errorMsg ? (
-          <span className="text-sm text-destructive">{errorMsg}</span>
-        ) : undefined
-      }
-    >
-      <SettingsRow
-        label="Runtime"
-        description="Execution runtime that powers this tenant's agent."
-      >
-        <Select
-          value={runtime ?? undefined}
-          onValueChange={(v) => {
-            const next = v as AgentRuntime;
-            setRuntime(next);
-            void persist({ runtime: next });
-          }}
-        >
-          <SelectTrigger className="w-60">
-            <SelectValue placeholder="Select runtime" />
-          </SelectTrigger>
-          <SelectContent>
-            {RUNTIME_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </SettingsRow>
-
-      <SettingsRow
-        label="Default model"
-        description="Model used when a thread doesn't specify its own."
-      >
-        {catalogFailed ? (
-          <div className="text-sm text-muted-foreground">
-            {model ?? "—"}{" "}
-            <span className="text-destructive">
-              (model catalog unavailable)
-            </span>
-          </div>
-        ) : (
-          <Select
-            value={model ?? undefined}
-            onValueChange={(v) => {
-              setModel(v);
-              void persist({ model: v });
-            }}
-            disabled={catalogResult.fetching}
-          >
-            <SelectTrigger className="w-60">
-              <SelectValue placeholder="Select model" />
-            </SelectTrigger>
-            <SelectContent>
-              {catalog.map((m) => (
-                <SelectItem key={m.id} value={m.modelId}>
-                  {m.displayName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </SettingsRow>
-    </SettingsSection>
   );
 }
 

@@ -8,6 +8,7 @@ const KNOWLEDGE_BASES = "/settings/knowledge-bases";
 const CRM = "/settings/crm";
 const MANAGED_APPLICATIONS = "/settings/managed-applications";
 const BILLING = "/settings/billing";
+const AGENTS = "/settings/agents";
 
 describe("visibleSettingsNavItems", () => {
   it("declares Workspace as a non-operator, non-desktop-gated section", () => {
@@ -67,6 +68,26 @@ describe("visibleSettingsNavItems", () => {
 
     expect(operatorWeb.some((i) => i.to === BILLING)).toBe(true);
     expect(memberWeb.some((i) => i.to === BILLING)).toBe(false);
+  });
+
+  it("shows Agents to operators and hides it for members", () => {
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === AGENTS);
+    expect(item).toBeDefined();
+    expect(item?.operatorOnly).toBe(true);
+
+    const operatorWeb = visibleSettingsNavItems({
+      isOperator: true,
+      roleResolved: true,
+      isDesktop: false,
+    });
+    const memberWeb = visibleSettingsNavItems({
+      isOperator: false,
+      roleResolved: true,
+      isDesktop: false,
+    });
+
+    expect(operatorWeb.some((i) => i.to === AGENTS)).toBe(true);
+    expect(memberWeb.some((i) => i.to === AGENTS)).toBe(false);
   });
 
   it("shows Knowledge Graph only after Cognee is runtime-enabled", () => {

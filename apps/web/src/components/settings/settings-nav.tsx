@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import {
   AppWindow,
   BookOpen,
+  Bot,
   Brain,
   BriefcaseBusiness,
   Clock,
@@ -151,6 +152,12 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Analytics",
     to: "/settings/analytics",
     icon: IconChartBar,
+    operatorOnly: true,
+  },
+  {
+    label: "Agents",
+    to: "/settings/agents",
+    icon: Bot,
     operatorOnly: true,
   },
 ];
