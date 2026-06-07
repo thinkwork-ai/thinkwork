@@ -208,7 +208,6 @@ export function SignInPage() {
           />
           <div className="text-center">
             <h1 className="text-2xl font-semibold tracking-tight">ThinkWork</h1>
-            <p className="text-sm text-muted-foreground">Spaces</p>
           </div>
         </div>
         {error && (

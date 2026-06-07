@@ -46,6 +46,7 @@ describe("tenantMentionTargets", () => {
         avatarUrl: undefined,
         role: "finance",
         email: null,
+        description: null,
       },
       {
         id: "agent:a1",
@@ -57,6 +58,7 @@ describe("tenantMentionTargets", () => {
         avatarUrl: "https://example.com/a.png",
         role: "coordinator",
         email: null,
+        description: null,
       },
     ]);
   });

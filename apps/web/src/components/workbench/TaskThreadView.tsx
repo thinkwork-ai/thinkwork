@@ -131,6 +131,12 @@ export interface TaskThreadMessage {
   sender?: TaskThreadMessageSender | null;
   createdAt?: string | null;
   metadata?: unknown;
+  mentions?: Array<{
+    targetType?: string | null;
+    targetId?: string | null;
+    displayName?: string | null;
+    rawText?: string | null;
+  }> | null;
   toolCalls?: unknown;
   toolResults?: unknown;
   parts?: AccumulatedPart[];
@@ -321,7 +327,7 @@ export interface ThreadInfoChecklistTask {
 }
 
 export interface ComposerMention {
-  targetType: "USER" | "AGENT";
+  targetType: "USER" | "AGENT" | "AGENT_PROFILE";
   targetId: string;
   displayName: string;
   rawText: string;
@@ -1548,7 +1554,7 @@ function TranscriptSegment({
         onDownloadAttachment={onDownloadAttachment}
         currentUser={currentUser}
       />
-      {turn ? <ThreadTurnActivity turn={turn} /> : null}
+      {turn ? <ThreadTurnActivity turn={turn} message={message} /> : null}
       {isLatestUser ? (
         <>
           {hasTypedParts ? (
@@ -1592,7 +1598,13 @@ function normalizeStatus(status: unknown) {
     .trim();
 }
 
-function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
+function ThreadTurnActivity({
+  turn,
+  message,
+}: {
+  turn?: TaskThreadTurn;
+  message?: TaskThreadMessage;
+}) {
   const status = normalizeStatus(turn?.status);
   const running = isRunningStatus(status);
   // One hook per turn surface (KTD3): live-elapsed only ticks while running,
@@ -1602,7 +1614,7 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
   if (!turn) return null;
 
   const usage = parseRecord(turn.usageJson);
-  const rows = actionRowsForTurn(turn, usage);
+  const rows = actionRowsForTurn(turn, usage, message);
 
   // Single source of truth for the header label (KTD2): derived from
   // turn.status, never from "assistant message present". skipped → null.
@@ -1636,6 +1648,7 @@ function ThreadTurnActivity({ turn }: { turn?: TaskThreadTurn }) {
           title={row.title}
           detail={row.detail}
           kind={row.kind}
+          hideIcon={row.hideIcon}
         />
       ))}
       {turn.error ? (
@@ -2352,9 +2365,13 @@ function FollowUpComposer({
     () =>
       mentionQuery === null
         ? []
-        : filterMentionTargets(mentionTargets, mentionQuery, {
-            includeDefaultAgentShortcut: true,
-          }),
+        : filterMentionTargets(mentionTargets, mentionQuery.query, {
+          includeDefaultAgentShortcut: true,
+          targetTypes:
+            mentionQuery.trigger === "#"
+              ? ["AGENT_PROFILE"]
+              : ["USER", "AGENT"],
+        }),
     [mentionQuery, mentionTargets],
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
@@ -2507,8 +2524,9 @@ function FollowUpComposer({
       : "Send without waking the agent";
 
   function selectMention(target: MentionTarget) {
-    const replacement = `@${target.displayName} `;
-    const query = mentionQuery ?? "";
+    const trigger = target.targetType === "AGENT_PROFILE" ? "#" : "@";
+    const replacement = `${trigger}${target.displayName} `;
+    const query = mentionQuery?.query ?? "";
     const prefix = composer.text.slice(
       0,
       composer.text.length - query.length - 1,
@@ -2584,8 +2602,8 @@ function FollowUpComposer({
       <div className="relative">
         {mentionMenuOpen ? (
           <MentionMenu
-            targets={mentionTargets}
-            query={mentionQuery ?? ""}
+            targets={mentionOptions}
+            query={mentionQuery?.query ?? ""}
             activeIndex={activeMentionIndex}
             includeDefaultAgentShortcut
             onSelect={selectMention}
@@ -2627,7 +2645,7 @@ function FollowUpComposer({
               catalog={skillCatalog}
               mentions={mentions}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type a command, attach a file..."
+              placeholder="Type @ to mention people, # for agent profiles, or / to pin a skill"
               disabled={disabled}
             />
           </PromptInputBody>
@@ -2694,9 +2712,11 @@ function FollowUpComposer({
   );
 }
 
-function currentMentionQuery(content: string): string | null {
-  const match = content.match(/(?:^|\s)@([\w.'-]*)$/u);
-  return match ? match[1] : null;
+function currentMentionQuery(
+  content: string,
+): { trigger: "@" | "#"; query: string } | null {
+  const match = content.match(/(?:^|\s)([@#])([\w.'-]*)$/u);
+  return match ? { trigger: match[1] as "@" | "#", query: match[2] ?? "" } : null;
 }
 
 function hasStructuredDefaultAgentMention(
@@ -3034,10 +3054,12 @@ function ActionRow({
   title,
   detail,
   kind,
+  hideIcon = false,
 }: {
   title: string;
   detail?: string;
   kind: "thinking" | "tool" | "source" | "code";
+  hideIcon?: boolean;
 }) {
   const Icon =
     kind === "source"
@@ -3050,7 +3072,7 @@ function ActionRow({
   return (
     <details className="group/action w-full min-w-0 max-w-full text-muted-foreground">
       <summary className="flex cursor-pointer list-none items-center gap-3 text-sm transition-colors hover:text-foreground">
-        <Icon className="size-4" />
+        {hideIcon ? null : <Icon className="size-4" />}
         {title}
         <ChevronRight className="size-4 transition-transform group-open/action:rotate-90" />
       </summary>
@@ -3317,6 +3339,7 @@ interface ActionRowData {
   title: string;
   detail?: string;
   kind: "thinking" | "tool" | "source" | "code";
+  hideIcon?: boolean;
 }
 
 // Exported for convergence testing (plan 2026-06-03-001 R1): live step events
@@ -3324,6 +3347,7 @@ interface ActionRowData {
 export function actionRowsForTurn(
   turn: TaskThreadTurn,
   usage: Record<string, unknown>,
+  message?: TaskThreadMessage,
 ): ActionRowData[] {
   const rows: ActionRowData[] = [];
 
@@ -3339,6 +3363,20 @@ export function actionRowsForTurn(
 
   for (const invocation of toolInvocations) {
     const record = parseRecord(invocation);
+    const agentProfileRun = agentProfileRunFromRecord(record);
+    if (agentProfileRun) {
+      const profileKey =
+        stringValue(agentProfileRun.profileRunId) ??
+        stringValue(agentProfileRun.profile_run_id) ??
+        stringValue(agentProfileRun.profileSlug) ??
+        stringValue(agentProfileRun.profile_slug) ??
+        "profile";
+      const key = `agent_profile:${profileKey.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(agentProfileActionRow(agentProfileRun));
+      continue;
+    }
     const name =
       stringValue(record.tool_name) ||
       stringValue(record.toolName) ||
@@ -3392,15 +3430,40 @@ export function actionRowsForTurn(
         stringValue(payload.toolName) ||
         stringValue(payload.name);
       if (toolName) {
-        const toolKey = toolName.toLowerCase();
+        const profileSlug = stringValue(payload.profile_slug);
+        const toolKey = profileSlug
+          ? `agent_profile_tool:${profileSlug}:${toolName.toLowerCase()}`
+          : toolName.toLowerCase();
         if (seen.has(toolKey)) continue;
         seen.add(toolKey);
       }
+    }
+    if (stringValue(event.eventType)?.startsWith("agent_profile_run")) {
+      const payload = parseRecord(event.payload);
+      const profileKey =
+        stringValue(payload.profile_run_id) ??
+        stringValue(payload.profileRunId) ??
+        stringValue(payload.profile_slug) ??
+        stringValue(payload.profileSlug);
+      if (profileKey) seen.add(`agent_profile:${profileKey.toLowerCase()}`);
     }
     const key = `${event.eventType ?? row.title}:${row.detail ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
     rows.push(row);
+  }
+
+  const hasProfileRow = [...seen].some((key) => key.startsWith("agent_profile:"));
+  const profileMention = !hasProfileRow
+    ? agentProfileMentionForMessage(message)
+    : null;
+  if (profileMention) {
+    rows.unshift({
+      title: `Agent Profile: ${profileMention.displayName}`,
+      detail: `Delegated via ${profileMention.rawText ?? `#${profileMention.displayName}`}. Waiting for profile lane activity.`,
+      kind: "thinking",
+      hideIcon: true,
+    });
   }
 
   return rows;
@@ -3604,14 +3667,35 @@ function actionRowForEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   const detail = eventDetail(event, payload);
 
+  if (
+    eventType === "agent_profile_run" ||
+    eventType === "agent_profile_run_started" ||
+    eventType === "agent_profile_run_completed" ||
+    eventType === "agent_profile_run_failed"
+  ) {
+    return agentProfileActionRow({
+      ...payload,
+      status:
+        payload.status ??
+        (eventType.endsWith("_started")
+          ? "running"
+          : eventType.endsWith("_failed")
+            ? "failed"
+            : "completed"),
+      event_detail: detail,
+    });
+  }
   if (eventType === "tool_invocation_started") {
     const toolName =
       stringValue(payload.tool_name) ||
       stringValue(payload.toolName) ||
       stringValue(payload.name) ||
       "tool";
+    const profileName = stringValue(payload.profile_name);
     return {
-      title: toolActionTitle(toolName),
+      title: profileName
+        ? `${profileName}: ${toolActionTitle(toolName)}`
+        : toolActionTitle(toolName),
       detail,
       kind: toolKind(toolName),
     };
@@ -3642,6 +3726,135 @@ function actionRowForEvent(event: TaskThreadEvent) {
     detail,
     kind: "tool" as const,
   };
+}
+
+function agentProfileRunFromRecord(record: Record<string, unknown>) {
+  const direct = parseRecord(
+    record.agent_profile_run ?? record.agentProfileRun,
+  );
+  if (Object.keys(direct).length > 0) return direct;
+
+  const result = parseRecord(record.result);
+  const nested = parseRecord(
+    result.agent_profile_run ?? result.agentProfileRun,
+  );
+  if (Object.keys(nested).length > 0) return nested;
+
+  if (
+    stringValue(record.profile_slug) ||
+    stringValue(record.profileSlug) ||
+    stringValue(record.profile_name) ||
+    stringValue(record.profileName)
+  ) {
+    return record;
+  }
+
+  return null;
+}
+
+function agentProfileActionRow(run: Record<string, unknown>): ActionRowData {
+  const displayName =
+    stringValue(agentProfileField(run, "profileName", "profile_name")) ??
+    displayNameFromMentionSlug(
+      stringValue(agentProfileField(run, "profileSlug", "profile_slug")),
+    ) ??
+    "Agent Profile";
+  const slug =
+    stringValue(agentProfileField(run, "profileSlug", "profile_slug")) ??
+    displayName.toLowerCase().replace(/\s+/g, "-");
+  const model =
+    stringValue(agentProfileField(run, "model", "model")) ??
+    stringValue(agentProfileField(run, "modelId", "model_id"));
+  const input = numberValue(agentProfileField(run, "inputTokens", "input_tokens"));
+  const output = numberValue(
+    agentProfileField(run, "outputTokens", "output_tokens"),
+  );
+  const cached = numberValue(
+    agentProfileField(run, "cachedReadTokens", "cached_read_tokens"),
+  );
+  const cost = numberValue(agentProfileField(run, "costUsd", "cost_usd"));
+  const duration = numberValue(
+    agentProfileField(run, "durationMs", "duration_ms"),
+  );
+  const status = stringValue(agentProfileField(run, "status", "status"));
+  const handoff =
+    stringValue(agentProfileField(run, "handoffSummary", "handoff_summary")) ??
+    stringValue(agentProfileField(run, "summary", "summary"));
+  const task =
+    stringValue(agentProfileField(run, "task", "task")) ??
+    stringValue(agentProfileField(run, "instruction", "instruction"));
+  const eventDetailLine = stringValue(
+    agentProfileField(run, "eventDetail", "event_detail"),
+  );
+
+  const lines = [
+    slug ? `Profile: #${slug}` : null,
+    model ? `Model: ${shortenModelName(model)}` : null,
+    input == null && output == null
+      ? null
+      : `Tokens: ${formatCount(input ?? 0)} in / ${formatCount(output ?? 0)} out${
+          cached && cached > 0 ? ` (${formatCount(cached)} cached)` : ""
+        }`,
+    cost == null ? null : `Cost: ${formatUsd(cost)}`,
+    duration == null ? null : `Duration: ${formatDuration(duration)}`,
+    status ? `Status: ${status.replace(/_/g, " ")}` : null,
+    task ? `Task: ${task}` : null,
+    handoff ? `Handoff: ${handoff}` : null,
+    eventDetailLine,
+  ].filter(Boolean);
+
+  return {
+    title: `Agent Profile: ${displayName}`,
+    detail: lines.join("\n") || undefined,
+    kind: "thinking",
+    hideIcon: true,
+  };
+}
+
+function agentProfileField(
+  run: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+) {
+  return run[camelKey] ?? run[snakeKey];
+}
+
+function agentProfileMentionForMessage(message?: TaskThreadMessage) {
+  const structured = (message?.mentions ?? []).find(
+    (mention) =>
+      stringValue(mention.targetType)?.toLowerCase() === "agent_profile" &&
+      stringValue(mention.displayName),
+  );
+  if (structured) {
+    return {
+      displayName: stringValue(structured.displayName) ?? "Agent Profile",
+      slug:
+        stringValue(structured.targetId) ??
+        stringValue(structured.displayName)?.toLowerCase(),
+      rawText:
+        stringValue(structured.rawText) ??
+        `#${stringValue(structured.displayName) ?? "Agent Profile"}`,
+    };
+  }
+
+  const rawMatch = message?.content?.match(/[#@]([a-z][a-z0-9_-]*)/i);
+  const rawMention = rawMatch?.[1];
+  const displayName = displayNameFromMentionSlug(rawMention);
+  return displayName
+    ? { displayName, slug: rawMention ?? null, rawText: rawMatch?.[0] }
+    : null;
+}
+
+function displayNameFromMentionSlug(slug: string | null | undefined) {
+  if (!slug) return null;
+  return slug
+    .replace(/[-_]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatUsd(value: number) {
+  return `$${value.toFixed(value >= 1 ? 2 : 4)}`;
 }
 
 function eventDetail(event: TaskThreadEvent, payload: Record<string, unknown>) {

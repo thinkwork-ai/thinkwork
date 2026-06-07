@@ -23,5 +23,6 @@ export const threadMentionTargets = async (
     avatarUrl: target.avatarUrl,
     role: target.role,
     email: target.email ?? null,
+    description: target.description ?? null,
   }));
 };

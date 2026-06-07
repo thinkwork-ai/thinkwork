@@ -27,5 +27,6 @@ export const tenantMentionTargets = async (
     avatarUrl: target.avatarUrl,
     role: target.role,
     email: target.email ?? null,
+    description: target.description ?? null,
   }));
 };

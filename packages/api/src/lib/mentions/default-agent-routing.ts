@@ -52,6 +52,7 @@ export interface DispatchDefaultAgentTurnInput {
   messageId: string;
   content?: string | null;
   requestedModelId?: string | null;
+  requestedProfileSlug?: string | null;
   sender?: {
     type?: string | null;
     id?: string | null;
@@ -79,6 +80,7 @@ export interface DefaultAgentChatInvoke {
    */
   pinnedSkills?: string[];
   requestedModelId?: string;
+  requestedProfileSlug?: string;
 }
 
 export interface DefaultAgentChatExecutor {
@@ -165,6 +167,9 @@ export async function dispatchDefaultAgentChatTurn(
     ...(pinnedSkills.length > 0 ? { pinnedSkills } : {}),
     ...(input.requestedModelId
       ? { requestedModelId: input.requestedModelId }
+      : {}),
+    ...(input.requestedProfileSlug
+      ? { requestedProfileSlug: input.requestedProfileSlug }
       : {}),
   });
   if (directInvoked) {
@@ -264,6 +269,9 @@ export function buildDefaultAgentTurnWakeup(
             modelId: input.requestedModelId,
             requestedModelId: input.requestedModelId,
           }
+        : {}),
+      ...(input.requestedProfileSlug
+        ? { requestedProfileSlug: input.requestedProfileSlug }
         : {}),
     },
     idempotencyKey: `agent-default:${input.tenantId}:${input.messageId}:${input.agentId}`,

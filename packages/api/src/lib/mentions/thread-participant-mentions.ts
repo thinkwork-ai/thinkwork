@@ -37,6 +37,7 @@ export function buildMentionParticipantRows(input: {
   const rowsByKey = new Map<string, MentionParticipantInsert>();
 
   for (const mention of input.mentions) {
+    if (mention.targetType === "agent_profile") continue;
     const target = targetsByKey.get(
       participantKey(mention.targetType, mention.targetId),
     );

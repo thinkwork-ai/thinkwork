@@ -278,6 +278,10 @@ export const sendMessage = async (
   const hasAgentMentions = parsedMentions.some(
     (mention) => mention.targetType === "agent",
   );
+  const requestedProfileSlug = profileSlugFromMentions(
+    parsedMentions,
+    mentionTargets,
+  );
   let customerOnboardingHandled = false;
   let responseMessage = row;
   if (
@@ -372,6 +376,7 @@ export const sendMessage = async (
         messageId: row.id,
         content: i.content,
         requestedModelId,
+        requestedProfileSlug,
         sender: { type: senderType, id: senderId },
       });
     } catch (err) {
@@ -454,6 +459,25 @@ export const sendMessage = async (
 
   return messageToCamel(responseMessage);
 };
+
+function profileSlugFromMentions(
+  mentions: Array<{ targetType: string; targetId: string }>,
+  targets: Array<{ targetType: string; targetId: string; aliases?: string[] }>,
+) {
+  const profileMention = mentions.find(
+    (mention) => mention.targetType === "agent_profile",
+  );
+  if (!profileMention) return null;
+  const target = targets.find(
+    (candidate) =>
+      candidate.targetType === profileMention.targetType &&
+      candidate.targetId === profileMention.targetId,
+  );
+  const slug = target?.aliases?.find((alias) =>
+    /^[a-z0-9][a-z0-9_-]*$/i.test(alias),
+  );
+  return slug?.toLowerCase() ?? null;
+}
 
 function validateExplicitMentions(
   mentions: Array<{ targetType: string; targetId: string }> | null | undefined,

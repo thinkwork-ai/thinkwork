@@ -1,6 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
+  agentProfileSpaceAssignments,
+  agentProfiles,
   agents,
   spaceMembers,
   spaces,
@@ -18,6 +20,7 @@ export interface ThreadMentionTarget extends MentionTarget {
   avatarUrl?: string | null;
   role?: string | null;
   email?: string | null;
+  description?: string | null;
   isDefaultAgent?: boolean;
 }
 
@@ -289,6 +292,10 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
       );
       markDefaultAgentTarget(byKey, defaultAgentId);
     }
+    await this.addAgentProfileTargets(byKey, {
+      tenantId: input.tenantId,
+      spaceId: input.spaceId ?? null,
+    });
 
     return [...byKey.values()].filter((target) => target.targetId);
   }
@@ -358,8 +365,72 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
     if (platformAgentId) {
       markDefaultAgentTarget(byKey, platformAgentId);
     }
+    await this.addAgentProfileTargets(byKey, {
+      tenantId: input.tenantId,
+      spaceId: null,
+      includeAllProfiles: true,
+    });
 
     return [...byKey.values()].filter((target) => target.targetId);
+  }
+
+  private async addAgentProfileTargets(
+    byKey: Map<string, ThreadMentionTarget>,
+    input: {
+      tenantId: string;
+      spaceId?: string | null;
+      includeAllProfiles?: boolean;
+    },
+  ) {
+    const profileRows = await this.db
+      .select({
+        profileId: agentProfiles.id,
+        slug: agentProfiles.slug,
+        name: agentProfiles.name,
+        description: agentProfiles.description,
+        routingGuidance: agentProfiles.routing_guidance,
+      })
+      .from(agentProfiles)
+      .where(
+        and(
+          eq(agentProfiles.tenant_id, input.tenantId),
+          eq(agentProfiles.enabled, true),
+        ),
+      );
+    if (profileRows.length === 0) return;
+
+    const assignmentRows = await this.db
+      .select({
+        profileId: agentProfileSpaceAssignments.profile_id,
+        spaceId: agentProfileSpaceAssignments.space_id,
+      })
+      .from(agentProfileSpaceAssignments)
+      .where(eq(agentProfileSpaceAssignments.tenant_id, input.tenantId));
+    const assignments = new Map<string, Set<string>>();
+    for (const row of assignmentRows) {
+      const existing = assignments.get(row.profileId) ?? new Set<string>();
+      existing.add(row.spaceId);
+      assignments.set(row.profileId, existing);
+    }
+
+    for (const row of profileRows) {
+      const spacesForProfile = assignments.get(row.profileId);
+      const availableInSpace =
+        input.includeAllProfiles ||
+        !spacesForProfile ||
+        spacesForProfile.size === 0 ||
+        (input.spaceId ? spacesForProfile.has(input.spaceId) : false);
+      if (!availableInSpace) continue;
+      addTarget(byKey, {
+        id: `agent_profile:${row.profileId}`,
+        targetType: "agent_profile",
+        targetId: row.profileId,
+        displayName: row.name,
+        aliases: [row.name, row.slug].filter(isString),
+        role: "Agent Profile",
+        description: row.description ?? row.routingGuidance,
+      });
+    }
   }
 
   private async ensureDefaultAgentTarget(

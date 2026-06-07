@@ -121,9 +121,9 @@ import {
   buildAgentProfileDelegationTool,
   executeAgentProfileDelegation,
   normalizeAgentProfiles,
-  parseAgentProfileSlashCommand,
   type ProfileDelegationToolOptions,
 } from "./agent-profile-delegation.js";
+import type { AgentProfileConfig } from "./agent-profile-adapter.js";
 import { buildMcpProxyTool } from "./mcp-proxy.js";
 import {
   readMcpJson,
@@ -185,6 +185,27 @@ export type {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function profileMentionTask(
+  message: string,
+  profile: AgentProfileConfig | undefined,
+): string {
+  if (!profile) return message.trim();
+  const aliases = [profile.name, profile.slug].filter(Boolean);
+  let task = message.trim();
+  for (const alias of aliases) {
+    const pattern = new RegExp(
+      `(^|\\s)[#@]${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
+      "iu",
+    );
+    task = task.replace(pattern, "$1").trim();
+  }
+  return task || message.trim();
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -1712,6 +1733,13 @@ export async function handleInvocation(
     typeof args.payload.model === "string" && args.payload.model.trim()
       ? args.payload.model.trim()
       : "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+  // Live activity emitter (plan 2026-06-03-001). Config (url/secret/api-url)
+  // is snapshotted HERE, at coroutine entry, and never re-read from the env
+  // mid-turn (env-shadowing guard). No-op when the host didn't opt in.
+  const activityEmitter = createActivityEmitter(
+    readActivityCallbackConfig(args.payload),
+    { logger: (entry) => logStructured(entry) },
+  );
   const profileDelegationOptions = (
     parentModelId: string,
   ): ProfileDelegationToolOptions => ({
@@ -1732,6 +1760,7 @@ export async function handleInvocation(
     gitSha: env.gitSha,
     identity,
     runLoop,
+    emitActivity: activityEmitter.emit,
   });
   const profileTool = buildAgentProfileDelegationTool(
     profileDelegationOptions(currentModelId),
@@ -1855,19 +1884,18 @@ export async function handleInvocation(
       count: bundle.tools.length,
     });
     runLoopStart = Date.now();
-    // Live activity emitter (plan 2026-06-03-001). Config (url/secret/api-url)
-    // is snapshotted HERE, at coroutine entry, and never re-read from the env
-    // mid-turn (env-shadowing guard). No-op when the host didn't opt in.
-    const activityEmitter = createActivityEmitter(
-      readActivityCallbackConfig(args.payload),
-      { logger: (entry) => logStructured(entry) },
-    );
-    const slash = parseAgentProfileSlashCommand(userMessage);
-    if (slash) {
+    const requestedProfileSlug = asString(
+      args.payload.requested_agent_profile_slug,
+    ).toLowerCase();
+    if (requestedProfileSlug) {
+      const requestedProfile = agentProfiles.find(
+        (profile) => profile.slug === requestedProfileSlug,
+      );
+      const profileTask = profileMentionTask(userMessage, requestedProfile);
       const evidence = await executeAgentProfileDelegation({
         options: profileDelegationOptions(currentModelId),
-        profileSlug: slash.profileSlug,
-        task: slash.task,
+        profileSlug: requestedProfileSlug,
+        task: profileTask,
       });
       runResult = {
         content: evidence.handoffSummary ?? "",
@@ -1878,9 +1906,12 @@ export async function handleInvocation(
             id: evidence.profileRunId,
             name: AGENT_PROFILE_TOOL_NAME,
             tool_name: AGENT_PROFILE_TOOL_NAME,
-            args: slash,
+            args: { profileSlug: requestedProfileSlug, task: profileTask },
             result: { agent_profile_run: evidence },
-            input_preview: JSON.stringify(slash).slice(0, 600),
+            input_preview: JSON.stringify({
+              profileSlug: requestedProfileSlug,
+              task: profileTask,
+            }).slice(0, 600),
             output_preview: (evidence.handoffSummary ?? "").slice(0, 600),
             status: evidence.status,
             agent_profile_run: evidence,

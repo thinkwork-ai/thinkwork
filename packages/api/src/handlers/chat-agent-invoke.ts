@@ -153,6 +153,7 @@ interface InvokeEvent {
   pinnedSkills?: string[];
   modelId?: string;
   requestedModelId?: string;
+  requestedProfileSlug?: string;
   /**
    * Mobile Pi background handoff reuses the durable local thread_turn row so
    * AgentCore finalizes the same logical turn instead of creating a second one.
@@ -1275,6 +1276,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         runtimeConfig.agentProfilesConfig.length > 0
           ? runtimeConfig.agentProfilesConfig
           : undefined,
+      requested_agent_profile_slug: event.requestedProfileSlug || undefined,
       budget_monthly_cents: runtimeConfig.budgetMonthlyCents,
       budget_paused: runtimeConfig.budgetPaused,
       skills:

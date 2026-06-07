@@ -497,6 +497,13 @@ export const createThread = async (
   const hasOpeningAgentMentions = parsedOpeningMentions.some(
     (mention) => mention.targetType === "agent",
   );
+  const requestedProfileSlug = profileSlugFromMentions(
+    parsedOpeningMentions,
+    await loadThreadMentionTargets({
+      tenantId: row.tenant_id,
+      threadId: row.id,
+    }),
+  );
   if (hasOpeningAgentMentions && firstMessageId) {
     try {
       await dispatchAgentMentions({
@@ -518,7 +525,7 @@ export const createThread = async (
     firstMessageId &&
     i.firstMessage &&
     createdByType === "user" &&
-    parsedOpeningMentions.length === 0
+    !hasOpeningAgentMentions
   ) {
     try {
       await dispatchDefaultAgentChatTurn({
@@ -528,6 +535,7 @@ export const createThread = async (
         messageId: firstMessageId,
         content: i.firstMessage,
         requestedModelId,
+        requestedProfileSlug,
         sender: { type: createdByType, id: createdById },
       });
     } catch (err) {
@@ -681,6 +689,25 @@ function stringValue(value: unknown): string | null {
 
 function normalizeKey(value: unknown): string | null {
   return stringValue(value)?.toLowerCase() ?? null;
+}
+
+function profileSlugFromMentions(
+  mentions: Array<{ targetType: string; targetId: string }>,
+  targets: Array<{ targetType: string; targetId: string; aliases?: string[] }>,
+) {
+  const profileMention = mentions.find(
+    (mention) => mention.targetType === "agent_profile",
+  );
+  if (!profileMention) return null;
+  const target = targets.find(
+    (candidate) =>
+      candidate.targetType === profileMention.targetType &&
+      candidate.targetId === profileMention.targetId,
+  );
+  const slug = target?.aliases?.find((alias) =>
+    /^[a-z0-9][a-z0-9_-]*$/i.test(alias),
+  );
+  return slug?.toLowerCase() ?? null;
 }
 
 async function persistOpeningMessageMentions(input: {

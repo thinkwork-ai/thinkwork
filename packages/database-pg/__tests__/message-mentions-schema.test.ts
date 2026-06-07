@@ -59,7 +59,7 @@ describe("Message mentions schema", () => {
     expect(migration0108).toContain("message_mentions tenant mismatch");
     expect(migration0108).toContain("message_mentions thread mismatch");
     expect(migration0108).toMatch(
-      /CHECK \(target_type IN \('user', 'agent'\)\)/,
+      /CHECK \(target_type IN \('user', 'agent', 'agent_profile'\)\)/,
     );
   });
 });
