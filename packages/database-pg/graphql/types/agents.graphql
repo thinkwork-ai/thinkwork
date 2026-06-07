@@ -168,6 +168,94 @@ type UserModelCatalogEntry {
   approved: Boolean!
 }
 
+type AgentProfile {
+  id: ID!
+  tenantId: ID!
+  slug: String!
+  name: String!
+  description: String
+  routingGuidance: String
+  instructions: String!
+  modelId: ID!
+  model: ModelCatalogEntry
+  enabled: Boolean!
+  builtInKey: String
+  toolPolicy: AWSJSON!
+  skillPolicy: AWSJSON!
+  executionControls: AWSJSON!
+  spaceAssignments: [AgentProfileSpaceAssignment!]!
+  spaces: [Space!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type AgentProfileSpaceAssignment {
+  profileId: ID!
+  tenantId: ID!
+  spaceId: ID!
+  space: Space
+  createdAt: AWSDateTime!
+}
+
+type AgentProfileSkillOption {
+  slug: String!
+  displayName: String
+  description: String
+  category: String
+  icon: String
+  tags: [String!]
+}
+
+type AgentProfileMcpServerOption {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  slug: String!
+  transport: String!
+  authType: String!
+  tools: AWSJSON
+  enabled: Boolean!
+  status: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type AgentProfileEditorCatalog {
+  models: [ModelCatalogEntry!]!
+  spaces: [Space!]!
+  skills: [AgentProfileSkillOption!]!
+  builtInTools: [String!]!
+  mcpServers: [AgentProfileMcpServerOption!]!
+}
+
+input AgentProfileInput {
+  slug: String
+  name: String!
+  description: String
+  routingGuidance: String
+  instructions: String!
+  modelId: ID!
+  enabled: Boolean = true
+  toolPolicy: AWSJSON
+  skillPolicy: AWSJSON
+  executionControls: AWSJSON
+  spaceIds: [ID!]
+}
+
+input UpdateAgentProfileInput {
+  slug: String
+  name: String
+  description: String
+  routingGuidance: String
+  instructions: String
+  modelId: ID
+  enabled: Boolean
+  toolPolicy: AWSJSON
+  skillPolicy: AWSJSON
+  executionControls: AWSJSON
+  spaceIds: [ID!]
+}
+
 type AgentWorkspace {
   slug: String!
   name: String!
@@ -179,6 +267,12 @@ extend type Query {
   modelCatalog: [ModelCatalogEntry!]!
   userModelCatalog(userId: ID!): [UserModelCatalogEntry!]!
   myApprovedModelCatalog: [ModelCatalogEntry!]!
+  agentProfiles(
+    tenantId: ID!
+    includeDisabled: Boolean = true
+  ): [AgentProfile!]!
+  agentProfile(tenantId: ID!, id: ID, slug: String): AgentProfile
+  agentProfileEditorCatalog(tenantId: ID!): AgentProfileEditorCatalog!
 }
 
 extend type Mutation {
@@ -188,4 +282,11 @@ extend type Mutation {
     modelId: String!
     approved: Boolean!
   ): [UserModelCatalogEntry!]!
+  createAgentProfile(tenantId: ID!, input: AgentProfileInput!): AgentProfile!
+  updateAgentProfile(
+    tenantId: ID!
+    id: ID!
+    input: UpdateAgentProfileInput!
+  ): AgentProfile!
+  deleteAgentProfile(tenantId: ID!, id: ID!): Boolean!
 }

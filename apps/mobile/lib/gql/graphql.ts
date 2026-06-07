@@ -203,6 +203,85 @@ export type AgentPerformance = {
   totalOutputTokens: Scalars["Int"]["output"];
 };
 
+export type AgentProfile = {
+  __typename?: "AgentProfile";
+  builtInKey?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  enabled: Scalars["Boolean"]["output"];
+  executionControls: Scalars["AWSJSON"]["output"];
+  id: Scalars["ID"]["output"];
+  instructions: Scalars["String"]["output"];
+  model?: Maybe<ModelCatalogEntry>;
+  modelId: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+  routingGuidance?: Maybe<Scalars["String"]["output"]>;
+  skillPolicy: Scalars["AWSJSON"]["output"];
+  slug: Scalars["String"]["output"];
+  spaceAssignments: Array<AgentProfileSpaceAssignment>;
+  spaces: Array<Space>;
+  tenantId: Scalars["ID"]["output"];
+  toolPolicy: Scalars["AWSJSON"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type AgentProfileEditorCatalog = {
+  __typename?: "AgentProfileEditorCatalog";
+  builtInTools: Array<Scalars["String"]["output"]>;
+  mcpServers: Array<AgentProfileMcpServerOption>;
+  models: Array<ModelCatalogEntry>;
+  skills: Array<AgentProfileSkillOption>;
+  spaces: Array<Space>;
+};
+
+export type AgentProfileInput = {
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  executionControls?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  instructions: Scalars["String"]["input"];
+  modelId: Scalars["ID"]["input"];
+  name: Scalars["String"]["input"];
+  routingGuidance?: InputMaybe<Scalars["String"]["input"]>;
+  skillPolicy?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  slug?: InputMaybe<Scalars["String"]["input"]>;
+  spaceIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
+  toolPolicy?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+};
+
+export type AgentProfileMcpServerOption = {
+  __typename?: "AgentProfileMcpServerOption";
+  authType: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+  slug: Scalars["String"]["output"];
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  tools?: Maybe<Scalars["AWSJSON"]["output"]>;
+  transport: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type AgentProfileSkillOption = {
+  __typename?: "AgentProfileSkillOption";
+  category?: Maybe<Scalars["String"]["output"]>;
+  description?: Maybe<Scalars["String"]["output"]>;
+  displayName?: Maybe<Scalars["String"]["output"]>;
+  icon?: Maybe<Scalars["String"]["output"]>;
+  slug: Scalars["String"]["output"];
+  tags?: Maybe<Array<Scalars["String"]["output"]>>;
+};
+
+export type AgentProfileSpaceAssignment = {
+  __typename?: "AgentProfileSpaceAssignment";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  profileId: Scalars["ID"]["output"];
+  space?: Maybe<Space>;
+  spaceId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+};
+
 export enum AgentRuntime {
   Flue = "FLUE",
 }
@@ -2111,6 +2190,7 @@ export type Mutation = {
    * compile falls back to the env-default model.
    */
   compileWikiNow: WikiCompileJob;
+  createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   /**
    * Queue an async export of audit events matching the filter. Validates:
@@ -2143,6 +2223,7 @@ export type Mutation = {
   decideInboxItem: InboxItem;
   decideRoutineApproval: InboxItem;
   delegateThread: Thread;
+  deleteAgentProfile: Scalars["Boolean"]["output"];
   deleteArtifact: Scalars["Boolean"]["output"];
   deleteBudgetPolicy: Scalars["Boolean"]["output"];
   deleteEvalRun: Scalars["Boolean"]["output"];
@@ -2268,6 +2349,7 @@ export type Mutation = {
   unpauseUserBudget: Scalars["Int"]["output"];
   unpinThread: Scalars["Boolean"]["output"];
   unregisterPushToken: Scalars["Boolean"]["output"];
+  updateAgentProfile: AgentProfile;
   updateArtifact: Artifact;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
@@ -2404,6 +2486,11 @@ export type MutationCompileWikiNowArgs = {
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
+export type MutationCreateAgentProfileArgs = {
+  input: AgentProfileInput;
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
 };
@@ -2481,6 +2568,11 @@ export type MutationDecideRoutineApprovalArgs = {
 
 export type MutationDelegateThreadArgs = {
   input: DelegateThreadInput;
+};
+
+export type MutationDeleteAgentProfileArgs = {
+  id: Scalars["ID"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationDeleteArtifactArgs = {
@@ -3007,6 +3099,12 @@ export type MutationUnregisterPushTokenArgs = {
   token: Scalars["String"]["input"];
 };
 
+export type MutationUpdateAgentProfileArgs = {
+  id: Scalars["ID"]["input"];
+  input: UpdateAgentProfileInput;
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type MutationUpdateArtifactArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateArtifactInput;
@@ -3468,6 +3566,9 @@ export type Query = {
   agentBudgetStatus?: Maybe<BudgetStatus>;
   agentCostBreakdown: CostSummary;
   agentPerformance: Array<AgentPerformance>;
+  agentProfile?: Maybe<AgentProfile>;
+  agentProfileEditorCatalog: AgentProfileEditorCatalog;
+  agentProfiles: Array<AgentProfile>;
   agentWorkspaceEvents: Array<AgentWorkspaceEvent>;
   agentWorkspaceReview?: Maybe<AgentWorkspaceReview>;
   agentWorkspaceReviews: Array<AgentWorkspaceReview>;
@@ -3746,6 +3847,21 @@ export type QueryAgentPerformanceArgs = {
   from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
   tenantId: Scalars["ID"]["input"];
   to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+};
+
+export type QueryAgentProfileArgs = {
+  id?: InputMaybe<Scalars["ID"]["input"]>;
+  slug?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryAgentProfileEditorCatalogArgs = {
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryAgentProfilesArgs = {
+  includeDisabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type QueryAgentWorkspaceEventsArgs = {
@@ -6001,6 +6117,20 @@ export type TraceEvent = {
   toolCallId?: Maybe<Scalars["String"]["output"]>;
   toolName?: Maybe<Scalars["String"]["output"]>;
   traceId: Scalars["String"]["output"];
+};
+
+export type UpdateAgentProfileInput = {
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  executionControls?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  instructions?: InputMaybe<Scalars["String"]["input"]>;
+  modelId?: InputMaybe<Scalars["ID"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  routingGuidance?: InputMaybe<Scalars["String"]["input"]>;
+  skillPolicy?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  slug?: InputMaybe<Scalars["String"]["input"]>;
+  spaceIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
+  toolPolicy?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
 export type UpdateArtifactInput = {

@@ -2,6 +2,12 @@ import {
   tenantAgentMutations,
   tenantAgentQueries,
 } from "./tenant-agent/index.js";
+import {
+  agentProfileMutations,
+  agentProfileQueries,
+  agentProfileSpaceAssignmentTypeResolvers,
+  agentProfileTypeResolvers,
+} from "./agent-profiles/index.js";
 import { goalMutations, goalQueries } from "./goals/index.js";
 import { coreQueries } from "./core/index.js";
 import { threadQueries } from "./threads/index.js";
@@ -78,6 +84,7 @@ import {
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
   ...tenantAgentQueries,
+  ...agentProfileQueries,
   ...goalQueries,
   ...coreQueries,
   ...threadQueries,
@@ -115,6 +122,7 @@ export const queryResolvers: Record<string, any> = {
 export const mutationResolvers: Record<string, any> = {
   _empty: () => null,
   ...tenantAgentMutations,
+  ...agentProfileMutations,
   ...goalMutations,
   ...coreMutations,
   ...messageMutations,
@@ -161,6 +169,8 @@ import { tenantTypeResolvers } from "./core/types.js";
 export const typeResolvers: Record<string, Record<string, any>> = {
   Tenant: tenantTypeResolvers,
   Agent: agentTypeResolvers,
+  AgentProfile: agentProfileTypeResolvers,
+  AgentProfileSpaceAssignment: agentProfileSpaceAssignmentTypeResolvers,
   Thread: threadTypeResolvers,
   ThreadParticipant: threadParticipantTypeResolvers,
   Message: messageTypeResolvers,

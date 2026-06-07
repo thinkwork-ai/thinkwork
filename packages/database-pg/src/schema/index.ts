@@ -7,6 +7,7 @@
 
 export * from "./core";
 export * from "./agents";
+export * from "./agent-profiles";
 export * from "./messages";
 export * from "./routines";
 export * from "./routine-executions";
