@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useQuery, useSubscription } from "urql";
 
@@ -152,10 +152,7 @@ const turn = {
   createdAt: "2026-06-04T16:55:01.000Z",
 };
 
-beforeEach(() => {
-  usePageHeaderActionsMock.mockReset();
-  vi.mocked(useQuery).mockReset();
-  vi.mocked(useSubscription).mockReset();
+function mockActivityQueries() {
   vi.mocked(useQuery)
     .mockReturnValue([
       {
@@ -202,6 +199,27 @@ beforeEach(() => {
               costUsd: 0.0076,
               createdAt: "2026-06-04T16:55:09.300Z",
             },
+            {
+              traceId: "trace-tool-1",
+              parentRequestId: "turn-1",
+              toolCallId: "tool-call-1",
+              toolName: "web_search",
+              agentName: "Pi",
+              runtimeType: "pi",
+              model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+              inputTokens: 1234,
+              outputTokens: 34,
+              costUsd: 0.0012,
+              modelRoutingStatus: "succeeded",
+              ruleSource: {
+                scope: "space",
+                path: "spaces/sales/TOOLS.md",
+              },
+              match: {
+                tool: "web_search",
+              },
+              createdAt: "2026-06-04T16:55:08.000Z",
+            },
           ],
         },
         fetching: false,
@@ -221,6 +239,13 @@ beforeEach(() => {
       },
       vi.fn(),
     ]);
+}
+
+beforeEach(() => {
+  usePageHeaderActionsMock.mockReset();
+  vi.mocked(useQuery).mockReset();
+  vi.mocked(useSubscription).mockReset();
+  mockActivityQueries();
   vi.mocked(useSubscription).mockReturnValue([
     { data: null, fetching: false, stale: false },
     vi.fn(),
@@ -243,12 +268,15 @@ describe("SettingsActivityThreadDetail", () => {
     ).toBeTruthy();
     expect(screen.getByText("CHAT-1043")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Activity" })).toBeTruthy();
-    expect(screen.getByText("Properties")).toBeTruthy();
+    expect(screen.queryByText("Properties")).toBeNull();
     expect(screen.getByText("Thinking")).toBeTruthy();
     expect(screen.getByText("Tool: web_search")).toBeTruthy();
     expect(screen.getByText("claude-haiku-4-5-20251001")).toBeTruthy();
     expect(screen.getByText(/1\.2K->34/)).toBeTruthy();
+    expect(screen.getByText("$0.0012")).toBeTruthy();
     expect(screen.getByText("succeeded")).toBeTruthy();
+    expect(screen.queryByText(/not routed/i)).toBeNull();
+    expect(screen.queryByText(/tokens unavailable/i)).toBeNull();
     expect(screen.getByText("Eric Odom")).toBeTruthy();
     expect(screen.getByText("ThinkWork")).toBeTruthy();
     expect(screen.queryByText(/Type a command/i)).toBeNull();
@@ -258,5 +286,13 @@ describe("SettingsActivityThreadDetail", () => {
       { label: "Activity", href: "/settings/activity" },
       { label: "what is SpaceX" },
     ]);
+    expect(headerArgs.actionKey).toBe("thread-properties-closed");
+
+    render(headerArgs.action);
+    mockActivityQueries();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open thread properties" }),
+    );
+    expect(screen.getByText("Properties")).toBeTruthy();
   });
 });

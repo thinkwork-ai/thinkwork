@@ -32,6 +32,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { UserModelsSection } from "@/components/settings/UserModelsSection";
 
 export function SettingsUserDetail() {
   const { userId: memberId } = useParams({
@@ -111,6 +112,7 @@ export function SettingsUserDetail() {
         callerIsOwner={callerIsOwner}
         onSaved={() => refetch({ requestPolicy: "network-only" })}
       />
+      <UserModelsSection userId={user.id} />
     </SettingsPane>
   );
 }

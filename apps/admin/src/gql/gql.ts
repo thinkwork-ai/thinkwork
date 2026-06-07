@@ -41,8 +41,6 @@ type Documents = {
   "\n  mutation AddSpaceMember($spaceId: ID!, $userId: ID!) {\n    addSpaceMember(spaceId: $spaceId, userId: $userId) {\n      id\n      userId\n      role\n      notificationPreference\n      createdAt\n      user {\n        id\n        name\n        email\n        image\n      }\n    }\n  }\n": typeof types.AddSpaceMemberDocument;
   "\n  mutation RemoveSpaceMember($spaceId: ID!, $userId: ID!) {\n    removeSpaceMember(spaceId: $spaceId, userId: $userId)\n  }\n": typeof types.RemoveSpaceMemberDocument;
   "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n": typeof types.ModelCatalogDocument;
-  "\n  query UserModelCatalog($userId: ID!) {\n    userModelCatalog(userId: $userId) {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n      approved\n    }\n  }\n": typeof types.UserModelCatalogDocument;
-  "\n  mutation SetUserModelApproval(\n    $userId: ID!\n    $modelId: String!\n    $approved: Boolean!\n  ) {\n    setUserModelApproval(\n      userId: $userId\n      modelId: $modelId\n      approved: $approved\n    ) {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n      approved\n    }\n  }\n": typeof types.SetUserModelApprovalDocument;
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.KnowledgeBasesListDocument;
   "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.KnowledgeBaseDetailDocument;
   "\n  mutation CreateKnowledgeBase($input: CreateKnowledgeBaseInput!) {\n    createKnowledgeBase(input: $input) {\n      id\n      name\n      slug\n      status\n      createdAt\n    }\n  }\n": typeof types.CreateKnowledgeBaseDocument;
@@ -221,10 +219,6 @@ const documents: Documents = {
     types.RemoveSpaceMemberDocument,
   "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n":
     types.ModelCatalogDocument,
-  "\n  query UserModelCatalog($userId: ID!) {\n    userModelCatalog(userId: $userId) {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n      approved\n    }\n  }\n":
-    types.UserModelCatalogDocument,
-  "\n  mutation SetUserModelApproval(\n    $userId: ID!\n    $modelId: String!\n    $approved: Boolean!\n  ) {\n    setUserModelApproval(\n      userId: $userId\n      modelId: $modelId\n      approved: $approved\n    ) {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n      approved\n    }\n  }\n":
-    types.SetUserModelApprovalDocument,
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      slug\n      description\n      status\n      documentCount\n      lastSyncAt\n      lastSyncStatus\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n":
     types.KnowledgeBasesListDocument,
   "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n      createdAt\n      updatedAt\n    }\n  }\n":
@@ -647,18 +641,6 @@ export function graphql(
 export function graphql(
   source: "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n",
 ): (typeof documents)["\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query UserModelCatalog($userId: ID!) {\n    userModelCatalog(userId: $userId) {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n      approved\n    }\n  }\n",
-): (typeof documents)["\n  query UserModelCatalog($userId: ID!) {\n    userModelCatalog(userId: $userId) {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n      approved\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation SetUserModelApproval(\n    $userId: ID!\n    $modelId: String!\n    $approved: Boolean!\n  ) {\n    setUserModelApproval(\n      userId: $userId\n      modelId: $modelId\n      approved: $approved\n    ) {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n      approved\n    }\n  }\n",
-): (typeof documents)["\n  mutation SetUserModelApproval(\n    $userId: ID!\n    $modelId: String!\n    $approved: Boolean!\n  ) {\n    setUserModelApproval(\n      userId: $userId\n      modelId: $modelId\n      approved: $approved\n    ) {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n      approved\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -526,6 +526,114 @@ describe("buildMcpTools — multi-server", () => {
 });
 
 // ---------------------------------------------------------------------------
+// TOOLS.md model routing for MCP tools.
+// ---------------------------------------------------------------------------
+
+describe("buildMcpTools — model routing", () => {
+  it("wraps a matched MCP tool with child-model execution evidence", async () => {
+    const store = new HandleStore();
+    const childModelCaller = vi.fn(async () => ({
+      text: "summarized routed MCP result",
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 123,
+        outputTokens: 45,
+        cachedReadTokens: 6,
+        totalTokens: 174,
+      },
+    }));
+    const connect: ConnectMcpServerFn = async () => [
+      {
+        name: "mcp_twenty-crm_execute_tool",
+        label: "Twenty CRM",
+        description: "Execute a Twenty CRM operation.",
+        parameters: Type.Object({}),
+        execute: async () => ({
+          content: [{ type: "text", text: "raw opportunity result" }],
+          details: {
+            mcp_server: "twenty-crm",
+            mcp_tool_name: "execute_tool",
+          },
+        }),
+      },
+    ];
+
+    const tools = await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "twenty-crm",
+          url: "https://twenty.example/mcp",
+          bearer: BEARER_FIXTURES.jwt,
+        },
+      ],
+      handleStore: store,
+      connectMcpServer: connect,
+      modelRoutingPolicy: {
+        routes: [
+          {
+            tool: "mcp_twenty-crm_execute_tool",
+            match: { toolName: "find_many_opportunities" },
+            model: "us.amazon.nova-micro-v1:0",
+            sourcePath: "User/TOOLS.md",
+            sourceOwner: "user",
+            precedence: 400,
+          },
+        ],
+      },
+      approvedModelIds: ["us.amazon.nova-micro-v1:0"],
+      childModelCaller,
+    });
+
+    const result = await tools[0]!.execute(
+      "tooluse-1",
+      {
+        toolName: "find_many_opportunities",
+        arguments: { limit: 5 },
+      },
+      undefined,
+      undefined,
+    );
+
+    expect(childModelCaller).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: "us.amazon.nova-micro-v1:0",
+        metadata: expect.objectContaining({
+          toolName: "mcp_twenty-crm_execute_tool",
+          sourceOwner: "user",
+          mcpServer: "twenty-crm",
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      content: [{ type: "text", text: "summarized routed MCP result" }],
+      details: {
+        mcp_server: "twenty-crm",
+        mcp_tool_name: "execute_tool",
+        modelRouting: {
+          toolCallId: "tooluse-1",
+          toolName: "mcp_twenty-crm_execute_tool",
+          match: expect.objectContaining({
+            toolName: "find_many_opportunities",
+            serverName: "twenty-crm",
+          }),
+          model: "us.amazon.nova-micro-v1:0",
+          ruleSource: {
+            path: "User/TOOLS.md",
+            owner: "user",
+            precedence: 400,
+          },
+          status: "completed",
+          inputTokens: 123,
+          outputTokens: 45,
+          cachedReadTokens: 6,
+          totalTokens: 174,
+        },
+      },
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Fail-closed validation.
 // ---------------------------------------------------------------------------
 

@@ -123,7 +123,11 @@ beforeEach(() => {
     status: "no_changes",
     files: [],
   });
-  mocks.recordCostEvents.mockResolvedValue({ totalUsd: 1.23 });
+  mocks.recordCostEvents.mockResolvedValue({
+    totalUsd: 1.23,
+    llmUsd: 1.23,
+    computeUsd: 0,
+  });
   mocks.checkBudgetAndPause.mockResolvedValue(undefined);
   mocks.notifyCostRecorded.mockResolvedValue(undefined);
   mocks.notifyThreadTurnUpdate.mockResolvedValue(undefined);
@@ -483,6 +487,7 @@ describe("processFinalize reconcile seam", () => {
               expect.objectContaining({
                 toolCallId: "tool-1",
                 model: "anthropic.claude-haiku",
+                costUsd: 1.23,
               }),
             ],
             tool_invocations: [
@@ -490,6 +495,11 @@ describe("processFinalize reconcile seam", () => {
                 model: "anthropic.claude-haiku",
                 input_tokens: 100,
                 output_tokens: 20,
+                cost_usd: 1.23,
+                model_routing: expect.objectContaining({
+                  costUsd: 1.23,
+                  cost_usd: 1.23,
+                }),
               }),
             ],
           }),

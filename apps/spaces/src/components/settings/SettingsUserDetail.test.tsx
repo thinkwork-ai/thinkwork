@@ -78,6 +78,11 @@ vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: () => {},
 }));
 vi.mock("@/lib/settings-queries", () => queryDocs);
+vi.mock("@/components/settings/UserModelsSection", () => ({
+  UserModelsSection: ({ userId }: { userId: string }) => (
+    <section data-testid="user-models-section" data-user-id={userId} />
+  ),
+}));
 
 import { SettingsUserDetail } from "./SettingsUserDetail";
 
@@ -122,6 +127,14 @@ describe("SettingsUserDetail role merge", () => {
     expect(screen.getByText("Active")).toBeTruthy();
     expect(screen.queryByText("Membership")).toBeNull();
     expect(screen.queryByText(/can.?t change your own role/i)).toBeNull();
+  });
+
+  it("renders model approvals on the Spaces user detail page", () => {
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    const section = screen.getByTestId("user-models-section");
+    expect(section.getAttribute("data-user-id")).toBe("user-9");
   });
 
   it("disables the Role select for the caller's own membership", () => {

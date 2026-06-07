@@ -862,6 +862,10 @@ export async function buildInvocationResources(
     // Plan §006 U4 — populate the per-invocation registry as part of the
     // existing tools/list pass. No extra network round-trip.
     registry: args.mcpRegistry,
+    modelRoutingPolicy,
+    approvedModelIds,
+    childModelCaller:
+      modelRoutingPolicy.routes.length > 0 ? args.childModelCaller : undefined,
   });
   tools.push(...mcpTools);
 

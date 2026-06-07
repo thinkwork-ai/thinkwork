@@ -3447,6 +3447,41 @@ describe("TaskThreadView", () => {
     expect(sendButton.parentElement?.contains(voiceInput)).toBe(true);
   });
 
+  it("right-aligns the follow-up model choice beside voice input", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Follow-up model controls",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={vi.fn()}
+        approvedModels={[
+          {
+            id: "model-haiku",
+            modelId: "anthropic.claude-haiku",
+            displayName: "Claude Haiku",
+            provider: "amazon_bedrock",
+            inputCostPerMillion: 0.15,
+            outputCostPerMillion: 0.6,
+          },
+        ]}
+        selectedModelId="anthropic.claude-haiku"
+        onSelectedModelChange={() => {}}
+      />,
+    );
+
+    const actionControls = screen.getByTestId("follow-up-action-controls");
+    const trigger = screen.getByLabelText("Select model");
+    const voiceInput = screen.getByRole("button", { name: "Voice input" });
+    expect(actionControls.contains(trigger)).toBe(true);
+    expect(actionControls.contains(voiceInput)).toBe(true);
+    expect(trigger.compareDocumentPosition(voiceInput)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   it("preserves a disabled agent toggle after send failure for retry", async () => {
     const onSendFollowUp = vi
       .fn()

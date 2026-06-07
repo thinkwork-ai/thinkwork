@@ -306,6 +306,7 @@ export async function processFinalize(
     agentName,
     modelRoutedToolCalls,
   });
+  applyModelRoutedToolCosts(toolInvocations, modelRoutedToolCalls);
 
   // 3. Record Hindsight phase costs
   const hindsightUsage = invokeResult.hindsight_usage ?? [];
@@ -612,6 +613,7 @@ export interface ModelRoutedToolCallEvidence {
   cachedWriteTokens?: number;
   totalTokens?: number;
   durationMs: number;
+  costUsd?: number;
   error?: string;
 }
 
@@ -679,6 +681,9 @@ function normalizeModelRoutedToolCall(
       record.cachedReadTokens ?? record.cached_read_tokens,
     ),
     durationMs: numberValue(record.durationMs ?? record.duration_ms),
+    ...(optionalNumberValue(record.costUsd ?? record.cost_usd) !== undefined
+      ? { costUsd: optionalNumberValue(record.costUsd ?? record.cost_usd) }
+      : {}),
     ...(optionalNumberValue(
       record.cachedWriteTokens ?? record.cached_write_tokens,
     ) !== undefined
@@ -755,12 +760,40 @@ export function enrichToolInvocationsWithModelRouting(
       input_tokens: routing.inputTokens,
       output_tokens: routing.outputTokens,
       cached_read_tokens: routing.cachedReadTokens,
+      cost_usd: routing.costUsd,
       model_routing_status: routing.status,
       model_routing_rule_source: routing.ruleSource,
       model_routing_match: routing.match,
       model_routing: invocation.model_routing ?? routing,
     };
   });
+}
+
+function applyModelRoutedToolCosts(
+  toolInvocations: Array<Record<string, unknown>>,
+  routedCalls: ModelRoutedToolCallEvidence[],
+): void {
+  const costByToolCallId = new Map(
+    routedCalls
+      .filter((call) => call.costUsd !== undefined)
+      .map((call) => [call.toolCallId, call.costUsd!]),
+  );
+  if (costByToolCallId.size === 0) return;
+  for (const invocation of toolInvocations) {
+    const toolCallId = stringValue(invocation.id);
+    if (!toolCallId) continue;
+    const costUsd = costByToolCallId.get(toolCallId);
+    if (costUsd === undefined) continue;
+    invocation.cost_usd = costUsd;
+    const routing = readRecord(invocation.model_routing);
+    if (Object.keys(routing).length > 0) {
+      invocation.model_routing = {
+        ...routing,
+        costUsd,
+        cost_usd: costUsd,
+      };
+    }
+  }
 }
 
 async function recordModelRoutedToolEvidence(input: {
@@ -809,6 +842,7 @@ async function recordModelRoutedToolEvidence(input: {
           output_tokens: call.outputTokens,
           cached_read_tokens: call.cachedReadTokens,
           duration_ms: call.durationMs,
+          cost_usd: call.costUsd,
           status: call.status,
           rule_source: call.ruleSource,
           match: call.match,
@@ -843,6 +877,7 @@ async function recordModelRoutedToolEvidence(input: {
         recordCompute: false,
       });
       if (costResult.totalUsd > 0) {
+        call.costUsd = costResult.llmUsd;
         childSpendRecorded = true;
         await notifyCostRecorded({
           tenantId: input.tenantId,

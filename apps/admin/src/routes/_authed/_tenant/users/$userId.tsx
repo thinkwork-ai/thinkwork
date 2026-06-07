@@ -11,7 +11,6 @@ import { EmptyState } from "@/components/EmptyState";
 import { Users } from "lucide-react";
 import { TenantMembersListQuery } from "@/lib/graphql-queries";
 import { HumanProfileSection } from "@/components/humans/HumanProfileSection";
-import { UserModelsSection } from "@/components/humans/UserModelsSection";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -134,7 +133,7 @@ function UserDetailPage() {
           />
         </TabsContent>
         <TabsContent value="configuration">
-          <div className="max-w-[760px] space-y-6">
+          <div className="max-w-[760px]">
             <HumanProfileSection
               userId={member.user.id}
               memberId={member.id}
@@ -149,7 +148,6 @@ function UserDetailPage() {
               }}
               onRoleSaved={() => reexecute({ requestPolicy: "network-only" })}
             />
-            <UserModelsSection userId={member.user.id} />
           </div>
         </TabsContent>
       </Tabs>
