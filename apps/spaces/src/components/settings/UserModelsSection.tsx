@@ -133,41 +133,43 @@ export function UserModelsSection({ userId }: UserModelsSectionProps) {
   }
 
   return (
-    <SettingsSection label="Models">
-      {queryResult.error && rows.length === 0 ? (
-        <SettingsRow
-          label="Model catalog unavailable"
-          description={queryResult.error.message}
-        />
-      ) : queryResult.fetching && rows.length === 0 ? (
-        <SettingsRow label="Loading models..." />
-      ) : rows.length === 0 ? (
-        <SettingsRow label="No catalog models are available." />
-      ) : (
-        rows.map((model) => (
+    <div data-testid="settings-user-models-section">
+      <SettingsSection label="Models">
+        {queryResult.error && rows.length === 0 ? (
           <SettingsRow
-            key={model.id}
-            label={
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate">{model.displayName}</span>
-                <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                  {formatProviderName(model.provider)}
+            label="Model catalog unavailable"
+            description={queryResult.error.message}
+          />
+        ) : queryResult.fetching && rows.length === 0 ? (
+          <SettingsRow label="Loading models..." />
+        ) : rows.length === 0 ? (
+          <SettingsRow label="No catalog models are available." />
+        ) : (
+          rows.map((model) => (
+            <SettingsRow
+              key={model.id}
+              label={
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate">{model.displayName}</span>
+                  <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                    {formatProviderName(model.provider)}
+                  </span>
                 </span>
-              </span>
-            }
-            description={formatModelCostLine(model)}
-          >
-            <Switch
-              aria-label={`Approve ${model.displayName}`}
-              checked={model.approved}
-              disabled={savingModelId === model.modelId}
-              onCheckedChange={(checked) =>
-                handleApprovalChange(model.modelId, checked)
               }
-            />
-          </SettingsRow>
-        ))
-      )}
-    </SettingsSection>
+              description={formatModelCostLine(model)}
+            >
+              <Switch
+                aria-label={`Approve ${model.displayName}`}
+                checked={model.approved}
+                disabled={savingModelId === model.modelId}
+                onCheckedChange={(checked) =>
+                  handleApprovalChange(model.modelId, checked)
+                }
+              />
+            </SettingsRow>
+          ))
+        )}
+      </SettingsSection>
+    </div>
   );
 }

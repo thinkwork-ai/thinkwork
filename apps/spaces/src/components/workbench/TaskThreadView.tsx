@@ -2631,7 +2631,7 @@ function FollowUpComposer({
               <PromptInputAttachButton />
             </PromptInputTools>
             <div
-              className="flex min-w-0 items-center gap-1"
+              className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1"
               data-testid="follow-up-action-controls"
             >
               <ComposerModelPicker

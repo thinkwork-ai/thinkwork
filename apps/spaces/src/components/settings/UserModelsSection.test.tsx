@@ -44,6 +44,7 @@ describe("UserModelsSection", () => {
     );
 
     expect(source).toContain("SettingsSection label=\"Models\"");
+    expect(source).toContain('data-testid="settings-user-models-section"');
     expect(source).toContain("UserModelCatalogQuery");
     expect(source).toContain("SetUserModelApprovalMutation");
     expect(source).toContain('requestPolicy: "cache-and-network"');
