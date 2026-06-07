@@ -67,6 +67,7 @@ import { customizeQueries, customizeMutations } from "./customize/index.js";
 import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
 import { ontologyQueries, ontologyMutations } from "./ontology/index.js";
+import { observabilityQueries } from "./observability/index.js";
 import {
   linkedTaskMutations,
   linkedTaskQueries,
@@ -115,6 +116,7 @@ export const queryResolvers: Record<string, any> = {
   ...complianceQueries,
   ...slackQueries,
   ...ontologyQueries,
+  ...observabilityQueries,
   ...spaceQueries,
   ...linkedTaskQueries,
 };

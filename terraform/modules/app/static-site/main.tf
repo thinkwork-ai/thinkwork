@@ -144,7 +144,8 @@ check "policy_inputs_are_mutually_exclusive" {
 }
 
 resource "aws_s3_bucket" "site" {
-  bucket = local.bucket_name
+  bucket        = local.bucket_name
+  force_destroy = var.stage == "dev"
 
   tags = {
     Name = "thinkwork-${var.stage}-${var.site_name}"
