@@ -1,13 +1,12 @@
-// @thinkwork/graph — shared 3D force-graph rendering for admin and Spaces.
+// @thinkwork/graph — shared 3D force-graph rendering for web surfaces.
 //
 // Hosts:
 //   - MemoryGraph — Hindsight memory + entity graph (used by Brain).
 //   - WikiGraph — compiled wiki-page graph (used by Pages).
 //   - KnowledgeGraph — Cognee thread graph with trust/provenance styling.
 //
-// The two components were ported from apps/admin/src/components/{Memory,Wiki}Graph.tsx
-// in U2 of plan docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md
-// to give apps/admin and apps/spaces one source of truth.
+// The Memory/Wiki components were ported out of the app layer to keep graph
+// rendering behavior reusable and versioned in one package.
 //
 // Performance invariants (in-place opacity mute on filter, one-shot camera
 // init, stable nodeThreeObject) are load-bearing — see each component's

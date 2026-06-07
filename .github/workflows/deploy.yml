@@ -378,7 +378,7 @@ jobs:
     #
     # Gating: only run when something terraform-relevant changed.
     # Docs-only, admin-only, or mobile-only PRs skip terraform-apply;
-    # downstream publish jobs (build-web/spaces/docs) accept skipped
+    # downstream publish jobs (build-web/docs) accept skipped
     # as success. We deliberately do NOT add `build-container` here even
     # to read `build-container.result` — that would reintroduce the
     # 20-minute queue gap. Instead we gate on the same detect-changes

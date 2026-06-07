@@ -1,5 +1,5 @@
 /**
- * WikiGraph — admin force-graph rendering compiled wiki pages and their
+ * WikiGraph — force-graph rendering compiled wiki pages and their
  * [[...]] links. Near-clone of MemoryGraph.tsx with the data source
  * swapped from Hindsight entities to wiki_pages/wiki_page_links.
  *
@@ -16,9 +16,8 @@
  * nothing is hidden. Opacities are applied in-place via stashed
  * material refs so a filter change doesn't restart the force sim.
  *
- * Ported from apps/admin/src/components/WikiGraph.tsx in U2 of the
- * apps/spaces Memory port (plan
- * docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md).
+ * Ported out of the app layer during the Memory UI work so web surfaces share
+ * one graph implementation.
  */
 import {
   useCallback,

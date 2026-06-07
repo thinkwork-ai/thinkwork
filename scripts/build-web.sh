@@ -90,7 +90,7 @@ cd "$REPO_ROOT"
 
 # Write production env file.
 #
-# VITE_API_AUTH_SECRET is intentionally absent. The spaces SPA authenticates
+# VITE_API_AUTH_SECRET is intentionally absent. The web SPA authenticates
 # REST calls with the user's Cognito id token (via apiFetch in
 # apps/web/src/lib/api-fetch.ts). Never re-add a service-to-service
 # secret here — Vite inlines it into the public JS bundle.

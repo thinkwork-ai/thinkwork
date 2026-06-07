@@ -29,10 +29,9 @@ const scheduledJobTypes = readFileSync(
   "utf-8",
 );
 const generatedGraphqlFiles = [
-  join(HERE, "..", "..", "..", "apps", "admin", "src", "gql", "graphql.ts"),
   join(HERE, "..", "..", "..", "apps", "cli", "src", "gql", "graphql.ts"),
   join(HERE, "..", "..", "..", "apps", "mobile", "lib", "gql", "graphql.ts"),
-  join(HERE, "..", "..", "..", "apps", "spaces", "src", "gql", "graphql.ts"),
+  join(HERE, "..", "..", "..", "apps", "web", "src", "gql", "graphql.ts"),
 ].map((path) => readFileSync(path, "utf-8"));
 
 const generatedTypeBlock = (source: string, typeName: string) => {
@@ -171,28 +170,28 @@ describe("migration 0148 — user cost attribution", () => {
       );
 
       expect(budgetPolicy).toMatch(
-        /userId\?: Maybe<Scalars\["ID"\]\["output"\]>/,
+        /userId\?: Maybe<Scalars\[['"]ID['"]\]\[['"]output['"]\]>/,
       );
       expect(scheduledJob).toMatch(
-        /budgetPaused: Scalars\["Boolean"\]\["output"\]/,
+        /budgetPaused: Scalars\[['"]Boolean['"]\]\[['"]output['"]\]/,
       );
       expect(scheduledJob).toMatch(
-        /budgetPausedAt\?: Maybe<Scalars\["AWSDateTime"\]\["output"\]>/,
+        /budgetPausedAt\?: Maybe<Scalars\[['"]AWSDateTime['"]\]\[['"]output['"]\]>/,
       );
       expect(scheduledJob).toMatch(
-        /budgetPausedReason\?: Maybe<Scalars\["String"\]\["output"\]>/,
+        /budgetPausedReason\?: Maybe<Scalars\[['"]String['"]\]\[['"]output['"]\]>/,
       );
       expect(userCostSummary).toMatch(
-        /userId\?: Maybe<Scalars\["ID"\]\["output"\]>/,
+        /userId\?: Maybe<Scalars\[['"]ID['"]\]\[['"]output['"]\]>/,
       );
       expect(userCostSummary).toMatch(
-        /userName: Scalars\["String"\]\["output"\]/,
+        /userName: Scalars\[['"]String['"]\]\[['"]output['"]\]/,
       );
       expect(userCostSummary).toMatch(
-        /isSystem: Scalars\["Boolean"\]\["output"\]/,
+        /isSystem: Scalars\[['"]Boolean['"]\]\[['"]output['"]\]/,
       );
       expect(upsertBudgetPolicyInput).toMatch(
-        /userId\?: InputMaybe<Scalars\["ID"\]\["input"\]>/,
+        /userId\?: InputMaybe<Scalars\[['"]ID['"]\]\[['"]input['"]\]>/,
       );
     }
   });
