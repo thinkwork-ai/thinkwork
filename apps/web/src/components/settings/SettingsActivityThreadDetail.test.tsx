@@ -416,12 +416,96 @@ describe("SettingsActivityThreadDetail", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Tool: mcp_twenty-crm_execute_tool"),
-    ).toBeTruthy();
+    expect(screen.getByText("Tool: mcp_twenty-crm_execute_tool")).toBeTruthy();
     expect(screen.getByText("claude-haiku-4-5-20251001")).toBeTruthy();
     expect(screen.getByText("91->13 (7 cached)")).toBeTruthy();
     expect(screen.getByText("$0.0004")).toBeTruthy();
     expect(screen.getByText("completed")).toBeTruthy();
+  });
+
+  it("renders Agent Profile runs as nested steps with child tools and trace lane metadata", () => {
+    const profileTurn = {
+      ...turn,
+      usageJson: JSON.stringify({
+        model: "moonshotai.kimi-k2.5",
+        input_tokens: 12,
+        output_tokens: 183,
+        cached_read_tokens: 10000,
+        agent_profile_runs: [
+          {
+            profileRunId: "profile-run-1",
+            profileId: "profile-research",
+            profileSlug: "research",
+            profileName: "Research",
+            model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+            status: "completed",
+            inputTokens: 88,
+            outputTokens: 24,
+            cachedReadTokens: 5000,
+            durationMs: 1600,
+            costUsd: 0.0017,
+            laneKey: "profile:research",
+            handoffSummary: "Research handoff summary",
+            toolInvocations: [
+              {
+                id: "child-web-search",
+                tool_name: "web_search",
+                type: "tool",
+                input_preview: '{"query":"Stripe CEO"}',
+                output_preview: "Search results",
+              },
+            ],
+          },
+        ],
+      }),
+      totalCost: 0.0048,
+    };
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({
+      turn: profileTurn,
+      traces: [
+        {
+          traceId: "trace-profile-1",
+          parentRequestId: "turn-1",
+          profileRunId: "profile-run-1",
+          profileId: "profile-research",
+          profileSlug: "research",
+          profileName: "Research",
+          laneKey: "profile:research",
+          profileStatus: "completed",
+          agentName: "Pi",
+          runtimeType: "pi",
+          model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+          inputTokens: 88,
+          outputTokens: 24,
+          durationMs: 1600,
+          costUsd: 0.0017,
+          createdAt: "2026-06-04T16:55:08.000Z",
+        },
+      ],
+    });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    expect(screen.getByText("Research")).toBeTruthy();
+    expect(screen.getByText("claude-haiku-4-5-20251001")).toBeTruthy();
+    expect(screen.getByText(/88.*24.*5\.0K cached/)).toBeTruthy();
+    expect(screen.getByText("1.6s")).toBeTruthy();
+    expect(screen.getByText("$0.0017")).toBeTruthy();
+    expect(screen.getByText("completed")).toBeTruthy();
+    expect(screen.getByText("Tool: web_search")).toBeTruthy();
+    expect(screen.queryByText(/not routed/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Research/ }));
+    expect(screen.getByText(/Research handoff summary/)).toBeTruthy();
+    expect(screen.getByText(/child-web-search/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Traces" }));
+    expect(screen.getByText("profile:research")).toBeTruthy();
   });
 });

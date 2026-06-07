@@ -11,14 +11,12 @@ status: complete
 - Plan:
   `docs/plans/2026-06-07-002-feat-agent-profiles-pi-subagents-plan.md`.
 - Target branch: `main`.
-- Current unit: U5 Finalize, Cost, Activity Events, And Trace Metadata.
-- Current branch: `codex/agent-profiles-u5-observability`.
-- Current worktree: `.Codex/worktrees/agent-profiles-u5`.
+- Current unit: U6 Activity Nested Profile Step And Multi-Lane Trace UI.
+- Current branch: `codex/agent-profiles-u6-activity-ui`.
+- Current worktree: `.Codex/worktrees/agent-profiles-u6`.
 - Status: in progress.
 - Notes:
-  - Active web work targets `apps/web` / `@thinkwork/web` only. Historical
-    `apps/admin` and `@thinkwork/admin` references in older ledger entries are
-    obsolete and must not be used for this Agent Profiles branch.
+  - Active web work targets `apps/web` / `@thinkwork/web` only.
   - Created branch from `origin/main` at `c61921b3e`.
   - Cherry-picked amended plan constraints into the U0 branch because
     `origin/main` did not yet include the local plan amendment.
@@ -116,8 +114,7 @@ status: complete
   - Created isolated U3 worktree `.Codex/worktrees/agent-profiles-u3` from
     `origin/main` at `4f8b7792`.
   - Copied local Vite auth/API configuration into `apps/web/.env` for the
-    `http://localhost:5174` dev server; there is no `apps/admin` in this
-    worktree.
+    `http://localhost:5174` dev server.
   - Started U3 runtime config work: compiling enabled Agent Profiles into the
     resolved AgentCore runtime payload with Space availability, model
     availability/user approval checks, capability bundles, and MCP operation
@@ -216,17 +213,39 @@ status: complete
     - `git diff --check` -> passed.
   - U5 local web note: copied deployed dev auth/API values from
     `apps/mobile/.env` into ignored `apps/web/.env` using `VITE_*` names for
-    the `http://localhost:5174` dev server; this branch has no `apps/admin`
-    target.
+    the `http://localhost:5174` dev server.
+  - U5 was squash merged in PR
+    [#2215](https://github.com/thinkwork-ai/thinkwork/pull/2215) as
+    `5a985517`; local worktree/branch were removed and the remote branch was
+    deleted.
+  - Created isolated U6 worktree `.Codex/worktrees/agent-profiles-u6` from
+    `origin/main` at `5a985517`.
+  - U6 local verification passed:
+    - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsActivityThreadDetail.test.tsx`
+      -> 4 tests passed.
+    - `pnpm --filter @thinkwork/web typecheck` -> passed.
+    - Direct Prettier formatting over changed files -> passed.
+    - `git diff --check` -> passed.
+    - `curl -I http://localhost:5174/settings/activity/preview` -> 200 from
+      the U6 `apps/web` dev server.
+    - `curl http://localhost:5174/sign-in` -> app shell served without
+      `Missing VITE` / `Configuration incomplete` text.
+  - U6 browser note: copied deployed dev auth/API values from
+    `apps/mobile/.env` into ignored `apps/web/.env` for the
+    `http://localhost:5174` dev server. The in-app browser control tool was not
+    callable in this turn, and Playwright is not installed in this workspace,
+    so visual validation is currently covered by the focused React render test
+    plus local :5174 HTTP smoke.
 
-| Unit                                               | Branch                                     | PR                                                           | State  | Notes                                                                                             |
-| -------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
-| U0 Pi Profile Adapter Spike                        | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
-| U1 Agent Profile Schema, Seeds, And GraphQL        | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | merged | Squash merged as `6956a0b4`; dev migration applied after drift failure and rerun CI passed.       |
-| U2 Settings -> Agents Page And Profile Editor      | `codex/agent-profiles-u2-settings-agents`  | [#2211](https://github.com/thinkwork-ai/thinkwork/pull/2211) | merged | Squash merged as `4f8b7792`; local worktree/branch removed and remote branch was deleted.         |
-| U3 Resolve Profiles Into AgentCore Runtime Config  | `codex/agent-profiles-u3-runtime-config`   | [#2213](https://github.com/thinkwork-ai/thinkwork/pull/2213) | merged | Squash merged as `17b2b36a`; runtime config now includes file-backed Agent Profile projections.   |
-| U4 Pi Subagent Execution And Slash Invocation      | `codex/agent-profiles-u4-pi-subagents`     | [#2214](https://github.com/thinkwork-ai/thinkwork/pull/2214) | merged | Squash merged as `b5bba6d7`; local worktree/branch removed and remote branch was deleted.         |
-| U5 Finalize, Cost, Activity Events, Trace Metadata | `codex/agent-profiles-u5-observability`    | TBD                                                          | active | Persisting profile run evidence into finalize usage, cost rows, activity events, and traces.      |
+| Unit                                                    | Branch                                     | PR                                                           | State  | Notes                                                                                             |
+| ------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
+| U0 Pi Profile Adapter Spike                             | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
+| U1 Agent Profile Schema, Seeds, And GraphQL             | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | merged | Squash merged as `6956a0b4`; dev migration applied after drift failure and rerun CI passed.       |
+| U2 Settings -> Agents Page And Profile Editor           | `codex/agent-profiles-u2-settings-agents`  | [#2211](https://github.com/thinkwork-ai/thinkwork/pull/2211) | merged | Squash merged as `4f8b7792`; local worktree/branch removed and remote branch was deleted.         |
+| U3 Resolve Profiles Into AgentCore Runtime Config       | `codex/agent-profiles-u3-runtime-config`   | [#2213](https://github.com/thinkwork-ai/thinkwork/pull/2213) | merged | Squash merged as `17b2b36a`; runtime config now includes file-backed Agent Profile projections.   |
+| U4 Pi Subagent Execution And Slash Invocation           | `codex/agent-profiles-u4-pi-subagents`     | [#2214](https://github.com/thinkwork-ai/thinkwork/pull/2214) | merged | Squash merged as `b5bba6d7`; local worktree/branch removed and remote branch was deleted.         |
+| U5 Finalize, Cost, Activity Events, Trace Metadata      | `codex/agent-profiles-u5-observability`    | [#2215](https://github.com/thinkwork-ai/thinkwork/pull/2215) | merged | Squash merged as `5a985517`; profile run evidence now lands in usage, cost rows, events, traces.  |
+| U6 Activity Nested Profile Step And Multi-Lane Trace UI | `codex/agent-profiles-u6-activity-ui`      | TBD                                                          | active | Rendering Agent Profile runs as nested Activity steps and profile lanes in trace metadata.        |
 
 ## Model Stacking Tool Routing - 2026-06-06
 
