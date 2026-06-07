@@ -7,6 +7,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
+  IS_CLI_RELEASE: ${{ !contains(github.ref_name, '-canary.') }}
 
 jobs:
   # ── Build + test ────────────────────────────────────────────────
@@ -157,6 +158,9 @@ jobs:
   publish-npm:
     name: Publish to npm
     needs: verify
+    # Web canary tags share the v* release workflow for deployable assets, but
+    # they must not mutate or publish the CLI package version.
+    if: ${{ !contains(github.ref_name, '-canary.') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -190,6 +194,7 @@ jobs:
   publish-homebrew:
     name: Update Homebrew Tap
     needs: publish-npm
+    if: ${{ !contains(github.ref_name, '-canary.') }}
     runs-on: ubuntu-latest
     steps:
       - name: Wait for npm propagation
@@ -241,7 +246,19 @@ jobs:
   github-release:
     name: GitHub Release
     needs: [publish-npm, publish-homebrew, build-deploy-artifacts]
-    if: always() && needs.publish-npm.result == 'success' && needs.build-deploy-artifacts.result == 'success'
+    if: >-
+      always() &&
+      needs.build-deploy-artifacts.result == 'success' &&
+      (
+        (
+          needs.publish-npm.result == 'success' &&
+          needs.publish-homebrew.result == 'success'
+        ) ||
+        (
+          needs.publish-npm.result == 'skipped' &&
+          needs.publish-homebrew.result == 'skipped'
+        )
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -268,10 +285,16 @@ jobs:
           echo "" >> notes.md
           echo "**Install:**" >> notes.md
           echo '```bash' >> notes.md
-          echo "npm install -g thinkwork-cli@${VERSION#v}" >> notes.md
-          echo "# or" >> notes.md
-          echo "brew install thinkwork-ai/tap/thinkwork" >> notes.md
+          if [[ "${IS_CLI_RELEASE}" == "true" ]]; then
+            echo "npm install -g thinkwork-cli@${VERSION#v}" >> notes.md
+            echo "# or" >> notes.md
+            echo "brew install thinkwork-ai/tap/thinkwork" >> notes.md
+          else
+            echo "thinkwork deploy --stage <stage>" >> notes.md
+          fi
           echo '```' >> notes.md
+        env:
+          IS_CLI_RELEASE: ${{ env.IS_CLI_RELEASE }}
 
       - name: Download deployable release assets
         uses: actions/download-artifact@v4
