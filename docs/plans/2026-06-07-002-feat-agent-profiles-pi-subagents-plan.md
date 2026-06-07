@@ -45,6 +45,9 @@ In scope:
   separate AgentCore instances.
 - Support parent auto-delegation and manual `/agent <profile> <task>`
   invocation.
+- Ship v1 profile execution as foreground, bounded child work only. Background
+  profile execution, resume/status polling, output files, chained delegation,
+  and nested delegation are deferred.
 - Persist profile-run observability and cost evidence.
 - Render nested profile steps in Activity and preserve profile lanes in the
   existing multi-lane Trace UI.
@@ -56,6 +59,8 @@ Out of scope:
 - Separate AgentCore instances for delegated long-running jobs.
 - Independent profile lifecycle, background job queueing, process supervision,
   or separate profile memory stores.
+- Raw access to the generic `pi-subagents` control surface in the managed
+  ThinkWork runtime.
 - Hermes-style profile isolation beyond the configuration ideas explicitly used
   here.
 - Per-Space profile edits.
@@ -75,8 +80,9 @@ Out of scope:
   the model-stacking boundary.
 - R13-R15, AE4: parent Pi agent delegates to a profile subagent inside the same
   AgentCore thread/turn and receives summary-only handoff.
-- R16-R17, AE5: `/agent <profile> <task>` invokes an available profile and fails
-  clearly when unavailable, disabled, or unknown.
+- R16-R17, AE5: natural-language delegation and the ThinkWork `/agent <profile>
+  <task>` alias invoke an available profile and fail clearly when unavailable,
+  disabled, or unknown.
 - R18-R22, AE4-AE6: Activity shows nested profile steps; Traces preserve
   profile lanes; raw tool/MCP calls remain inspectable as child details.
 - R23-R24: profile editor is hybrid: structured settings for config and an
@@ -132,6 +138,17 @@ Out of scope:
   parent Pi sessions delegating to focused child Pi sessions. Implementation
   should validate the exact API and supply-chain posture before integrating, but
   the product direction matches the origin requirements.
+- The Pi package guidance describes a generic `subagent` tool, built-in agents
+  that can inherit default model unless overridden, custom markdown agents with
+  frontmatter, and controls such as `model`, `fallbackModels`, `thinking`,
+  `tools`, `skills`, `extensions`, `inheritProjectContext`, `inheritSkills`,
+  `defaultContext`, `maxSubagentDepth`, `maxExecutionTimeMs`, and `maxTokens`.
+  ThinkWork should compile managed Agent Profile configuration into that shape
+  only through a controlled adapter.
+- The existing `DelegationProvider` / `createDelegationExtension()` path is a
+  hosted managed-agent delegation seam, not the final Agent Profile seam. It can
+  inspire tests or fallback mechanics, but profile execution needs its own
+  `ProfileDelegationProvider` or equivalent wrapper contract.
 
 ## Technical Design
 
@@ -152,7 +169,8 @@ Minimum persistent shape:
     access, and any disabled defaults
   - `skill_policy` JSON or relation data for assigned skills
   - `execution_controls` JSON for thinking level, max runtime, token/cost
-    budget, background allowed
+    budget, and future async/background flags. V1 enforces foreground-only
+    execution regardless of stored future flags.
   - `created_at`, `updated_at`
 - `agent_profile_space_assignments`
   - `profile_id`, `space_id`
@@ -162,6 +180,38 @@ The implementation can normalize skills and MCP server access into join tables
 if that matches resolver/test ergonomics, but the v1 invariant is clearer than
 the storage detail: profile definition is global; Space assignment only controls
 availability.
+
+### Pi Profile Adapter Contract
+
+ThinkWork remains the source of truth for profile configuration. The managed
+runtime may materialize generated Pi custom-agent files/frontmatter or use a
+structured provider, but user/project-discovered agent files must not override
+database policy.
+
+The runtime adapter must prove and document this mapping before schema/UI work
+locks in:
+
+- `model_id` -> Pi `model` or an explicit per-run child model override.
+- approved fallback models -> Pi `fallbackModels` only when all entries pass
+  ThinkWork model approval.
+- thinking setting -> Pi `thinking`.
+- default tools, explicit built-in tools, and denied defaults -> Pi `tools`.
+- assigned skills -> Pi `skills`.
+- allowed extensions -> Pi `extensions`, restricted to reviewed allowlisted
+  extensions.
+- context mode -> Pi `inheritProjectContext`, `inheritSkills`, and
+  `defaultContext`.
+- max runtime -> Pi foreground `timeoutMs` / `maxRuntimeMs` and/or
+  `maxExecutionTimeMs`, depending on the proven API.
+- max tokens -> Pi `maxTokens`.
+- cost budget -> ThinkWork-side policy and telemetry in v1, not assumed to be
+  Pi-enforced until proven.
+
+Generated profile materialization, if used, should live in an isolated runtime
+directory such as `.thinkwork/generated-pi-agents` or `.pi/agents` inside the
+container workspace. The adapter must reject unrecognized frontmatter fields,
+unapproved models/fallbacks, unapproved tools/extensions, unsafe output paths,
+and prompt-supplied attempts to override model/tools/skills.
 
 ### Runtime Config Contract
 
@@ -177,7 +227,8 @@ Each resolved profile should include:
 - routing guidance and instructions
 - available skills
 - effective default tools and explicit built-in tools
-- effective MCP servers by server id/name, not individual operation names
+- effective MCP server grants for operator display, plus the compiled
+  per-operation child-session allowlist the runtime will enforce
 - execution controls
 - availability metadata: global or Space-restricted
 
@@ -228,10 +279,60 @@ for example `agent_profile_runs`, rather than overloading
 Raw tool/MCP calls inside the child profile remain tool invocation records. They
 do not get independent model override semantics.
 
+### Managed Delegation Guardrails
+
+Do not expose the raw generic `subagent` tool in the managed ThinkWork runtime.
+Register a constrained ThinkWork tool such as
+`delegate_to_agent_profile({ profileSlug, task })` that can only list and run
+enabled, available profiles from the resolved runtime config.
+
+V1 constraints:
+
+- Force foreground execution: no `asyncByDefault`, background launch,
+  status/resume polling, output files, or long-running supervision.
+- Disable TUI clarification behavior (`clarify=false` or equivalent) so managed
+  web/API calls do not block on an interactive prompt.
+- Reject prompt/tool-input overrides for child model, tools, skills, MCP,
+  extensions, context inheritance, output paths, timeout, or token caps.
+- Validate profile model and fallback models against the model catalog and user
+  approval before launch.
+- Exclude child access to delegation by default. Set `maxSubagentDepth: 0` or
+  the equivalent child-runtime cap unless a future design explicitly enables
+  nested delegation.
+- Cap concurrent profile runs per parent turn.
+- Store child context and artifacts under tenant-scoped, encrypted storage with
+  the same retention/deletion behavior as parent turn evidence.
+- Redact secrets and PII before profile telemetry, child context excerpts, tool
+  arguments, or artifacts are persisted.
+
+### MCP Capability Contract
+
+The product UI may grant MCP access at the server level for operator simplicity,
+but the runtime compiler must enforce the actual operations available to the
+child session.
+
+Preferred v1 path:
+
+- Reuse ThinkWork's existing MCP bridge/tool construction, including handle
+  auth, tenant/user credential scoping, input/output scrubbing, and invocation
+  record shape.
+- Compile profile MCP grants into a child-session `toolWhitelist` /
+  per-operation allowlist derived from the server's discovered tools.
+- Bind child MCP calls to the invoking tenant and user credential scope.
+- Disable generic discovery/proxy access to MCP servers unless explicitly
+  granted through the compiled profile policy.
+- Only adopt `pi-mcp-adapter` if the U0 spike proves it preserves ThinkWork's
+  handle, credential, scrubber, and record-shape guarantees.
+
+Tests must cover a profile allowed to use one MCP server operation and denied
+from another operation on the same server.
+
 ### Manual Invocation
 
-Support `/agent <profile> <task>` as a command that results in profile
-delegation.
+Support natural-language delegation as the primary path and `/agent <profile>
+<task>` as a ThinkWork command alias that results in profile delegation. If Pi's
+native `/run` command maps cleanly through the adapter, the web composer may
+recognize it later, but `/agent` is the ThinkWork product surface.
 
 The validation boundary should be server/runtime-side because availability
 depends on tenant, profile status, and active Space. The web composer may add
@@ -269,15 +370,36 @@ Settings -> Agents has two sections:
 1. Default Agent
    - Move the existing runtime/default model settings from General.
 2. Agent Profiles
-   - list Research, Coding, Analyst, and custom profiles
+   - list ThinkWork built-in profiles Research, Coding, Analyst, and custom
+     profiles
    - status, model, Space availability, tools/MCP/skills summary
    - create/edit profile editor
-   - structured controls for model, routing guidance, instructions, capabilities,
+   - preset-first controls for enable/disable, model, Space availability, and
+     concise capability summary
+   - advanced controls for routing guidance, instructions, capabilities,
      execution controls, and Space availability
    - an "open workspace/editor" path for richer profile instructions/context
 
+ThinkWork built-in profile mapping:
+
+- Research maps to a Pi researcher-style child agent or generated custom
+  profile. It is selected for research/citation/current-information tasks and
+  starts with web search/extract plus read-only MCP access where granted.
+- Coding maps to a ThinkWork custom profile or a constrained parent-controlled
+  chain if the adapter spike proves a chain is safe. Do not imply one Pi built-in
+  agent owns Coding in v1.
+- Analyst maps to a ThinkWork custom Pi profile for data interpretation,
+  summarization, and structured analysis tasks.
+
 Activity/Trace UI:
 
+- In the parent thread conversation, use the Codex spawned-agents screenshot as
+  the starting pattern: a lightweight collapsible "Delegated to N profiles" /
+  "Spawned N agents" group with per-profile icon/color, profile name, role label,
+  and truncated task/instruction preview.
+- The conversation pattern is not the full trace. It should keep the parent
+  "Working..." / "Worked for" thread readable while exposing that delegated
+  profile work happened.
 - Show a nested Agent Profile step in the parent turn timeline.
 - Show model/tokens/cost/duration/status on the profile row.
 - Preserve the existing multi-lane Trace UI by using explicit profile run/lane
@@ -286,6 +408,44 @@ Activity/Trace UI:
 - Rename UI copy away from "MODEL ROUTING" when showing profile evidence.
 
 ## Implementation Units
+
+### U0: Pi Profile Adapter Spike
+
+Files:
+
+- Inspect `packages/agentcore-pi/agent-container/src/server.ts`
+- Inspect `packages/pi-runtime-core/src/*`
+- Inspect `packages/pi-extensions/src/*`
+- Add exploratory tests under
+  `packages/agentcore-pi/agent-container/tests/agent-profile-adapter.test.ts`
+- Add a short decision note under `docs/solutions/` if the outcome materially
+  affects implementation
+
+Approach:
+
+- Install or inspect `pi-subagents` in an isolated local spike without changing
+  production runtime behavior first.
+- Prove one tenant profile can be materialized or passed as structured config
+  and invoked as a child Pi session inside the existing AgentCore parent turn.
+- Prove explicit child model selection, fallback model validation, tools,
+  skills, MCP allowlisting, timeout, max tokens, and telemetry extraction.
+- Decide whether to use package files/frontmatter, `agentOverrides`, a
+  structured provider, or a ThinkWork wrapper around child Pi sessions.
+- Define the production adapter contract before U1 schema/UI fields are frozen.
+
+Test scenarios:
+
+- A generated Research profile launches on its explicit model, not the parent
+  model.
+- Prompt-supplied model/tool/skill overrides are ignored or rejected.
+- A child profile can use one allowlisted built-in tool and cannot use a denied
+  one.
+- A child profile can use an allowlisted MCP operation and cannot use a denied
+  operation on the same server.
+- Child profile telemetry can be extracted into the proposed
+  `agent_profile_runs` shape for completed, timed out, interrupted, and
+  resource-limit-exceeded outcomes.
+- Raw credentials and tool secrets do not appear in extracted telemetry.
 
 ### U1: Agent Profile Schema, Seeds, And GraphQL
 
@@ -309,9 +469,9 @@ Files:
 Approach:
 
 - Add profile tables and the Space assignment table.
-- Seed built-in Research, Coding, and Analyst profiles for each tenant during
-  bootstrap or first resolver access, matching existing tenant-agent bootstrap
-  conventions.
+- Seed ThinkWork built-in Research, Coding, and Analyst profiles for each tenant
+  during bootstrap or first resolver access, matching existing tenant-agent
+  bootstrap conventions.
 - Add GraphQL types for `AgentProfile`, `AgentProfileSpaceAssignment`,
   `AgentProfileToolPolicy`, and `AgentProfileExecutionControls`.
 - Add queries for listing profiles, fetching one profile, and listing editor
@@ -394,10 +554,12 @@ Approach:
 - Compile each profile's effective capabilities:
   - platform default safe tools
   - explicit built-in tools
-  - MCP servers granted by profile
+  - MCP servers granted by profile for display
+  - per-operation MCP allowlists enforced by the child runtime
   - assigned skills
   - disabled defaults, if supported
-- Keep tool/MCP operation names out of the profile availability decision.
+- Keep raw tool/MCP operation names out of the model-stacking product boundary,
+  while still compiling operation allowlists for runtime enforcement.
 - Include profile config in the runtime payload as `agent_profiles`.
 - Preserve existing tenant agent model, user-approved model, and composer model
   behavior for the parent agent.
@@ -407,8 +569,8 @@ Test scenarios:
 - Runtime config includes Research when it has no Space assignments.
 - Runtime config excludes Coding when the current Space is not assigned.
 - Runtime config includes Coding when the current Space is assigned.
-- Profile MCP access is represented by server id/name, not by specific MCP tool
-  operation names.
+- Profile MCP access displays by server id/name but compiles into operation
+  allowlists.
 - Parent tenant-agent runtime config remains unchanged when no profiles are
   enabled.
 - Disabled profiles are excluded from runtime config and slash invocation.
@@ -442,16 +604,18 @@ Approach:
   Treat the Pi package page's security note seriously: packages can execute code
   and influence agent behavior.
 - If `pi-subagents` cannot be used directly because it assumes local CLI/TUI
-  behavior, adapt the same Pi subagent/session pattern through the existing
-  `DelegationProvider` / `createDelegationExtension()` seam.
-- Add a profile delegation tool/extension that the parent model can call for
-  auto-delegation.
+  behavior, adapt the same Pi child-session pattern through a new
+  `ProfileDelegationProvider` / `delegate_to_agent_profile` wrapper. Do not
+  reuse the existing hosted `DelegationProvider` as-is.
+- Add a constrained profile delegation tool/extension that the parent model can
+  call for auto-delegation.
 - Parse `/agent <profile> <task>` into an explicit profile delegation request
   before or inside the runtime loop, while preserving normal chat history.
 - Launch the profile as a child Pi subagent using the profile model,
   instructions, capability bundle, and execution controls.
 - Return only the handoff summary to the parent by default.
 - Return first-class `agent_profile_runs` evidence in the runtime response.
+- Force v1 profile runs to foreground execution and disable nested delegation.
 - Stop using `TOOLS.md`, `model_routing_policy`, and
   `model_routed_tool_calls` as the model-stacking path. Keep compatibility only
   where needed for old data/tests until explicitly removed.
@@ -459,6 +623,7 @@ Approach:
 Test scenarios:
 
 - Runtime registers profile delegation only when `agent_profiles` are present.
+- Runtime does not register the raw generic `subagent` tool in managed mode.
 - Parent auto-delegation can invoke the Research profile with its configured
   model and tool bundle.
 - `/agent research find source X` invokes Research when available.
@@ -468,10 +633,15 @@ Test scenarios:
 - Profile child run refuses execution when the profile model is not approved for
   the invoking user/tenant.
 - Profile child run can use granted built-in tools and MCP servers.
+- Profile child run cannot use an ungranted MCP operation on an otherwise
+  granted MCP server.
+- Prompt-supplied model/tool/skill overrides are rejected.
 - Raw tool calls inside the profile do not create independent model override
   records.
 - Profile execution returns a summary handoff plus `agent_profile_runs`
   telemetry.
+- Timed out, interrupted, and resource-limit-exceeded child runs return durable
+  status evidence.
 - Tenant/session isolation holds for a child profile subagent.
 
 ### U5: Finalize, Cost, Activity Events, And Trace Metadata
@@ -503,6 +673,8 @@ Approach:
 - Keep raw child tool calls inspectable from persisted usage records.
 - Avoid double-counting: parent cost, profile child LLM cost, and external tool
   costs should remain separate cost rows with clear metadata.
+- Store child artifacts/context excerpts only after applying tenant/user scoped
+  redaction and retention rules.
 
 Test scenarios:
 
@@ -514,6 +686,10 @@ Test scenarios:
 - `threadTraces` returns profile metadata for profile cost rows.
 - Raw tool calls inside a profile remain present in usage JSON details.
 - Replayed/idempotent finalize does not duplicate profile cost rows or events.
+- Timeout, interruption, and resource-limit outcomes persist with distinct
+  profile statuses and do not disappear from Activity/Traces.
+- Raw credentials, MCP tokens, and tool secrets are absent from persisted
+  profile metadata and trace payloads.
 
 ### U6: Activity Nested Profile Step And Multi-Lane Trace UI
 
@@ -530,6 +706,9 @@ Approach:
 
 - Rename the UI evidence concept from model routing to profile execution where
   profile records are shown.
+- Add the lightweight parent conversation rendering for delegated profiles based
+  on the Codex spawned-agents pattern: collapsible group, profile icon/color,
+  profile name, role label, and task preview.
 - Add a nested Agent Profile step row inside the parent turn timeline.
 - Show model, tokens, cost, duration, and status on the profile row.
 - Expand profile details to show handoff summary, child model evidence, and raw
@@ -543,6 +722,8 @@ Test scenarios:
 
 - Activity detail renders Research as a nested profile step with model, tokens,
   cost, duration, and completed status.
+- Parent conversation rendering shows delegated profile rows without forcing the
+  user into the Trace UI.
 - Expanding the Research step shows handoff summary and child tool calls.
 - Trace UI renders a Research lane using profile metadata.
 - A turn with no profile runs continues to render the parent/tool timeline.
@@ -585,15 +766,16 @@ Test scenarios:
 
 ## Sequencing
 
-1. U1 establishes the durable Agent Profile configuration domain.
-2. U2 gives operators a place to configure profiles and moves default Agent
+1. U0 proves the Pi adapter contract before product/schema fields are frozen.
+2. U1 establishes the durable Agent Profile configuration domain.
+3. U2 gives operators a place to configure profiles and moves default Agent
    settings out of General.
-3. U3 compiles profile availability and capability bundles into runtime config.
-4. U4 makes profiles executable as Pi subagents and retires tool routing as the
+4. U3 compiles profile availability and capability bundles into runtime config.
+5. U4 makes profiles executable as Pi subagents and retires tool routing as the
    model-stacking path.
-5. U5 persists profile evidence and cost attribution.
-6. U6 makes that evidence visible in Activity and Traces.
-7. U7 documents the new model and records the customer-demo validation path.
+6. U5 persists profile evidence and cost attribution.
+7. U6 makes that evidence visible in Activity and Traces.
+8. U7 documents the new model and records the customer-demo validation path.
 
 U1-U3 can be implemented as separate PRs if needed. U4-U6 are tightly coupled:
 do not claim the feature is demo-ready until runtime execution, finalize
@@ -611,6 +793,7 @@ Focused checks:
 - `pnpm --filter @thinkwork/api exec vitest run src/lib/resolve-agent-runtime-config.test.ts`
 - `pnpm --filter @thinkwork/api exec vitest run src/lib/chat-finalize/process-finalize.test.ts`
 - `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/agent-profiles.test.ts`
+- `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/agent-profile-adapter.test.ts`
 - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsAgents.test.tsx`
 - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsActivityThreadDetail.test.tsx`
 
@@ -638,18 +821,32 @@ Manual/browser proof for the demo:
 - Open Traces and verify the Research lane appears with profile cost metadata.
 - Try `/agent research <task>` and verify explicit invocation.
 - Try a restricted profile in an unavailable Space and verify a clear failure.
+- Verify the parent conversation shows a lightweight delegated-profile group
+  before opening the detailed Trace UI.
 
 ## Risks
 
 - **Pi package fit.** `pi-subagents` may assume local CLI/TUI affordances that do
-  not map directly to managed AgentCore. Mitigation: validate package API in U4
-  and adapt through the existing `DelegationProvider` seam if direct install is
-  unsafe.
+  not map directly to managed AgentCore. Mitigation: validate package API in U0
+  and adapt through a ThinkWork `ProfileDelegationProvider` / child-session
+  wrapper if direct install is unsafe.
 - **Third-party package safety.** `pi-subagents` is external code that can
   influence agent behavior. Mitigation: inspect package source, manifest,
   transitive dependencies, and runtime side effects before adding it to the
-  managed container; prefer a small ThinkWork wrapper over direct install if the
-  package does more than the managed runtime needs.
+  managed container; pin the exact version; block runtime package installs;
+  require lockfile, license, audit, and rollback/kill-switch review for
+  dependency changes; prefer a small ThinkWork wrapper over direct install if
+  the package does more than the managed runtime needs.
+- **Raw subagent bypass.** Exposing generic Pi subagent creation could bypass
+  tenant policy, profile approval, or observability. Mitigation: expose only the
+  constrained ThinkWork delegation wrapper in managed mode.
+- **MCP overgranting.** Granting an MCP server by name can expose more operations
+  than intended. Mitigation: compile server-level UI grants into operation
+  allowlists and test denied operations on granted servers.
+- **Context/artifact leakage.** Child sessions can persist sensitive prompt,
+  tool, or artifact data. Mitigation: default child context to fresh/minimal,
+  redact secrets/PII before persistence, encrypt tenant-scoped storage, and test
+  that credentials never appear in traces.
 - **Model approval bypass.** A globally configured profile could accidentally
   use a model that a user is not approved to run. Mitigation: resolve profile
   model availability through the same model catalog/user approval path used for
@@ -677,6 +874,8 @@ Manual/browser proof for the demo:
 
 - Which `pi-subagents` APIs are safe to use inside the managed AgentCore runtime,
   and which should be adapted through local ThinkWork wrappers?
+- Whether U0 proves generated custom-agent files/frontmatter or a structured
+  provider as the safer production materialization path.
 - Which execution controls are enforceable immediately by Pi and which must be
   displayed as disabled/future until runtime support exists?
 - Whether profile instructions should be stored entirely in the database for v1
@@ -693,10 +892,16 @@ Manual/browser proof for the demo:
 - Profile Space availability works for global and restricted profiles.
 - Parent auto-delegation and `/agent <profile> <task>` execute profiles as Pi
   subagents inside the existing AgentCore turn.
+- Managed runtime exposes only the constrained ThinkWork profile delegation
+  wrapper, not the raw generic subagent tool.
 - Profile model/capability bundle is honored during child execution.
+- Profile MCP server grants compile to enforceable child-session operation
+  allowlists.
 - Finalize persists profile run evidence and child profile cost.
 - Activity shows nested profile steps with model/tokens/cost/duration/status.
 - Traces show profile lanes with explicit profile metadata.
+- Parent conversation shows delegated profile work using the lightweight
+  spawned-agents-style group.
 - Raw tool/MCP calls remain inspectable as child details.
 - The old `TOOLS.md` model-routing direction is documented as superseded.
 - A fresh local/browser E2E validates the customer demo scenario.
