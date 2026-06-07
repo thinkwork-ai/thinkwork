@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-07-002-feat-agent-profiles-pi-subagents-plan.md`.
 - Target branch: `main`.
-- Current unit: U3 Resolve Profiles Into AgentCore Runtime Config.
-- Current branch: `codex/agent-profiles-u3-runtime-config`.
-- Current worktree: `.Codex/worktrees/agent-profiles-u3`.
+- Current unit: U4 Pi Subagent Execution And Slash Invocation.
+- Current branch: `codex/agent-profiles-u4-pi-subagents`.
+- Current worktree: `.Codex/worktrees/agent-profiles-u4`.
 - Status: in progress.
 - Notes:
   - Active web work targets `apps/web` / `@thinkwork/web` only. Historical
@@ -160,13 +160,40 @@ status: complete
     `/settings/local-workspace?file=Agent%2Fagents%2Fresearch.md` renders
     "No workspace is available for your account." Browser validation needs an
     authenticated operator/workspace session on the web app.
+  - U3 was squash merged in PR
+    [#2213](https://github.com/thinkwork-ai/thinkwork/pull/2213) as
+    `17b2b36a`; local worktree/branch were removed and the remote branch was
+    deleted.
+  - Created isolated U4 worktree `.Codex/worktrees/agent-profiles-u4` from
+    `origin/main` at `17b2b36a`.
+  - Copied local Vite auth/API configuration into `apps/web/.env` for the
+    `http://localhost:5174` dev server; active web work targets `apps/web`.
+  - U4 implemented constrained Pi profile delegation: runtime `agent_profiles`
+    become a `delegate_to_agent_profile` tool plus `/agent <profile> <task>`
+    slash path, child profile runs use the profile model/capability allowlist,
+    MCP tool filtering is server/tool aware, and profile run evidence is
+    returned as `agent_profile_runs` on the invocation response.
+  - U4 local verification passed:
+    - `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/server.test.ts agent-container/tests/agent-profile-delegation.test.ts agent-container/tests/agent-profile-adapter.test.ts`
+      -> 68 tests passed.
+    - `pnpm --filter @thinkwork/pi-runtime-core exec vitest run test/agent-loop.test.ts`
+      -> 38 tests passed.
+    - `pnpm --filter @thinkwork/pi-runtime-core typecheck` -> passed.
+    - `pnpm --filter @thinkwork/agentcore-pi typecheck` -> passed.
+    - `pnpm --filter @thinkwork/agentcore-pi test` -> 28 test files passed,
+      465 tests passed, 5 todo.
+    - `pnpm --filter @thinkwork/pi-runtime-core test` -> 10 test files
+      passed, 86 tests passed.
+    - Direct Prettier check over changed files -> passed.
+    - `git diff --check` -> passed.
 
 | Unit                                              | Branch                                     | PR                                                           | State  | Notes                                                                                             |
 | ------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
 | U0 Pi Profile Adapter Spike                       | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
 | U1 Agent Profile Schema, Seeds, And GraphQL       | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | merged | Squash merged as `6956a0b4`; dev migration applied after drift failure and rerun CI passed.       |
 | U2 Settings -> Agents Page And Profile Editor     | `codex/agent-profiles-u2-settings-agents`  | [#2211](https://github.com/thinkwork-ai/thinkwork/pull/2211) | merged | Squash merged as `4f8b7792`; local worktree/branch removed and remote branch was deleted.         |
-| U3 Resolve Profiles Into AgentCore Runtime Config | `codex/agent-profiles-u3-runtime-config`   | TBD                                                          | active | Compiling enabled, Space-scoped Agent Profiles into AgentCore runtime config.                     |
+| U3 Resolve Profiles Into AgentCore Runtime Config | `codex/agent-profiles-u3-runtime-config`   | [#2213](https://github.com/thinkwork-ai/thinkwork/pull/2213) | merged | Squash merged as `17b2b36a`; runtime config now includes file-backed Agent Profile projections.   |
+| U4 Pi Subagent Execution And Slash Invocation     | `codex/agent-profiles-u4-pi-subagents`     | TBD                                                          | active | Implementing constrained profile delegation inside the Pi AgentCore runtime.                      |
 
 ## Model Stacking Tool Routing - 2026-06-06
 

@@ -202,6 +202,17 @@ describe("buildToolAllowlist", () => {
     expect(allowlist).toHaveLength(BUILTIN_TOOL_NAMES.length + 3);
   });
 
+  it("supports a narrowed built-in allowlist for child profile runs", () => {
+    const allowlist = buildToolAllowlist(
+      [toToolDefinition(fakeAgentTool("profile_tool"))],
+      ["web_search"],
+      ["read"],
+    );
+    expect(allowlist).toEqual(["read", "profile_tool", "web_search"]);
+    expect(allowlist).not.toContain("bash");
+    expect(allowlist).not.toContain("write");
+  });
+
   it("forwards extensionToolNames through to openSession (U6 allowlist fix)", async () => {
     let captured: OpenSessionInputs | undefined;
     const session = makeFakeSession({ messages: [assistantMessage("ok")] });
@@ -216,6 +227,51 @@ describe("buildToolAllowlist", () => {
     );
     expect(captured?.toolAllowlist).toContain("recall");
     expect(captured?.toolAllowlist).toContain("reflect");
+  });
+
+  it("extracts agent profile run evidence from profile delegation tool results", async () => {
+    const profileRun = {
+      profileRunId: "profile-run-1",
+      profileId: "profile-research",
+      profileSlug: "research",
+      profileName: "Research",
+      model: "anthropic/claude-haiku-4-5",
+      status: "completed" as const,
+      startedAt: "2026-06-07T12:00:00.000Z",
+      finishedAt: "2026-06-07T12:00:01.000Z",
+      durationMs: 1000,
+      inputTokens: 10,
+      outputTokens: 20,
+      parentThreadTurnId: "turn-parent",
+      handoffSummary: "Research handoff",
+      toolInvocations: [],
+      laneKey: "profile:research",
+    };
+    const session = makeFakeSession({
+      events: [
+        {
+          type: "tool_execution_start",
+          toolCallId: "tool-call-1",
+          toolName: "delegate_to_agent_profile",
+          args: { profileSlug: "research", task: "find sources" },
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "tool-call-1",
+          toolName: "delegate_to_agent_profile",
+          result: { details: { agentProfileRun: profileRun } },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+      messages: [assistantMessage("parent summary")],
+    });
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async (inputs) => ({ session, modelId: inputs.modelId }),
+    });
+
+    expect(result.agentProfileRuns).toEqual([profileRun]);
+    expect(result.toolInvocations[0]?.agent_profile_run).toEqual(profileRun);
   });
 });
 

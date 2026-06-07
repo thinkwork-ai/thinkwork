@@ -23,6 +23,7 @@ import {
 import { textFromAssistant } from "./history.js";
 import { collectToolCosts } from "./tool-costs.js";
 import type {
+  AgentProfileRunRecord,
   PiInvocationIdentity,
   RunAgentLoopArgs,
   RunAgentLoopResult,
@@ -326,6 +327,59 @@ function extractModelRoutingRecord(input: {
   };
 }
 
+function isAgentProfileRunRecord(
+  value: unknown,
+): value is AgentProfileRunRecord {
+  const record = recordValue(value);
+  return (
+    typeof record?.profileRunId === "string" &&
+    typeof record.profileId === "string" &&
+    typeof record.profileSlug === "string" &&
+    typeof record.profileName === "string" &&
+    typeof record.model === "string" &&
+    typeof record.status === "string" &&
+    typeof record.startedAt === "string" &&
+    typeof record.finishedAt === "string" &&
+    typeof record.parentThreadTurnId === "string"
+  );
+}
+
+function findAgentProfileRunRecord(
+  value: unknown,
+  depth = 0,
+): AgentProfileRunRecord | undefined {
+  if (depth > 4) return undefined;
+  if (isAgentProfileRunRecord(value)) return value;
+  const record = recordValue(value);
+  if (!record) return undefined;
+
+  for (const key of [
+    "agentProfileRun",
+    "agent_profile_run",
+    "profileRun",
+    "profile_run",
+  ]) {
+    const direct = record[key];
+    if (isAgentProfileRunRecord(direct)) return direct;
+  }
+
+  for (const key of ["details", "result", "toolResult", "rawToolResult"]) {
+    const nested = findAgentProfileRunRecord(record[key], depth + 1);
+    if (nested) return nested;
+  }
+
+  const content = Array.isArray(record.content) ? record.content : [];
+  for (const item of content) {
+    const itemRecord = recordValue(item);
+    const text = optionalStringValue(itemRecord?.text);
+    if (!text || text.length > 200_000) continue;
+    const parsed = parseJsonRecord(text);
+    const nested = findAgentProfileRunRecord(parsed, depth + 1);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
 /**
  * Fire the host's live-activity emitter, swallowing any throw. Best-effort by
  * contract: a faulty or slow emitter must never break or delay the turn (the
@@ -379,10 +433,11 @@ export function toToolDefinition(tool: AgentTool<any>): ToolDefinition {
 export function buildToolAllowlist(
   customTools: ToolDefinition[],
   extensionToolNames: readonly string[] = [],
+  builtinToolNames: readonly string[] = BUILTIN_TOOL_NAMES,
 ): string[] {
   return [
     ...new Set([
-      ...BUILTIN_TOOL_NAMES,
+      ...builtinToolNames,
       ...customTools.map((tool) => tool.name),
       ...extensionToolNames,
     ]),
@@ -561,6 +616,7 @@ export async function runAgentLoop(
   const toolAllowlist = buildToolAllowlist(
     customTools,
     args.extensionToolNames,
+    args.builtinToolNames,
   );
   const requestedModelId = resolveModelIdString(args.modelId);
   const cwd = args.cwd?.trim() || process.cwd();
@@ -637,6 +693,7 @@ export async function runAgentLoop(
           toolName: event.toolName,
           result: event.result,
         });
+        const agentProfileRun = findAgentProfileRunRecord(event.result);
         deps.log?.({
           level: event.isError ? "error" : "info",
           event: "agentcore_phase",
@@ -666,6 +723,7 @@ export async function runAgentLoop(
           existing.status = event.isError ? "error" : "ok";
           existing.finished_at = finished;
           if (modelRouting) existing.model_routing = modelRouting;
+          if (agentProfileRun) existing.agent_profile_run = agentProfileRun;
         } else {
           toolsCalled.add(event.toolName);
           toolInvocations.push({
@@ -677,6 +735,7 @@ export async function runAgentLoop(
             output_preview: toolPreview(event.result),
             status: event.isError ? "error" : "ok",
             ...(modelRouting ? { model_routing: modelRouting } : {}),
+            ...(agentProfileRun ? { agent_profile_run: agentProfileRun } : {}),
             finished_at: finished,
             runtime: "pi",
           });
@@ -743,6 +802,9 @@ export async function runAgentLoop(
     const modelRoutedToolCalls = toolInvocations.flatMap((invocation) =>
       invocation.model_routing ? [invocation.model_routing] : [],
     );
+    const agentProfileRuns = toolInvocations.flatMap((invocation) =>
+      invocation.agent_profile_run ? [invocation.agent_profile_run] : [],
+    );
 
     return {
       content: textFromAssistant(assistant),
@@ -751,6 +813,7 @@ export async function runAgentLoop(
       toolsCalled: [...toolsCalled],
       toolInvocations,
       ...(modelRoutedToolCalls.length > 0 ? { modelRoutedToolCalls } : {}),
+      ...(agentProfileRuns.length > 0 ? { agentProfileRuns } : {}),
       toolCosts: toolInvocations.flatMap((invocation) =>
         collectToolCosts(invocation.result),
       ),

@@ -116,6 +116,14 @@ import {
   validateDirectTools,
   type DirectToolsMismatch,
 } from "./mcp-registry.js";
+import {
+  AGENT_PROFILE_TOOL_NAME,
+  buildAgentProfileDelegationTool,
+  executeAgentProfileDelegation,
+  normalizeAgentProfiles,
+  parseAgentProfileSlashCommand,
+  type ProfileDelegationToolOptions,
+} from "./agent-profile-delegation.js";
 import { buildMcpProxyTool } from "./mcp-proxy.js";
 import {
   readMcpJson,
@@ -1693,6 +1701,44 @@ export async function handleInvocation(
   if (fileReadTool) {
     bundle.tools.push(fileReadTool);
   }
+  const agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
+  const profileChildExtensionFactories = [...bundle.extensionFactories];
+  // The current invocation's model id is what pi-ai's Agent will use
+  // to serialize history -> Bedrock for THIS turn. We use the same id on
+  // synthesized AssistantMessage history entries so the metadata is
+  // self-consistent even though pi-ai doesn't actually read those
+  // fields during serialization.
+  const currentModelId =
+    typeof args.payload.model === "string" && args.payload.model.trim()
+      ? args.payload.model.trim()
+      : "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+  const profileDelegationOptions = (
+    parentModelId: string,
+  ): ProfileDelegationToolOptions => ({
+    profiles: agentProfiles,
+    parentThreadTurnId: threadTurnId || identity.threadId,
+    parentModelId,
+    approvedModelIds: normalizeApprovedModelIds(
+      args.payload.approved_model_ids,
+    ),
+    tools: bundle.tools,
+    extensionFactories: profileChildExtensionFactories,
+    extensionToolNames: bundle.extensionToolNames,
+    workspaceSkills,
+    mcpRegistry,
+    cwd: env.workspaceDir,
+    agentDir: env.piAgentDir,
+    threadId: identity.threadId,
+    gitSha: env.gitSha,
+    identity,
+    runLoop,
+  });
+  const profileTool = buildAgentProfileDelegationTool(
+    profileDelegationOptions(currentModelId),
+  );
+  if (profileTool) {
+    bundle.tools.push(profileTool);
+  }
   // Plan §004 U6 — system-prompt composition runs inside the session via a
   // `before_agent_start` extension hook instead of being hand-built here and
   // passed as a string. The hook composes from workspace defaults + tool policy
@@ -1723,15 +1769,6 @@ export async function handleInvocation(
     ),
   );
   try {
-    // The current invocation's model id is what pi-ai's Agent will use
-    // to serialize history → Bedrock for THIS turn. We use the same id on
-    // synthesized AssistantMessage history entries so the metadata is
-    // self-consistent even though pi-ai doesn't actually read those
-    // fields during serialization.
-    const currentModelId =
-      typeof args.payload.model === "string" && args.payload.model.trim()
-        ? args.payload.model.trim()
-        : "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
     // Durable per-thread session (U4): resume the thread's persisted Pi session
     // from S3 instead of replaying full history as prompt text. Requires the
     // workspace bucket + a tenant slug for isolation; otherwise the loop falls
@@ -1802,6 +1839,7 @@ export async function handleInvocation(
       tools: bundle.tools.length,
       extensionTools: bundle.extensionToolNames.length,
       workspaceSkills: workspaceSkills.length,
+      agentProfiles: agentProfiles.length,
     });
     logAgentCorePhase({
       phase: "runtime.agent_loop",
@@ -1824,40 +1862,72 @@ export async function handleInvocation(
       readActivityCallbackConfig(args.payload),
       { logger: (entry) => logStructured(entry) },
     );
-    runResult = await runLoop(
-      {
-        message: userMessage,
-        history: normalizeHistory(
-          args.payload.messages_history,
-          currentModelId,
-        ),
-        // U6 — no prebuilt system prompt; the system-prompt extension's
-        // before_agent_start hook composes and sets it for the turn.
-        tools: bundle.tools,
-        // Plan §004 U5 — load thinkwork capabilities (memory first) as Pi
-        // extensions over the resource loader, additive to the built-ins +
-        // custom tools.
-        extensionFactories: bundle.extensionFactories,
-        // U6 — fold extension tool names into the allowlist so they're actually
-        // enabled (the SDK gates to the allowlist).
-        extensionToolNames: bundle.extensionToolNames,
-        modelId: args.payload.model,
-        threadId: identity.threadId,
-        gitSha: env.gitSha,
-        identity,
-        cwd: env.workspaceDir,
-        agentDir: env.piAgentDir,
-        sessionStore,
-        // Session scratch lives outside the workspace dir so the per-turn
-        // workspace S3 sync (delete-extraneous) cannot reap an in-flight
-        // session file.
-        sessionDir: "/tmp/pi-sessions",
-      },
-      {
-        log: (entry) => logStructured(entry),
-        emitActivity: activityEmitter.emit,
-      },
-    );
+    const slash = parseAgentProfileSlashCommand(userMessage);
+    if (slash) {
+      const evidence = await executeAgentProfileDelegation({
+        options: profileDelegationOptions(currentModelId),
+        profileSlug: slash.profileSlug,
+        task: slash.task,
+      });
+      runResult = {
+        content: evidence.handoffSummary ?? "",
+        modelId: currentModelId,
+        toolsCalled: [AGENT_PROFILE_TOOL_NAME],
+        toolInvocations: [
+          {
+            id: evidence.profileRunId,
+            name: AGENT_PROFILE_TOOL_NAME,
+            tool_name: AGENT_PROFILE_TOOL_NAME,
+            args: slash,
+            result: { agent_profile_run: evidence },
+            input_preview: JSON.stringify(slash).slice(0, 600),
+            output_preview: (evidence.handoffSummary ?? "").slice(0, 600),
+            status: evidence.status,
+            agent_profile_run: evidence,
+            started_at: evidence.startedAt,
+            finished_at: evidence.finishedAt,
+            runtime: "pi",
+          },
+        ],
+        agentProfileRuns: [evidence],
+        toolCosts: [],
+      };
+    } else {
+      runResult = await runLoop(
+        {
+          message: userMessage,
+          history: normalizeHistory(
+            args.payload.messages_history,
+            currentModelId,
+          ),
+          // U6 — no prebuilt system prompt; the system-prompt extension's
+          // before_agent_start hook composes and sets it for the turn.
+          tools: bundle.tools,
+          // Plan §004 U5 — load thinkwork capabilities (memory first) as Pi
+          // extensions over the resource loader, additive to the built-ins +
+          // custom tools.
+          extensionFactories: bundle.extensionFactories,
+          // U6 — fold extension tool names into the allowlist so they're actually
+          // enabled (the SDK gates to the allowlist).
+          extensionToolNames: bundle.extensionToolNames,
+          modelId: args.payload.model,
+          threadId: identity.threadId,
+          gitSha: env.gitSha,
+          identity,
+          cwd: env.workspaceDir,
+          agentDir: env.piAgentDir,
+          sessionStore,
+          // Session scratch lives outside the workspace dir so the per-turn
+          // workspace S3 sync (delete-extraneous) cannot reap an in-flight
+          // session file.
+          sessionDir: "/tmp/pi-sessions",
+        },
+        {
+          log: (entry) => logStructured(entry),
+          emitActivity: activityEmitter.emit,
+        },
+      );
+    }
     // Flush any in-flight live-activity POSTs now that the turn is done — the
     // turn already completed, so this never extends its wall-clock, and it
     // closes the Lambda-Web-Adapter unawaited-promise gap for the live view.
@@ -2148,6 +2218,7 @@ export async function handleInvocation(
     tools_called: runResult.toolsCalled,
     tool_invocations: runResult.toolInvocations,
     model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
+    agent_profile_runs: runResult.agentProfileRuns ?? [],
     hindsight_usage: hindsightUsage,
     response: {
       role: "assistant",
@@ -2158,6 +2229,7 @@ export async function handleInvocation(
       tools_called: runResult.toolsCalled,
       tool_invocations: runResult.toolInvocations,
       model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
+      agent_profile_runs: runResult.agentProfileRuns ?? [],
       tool_costs:
         runResult.toolCosts ??
         runResult.toolInvocations.flatMap((invocation) =>

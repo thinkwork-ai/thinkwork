@@ -174,6 +174,22 @@ export type ConnectMcpServerFn = (
   args: ConnectMcpServerArgs,
 ) => Promise<AgentTool<any>[]>;
 
+export interface McpAgentToolIdentity {
+  serverName: string;
+  toolName: string;
+}
+
+const mcpAgentToolIdentities = new WeakMap<
+  AgentTool<any>,
+  McpAgentToolIdentity
+>();
+
+export function getMcpAgentToolIdentity(
+  tool: AgentTool<any>,
+): McpAgentToolIdentity | null {
+  return mcpAgentToolIdentities.get(tool) ?? null;
+}
+
 /**
  * Optional callback fired when a per-server connect throws. U9 wires
  * structured logging through this seam without re-opening U7. Returns
@@ -316,8 +332,7 @@ function modelRoutingDecisionRank(decision: ModelRoutingDecision): {
   return {
     specificity: Object.keys(decision.route.match).length,
     precedence: decision.route.precedence ?? 0,
-    exactTool:
-      decision.route.tool === MCP_SERVER_MODEL_ROUTING_TOOL ? 0 : 1,
+    exactTool: decision.route.tool === MCP_SERVER_MODEL_ROUTING_TOOL ? 0 : 1,
   };
 }
 
@@ -344,9 +359,7 @@ function findMcpModelRoutingDecision(
       match: input.match,
     }),
     findModelRoutingDecision(policy, input),
-  ].filter((decision): decision is ModelRoutingDecision =>
-    Boolean(decision),
-  );
+  ].filter((decision): decision is ModelRoutingDecision => Boolean(decision));
   if (!decisions.length) return null;
   return [...decisions].sort(compareModelRoutingDecisions)[0]!;
 }
@@ -416,11 +429,12 @@ function wrapMcpToolForModelRouting(input: {
   childModelCaller?: ChildModelCaller;
 }): AgentTool<any> {
   const { tool, serverName, modelRoutingPolicy, approvedModelIds } = input;
-  if (modelRoutingPolicy.routes.length === 0) return tool;
-
-  return {
+  const wrapped: AgentTool<any> = {
     ...tool,
     async execute(toolCallId, params, signal, onUpdate) {
+      if (modelRoutingPolicy.routes.length === 0) {
+        return tool.execute(toolCallId, params, signal, onUpdate);
+      }
       const match = mcpToolRouteMatch({
         serverName,
         toolName: tool.name,
@@ -479,6 +493,11 @@ function wrapMcpToolForModelRouting(input: {
       });
     },
   };
+  mcpAgentToolIdentities.set(wrapped, {
+    serverName,
+    toolName: tool.name,
+  });
+  return wrapped;
 }
 
 /**
