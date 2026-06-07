@@ -42,6 +42,7 @@ export function ComposerModelPicker({
       disabled={disabled || empty}
     >
       <SelectTrigger
+        type="button"
         aria-label="Select model"
         title={
           selected
@@ -62,7 +63,12 @@ export function ComposerModelPicker({
           {selected?.displayName ?? (empty ? "No models" : "Model")}
         </span>
       </SelectTrigger>
-      <SelectContent align="start" sideOffset={6} className="rounded-xl p-1.5">
+      <SelectContent
+        align="end"
+        position="popper"
+        sideOffset={6}
+        className="z-[70] rounded-xl p-1.5"
+      >
         <SelectGroup>
           <SelectLabel className="px-2 py-1.5 text-xs text-muted-foreground">
             Approved models

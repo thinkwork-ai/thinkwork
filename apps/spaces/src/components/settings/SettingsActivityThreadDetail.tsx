@@ -5,13 +5,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ChevronRight, ExternalLink, FileText } from "lucide-react";
+import { ChevronRight, ExternalLink, FileText, Info } from "lucide-react";
 import { useQuery, useSubscription } from "urql";
 import { Badge, Button, Separator, cn } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
-import { ExecutionTrace } from "@/components/settings/SettingsActivityExecutionTrace";
+import {
+  ExecutionTrace,
+  type ExecutionTraceModelRouteTrace,
+} from "@/components/settings/SettingsActivityExecutionTrace";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -150,6 +153,7 @@ export function SettingsActivityThreadDetail({
 }: SettingsActivityThreadDetailProps) {
   const { tenantId } = useTenant();
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
 
   const [
     { data: threadData, fetching: threadFetching, error: threadError },
@@ -249,6 +253,29 @@ export function SettingsActivityThreadDetail({
     title,
     documentTitle: `Activity Thread · ${title}`,
     breadcrumbs: [...breadcrumbParents, { label: title }],
+    action: (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-8 w-8",
+          propertiesOpen
+            ? "text-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+        aria-label={
+          propertiesOpen ? "Close thread properties" : "Open thread properties"
+        }
+        title={
+          propertiesOpen ? "Close thread properties" : "Open thread properties"
+        }
+        onClick={() => setPropertiesOpen((open) => !open)}
+      >
+        <Info className="h-4 w-4" />
+      </Button>
+    ),
+    actionKey: `thread-properties-${propertiesOpen ? "open" : "closed"}`,
   });
 
   if (threadFetching && !thread) {
@@ -273,7 +300,12 @@ export function SettingsActivityThreadDetail({
 
   return (
     <div className="h-full min-h-0 overflow-y-auto">
-      <div className="grid gap-6 p-6 md:grid-cols-[minmax(0,1fr)_320px]">
+      <div
+        className={cn(
+          "grid gap-6 p-6",
+          propertiesOpen && "md:grid-cols-[minmax(0,1fr)_320px]",
+        )}
+      >
         <main className="min-w-0">
           <div className="mb-8">
             <p className="mb-3 font-mono text-sm uppercase tracking-wide text-muted-foreground">
@@ -295,6 +327,10 @@ export function SettingsActivityThreadDetail({
                 defaultAgentName="ThinkWork"
                 assistantLabel="ThinkWork"
                 userLabel={userLabel}
+                modelRouteTraces={
+                  (tracesData?.threadTraces ??
+                    []) as ExecutionTraceModelRouteTrace[]
+                }
               />
             ) : turnsFetching ? (
               <div className="flex justify-center py-12">
@@ -306,13 +342,15 @@ export function SettingsActivityThreadDetail({
           <ThreadTraces traces={tracesData?.threadTraces ?? []} />
         </main>
 
-        <aside className="md:pt-8">
-          <ThreadProperties
-            thread={thread}
-            latestSystemPrompt={latestSystemPrompt}
-            onViewSystemPrompt={() => setSystemPromptOpen(true)}
-          />
-        </aside>
+        {propertiesOpen ? (
+          <aside className="md:pt-8">
+            <ThreadProperties
+              thread={thread}
+              latestSystemPrompt={latestSystemPrompt}
+              onViewSystemPrompt={() => setSystemPromptOpen(true)}
+            />
+          </aside>
+        ) : null}
       </div>
 
       <SystemPromptSheet

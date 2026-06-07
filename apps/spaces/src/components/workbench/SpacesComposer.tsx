@@ -444,14 +444,17 @@ export function SpacesComposer({
                   </SelectContent>
                 </Select>
               ) : null}
+            </PromptInputTools>
+            <div
+              className="flex min-w-0 items-center gap-1"
+              data-testid="composer-action-controls"
+            >
               <ComposerModelPicker
                 models={approvedModels}
                 value={selectedModelId}
                 onValueChange={onSelectedModelChange}
                 disabled={disabled || isSubmitting}
               />
-            </PromptInputTools>
-            <div className="flex items-center gap-1">
               <PromptInputSpeechButton
                 textareaRef={
                   textareaRef as React.RefObject<HTMLTextAreaElement | null>

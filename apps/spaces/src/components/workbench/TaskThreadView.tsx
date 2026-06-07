@@ -2629,6 +2629,11 @@ function FollowUpComposer({
                 <Bot className="size-5" />
               </button>
               <PromptInputAttachButton />
+            </PromptInputTools>
+            <div
+              className="flex min-w-0 items-center gap-1"
+              data-testid="follow-up-action-controls"
+            >
               <ComposerModelPicker
                 models={approvedModels}
                 value={selectedModelId}
@@ -2636,8 +2641,6 @@ function FollowUpComposer({
                 disabled={disabled || isSending}
                 tone="dark"
               />
-            </PromptInputTools>
-            <div className="flex items-center gap-1">
               <PromptInputSpeechButton
                 textareaRef={
                   textareaRef as React.RefObject<HTMLTextAreaElement | null>

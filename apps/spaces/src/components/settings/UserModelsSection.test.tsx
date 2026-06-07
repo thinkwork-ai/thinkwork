@@ -37,12 +37,13 @@ describe("UserModelsSection", () => {
     expect(updated[1]).not.toBe(models[1]);
   });
 
-  it("wires query, mutation, rollback, and switches in the rendered section", () => {
+  it("wires catalog query, mutation, rollback, and switches in Spaces settings", () => {
     const source = readFileSync(
-      new URL("./UserModelsSection.tsx", import.meta.url),
+      `${process.cwd()}/src/components/settings/UserModelsSection.tsx`,
       "utf8",
     );
 
+    expect(source).toContain("SettingsSection label=\"Models\"");
     expect(source).toContain("UserModelCatalogQuery");
     expect(source).toContain("SetUserModelApprovalMutation");
     expect(source).toContain('requestPolicy: "cache-and-network"');

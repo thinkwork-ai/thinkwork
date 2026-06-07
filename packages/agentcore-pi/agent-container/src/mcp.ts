@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import {
+  assertModelRouteApproved,
+  findModelRoutingDecision,
+  ModelRoutingPolicyError,
+  type ChildModelCaller,
+  type ModelRoutingDecision,
+  type ModelRoutingPolicy,
+} from "@thinkwork/pi-runtime-core";
 import type { McpToolRegistry } from "./mcp-registry.js";
 
 /**
@@ -230,6 +238,10 @@ export interface BuildMcpToolsOptions {
    * Omit to retain the legacy "AgentTools-only, no registry" behavior.
    */
   registry?: McpToolRegistry;
+  /** Optional TOOLS.md policy for wrapping matched MCP tools in child-model work. */
+  modelRoutingPolicy?: ModelRoutingPolicy;
+  approvedModelIds?: string[];
+  childModelCaller?: ChildModelCaller;
 }
 
 /**
@@ -257,6 +269,173 @@ function normaliseExtraHeaders(
   return out;
 }
 
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringMatchValues(value: unknown): Record<string, string> {
+  const record = recordValue(value);
+  if (!record) return {};
+  const match: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(record)) {
+    if (
+      typeof raw === "string" ||
+      typeof raw === "number" ||
+      typeof raw === "boolean"
+    ) {
+      match[key] = String(raw).trim();
+    }
+  }
+  return match;
+}
+
+function mcpToolRouteMatch(input: {
+  serverName: string;
+  toolName: string;
+  params: unknown;
+}): Record<string, string> {
+  const paramMatch = stringMatchValues(input.params);
+  return {
+    serverName: input.serverName,
+    mcpServer: input.serverName,
+    tool: input.toolName,
+    toolName: input.toolName,
+    ...paramMatch,
+  };
+}
+
+function childModelPrompt(input: {
+  toolName: string;
+  params: unknown;
+  result: unknown;
+}): string {
+  return [
+    `MCP tool: ${input.toolName}`,
+    "",
+    "Tool parameters:",
+    JSON.stringify(input.params ?? {}, null, 2),
+    "",
+    "Raw tool result:",
+    JSON.stringify(input.result ?? {}, null, 2),
+  ].join("\n");
+}
+
+function routedMcpResult(input: {
+  originalResult: unknown;
+  childText: string;
+  decision: ModelRoutingDecision;
+  toolCallId: string;
+  toolName: string;
+  match: Record<string, string>;
+  durationMs: number;
+  usage?: Awaited<ReturnType<ChildModelCaller>>["usage"];
+  stopReason?: string;
+}) {
+  const original = recordValue(input.originalResult);
+  const originalDetails = recordValue(original?.details);
+  return {
+    content: [{ type: "text" as const, text: input.childText }],
+    details: {
+      ...(originalDetails ?? {}),
+      rawToolResult: input.originalResult,
+      modelRouting: {
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        match: input.match,
+        model: input.decision.route.model,
+        ruleSource: input.decision.ruleSource,
+        status: "completed",
+        durationMs: input.durationMs,
+        ...(input.stopReason ? { stopReason: input.stopReason } : {}),
+        ...(input.usage
+          ? {
+              inputTokens: input.usage.inputTokens,
+              outputTokens: input.usage.outputTokens,
+              cachedReadTokens: input.usage.cachedReadTokens,
+              cachedWriteTokens: input.usage.cachedWriteTokens,
+              totalTokens: input.usage.totalTokens,
+            }
+          : {}),
+      },
+    },
+  };
+}
+
+function wrapMcpToolForModelRouting(input: {
+  tool: AgentTool<any>;
+  serverName: string;
+  modelRoutingPolicy: ModelRoutingPolicy;
+  approvedModelIds: string[];
+  childModelCaller?: ChildModelCaller;
+}): AgentTool<any> {
+  const { tool, serverName, modelRoutingPolicy, approvedModelIds } = input;
+  if (modelRoutingPolicy.routes.length === 0) return tool;
+
+  return {
+    ...tool,
+    async execute(toolCallId, params, signal, onUpdate) {
+      const match = mcpToolRouteMatch({
+        serverName,
+        toolName: tool.name,
+        params,
+      });
+      const decision = findModelRoutingDecision(modelRoutingPolicy, {
+        toolName: tool.name,
+        match,
+      });
+      if (!decision) {
+        return tool.execute(toolCallId, params, signal, onUpdate);
+      }
+
+      assertModelRouteApproved({ decision, approvedModelIds });
+      if (!input.childModelCaller) {
+        throw new ModelRoutingPolicyError(
+          "MODEL_ROUTE_CALLER_MISSING",
+          `TOOLS.md routed ${tool.name} to model "${decision.route.model}", but no child model caller is configured.`,
+          decision.route,
+        );
+      }
+
+      const originalResult = await tool.execute(
+        toolCallId,
+        params,
+        signal,
+        onUpdate,
+      );
+      const startedAt = Date.now();
+      const childResult = await input.childModelCaller({
+        modelId: decision.route.model,
+        systemPrompt:
+          "You are a ThinkWork MCP tool execution helper. Use the raw MCP tool result to produce the concise useful result for the parent agent.",
+        prompt: childModelPrompt({
+          toolName: tool.name,
+          params,
+          result: originalResult,
+        }),
+        metadata: {
+          toolName: tool.name,
+          sourcePath: decision.ruleSource.path,
+          sourceOwner: decision.ruleSource.owner,
+          mcpServer: serverName,
+        },
+      });
+      return routedMcpResult({
+        originalResult,
+        childText: childResult.text,
+        decision,
+        toolCallId,
+        toolName: tool.name,
+        match,
+        durationMs: Date.now() - startedAt,
+        usage: childResult.usage,
+        stopReason: childResult.stopReason,
+      });
+    },
+  };
+}
+
 /**
  * Build the MCP tool surface for one invocation. Per server: mint a
  * handle from the bearer, build the handle-shaped Authorization
@@ -273,6 +452,9 @@ export async function buildMcpTools(
     connectMcpServer,
     onConnectError,
     registry,
+    modelRoutingPolicy = { routes: [] },
+    approvedModelIds = [],
+    childModelCaller,
   } = options;
 
   const tools: AgentTool<any>[] = [];
@@ -318,7 +500,17 @@ export async function buildMcpTools(
         transport: config.transport,
         registry,
       });
-      tools.push(...serverTools);
+      tools.push(
+        ...serverTools.map((tool) =>
+          wrapMcpToolForModelRouting({
+            tool,
+            serverName: config.serverName,
+            modelRoutingPolicy,
+            approvedModelIds,
+            childModelCaller,
+          }),
+        ),
+      );
     } catch (err) {
       // Failed connect: revoke the handle so we don't leak it across
       // invocations. Surface the error through onConnectError so U9

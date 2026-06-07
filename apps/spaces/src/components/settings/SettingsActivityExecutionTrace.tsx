@@ -205,6 +205,7 @@ type TimelineEvent = {
   toolUses?: string[];
   hasToolResult?: boolean;
   // Tool fields
+  toolCallId?: string;
   toolName?: string;
   toolType?: string;
   toolInput?: string;
@@ -213,6 +214,7 @@ type TimelineEvent = {
   routeInputTokens?: number | null;
   routeOutputTokens?: number | null;
   routeCacheReadTokens?: number | null;
+  routeCostUsd?: number | null;
   routeStatus?: string;
   routeRuleSource?: unknown;
   routeMatch?: unknown;
@@ -227,11 +229,26 @@ type ToolModelEvidence = Pick<
   | "routeInputTokens"
   | "routeOutputTokens"
   | "routeCacheReadTokens"
+  | "routeCostUsd"
   | "routeStatus"
   | "routeRuleSource"
   | "routeMatch"
   | "routeUnavailableReason"
 >;
+
+export interface ExecutionTraceModelRouteTrace {
+  parentRequestId?: string | null;
+  toolCallId?: string | null;
+  toolName?: string | null;
+  model?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  costUsd?: number | null;
+  modelRoutingStatus?: string | null;
+  ruleSource?: unknown;
+  match?: unknown;
+  metadata?: unknown;
+}
 
 function normalizeName(name: string): string {
   return name.replace(/[-\s]/g, "_");
@@ -306,6 +323,9 @@ function extractToolModelEvidence(
       routing.cached_read_tokens ??
       routing.cacheReadTokens,
   );
+  const costUsd = numberValue(
+    record.cost_usd ?? record.costUsd ?? routing.cost_usd ?? routing.costUsd,
+  );
   const ruleSource =
     record.model_routing_rule_source ??
     record.modelRoutingRuleSource ??
@@ -323,10 +343,11 @@ function extractToolModelEvidence(
     !status &&
     inputTokens == null &&
     outputTokens == null &&
+    costUsd == null &&
     ruleSource == null &&
     match == null
   ) {
-    return { routeUnavailableReason: "not routed" };
+    return {};
   }
 
   return {
@@ -334,13 +355,11 @@ function extractToolModelEvidence(
     routeInputTokens: inputTokens,
     routeOutputTokens: outputTokens,
     routeCacheReadTokens: cacheReadTokens,
+    routeCostUsd: costUsd,
     routeStatus: status,
     routeRuleSource: ruleSource,
     routeMatch: match,
-    routeUnavailableReason:
-      !model || inputTokens == null || outputTokens == null
-        ? (error ?? "tokens unavailable")
-        : undefined,
+    routeUnavailableReason: error,
   };
 }
 
@@ -359,6 +378,9 @@ function extractToolModelEvidenceFromEvent(event: any): TimelineEvent | null {
     type: "tool_call",
     timestamp: event.createdAt ?? "",
     branch: "parent",
+    toolCallId:
+      String(payload.tool_call_id ?? payload.toolCallId ?? "").trim() ||
+      undefined,
     toolName,
     toolType: "tool",
     toolInput: "",
@@ -371,25 +393,137 @@ function toolRouteKey(event: TimelineEvent): string {
   return normalizeName(event.toolName ?? "tool").toLowerCase();
 }
 
+function toolEventCallId(event: TimelineEvent): string | null {
+  return typeof event.toolCallId === "string" && event.toolCallId.trim()
+    ? event.toolCallId.trim()
+    : null;
+}
+
+function toolTraceRouteKey(trace: ExecutionTraceModelRouteTrace): string {
+  return normalizeName(trace.toolName ?? "tool").toLowerCase();
+}
+
+function traceToolCallId(trace: ExecutionTraceModelRouteTrace): string | null {
+  if (typeof trace.toolCallId === "string" && trace.toolCallId.trim()) {
+    return trace.toolCallId.trim();
+  }
+  const metadata = modelRoutingRecord(trace.metadata);
+  const raw = metadata.tool_call_id ?? metadata.toolCallId;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+
+function traceEvidence(trace: ExecutionTraceModelRouteTrace): ToolModelEvidence {
+  return {
+    routeModelId: trace.model?.trim() || undefined,
+    routeInputTokens: numberValue(trace.inputTokens),
+    routeOutputTokens: numberValue(trace.outputTokens),
+    routeCostUsd: numberValue(trace.costUsd),
+    routeStatus: trace.modelRoutingStatus?.trim() || undefined,
+    routeRuleSource: trace.ruleSource,
+    routeMatch: trace.match,
+  };
+}
+
+function enrichEventsWithRouteTraces(
+  events: TimelineEvent[],
+  traces: ExecutionTraceModelRouteTrace[] = [],
+  turnId?: string,
+): TimelineEvent[] {
+  const scopedTraces = traces.filter(
+    (trace) =>
+      trace.toolName?.trim() &&
+      (!turnId || !trace.parentRequestId || trace.parentRequestId === turnId),
+  );
+  if (scopedTraces.length === 0) return events;
+
+  const tracesById = new Map<string, ExecutionTraceModelRouteTrace>();
+  const tracesByTool = new Map<string, ExecutionTraceModelRouteTrace[]>();
+  for (const trace of scopedTraces) {
+    const toolCallId = traceToolCallId(trace);
+    if (toolCallId) tracesById.set(toolCallId, trace);
+    const key = toolTraceRouteKey(trace);
+    const bucket = tracesByTool.get(key) ?? [];
+    bucket.push(trace);
+    tracesByTool.set(key, bucket);
+  }
+
+  return events.map((event) => {
+    if (event.type !== "tool_call") return event;
+    const toolCallId = toolEventCallId(event);
+    const matchedById = toolCallId ? tracesById.get(toolCallId) : null;
+    const bucket = tracesByTool.get(toolRouteKey(event));
+    const matched = matchedById ?? bucket?.shift();
+    if (!matched) return event;
+    return {
+      ...event,
+      ...traceEvidence(matched),
+      routeRuleSource: event.routeRuleSource ?? matched.ruleSource,
+      routeMatch: event.routeMatch ?? matched.match,
+      routeUnavailableReason: undefined,
+    };
+  });
+}
+
 function appendUnmatchedRouteEvents(
   events: TimelineEvent[],
   turnEvents: any[] = [],
 ): TimelineEvent[] {
+  const routeEvents = turnEvents
+    .map(extractToolModelEvidenceFromEvent)
+    .filter((event): event is TimelineEvent => event !== null);
+  if (routeEvents.length === 0) return events;
+
+  const routeEventsById = new Map<string, TimelineEvent>();
+  const routeEventsByTool = new Map<string, TimelineEvent[]>();
+  for (const routeEvent of routeEvents) {
+    const toolCallId = toolEventCallId(routeEvent);
+    if (toolCallId) routeEventsById.set(toolCallId, routeEvent);
+    const key = toolRouteKey(routeEvent);
+    const bucket = routeEventsByTool.get(key) ?? [];
+    bucket.push(routeEvent);
+    routeEventsByTool.set(key, bucket);
+  }
+  const consumedRouteEvents = new Set<TimelineEvent>();
+  const merged = events.map((event) => {
+    if (event.type !== "tool_call") return event;
+    const toolCallId = toolEventCallId(event);
+    const byId = toolCallId ? routeEventsById.get(toolCallId) : null;
+    const bucket = routeEventsByTool.get(toolRouteKey(event));
+    const routeEvent = byId ?? bucket?.shift();
+    if (!routeEvent) return event;
+    consumedRouteEvents.add(routeEvent);
+    return {
+      ...event,
+      routeModelId: event.routeModelId ?? routeEvent.routeModelId,
+      routeInputTokens: event.routeInputTokens ?? routeEvent.routeInputTokens,
+      routeOutputTokens:
+        event.routeOutputTokens ?? routeEvent.routeOutputTokens,
+      routeCacheReadTokens:
+        event.routeCacheReadTokens ?? routeEvent.routeCacheReadTokens,
+      routeCostUsd: event.routeCostUsd ?? routeEvent.routeCostUsd,
+      routeStatus: event.routeStatus ?? routeEvent.routeStatus,
+      routeRuleSource: event.routeRuleSource ?? routeEvent.routeRuleSource,
+      routeMatch: event.routeMatch ?? routeEvent.routeMatch,
+      routeUnavailableReason: undefined,
+    };
+  });
+
   const existing = new Set(
-    events
+    merged
       .filter((event) => event.type === "tool_call")
       .map((event) => toolRouteKey(event)),
   );
-  const routeEvents = turnEvents
-    .map(extractToolModelEvidenceFromEvent)
-    .filter((event): event is TimelineEvent => event !== null)
+  const unmatchedRouteEvents = routeEvents
+    .filter((event) => !consumedRouteEvents.has(event))
     .filter((event) => {
       const key = toolRouteKey(event);
       if (existing.has(key)) return false;
       existing.add(key);
       return true;
     });
-  return routeEvents.length > 0 ? [...events, ...routeEvents] : events;
+  return unmatchedRouteEvents.length > 0
+    ? [...merged, ...unmatchedRouteEvents]
+    : merged;
 }
 
 function hasConcreteRouteEvidence(event: TimelineEvent): boolean {
@@ -397,18 +531,19 @@ function hasConcreteRouteEvidence(event: TimelineEvent): boolean {
     event.routeModelId ||
     event.routeStatus ||
     event.routeInputTokens != null ||
-    event.routeOutputTokens != null,
+    event.routeOutputTokens != null ||
+    event.routeCostUsd != null,
   );
 }
 
 function routeStatusLabel(status?: string): string {
-  if (!status) return "not routed";
+  if (!status) return "";
   return status.replace(/_/g, " ");
 }
 
-function formatRouteTokens(event: TimelineEvent): string {
+function formatRouteTokens(event: TimelineEvent): string | null {
   if (event.routeInputTokens == null && event.routeOutputTokens == null) {
-    return "tokens unavailable";
+    return null;
   }
   const input = formatTokens(event.routeInputTokens ?? 0);
   const output = formatTokens(event.routeOutputTokens ?? 0);
@@ -421,16 +556,15 @@ function formatRouteTokens(event: TimelineEvent): string {
 
 function routeEvidenceLines(event: TimelineEvent): string[] {
   const status = routeStatusLabel(event.routeStatus);
-  const model = event.routeModelId
-    ? shortModelId(event.routeModelId)
-    : event.routeUnavailableReason || status === "not routed"
-      ? "not routed"
-      : "unknown";
-  const lines = [
-    `Model: ${model}`,
-    `Tokens: ${formatRouteTokens(event)}`,
-    `Routing status: ${status}`,
-  ];
+  const lines = [];
+  lines.push(
+    `Model: ${event.routeModelId ? shortModelId(event.routeModelId) : "--"}`,
+  );
+  lines.push(`Tokens: ${formatRouteTokens(event) ?? "--"}`);
+  lines.push(
+    `Cost: ${event.routeCostUsd != null ? formatCost(event.routeCostUsd) : "--"}`,
+  );
+  if (status) lines.push(`Routing status: ${status}`);
   if (event.routeRuleSource != null) {
     lines.push(
       `Rule source: ${JSON.stringify(event.routeRuleSource, null, 2)}`,
@@ -447,18 +581,26 @@ function routeEvidenceLines(event: TimelineEvent): string[] {
 
 function ToolRouteDetail({ event }: { event: TimelineEvent }) {
   const routed = hasConcreteRouteEvidence(event);
+  if (!routed) return null;
+  const tokenLabel = formatRouteTokens(event);
+  const status = routeStatusLabel(event.routeStatus);
   return (
-    <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+    <span className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
       <span className="max-w-40 truncate font-mono">
-        {event.routeModelId ? shortModelId(event.routeModelId) : "model --"}
+        {event.routeModelId ? shortModelId(event.routeModelId) : "--"}
       </span>
-      <span className="tabular-nums">{formatRouteTokens(event)}</span>
-      <Badge
-        variant="outline"
-        className="px-1.5 py-0 text-[9px] text-muted-foreground"
-      >
-        {routed ? routeStatusLabel(event.routeStatus) : "not routed"}
-      </Badge>
+      {tokenLabel ? <span className="tabular-nums">{tokenLabel}</span> : null}
+      {event.routeCostUsd != null ? (
+        <span className="tabular-nums">{formatCost(event.routeCostUsd)}</span>
+      ) : null}
+      {status ? (
+        <Badge
+          variant="outline"
+          className="px-1.5 py-0 text-[9px] text-muted-foreground"
+        >
+          {status}
+        </Badge>
+      ) : null}
     </span>
   );
 }
@@ -483,6 +625,8 @@ function buildTimelineFromUsage(
   outputTokens?: number,
   totalCost?: number,
   turnEvents?: any[],
+  modelRouteTraces?: ExecutionTraceModelRouteTrace[],
+  turnId?: string,
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
@@ -514,6 +658,7 @@ function buildTimelineFromUsage(
           ? `sub-agent:${(ti.tool_name || "").toLowerCase()}`
           : "parent",
       toolName: ti.tool_name || "unknown",
+      toolCallId: ti.id,
       toolType: ti.type || "tool",
       toolInput: ti.input_preview || "",
       toolOutput: ti.output_preview || "",
@@ -530,7 +675,11 @@ function buildTimelineFromUsage(
     });
   }
 
-  return appendUnmatchedRouteEvents(events, turnEvents);
+  return enrichEventsWithRouteTraces(
+    appendUnmatchedRouteEvents(events, turnEvents),
+    modelRouteTraces,
+    turnId,
+  );
 }
 
 function buildTimeline(
@@ -539,6 +688,8 @@ function buildTimeline(
   userMessage: string,
   responseText: string,
   turnEvents?: any[],
+  modelRouteTraces?: ExecutionTraceModelRouteTrace[],
+  turnId?: string,
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
@@ -605,6 +756,7 @@ function buildTimeline(
           timestamp: inv.timestamp,
           branch: toolBranch,
           toolName,
+          toolCallId: matchingTool?.id,
           toolType: matchingTool?.type || "mcp_tool",
           toolInput,
           toolOutput,
@@ -625,7 +777,11 @@ function buildTimeline(
 
   reparentSubAgentEvents(events);
 
-  return appendUnmatchedRouteEvents(events, turnEvents);
+  return enrichEventsWithRouteTraces(
+    appendUnmatchedRouteEvents(events, turnEvents),
+    modelRouteTraces,
+    turnId,
+  );
 }
 
 function reparentSubAgentEvents(events: TimelineEvent[]): void {
@@ -738,6 +894,7 @@ function ExecutionTimeline({
   totalCostFromTurn,
   responseText,
   agentName,
+  modelRouteTraces,
   onViewDetail,
 }: {
   turnId: string;
@@ -748,6 +905,7 @@ function ExecutionTimeline({
   totalCostFromTurn?: number;
   responseText: string;
   agentName?: string | null;
+  modelRouteTraces?: ExecutionTraceModelRouteTrace[];
   onViewDetail: (title: string, content: string) => void;
 }) {
   const { tenantId } = useTenant();
@@ -779,6 +937,8 @@ function ExecutionTimeline({
           "",
           responseText,
           turnEvents,
+          modelRouteTraces,
+          turnId,
         )
       : buildTimelineFromUsage(
           toolInvocations,
@@ -788,6 +948,8 @@ function ExecutionTimeline({
           outputTokens,
           totalCostFromTurn,
           turnEvents,
+          modelRouteTraces,
+          turnId,
         );
 
   if (events.length === 0) return null;
@@ -1093,9 +1255,11 @@ function ExecutionTimeline({
 function TurnRow({
   turn,
   agentName,
+  modelRouteTraces,
 }: {
   turn: any;
   agentName?: string | null;
+  modelRouteTraces?: ExecutionTraceModelRouteTrace[];
 }) {
   const [open, setOpen] = useState(false);
   const [detailDialog, setDetailDialog] = useState<{
@@ -1251,6 +1415,7 @@ function TurnRow({
               totalCostFromTurn={turn.totalCost || 0}
               responseText={result?.response ? String(result.response) : ""}
               agentName={agentName}
+              modelRouteTraces={modelRouteTraces}
               onViewDetail={(t, c) => setDetailDialog({ title: t, content: c })}
             />
           )}
@@ -1460,6 +1625,7 @@ interface ExecutionTraceProps {
   threadId: string;
   tenantId: string;
   messages?: ChatMessage[];
+  modelRouteTraces?: ExecutionTraceModelRouteTrace[];
   agentMap?: Map<string, AgentRef>;
   defaultAgentName?: string | null;
   assistantLabel?: string | null;
@@ -1476,6 +1642,7 @@ export function ExecutionTrace({
   threadId,
   tenantId,
   messages = [],
+  modelRouteTraces = [],
   agentMap,
   defaultAgentName,
   assistantLabel,
@@ -1586,6 +1753,7 @@ export function ExecutionTrace({
               <TurnRow
                 key={item.turn.id}
                 turn={item.turn}
+                modelRouteTraces={modelRouteTraces}
                 agentName={
                   item.turn.agentId
                     ? agentMap?.get(item.turn.agentId)?.name

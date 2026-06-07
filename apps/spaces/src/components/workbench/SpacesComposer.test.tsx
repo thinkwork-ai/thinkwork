@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SpacesComposer } from "./SpacesComposer";
 import { useState } from "react";
@@ -265,6 +266,42 @@ describe("SpacesComposer", () => {
     expect(trigger.getAttribute("title")).toContain(
       "$0.15 input / $0.60 output per 1M tokens",
     );
+  });
+
+  it("right-aligns the model choice beside voice input", () => {
+    render(
+      <SpacesComposer
+        value=""
+        onChange={() => {}}
+        onSubmit={() => {}}
+        approvedModels={approvedModels}
+        selectedModelId="anthropic.claude-haiku"
+        onSelectedModelChange={() => {}}
+      />,
+    );
+
+    const actionControls = screen.getByTestId("composer-action-controls");
+    const trigger = screen.getByLabelText("Select model");
+    const voiceInput = screen.getByRole("button", { name: "Voice input" });
+    expect(actionControls.contains(trigger)).toBe(true);
+    expect(actionControls.contains(voiceInput)).toBe(true);
+    expect(trigger.compareDocumentPosition(voiceInput)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("keeps the model picker as a real non-submit select trigger", () => {
+    const source = readFileSync(
+      `${process.cwd()}/src/components/workbench/ComposerModelPicker.tsx`,
+      "utf8",
+    );
+
+    expect(source).toContain('type="button"');
+    expect(source).toContain("SelectContent");
+    expect(source).toContain('align="end"');
+    expect(source).toContain('position="popper"');
+    expect(source).toContain("z-[70]");
+    expect(source).toContain("models.map((model)");
   });
 
   it("passes the selected approved model through submit", async () => {

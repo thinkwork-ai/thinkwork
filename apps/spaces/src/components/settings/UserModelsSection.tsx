@@ -1,19 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
+import { Switch } from "@thinkwork/ui";
 import type { UserModelCatalogEntry } from "@/gql/graphql";
 import {
   SetUserModelApprovalMutation,
   UserModelCatalogQuery,
 } from "@/lib/graphql-queries";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
+  SettingsRow,
+  SettingsSection,
+} from "@/components/settings/SettingsContent";
 
 type ModelApprovalRow = Pick<
   UserModelCatalogEntry,
@@ -136,57 +133,41 @@ export function UserModelsSection({ userId }: UserModelsSectionProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Models</CardTitle>
-        <CardDescription>
-          Approved catalog models this person can select for agent turns.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {queryResult.error && rows.length === 0 ? (
-          <p className="text-sm text-destructive">
-            {queryResult.error.message}
-          </p>
-        ) : queryResult.fetching && rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Loading models…</p>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No catalog models are available.
-          </p>
-        ) : (
-          <div className="divide-y rounded-md border">
-            {rows.map((model) => (
-              <div
-                key={model.id}
-                className="flex items-center justify-between gap-4 px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate text-sm font-medium">
-                      {model.displayName}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {formatProviderName(model.provider)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {formatModelCostLine(model)}
-                  </p>
-                </div>
-                <Switch
-                  aria-label={`Approve ${model.displayName}`}
-                  checked={model.approved}
-                  disabled={savingModelId === model.modelId}
-                  onCheckedChange={(checked) =>
-                    handleApprovalChange(model.modelId, checked)
-                  }
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <SettingsSection label="Models">
+      {queryResult.error && rows.length === 0 ? (
+        <SettingsRow
+          label="Model catalog unavailable"
+          description={queryResult.error.message}
+        />
+      ) : queryResult.fetching && rows.length === 0 ? (
+        <SettingsRow label="Loading models..." />
+      ) : rows.length === 0 ? (
+        <SettingsRow label="No catalog models are available." />
+      ) : (
+        rows.map((model) => (
+          <SettingsRow
+            key={model.id}
+            label={
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate">{model.displayName}</span>
+                <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                  {formatProviderName(model.provider)}
+                </span>
+              </span>
+            }
+            description={formatModelCostLine(model)}
+          >
+            <Switch
+              aria-label={`Approve ${model.displayName}`}
+              checked={model.approved}
+              disabled={savingModelId === model.modelId}
+              onCheckedChange={(checked) =>
+                handleApprovalChange(model.modelId, checked)
+              }
+            />
+          </SettingsRow>
+        ))
+      )}
+    </SettingsSection>
   );
 }
