@@ -20,6 +20,10 @@ import {
   PromptSection,
   RunDetailSheet,
   RunHistoryTable,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
   type ScheduledJobRunRow,
 } from "@thinkwork/ui";
 import { Response } from "@/components/ai-elements/response";
@@ -214,81 +218,110 @@ export function ScheduledJobDetail({
 
   // Row actions live as icon buttons in the page header (matching the other
   // settings detail pages), not as an in-body toolbar.
+  const toggleLabel = job?.enabled ? "Disable" : "Enable";
   const headerActions = job ? (
-    <div className="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        title="Edit"
-        aria-label="Edit"
-        disabled={pendingAction !== null || !agentId}
-        onClick={() => setEditOpen(true)}
-      >
-        <Pencil className="size-4" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        title={job.enabled ? "Disable" : "Enable"}
-        aria-label={job.enabled ? "Disable" : "Enable"}
-        disabled={pendingAction !== null}
-        onClick={handleToggle}
-      >
-        {pendingAction === "toggle" ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : job.enabled ? (
-          <Pause className="size-4" />
-        ) : (
-          <Play className="size-4" />
-        )}
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        title="Trigger now"
-        aria-label="Trigger now"
-        disabled={pendingAction !== null || !job.enabled}
-        onClick={handleFire}
-      >
-        {pendingAction === "fire" ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <Zap className="size-4" />
-        )}
-      </Button>
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Delete"
-            aria-label="Delete"
-            className="text-destructive hover:text-destructive"
-            disabled={pendingAction !== null}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this job?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {job.name} will stop firing and the EventBridge schedule will be
-              removed. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-white hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+    <TooltipProvider delayDuration={300}>
+      <div className="flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Edit"
+                disabled={pendingAction !== null || !agentId}
+                onClick={() => setEditOpen(true)}
+              >
+                <Pencil className="size-4" />
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Edit</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={toggleLabel}
+                disabled={pendingAction !== null}
+                onClick={handleToggle}
+              >
+                {pendingAction === "toggle" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : job.enabled ? (
+                  <Pause className="size-4" />
+                ) : (
+                  <Play className="size-4" />
+                )}
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{toggleLabel}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Trigger now"
+                disabled={pendingAction !== null || !job.enabled}
+                onClick={handleFire}
+              >
+                {pendingAction === "fire" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Zap className="size-4" />
+                )}
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {job.enabled ? "Trigger now" : "Enable to trigger"}
+          </TooltipContent>
+        </Tooltip>
+        <AlertDialog>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Delete"
+                    className="text-destructive hover:text-destructive"
+                    disabled={pendingAction !== null}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </AlertDialogTrigger>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Delete</TooltipContent>
+          </Tooltip>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this job?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {job.name} will stop firing and the EventBridge schedule will be
+                removed. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                className="bg-destructive text-white hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </TooltipProvider>
   ) : undefined;
 
   usePageHeaderActions({

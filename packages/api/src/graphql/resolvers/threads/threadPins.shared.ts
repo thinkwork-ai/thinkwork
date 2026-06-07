@@ -148,15 +148,29 @@ export async function nextPinOrder(input: ThreadPinCaller) {
   return (row?.maxOrder ?? 0) + 1;
 }
 
-export async function loadPinnedThreads(input: ThreadPinCaller & {
-  limit?: number | null;
-}) {
+export async function loadPinnedThreads(
+  input: ThreadPinCaller & {
+    limit?: number | null;
+  },
+) {
   const limit = Math.min(Math.max(input.limit ?? 50, 0), 100);
   if (limit === 0) return [];
 
   const rows = await db
     .select({
       ...threadColumns,
+      // Read-state is per-user: viewing a thread writes the caller's
+      // `last_read_at` onto their `thread_participants` row (see
+      // updateThread.applyCallerReadState), NOT onto `threads.last_read_at`,
+      // which only the legacy owner-with-no-participant path touches. The pinned
+      // list joins the caller's participant row anyway (for pin_order), so
+      // resolve the effective read timestamp the same way threadsPaged does:
+      // prefer the participant value, fall back to the thread column. Selecting
+      // `...threadColumns` already bound `last_read_at` to the thread column —
+      // this later key overrides it. Without the override a pinned thread the
+      // caller already read reverts to unread the moment it's pinned (the pin
+      // itself creates a participant row with a null `last_read_at`).
+      last_read_at: sql<Date | null>`COALESCE(${threadParticipants.last_read_at}, ${threads.last_read_at})`,
       pinned_at: threadParticipants.pinned_at,
       pin_order: threadParticipants.pin_order,
     })
@@ -187,9 +201,11 @@ export async function loadPinnedThreads(input: ThreadPinCaller & {
   return rows.map(rowToPinnedThread);
 }
 
-export async function loadPinnedThread(input: ThreadPinCaller & {
-  threadId: string;
-}) {
+export async function loadPinnedThread(
+  input: ThreadPinCaller & {
+    threadId: string;
+  },
+) {
   const rows = await loadPinnedThreads({ ...input, limit: 100 });
   return rows.find((row) => row.thread.id === input.threadId) ?? null;
 }

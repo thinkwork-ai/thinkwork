@@ -25,12 +25,49 @@ vi.mock("@/components/apps/InlineAppletEmbed", () => ({
   ),
 }));
 
+const { tenantMock } = vi.hoisted(() => ({
+  tenantMock: { isOperator: false, roleResolved: true },
+}));
+vi.mock("@/context/TenantContext", () => ({
+  useTenant: () => tenantMock,
+}));
+
+// The Info Panel "Open thread detail" link is the only @tanstack/react-router
+// usage in TaskThreadView; stub Link to a plain anchor so these provider-less
+// render tests can assert it without mounting a RouterProvider.
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  Link: ({
+    to,
+    params,
+    children,
+    ...rest
+  }: {
+    to: string;
+    params?: Record<string, string>;
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => (
+    <a
+      href={to.replace(
+        /\$(\w+)/g,
+        (_match, key: string) => params?.[key] ?? `$${key}`,
+      )}
+      {...rest}
+    >
+      {children}
+    </a>
+  ),
+}));
+
 import { TaskThreadView } from "./TaskThreadView";
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   delete window.thinkworkBridge;
+  tenantMock.isOperator = false;
+  tenantMock.roleResolved = true;
 });
 
 function getThinkingDisclosure(index = 0): HTMLElement {
@@ -3984,6 +4021,53 @@ describe("TaskThreadView", () => {
       expect(screen.getByText("(No message content)")).toBeTruthy();
       expect(screen.queryByTestId("collapsible-user-body")).toBeNull();
       expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+    });
+  });
+
+  describe("info panel thread detail link", () => {
+    function renderPanel() {
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-1",
+            identifier: "CHAT-831",
+            title: "CRM pipeline risk",
+            lifecycleStatus: "COMPLETED",
+            messages: [{ id: "m1", role: "USER", content: "hi" }],
+          }}
+          infoPanelState={{
+            isOpen: true,
+            onOpenChange: vi.fn(),
+            threadId: "thread-1",
+            threadIdentifier: "CHAT-831",
+            startedAt: "2026-05-18T20:50:00.000Z",
+            startedBy: "Eric Odom",
+            agents: [],
+            attachments: [],
+            onDownloadAttachment: vi.fn(),
+          }}
+          onSendFollowUp={vi.fn()}
+        />,
+      );
+      return screen.getByTestId("thread-info-panel");
+    }
+
+    it("links operators to the main-shell thread detail route", () => {
+      tenantMock.isOperator = true;
+      const panel = renderPanel();
+      const link = within(panel).getByRole("link", {
+        name: /open thread detail/i,
+      });
+      // Stays in the main section (_shell route), not /settings/...
+      expect(link.getAttribute("href")).toBe("/activity/thread-1");
+    });
+
+    it("hides the thread detail link from non-operators", () => {
+      tenantMock.isOperator = false;
+      const panel = renderPanel();
+      expect(
+        within(panel).queryByRole("link", { name: /open thread detail/i }),
+      ).toBeNull();
     });
   });
 });

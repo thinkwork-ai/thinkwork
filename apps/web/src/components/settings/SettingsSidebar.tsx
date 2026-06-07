@@ -108,7 +108,13 @@ export function SettingsSidebar({
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 pt-0">
         <button
           type="button"
-          className={cn(itemClassName, "mb-2 text-sidebar-foreground/65")}
+          // shrink-0 so the row keeps its h-8 even when the nav below overflows
+          // — otherwise flexbox compresses it and "Back to app" drifts off the
+          // "New thread" line, shifting content when switching Settings <-> Main.
+          className={cn(
+            itemClassName,
+            "mb-2 shrink-0 text-sidebar-foreground/65",
+          )}
           onClick={() => {
             onNavigate?.();
             navigate({ to: getSettingsReturnTo() });
@@ -117,7 +123,14 @@ export function SettingsSidebar({
           <ArrowLeft />
           <span>Back to app</span>
         </button>
-        <nav className="flex flex-col gap-0.5" aria-label="Settings sections">
+        {/* Block (not flex) scroll container — mirrors the main sidebar's
+            thread list. A flex-col here would let the items flex-shrink to fit,
+            compressing the list instead of scrolling. Block flow keeps each
+            item at its natural h-8 and overflows into a scroll. */}
+        <nav
+          className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain"
+          aria-label="Settings sections"
+        >
           {items.map((item) => {
             const active = pathname.startsWith(item.to);
             return (
@@ -127,6 +140,7 @@ export function SettingsSidebar({
                 onClick={() => onNavigate?.()}
                 className={cn(
                   itemClassName,
+                  "shrink-0",
                   active &&
                     "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
                 )}

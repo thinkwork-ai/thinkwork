@@ -363,7 +363,12 @@ export function ChatSidebar() {
       setSelectedThreadId(routeThreadId);
       markThreadRead(routeThreadId);
       persistThreadRead(routeThreadId);
-    } else if (location.pathname === "/new") {
+    } else {
+      // Any non-thread route (New thread, Automations, Settings, …) has no
+      // active thread — clear the selection so a stale highlight doesn't linger
+      // on a pinned/recent row while viewing e.g. Automations. Clicking a row
+      // sets selectedThreadId optimistically and navigates in the same tick, so
+      // this never clears a just-clicked thread (its route is already active).
       setSelectedThreadId(undefined);
     }
   }, [location.pathname, markThreadRead, persistThreadRead, routeThreadId]);
@@ -542,9 +547,31 @@ export function ChatSidebar() {
         .filter((thread) => !pendingThreadDeletes.has(thread.id)),
     [pendingThreadDeletes, pinnedData?.pinnedThreads],
   );
+  // The pinnedThreads query resolves lastReadAt from the thread row, which is
+  // null for threads whose read-state lives on the caller's participant row
+  // (the common case) — so a pinned thread can show unread even though it's
+  // read. The recent/search lists (threadsPaged) already resolve the correct
+  // per-caller lastReadAt, so reuse it here. The server resolver carries the
+  // authoritative value for pins outside the recent window; this keeps the
+  // overlap correct immediately. Only override when the recent list actually
+  // knows the thread (has() — the value itself may legitimately be null/unread).
+  const recentReadStateById = useMemo(() => {
+    const byId = new Map<string, string | null | undefined>();
+    for (const thread of recentThreads) byId.set(thread.id, thread.lastReadAt);
+    return byId;
+  }, [recentThreads]);
   const pinnedThreads = useMemo(
-    () => orderPinnedThreads(serverPinnedThreads, optimisticPinnedOrder),
-    [optimisticPinnedOrder, serverPinnedThreads],
+    () =>
+      orderPinnedThreads(serverPinnedThreads, optimisticPinnedOrder).map(
+        (thread) =>
+          recentReadStateById.has(thread.id)
+            ? {
+                ...thread,
+                lastReadAt: recentReadStateById.get(thread.id) ?? null,
+              }
+            : thread,
+      ),
+    [optimisticPinnedOrder, recentReadStateById, serverPinnedThreads],
   );
   const pinnedThreadIds = useMemo(
     () => pinnedThreads.map((thread) => thread.id),
@@ -1303,8 +1330,44 @@ function PinnedThreadListSection({
     [threads],
   );
 
+  // A dnd-kit pointer drag is followed by a synthetic `click`. Left alone it
+  // reaches the row's <Link> and navigates to the dragged thread — observed as
+  // a full page load when reordering. Per-row capture handlers proved fragile
+  // because the list reorders under the pointer between drop and click, so the
+  // click can land on a different row (or retarget to <body>). Instead, when a
+  // drag activates, arm a one-shot capture-phase click swallow on the document:
+  // it cancels the single trailing click wherever it lands, then removes itself
+  // (on that click or a short timeout, so a later genuine click still selects).
+  const swallowCleanupRef = useRef<(() => void) | null>(null);
+  // Armed on drag start; stays installed for the WHOLE drag (any duration) and
+  // is torn down a beat after drop — so it reliably catches the single trailing
+  // click no matter how long the reorder took.
+  const armClickSwallow = useCallback(() => {
+    swallowCleanupRef.current?.();
+    const swallow = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      cleanup();
+    };
+    function cleanup() {
+      document.removeEventListener("click", swallow, true);
+      swallowCleanupRef.current = null;
+    }
+    document.addEventListener("click", swallow, true);
+    swallowCleanupRef.current = cleanup;
+  }, []);
+  const disarmClickSwallowSoon = useCallback(() => {
+    const cleanup = swallowCleanupRef.current;
+    if (!cleanup) return;
+    // The trailing click fires just after drop — keep the swallow briefly to
+    // catch it, then remove (no-op if the click already self-removed it).
+    window.setTimeout(cleanup, 250);
+  }, []);
+  useEffect(() => () => swallowCleanupRef.current?.(), []);
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      disarmClickSwallowSoon();
       const { active, over } = event;
       if (!over || active.id === over.id) return;
       const oldIndex = threadIds.indexOf(String(active.id));
@@ -1312,7 +1375,7 @@ function PinnedThreadListSection({
       if (oldIndex < 0 || newIndex < 0) return;
       onReorder?.(arrayMove(threadIds, oldIndex, newIndex));
     },
-    [onReorder, threadIds],
+    [disarmClickSwallowSoon, onReorder, threadIds],
   );
 
   if (threads.length === 0) return null;
@@ -1335,7 +1398,9 @@ function PinnedThreadListSection({
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            onDragStart={armClickSwallow}
             onDragEnd={handleDragEnd}
+            onDragCancel={disarmClickSwallowSoon}
           >
             <SortableContext
               items={threadIds}
@@ -1386,6 +1451,12 @@ function SortablePinnedThreadRow({
       ref={setNodeRef}
       style={style}
       className={cn(isDragging && "relative z-10")}
+      // The row contains a TanStack <Link> (an <a>), which is natively
+      // draggable. Cancel the native dragstart (it bubbles from the anchor) so
+      // only dnd-kit's pointer drag runs; the post-drag click is swallowed at
+      // the document level by the DndContext (see armClickSwallow).
+      draggable={false}
+      onDragStart={(event) => event.preventDefault()}
       {...listeners}
     >
       <ChatThreadRow
@@ -1829,6 +1900,14 @@ function ChatThreadRow({
           <ContextMenuTrigger asChild>
             <Link
               {...linkProps}
+              // Anchors are natively draggable. Inside a pinned row that's also
+              // a dnd-kit sortable, the native link-drag fires alongside the
+              // pointer drag; dropping the link back on the Electron window
+              // navigates the top-level frame to the thread URL — a full
+              // document load whose relative assets 404, blanking the app.
+              // dnd-kit reorders via pointer events, so disabling the native
+              // drag costs nothing and removes the crash trigger.
+              draggable={false}
               state={(previous) => ({
                 ...previous,
                 threadTitleFallback: { threadId: thread.id, title },

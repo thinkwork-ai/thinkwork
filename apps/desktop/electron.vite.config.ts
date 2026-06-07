@@ -28,6 +28,15 @@ async function resolveWebConfig(env: {
   return mergeConfig(baseConfig, {
     root: webDir,
     envDir: webDir,
+    // electron-vite defaults the renderer to a relative base ("./"), which
+    // emits relative asset URLs in index.html. That only resolves when the
+    // document itself sits at the app root — a full document load at a nested
+    // route (a dropped link, a reload, a deep link) resolves assets against
+    // e.g. thinkwork://app/threads/, 404s every chunk, and blanks the window.
+    // The thinkwork:// protocol handler roots at the renderer dir, so an
+    // absolute base makes "/assets/..." resolve from root at any path — and
+    // matches the web build, which already defaults to "/".
+    base: "/",
     define: {
       __DESKTOP_BUILD__: "true",
     },
