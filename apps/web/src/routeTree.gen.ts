@@ -64,6 +64,7 @@ import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
 import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./routes/_authed/settings.automations.$scheduledJobId";
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
+import { Route as AuthedSettingsApplicationsCogneeRouteImport } from "./routes/_authed/settings.applications.cognee";
 import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
 import { Route as AuthedSettingsActivityThreadIdRouteImport } from "./routes/_authed/settings.activity_.$threadId";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
@@ -386,6 +387,12 @@ const AuthedSettingsArtifactsIdRoute =
     path: "/$id",
     getParentRoute: () => AuthedSettingsArtifactsRoute,
   } as any);
+const AuthedSettingsApplicationsCogneeRoute =
+  AuthedSettingsApplicationsCogneeRouteImport.update({
+    id: "/applications/cognee",
+    path: "/applications/cognee",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsAgentsProfileIdRoute =
   AuthedSettingsAgentsProfileIdRouteImport.update({
     id: "/agents/$profileId",
@@ -541,6 +548,7 @@ export interface FileRoutesByFullPath {
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
+  "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -611,6 +619,7 @@ export interface FileRoutesByTo {
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
+  "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -689,6 +698,7 @@ export interface FileRoutesById {
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/settings/activity_/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
+  "/_authed/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/_authed/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -766,6 +776,7 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
+    | "/settings/applications/cognee"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -836,6 +847,7 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
+    | "/settings/applications/cognee"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -913,6 +925,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/threads/$id"
     | "/_authed/settings/activity_/$threadId"
     | "/_authed/settings/agents/$profileId"
+    | "/_authed/settings/applications/cognee"
     | "/_authed/settings/artifacts/$id"
     | "/_authed/settings/automations/$scheduledJobId"
     | "/_authed/settings/evaluations/$runId"
@@ -1348,6 +1361,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsArtifactsIdRouteImport;
       parentRoute: typeof AuthedSettingsArtifactsRoute;
     };
+    "/_authed/settings/applications/cognee": {
+      id: "/_authed/settings/applications/cognee";
+      path: "/applications/cognee";
+      fullPath: "/settings/applications/cognee";
+      preLoaderRoute: typeof AuthedSettingsApplicationsCogneeRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/agents/$profileId": {
       id: "/_authed/settings/agents/$profileId";
       path: "/agents/$profileId";
@@ -1634,6 +1654,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
   AuthedSettingsActivityThreadIdRoute: typeof AuthedSettingsActivityThreadIdRoute;
   AuthedSettingsAgentsProfileIdRoute: typeof AuthedSettingsAgentsProfileIdRoute;
+  AuthedSettingsApplicationsCogneeRoute: typeof AuthedSettingsApplicationsCogneeRoute;
   AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   AuthedSettingsEvaluationsRunIdRoute: typeof AuthedSettingsEvaluationsRunIdRoute;
   AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
@@ -1677,6 +1698,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
   AuthedSettingsActivityThreadIdRoute: AuthedSettingsActivityThreadIdRoute,
   AuthedSettingsAgentsProfileIdRoute: AuthedSettingsAgentsProfileIdRoute,
+  AuthedSettingsApplicationsCogneeRoute: AuthedSettingsApplicationsCogneeRoute,
   AuthedSettingsAutomationsScheduledJobIdRoute:
     AuthedSettingsAutomationsScheduledJobIdRoute,
   AuthedSettingsEvaluationsRunIdRoute: AuthedSettingsEvaluationsRunIdRoute,
