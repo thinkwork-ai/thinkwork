@@ -6,6 +6,34 @@ status: complete
 
 # Autopilot Status Ledger
 
+## Agent Profiles And Pi Subagents - 2026-06-07
+
+- Plan:
+  `docs/plans/2026-06-07-002-feat-agent-profiles-pi-subagents-plan.md`.
+- Target branch: `main`.
+- Current unit: U0 Pi Profile Adapter Spike.
+- Current branch: `codex/agent-profiles-u0-pi-adapter-spike`.
+- Current worktree: `.Codex/worktrees/agent-profiles-u0`.
+- Status: ready for PR.
+- Notes:
+  - Created branch from `origin/main` at `c61921b3e`.
+  - Cherry-picked amended plan constraints into the U0 branch because
+    `origin/main` did not yet include the local plan amendment.
+  - Added a profile adapter contract proof under `agentcore-pi`.
+  - Added a U0 decision note documenting why v1 should use a constrained
+    ThinkWork adapter instead of exposing the raw `pi-subagents` tool surface.
+  - Local verification passed:
+    - `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/agent-profile-adapter.test.ts`
+      -> 6 tests passed.
+    - `pnpm --filter @thinkwork/agentcore-pi typecheck` -> passed.
+    - `pnpm --filter @thinkwork/agentcore-pi test` -> 27 test files passed,
+      459 tests passed, 5 todo.
+    - `git diff --check` -> passed.
+
+| Unit | Branch | PR | State | Notes |
+| --- | --- | --- | --- | --- |
+| U0 Pi Profile Adapter Spike | `codex/agent-profiles-u0-pi-adapter-spike` | pending | ready for PR | Adapter contract proof, decision note, and local verification completed. |
+
 ## Model Stacking Tool Routing - 2026-06-06
 
 - Plan:
