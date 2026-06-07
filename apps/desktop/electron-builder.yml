@@ -13,6 +13,8 @@ directories:
 files:
   - out/**/*
   - package.json
+  - "!node_modules/@thinkwork/deployment-profile"
+  - "!node_modules/@thinkwork/deployment-profile/**"
 
 extraMetadata:
   main: out/main/index.js
