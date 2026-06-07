@@ -1,0 +1,322 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const {
+  mockSelect,
+  mockInsert,
+  mockUpdate,
+  mockDelete,
+  mockRequireAdminOrServiceCaller,
+  mockSnakeToCamel,
+  tables,
+} = vi.hoisted(() => ({
+  mockSelect: vi.fn(),
+  mockInsert: vi.fn(),
+  mockUpdate: vi.fn(),
+  mockDelete: vi.fn(),
+  mockRequireAdminOrServiceCaller: vi.fn(),
+  mockSnakeToCamel: vi.fn((row: Record<string, unknown>) => {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      result[key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = value;
+    }
+    return result;
+  }),
+  tables: {
+    agentProfiles: {
+      id: "agent_profiles.id",
+      tenant_id: "agent_profiles.tenant_id",
+      slug: "agent_profiles.slug",
+      name: "agent_profiles.name",
+      enabled: "agent_profiles.enabled",
+      built_in_key: "agent_profiles.built_in_key",
+    },
+    agentProfileSpaceAssignments: {
+      profile_id: "agent_profile_space_assignments.profile_id",
+      tenant_id: "agent_profile_space_assignments.tenant_id",
+      space_id: "agent_profile_space_assignments.space_id",
+    },
+    agents: {
+      tenant_id: "agents.tenant_id",
+      is_platform_default: "agents.is_platform_default",
+      model: "agents.model",
+    },
+    modelCatalog: {
+      model_id: "model_catalog.model_id",
+      display_name: "model_catalog.display_name",
+      is_available: "model_catalog.is_available",
+    },
+    spaces: {
+      id: "spaces.id",
+      tenant_id: "spaces.tenant_id",
+    },
+  },
+}));
+
+vi.mock("../../utils.js", () => ({
+  agentProfiles: tables.agentProfiles,
+  agentProfileSpaceAssignments: tables.agentProfileSpaceAssignments,
+  agents: tables.agents,
+  modelCatalog: tables.modelCatalog,
+  spaces: tables.spaces,
+  and: vi.fn((...conditions: unknown[]) => ({ type: "and", conditions })),
+  asc: vi.fn((column: unknown) => ({ type: "asc", column })),
+  db: {
+    select: mockSelect,
+    insert: mockInsert,
+    update: mockUpdate,
+    delete: mockDelete,
+  },
+  eq: vi.fn((left: unknown, right: unknown) => ({ type: "eq", left, right })),
+  inArray: vi.fn((left: unknown, right: unknown[]) => ({
+    type: "inArray",
+    left,
+    right,
+  })),
+  snakeToCamel: mockSnakeToCamel,
+}));
+
+vi.mock("../core/authz.js", () => ({
+  requireAdminOrServiceCaller: mockRequireAdminOrServiceCaller,
+}));
+
+let listMod: typeof import("./agentProfiles.query.js");
+let createMod: typeof import("./createAgentProfile.mutation.js");
+let updateMod: typeof import("./updateAgentProfile.mutation.js");
+let deleteMod: typeof import("./deleteAgentProfile.mutation.js");
+
+beforeEach(async () => {
+  vi.resetModules();
+  mockSelect.mockReset();
+  mockInsert.mockReset();
+  mockUpdate.mockReset();
+  mockDelete.mockReset();
+  mockRequireAdminOrServiceCaller.mockReset();
+  mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
+  mockSnakeToCamel.mockClear();
+  listMod = await import("./agentProfiles.query.js");
+  createMod = await import("./createAgentProfile.mutation.js");
+  updateMod = await import("./updateAgentProfile.mutation.js");
+  deleteMod = await import("./deleteAgentProfile.mutation.js");
+});
+
+describe("Agent Profile resolvers", () => {
+  it("seeds missing built-in profiles before listing tenant profiles", async () => {
+    mockSelect
+      .mockReturnValueOnce(queryRows([]))
+      .mockReturnValueOnce(queryRows([{ model: "model-parent" }]))
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-research",
+            tenant_id: "tenant-1",
+            slug: "research",
+            name: "Research",
+            model_id: "model-parent",
+            enabled: true,
+            built_in_key: "research",
+            tool_policy: {},
+            skill_policy: {},
+            execution_controls: {},
+          },
+        ]),
+      );
+    const insertedValues: unknown[] = [];
+    mockInsert.mockReturnValueOnce(insertRows(undefined, insertedValues));
+
+    const context = ctx();
+    const result = await listMod.agentProfiles(
+      null,
+      { tenantId: "tenant-1" },
+      context,
+    );
+
+    expect(mockRequireAdminOrServiceCaller).toHaveBeenCalledWith(
+      context,
+      "tenant-1",
+      "agent_profiles:read",
+    );
+    expect(insertedValues).toHaveLength(3);
+    expect(insertedValues[0]).toMatchObject({
+      tenant_id: "tenant-1",
+      slug: "research",
+      model_id: "model-parent",
+      built_in_key: "research",
+    });
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: "profile-research",
+        tenantId: "tenant-1",
+        builtInKey: "research",
+      }),
+    ]);
+  });
+
+  it("creates a custom profile and replaces its Space assignments", async () => {
+    mockSelect
+      .mockReturnValueOnce(
+        queryRows([
+          { builtInKey: "research" },
+          { builtInKey: "coding" },
+          { builtInKey: "analyst" },
+        ]),
+      )
+      .mockReturnValueOnce(queryRows([{ modelId: "model-fast" }]))
+      .mockReturnValueOnce(queryRows([{ id: "space-1" }]));
+    const insertedProfileValues: unknown[] = [];
+    const insertedAssignmentValues: unknown[] = [];
+    mockInsert
+      .mockReturnValueOnce(
+        insertRows(
+          [
+            {
+              id: "profile-custom",
+              tenant_id: "tenant-1",
+              slug: "fast-research",
+              name: "Fast Research",
+              model_id: "model-fast",
+              enabled: true,
+              built_in_key: null,
+              tool_policy: { builtInTools: ["web-search"] },
+              skill_policy: {},
+              execution_controls: {},
+            },
+          ],
+          insertedProfileValues,
+        ),
+      )
+      .mockReturnValueOnce(insertRows(undefined, insertedAssignmentValues));
+    mockDelete.mockReturnValueOnce(deleteRows());
+
+    const result = await createMod.createAgentProfile(
+      null,
+      {
+        tenantId: "tenant-1",
+        input: {
+          slug: "Fast Research",
+          name: "Fast Research",
+          instructions: "Go find it.",
+          modelId: "model-fast",
+          toolPolicy: JSON.stringify({ builtInTools: ["web-search"] }),
+          spaceIds: ["space-1"],
+        },
+      },
+      ctx(),
+    );
+
+    expect(insertedProfileValues[0]).toMatchObject({
+      tenant_id: "tenant-1",
+      slug: "fast-research",
+      model_id: "model-fast",
+      built_in_key: null,
+    });
+    expect(insertedAssignmentValues).toEqual([
+      {
+        tenant_id: "tenant-1",
+        profile_id: "profile-custom",
+        space_id: "space-1",
+      },
+    ]);
+    expect(result).toMatchObject({
+      id: "profile-custom",
+      slug: "fast-research",
+      modelId: "model-fast",
+    });
+  });
+
+  it("refuses to change built-in profile identity", async () => {
+    mockSelect
+      .mockReturnValueOnce(
+        queryRows([
+          { builtInKey: "research" },
+          { builtInKey: "coding" },
+          { builtInKey: "analyst" },
+        ]),
+      )
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-research",
+            tenant_id: "tenant-1",
+            slug: "research",
+            built_in_key: "research",
+          },
+        ]),
+      );
+
+    await expect(
+      updateMod.updateAgentProfile(
+        null,
+        {
+          tenantId: "tenant-1",
+          id: "profile-research",
+          input: { slug: "research-renamed" },
+        },
+        ctx(),
+      ),
+    ).rejects.toThrow("Built-in Agent Profile slug cannot be changed");
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete built-in profiles", async () => {
+    mockSelect
+      .mockReturnValueOnce(
+        queryRows([
+          { builtInKey: "research" },
+          { builtInKey: "coding" },
+          { builtInKey: "analyst" },
+        ]),
+      )
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-research",
+            tenant_id: "tenant-1",
+            slug: "research",
+            built_in_key: "research",
+          },
+        ]),
+      );
+
+    await expect(
+      deleteMod.deleteAgentProfile(
+        null,
+        { tenantId: "tenant-1", id: "profile-research" },
+        ctx(),
+      ),
+    ).rejects.toThrow("Built-in Agent Profiles can be disabled");
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+});
+
+function ctx() {
+  return { auth: { authType: "cognito" } } as any;
+}
+
+function queryRows(rows: unknown[]) {
+  const chain = {
+    from: () => chain,
+    where: () => chain,
+    orderBy: () => Promise.resolve(rows),
+    then: (resolve: (rows: unknown[]) => unknown) => resolve(rows),
+  };
+  return chain;
+}
+
+function insertRows(returningRows: unknown[] | undefined, captured: unknown[]) {
+  const chain = {
+    values: (values: unknown | unknown[]) => {
+      captured.push(...(Array.isArray(values) ? values : [values]));
+      return chain;
+    },
+    returning: () => Promise.resolve(returningRows ?? []),
+    then: (resolve: () => unknown) => resolve(),
+  };
+  return chain;
+}
+
+function deleteRows() {
+  const chain = {
+    where: () => Promise.resolve(undefined),
+  };
+  return chain;
+}

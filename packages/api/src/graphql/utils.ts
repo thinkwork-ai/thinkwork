@@ -35,6 +35,8 @@ import {
   agents,
   agentCapabilities,
   agentSkills,
+  agentProfiles,
+  agentProfileSpaceAssignments,
   modelCatalog,
   userModelApprovals,
   // Messages
@@ -100,6 +102,7 @@ import {
   tenantMcpContextTools,
   tenantMcpServers,
   tenantCredentials,
+  tenantBuiltinTools,
   // Customize page (apps/web)
   tenantWorkflowCatalog,
   // Skills settings list — per-tenant index of the S3 skill catalog
@@ -151,6 +154,8 @@ export {
   agents,
   agentCapabilities,
   agentSkills,
+  agentProfiles,
+  agentProfileSpaceAssignments,
   modelCatalog,
   userModelApprovals,
   messages,
@@ -195,6 +200,7 @@ export {
   tenantMcpContextTools,
   tenantMcpServers,
   tenantCredentials,
+  tenantBuiltinTools,
   tenantWorkflowCatalog,
   skillCatalog,
   slackWorkspaces,

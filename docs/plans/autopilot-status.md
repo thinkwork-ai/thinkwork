@@ -11,10 +11,10 @@ status: complete
 - Plan:
   `docs/plans/2026-06-07-002-feat-agent-profiles-pi-subagents-plan.md`.
 - Target branch: `main`.
-- Current unit: U0 Pi Profile Adapter Spike.
-- Current branch: `codex/agent-profiles-u0-pi-adapter-spike`.
-- Current worktree: `.Codex/worktrees/agent-profiles-u0`.
-- Status: ready for PR.
+- Current unit: U1 Agent Profile Schema, Seeds, And GraphQL.
+- Current branch: `codex/agent-profiles-u1-schema-graphql`.
+- Current worktree: `.Codex/worktrees/agent-profiles-u1`.
+- Status: in progress.
 - Notes:
   - Created branch from `origin/main` at `c61921b3e`.
   - Cherry-picked amended plan constraints into the U0 branch because
@@ -29,10 +29,31 @@ status: complete
     - `pnpm --filter @thinkwork/agentcore-pi test` -> 27 test files passed,
       459 tests passed, 5 todo.
     - `git diff --check` -> passed.
+  - U1 implemented tenant-global Agent Profile schema, built-in lazy seeding,
+    Space assignments, editor catalog source data, and GraphQL CRUD resolvers.
+  - U1 local verification passed:
+    - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/agent-profiles/agentProfiles.resolver.test.ts`
+      -> 4 tests passed.
+    - `pnpm --filter @thinkwork/api typecheck` -> passed.
+    - `pnpm --filter @thinkwork/database-pg typecheck` -> passed.
+    - `pnpm --filter @thinkwork/web typecheck` -> passed.
+    - `pnpm --filter thinkwork-cli typecheck` -> passed.
+    - `pnpm --filter @thinkwork/api test` -> 432 test files passed, 3
+      skipped; 3,691 tests passed, 9 skipped.
+    - `git diff --check` -> passed.
+    - Direct Prettier check over changed files -> passed.
+  - U1 CI recovery:
+    - Initial Migration Drift Precheck failed because dev was missing
+      `0152_agent_profiles.sql` objects.
+    - Applied `packages/database-pg/drizzle/0152_agent_profiles.sql` to dev
+      with `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ...`.
+    - `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0152_agent_profiles.sql`
+      now reports all table/index/constraint markers present.
 
-| Unit | Branch | PR | State | Notes |
-| --- | --- | --- | --- | --- |
-| U0 Pi Profile Adapter Spike | `codex/agent-profiles-u0-pi-adapter-spike` | pending | ready for PR | Adapter contract proof, decision note, and local verification completed. |
+| Unit                                        | Branch                                     | PR                                                           | State  | Notes                                                                                             |
+| ------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
+| U0 Pi Profile Adapter Spike                 | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
+| U1 Agent Profile Schema, Seeds, And GraphQL | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | open   | Dev migration applied after drift failure; rerunning CI.                                          |
 
 ## Model Stacking Tool Routing - 2026-06-06
 
