@@ -125,9 +125,14 @@ describe("desktop window navigation", () => {
     const shell = { openExternal: vi.fn(async () => undefined) };
     configureNavigationHandlers(webContents, shell);
 
+    // A full-document navigation to our own app URL (e.g. a dropped thread
+    // link) must be cancelled — SPA routing uses pushState, which never fires
+    // will-navigate, so any will-navigate here is an unwanted reload that 404s
+    // relative assets and blanks the window. It must NOT be opened externally.
     const appNavigation = createNavigationEvent();
     webContents.navigateHandler?.(appNavigation, "thinkwork://app/new");
-    expect(appNavigation.preventDefault).not.toHaveBeenCalled();
+    expect(appNavigation.preventDefault).toHaveBeenCalledTimes(1);
+    expect(shell.openExternal).not.toHaveBeenCalled();
 
     const externalNavigation = createNavigationEvent();
     webContents.navigateHandler?.(

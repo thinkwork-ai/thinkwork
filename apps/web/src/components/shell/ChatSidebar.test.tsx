@@ -620,7 +620,9 @@ describe("ChatSidebar", () => {
     expect(
       screen.getByRole("link", { name: "General" }).getAttribute("href"),
     ).toBe("/spaces/space-general");
-    expect(screen.getByRole("button", { name: /toggle threads/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /toggle threads/i }),
+    ).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: "New thread in Threads" })
@@ -1062,7 +1064,9 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     // The Chats controls cluster shows "2" (the two unread, not the read one).
-    expect(within(sectionToggle(/toggle threads/i)).getByText("2")).toBeTruthy();
+    expect(
+      within(sectionToggle(/toggle threads/i)).getByText("2"),
+    ).toBeTruthy();
   });
 
   it("puts no badge or options menu on action items or the Pinned section (R7)", () => {
@@ -1087,7 +1091,30 @@ describe("ChatSidebar", () => {
       screen.queryByRole("button", { name: /pinned options/i }),
     ).toBeNull();
     // Chats does get one.
-    expect(screen.getByRole("button", { name: /threads options/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /threads options/i }),
+    ).toBeTruthy();
+  });
+
+  it("renders pinned thread links as non-draggable so native link-drag can't navigate", () => {
+    pinnedThreadItemsMock.push({
+      id: "pinned-1",
+      title: "Pinned thread",
+      lastActivityAt: "2026-05-19T19:00:00Z",
+      lastReadAt: null,
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    // Anchors default to draggable; a dragged-then-dropped thread link blanks
+    // the desktop window (full reload at a nested route 404s relative assets).
+    expect(
+      screen
+        .getByRole("link", { name: "Pinned thread" })
+        .getAttribute("draggable"),
+    ).toBe("false");
   });
 
   it("marks the Chats section's unread ids read optimistically (R2, R4)", async () => {
@@ -1122,7 +1149,9 @@ describe("ChatSidebar", () => {
       }),
     );
     // Optimistic: the badge clears immediately to 0 (no "2" left in the cluster).
-    expect(within(sectionToggle(/toggle threads/i)).queryByText("2")).toBeNull();
+    expect(
+      within(sectionToggle(/toggle threads/i)).queryByText("2"),
+    ).toBeNull();
     await waitFor(() =>
       expect(recentReexecuteMock).toHaveBeenCalledWith({
         requestPolicy: "network-only",

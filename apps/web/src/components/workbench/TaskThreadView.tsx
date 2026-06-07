@@ -29,6 +29,8 @@ import {
   Label,
   Textarea,
 } from "@thinkwork/ui";
+import { Link } from "@tanstack/react-router";
+import { useTenant } from "@/context/TenantContext";
 import {
   Children,
   useEffect,
@@ -628,6 +630,17 @@ function ThreadInfoPanel({
 }) {
   if (!state?.isOpen) return null;
 
+  return <ThreadInfoPanelBody state={state} onTaskPrompt={onTaskPrompt} />;
+}
+
+function ThreadInfoPanelBody({
+  state,
+  onTaskPrompt,
+}: {
+  state: TaskThreadInfoPanelState;
+  onTaskPrompt: (task: ThreadInfoChecklistTask) => void;
+}) {
+  const { isOperator } = useTenant();
   const startedAt = formatInfoDate(state.startedAt);
   const startedBy = state.startedBy?.trim() || "Unknown";
   const hasGoal = Boolean(state.goal);
@@ -664,6 +677,17 @@ function ThreadInfoPanel({
                 icon={<Zap className="size-4" />}
                 value={`Triggered by ${startedBy}`}
               />
+              {isOperator && state.threadId ? (
+                <Link
+                  to="/activity/$threadId"
+                  params={{ threadId: state.threadId }}
+                  className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:bg-white/10"
+                >
+                  <FileText className="size-4 shrink-0 text-white/45" />
+                  <span className="min-w-0 flex-1">Open thread detail</span>
+                  <ChevronRight className="size-4 shrink-0 text-white/40" />
+                </Link>
+              ) : null}
             </div>
           </section>
 

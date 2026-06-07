@@ -74,6 +74,7 @@ import { Route as AuthedShellCustomizeSkillsRouteImport } from "./routes/_authed
 import { Route as AuthedShellAutomationsScheduledJobIdRouteImport } from "./routes/_authed/_shell/automations.$scheduledJobId";
 import { Route as AuthedShellArtifactsIdRouteImport } from "./routes/_authed/_shell/artifacts.$id";
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
+import { Route as AuthedShellActivityThreadIdRouteImport } from "./routes/_authed/_shell/activity.$threadId";
 import { Route as AuthedSettingsEvaluationsStudioIndexRouteImport } from "./routes/_authed/settings.evaluations.studio.index";
 import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes/_authed/settings.evaluations.studio.new";
 import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.$testCaseId";
@@ -438,6 +439,12 @@ const AuthedShellApprovalsApprovalIdRoute =
     path: "/approvals/$approvalId",
     getParentRoute: () => AuthedShellRoute,
   } as any);
+const AuthedShellActivityThreadIdRoute =
+  AuthedShellActivityThreadIdRouteImport.update({
+    id: "/activity/$threadId",
+    path: "/activity/$threadId",
+    getParentRoute: () => AuthedShellRoute,
+  } as any);
 const AuthedSettingsEvaluationsStudioIndexRoute =
   AuthedSettingsEvaluationsStudioIndexRouteImport.update({
     id: "/evaluations/studio/",
@@ -507,6 +514,7 @@ export interface FileRoutesByFullPath {
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/settings/": typeof AuthedSettingsIndexRoute;
+  "/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
@@ -574,6 +582,7 @@ export interface FileRoutesByTo {
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/settings": typeof AuthedSettingsIndexRoute;
+  "/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
@@ -649,6 +658,7 @@ export interface FileRoutesById {
   "/_authed/settings/tools": typeof AuthedSettingsToolsRoute;
   "/_authed/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/_authed/settings/": typeof AuthedSettingsIndexRoute;
+  "/_authed/_shell/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/_authed/_shell/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/_authed/_shell/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
@@ -723,6 +733,7 @@ export interface FileRouteTypes {
     | "/settings/tools"
     | "/settings/wiki"
     | "/settings/"
+    | "/activity/$threadId"
     | "/approvals/$approvalId"
     | "/artifacts/$id"
     | "/automations/$scheduledJobId"
@@ -790,6 +801,7 @@ export interface FileRouteTypes {
     | "/settings/tools"
     | "/settings/wiki"
     | "/settings"
+    | "/activity/$threadId"
     | "/approvals/$approvalId"
     | "/artifacts/$id"
     | "/automations/$scheduledJobId"
@@ -864,6 +876,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/tools"
     | "/_authed/settings/wiki"
     | "/_authed/settings/"
+    | "/_authed/_shell/activity/$threadId"
     | "/_authed/_shell/approvals/$approvalId"
     | "/_authed/_shell/artifacts/$id"
     | "/_authed/_shell/automations/$scheduledJobId"
@@ -1379,6 +1392,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellApprovalsApprovalIdRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/activity/$threadId": {
+      id: "/_authed/_shell/activity/$threadId";
+      path: "/activity/$threadId";
+      fullPath: "/activity/$threadId";
+      preLoaderRoute: typeof AuthedShellActivityThreadIdRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
     "/_authed/settings/evaluations/studio/": {
       id: "/_authed/settings/evaluations/studio/";
       path: "/evaluations/studio";
@@ -1511,6 +1531,7 @@ interface AuthedShellRouteChildren {
   AuthedShellCustomizeRoute: typeof AuthedShellCustomizeRouteWithChildren;
   AuthedShellMemoryRoute: typeof AuthedShellMemoryRouteWithChildren;
   AuthedShellNewRoute: typeof AuthedShellNewRoute;
+  AuthedShellActivityThreadIdRoute: typeof AuthedShellActivityThreadIdRoute;
   AuthedShellApprovalsApprovalIdRoute: typeof AuthedShellApprovalsApprovalIdRoute;
   AuthedShellArtifactsIdRoute: typeof AuthedShellArtifactsIdRoute;
   AuthedShellSpacesSpaceIdRoute: typeof AuthedShellSpacesSpaceIdRouteWithChildren;
@@ -1526,6 +1547,7 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellCustomizeRoute: AuthedShellCustomizeRouteWithChildren,
   AuthedShellMemoryRoute: AuthedShellMemoryRouteWithChildren,
   AuthedShellNewRoute: AuthedShellNewRoute,
+  AuthedShellActivityThreadIdRoute: AuthedShellActivityThreadIdRoute,
   AuthedShellApprovalsApprovalIdRoute: AuthedShellApprovalsApprovalIdRoute,
   AuthedShellArtifactsIdRoute: AuthedShellArtifactsIdRoute,
   AuthedShellSpacesSpaceIdRoute: AuthedShellSpacesSpaceIdRouteWithChildren,

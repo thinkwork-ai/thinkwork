@@ -102,7 +102,16 @@ export function configureNavigationHandlers(
   });
 
   webContents.on("will-navigate", (event, url) => {
-    if (isDesktopAppUrl(url)) return;
+    if (isDesktopAppUrl(url)) {
+      // In-app routing happens via history.pushState, which never fires
+      // will-navigate. A will-navigate to our own app URL is therefore always
+      // an unwanted full document load — e.g. a natively-dragged thread link
+      // dropped back onto the window. Allowing it reloads index.html at a
+      // nested path whose relative asset URLs 404, blanking the renderer.
+      // Cancel it; the SPA router stays where it is.
+      event.preventDefault();
+      return;
+    }
 
     event.preventDefault();
     openAllowedExternalUrl(url, desktopShell);
