@@ -1,5 +1,6 @@
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { ManagedApplicationDestroyButton } from "@/components/settings/managed-applications/ManagedApplicationDestroyButton";
 import { KnowledgeGraphConfigPanel } from "./knowledge-graph/KnowledgeGraphConfigPanel";
 
 /**
@@ -15,6 +16,8 @@ export function SettingsCogneeApplication() {
       { label: "Applications", href: "/settings/managed-applications" },
       { label: "Cognee" },
     ],
+    action: <ManagedApplicationDestroyButton appKey="cognee" />,
+    actionKey: "cognee-application:destroy",
   });
 
   return (

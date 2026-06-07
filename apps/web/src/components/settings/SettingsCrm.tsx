@@ -15,6 +15,7 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { ManagedApplicationDestroyButton } from "@/components/settings/managed-applications/ManagedApplicationDestroyButton";
 
 export function SettingsCrm() {
   usePageHeaderActions({
@@ -23,6 +24,8 @@ export function SettingsCrm() {
       { label: "Applications", href: "/settings/managed-applications" },
       { label: "Twenty CRM" },
     ],
+    action: <ManagedApplicationDestroyButton appKey="twenty" />,
+    actionKey: "twenty-crm:destroy",
   });
 
   const [statusResult, refreshStatus] = useQuery({
