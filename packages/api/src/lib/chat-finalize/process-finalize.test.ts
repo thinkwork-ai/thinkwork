@@ -508,6 +508,144 @@ describe("processFinalize reconcile seam", () => {
     );
   });
 
+  it("attributes parent composer model usage to non-routed tool invocations", async () => {
+    mocks.recordCostEvents.mockResolvedValueOnce({
+      totalUsd: 0.008799,
+      llmUsd: 0.008799,
+      computeUsd: 0,
+    });
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "Patrick Collison is the CEO of Stripe.",
+          tools_called: ["web_search", "web_extract"],
+          tool_invocations: [
+            {
+              id: "tool-search",
+              tool_name: "web_search",
+              input_preview: '{"query":"Stripe CEO"}',
+              output_preview: "Search results",
+            },
+            {
+              id: "tool-extract",
+              tool_name: "web_extract",
+              input_preview: '{"url":"https://stripe.com"}',
+              output_preview: "Extracted page",
+            },
+          ],
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 12,
+          output_tokens: 417,
+          cached_read_tokens: 17500,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    const succeededUpdate = mocks.updateSets.find((value: any) =>
+      Boolean(value?.usage_json?.tool_invocations),
+    ) as any;
+    const invocations = succeededUpdate.usage_json.tool_invocations;
+
+    expect(succeededUpdate.usage_json).toMatchObject({
+      model: "moonshotai.kimi-k2.5",
+      input_tokens: 12,
+      output_tokens: 417,
+      cached_read_tokens: 17500,
+      cost_usd: 0.008799,
+    });
+    expect(invocations).toEqual([
+      expect.objectContaining({
+        id: "tool-search",
+        model: "moonshotai.kimi-k2.5",
+        input_tokens: 6,
+        output_tokens: 209,
+        cached_read_tokens: 8750,
+        cost_usd: expect.closeTo(0.0043995, 10),
+        model_routing_status: "parent_model",
+        model_routing_match: {
+          tool: "web_search",
+          fallback: "composer_model",
+        },
+      }),
+      expect.objectContaining({
+        id: "tool-extract",
+        model: "moonshotai.kimi-k2.5",
+        input_tokens: 6,
+        output_tokens: 208,
+        cached_read_tokens: 8750,
+        cost_usd: expect.closeTo(0.0043995, 10),
+        model_routing_status: "parent_model",
+        model_routing_match: {
+          tool: "web_extract",
+          fallback: "composer_model",
+        },
+      }),
+    ]);
+    const attributedCost = invocations.reduce(
+      (sum: number, invocation: any) => sum + invocation.cost_usd,
+      0,
+    );
+    expect(attributedCost).toBeCloseTo(0.008799, 12);
+  });
+
+  it("does not overwrite explicit routed model evidence with parent fallback attribution", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "done",
+          tool_invocations: [
+            {
+              id: "tool-1",
+              tool_name: "mcp_twenty-crm_execute_tool",
+              model_routing: {
+                match: { serverName: "twenty-crm" },
+                model: "anthropic.claude-haiku",
+                status: "completed",
+                inputTokens: 100,
+                outputTokens: 20,
+                cachedReadTokens: 5,
+              },
+            },
+          ],
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 1000,
+          output_tokens: 200,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    const succeededUpdate = mocks.updateSets.find((value: any) =>
+      Boolean(value?.usage_json?.tool_invocations),
+    ) as any;
+    expect(succeededUpdate.usage_json.tool_invocations).toEqual([
+      expect.objectContaining({
+        model: "anthropic.claude-haiku",
+        input_tokens: 100,
+        output_tokens: 20,
+        cached_read_tokens: 5,
+        cost_usd: 1.23,
+        model_routing_status: "completed",
+      }),
+    ]);
+  });
+
   it("records rejected model routes as events without child LLM cost rows", async () => {
     await expect(
       processFinalize({

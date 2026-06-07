@@ -299,6 +299,76 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.getByText("Properties")).toBeTruthy();
   });
 
+  it("renders parent composer model evidence for non-overridden tool calls", () => {
+    const fallbackTurn = {
+      ...turn,
+      usageJson: JSON.stringify({
+        model: "moonshotai.kimi-k2.5",
+        input_tokens: 12,
+        output_tokens: 417,
+        cached_read_tokens: 17500,
+        tool_invocations: [
+          {
+            id: "web-search-1",
+            tool_name: "web_search",
+            type: "tool",
+            input_preview: '{"query":"Stripe CEO"}',
+            output_preview: "Search results",
+            model: "moonshotai.kimi-k2.5",
+            input_tokens: 6,
+            output_tokens: 209,
+            cached_read_tokens: 8750,
+            cost_usd: 0.0043995,
+            model_routing_status: "parent_model",
+            model_routing_match: {
+              tool: "web_search",
+              fallback: "composer_model",
+            },
+          },
+          {
+            id: "web-extract-1",
+            tool_name: "web_extract",
+            type: "tool",
+            input_preview: '{"url":"https://stripe.com"}',
+            output_preview: "Extracted page",
+            model: "moonshotai.kimi-k2.5",
+            input_tokens: 6,
+            output_tokens: 208,
+            cached_read_tokens: 8750,
+            cost_usd: 0.0043995,
+            model_routing_status: "parent_model",
+            model_routing_match: {
+              tool: "web_extract",
+              fallback: "composer_model",
+            },
+          },
+        ],
+      }),
+      totalCost: 0.008799,
+    };
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({ turn: fallbackTurn, traces: [] });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    expect(screen.getByText("Tool: web_search")).toBeTruthy();
+    expect(screen.getByText("Tool: web_extract")).toBeTruthy();
+    expect(screen.getAllByText("moonshotai.kimi-k2.5").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByText("6->209 (8.8K cached)")).toBeTruthy();
+    expect(screen.getByText("6->208 (8.8K cached)")).toBeTruthy();
+    expect(screen.getAllByText("$0.0044")).toHaveLength(2);
+    expect(screen.getAllByText("parent model")).toHaveLength(2);
+    expect(screen.queryByText(/not routed/i)).toBeNull();
+    expect(screen.queryByText(/tokens unavailable/i)).toBeNull();
+  });
+
   it("renders MCP route evidence from usage_json model_routed_tool_calls", () => {
     const mcpTurn = {
       ...turn,

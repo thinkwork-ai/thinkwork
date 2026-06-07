@@ -67,12 +67,18 @@ export const threadTurns_ = async (
     .orderBy(desc(threadTurns.started_at))
     .limit(limit);
 
-  // Batch-resolve totalCost per trigger run from cost_events
-  const wakeupIds = rows
-    .map((r) => r.wakeup_request_id)
-    .filter(Boolean) as string[];
-  const runCostMap = new Map<string, number>();
-  if (wakeupIds.length > 0) {
+  // Batch-resolve totalCost per turn from parent cost events plus routed child
+  // model events. Child rows use metadata.parent_request_id because their
+  // request_id is `${turnId}:tool:${toolCallId}:model`.
+  const requestIds = [
+    ...new Set(
+      rows.flatMap((r) =>
+        [r.id, r.wakeup_request_id].filter(Boolean) as string[],
+      ),
+    ),
+  ];
+  const directCostByRequestId = new Map<string, number>();
+  if (requestIds.length > 0) {
     try {
       const costRows = await db
         .select({
@@ -80,20 +86,59 @@ export const threadTurns_ = async (
           total: sql<string>`COALESCE(SUM(amount_usd), 0)`,
         })
         .from(costEvents)
-        .where(inArray(costEvents.request_id, wakeupIds))
+        .where(inArray(costEvents.request_id, requestIds))
         .groupBy(costEvents.request_id);
       for (const row of costRows) {
-        runCostMap.set(row.request_id, Number(row.total));
+        directCostByRequestId.set(row.request_id, Number(row.total));
       }
     } catch (costErr) {
-      console.error("[graphql] TriggerRun cost batch failed:", costErr);
+      console.error("[graphql] ThreadTurn direct cost batch failed:", costErr);
     }
   }
 
-  return rows.map((r) => ({
-    ...withRuntimeType(snakeToCamel(r)),
-    totalCost: r.wakeup_request_id
-      ? (runCostMap.get(r.wakeup_request_id) ?? null)
-      : null,
-  }));
+  const turnIds = rows.map((r) => r.id);
+  const childCostByTurnId = new Map<string, number>();
+  if (turnIds.length > 0) {
+    try {
+      const childCostRows = await db
+        .select({
+          parent_request_id: sql<string>`${costEvents.metadata}->>'parent_request_id'`,
+          total: sql<string>`COALESCE(SUM(amount_usd), 0)`,
+        })
+        .from(costEvents)
+        .where(
+          and(
+            eq(costEvents.tenant_id, args.tenantId),
+            inArray(
+              sql`${costEvents.metadata}->>'parent_request_id'`,
+              turnIds,
+            ),
+          ),
+        )
+        .groupBy(sql`${costEvents.metadata}->>'parent_request_id'`);
+      for (const row of childCostRows) {
+        if (!row.parent_request_id) continue;
+        childCostByTurnId.set(row.parent_request_id, Number(row.total));
+      }
+    } catch (costErr) {
+      console.error("[graphql] ThreadTurn child cost batch failed:", costErr);
+    }
+  }
+
+  return rows.map((r) => {
+    const directRequestIds = [
+      ...new Set(
+        [r.id, r.wakeup_request_id].filter(Boolean) as string[],
+      ),
+    ];
+    const directCost = directRequestIds.reduce(
+      (sum, requestId) => sum + (directCostByRequestId.get(requestId) ?? 0),
+      0,
+    );
+    const totalCost = directCost + (childCostByTurnId.get(r.id) ?? 0);
+    return {
+      ...withRuntimeType(snakeToCamel(r)),
+      totalCost: totalCost > 0 ? totalCost : null,
+    };
+  });
 };
