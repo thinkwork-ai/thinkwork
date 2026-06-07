@@ -92,6 +92,7 @@ vi.mock("./record-guardrail-block.js", () => ({
 
 import {
   capturedSystemPromptFromFinalizePayload,
+  collectAgentProfileRuns,
   collectModelRoutedToolCalls,
   diagnosticsFromFinalizePayload,
   diagnosticsWithWorkspaceReconcile,
@@ -279,6 +280,73 @@ describe("isHiddenDesktopDelegation", () => {
 });
 
 describe("model routed tool evidence helpers", () => {
+  it("collects Agent Profile runs from top-level, response, and tool result evidence", () => {
+    expect(
+      collectAgentProfileRuns({
+        agent_profile_runs: [
+          {
+            profileRunId: "run-top",
+            profileId: "profile-research",
+            profileSlug: "research",
+            profileName: "Research",
+            model: "anthropic.claude-haiku",
+            status: "completed",
+            inputTokens: 10,
+            outputTokens: 5,
+            laneKey: "profile:research",
+          },
+        ],
+        response: {
+          agent_profile_runs: [
+            {
+              profileRunId: "run-response",
+              profileId: "profile-analyst",
+              profileSlug: "analyst",
+              profileName: "Analyst",
+              model: "moonshotai.kimi-k2.5",
+              status: "failed",
+              error: "bad data",
+            },
+          ],
+          tool_invocations: [
+            {
+              id: "delegate-1",
+              result: {
+                agent_profile_run: {
+                  profileRunId: "run-tool",
+                  profileId: "profile-coding",
+                  profileSlug: "coding",
+                  profileName: "Coding",
+                  model: "anthropic.claude-sonnet",
+                  status: "completed",
+                  toolInvocations: [{ id: "tool-1", tool_name: "read" }],
+                },
+              },
+            },
+          ],
+        },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        profileRunId: "run-top",
+        profileSlug: "research",
+        laneKey: "profile:research",
+      }),
+      expect.objectContaining({
+        profileRunId: "run-response",
+        profileSlug: "analyst",
+        status: "failed",
+        error: "bad data",
+      }),
+      expect.objectContaining({
+        profileRunId: "run-tool",
+        profileSlug: "coding",
+        laneKey: "profile:coding",
+        toolInvocations: [expect.objectContaining({ tool_name: "read" })],
+      }),
+    ]);
+  });
+
   it("collects routed model usage from tool invocation metadata", () => {
     expect(
       collectModelRoutedToolCalls({
@@ -505,6 +573,155 @@ describe("processFinalize reconcile seam", () => {
           }),
         }),
       ]),
+    );
+  });
+
+  it("records Agent Profile run cost, event, and usage evidence", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        trace_id: "trace-profile",
+        cost_owner_user_id: "55555555-5555-5555-5555-555555555555",
+        duration_ms: 50,
+        status: "completed",
+        response: {
+          content: "Parent summary",
+          agent_profile_runs: [
+            {
+              profileRunId: "profile-run-1",
+              profileId: "profile-research",
+              profileSlug: "research",
+              profileName: "Research",
+              model: "anthropic.claude-haiku",
+              status: "completed",
+              inputTokens: 120,
+              outputTokens: 40,
+              cachedReadTokens: 8,
+              durationMs: 900,
+              handoffSummary: "Research handoff",
+              laneKey: "profile:research",
+              toolInvocations: [
+                {
+                  id: "child-tool-1",
+                  tool_name: "web_search",
+                  input_preview: '{"query":"Stripe CEO"}',
+                },
+              ],
+            },
+          ],
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 1000,
+          output_tokens: 200,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(mocks.recordCostEvents).toHaveBeenCalledTimes(2);
+    expect(mocks.recordCostEvents).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        requestId: `${TURN_ID}:profile:profile-run-1:model`,
+        model: "anthropic.claude-haiku",
+        inputTokens: 120,
+        outputTokens: 40,
+        cachedReadTokens: 8,
+        durationMs: 900,
+        source: "pi_agent_profile",
+        recordCompute: false,
+        metadata: expect.objectContaining({
+          parent_request_id: TURN_ID,
+          profile_run_id: "profile-run-1",
+          profile_id: "profile-research",
+          profile_slug: "research",
+          profile_name: "Research",
+          lane_key: "profile:research",
+          profile_status: "completed",
+        }),
+      }),
+    );
+    expect(mocks.appendThreadTurnEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        runId: TURN_ID,
+        eventType: "agent_profile_run",
+        message: "Agent Profile Research completed on anthropic.claude-haiku",
+        payload: expect.objectContaining({
+          profile_run_id: "profile-run-1",
+          profile_slug: "research",
+          model: "anthropic.claude-haiku",
+          input_tokens: 120,
+          output_tokens: 40,
+          cost_usd: 1.23,
+          status: "completed",
+          lane_key: "profile:research",
+          handoff_summary: "Research handoff",
+          tool_invocations: [
+            expect.objectContaining({ tool_name: "web_search" }),
+          ],
+        }),
+      }),
+    );
+    const succeededUpdate = mocks.updateSets.find((value: any) =>
+      Boolean(value?.usage_json?.agent_profile_runs),
+    ) as any;
+    expect(succeededUpdate.usage_json.agent_profile_runs).toEqual([
+      expect.objectContaining({
+        profileRunId: "profile-run-1",
+        profileSlug: "research",
+        model: "anthropic.claude-haiku",
+        inputTokens: 120,
+        outputTokens: 40,
+        costUsd: 1.23,
+        toolInvocations: [expect.objectContaining({ tool_name: "web_search" })],
+      }),
+    ]);
+  });
+
+  it("records failed Agent Profile runs as events without child LLM cost rows", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 50,
+        status: "completed",
+        response: {
+          content: "Parent summary",
+          agent_profile_runs: [
+            {
+              profileRunId: "profile-run-2",
+              profileId: "profile-analyst",
+              profileSlug: "analyst",
+              profileName: "Analyst",
+              model: "moonshotai.kimi-k2.5",
+              status: "timed_out",
+              error: "timeout",
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(mocks.recordCostEvents).toHaveBeenCalledTimes(1);
+    expect(mocks.appendThreadTurnEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: "agent_profile_run",
+        level: "error",
+        payload: expect.objectContaining({
+          profile_run_id: "profile-run-2",
+          profile_slug: "analyst",
+          status: "timed_out",
+          error: "timeout",
+        }),
+      }),
     );
   });
 

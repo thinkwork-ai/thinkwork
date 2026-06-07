@@ -6103,12 +6103,18 @@ export type TraceEvent = {
   estimated?: Maybe<Scalars["Boolean"]["output"]>;
   eventType?: Maybe<Scalars["String"]["output"]>;
   inputTokens?: Maybe<Scalars["Int"]["output"]>;
+  laneKey?: Maybe<Scalars["String"]["output"]>;
   match?: Maybe<Scalars["AWSJSON"]["output"]>;
   metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
   model?: Maybe<Scalars["String"]["output"]>;
   modelRoutingStatus?: Maybe<Scalars["String"]["output"]>;
   outputTokens?: Maybe<Scalars["Int"]["output"]>;
   parentRequestId?: Maybe<Scalars["String"]["output"]>;
+  profileId?: Maybe<Scalars["ID"]["output"]>;
+  profileName?: Maybe<Scalars["String"]["output"]>;
+  profileRunId?: Maybe<Scalars["String"]["output"]>;
+  profileSlug?: Maybe<Scalars["String"]["output"]>;
+  profileStatus?: Maybe<Scalars["String"]["output"]>;
   requestId?: Maybe<Scalars["String"]["output"]>;
   ruleSource?: Maybe<Scalars["AWSJSON"]["output"]>;
   runtimeType?: Maybe<Scalars["String"]["output"]>;

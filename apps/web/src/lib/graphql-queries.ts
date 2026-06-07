@@ -701,6 +701,12 @@ export const SettingsActivityThreadTracesQuery = gql`
       parentRequestId
       toolCallId
       toolName
+      profileRunId
+      profileId
+      profileSlug
+      profileName
+      laneKey
+      profileStatus
       modelRoutingStatus
       ruleSource
       match

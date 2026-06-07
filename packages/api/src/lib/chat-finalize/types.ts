@@ -30,6 +30,34 @@ export interface FinalizeModelRoutedToolCall {
   error?: string;
 }
 
+export interface FinalizeAgentProfileRun {
+  profileRunId: string;
+  profileId: string;
+  profileSlug: string;
+  profileName: string;
+  model: string;
+  status:
+    | "completed"
+    | "failed"
+    | "timed_out"
+    | "interrupted"
+    | "resource_limit_exceeded";
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedReadTokens?: number;
+  cachedWriteTokens?: number;
+  totalTokens?: number;
+  costUsd?: number;
+  parentThreadTurnId?: string;
+  handoffSummary?: string;
+  laneKey?: string;
+  error?: string;
+  toolInvocations?: Array<Record<string, unknown>>;
+}
+
 export interface FinalizePayload {
   /** Idempotency key — `thread_turns.id` that chat-agent-invoke inserted before dispatching. */
   thread_turn_id: string;
@@ -81,6 +109,8 @@ export interface FinalizePayload {
     tool_invocations?: Array<Record<string, unknown>>;
     /** Child model calls made for TOOLS.md model-routed tool invocations. */
     model_routed_tool_calls?: FinalizeModelRoutedToolCall[];
+    /** Child Pi Agent Profile runs made inside the parent turn. */
+    agent_profile_runs?: FinalizeAgentProfileRun[];
     /** Tools called (legacy + flat list for thread_turns.usage_json). */
     tools_called?: string[];
     /** Tool cost rows (Nova Act, browser, etc.) for cost_events insertion. */
@@ -110,6 +140,8 @@ export interface FinalizePayload {
       messageId?: string;
     };
   };
+  /** Top-level child Pi Agent Profile runs, mirrored by newer runtimes. */
+  agent_profile_runs?: FinalizeAgentProfileRun[];
   /** Top-level guardrail block (mirrors `response.guardrail_block`). */
   guardrail_block?: GuardrailBlockPayload;
   /** Token-usage triple that drives `recordCostEvents`. */

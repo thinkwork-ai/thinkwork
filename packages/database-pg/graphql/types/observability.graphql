@@ -18,6 +18,12 @@ type TraceEvent {
   parentRequestId: String
   toolCallId: String
   toolName: String
+  profileRunId: String
+  profileId: ID
+  profileSlug: String
+  profileName: String
+  laneKey: String
+  profileStatus: String
   modelRoutingStatus: String
   ruleSource: AWSJSON
   match: AWSJSON
