@@ -9,7 +9,6 @@ import {
   CreditCard,
   FolderTree,
   History,
-  Layers3,
   NotebookText,
   Repeat,
   Settings as SettingsIcon,
@@ -20,6 +19,7 @@ import {
   Wrench,
 } from "lucide-react";
 import {
+  IconApps,
   IconChartBar,
   IconPlanet,
   IconTopologyStar3,
@@ -86,9 +86,9 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
-    label: "Managed Applications",
+    label: "Applications",
     to: "/settings/managed-applications",
-    icon: Layers3,
+    icon: IconApps,
     operatorOnly: true,
   },
   {

@@ -52,6 +52,8 @@ export function ManagedApplicationsPage() {
     jobResult.data?.managedApplicationDeployment ?? optimisticJob ?? null;
   const loading = appsResult.fetching && apps.length === 0;
   const unavailable = appsResult.error || statusResult.error;
+  const refreshing =
+    appsResult.fetching || statusResult.fetching || jobResult.fetching;
 
   useEffect(() => {
     if (!selectedJob || terminalJobStatus(selectedJob.status)) return;
@@ -118,17 +120,18 @@ export function ManagedApplicationsPage() {
   return (
     <SettingsPane className="max-w-none">
       <SettingsHeader
-        title="Managed Applications"
+        title="Applications"
         description="Plan, approve, monitor, and tear down customer-owned Cognee and Twenty deployments."
         actions={
           <Button
             type="button"
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon-sm"
             onClick={refreshAll}
+            aria-label="Refresh"
+            title="Refresh"
           >
-            <RefreshCw className="size-4" />
-            Refresh
+            <RefreshCw className={`size-4${refreshing ? " animate-spin" : ""}`} />
           </Button>
         }
       />
