@@ -55,7 +55,11 @@ import {
   notifyThreadTurnUpdate,
 } from "./notify.js";
 import { reconcileChangedFiles, type ReconcileReport } from "./reconcile.js";
-import type { FinalizePayload, FinalizeResponse } from "./types.js";
+import type {
+  FinalizeAgentProfileRun,
+  FinalizePayload,
+  FinalizeResponse,
+} from "./types.js";
 
 const db = getDb();
 
@@ -211,6 +215,7 @@ export async function processFinalize(
   // ---- Completed-turn finalize chain ----------------------------------
   const invokeResult = payload.response ?? {};
   const modelRoutedToolCalls = collectModelRoutedToolCalls(invokeResult);
+  const agentProfileRuns = collectAgentProfileRuns(payload);
   const toolInvocations = enrichToolInvocationsWithModelRouting(
     invokeResult.tool_invocations ?? [],
   );
@@ -308,6 +313,17 @@ export async function processFinalize(
     agentName,
     modelRoutedToolCalls,
   });
+  await recordAgentProfileRunEvidence({
+    tenantId,
+    agentId,
+    userId: costOwnerUserId,
+    turnId,
+    threadId,
+    traceId,
+    runtimeType,
+    agentName,
+    agentProfileRuns,
+  });
   applyModelRoutedToolCosts(toolInvocations, modelRoutedToolCalls);
   applyParentModelFallbackToolEvidence(toolInvocations, {
     model: usage.model || agentModel || null,
@@ -404,6 +420,7 @@ export async function processFinalize(
     })),
     tool_invocations: toolInvocations,
     model_routed_tool_calls: modelRoutedToolCalls,
+    agent_profile_runs: agentProfileRuns,
   };
 
   try {
@@ -628,6 +645,29 @@ export interface ModelRoutedToolCallEvidence {
   error?: string;
 }
 
+export interface AgentProfileRunEvidence {
+  profileRunId: string;
+  profileId: string;
+  profileSlug: string;
+  profileName: string;
+  model: string;
+  status: FinalizeAgentProfileRun["status"];
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  cachedWriteTokens?: number;
+  totalTokens?: number;
+  costUsd?: number;
+  parentThreadTurnId?: string;
+  handoffSummary?: string;
+  laneKey: string;
+  error?: string;
+  toolInvocations: Array<Record<string, unknown>>;
+}
+
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -655,6 +695,135 @@ function stringRecord(value: unknown): Record<string, string> {
     }
   }
   return result;
+}
+
+function arrayOfRecords(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+        const record = readRecord(item);
+        return Object.keys(record).length > 0 ? [record] : [];
+      })
+    : [];
+}
+
+function normalizeAgentProfileRun(
+  value: unknown,
+): AgentProfileRunEvidence | null {
+  const record = readRecord(value);
+  const profileRunId =
+    stringValue(record.profileRunId) ?? stringValue(record.profile_run_id);
+  const profileId =
+    stringValue(record.profileId) ?? stringValue(record.profile_id);
+  const profileSlug =
+    stringValue(record.profileSlug) ?? stringValue(record.profile_slug);
+  const profileName =
+    stringValue(record.profileName) ??
+    stringValue(record.profile_name) ??
+    profileSlug;
+  const model = stringValue(record.model);
+  if (!profileRunId || !profileId || !profileSlug || !profileName || !model) {
+    return null;
+  }
+
+  const rawStatus = stringValue(record.status);
+  const status: FinalizeAgentProfileRun["status"] =
+    rawStatus === "failed" ||
+    rawStatus === "timed_out" ||
+    rawStatus === "interrupted" ||
+    rawStatus === "resource_limit_exceeded"
+      ? rawStatus
+      : "completed";
+  const laneKey =
+    stringValue(record.laneKey) ??
+    stringValue(record.lane_key) ??
+    `profile:${profileSlug}`;
+
+  return {
+    profileRunId,
+    profileId,
+    profileSlug,
+    profileName,
+    model,
+    status,
+    startedAt: stringValue(record.startedAt) ?? stringValue(record.started_at),
+    finishedAt:
+      stringValue(record.finishedAt) ?? stringValue(record.finished_at),
+    durationMs: numberValue(record.durationMs ?? record.duration_ms),
+    inputTokens: numberValue(record.inputTokens ?? record.input_tokens),
+    outputTokens: numberValue(record.outputTokens ?? record.output_tokens),
+    cachedReadTokens: numberValue(
+      record.cachedReadTokens ?? record.cached_read_tokens,
+    ),
+    laneKey,
+    toolInvocations: arrayOfRecords(
+      record.toolInvocations ?? record.tool_invocations,
+    ),
+    ...(optionalNumberValue(
+      record.cachedWriteTokens ?? record.cached_write_tokens,
+    ) !== undefined
+      ? {
+          cachedWriteTokens: optionalNumberValue(
+            record.cachedWriteTokens ?? record.cached_write_tokens,
+          ),
+        }
+      : {}),
+    ...(optionalNumberValue(record.totalTokens ?? record.total_tokens) !==
+    undefined
+      ? {
+          totalTokens: optionalNumberValue(
+            record.totalTokens ?? record.total_tokens,
+          ),
+        }
+      : {}),
+    ...(optionalNumberValue(record.costUsd ?? record.cost_usd) !== undefined
+      ? { costUsd: optionalNumberValue(record.costUsd ?? record.cost_usd) }
+      : {}),
+    ...(stringValue(record.parentThreadTurnId ?? record.parent_thread_turn_id)
+      ? {
+          parentThreadTurnId: stringValue(
+            record.parentThreadTurnId ?? record.parent_thread_turn_id,
+          ),
+        }
+      : {}),
+    ...(stringValue(record.handoffSummary ?? record.handoff_summary)
+      ? {
+          handoffSummary: stringValue(
+            record.handoffSummary ?? record.handoff_summary,
+          ),
+        }
+      : {}),
+    ...(stringValue(record.error) ? { error: stringValue(record.error) } : {}),
+  };
+}
+
+export function collectAgentProfileRuns(
+  payload: Pick<FinalizePayload, "agent_profile_runs" | "response">,
+): AgentProfileRunEvidence[] {
+  const byId = new Map<string, AgentProfileRunEvidence>();
+  const add = (run: AgentProfileRunEvidence | null) => {
+    if (!run) return;
+    byId.set(run.profileRunId, run);
+  };
+
+  for (const item of payload.agent_profile_runs ?? []) {
+    add(normalizeAgentProfileRun(item));
+  }
+  for (const item of payload.response?.agent_profile_runs ?? []) {
+    add(normalizeAgentProfileRun(item));
+  }
+  for (const invocation of payload.response?.tool_invocations ?? []) {
+    const record = readRecord(invocation);
+    add(
+      normalizeAgentProfileRun(
+        record.agent_profile_run ??
+          record.agentProfileRun ??
+          readRecord(record.result).agent_profile_run ??
+          readRecord(record.result).agentProfileRun,
+      ),
+    );
+  }
+
+  return [...byId.values()];
 }
 
 function normalizeModelRoutedToolCall(
@@ -825,15 +994,15 @@ function splitMoneyTotal(total: number | null, count: number): number[] {
   }
   const base = total / count;
   const values = Array.from({ length: count }, () => base);
-  const assigned = values
-    .slice(0, -1)
-    .reduce((sum, value) => sum + value, 0);
+  const assigned = values.slice(0, -1).reduce((sum, value) => sum + value, 0);
   values[count - 1] = total - assigned;
   return values;
 }
 
 function hasToolModelEvidence(invocation: Record<string, unknown>): boolean {
-  if (stringValue(invocation.model ?? invocation.model_id ?? invocation.modelId)) {
+  if (
+    stringValue(invocation.model ?? invocation.model_id ?? invocation.modelId)
+  ) {
     return true;
   }
   return normalizeModelRoutedToolCall(
@@ -880,7 +1049,10 @@ function applyParentModelFallbackToolEvidence(
     parent.cachedReadTokens,
     fallbackInvocations.length,
   );
-  const costSplits = splitMoneyTotal(parent.costUsd, fallbackInvocations.length);
+  const costSplits = splitMoneyTotal(
+    parent.costUsd,
+    fallbackInvocations.length,
+  );
 
   fallbackInvocations.forEach((invocation, index) => {
     const toolName =
@@ -1014,6 +1186,125 @@ async function recordModelRoutedToolEvidence(input: {
     } catch (budgetErr) {
       console.error(
         `[chat-finalize] Model-routed tool budget check failed:`,
+        budgetErr,
+      );
+    }
+  }
+}
+
+async function recordAgentProfileRunEvidence(input: {
+  tenantId: string;
+  agentId: string;
+  userId?: string | null;
+  turnId: string;
+  threadId: string;
+  traceId?: string;
+  runtimeType?: string | null;
+  agentName?: string | null;
+  agentProfileRuns: AgentProfileRunEvidence[];
+}): Promise<void> {
+  if (input.agentProfileRuns.length === 0) return;
+
+  let childSpendRecorded = false;
+  for (const run of input.agentProfileRuns) {
+    const metadata = {
+      parent_request_id: input.turnId,
+      profile_run_id: run.profileRunId,
+      profile_id: run.profileId,
+      profile_slug: run.profileSlug,
+      profile_name: run.profileName,
+      lane_key: run.laneKey,
+      profile_status: run.status,
+      ...(run.error ? { error: run.error } : {}),
+    };
+
+    if (run.status === "completed") {
+      try {
+        const costResult = await recordCostEvents({
+          tenantId: input.tenantId,
+          agentId: input.agentId,
+          userId: input.userId,
+          requestId: `${input.turnId}:profile:${run.profileRunId}:model`,
+          model: run.model,
+          inputTokens: run.inputTokens,
+          outputTokens: run.outputTokens,
+          cachedReadTokens: run.cachedReadTokens,
+          durationMs: run.durationMs,
+          threadId: input.threadId,
+          traceId: input.traceId,
+          runtimeType: input.runtimeType,
+          source: "pi_agent_profile",
+          metadata,
+          recordCompute: false,
+        });
+        if (costResult.totalUsd > 0) {
+          run.costUsd = costResult.llmUsd;
+          childSpendRecorded = true;
+          await notifyCostRecorded({
+            tenantId: input.tenantId,
+            agentId: input.agentId,
+            agentName: input.agentName ?? "",
+            userId: input.userId,
+            eventType: "agent_profile_run",
+            amountUsd: costResult.totalUsd,
+            model: run.model,
+          });
+        }
+      } catch (costErr) {
+        console.error(
+          `[chat-finalize] Agent Profile cost recording failed:`,
+          costErr,
+        );
+      }
+    }
+
+    try {
+      await appendThreadTurnEvent(drizzleThreadTurnEventStore(db), {
+        tenantId: input.tenantId,
+        runId: input.turnId,
+        agentId: input.agentId,
+        eventType: "agent_profile_run",
+        stream: "step",
+        level: run.status === "completed" ? "info" : "error",
+        color: run.status === "completed" ? "green" : "red",
+        message:
+          run.status === "completed"
+            ? `Agent Profile ${run.profileName} completed on ${run.model}`
+            : `Agent Profile ${run.profileName} ${run.status}`,
+        payload: {
+          profile_run_id: run.profileRunId,
+          profile_id: run.profileId,
+          profile_slug: run.profileSlug,
+          profile_name: run.profileName,
+          model: run.model,
+          input_tokens: run.inputTokens,
+          output_tokens: run.outputTokens,
+          cached_read_tokens: run.cachedReadTokens,
+          cached_write_tokens: run.cachedWriteTokens,
+          total_tokens: run.totalTokens,
+          duration_ms: run.durationMs,
+          cost_usd: run.costUsd,
+          status: run.status,
+          lane_key: run.laneKey,
+          handoff_summary: run.handoffSummary,
+          tool_invocations: run.toolInvocations,
+          ...(run.error ? { error: run.error } : {}),
+        },
+      });
+    } catch (eventErr) {
+      console.error(
+        `[chat-finalize] Agent Profile event recording failed:`,
+        eventErr,
+      );
+    }
+  }
+
+  if (childSpendRecorded) {
+    try {
+      await checkBudgetAndPause(input.tenantId, input.agentId, input.userId);
+    } catch (budgetErr) {
+      console.error(
+        `[chat-finalize] Agent Profile budget check failed:`,
         budgetErr,
       );
     }

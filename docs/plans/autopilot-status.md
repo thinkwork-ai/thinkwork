@@ -11,9 +11,9 @@ status: complete
 - Plan:
   `docs/plans/2026-06-07-002-feat-agent-profiles-pi-subagents-plan.md`.
 - Target branch: `main`.
-- Current unit: U4 Pi Subagent Execution And Slash Invocation.
-- Current branch: `codex/agent-profiles-u4-pi-subagents`.
-- Current worktree: `.Codex/worktrees/agent-profiles-u4`.
+- Current unit: U5 Finalize, Cost, Activity Events, And Trace Metadata.
+- Current branch: `codex/agent-profiles-u5-observability`.
+- Current worktree: `.Codex/worktrees/agent-profiles-u5`.
 - Status: in progress.
 - Notes:
   - Active web work targets `apps/web` / `@thinkwork/web` only. Historical
@@ -170,6 +170,12 @@ status: complete
     `http://localhost:5174` dev server; active web work targets `apps/web`.
   - Opened U4 PR
     [#2214](https://github.com/thinkwork-ai/thinkwork/pull/2214).
+  - U4 CI passed on PR #2214: `cla`, `lint`, `test`, `typecheck`, and
+    `verify`.
+  - U4 was squash merged as `b5bba6d7`; local worktree/branch were removed and
+    the remote branch was deleted.
+  - Created isolated U5 worktree `.Codex/worktrees/agent-profiles-u5` from
+    `origin/main` at `b5bba6d7`.
   - U4 implemented constrained Pi profile delegation: runtime `agent_profiles`
     become a `delegate_to_agent_profile` tool plus `/agent <profile> <task>`
     slash path, child profile runs use the profile model/capability allowlist,
@@ -188,14 +194,39 @@ status: complete
       passed, 86 tests passed.
     - Direct Prettier check over changed files -> passed.
     - `git diff --check` -> passed.
+  - U5 implemented Agent Profile run finalize evidence: profile run summaries
+    are collected from runtime responses/tool results, persisted into turn
+    usage JSON, recorded as `pi_agent_profile` cost rows with
+    `parent_request_id` metadata, emitted as thread turn events, included in
+    aggregate `ThreadTurn.totalCost`, and surfaced on trace events with
+    profile lane metadata.
+  - U5 local verification passed:
+    - `pnpm schema:build` -> passed.
+    - `pnpm --filter @thinkwork/web codegen`,
+      `pnpm --filter @thinkwork/mobile codegen`, and
+      `pnpm --filter thinkwork-cli codegen` -> passed.
+    - `pnpm --filter @thinkwork/api exec vitest run src/lib/chat-finalize/process-finalize.test.ts src/graphql/resolvers/triggers/threadTurns.query.test.ts src/graphql/resolvers/observability/threadTraces.query.test.ts`
+      -> 23 tests passed.
+    - `pnpm --filter @thinkwork/api typecheck` -> passed.
+    - `pnpm --filter @thinkwork/web typecheck` -> passed.
+    - `pnpm --filter thinkwork-cli typecheck` -> passed.
+    - `pnpm --filter @thinkwork/mobile test` -> 32 test files passed, 185
+      tests passed.
+    - Direct Prettier formatting over changed files -> passed.
+    - `git diff --check` -> passed.
+  - U5 local web note: copied deployed dev auth/API values from
+    `apps/mobile/.env` into ignored `apps/web/.env` using `VITE_*` names for
+    the `http://localhost:5174` dev server; this branch has no `apps/admin`
+    target.
 
-| Unit                                              | Branch                                     | PR                                                           | State  | Notes                                                                                             |
-| ------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
-| U0 Pi Profile Adapter Spike                       | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
-| U1 Agent Profile Schema, Seeds, And GraphQL       | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | merged | Squash merged as `6956a0b4`; dev migration applied after drift failure and rerun CI passed.       |
-| U2 Settings -> Agents Page And Profile Editor     | `codex/agent-profiles-u2-settings-agents`  | [#2211](https://github.com/thinkwork-ai/thinkwork/pull/2211) | merged | Squash merged as `4f8b7792`; local worktree/branch removed and remote branch was deleted.         |
-| U3 Resolve Profiles Into AgentCore Runtime Config | `codex/agent-profiles-u3-runtime-config`   | [#2213](https://github.com/thinkwork-ai/thinkwork/pull/2213) | merged | Squash merged as `17b2b36a`; runtime config now includes file-backed Agent Profile projections.   |
-| U4 Pi Subagent Execution And Slash Invocation     | `codex/agent-profiles-u4-pi-subagents`     | [#2214](https://github.com/thinkwork-ai/thinkwork/pull/2214) | active | Implemented constrained profile delegation inside the Pi AgentCore runtime; CI pending.           |
+| Unit                                               | Branch                                     | PR                                                           | State  | Notes                                                                                             |
+| -------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------- |
+| U0 Pi Profile Adapter Spike                        | `codex/agent-profiles-u0-pi-adapter-spike` | [#2208](https://github.com/thinkwork-ai/thinkwork/pull/2208) | merged | Squash merged as `dbf07c64`; local worktree/branch removed and remote branch was already deleted. |
+| U1 Agent Profile Schema, Seeds, And GraphQL        | `codex/agent-profiles-u1-schema-graphql`   | [#2209](https://github.com/thinkwork-ai/thinkwork/pull/2209) | merged | Squash merged as `6956a0b4`; dev migration applied after drift failure and rerun CI passed.       |
+| U2 Settings -> Agents Page And Profile Editor      | `codex/agent-profiles-u2-settings-agents`  | [#2211](https://github.com/thinkwork-ai/thinkwork/pull/2211) | merged | Squash merged as `4f8b7792`; local worktree/branch removed and remote branch was deleted.         |
+| U3 Resolve Profiles Into AgentCore Runtime Config  | `codex/agent-profiles-u3-runtime-config`   | [#2213](https://github.com/thinkwork-ai/thinkwork/pull/2213) | merged | Squash merged as `17b2b36a`; runtime config now includes file-backed Agent Profile projections.   |
+| U4 Pi Subagent Execution And Slash Invocation      | `codex/agent-profiles-u4-pi-subagents`     | [#2214](https://github.com/thinkwork-ai/thinkwork/pull/2214) | merged | Squash merged as `b5bba6d7`; local worktree/branch removed and remote branch was deleted.         |
+| U5 Finalize, Cost, Activity Events, Trace Metadata | `codex/agent-profiles-u5-observability`    | TBD                                                          | active | Persisting profile run evidence into finalize usage, cost rows, activity events, and traces.      |
 
 ## Model Stacking Tool Routing - 2026-06-06
 

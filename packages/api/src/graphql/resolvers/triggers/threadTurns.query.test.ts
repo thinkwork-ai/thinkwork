@@ -105,12 +105,44 @@ describe("threadTurns", () => {
     ];
 
     await expect(
-      threadTurns_(null, { tenantId: "tenant-1", threadId: "thread-1" }, {} as never),
+      threadTurns_(
+        null,
+        { tenantId: "tenant-1", threadId: "thread-1" },
+        {} as never,
+      ),
     ).resolves.toEqual([
       expect.objectContaining({
         id: "turn-1",
         wakeupRequestId: "turn-1",
         totalCost: 0.1213174,
+      }),
+    ]);
+  });
+
+  it("adds direct parent cost and Agent Profile child cost through parent_request_id metadata", async () => {
+    mocks.rows = [
+      [
+        {
+          id: "turn-1",
+          wakeup_request_id: null,
+          runtime_type: "pi",
+          status: "succeeded",
+        },
+      ],
+      [{ request_id: "turn-1", total: "0.010000" }],
+      [{ parent_request_id: "turn-1", total: "0.002500" }],
+    ];
+
+    await expect(
+      threadTurns_(
+        null,
+        { tenantId: "tenant-1", threadId: "thread-1" },
+        {} as never,
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "turn-1",
+        totalCost: 0.0125,
       }),
     ]);
   });
@@ -130,7 +162,11 @@ describe("threadTurns", () => {
     ];
 
     await expect(
-      threadTurns_(null, { tenantId: "tenant-1", threadId: "thread-1" }, {} as never),
+      threadTurns_(
+        null,
+        { tenantId: "tenant-1", threadId: "thread-1" },
+        {} as never,
+      ),
     ).resolves.toEqual([
       expect.objectContaining({
         id: "turn-1",

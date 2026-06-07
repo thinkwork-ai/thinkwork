@@ -58,6 +58,25 @@ export const threadTraces = async (
           : null,
       toolName:
         typeof metadata.tool_name === "string" ? metadata.tool_name : null,
+      profileRunId:
+        typeof metadata.profile_run_id === "string"
+          ? metadata.profile_run_id
+          : null,
+      profileId:
+        typeof metadata.profile_id === "string" ? metadata.profile_id : null,
+      profileSlug:
+        typeof metadata.profile_slug === "string"
+          ? metadata.profile_slug
+          : null,
+      profileName:
+        typeof metadata.profile_name === "string"
+          ? metadata.profile_name
+          : null,
+      laneKey: typeof metadata.lane_key === "string" ? metadata.lane_key : null,
+      profileStatus:
+        typeof metadata.profile_status === "string"
+          ? metadata.profile_status
+          : null,
       modelRoutingStatus:
         typeof metadata.model_routing_status === "string"
           ? metadata.model_routing_status
