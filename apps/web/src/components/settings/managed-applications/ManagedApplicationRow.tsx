@@ -33,9 +33,29 @@ export function ManagedApplicationRow({
       className="flex items-start justify-between gap-4 border-b border-border px-4 py-4 transition-colors last:border-b-0 hover:bg-muted/30"
     >
       <div className="min-w-0">
-        <h3 className="text-sm font-medium text-foreground">
-          {app.displayName}
-        </h3>
+        <div className="flex items-center gap-1">
+          <h3 className="text-sm font-medium text-foreground">
+            {app.displayName}
+          </h3>
+          {runtime?.url && runtimeEnabled ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-6 text-muted-foreground"
+              aria-label={`Open ${app.displayName} in a new tab`}
+              title={`Open ${app.displayName} in a new tab`}
+              onClick={(event) => {
+                // Don't trigger the card's drill-in navigation.
+                event.preventDefault();
+                event.stopPropagation();
+                window.open(runtime.url!, "_blank", "noopener,noreferrer");
+              }}
+            >
+              <ExternalLink className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           {runtime?.message ?? managedAppDescription(key)}
         </p>
@@ -44,23 +64,6 @@ export function ManagedApplicationRow({
         <Badge variant="outline" className={statusBadgeClassName(status)}>
           {status}
         </Badge>
-        {runtime?.url && runtimeEnabled ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Open ${app.displayName} in a new tab`}
-            title={`Open ${app.displayName} in a new tab`}
-            onClick={(event) => {
-              // Don't trigger the card's drill-in navigation.
-              event.preventDefault();
-              event.stopPropagation();
-              window.open(runtime.url!, "_blank", "noopener,noreferrer");
-            }}
-          >
-            <ExternalLink className="size-4" />
-          </Button>
-        ) : null}
       </div>
     </Link>
   );

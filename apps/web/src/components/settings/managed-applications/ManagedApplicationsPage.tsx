@@ -62,7 +62,7 @@ export function ManagedApplicationsPage() {
           </div>
         </SettingsSection>
       ) : (
-        <SettingsSection label="Applications">
+        <SettingsSection>
           {loading ? (
             <div className="p-4 text-sm text-muted-foreground">
               Loading managed applications...
