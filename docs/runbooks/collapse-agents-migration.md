@@ -57,7 +57,7 @@ branch and confirm no live callers still depend on per-Space agent assignments
 or retired per-agent mutations:
 
 ```bash
-rg "space_agent_assignments|spaceAgentAssignments|setSpaceAgentAvailability|claimVanityEmailAddress|releaseVanityEmailAddress|toggleAgentEmailChannel|updateAgentEmailAllowlist|agentEmailCapability|createAgent|deleteAgent|updateAgentRuntime|updateAgentStatus|setAgentBudgetPolicy|setAgentCapabilities|setAgentSkills" packages/api/src packages/lambda apps/cli/src apps/admin/src packages/database-pg/graphql/types
+rg "space_agent_assignments|spaceAgentAssignments|setSpaceAgentAvailability|claimVanityEmailAddress|releaseVanityEmailAddress|toggleAgentEmailChannel|updateAgentEmailAllowlist|agentEmailCapability|createAgent|deleteAgent|updateAgentRuntime|updateAgentStatus|setAgentBudgetPolicy|setAgentCapabilities|setAgentSkills" packages/api/src packages/lambda apps/cli/src apps/web/src packages/database-pg/graphql/types
 ```
 
 The broad string survey currently has expected residual hits for helper names,
@@ -67,13 +67,13 @@ comments, and legacy non-GraphQL handler text, including:
   `createAgentLoaders`
 - `packages/api/src/graphql/resolvers/customize/*` comments that refer to the
   old `setAgentSkills` log shape or projection source
-- `packages/lambda/admin-ops-mcp.ts` `routineOps.createAgentRoutine`
+- `packages/lambda/web-ops-mcp.ts` `routineOps.createAgentRoutine`
 - `packages/api/src/handlers/agents.ts` legacy REST handler text
 
-The narrower retired GraphQL/admin/CLI survey should have no live hits:
+The narrower retired GraphQL/web/CLI survey should have no live hits:
 
 ```bash
-rg "createAgent|setAgentSkills|updateAgentRuntime|setSpaceAgentAvailability|claimVanityEmailAddress|releaseVanityEmailAddress|toggleAgentEmailChannel|updateAgentEmailAllowlist|agentEmailCapability|updateAgentStatus|setAgentBudgetPolicy|setAgentCapabilities" packages/database-pg/graphql/types packages/api/src/graphql/resolvers apps/admin/src apps/cli/src
+rg "createAgent|setAgentSkills|updateAgentRuntime|setSpaceAgentAvailability|claimVanityEmailAddress|releaseVanityEmailAddress|toggleAgentEmailChannel|updateAgentEmailAllowlist|agentEmailCapability|updateAgentStatus|setAgentBudgetPolicy|setAgentCapabilities" packages/database-pg/graphql/types packages/api/src/graphql/resolvers apps/web/src apps/cli/src
 ```
 
 Expected result after the cutover PRs: only comments or helper identifiers, no

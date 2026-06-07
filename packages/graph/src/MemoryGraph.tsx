@@ -6,10 +6,8 @@
  * avoid a camera reset or simulation restart on filter-keystrokes. Do
  * not "clean up" those without measuring.
  *
- * Ported from apps/admin/src/components/MemoryGraph.tsx in U2 of the
- * apps/spaces Memory port (plan
- * docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md). Both
- * apps/admin and apps/spaces consume this version.
+ * Ported out of the app layer during the Memory UI work so web surfaces share
+ * one graph implementation.
  */
 import {
   useCallback,

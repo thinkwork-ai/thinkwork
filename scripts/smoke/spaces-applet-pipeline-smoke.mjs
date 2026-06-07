@@ -5,7 +5,7 @@
  * Scenarios:
  *   A1. Service writer path persists source + metadata and returns
  *       validated/persisted pins.
- *   A2. Deployed apps/spaces can serve /artifacts/:id for a saved applet.
+ *   A2. Deployed apps/web can serve /artifacts/:id for a saved applet.
  *   A3. A returned applet source's deterministic refresh() export can be
  *       invoked and returns per-source statuses.
  *   A4. Applet state writes and reads back through the host API GraphQL path.

@@ -773,22 +773,6 @@ variable "www_certificate_arn" {
   default     = ""
 }
 
-# ---------------------------------------------------------------------------
-# Admin site (custom domain — optional)
-# ---------------------------------------------------------------------------
-
-variable "admin_domain" {
-  description = "Custom domain for the admin SPA (e.g. admin.thinkwork.ai). Leave empty for CloudFront default."
-  type        = string
-  default     = ""
-}
-
-variable "admin_certificate_arn" {
-  description = "ACM certificate ARN for the admin domain (us-east-1, required for CloudFront custom domains)."
-  type        = string
-  default     = ""
-}
-
 variable "app_domain" {
   description = "Canonical custom domain for the end-user app (e.g. app.thinkwork.ai). Leave empty to fall back to computer_domain for compatibility."
   type        = string
@@ -911,7 +895,7 @@ variable "google_places_api_key" {
 }
 
 variable "mapbox_public_token" {
-  description = "Mapbox public pk.* token consumed by the apps/spaces MapView primitive (in @thinkwork/computer-stdlib) for inline map tile rendering inside generated applets. Flows from this variable → terraform output → scripts/build-spaces.sh → apps/spaces/.env.production as VITE_MAPBOX_PUBLIC_TOKEN. URL-restrict on the Mapbox dashboard to the deployed `computer.<apex>` host (and any dev hosts) — the token ships in the public Vite bundle, so URL allowlist is the security boundary. Empty string is acceptable: MapView falls back to OpenStreetMap tiles when the env var is unset, so dev environments without an operator-provisioned token still render maps."
+  description = "Mapbox public pk.* token consumed by the apps/web MapView primitive (in @thinkwork/computer-stdlib) for inline map tile rendering inside generated applets. Flows from this variable → terraform output → scripts/build-web.sh → apps/web/.env.production as VITE_MAPBOX_PUBLIC_TOKEN. URL-restrict on the Mapbox dashboard to the deployed `computer.<apex>` host (and any dev hosts) — the token ships in the public Vite bundle, so URL allowlist is the security boundary. Empty string is acceptable: MapView falls back to OpenStreetMap tiles when the env var is unset, so dev environments without an operator-provisioned token still render maps."
   type        = string
   default     = ""
   sensitive   = true

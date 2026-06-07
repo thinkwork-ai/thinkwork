@@ -6,7 +6,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Pi AgentCore runtime, deployed by the repo's own CLI via Terraform. There is **no local-only mode** — end-to-end work requires a deployed AWS stack. "Thinkwork supersedes maniflow" — ignore the old `maniflow*` names you may see on stale resources.
 
-- `apps/admin` — React 19 + Vite + TanStack Router operator SPA (dev port **5174**)
+- `apps/web` — React 19 + Vite + TanStack Router unified web/operator app (dev port **5174** by default; **5180** is the Cognito callback-friendly worktree port)
 - `apps/mobile` — Expo + React Native + NativeWind (iOS via TestFlight)
 - `apps/cli` — `thinkwork-cli` (commander.js), published to npm, bundles Terraform modules
 - `packages/database-pg` — Drizzle schema + migrations + canonical GraphQL source (`graphql/types/*.graphql`)
@@ -63,7 +63,7 @@ pnpm db:migrate-manual                              # drift reporter for hand-ro
 
 Some `drizzle/*.sql` files are **hand-rolled** (partial indices, CHECK constraints, precise FK ordering) and not registered in `meta/_journal.json`. They're outside `db:push`'s scope — apply via `psql "$DATABASE_URL" -f <file>`. `pnpm db:migrate-manual` reports which of their declared objects are present in the target DB; every such file must declare `-- creates: public.X` (or `-- creates-column: public.T.C`) markers in its header so the reporter can check. The `deploy.yml` workflow runs the reporter as a gate after `terraform-apply` — missing objects fail the deploy so unapplied migrations can't ship silently. Background: `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md`.
 
-After editing GraphQL types, **regenerate codegen** in every consumer that has a `codegen` script: `apps/cli`, `apps/admin`, `apps/mobile`, `packages/api`. Run `pnpm --filter @thinkwork/<name> codegen`.
+After editing GraphQL types, **regenerate codegen** in every consumer that has a `codegen` script: `apps/cli`, `apps/web`, `apps/mobile`, `packages/api`. Run `pnpm --filter @thinkwork/<name> codegen`.
 
 ### Lambda build
 
@@ -84,21 +84,21 @@ thinkwork login --stage <stage>    # OAuth to the deployed Cognito pool
 thinkwork me                       # identity + tenant sanity check
 ```
 
-### Admin dev server
+### Web dev server
 
 ```bash
-pnpm --filter @thinkwork/admin dev     # port 5174 by default
+pnpm --filter @thinkwork/web dev     # port 5174 by default
 ```
 
-When running the admin dev server from a worktree, first copy the ignored env file from the main checkout:
+When running the web dev server from a worktree, first copy the ignored env file from the main checkout:
 
 ```bash
-cp /Users/ericodom/Projects/thinkwork/apps/admin/.env apps/admin/.env
+cp /Users/ericodom/Projects/thinkwork/apps/web/.env apps/web/.env
 ```
 
-Do this before opening the browser for local verification; without it the admin shell may load but tenant/API-backed pages such as Threads will sit on loading placeholders.
+Do this before opening the browser for local verification; without it the web shell may load but tenant/API-backed pages such as Threads will sit on loading placeholders.
 
-Concurrent admin vite instances (worktrees) must bind to 5175+. **Each port must be listed in the Cognito `ThinkworkAdmin` CallbackURLs** or Google OAuth fails with a generic-looking `redirect_mismatch` page — add the new port in Terraform/Cognito before starting the second server.
+Concurrent web Vite instances (worktrees) must bind to a Cognito-allowlisted port such as 5180. **Each port must be listed in the Cognito `ThinkworkAdmin` CallbackURLs** or Google OAuth fails with a generic-looking `redirect_mismatch` page — add the new port in Terraform/Cognito before starting the second server.
 
 ### Mobile dev server
 

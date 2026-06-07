@@ -7,10 +7,8 @@
  * Hindsight "Summaries" badge tone so the family visual language stays
  * coherent).
  *
- * Originally defined at apps/admin/src/lib/wiki-palette.ts; moved here in
- * U2 of the apps/spaces Memory port (plan
- * docs/plans/2026-05-09-003-feat-computer-memory-ui-port-plan.md) so admin
- * and Spaces share one palette.
+ * Originally defined in the admin UI; moved here during the Memory port so
+ * web and shared graph surfaces use one palette.
  */
 
 export type WikiPageType = "ENTITY" | "TOPIC" | "DECISION";

@@ -349,11 +349,11 @@ primitives so generated code does not need bespoke empty-state handling.
 Dependency direction is one-way:
 
 ```text
-apps/computer -> @thinkwork/computer-stdlib -> @thinkwork/ui
+apps/web -> @thinkwork/computer-stdlib -> @thinkwork/ui
 ```
 
 `@thinkwork/computer-stdlib` must not import from `apps/*`,
-`@thinkwork/admin`, or `@thinkwork/computer`. Contract tests in the stdlib
+`@thinkwork/web`, or another app package. Contract tests in the stdlib
 package enforce this.
 
 ## Acceptance Pins

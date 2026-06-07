@@ -22,7 +22,7 @@ The sign-in page itself is small — a logo, the two entry points, and any invit
 
 ## The `_authed` guard
 
-**File:** `apps/admin/src/routes/_authed.tsx`
+**File:** `apps/web/src/routes/_authed.tsx`
 
 The `_authed` layout is a thin guard. Its job is:
 
@@ -34,7 +34,7 @@ Anything under `_authed/...` in the route tree is automatically behind this gate
 
 ## The `_authed/_tenant` layout
 
-**File:** `apps/admin/src/routes/_authed/_tenant.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant.tsx`
 
 This is the big one. Every page in the Work, Agents, and Manage groups lives under this layout. It owns:
 
@@ -48,7 +48,7 @@ Rendering this layout also guarantees that `useTenant()` resolves to a real tena
 
 ### Tenant resolution
 
-**File:** `apps/admin/src/lib/TenantContext.tsx`
+**File:** `apps/web/src/lib/TenantContext.tsx`
 
 Tenant resolution is a one-shot fetch on app boot:
 
@@ -61,7 +61,7 @@ If the `/api/tenants/me` call fails or returns an empty tenant, the layout surfa
 
 ## JWT plumbing
 
-**File:** `apps/admin/src/lib/graphql-client.ts`
+**File:** `apps/web/src/lib/graphql-client.ts`
 
 The admin app uses urql with three exchanges: `cacheExchange` → `fetchExchange` → `subscriptionExchange`.
 
@@ -148,7 +148,7 @@ These pages do not have access to the tenant context because they run before ten
 
 ## Related pages
 
-- [Admin Overview](/applications/admin/) — the full map of pages
+- [Admin Overview](/applications/web/) — the full map of pages
 - [Mobile — Authentication](/applications/mobile/authentication/) — the mobile-side sign-in flow (Google OAuth + pre-signup Lambda)
 - [Architecture](/architecture/) — where the admin app sits in the three-tier deployment model
 - [Deploy Configuration](/deploy/configuration/) — the Cognito user pool and identity provider setup

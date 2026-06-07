@@ -2,10 +2,10 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { defineConfig } from "electron-vite";
 import { loadEnv, mergeConfig, type UserConfig as ViteUserConfig } from "vite";
-import spacesConfig from "../spaces/vite.config";
+import webConfig from "../web/vite.config";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
-const spacesDir = resolve(rootDir, "../spaces");
+const webDir = resolve(rootDir, "../web");
 const bundledWorkspaceDeps = [
   "@thinkwork/deployment-profile",
   "@thinkwork/desktop-ipc",
@@ -18,18 +18,16 @@ const DESKTOP_BUILD_ENV_KEYS = [
   "THINKWORK_DESKTOP_VERSION",
 ] as const;
 
-async function resolveSpacesConfig(env: {
+async function resolveWebConfig(env: {
   command: "build" | "serve";
   mode: string;
 }): Promise<ViteUserConfig> {
   const baseConfig =
-    typeof spacesConfig === "function"
-      ? await spacesConfig(env)
-      : await spacesConfig;
+    typeof webConfig === "function" ? await webConfig(env) : await webConfig;
 
   return mergeConfig(baseConfig, {
-    root: spacesDir,
-    envDir: spacesDir,
+    root: webDir,
+    envDir: webDir,
     define: {
       __DESKTOP_BUILD__: "true",
     },
@@ -37,14 +35,14 @@ async function resolveSpacesConfig(env: {
       outDir: resolve(rootDir, "out/renderer"),
       emptyOutDir: true,
       rollupOptions: {
-        input: resolve(spacesDir, "index.html"),
+        input: resolve(webDir, "index.html"),
       },
     },
   } satisfies ViteUserConfig);
 }
 
-function loadSpacesEnv(mode: string): Record<string, string> {
-  const env = loadEnv(mode, spacesDir, ["VITE_"]);
+function loadWebEnv(mode: string): Record<string, string> {
+  const env = loadEnv(mode, webDir, ["VITE_"]);
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("VITE_") && value) env[key] = value;
   }
@@ -56,7 +54,7 @@ function loadSpacesEnv(mode: string): Record<string, string> {
 }
 
 export default defineConfig(async (env) => {
-  const spacesEnv = loadSpacesEnv(env.mode);
+  const webEnv = loadWebEnv(env.mode);
 
   return {
     main: {
@@ -66,7 +64,7 @@ export default defineConfig(async (env) => {
             process.env.THINKWORK_APPLE_TEAM_ID ??
             "",
         ),
-        __THINKWORK_DESKTOP_ENV__: JSON.stringify(spacesEnv),
+        __THINKWORK_DESKTOP_ENV__: JSON.stringify(webEnv),
       },
       build: {
         externalizeDeps: {
@@ -95,6 +93,6 @@ export default defineConfig(async (env) => {
         },
       },
     },
-    renderer: await resolveSpacesConfig(env),
+    renderer: await resolveWebConfig(env),
   };
 });

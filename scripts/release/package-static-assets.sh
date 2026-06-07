@@ -5,9 +5,8 @@
 #   bash scripts/release/package-static-assets.sh [output-dir]
 #
 # Expected build outputs:
-#   apps/admin/dist      -> admin.tar.gz
-#   apps/spaces/dist    -> spaces.tar.gz
-#   docs/dist            -> docs.tar.gz
+#   apps/web/dist -> web.tar.gz
+#   docs/dist     -> docs.tar.gz
 
 set -Eeuo pipefail
 
@@ -52,6 +51,5 @@ package_site() {
 }
 
 echo "Packaging static release assets -> ${OUT_DIR}"
-package_site "admin" "$REPO_ROOT/apps/admin/dist"
-package_site "spaces" "$REPO_ROOT/apps/spaces/dist"
+package_site "web" "$REPO_ROOT/apps/web/dist"
 package_site "docs" "$REPO_ROOT/docs/dist"

@@ -8,14 +8,14 @@ import { Aside } from "@astrojs/starlight/components";
 The Settings page is the canonical read-out of the tenant's configuration and the underlying deployment. Most of it is **read-only** — configuration lives in Terraform and the admin app reflects what's actually deployed, rather than offering a separate configuration store that could drift from the real state.
 
 **Route:** `/settings`  
-**File:** `apps/admin/src/routes/_authed/_tenant/settings.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/settings.tsx`
 
 ## Layout
 
 The page is a stack of four cards: Organization, Configuration, Deployment, and Resources & URLs.
 
 Optional infrastructure toggles such as Cognee and Twenty CRM live in
-[Managed Applications](/applications/admin/managed-applications/) inside
+[Managed Applications](/applications/web/managed-applications/) inside
 Spaces/Desktop Settings -> General. The Settings page remains a read-only
 deployment readout.
 
@@ -148,8 +148,8 @@ The deliberately heavy use of "No — Terraform" is the design philosophy: tenan
 
 ## Related pages
 
-- [Humans](/applications/admin/humans/) — tenant member management (the mutable counterpart to this page)
-- [Managed Applications](/applications/admin/managed-applications/) — optional Cognee and Twenty CRM deployment controls
+- [Humans](/applications/web/humans/) — tenant member management (the mutable counterpart to this page)
+- [Managed Applications](/applications/web/managed-applications/) — optional Cognee and Twenty CRM deployment controls
 - [Deploy Configuration](/deploy/configuration/) — the Terraform reference for every field on this page
 - [CLI](/applications/cli/) — the tool used to change Terraform-backed settings and redeploy
 - [Architecture](/architecture/) — how the tenant fits into the three-tier deployment model

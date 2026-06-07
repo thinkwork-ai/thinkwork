@@ -69,7 +69,7 @@ include:
 - `assertions` — deterministic checks where possible, plus `llm-rubric`
   for behaviors that require judgment.
 - `agentcore_evaluator_ids` — only IDs from
-  `apps/admin/src/components/evaluations/EvalTestCaseForm.tsx`.
+  `apps/web/src/components/settings/SettingsEvalStudio.tsx`.
 - `threshold` — default `0.7`; must be numeric in `(0, 1]`.
 
 Default-agent files are split by risk dimension:

@@ -107,7 +107,7 @@ input UpdateArtifactInput {
   summary: String
   metadata: AWSJSON
   # Nullable AWSDateTime. Set an ISO 8601 timestamp to mark the artifact
-  # as a favorite (drives the apps/spaces sidebar Favorites section);
+  # as a favorite (drives the apps/web sidebar Favorites section);
   # pass `null` to clear the flag. Other fields are unchanged either way.
   favoritedAt: AWSDateTime
 }
@@ -146,7 +146,7 @@ extend type Query {
     type: ArtifactType
     status: ArtifactStatus
     # When true, return only artifacts with a non-null favoritedAt,
-    # ordered favoritedAt DESC. Drives the apps/spaces sidebar
+    # ordered favoritedAt DESC. Drives the apps/web sidebar
     # Favorites section.
     favoritedOnly: Boolean
     limit: Int

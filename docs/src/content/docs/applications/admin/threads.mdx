@@ -10,7 +10,7 @@ Threads are the canonical record of work in ThinkWork. Every user chat, every in
 ## The thread list
 
 **Route:** `/threads`  
-**File:** `apps/admin/src/routes/_authed/_tenant/threads/index.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/threads/index.tsx`
 
 The list is the most feature-dense page in the admin app. It supports:
 
@@ -51,7 +51,7 @@ Both trigger a `reexecuteThreads({ requestPolicy: "network-only" })` call. The l
 ## Thread detail
 
 **Route:** `/threads/:threadId`  
-**File:** `apps/admin/src/routes/_authed/_tenant/threads/$threadId.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/threads/$threadId.tsx`
 
 The detail page is a two-pane layout on larger screens: a main content column with the timeline and an optional right sidebar with thread properties, sub-tasks, attachments, and artifacts. On small screens the sidebar becomes a bottom sheet.
 
@@ -109,7 +109,7 @@ Beyond the explicit status, an additional **inbox status** is computed for each 
 2. Group by assignee to see who's got what
 3. Click into a row to read the timeline
 4. Use the inline status picker to move the thread through its lifecycle
-5. If the thread needs a human decision that the agent is waiting on, approve it from the [Inbox](/applications/admin/inbox/)
+5. If the thread needs a human decision that the agent is waiting on, approve it from the [Inbox](/applications/web/inbox/)
 
 ### Debug a bad turn
 
@@ -128,9 +128,9 @@ Beyond the explicit status, an additional **inbox status** is computed for each 
 
 ## Related pages
 
-- [Inbox](/applications/admin/inbox/) — the approval queue for agent-requested human-in-the-loop actions
-- [Tenant Agent](/applications/admin/agents/) — the platform agent that runs managed turns
-- [Spaces](/applications/admin/spaces/) — the workrooms that scope thread context
-- [Artifacts](/applications/admin/artifacts/) — tenant-wide view of thread-generated artifacts
-- [Analytics](/applications/admin/analytics/) — aggregate metrics over threads
+- [Inbox](/applications/web/inbox/) — the approval queue for agent-requested human-in-the-loop actions
+- [Tenant Agent](/applications/web/agents/) — the platform agent that runs managed turns
+- [Spaces](/applications/web/spaces/) — the workrooms that scope thread context
+- [Artifacts](/applications/web/artifacts/) — tenant-wide view of thread-generated artifacts
+- [Analytics](/applications/web/analytics/) — aggregate metrics over threads
 - [Threads (concept)](/concepts/threads/) — the underlying thread model

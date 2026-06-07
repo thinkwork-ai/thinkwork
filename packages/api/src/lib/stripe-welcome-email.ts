@@ -23,7 +23,7 @@ export interface WelcomeEmailInput {
   plan: string;
   tenantId: string;
   sessionId: string;
-  adminUrl: string;
+  appUrl: string;
 }
 
 const DEFAULT_FROM_EMAIL = "hello@agents.thinkwork.ai";
@@ -46,11 +46,11 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function buildWelcomeLink(adminUrl: string, sessionId: string): string {
+function buildWelcomeLink(appUrl: string, sessionId: string): string {
   // Mirrors the Stripe success_url. Clicking this link is equivalent to
   // re-visiting the post-checkout landing page (which kicks Google OAuth
   // and lets bootstrapUser claim the paid tenant).
-  const base = adminUrl.replace(/\/$/, "");
+  const base = appUrl.replace(/\/$/, "");
   return `${base}/onboarding/welcome?session_id=${encodeURIComponent(sessionId)}`;
 }
 
@@ -58,7 +58,7 @@ export async function sendStripeWelcomeEmail(
   input: WelcomeEmailInput,
 ): Promise<boolean> {
   const fromEmail = process.env.STRIPE_WELCOME_FROM_EMAIL || DEFAULT_FROM_EMAIL;
-  const link = buildWelcomeLink(input.adminUrl, input.sessionId);
+  const link = buildWelcomeLink(input.appUrl, input.sessionId);
 
   const planLabel =
     input.plan && input.plan !== "unknown"

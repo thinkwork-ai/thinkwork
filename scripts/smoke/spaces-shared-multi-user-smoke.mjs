@@ -41,7 +41,7 @@ const apiKey = first(
 if (!databaseUrl) fail("Missing DATABASE_URL.");
 if (!apiUrl || !apiKey) {
   fail(
-    "Missing GraphQL config. Provide apps/spaces/.env or VITE_GRAPHQL_* env vars.",
+    "Missing GraphQL config. Provide apps/web/.env or VITE_GRAPHQL_* env vars.",
   );
 }
 

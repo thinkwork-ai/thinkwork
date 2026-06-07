@@ -15,7 +15,7 @@ describe("useAppletAPI", () => {
     );
   });
 
-  it("delegates to the host registry when apps/spaces registers it", () => {
+  it("delegates to the host registry when apps/web registers it", () => {
     const api: AppletAPI = {
       useAppletState: vi.fn(),
       useAppletQuery: vi.fn(),

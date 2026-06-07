@@ -2,7 +2,7 @@
 title: Stale localhost Vite server from detached checkout
 date: 2026-06-05
 category: developer-experience
-module: apps/spaces
+module: apps/web
 problem_type: developer_experience
 component: development_workflow
 severity: medium
@@ -38,7 +38,7 @@ detached checkout at `/Users/ericodom/Projects/thinkwork`, not from current
 `origin/main`.
 
 The safe fix was to create a clean worktree from `origin/main`, copy
-`apps/spaces/.env` into it, verify the Spaces tests and typecheck, kill the old
+`apps/web/.env` into it, verify the Spaces tests and typecheck, kill the old
 listener, and restart Vite from the clean worktree on the requested port.
 
 ## Guidance
@@ -74,8 +74,8 @@ For Spaces verification, copy the ignored env file before starting the dev
 server:
 
 ```bash
-cp /Users/ericodom/Projects/thinkwork/apps/spaces/.env \
-  /Users/ericodom/Projects/thinkwork/.Codex/worktrees/kg-spaces-data-ui/apps/spaces/.env
+cp /Users/ericodom/Projects/thinkwork/apps/web/.env \
+  /Users/ericodom/Projects/thinkwork/.Codex/worktrees/kg-spaces-data-ui/apps/web/.env
 ```
 
 Install dependencies from the worktree root:
@@ -88,11 +88,11 @@ pnpm install
 Run focused verification before replacing the listener:
 
 ```bash
-pnpm --filter @thinkwork/spaces test -- \
+pnpm --filter @thinkwork/web test -- \
   SettingsKnowledgeGraph.test.ts \
   KnowledgeGraphExplorer.test.tsx
 
-pnpm --filter @thinkwork/spaces typecheck
+pnpm --filter @thinkwork/web typecheck
 ```
 
 Kill the stale listener only after confirming it is the wrong process:
@@ -105,7 +105,7 @@ Start Spaces explicitly from the clean worktree, even if `5174` is usually
 documented as the admin dev port:
 
 ```bash
-cd /Users/ericodom/Projects/thinkwork/.Codex/worktrees/kg-spaces-data-ui/apps/spaces
+cd /Users/ericodom/Projects/thinkwork/.Codex/worktrees/kg-spaces-data-ui/apps/web
 pnpm dev --host 127.0.0.1 --port 5174
 ```
 
@@ -114,7 +114,7 @@ on `:5174`. The corrected listener was node PID `71225` on
 `127.0.0.1:5174`, with cwd under:
 
 ```bash
-/Users/ericodom/Projects/thinkwork/.Codex/worktrees/kg-spaces-data-ui/apps/spaces
+/Users/ericodom/Projects/thinkwork/.Codex/worktrees/kg-spaces-data-ui/apps/web
 ```
 
 ## Why This Matters
@@ -132,7 +132,7 @@ a known baseline from `origin/main` and protects unrelated user changes.
 
 It also matters because repo guidance says the admin dev server commonly uses
 port `5174`, but ports are not identity. In this incident, the user explicitly
-wanted `apps/spaces` to reuse `5174`. The correct question was not "what
+wanted `apps/web` to reuse `5174`. The correct question was not "what
 usually runs on this port?" but "what process is actually listening, and from
 which cwd?"
 
@@ -172,18 +172,18 @@ git worktree add \
 
 cd /Users/ericodom/Projects/thinkwork/.Codex/worktrees/kg-spaces-data-ui
 
-cp /Users/ericodom/Projects/thinkwork/apps/spaces/.env apps/spaces/.env
+cp /Users/ericodom/Projects/thinkwork/apps/web/.env apps/web/.env
 pnpm install
 ```
 
 Verifying the app before replacing the listener:
 
 ```bash
-pnpm --filter @thinkwork/spaces test -- \
+pnpm --filter @thinkwork/web test -- \
   SettingsKnowledgeGraph.test.ts \
   KnowledgeGraphExplorer.test.tsx
 
-pnpm --filter @thinkwork/spaces typecheck
+pnpm --filter @thinkwork/web typecheck
 ```
 
 Restarting Spaces on the requested port:
@@ -191,7 +191,7 @@ Restarting Spaces on the requested port:
 ```bash
 kill 54166
 
-cd /Users/ericodom/Projects/thinkwork/.Codex/worktrees/kg-spaces-data-ui/apps/spaces
+cd /Users/ericodom/Projects/thinkwork/.Codex/worktrees/kg-spaces-data-ui/apps/web
 pnpm dev --host 127.0.0.1 --port 5174
 ```
 
@@ -217,4 +217,4 @@ curl -s http://127.0.0.1:5174/src/components/settings/knowledge-graph/KnowledgeG
 - [Cognee Thread Ingest Explorer Validation Pattern](../best-practices/cognee-thread-ingest-explorer-2026-06-04.md) - product-area validation for the same Knowledge Graph Explorer surface.
 - [Stale tsbuildinfo in fresh worktree breaks api typecheck via degraded Drizzle inference](../build-errors/worktree-stale-tsbuildinfo-drizzle-implicit-any-2026-04-24.md) - adjacent stale-worktree pattern in TypeScript compile caches.
 - [Update Cognito callback URLs](../runbooks/update-cognito-callback-urls-2026-05-22.md) - related local port concern when new dev-server ports need OAuth callback allowlisting.
-- [apps/spaces urql document cache doesn't auto-invalidate on live events](../integration-issues/spaces-urql-doc-cache-no-live-invalidation.md) - same app family and stale-looking UI symptom, different root cause.
+- [apps/web urql document cache doesn't auto-invalidate on live events](../integration-issues/spaces-urql-doc-cache-no-live-invalidation.md) - same app family and stale-looking UI symptom, different root cause.

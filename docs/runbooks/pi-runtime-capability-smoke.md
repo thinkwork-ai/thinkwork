@@ -6,7 +6,7 @@ The smoke uses GraphQL to create a chat thread, sends a user message with `sendM
 
 ## Prerequisites
 
-- `apps/admin/.env` exists with `VITE_GRAPHQL_HTTP_URL` and `VITE_GRAPHQL_API_KEY`, or set `THINKWORK_GRAPHQL_URL` and `THINKWORK_GRAPHQL_API_KEY`.
+- `` exists with `VITE_GRAPHQL_HTTP_URL` and `VITE_GRAPHQL_API_KEY`, or set `THINKWORK_GRAPHQL_URL` and `THINKWORK_GRAPHQL_API_KEY`.
 - A deployed agent whose `runtime` is `PI`.
 - The agent is reachable through the normal thread-message path.
 - For `execute_code`, the agent/template must have Code Sandbox enabled and sandbox preflight must report a ready interpreter for the invoking user.

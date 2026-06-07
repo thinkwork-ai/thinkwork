@@ -463,7 +463,7 @@ Run `thinkwork mcp <sub> --help` for the full options list on each subcommand, i
 
 ### mcp key create / list / revoke
 
-Per-tenant Bearer tokens for the admin-ops MCP server (served at `mcp.thinkwork.ai/mcp/admin`). Each token is scoped to one tenant; callers present it as `Authorization: Bearer tkm_…` against the admin-ops HTTP endpoint.
+Per-tenant Bearer tokens for the admin-ops MCP server (served at `mcp.thinkwork.ai/mcp/web`). Each token is scoped to one tenant; callers present it as `Authorization: Bearer tkm_…` against the admin-ops HTTP endpoint.
 
 ```bash
 # Mint a new tkm_ token (printed ONCE — save it immediately)
@@ -484,7 +484,7 @@ One-shot idempotent provisioning of the admin-ops MCP for a tenant: mints a fres
 
 ```bash
 # Single tenant (interactive picker or -t)
-thinkwork mcp provision -t <slug> [--url https://mcp.thinkwork.ai/mcp/admin] -s <stage>
+thinkwork mcp provision -t <slug> [--url https://mcp.thinkwork.ai/mcp/web] -s <stage>
 
 # Backfill every tenant at once
 thinkwork mcp provision --all -s <stage>
@@ -507,7 +507,7 @@ thinkwork tools web-search set|test|disable|clear
 
 Run `thinkwork tools --help` for the full subcommand tree.
 
-Use [Spaces -> Built-in Tools](/applications/admin/builtin-tools/) to inspect the full built-in catalog, configure Firecrawl Web Extraction, test credentials, and confirm the tenant platform agent has access to `execute_code`, `browser_automation`, `web_search`, `web_extract`, and `send_email`.
+Use [Spaces -> Built-in Tools](/applications/web/builtin-tools/) to inspect the full built-in catalog, configure Firecrawl Web Extraction, test credentials, and confirm the tenant platform agent has access to `execute_code`, `browser_automation`, `web_search`, `web_extract`, and `send_email`.
 
 ---
 
@@ -1026,7 +1026,7 @@ Tenant (workspace) lifecycle — create, rename, configure plan and per-tenant s
 thinkwork tenant <subcommand> [args] [options]
 ```
 
-All subcommands accept `-s/--stage` and the global `--json`. Alias: `tenants`. **Note:** `list` and `get` use the `@thinkwork/admin-ops` REST client; `create`, `update`, and `settings get`/`set` use GraphQL via the standard CLI client. Mixed substrate is intentional pending admin-ops parity.
+All subcommands accept `-s/--stage` and the global `--json`. Alias: `tenants`. **Note:** `list` and `get` use the `@thinkwork/web-ops` REST client; `create`, `update`, and `settings get`/`set` use GraphQL via the standard CLI client. Mixed substrate is intentional pending admin-ops parity.
 
 ### tenant list / get
 
@@ -1069,8 +1069,8 @@ The old per-agent CLI group is retired. The command files remain so older script
 
 Use the admin web app for the current model:
 
-- [Tenant Agent](/applications/admin/agents/) — tenant-wide platform-agent defaults, workspace, and folder specialists.
-- [Spaces](/applications/admin/spaces/) — Space workspace, tools, memory, triggers, settings, and members.
+- [Tenant Agent](/applications/web/agents/) — tenant-wide platform-agent defaults, workspace, and folder specialists.
+- [Spaces](/applications/web/spaces/) — Space workspace, tools, memory, triggers, settings, and members.
 
 When invoked, retired `thinkwork agent ...` commands report:
 
@@ -1086,7 +1086,7 @@ Check `thinkwork --help` in your installed CLI version before scripting `thinkwo
 thinkwork agent <subcommand> [args] [options]
 ```
 
-Do not use retired subcommands for new automation. Space email is configured from [Admin — Spaces](/applications/admin/spaces/), not through `thinkwork agent email`.
+Do not use retired subcommands for new automation. Space email is configured from [Admin — Spaces](/applications/web/spaces/), not through `thinkwork agent email`.
 
 ---
 

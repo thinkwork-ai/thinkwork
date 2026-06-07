@@ -94,7 +94,7 @@ These must be set in every deployment. There are no defaults.
 | ---------------------------- | ------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `create_cognito`             | bool         | `true`  | Whether to create a new Cognito User Pool and Identity Pool.                                                                                |
 | `cognito_domain_prefix`      | string       | `""`    | Cognito hosted UI domain prefix (e.g. `thinkwork-dev` → `thinkwork-dev.auth.us-east-1.amazoncognito.com`). Defaults to `thinkwork-{stage}`. |
-| `cognito_callback_urls`      | list(string) | `[]`    | OAuth callback URLs for the Cognito app client. Add your admin app and end-user app URLs.                                                   |
+| `cognito_callback_urls`      | list(string) | `[]`    | OAuth callback URLs for the Cognito app client. Add your web app URLs.                                                   |
 | `cognito_logout_urls`        | list(string) | `[]`    | OAuth logout URLs.                                                                                                                          |
 | `google_oauth_client_id`     | string       | `""`    | Google OAuth client ID for Google identity provider. Leave empty to disable Google sign-in.                                                 |
 | `google_oauth_client_secret` | string       | `""`    | Google OAuth client secret. Stored in Secrets Manager.                                                                                      |
@@ -109,7 +109,7 @@ These must be set in every deployment. There are no defaults.
 | --------------------- | ------ | ------- | ----------------------------------------------------------------------------------------------------- |
 | `domain_name`         | string | `""`    | Root domain for the deployment (e.g. `thinkwork.example.com`). Leave empty to use CloudFront domains. |
 | `hosted_zone_id`      | string | `""`    | Route53 hosted zone ID for `domain_name`. Required if `domain_name` is set.                           |
-| `admin_app_subdomain` | string | `"app"` | Subdomain for the admin app (e.g. `app.thinkwork.example.com`).                                       |
+| `admin_app_subdomain` | string | `"app"` | Subdomain for the web app (e.g. `app.thinkwork.example.com`).                                       |
 | `api_subdomain`       | string | `"api"` | Subdomain for API Gateway (e.g. `api.thinkwork.example.com`).                                         |
 
 ## Memory

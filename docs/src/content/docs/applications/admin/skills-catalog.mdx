@@ -15,7 +15,7 @@ Two sources feed the catalog:
 ## The list view
 
 **Route:** `/skills`  
-**File:** `apps/admin/src/routes/_authed/_tenant/skills/index.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/skills/index.tsx`
 
 The list is a unified `DataTable` with tabbed filtering: **All**, **Installed**, **Custom**, and **Catalog**. Each row shows:
 
@@ -52,7 +52,7 @@ When an operator views Installed skills, the list calls `checkUpgradeable()` in 
 ## The skill detail view
 
 **Route:** `/skills/:slug`  
-**File:** `apps/admin/src/routes/_authed/_tenant/skills/$slug.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/skills/$slug.tsx`
 
 The detail view is a full file-tree browser plus editor, sized for real skill authoring work:
 
@@ -78,7 +78,7 @@ Destructive actions (uninstall, delete file, upgrade) use alert dialogs and do n
 ## The skill builder
 
 **Route:** `/skills/builder`  
-**File:** `apps/admin/src/routes/_authed/_tenant/skills/builder.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/skills/builder.tsx`
 
 The builder is a guided wizard for creating tenant-owned custom skills from scratch. Four steps:
 
@@ -96,7 +96,7 @@ The builder is deliberately small. Serious skill authoring — multi-file packs,
 ## Distinction: workspace skills vs the Skills Catalog
 
 - **Skills Catalog** (this page) — browse, install, and author skills at the **tenant** level. Skills here exist whether or not any agent uses them.
-- **Agent or template Workspace tab** — materialize an editable skill under `workspace/skills/<slug>/SKILL.md` so it can affect a real invocation. See [Agents → Workspace](/applications/admin/agents/#workspace).
+- **Agent or template Workspace tab** — materialize an editable skill under `workspace/skills/<slug>/SKILL.md` so it can affect a real invocation. See [Agents → Workspace](/applications/web/agents/#workspace).
 
 A workspace skill goes through two steps before it affects a real invocation: install or author it at the tenant/catalog level, then add it to an agent or template workspace.
 
@@ -111,7 +111,7 @@ Built-in tools do not follow this path. Tools such as `web_search` and `send_ema
 
 ## Related pages
 
-- [Agents](/applications/admin/agents/) — where agent workspaces and workspace skills are managed
+- [Agents](/applications/web/agents/) — where agent workspaces and workspace skills are managed
 - [Authoring Guide: Skill Packs](/guides/skill-packs/) — the authoring reference for serious skill development
-- [Tenant MCP Servers](/applications/admin/mcp-servers/) — the other path for exposing external capabilities to agents
-- [Built-in Tools](/applications/admin/builtin-tools/) — platform-owned tools that are injected by runtime configuration instead of installed as skill packs
+- [Tenant MCP Servers](/applications/web/mcp-servers/) — the other path for exposing external capabilities to agents
+- [Built-in Tools](/applications/web/builtin-tools/) — platform-owned tools that are injected by runtime configuration instead of installed as skill packs

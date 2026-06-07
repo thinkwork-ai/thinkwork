@@ -1,7 +1,7 @@
 /**
  * Shared types and constants for the scheduled-job (Automations) detail UI.
  *
- * Both `apps/admin` and `apps/spaces` render the same backend row from
+ * Web and mobile render the same backend row from
  * `GET /api/thread-turns` and need the same visual vocabulary for status
  * pills. Keeping the type + colors here ensures the two apps cannot drift.
  */

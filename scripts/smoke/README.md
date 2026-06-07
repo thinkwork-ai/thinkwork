@@ -90,7 +90,7 @@ Live mode reads `terraform/examples/greenfield` outputs unless
 `SMOKE_TERRAFORM_DIR` points elsewhere. `SMOKE_TWENTY_URL` can supply the
 public URL directly when Terraform outputs are unavailable. GraphQL deployment
 status and managed-app health are checked when API credentials are available
-from `apps/spaces/.env` or equivalent `VITE_GRAPHQL_HTTP_URL` plus
+from `apps/web/.env` or equivalent `VITE_GRAPHQL_HTTP_URL` plus
 `API_AUTH_SECRET`/`THINKWORK_API_SECRET` or an API key.
 
 Passing live mode means:
@@ -131,7 +131,7 @@ SMOKE_ENABLE_KNOWLEDGE_GRAPH=1 \
   node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs
 ```
 
-Live mode requires deployed GraphQL credentials from `apps/spaces/.env` or
+Live mode requires deployed GraphQL credentials from `apps/web/.env` or
 equivalent `VITE_GRAPHQL_HTTP_URL`/`GRAPHQL_HTTP_URL` plus
 `API_AUTH_SECRET`/`THINKWORK_API_SECRET` or an API key. The default live path
 uses bearer/API-key service auth scoped by `SMOKE_TENANT_ID`; alternatively,

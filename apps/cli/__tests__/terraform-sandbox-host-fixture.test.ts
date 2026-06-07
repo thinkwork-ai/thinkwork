@@ -41,7 +41,7 @@ const THINKWORK_VARS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/variables.tf",
 );
-const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-spaces.sh");
+const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-web.sh");
 const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
 const RELEASE_DESKTOP_WORKFLOW = resolve(
   REPO_ROOT,
@@ -264,7 +264,7 @@ describe("U3 — sandbox variables", () => {
       /computer_sandbox_certificate_arn\s*=\s*local\.www_dns_enabled \? aws_acm_certificate_validation\.computer_sandbox\[0\]\.certificate_arn : ""/,
     );
     expect(source).toMatch(
-      /computer_sandbox_allowed_parent_origins\s*=\s*local\.www_dns_enabled \? "https:\/\/\$\{local\.app_domain\},https:\/\/\$\{local\.admin_domain\}" : ""/,
+      /computer_sandbox_allowed_parent_origins\s*=\s*local\.www_dns_enabled \? "https:\/\/\$\{local\.app_domain\}" : ""/,
     );
   });
 
@@ -296,9 +296,7 @@ describe("U10 — host CSP wired for computer_site", () => {
   it("computer_site opts into inline_response_headers carrying the host CSP profile", () => {
     // Plan-012 U10: the parent SPA's host CSP is set via the
     // CloudFront response-headers policy, not via <meta> in
-    // index.html. Host CSP allowlists the sandbox subdomain in
-    // frame-src and permits only ThinkWork Admin to frame the Computer
-    // artifact route for admin-side live app inspection.
+    // index.html. Host CSP allowlists the sandbox subdomain in frame-src.
     const source = read(THINKWORK_MAIN);
     const computerSiteBlock = source.match(
       /module "computer_site"\s*\{[\s\S]*?\n\}/,
@@ -319,8 +317,8 @@ describe("U10 — host CSP wired for computer_site", () => {
     expect(source).toMatch(
       /frame-ancestors \$\{local\.computer_host_frame_ancestors\}/,
     );
-    expect(source).toMatch(/var\.admin_domain/);
-    expect(source).toMatch(/module\.admin_site\.distribution_domain/);
+    expect(source).not.toMatch(/var\.admin_domain/);
+    expect(source).not.toMatch(/module\.admin_site\.distribution_domain/);
     // connect-src must allow API Gateway for GraphQL queries/mutations,
     // AppSync for the streaming wire, Cognito IdP for SDK calls, and
     // Cognito Hosted UI for the OAuth callback token exchange.
@@ -380,7 +378,7 @@ describe("U10 — host CSP wired for computer_site", () => {
 });
 
 describe("U11.5 — computer deploy script sandbox enforcement", () => {
-  it("build-spaces requires sandbox outputs and does not emit a legacy loader flag", () => {
+  it("build-web requires sandbox outputs and does not emit a legacy loader flag", () => {
     const source = read(BUILD_COMPUTER);
     expect(source).toMatch(
       /COMPUTER_SANDBOX_URL="\$\(tf_output_cached_raw computer_sandbox_url/,
@@ -400,13 +398,13 @@ describe("Computer Mapbox production wiring", () => {
     );
     // The Spaces web build moved to release-desktop.yml (deploy-sync: web ships
     // on the desktop release cut), which is where the MAPBOX_PUBLIC_TOKEN env
-    // now feeds build-spaces.sh → VITE_MAPBOX_PUBLIC_TOKEN.
+    // now feeds build-web.sh → VITE_MAPBOX_PUBLIC_TOKEN.
     expect(read(RELEASE_DESKTOP_WORKFLOW)).toMatch(
       /MAPBOX_PUBLIC_TOKEN:\s*\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
     );
   });
 
-  it("build-spaces allows CI to override the Terraform output token and passes it to the iframe shell", () => {
+  it("build-web allows CI to override the Terraform output token and passes it to the iframe shell", () => {
     const source = read(BUILD_COMPUTER);
     expect(source).toContain(
       "MAPBOX_PUBLIC_TOKEN=\"${MAPBOX_PUBLIC_TOKEN:-$(tf_output_cached_raw mapbox_public_token 2>/dev/null || echo '')}\"",

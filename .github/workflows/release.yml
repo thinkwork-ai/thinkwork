@@ -62,8 +62,7 @@ jobs:
 
       - name: Build static sites
         run: |
-          pnpm --filter @thinkwork/admin build
-          pnpm --filter @thinkwork/spaces build
+          pnpm --filter @thinkwork/web build
           pnpm --filter @thinkwork/docs build
           bash scripts/release/package-static-assets.sh dist/release/static
 
@@ -134,8 +133,7 @@ jobs:
             --artifact-root dist/release \
             --base-url "${{ steps.release.outputs.asset_base_url }}" \
             --lambda-dir dist/release/lambdas \
-            --artifact "name=admin,type=static-site,path=dist/release/static/admin.tar.gz" \
-            --artifact "name=spaces,type=static-site,path=dist/release/static/spaces.tar.gz" \
+            --artifact "name=web,type=static-site,path=dist/release/static/web.tar.gz" \
             --artifact "name=docs,type=static-site,path=dist/release/static/docs.tar.gz" \
             --image "name=agentcore-pi-amd64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-pi-amd64,digest=${{ steps.pi-amd64.outputs.digest }},architecture=amd64" \
             --image "name=agentcore-pi-arm64,repository=${AGENTCORE_REPOSITORY},tag=${GITHUB_REF_NAME}-pi-arm64,digest=${{ steps.pi-arm64.outputs.digest }},architecture=arm64" \

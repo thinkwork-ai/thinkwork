@@ -1,7 +1,7 @@
 ################################################################################
 # Static Site — App Module
 #
-# S3 + CloudFront distribution for static web apps (apps/admin, docs site).
+# S3 + CloudFront distribution for static web apps.
 # Reusable for any static frontend that needs a CDN + custom domain.
 ################################################################################
 
@@ -55,7 +55,7 @@ variable "viewer_request_function_code" {
 # Response-headers policy (optional, plan-012 U3)
 #
 # Two opt-in forms, both backwards compatible — existing callers
-# (computer_site, admin_site, docs_site, www_site) leave both unset and the
+# (computer_site, docs_site, www_site) leave both unset and the
 # distribution is created with no response-headers policy attached:
 #
 #   - Pass `response_headers_policy_id` to attach an existing policy by id.

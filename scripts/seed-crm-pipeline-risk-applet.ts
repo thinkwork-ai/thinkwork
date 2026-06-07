@@ -8,11 +8,11 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "..");
 const SOURCE_PATH = resolve(
   REPO_ROOT,
-  "apps/spaces/src/test/fixtures/crm-pipeline-risk-applet/source.tsx",
+  "apps/web/src/test/fixtures/crm-pipeline-risk-applet/source.tsx",
 );
 const METADATA_PATH = resolve(
   REPO_ROOT,
-  "apps/spaces/src/test/fixtures/crm-pipeline-risk-applet/metadata.json",
+  "apps/web/src/test/fixtures/crm-pipeline-risk-applet/metadata.json",
 );
 
 const LOOKUP_QUERY = `

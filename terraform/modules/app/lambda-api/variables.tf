@@ -333,7 +333,7 @@ variable "agentcore_pi_function_arn" {
 }
 
 variable "admin_url" {
-  description = "Admin app URL (e.g. https://d3li9vbqnhv7w.cloudfront.net)"
+  description = "Deprecated compatibility input for the unified web app URL (e.g. https://app.thinkwork.ai)."
   type        = string
   default     = ""
 }

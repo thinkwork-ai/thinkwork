@@ -12,8 +12,7 @@ try {
   const outputPath = required("--summary");
   const targets = [
     ["api_endpoint", "api"],
-    ["admin_url", "admin"],
-    ["computer_url", "spaces"],
+    ["app_url", "web"],
     ["docs_url", "docs"],
   ]
     .map(([output, name]) => ({

@@ -107,19 +107,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/build-desktop.sh "${STAGE}" --publish always
 
-      # Deploy-sync: ship the Spaces web app (app.thinkwork.ai) on the same
+      # Deploy-sync: ship the web app (app.thinkwork.ai) on the same
       # release cut that builds the desktop artifact, so the web app and the
-      # desktop app always update together. deploy.yml no longer deploys Spaces
+      # desktop app always update together. deploy.yml no longer deploys web
       # per-merge — this is the single web-deploy trigger. Reuses the AWS creds
       # + terraform init already configured above.
-      - name: Build and deploy Spaces web app
+      - name: Build and deploy web app
         env:
           MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}
         run: |
           # Stamp the same release version the desktop build uses so the web
           # sidebar header shows the running build (e.g. "canary 95").
           VITE_APP_VERSION="${GITHUB_REF_NAME#desktop-v}" \
-            bash scripts/build-spaces.sh "${STAGE}"
+            bash scripts/build-web.sh "${STAGE}"
 
       - name: Publish desktop update metadata
         env:

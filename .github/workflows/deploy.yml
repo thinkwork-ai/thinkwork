@@ -36,8 +36,7 @@ jobs:
       runtime_container_stale: ${{ steps.runtime-image.outputs.stale }}
       terraform: ${{ steps.filter.outputs.terraform }}
       workspace_defaults: ${{ steps.filter.outputs.workspace_defaults }}
-      admin: ${{ steps.filter.outputs.admin }}
-      spaces: ${{ steps.filter.outputs.spaces }}
+      web: ${{ steps.filter.outputs.web }}
       docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
@@ -78,10 +77,8 @@ jobs:
               - 'packages/api/src/handlers/seed-workspace-defaults.ts'
               - 'packages/api/src/lib/spaces/customer-onboarding-seed.ts'
               - 'packages/api/src/lib/spaces/customer-onboarding-source-files.ts'
-            admin:
-              - 'apps/admin/**'
-            spaces:
-              - 'apps/spaces/**'
+            web:
+              - 'apps/web/**'
             docs:
               - 'docs/**'
 
@@ -381,7 +378,7 @@ jobs:
     #
     # Gating: only run when something terraform-relevant changed.
     # Docs-only, admin-only, or mobile-only PRs skip terraform-apply;
-    # downstream publish jobs (build-admin/spaces/docs) accept skipped
+    # downstream publish jobs (build-web/docs) accept skipped
     # as success. We deliberately do NOT add `build-container` here even
     # to read `build-container.result` — that would reintroduce the
     # 20-minute queue gap. Instead we gate on the same detect-changes
@@ -1002,7 +999,7 @@ jobs:
           # WWW_DOMAIN is also configured, which enables the module. NB:
           # despite the name, www_dns no longer manages the marketing-site
           # apex/www DNS (extracted to thinkwork-ai/thinkworkwebsite); it
-          # still owns the shared ACM cert + docs/admin/api CNAMEs.
+          # still owns the shared ACM cert + docs/web/api CNAMEs.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || 'placeholder-not-configured' }}
         run: |
           LAMBDA_DIR=""
@@ -1333,61 +1330,10 @@ jobs:
           export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=require"
           bash scripts/db-migrate-manual.sh
 
-  # ── Build & deploy admin app ─────────────────────────────────────
-  build-admin:
-    name: Build & Deploy Admin
-    needs: [terraform-apply]
-    # Allow terraform-apply == skipped: S3 bucket + CloudFront exist
-    # from prior applies; this job only writes a fresh SPA bundle.
-    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Terraform init
-        working-directory: terraform/examples/greenfield
-        run: |
-          terraform init
-          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
-
-      - name: Build & deploy
-        run: bash scripts/build-admin.sh ${{ env.STAGE }}
-        env:
-          VITE_ADMIN_EXTENSION_SAMPLE_ENABLED: ${{ vars.ADMIN_EXTENSION_SAMPLE_ENABLED }}
-          VITE_ADMIN_EXTENSION_SAMPLE_ID: ${{ vars.ADMIN_EXTENSION_SAMPLE_ID }}
-          VITE_ADMIN_EXTENSION_SAMPLE_LABEL: ${{ vars.ADMIN_EXTENSION_SAMPLE_LABEL }}
-          VITE_ADMIN_EXTENSION_SAMPLE_URL: ${{ vars.ADMIN_EXTENSION_SAMPLE_URL }}
-          VITE_ADMIN_EXTENSION_SAMPLE_GRAPHQL_URL: ${{ vars.ADMIN_EXTENSION_SAMPLE_GRAPHQL_URL }}
-          VITE_ADMIN_EXTENSION_SAMPLE_NAV_GROUP: ${{ vars.ADMIN_EXTENSION_SAMPLE_NAV_GROUP }}
-          VITE_ADMIN_EXTENSION_SAMPLE_EMBED_MODE: ${{ vars.ADMIN_EXTENSION_SAMPLE_EMBED_MODE }}
-        # API_AUTH_SECRET is intentionally NOT passed to the admin build.
-        # The admin SPA authenticates REST calls with the user's Cognito
-        # id token (see apps/admin/src/lib/api-fetch.ts). Never re-inject
-        # the secret here — Vite inlines it into the public JS bundle.
-        # The server-side Lambda env injection (terraform-apply step
-        # above) is a separate path and remains untouched.
-
-  # NOTE: the Spaces SPA (apps/spaces → app.thinkwork.ai) is intentionally NOT
+  # NOTE: the web app (apps/web → app.thinkwork.ai) is intentionally NOT
   # deployed on every push to main. It now ships only when a desktop release is
   # cut (release-desktop.yml on a `desktop-v*` tag), so the web app and the
-  # desktop app always update together. See the `build-spaces` step there.
+  # desktop app always update together. See the `build-web` step there.
 
   # ── Build & deploy docs site ────────────────────────────────────
   build-docs:
@@ -1566,7 +1512,6 @@ jobs:
         terraform-apply,
         update-agentcore-runtimes,
         migration-drift-check,
-        build-admin,
         build-docs,
         bootstrap,
         workspace-layout-migration,
@@ -1636,8 +1581,7 @@ jobs:
           echo "╠══════════════════════════════════════════════════════════════╣"
           echo "║ Stage: ${{ env.STAGE }}"
           echo "║"
-          echo "║ Admin App:  $(tf_output_raw admin_url || echo 'N/A')"
-          echo "║ Spaces:     $(tf_output_raw computer_url || echo 'N/A')"
+          echo "║ Web App:    $(tf_output_raw app_url || echo 'N/A')"
           echo "║ Docs Site:  $(tf_output_raw docs_url || echo 'N/A')"
           echo "║ API:        $(tf_output_raw api_endpoint || echo 'N/A')"
           echo "║ AppSync:    $(tf_output_raw appsync_api_url || echo 'N/A')"
@@ -1652,7 +1596,6 @@ jobs:
           echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"
           echo "║   AgentCore Runtime:      ${{ needs.update-agentcore-runtimes.result }}"
           echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
-          echo "║   Build Admin:            ${{ needs.build-admin.result }}"
           echo "║   Build Docs:             ${{ needs.build-docs.result }}"
           echo "║   Bootstrap:              ${{ needs.bootstrap.result }}"
           echo "╚══════════════════════════════════════════════════════════════╝"

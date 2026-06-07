@@ -2,7 +2,7 @@
  * Best-effort sanitization of a tenant applet theme CSS string before it is
  * persisted/served. This is **defense-in-depth + legacy-data cleanup**, NOT the
  * sole gate: the authoritative control is the client allowlist parser
- * `parseShadcnThemeCss` (apps/spaces/src/applets/theme-tokens.ts), which emits
+ * `parseShadcnThemeCss` (apps/web/src/applets/theme-tokens.ts), which emits
  * only allowlisted `--token: value` pairs (strict name regex + value denylist +
  * length cap) applied via `setProperty` inside a cross-origin sandboxed iframe.
  * The raw CSS string is never injected into a `<style>`/innerHTML sink. Do not

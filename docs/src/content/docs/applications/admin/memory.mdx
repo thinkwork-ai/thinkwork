@@ -5,11 +5,11 @@ description: Browse, search, edit, and visualize retained memory across one agen
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Memory tab is the raw retained-record view inside [Admin — Memory](/applications/admin/knowledge/). It covers both AgentCore managed memory and the optional Hindsight add-on. Use it when you need to inspect what was retained before it is routed into `query_context` or compiled into pages.
+The Memory tab is the raw retained-record view inside [Admin — Memory](/applications/web/knowledge/). It covers both AgentCore managed memory and the optional Hindsight add-on. Use it when you need to inspect what was retained before it is routed into `query_context` or compiled into pages.
 
 **Route:** `/knowledge/memory`
-**Route wrapper:** `apps/admin/src/routes/_authed/_tenant/knowledge/memory.tsx`
-**Tab implementation:** `apps/admin/src/routes/_authed/_tenant/memory/index.tsx`
+**Route wrapper:** `apps/web/src/routes/_authed/_tenant/knowledge/memory.tsx`
+**Tab implementation:** `apps/web/src/routes/_authed/_tenant/memory/index.tsx`
 
 The legacy `/memory` route redirects to this tab.
 
@@ -89,7 +89,7 @@ Deletes are hard deletes. For bulk redaction, operate at the SQL layer with a re
 
 ## Related Pages
 
-- [Admin — Memory](/applications/admin/knowledge/) — the combined operator surface
+- [Admin — Memory](/applications/web/knowledge/) — the combined operator surface
 - [Memory](/concepts/knowledge/) — the product model
 - [Retained Memory](/concepts/knowledge/memory/) — memory contract and backend behavior
 - [Compiled Pages](/concepts/knowledge/compounding-memory/) — how memory becomes durable pages

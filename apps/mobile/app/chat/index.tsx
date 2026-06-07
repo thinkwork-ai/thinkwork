@@ -27,7 +27,7 @@ import {
 } from "@/lib/mobile-tenant";
 
 // ThreadLifecycleStatus → operator-facing label. Mirrors admin's
-// ThreadLifecycleBadge (apps/admin/src/components/threads/ThreadLifecycleBadge.tsx).
+// ThreadLifecycleBadge (apps/web/src/components/threads/ThreadLifecycleBadge.tsx).
 // Read-only; lifecycle is derived server-side via thread.lifecycleStatus (U4).
 const LIFECYCLE_LABELS: Record<string, string> = {
   RUNNING: "Running",

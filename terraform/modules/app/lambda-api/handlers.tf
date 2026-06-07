@@ -66,6 +66,8 @@ locals {
     # getChatAgentInvokeFnArn falls back to null and sendMessage loses
     # message_history on the wakeup-processor fallback path.
     CHAT_AGENT_INVOKE_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke"
+    APP_URL                  = var.admin_url
+    WEB_URL                  = var.admin_url
     ADMIN_URL                = var.admin_url
     DOCS_URL                 = var.docs_url
     APPSYNC_REALTIME_URL     = var.appsync_realtime_url
@@ -1073,7 +1075,7 @@ locals {
     "POST /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"     = "mcp-approval"
     "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"  = "mcp-approval"
 
-    # Plugin upload admin surface (plan §U10). Admin SPA drives the full
+    # Plugin upload admin surface (plan §U10). Web app drives the full
     # flow: POST /presign → browser PUT to presigned S3 URL → POST /upload
     # (validator + three-phase install saga). GET routes back the admin's
     # plugin history view. handleCors() short-circuits OPTIONS before auth

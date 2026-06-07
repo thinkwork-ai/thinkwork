@@ -2,7 +2,7 @@
  * ExecutionGraphMobile — vertical step-list visualization of a routine
  * execution (Plan 2026-05-01-007 §U13 mobile parity).
  *
- * Mobile counterpart to admin's apps/admin/src/components/routines/
+ * Mobile counterpart to admin's apps/web/src/components/routines/
  * ExecutionGraph.tsx. Same data shapes (StepEventLite + the
  * latest-event-per-node collapse) so a future shared package is easy.
  *

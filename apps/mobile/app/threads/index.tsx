@@ -49,7 +49,7 @@ interface Thread {
 }
 
 // ThreadLifecycleStatus → operator-facing label. Mirrors admin's
-// ThreadLifecycleBadge (apps/admin/src/components/threads/ThreadLifecycleBadge.tsx).
+// ThreadLifecycleBadge (apps/web/src/components/threads/ThreadLifecycleBadge.tsx).
 const LIFECYCLE_LABELS: Record<string, string> = {
   RUNNING: "Running",
   COMPLETED: "Completed",

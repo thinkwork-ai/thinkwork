@@ -8,7 +8,7 @@ import { Aside } from '@astrojs/starlight/components';
 The Humans page is the tenant's user directory. It lists every person (and every service account) who has access to the tenant, their role, and their current status. From here operators invite new members, see who's pending acceptance, and manage the access that underpins every other admin feature.
 
 **Route:** `/humans`  
-**File:** `apps/admin/src/routes/_authed/_tenant/humans/index.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/humans/index.tsx`
 
 ## The list
 
@@ -73,7 +73,7 @@ The `tenant_members` table also carries a `principal_type` column that distingui
 - **`user`** — a human member
 - **`service_account`** — a programmatic account used by BYOB agents and internal services
 
-The Humans page only shows `user` rows. Service accounts are managed through [Agent Invites](/applications/admin/agent-invites/) and the credential vault, not through Humans.
+The Humans page only shows `user` rows. Service accounts are managed through [Agent Invites](/applications/web/agent-invites/) and the credential vault, not through Humans.
 
 ## GraphQL
 
@@ -128,7 +128,7 @@ Role editing is not deeply visible in the current Humans route code — the list
 
 ## Related pages
 
-- [Settings](/applications/admin/settings/) — tenant configuration, plan, and deployment status
-- [Agent Invites](/applications/admin/agent-invites/) — the BYOB equivalent for service accounts
-- [Authentication & Tenancy](/applications/admin/authentication-and-tenancy/) — how members authenticate into the admin app
+- [Settings](/applications/web/settings/) — tenant configuration, plan, and deployment status
+- [Agent Invites](/applications/web/agent-invites/) — the BYOB equivalent for service accounts
+- [Authentication & Tenancy](/applications/web/authentication-and-tenancy/) — how members authenticate into the admin app
 - [Architecture → Multi-tenancy](/architecture/#multi-tenancy) — tenant isolation at the database level

@@ -8,7 +8,7 @@ import { Aside } from '@astrojs/starlight/components';
 Artifacts are structured, thread-attached outputs that agents produce during a turn. Unlike chat messages — which are conversational — artifacts are durable, named outputs meant to outlive the thread that produced them. The Artifacts page is the tenant-wide gallery for browsing them, reading their contents, and linking back to the threads that generated them.
 
 **Route:** `/artifacts`  
-**File:** `apps/admin/src/routes/_authed/_tenant/artifacts/index.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/artifacts/index.tsx`
 
 ## Artifact types
 
@@ -110,6 +110,6 @@ Because the content is just text / markdown, any downstream system can consume i
 
 ## Related pages
 
-- [Threads](/applications/admin/threads/) — the source of every artifact; the thread detail page lists artifacts produced on that thread
-- [Agents](/applications/admin/agents/) — which agents produce which artifact types is a function of their tool policy
+- [Threads](/applications/web/threads/) — the source of every artifact; the thread detail page lists artifacts produced on that thread
+- [Agents](/applications/web/agents/) — which agents produce which artifact types is a function of their tool policy
 - [Automations (concept)](/concepts/automations/) — routines can produce artifacts as their output

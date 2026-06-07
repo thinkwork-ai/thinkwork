@@ -8,7 +8,7 @@ import { Aside } from "@astrojs/starlight/components";
 The Evaluations pages are where operators author test cases, start runs, and drill into per-test results. They sit on top of the same GraphQL + `eval-runner` Lambda path the [`thinkwork eval` CLI](/guides/evaluations/#from-the-cli) uses, so runs started in the UI show up in the CLI and vice versa.
 
 **Route:** `/evaluations`
-**File:** `apps/admin/src/routes/_authed/_tenant/evaluations/`
+**File:** `apps/web/src/routes/_authed/_tenant/evaluations/`
 
 See the [Evaluations guide](/guides/evaluations/) for the architecture, assertion types, scoring model, and CLI reference. This page walks through the UI itself.
 
@@ -144,5 +144,5 @@ The **Schedules** button in the dashboard header navigates to `/scheduled-jobs?t
 ## Related
 
 - [Evaluations guide](/guides/evaluations/) — architecture, assertion types, scoring, CLI reference
-- [Automations](/applications/admin/automations/) — the cron UI that powers eval schedules
-- [Agent Templates](/applications/admin/agent-templates/) — the templates the Run Evaluation dialog picks from
+- [Automations](/applications/web/automations/) — the cron UI that powers eval schedules
+- [Agent Templates](/applications/web/agent-templates/) — the templates the Run Evaluation dialog picks from

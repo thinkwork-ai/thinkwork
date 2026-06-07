@@ -1,5 +1,5 @@
 /**
- * Per-tenant catalog tables that back the apps/spaces Customize page's
+ * Per-tenant catalog tables that back the apps/web Customize page's
  * Available / Discover sections for Workflows. Skills now live in the S3
  * skill catalog and workspace `skills/` folders, while MCP servers already
  * have `tenant_mcp_servers`; this table fills the missing workflow catalog.

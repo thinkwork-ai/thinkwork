@@ -153,7 +153,7 @@ output "deployment_appconfig_configuration_profile_id" {
 }
 
 output "mapbox_public_token" {
-  description = "Mapbox public token used by apps/spaces MapView. Surfaced for scripts/build-spaces.sh to inline as VITE_MAPBOX_PUBLIC_TOKEN at build time. MapView falls back to OSM tiles when this is empty."
+  description = "Mapbox public token used by apps/web MapView. Surfaced for scripts/build-web.sh to inline as VITE_MAPBOX_PUBLIC_TOKEN at build time. MapView falls back to OSM tiles when this is empty."
   value       = var.mapbox_public_token
   sensitive   = true
 }
@@ -307,32 +307,16 @@ output "twenty_storage_file_system_id" {
   value       = local.twenty_provisioned ? module.twenty[0].twenty_storage_file_system_id : null
 }
 
-# Admin static site
-output "admin_distribution_id" {
-  description = "CloudFront distribution ID for the admin app"
-  value       = module.admin_site.distribution_id
-}
-
-output "admin_distribution_domain" {
-  description = "CloudFront domain for the admin app"
-  value       = module.admin_site.distribution_domain
-}
-
-output "admin_bucket_name" {
-  description = "S3 bucket for admin app assets"
-  value       = module.admin_site.bucket_name
-}
-
 output "admin_url" {
-  description = "Public URL for the admin app (custom domain when set, CloudFront default otherwise)"
-  value       = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
+  description = "Deprecated compatibility alias for app_url"
+  value       = local.end_user_app_url
 }
 
 locals {
   end_user_app_url = local.end_user_app_domain != "" ? "https://${local.end_user_app_domain}" : "https://${module.computer_site.distribution_domain}"
 }
 
-# End-user app static site (apps/spaces).
+# End-user app static site (apps/web).
 output "app_distribution_id" {
   description = "CloudFront distribution ID for the end-user app"
   value       = module.computer_site.distribution_id
@@ -354,7 +338,7 @@ output "app_url" {
 }
 
 # Deprecated compatibility aliases. Keep these stable for existing scripts and
-# external callers while the source path is apps/spaces.
+# external callers while the source path is apps/web.
 output "computer_distribution_id" {
   description = "Deprecated alias for app_distribution_id"
   value       = module.computer_site.distribution_id
@@ -377,7 +361,7 @@ output "computer_url" {
 
 # Computer sandbox subdomain (plan-012 U3 / U11.5 — iframe-isolated
 # fragment substrate). Provisioned only when var.computer_sandbox_domain
-# is set. scripts/build-spaces.sh reads these to sync the iframe-shell
+# is set. scripts/build-web.sh reads these to sync the iframe-shell
 # bundle and invalidate the sandbox distribution.
 output "computer_sandbox_distribution_id" {
   description = "CloudFront distribution ID for the iframe-isolated sandbox subdomain (empty when not provisioned)"

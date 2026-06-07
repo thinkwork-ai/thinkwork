@@ -1,6 +1,6 @@
 # ThinkWork Desktop
 
-Electron shell for the `@thinkwork/spaces` renderer.
+Electron shell for the `@thinkwork/web` renderer.
 
 There is no local-only backend for this app. Development and packaged smoke
 tests use a deployed ThinkWork stage for Cognito, GraphQL, AppSync, and the
@@ -26,7 +26,7 @@ If a worktree is missing local app env, copy it from the primary checkout
 before launching:
 
 ```bash
-cp /Users/ericodom/Projects/thinkwork/apps/spaces/.env apps/spaces/.env
+cp /Users/ericodom/Projects/thinkwork/apps/web/.env apps/web/.env
 ```
 
 Dev mode launches Electron directly. Packaged-app behavior such as default

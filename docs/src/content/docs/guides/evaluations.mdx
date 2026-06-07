@@ -42,7 +42,7 @@ eval-runner (concurrency=5 per run):
   5. Notify AppSync so subscribed UI tabs live-update
 ```
 
-Every run executes against the tenant's [platform agent](/applications/admin/evaluations/#agent-target) — the single `agents` row with `is_platform_default = true`. The workspace, tools, and baseline model that AgentCore loads come from that agent's configuration. Tests that turn on tool-surface assumptions (for example, "the agent should refuse to web-search") depend on what's enabled on the platform agent.
+Every run executes against the tenant's [platform agent](/applications/web/evaluations/#agent-target) — the single `agents` row with `is_platform_default = true`. The workspace, tools, and baseline model that AgentCore loads come from that agent's configuration. Tests that turn on tool-surface assumptions (for example, "the agent should refuse to web-search") depend on what's enabled on the platform agent.
 
 ## Authoring test cases
 
@@ -131,7 +131,7 @@ Web and Admin use the cloud/backend eval target:
 1. Open `/evaluations`, click **Run Evaluation**.
 2. Optional: override **Model**. Blank = platform agent's default (Kimi K2.5).
 3. Pick a **scope**: All Categories, a subset (multi-select), or specific test cases.
-4. Click **Start Evaluation**. The run appears in Recent Runs with `status=pending` and transitions to `running → completed` as the Lambda works through the pack. The run targets the tenant's [platform agent](/applications/admin/evaluations/#agent-target).
+4. Click **Start Evaluation**. The run appears in Recent Runs with `status=pending` and transitions to `running → completed` as the Lambda works through the pack. The run targets the tenant's [platform agent](/applications/web/evaluations/#agent-target).
 
 Live updates come via the `onEvalRunUpdated` AppSync subscription plus a 3s poll fallback — the dashboard and Run Results page stay in sync without a manual refresh.
 
@@ -143,7 +143,7 @@ historical comparison, but Desktop Pi is not a current run target.
 
 `thinkwork eval` mirrors the Studio feature-for-feature. Interactive mode prompts for missing values in a TTY; non-TTY mode fails fast on missing required flags.
 
-Every run targets the tenant's [platform agent](/applications/admin/evaluations/#agent-target); there is no `--agent`/`--agent-template` flag.
+Every run targets the tenant's [platform agent](/applications/web/evaluations/#agent-target); there is no `--agent`/`--agent-template` flag.
 
 ```bash
 # Fully interactive — prompts for scope, confirmation
@@ -224,7 +224,7 @@ Recurring evals use the shared `scheduled_jobs` infrastructure — the same Even
 | Legacy Desktop eval API | `packages/api/src/handlers/desktop-eval-runs.ts` tombstone              |
 | AppSync notify          | `packages/api/src/lib/eval-notify.ts`                                   |
 | Seeds                   | `seeds/eval-test-cases/*.json` (11 files, 189 cases)                    |
-| Studio UI               | `apps/admin/src/routes/_authed/_tenant/evaluations/`                    |
+| Studio UI               | `apps/web/src/routes/_authed/_tenant/evaluations/`                    |
 | CLI                     | `apps/cli/src/commands/eval/`                                           |
 | Terraform               | `terraform/modules/app/lambda-api/main.tf` (`eval-runner` Lambda + IAM) |
 

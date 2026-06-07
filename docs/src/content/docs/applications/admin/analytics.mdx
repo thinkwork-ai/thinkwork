@@ -8,7 +8,7 @@ import { Aside } from "@astrojs/starlight/components";
 The Analytics page is the operator's tenant-wide view into what the tenant is doing and what it's spending. Three tabs — **Activity**, **Cost**, **Performance** — switch between views built from the same underlying aggregates.
 
 **Route:** `/analytics?view=activity|cost|performance`  
-**File:** `apps/admin/src/routes/_authed/_tenant/analytics.tsx`
+**File:** `apps/web/src/routes/_authed/_tenant/analytics.tsx`
 
 ## Layout
 
@@ -18,7 +18,7 @@ A single top-of-page tab toggle switches between the three views. Some deploymen
 
 The Activity view answers "is the tenant busy, and where is the work happening?"
 
-It shows thread-turn counts rolled up to day buckets over a rolling window. The aggregation is computed client-side from the same thread and turn queries the [Threads](/applications/admin/threads/) page uses, filtered by timestamp.
+It shows thread-turn counts rolled up to day buckets over a rolling window. The aggregation is computed client-side from the same thread and turn queries the [Threads](/applications/web/threads/) page uses, filtered by timestamp.
 
 Queries:
 
@@ -102,7 +102,7 @@ Queries for performance pull from thread traces or the audit log's cost events d
 2. Scroll to the cost breakdown table
 3. Sort by total spend descending
 4. The top row is the top spender
-5. Cross-reference in Performance view and [Threads](/applications/admin/threads/) to see whether it's high volume or high per-turn cost
+5. Cross-reference in Performance view and [Threads](/applications/web/threads/) to see whether it's high volume or high per-turn cost
 
 ### Answer "is anything slower than usual?"
 
@@ -110,7 +110,7 @@ Queries for performance pull from thread traces or the audit log's cost events d
 2. Pick an agent
 3. Look at the latency percentile chart
 4. Compare p95 to the baseline from prior weeks
-5. If p95 is trending up, check [Threads](/applications/admin/threads/) for that agent to find the slow turns
+5. If p95 is trending up, check [Threads](/applications/web/threads/) for that agent to find the slow turns
 
 ## Data sources
 
@@ -128,9 +128,9 @@ Queries for performance pull from thread traces or the audit log's cost events d
 
 ## Related pages
 
-- [Dashboard](/applications/admin/dashboard/) — the quick-glance metric cards that the Analytics page backs
-- [Threads](/applications/admin/threads/) — drill into the specific turns that drove a number
-- [Tenant Agent](/applications/admin/agents/) — platform-agent defaults and legacy agent context
-- [Spaces](/applications/admin/spaces/) — Space runtime budget overrides
+- [Dashboard](/applications/web/dashboard/) — the quick-glance metric cards that the Analytics page backs
+- [Threads](/applications/web/threads/) — drill into the specific turns that drove a number
+- [Tenant Agent](/applications/web/agents/) — platform-agent defaults and legacy agent context
+- [Spaces](/applications/web/spaces/) — Space runtime budget overrides
 - [Budgets, Usage, and Audit (concept)](/concepts/control/budgets-usage-and-audit/) — the control layer
 - [Roadmap](/roadmap/) — what's coming next in cost tracking and eval UI

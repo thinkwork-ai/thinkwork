@@ -496,6 +496,7 @@ async function downloadAndVerify(artifact, localPath) {
 function terraformOutputs(terraformDir) {
   const names = [
     "api_endpoint",
+    "app_url",
     "admin_url",
     "computer_url",
     "docs_url",
