@@ -369,7 +369,7 @@ export function SpacesComposer({
               catalog={skillCatalog}
               mentions={mentions}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type @ to mention or / to pin a skill"
+              placeholder="Type @ to mention or / to invoke a skill"
               disabled={isComposerDisabled}
               autoFocus
             />

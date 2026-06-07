@@ -2627,7 +2627,7 @@ function FollowUpComposer({
               catalog={skillCatalog}
               mentions={mentions}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type a command, attach a file..."
+              placeholder="Ask for follow-up changes"
               disabled={disabled}
             />
           </PromptInputBody>
