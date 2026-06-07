@@ -1,10 +1,15 @@
 ---
 title: "Model stacking end-to-end verification"
 date: 2026-06-06
-status: active
+status: superseded
+superseded_by: docs/verification/agent-profiles-e2e.md
 ---
 
 # Model Stacking End-to-End Verification
+
+> Superseded on 2026-06-07. This runbook verifies the retired `TOOLS.md`
+> routing path. The active customer-demo path is Agent Profiles:
+> `docs/verification/agent-profiles-e2e.md`.
 
 This runbook proves the demo-critical model-stacking path:
 

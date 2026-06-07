@@ -1,10 +1,16 @@
 ---
 title: "Model stacking with TOOLS.md routing"
 date: 2026-06-06
-status: active
+status: superseded
+superseded_by: docs/solutions/agent-profiles-pi-subagent-model-stacking-2026-06-07.md
 ---
 
 # Model Stacking with TOOLS.md Routing
+
+> Superseded on 2026-06-07. ThinkWork no longer treats per-tool `TOOLS.md`
+> model routing as the customer-facing model-stacking primitive. Use Agent
+> Profiles executed as Pi child sessions instead:
+> `docs/solutions/agent-profiles-pi-subagent-model-stacking-2026-06-07.md`.
 
 ThinkWork supports model stacking by combining a user-selected parent turn
 model with ThinkWork-native `TOOLS.md` routes for specific tool calls. The

@@ -66,7 +66,7 @@ function researchProfile(
     instructions: "Research with sources.",
     routingGuidance: "Use this for research.",
     toolPolicy: {
-      builtInTools: ["read", "web_search"],
+      builtInTools: ["read", "web_search", "web_extract"],
       skills: ["source-review"],
       mcpServers: [
         {
@@ -223,7 +223,7 @@ describe("agent profile delegation", () => {
     expect(runLoop).toHaveBeenCalledTimes(1);
     expect(captured?.modelId).toBe("anthropic/claude-haiku-4-5");
     expect(captured?.builtinToolNames).toEqual(["read"]);
-    expect(captured?.extensionToolNames).toEqual(["web_search"]);
+    expect(captured?.extensionToolNames).toEqual(["web_search", "web_extract"]);
     expect(captured?.tools.map((item) => item.name)).toEqual([
       "find_many_opportunities",
     ]);
@@ -243,6 +243,89 @@ describe("agent profile delegation", () => {
       outputTokens: 5,
       totalTokens: 15,
     });
+  });
+
+  it("preserves the customer-demo proof shape for a delegated Research run", async () => {
+    const runLoop = vi.fn(async (args) => ({
+      content: "Patrick Collison is the CEO of Stripe. Source: stripe.com.",
+      modelId: String(args.modelId),
+      toolsCalled: ["web_search", "web_extract"],
+      toolInvocations: [
+        {
+          id: "tool-web-search",
+          name: "web_search",
+          tool_name: "web_search",
+          args: { query: "Stripe CEO today" },
+          result: { results: [{ title: "Stripe leadership" }] },
+          input_preview: '{"query":"Stripe CEO today"}',
+          output_preview: "Stripe leadership",
+          status: "completed",
+          runtime: "pi" as const,
+        },
+        {
+          id: "tool-web-extract",
+          name: "web_extract",
+          tool_name: "web_extract",
+          args: {
+            url: "https://stripe.com/newsroom",
+            authorization: "Bearer demo-secret",
+          },
+          result: { title: "Stripe Newsroom" },
+          input_preview:
+            '{"url":"https://stripe.com/newsroom","authorization":"Bearer demo-secret"}',
+          output_preview: "Patrick Collison",
+          status: "completed",
+          runtime: "pi" as const,
+        },
+      ],
+      usage: {
+        input: 88,
+        output: 24,
+        cacheRead: 5_000,
+        cacheWrite: 0,
+        totalTokens: 112,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      toolCosts: [],
+    }));
+
+    const evidence = await executeAgentProfileDelegation({
+      options: await options({ runLoop }),
+      profileSlug: "research",
+      task: "Search the web and cite the source for the CEO of Stripe today.",
+    });
+
+    expect(runLoop).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          "Search the web and cite the source for the CEO of Stripe today.",
+        modelId: "anthropic/claude-haiku-4-5",
+        extensionToolNames: ["web_search", "web_extract"],
+        threadId: expect.stringContaining(":profile:"),
+      }),
+    );
+    expect(evidence).toMatchObject({
+      profileSlug: "research",
+      profileName: "Research",
+      model: "anthropic/claude-haiku-4-5",
+      parentThreadTurnId: "turn-parent",
+      status: "completed",
+      inputTokens: 88,
+      outputTokens: 24,
+      cachedReadTokens: 5_000,
+      totalTokens: 112,
+      handoffSummary:
+        "Patrick Collison is the CEO of Stripe. Source: stripe.com.",
+      laneKey: "profile:research",
+    });
+    expect(evidence.toolInvocations.map((item) => item.tool_name)).toEqual([
+      "web_search",
+      "web_extract",
+    ]);
+    expect(JSON.stringify(evidence.toolInvocations)).toContain("[REDACTED]");
+    expect(JSON.stringify(evidence.toolInvocations)).not.toContain(
+      "demo-secret",
+    );
   });
 
   it("returns first-class profile evidence from the constrained profile tool", async () => {
