@@ -4,7 +4,6 @@ import {
   BookOpen,
   Bot,
   Brain,
-  BriefcaseBusiness,
   Clock,
   CreditCard,
   FolderTree,
@@ -102,13 +101,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/artifacts",
     icon: AppWindow,
     operatorOnly: true,
-  },
-  {
-    label: "CRM",
-    to: "/settings/crm",
-    icon: BriefcaseBusiness,
-    operatorOnly: true,
-    managedAppKey: "twenty",
   },
   {
     label: "Knowledge Graph",

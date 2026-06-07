@@ -6,6 +6,7 @@ import {
 } from "./settings-nav";
 
 const labels = () => SETTINGS_NAV_ITEMS.map((item) => item.label);
+const paths = () => SETTINGS_NAV_ITEMS.map((item) => item.to);
 
 describe("settings-nav", () => {
   // U1: Managed Applications renamed to Applications
@@ -25,6 +26,12 @@ describe("settings-nav", () => {
     expect(settingsCrumbForPath("/settings/managed-applications")).toEqual([
       { label: "Applications" },
     ]);
+  });
+
+  // U4: standalone CRM nav entry removed (reachable via Applications drill-in)
+  it("does not list a standalone CRM nav entry", () => {
+    expect(paths()).not.toContain("/settings/crm");
+    expect(labels()).not.toContain("CRM");
   });
 
   it("filters operator-only items for non-operators", () => {
