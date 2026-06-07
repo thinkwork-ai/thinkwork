@@ -134,13 +134,13 @@ export function AppTopBar() {
       {tabs.length > 0 ? (
         <div className="flex flex-1 justify-center">
           <Tabs value={activeTab}>
-            <TabsList variant="line" className="h-8 border-b-0">
+            <TabsList>
               {tabs.map((tab) => (
                 <TabsTrigger
                   key={tab.to}
                   value={tab.to}
                   asChild
-                  className="px-3 text-xs"
+                  className="px-3"
                 >
                   <Link to={tab.to}>{tab.label}</Link>
                 </TabsTrigger>

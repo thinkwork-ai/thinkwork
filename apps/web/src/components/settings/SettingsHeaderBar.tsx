@@ -92,13 +92,13 @@ export function SettingsHeaderBar() {
       {tabs.length > 0 ? (
         <div className="flex flex-1 justify-center">
           <Tabs value={activeTab}>
-            <TabsList variant="line" className="h-8 border-b-0">
+            <TabsList>
               {tabs.map((tab) => (
                 <TabsTrigger
                   key={tab.to}
                   value={tab.to}
                   asChild
-                  className="px-3 text-xs"
+                  className="px-3"
                 >
                   <Link to={tab.to}>{tab.label}</Link>
                 </TabsTrigger>
@@ -108,9 +108,17 @@ export function SettingsHeaderBar() {
         </div>
       ) : null}
       {actions?.action ? (
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-1",
+            // Balance the left breadcrumb so centered tabs stay centered.
+            tabs.length > 0 ? "flex-1 justify-end" : "ml-auto",
+          )}
+        >
           {actions.action}
         </div>
+      ) : tabs.length > 0 ? (
+        <div className="flex-1" aria-hidden />
       ) : null}
     </header>
   );
