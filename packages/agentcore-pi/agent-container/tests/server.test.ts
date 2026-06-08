@@ -226,7 +226,7 @@ describe("handleInvocation — happy path", () => {
     expect(fetchCalled).toBe(0);
   });
 
-  it("executes requested profile mentions and returns agent_profile_runs evidence", async () => {
+  it("executes requested profile mentions and returns parent response with agent_profile_runs evidence", async () => {
     let childModel: unknown;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
@@ -258,6 +258,29 @@ describe("handleInvocation — happy path", () => {
           builtinToolNames,
           extensionToolNames,
         }) => {
+          if (modelId === "anthropic/claude-sonnet-4-5") {
+            expect(String(message)).toContain("Research handoff");
+            return {
+              content: "Parent final answer from Research handoff",
+              modelId: String(modelId),
+              toolsCalled: [],
+              toolInvocations: [],
+              usage: {
+                input: 3,
+                output: 2,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 5,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 0,
+                },
+              },
+            };
+          }
           childModel = modelId;
           expect(message).toBe("Find current sources");
           expect(builtinToolNames).toEqual(["read"]);
@@ -300,7 +323,7 @@ describe("handleInvocation — happy path", () => {
       }),
     ]);
     expect(body.response).toMatchObject({
-      content: "Research handoff",
+      content: "Parent final answer from Research handoff",
       agent_profile_runs: [
         expect.objectContaining({
           profileSlug: "research",
@@ -465,7 +488,7 @@ describe("handleInvocation — happy path", () => {
   it("automatically delegates source-backed research prompts to the Research profile", async () => {
     let childModel: unknown;
     let childMessage: unknown;
-    let parentLoopCalled = false;
+    let parentLoopMessage: unknown;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
         message:
@@ -496,12 +519,31 @@ describe("handleInvocation — happy path", () => {
           builtinToolNames,
           extensionToolNames,
         }) => {
+          if (modelId === "anthropic/claude-sonnet-4-5") {
+            parentLoopMessage = message;
+            return {
+              content: "Parent final answer from automatic Research",
+              modelId: String(modelId),
+              toolsCalled: [],
+              toolInvocations: [],
+              usage: {
+                input: 3,
+                output: 2,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 5,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 0,
+                },
+              },
+            };
+          }
           childModel = modelId;
           childMessage = message;
-          parentLoopCalled =
-            modelId === "anthropic/claude-sonnet-4-5" &&
-            message ===
-              "Research the current CEO of Stripe today, cite one source, and keep it to one sentence.";
           expect(builtinToolNames).toEqual(["read"]);
           expect(extensionToolNames).toEqual(["web_search"]);
           return {
@@ -529,11 +571,11 @@ describe("handleInvocation — happy path", () => {
     });
 
     expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
-    expect(parentLoopCalled).toBe(false);
     expect(childModel).toBe("anthropic/claude-haiku-4-5");
     expect(childMessage).toBe(
       "Research the current CEO of Stripe today, cite one source, and keep it to one sentence.",
     );
+    expect(String(parentLoopMessage)).toContain("Research handoff");
     const body = result.body as Record<string, unknown>;
     expect(body.agent_profile_runs).toEqual([
       expect.objectContaining({
@@ -545,6 +587,167 @@ describe("handleInvocation — happy path", () => {
         totalTokens: 13,
       }),
     ]);
+    expect(body.response).toMatchObject({
+      content: "Parent final answer from automatic Research",
+    });
+  });
+
+  it("retries the specialist once when Reviewer requests revision", async () => {
+    const calls: Array<{ modelId: unknown; message: string }> = [];
+    let researchCalls = 0;
+    let reviewerCalls = 0;
+    const loopPolicy = {
+      mode: "closed",
+      enabled: true,
+      maxIterations: 1,
+      maxReviewLoops: 1,
+      reviewGate: true,
+      externalReviewerPolicy: "explicit",
+      failBehavior: "return_blocker",
+    };
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        message:
+          "#Research Find the current CEO of Stripe today and cite one source. Keep it concise. Please use #Reviewer to verify.",
+        model: "anthropic/claude-sonnet-4-5",
+        approved_model_ids: [
+          "anthropic/claude-sonnet-4-5",
+          "anthropic/claude-haiku-4-5",
+          "moonshotai/kimi-k2.5",
+        ],
+        web_search_config: { provider: "exa", apiKey: "exa-key" },
+        agent_profiles: [
+          {
+            id: "profile-research",
+            slug: "research",
+            name: "Research",
+            modelId: "anthropic/claude-haiku-4-5",
+            builtInKey: "research",
+            instructions: "Research with sources.",
+            builtInTools: ["web-search"],
+            executionControls: { loopPolicy },
+          },
+          {
+            id: "profile-reviewer",
+            slug: "reviewer",
+            name: "Reviewer",
+            modelId: "moonshotai/kimi-k2.5",
+            builtInKey: "reviewer",
+            instructions: "Review the handoff for accuracy.",
+            builtInTools: [],
+            executionControls: { loopPolicy },
+          },
+        ],
+      }),
+      deps: makeDeps({
+        runAgentLoop: async ({ modelId, message }) => {
+          calls.push({ modelId, message: String(message) });
+          if (modelId === "anthropic/claude-haiku-4-5") {
+            researchCalls += 1;
+            return {
+              content:
+                researchCalls === 1
+                  ? "Verdict: pass\nSummary: Patrick Collison is CEO, but source is vague.\nEvidence: internal note\nConfidence: medium"
+                  : "Verdict: pass\nSummary: Patrick Collison is CEO. Source: https://stripe.com/newsroom\nEvidence: https://stripe.com/newsroom\nConfidence: high",
+              modelId: String(modelId),
+              toolsCalled: ["web_search"],
+              toolInvocations: [],
+              usage: {
+                input: 10,
+                output: 5,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 15,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 0,
+                },
+              },
+            };
+          }
+          if (modelId === "moonshotai/kimi-k2.5") {
+            reviewerCalls += 1;
+            return {
+              content:
+                reviewerCalls === 1
+                  ? "Verdict: revise\nSummary: Source is not independently citable.\nFeedback: Ask Research to add a source URL.\nConfidence: high"
+                  : "Verdict: pass\nSummary: The revised answer is supported by a source URL.\nEvidence: https://stripe.com/newsroom\nConfidence: high",
+              modelId: String(modelId),
+              toolsCalled: [],
+              toolInvocations: [],
+              usage: {
+                input: 6,
+                output: 4,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 10,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 0,
+                },
+              },
+            };
+          }
+          expect(String(message)).toContain(
+            "Source: https://stripe.com/newsroom",
+          );
+          expect(String(message)).toContain("Reviewer");
+          return {
+            content: "Final answer after Reviewer-approved Research retry.",
+            modelId: String(modelId),
+            toolsCalled: [],
+            toolInvocations: [],
+            usage: {
+              input: 3,
+              output: 2,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 5,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+    expect(calls.map((call) => call.modelId)).toEqual([
+      "anthropic/claude-haiku-4-5",
+      "moonshotai/kimi-k2.5",
+      "anthropic/claude-haiku-4-5",
+      "moonshotai/kimi-k2.5",
+      "anthropic/claude-sonnet-4-5",
+    ]);
+    expect(calls[2]?.message).toContain("Reviewer feedback");
+    expect(calls[2]?.message).toContain("Ask Research to add a source URL");
+    const body = result.body as Record<string, unknown>;
+    expect(body.agent_profile_runs).toEqual([
+      expect.objectContaining({ profileSlug: "research" }),
+      expect.objectContaining({
+        profileSlug: "reviewer",
+        handoff: expect.objectContaining({ verdict: "revise" }),
+      }),
+      expect.objectContaining({ profileSlug: "research" }),
+      expect.objectContaining({
+        profileSlug: "reviewer",
+        handoff: expect.objectContaining({ verdict: "pass" }),
+      }),
+    ]);
+    expect(body.response).toMatchObject({
+      content: "Final answer after Reviewer-approved Research retry.",
+    });
   });
 
   it("creates WORKSPACE_DIR before per-turn staging and the agent loop", async () => {
