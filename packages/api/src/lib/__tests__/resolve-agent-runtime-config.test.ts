@@ -913,7 +913,12 @@ describe("resolveAgentRuntimeConfig", () => {
         built_in_key: "research",
         tool_policy: { builtInTools: ["web-search", "web-extract"] },
         skill_policy: { skillSlugs: [] },
-        execution_controls: { clarify: false, maxRuntimeMs: 30_000 },
+        execution_controls: {
+          clarify: false,
+          maxRuntimeMs: 30_000,
+          reviewGate: true,
+          maxReviewLoops: 2,
+        },
       },
     ]);
     rowsQueue.push([]); // space assignments
@@ -935,6 +940,8 @@ describe("resolveAgentRuntimeConfig", () => {
           clarify: false,
           maxSubagentDepth: 0,
           maxRuntimeMs: 30_000,
+          reviewGate: true,
+          maxReviewLoops: 2,
         }),
       }),
     ]);

@@ -135,13 +135,28 @@ describe("Agent Profile resolvers", () => {
       "tenant-1",
       "agent_profiles:read",
     );
-    expect(insertedValues).toHaveLength(3);
+    expect(insertedValues).toHaveLength(4);
     expect(insertedValues[0]).toMatchObject({
       tenant_id: "tenant-1",
       slug: "research",
       model_id: "model-parent",
       built_in_key: "research",
     });
+    expect(insertedValues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tenant_id: "tenant-1",
+          slug: "reviewer",
+          name: "Reviewer",
+          model_id: "model-parent",
+          built_in_key: "reviewer",
+          execution_controls: expect.objectContaining({
+            reviewGate: true,
+            maxReviewLoops: 2,
+          }),
+        }),
+      ]),
+    );
     expect(result).toEqual([
       expect.objectContaining({
         id: "profile-research",
@@ -158,6 +173,7 @@ describe("Agent Profile resolvers", () => {
           { builtInKey: "research" },
           { builtInKey: "coding" },
           { builtInKey: "analyst" },
+          { builtInKey: "reviewer" },
         ]),
       )
       .mockReturnValueOnce(queryRows([{ modelId: "model-fast" }]))
@@ -230,6 +246,7 @@ describe("Agent Profile resolvers", () => {
           { builtInKey: "research" },
           { builtInKey: "coding" },
           { builtInKey: "analyst" },
+          { builtInKey: "reviewer" },
         ]),
       )
       .mockReturnValueOnce(
@@ -264,6 +281,7 @@ describe("Agent Profile resolvers", () => {
           { builtInKey: "research" },
           { builtInKey: "coding" },
           { builtInKey: "analyst" },
+          { builtInKey: "reviewer" },
         ]),
       )
       .mockReturnValueOnce(

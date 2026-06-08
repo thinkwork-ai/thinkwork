@@ -413,7 +413,7 @@ export function buildAgentProfileDelegationTool(
     name: AGENT_PROFILE_TOOL_NAME,
     label: "Agent Profile",
     description:
-      "Delegate a bounded subtask to an enabled ThinkWork Agent Profile such as Research, Coding, or Analyst. Use this for specialized subtasks that should run with the profile's configured model and capabilities.",
+      "Delegate a bounded subtask to an enabled ThinkWork Agent Profile such as Research, Coding, Analyst, or Reviewer. Use this for specialized subtasks that should run with the profile's configured model and capabilities.",
     parameters: Type.Object({
       profileSlug: Type.String({
         description: "Slug of the available Agent Profile to run.",

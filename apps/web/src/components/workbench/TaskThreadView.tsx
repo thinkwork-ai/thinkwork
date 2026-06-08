@@ -2684,12 +2684,18 @@ function FollowUpComposer({
               catalog={skillCatalog}
               mentions={mentions}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type @ to mention people, # for agent profiles, or / to pin a skill"
+              placeholder="Type @ to mention people, # for agent profiles, or / to use a skill"
               disabled={disabled}
             />
           </PromptInputBody>
           <PromptInputFooter className="px-2 pb-2">
             <PromptInputTools>
+              <PromptInputAttachButton />
+            </PromptInputTools>
+            <div
+              className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1"
+              data-testid="follow-up-action-controls"
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -2709,17 +2715,11 @@ function FollowUpComposer({
               >
                 <Bot className="size-5" />
               </button>
-              <PromptInputAttachButton />
-            </PromptInputTools>
-            <div
-              className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1"
-              data-testid="follow-up-action-controls"
-            >
               <ComposerModelPicker
                 models={approvedModels}
                 value={selectedModelId}
                 onValueChange={onSelectedModelChange}
-                disabled={disabled || isSending}
+                disabled={disabled || isSending || !effectiveAgentEnabled}
                 tone="dark"
               />
               <PromptInputSpeechButton

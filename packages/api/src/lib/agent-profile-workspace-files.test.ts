@@ -40,6 +40,8 @@ describe("agent profile workspace files", () => {
         maxRuntimeMs: 120000,
         maxTokens: 4096,
         thinking: "minimal",
+        reviewGate: true,
+        maxReviewLoops: 2,
       },
       spaceIds: ["space-research"],
     });
@@ -70,6 +72,8 @@ describe("agent profile workspace files", () => {
         maxRuntimeMs: 120000,
         maxTokens: 4096,
         thinking: "minimal",
+        reviewGate: true,
+        maxReviewLoops: 2,
       },
       spaceRefs: ["space-research"],
     });

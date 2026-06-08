@@ -364,6 +364,56 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.queryByText("#Research verify agent profile e2e")).toBeNull();
   });
 
+  it("uses the full first user message when the stored title is clipped", () => {
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({
+      thread: {
+        ...thread,
+        title: "#Research explicit profile e2e: find the current ceo...",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "USER",
+                content:
+                  "#Research explicit profile e2e: find the current ceo of stripe today, cite one source, one sentence.",
+                createdAt: "2026-06-04T16:55:00.000Z",
+                sender: { displayName: "Eric Odom" },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    const fullDisplayTitle =
+      "Research explicit profile e2e: find the current ceo of stripe today, cite one source, one sentence.";
+    const headerArgs = usePageHeaderActionsMock.mock.calls.at(-1)?.[0];
+    expect(headerArgs.documentTitle).toBe(
+      `Activity Thread · ${fullDisplayTitle}`,
+    );
+    expect(headerArgs.breadcrumbs).toEqual([
+      { label: "Activity", href: "/settings/activity" },
+      { label: fullDisplayTitle },
+    ]);
+    expect(
+      screen.getByRole("heading", { name: fullDisplayTitle }).className,
+    ).toContain("[text-wrap:wrap]");
+    expect(
+      screen.queryByText(
+        "#Research explicit profile e2e: find the current ceo...",
+      ),
+    ).toBeNull();
+  });
+
   it("renders parent composer model evidence for non-overridden tool calls", () => {
     const fallbackTurn = {
       ...turn,

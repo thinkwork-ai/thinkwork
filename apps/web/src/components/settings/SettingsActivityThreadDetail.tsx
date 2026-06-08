@@ -157,6 +157,10 @@ const TRIGGER_LABELS: Record<string, string> = {
   email: "Email",
 };
 
+function looksTruncatedTitle(value: string) {
+  return /(?:\.{3}|…)\s*$/.test(value.trim());
+}
+
 export function SettingsActivityThreadDetail({
   threadId,
   breadcrumbParents,
@@ -256,7 +260,15 @@ export function SettingsActivityThreadDetail({
       ?.displayName ?? "User";
   const latestSystemPrompt =
     turns.find((turn) => turn.systemPrompt?.trim())?.systemPrompt ?? null;
-  const title = thread?.title?.trim() || thread?.identifier || "Thread";
+  const storedTitle = thread?.title?.trim() ?? "";
+  const firstUserMessageContent =
+    messages
+      .find((message) => message.role.toUpperCase() === "USER")
+      ?.content?.trim() ?? "";
+  const title =
+    storedTitle && !(looksTruncatedTitle(storedTitle) && firstUserMessageContent)
+      ? storedTitle
+      : firstUserMessageContent || thread?.identifier || "Thread";
   const displayTitle = shortcutDisplayText(title, {
     fallbackAgentProfiles: true,
     fallbackMentions: true,
@@ -323,7 +335,7 @@ export function SettingsActivityThreadDetail({
       >
         <main className="w-full min-w-0">
           <div className="mb-8">
-            <h1 className="w-full max-w-none break-words text-xl font-semibold leading-snug text-foreground sm:text-2xl">
+            <h1 className="w-full max-w-none break-words text-xl font-semibold leading-snug text-foreground [text-wrap:wrap]">
               <InlineShortcutText
                 text={title}
                 fallbackAgentProfiles

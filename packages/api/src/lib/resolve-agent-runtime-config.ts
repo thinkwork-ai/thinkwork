@@ -165,6 +165,8 @@ export interface AgentProfileRuntimeConfig {
     maxRuntimeMs?: number;
     maxTokens?: number;
     thinking?: string;
+    reviewGate?: boolean;
+    maxReviewLoops?: number;
   };
 }
 
@@ -882,6 +884,11 @@ async function loadAgentProfileRuntimeConfigs(input: {
         ),
         ...optionalPositiveInt("maxTokens", executionControls.maxTokens),
         ...optionalString("thinking", executionControls.thinking),
+        ...(executionControls.reviewGate === true ? { reviewGate: true } : {}),
+        ...optionalPositiveInt(
+          "maxReviewLoops",
+          executionControls.maxReviewLoops,
+        ),
       },
     });
   }

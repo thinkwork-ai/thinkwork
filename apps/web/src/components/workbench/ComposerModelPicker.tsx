@@ -57,6 +57,7 @@ export function ComposerModelPicker({
             ? "text-white/70 hover:text-white"
             : "text-muted-foreground hover:text-foreground",
           !selected && "text-destructive hover:text-destructive",
+          disabled && "pointer-events-none opacity-45",
         )}
       >
         <span className="truncate">
