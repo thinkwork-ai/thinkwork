@@ -231,6 +231,67 @@ describe("agent profile delegation", () => {
     });
   });
 
+  it("passes bounded parent conversation history into profile child loops", async () => {
+    let captured:
+      | Parameters<NonNullable<ProfileDelegationToolOptions["runLoop"]>>[0]
+      | undefined;
+    const parentHistory: NonNullable<
+      ProfileDelegationToolOptions["parentHistory"]
+    > = [
+      {
+        role: "user",
+        content: "Find the current CEO of Stripe and cite one source.",
+        timestamp: 1,
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Patrick Collison is the CEO of Stripe. Source: stripe.com.",
+          },
+        ],
+        api: "bedrock-converse-stream",
+        provider: "amazon-bedrock",
+        model: "anthropic/claude-sonnet-4-5",
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0,
+          },
+        },
+        stopReason: "stop",
+        timestamp: 2,
+      },
+    ];
+    const runLoop = vi.fn(async (args) => {
+      captured = args;
+      return {
+        content: "Review handoff",
+        modelId: String(args.modelId),
+        toolsCalled: [],
+        toolInvocations: [],
+        toolCosts: [],
+      };
+    });
+
+    await executeAgentProfileDelegation({
+      options: await options({ runLoop, parentHistory }),
+      profileSlug: "research",
+      task: "Review the previous answer for accuracy.",
+    });
+
+    expect(captured?.history).toEqual(parentHistory);
+  });
+
   it("emits profile start, child tool, and completion activity with lane metadata", async () => {
     let emitChildActivity: unknown;
     const emitted: Array<{ eventType: string; message: string; payload?: unknown }> =
