@@ -170,6 +170,60 @@ export interface AgentProfileRunEvidence {
   error?: string;
 }
 
+export type AgentProfileLoopGoalStatus =
+  | "active"
+  | "passed"
+  | "revision_requested"
+  | "failed"
+  | "budget_limited";
+
+export type AgentProfileLoopCompletionVerdict = "pass" | "revise" | "fail";
+
+export interface AgentProfileLoopGoalUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  cachedWriteTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
+export interface AgentProfileLoopGoalState {
+  source: "thinkwork_agent_profile_loop";
+  goalId: string;
+  profileRunId: string;
+  parentThreadTurnId: string;
+  objective: string;
+  owner: {
+    type: "profile";
+    profileId: string;
+    profileSlug: string;
+    profileName: string;
+  };
+  status: AgentProfileLoopGoalStatus;
+  policy: AgentLoopPolicy;
+  budget: {
+    maxIterations: number;
+    maxReviewLoops: number;
+    maxRuntimeMs?: number;
+    maxTokens?: number;
+    costBudgetUsd?: number;
+  };
+  usage: AgentProfileLoopGoalUsage;
+  usageByModel: Record<string, AgentProfileLoopGoalUsage>;
+  completion?: {
+    verdict: AgentProfileLoopCompletionVerdict;
+    feedback?: string;
+    checkedAt: string;
+  };
+  continuation: {
+    mode: "thinkwork_managed";
+    hiddenContinuationAllowed: false;
+  };
+  startedAt: string;
+  updatedAt: string;
+}
+
 export interface ProfileChildRunner {
   runProfile(
     request: CompiledAgentProfileRunRequest,
@@ -387,6 +441,29 @@ function defaultContextPolicy(
   };
 }
 
+function defaultLoopPolicyForRequest(
+  request: CompiledAgentProfileRunRequest,
+): AgentLoopPolicy {
+  return {
+    mode: "closed",
+    enabled: true,
+    maxIterations: 1,
+    maxReviewLoops: request.execution.maxReviewLoops ?? 1,
+    reviewGate: request.execution.reviewGate ?? false,
+    externalReviewerPolicy: "explicit",
+    failBehavior: "return_blocker",
+    ...(request.execution.maxRuntimeMs !== undefined
+      ? { maxRuntimeMs: request.execution.maxRuntimeMs }
+      : {}),
+    ...(request.execution.maxTokens !== undefined
+      ? { maxTokens: request.execution.maxTokens }
+      : {}),
+    ...(request.execution.costBudgetUsd !== undefined
+      ? { costBudgetUsd: request.execution.costBudgetUsd }
+      : {}),
+  };
+}
+
 export function compileAgentProfileRunRequest(
   args: CompileAgentProfileRunRequestArgs,
 ): CompiledAgentProfileRunRequest {
@@ -601,6 +678,124 @@ export function buildAgentProfileRunEvidence(input: {
     ),
     laneKey: input.request.telemetry.laneKey,
     ...(input.result.error ? { error: input.result.error } : {}),
+  };
+}
+
+function zeroGoalUsage(): AgentProfileLoopGoalUsage {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedReadTokens: 0,
+    cachedWriteTokens: 0,
+    totalTokens: 0,
+    costUsd: 0,
+  };
+}
+
+function usageFromEvidence(
+  evidence: AgentProfileRunEvidence | undefined,
+): AgentProfileLoopGoalUsage {
+  if (!evidence) return zeroGoalUsage();
+  return {
+    inputTokens: evidence.inputTokens ?? 0,
+    outputTokens: evidence.outputTokens ?? 0,
+    cachedReadTokens: evidence.cachedReadTokens ?? 0,
+    cachedWriteTokens: evidence.cachedWriteTokens ?? 0,
+    totalTokens: evidence.totalTokens ?? 0,
+    costUsd: evidence.costUsd ?? 0,
+  };
+}
+
+function loopGoalStatus(input: {
+  evidence?: AgentProfileRunEvidence;
+  verdict?: AgentProfileLoopCompletionVerdict;
+}): AgentProfileLoopGoalStatus {
+  if (!input.evidence) return "active";
+  if (
+    input.evidence.status === "timed_out" ||
+    input.evidence.status === "resource_limit_exceeded"
+  ) {
+    return "budget_limited";
+  }
+  if (input.evidence.status !== "completed") return "failed";
+  if (input.verdict === "revise") return "revision_requested";
+  if (input.verdict === "fail") return "failed";
+  return "passed";
+}
+
+export function buildAgentProfileLoopGoalState(input: {
+  request: CompiledAgentProfileRunRequest;
+  evidence?: AgentProfileRunEvidence;
+  completion?: {
+    verdict: AgentProfileLoopCompletionVerdict;
+    feedback?: string;
+    checkedAt?: Date;
+  };
+  now?: () => Date;
+}): AgentProfileLoopGoalState {
+  const policy =
+    input.request.execution.loopPolicy ??
+    defaultLoopPolicyForRequest(input.request);
+  const usage = usageFromEvidence(input.evidence);
+  const startedAt =
+    input.evidence?.startedAt ?? input.request.telemetry.createdAt;
+  const updatedAt =
+    input.evidence?.finishedAt ?? (input.now?.() ?? new Date()).toISOString();
+  const status = loopGoalStatus({
+    evidence: input.evidence,
+    verdict: input.completion?.verdict,
+  });
+
+  return {
+    source: "thinkwork_agent_profile_loop",
+    goalId: `profile-loop:${input.request.profileRunId}`,
+    profileRunId: input.request.profileRunId,
+    parentThreadTurnId: input.request.parentThreadTurnId,
+    objective: input.request.task,
+    owner: {
+      type: "profile",
+      profileId: input.request.profileId,
+      profileSlug: input.request.profileSlug,
+      profileName: input.request.profileName,
+    },
+    status,
+    policy,
+    budget: {
+      maxIterations: policy.maxIterations,
+      maxReviewLoops: policy.maxReviewLoops,
+      ...(policy.maxRuntimeMs !== undefined
+        ? { maxRuntimeMs: policy.maxRuntimeMs }
+        : {}),
+      ...(policy.maxTokens !== undefined
+        ? { maxTokens: policy.maxTokens }
+        : {}),
+      ...(policy.costBudgetUsd !== undefined
+        ? { costBudgetUsd: policy.costBudgetUsd }
+        : {}),
+    },
+    usage,
+    usageByModel: input.evidence ? { [input.evidence.model]: usage } : {},
+    ...(input.completion
+      ? {
+          completion: {
+            verdict: input.completion.verdict,
+            ...(input.completion.feedback
+              ? { feedback: input.completion.feedback }
+              : {}),
+            checkedAt: (
+              input.completion.checkedAt ??
+              input.now?.() ??
+              new Date()
+            ).toISOString(),
+          },
+        }
+      : {}),
+    continuation: {
+      mode: "thinkwork_managed",
+      hiddenContinuationAllowed: false,
+    },
+    startedAt,
+    updatedAt,
   };
 }
 
