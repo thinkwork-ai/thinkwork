@@ -51,7 +51,7 @@ import { deriveAgentDefault } from "@/lib/agent-mode";
 import type { ApprovedModelOption } from "@/lib/approved-model-selection";
 
 export interface SpacesComposerMention {
-  targetType: "USER" | "AGENT";
+  targetType: "USER" | "AGENT" | "AGENT_PROFILE";
   targetId: string;
   displayName: string;
   rawText: string;
@@ -141,7 +141,12 @@ export function SpacesComposer({
     () =>
       mentionQuery === null
         ? []
-        : filterMentionTargets(mentionTargets, mentionQuery),
+        : filterMentionTargets(mentionTargets, mentionQuery.query, {
+            targetTypes:
+              mentionQuery.trigger === "#"
+                ? ["AGENT_PROFILE"]
+                : ["USER", "AGENT"],
+          }),
     [mentionQuery, mentionTargets],
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
@@ -255,8 +260,9 @@ export function SpacesComposer({
   }
 
   function selectMention(target: MentionTarget) {
-    const replacement = `@${target.displayName} `;
-    const query = mentionQuery ?? "";
+    const trigger = target.targetType === "AGENT_PROFILE" ? "#" : "@";
+    const replacement = `${trigger}${target.displayName} `;
+    const query = mentionQuery?.query ?? "";
     const prefix = value.slice(0, value.length - query.length - 1);
     onChange(`${prefix}${replacement}`);
     setMentions((current) => [
@@ -323,8 +329,8 @@ export function SpacesComposer({
       <div className="relative">
         {mentionMenuOpen ? (
           <MentionMenu
-            targets={mentionTargets}
-            query={mentionQuery ?? ""}
+            targets={mentionOptions}
+            query={mentionQuery?.query ?? ""}
             activeIndex={activeMentionIndex}
             placement="bottom"
             onSelect={selectMention}
@@ -369,7 +375,7 @@ export function SpacesComposer({
               catalog={skillCatalog}
               mentions={mentions}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type @ to mention or / to invoke a skill"
+              placeholder="Type @ to mention people, # for agent profiles, or / to pin a skill"
               disabled={isComposerDisabled}
               autoFocus
             />
@@ -611,8 +617,8 @@ function dataUrlToFile(
 }
 
 function currentMentionQuery(content: string) {
-  const match = /(?:^|\s)@([\w.'-]*)$/u.exec(content);
-  return match ? match[1] : null;
+  const match = /(?:^|\s)([@#])([\w.'-]*)$/u.exec(content);
+  return match ? { trigger: match[1] as "@" | "#", query: match[2] ?? "" } : null;
 }
 
 function hasDefaultAgentMentionAlias(content: string) {

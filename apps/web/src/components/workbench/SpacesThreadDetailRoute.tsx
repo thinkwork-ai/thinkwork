@@ -27,6 +27,10 @@ import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions"
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
 import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
+import {
+  mergeAgentProfileMentionTargets,
+  type AgentProfileMentionSource,
+} from "@/components/workbench/agent-profile-mention-targets";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -73,6 +77,7 @@ import {
   writeStoredModelId,
   type ApprovedModelOption,
 } from "@/lib/approved-model-selection";
+import { SettingsAgentProfilesQuery } from "@/lib/settings-queries";
 
 interface SpacesThreadDetailRouteProps {
   threadId: string;
@@ -96,6 +101,12 @@ interface OptimisticMessage {
   expectAssistantResponse: boolean;
   startedAt?: string | null;
   attachments?: OptimisticAttachmentPreview[];
+  mentions?: Array<{
+    targetType: "USER" | "AGENT" | "AGENT_PROFILE";
+    targetId: string;
+    displayName: string;
+    rawText?: string;
+  }>;
 }
 
 const ACTIVE_AGENT_REFRESH_MS = 2_000;
@@ -153,6 +164,7 @@ interface ThreadResult {
             targetType?: string | null;
             targetId?: string | null;
             displayName?: string | null;
+            rawText?: string | null;
           }> | null;
           durableArtifact?: {
             id: string;
@@ -226,6 +238,10 @@ interface RunbookRunsResult {
 
 interface MentionTargetsResult {
   threadMentionTargets?: MentionTarget[] | null;
+}
+
+interface AgentProfilesMentionData {
+  agentProfiles?: AgentProfileMentionSource[] | null;
 }
 
 interface ApprovedModelsResult {
@@ -369,6 +385,15 @@ export function SpacesThreadDetailRoute({
     query: ThreadMentionTargetsQuery,
     variables: { threadId },
     pause: !threadId,
+    requestPolicy: "cache-and-network",
+  });
+  const [{ data: agentProfilesData }] = useQuery<
+    AgentProfilesMentionData,
+    { tenantId: string }
+  >({
+    query: SettingsAgentProfilesQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
   // Tenant skill catalog for the `/skill` force-pin popup (plan 2026-06-04-004
@@ -794,6 +819,7 @@ export function SpacesThreadDetailRoute({
             optimisticThreadStart.expectAssistantResponse,
           startedAt: optimisticThreadStart.startedAt ?? null,
           attachments: optimisticThreadStart.attachments,
+          mentions: optimisticThreadStart.mentions,
         }
       : null;
   const effectiveOptimisticMessage =
@@ -804,8 +830,22 @@ export function SpacesThreadDetailRoute({
           effectiveOptimisticMessage.expectAssistantResponse,
         startedAt: effectiveOptimisticMessage.startedAt,
         attachments: effectiveOptimisticMessage.attachments,
+        mentions: effectiveOptimisticMessage.mentions,
       })
     : thread;
+  const mentionTargets = useMemo(
+    () =>
+      mergeAgentProfileMentionTargets(
+        mentionTargetsData?.threadMentionTargets,
+        agentProfilesData?.agentProfiles,
+        routeThread?.spaceId ?? null,
+      ),
+    [
+      agentProfilesData?.agentProfiles,
+      mentionTargetsData?.threadMentionTargets,
+      routeThread?.spaceId,
+    ],
+  );
   const threadArtifacts = useMemo(
     () => deriveThreadArtifacts(visibleThread),
     [visibleThread],
@@ -1434,7 +1474,7 @@ export function SpacesThreadDetailRoute({
       streamingChunks={hasDurableAssistant ? [] : chunks}
       streamState={hasDurableAssistant ? undefined : streamState}
       isSending={sending}
-      mentionTargets={mentionTargetsData?.threadMentionTargets ?? []}
+      mentionTargets={mentionTargets}
       skillCatalog={skillCatalog}
       approvedModels={approvedModels ?? undefined}
       selectedModelId={selectedModelId}
@@ -1466,6 +1506,12 @@ export function SpacesThreadDetailRoute({
                   mimeType: file.type,
                 }))
               : undefined,
+          mentions: mentions.map((mention) => ({
+            targetType: mention.targetType,
+            targetId: mention.targetId,
+            displayName: mention.displayName,
+            rawText: mention.rawText,
+          })),
         });
         resetStreamingChunks();
 
@@ -1513,7 +1559,7 @@ export function SpacesThreadDetailRoute({
           content: string;
           metadata?: string;
           mentions?: Array<{
-            targetType: "USER" | "AGENT";
+            targetType: "USER" | "AGENT" | "AGENT_PROFILE";
             targetId: string;
             displayName: string;
             rawText: string;
@@ -1992,6 +2038,12 @@ function withOptimisticUserTurn(
     expectAssistantResponse?: boolean;
     startedAt?: string | null;
     attachments?: OptimisticAttachmentPreview[];
+    mentions?: Array<{
+      targetType: "USER" | "AGENT" | "AGENT_PROFILE";
+      targetId: string;
+      displayName: string;
+      rawText?: string;
+    }>;
   } = {},
 ): TaskThread | null {
   if (!thread) return null;
@@ -2051,6 +2103,7 @@ function withOptimisticUserTurn(
                     label: attachment.name,
                   }))
                 : undefined,
+            mentions: options.mentions,
           },
         ],
     turns,
@@ -2125,6 +2178,7 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
       parts: normalizePersistedParts(node.parts),
       createdAt: node.createdAt,
       metadata: node.metadata,
+      mentions: node.mentions,
       toolCalls: node.toolCalls,
       toolResults: node.toolResults,
       durableArtifact: node.durableArtifact

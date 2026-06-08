@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 export interface MentionTarget {
   id: string;
-  targetType: "USER" | "AGENT";
+  targetType: "USER" | "AGENT" | "AGENT_PROFILE";
   targetId: string;
   displayName: string;
   aliases?: string[];
@@ -13,6 +13,8 @@ export interface MentionTarget {
   role?: string | null;
   /** Secondary row in the picker (users). Populated once the backend field ships. */
   email?: string | null;
+  /** Secondary row in the picker for Agent Profiles. */
+  description?: string | null;
 }
 
 interface MentionMenuProps {
@@ -36,13 +38,20 @@ const DEFAULT_AGENT_SHORTCUT_ALIASES = ["agent", "think"] as const;
 export function filterMentionTargets(
   targets: MentionTarget[],
   query: string,
-  options: { includeDefaultAgentShortcut?: boolean } = {},
+  options: {
+    includeDefaultAgentShortcut?: boolean;
+    targetTypes?: MentionTarget["targetType"][];
+  } = {},
 ) {
   const normalized = query.trim().toLowerCase();
+  const allowedTypes = options.targetTypes
+    ? new Set(options.targetTypes)
+    : null;
   const shortcut = options.includeDefaultAgentShortcut
     ? defaultAgentShortcutTarget(targets, normalized)
     : null;
   const filtered = targets
+    .filter((target) => !allowedTypes || allowedTypes.has(target.targetType))
     .filter(
       (target) =>
         !shortcut ||
@@ -53,6 +62,7 @@ export function filterMentionTargets(
       normalized
         ? target.displayName.toLowerCase().includes(normalized) ||
           target.role?.toLowerCase().includes(normalized) ||
+          target.description?.toLowerCase().includes(normalized) ||
           target.aliases?.some((alias) =>
             alias.toLowerCase().includes(normalized),
           )
@@ -119,8 +129,13 @@ export function MentionMenu({
       aria-activedescendant={activeOption ? optionId(activeOption) : undefined}
     >
       {filtered.map((target, index) => {
-        const Icon = target.targetType === "AGENT" ? Bot : UserRound;
+        const Icon =
+          target.targetType === "AGENT" ||
+          target.targetType === "AGENT_PROFILE"
+            ? Bot
+            : UserRound;
         const isActive = index === activeIndex;
+        const secondaryText = target.description ?? target.email ?? null;
         return (
           <Button
             key={target.id}
@@ -150,9 +165,9 @@ export function MentionMenu({
                   </span>
                 ) : null}
               </span>
-              {target.email ? (
+              {secondaryText ? (
                 <span className="block truncate text-xs text-muted-foreground">
-                  {target.email}
+                  {secondaryText}
                 </span>
               ) : null}
             </span>

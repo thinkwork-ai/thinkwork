@@ -60,7 +60,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ),
 }));
 
-import { TaskThreadView } from "./TaskThreadView";
+import { actionRowsForTurn, TaskThreadView } from "./TaskThreadView";
 
 afterEach(() => {
   cleanup();
@@ -2990,6 +2990,80 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("Checking memory")).toBeTruthy();
   });
 
+  it("renders profile-tagged live tool events as agent profile lane activity", () => {
+    const message = {
+      id: "u1",
+      role: "USER" as const,
+      content: "Find sources #Research",
+      mentions: [
+        {
+          targetType: "AGENT_PROFILE" as const,
+          targetId: "research",
+          displayName: "Research",
+        },
+      ],
+    };
+    const turn = {
+      id: "turn-1",
+      status: "running",
+      invocationSource: "chat_message",
+      events: [
+        {
+          id: "e1",
+          eventType: "agent_profile_run_started",
+          payload: {
+            profile_slug: "research",
+            profile_name: "Research",
+            model: "anthropic.claude-3-5-haiku-20241022-v1:0",
+            status: "running",
+          },
+          createdAt: "2026-05-09T11:30:00Z",
+        },
+        {
+          id: "e2",
+          eventType: "tool_invocation_started",
+          payload: {
+            profile_slug: "research",
+            profile_name: "Research",
+            tool_name: "web_search",
+            tool_use_id: "tool-1",
+          },
+          createdAt: "2026-05-09T11:30:01Z",
+        },
+      ],
+    };
+    const rows = actionRowsForTurn(turn, {}, message);
+
+    expect(rows[0]?.title).toBe("Agent Profile: Research");
+    expect(rows[0]?.detail).toContain("Model: claude-3-5-haiku-20241022");
+    expect(rows[1]?.title).toBe("Research: Finding sources");
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-live-profile",
+          title: "Live profile tools",
+          lifecycleStatus: "RUNNING",
+          messages: [message],
+          turns: [turn],
+        }}
+      />,
+    );
+
+    openThinkingDisclosure();
+    const agentProfileSummary = screen
+      .getByText("Agent Profile: Research")
+      .closest("summary");
+    expect(agentProfileSummary?.querySelectorAll("svg")).toHaveLength(1);
+    expect(screen.getByText("Research: Finding sources")).toBeTruthy();
+    expect(
+      screen
+        .getByText("Research: Finding sources")
+        .closest("summary")
+        ?.querySelectorAll("svg"),
+    ).toHaveLength(2);
+  });
+
   it("dedupes live tool_invocation_started events against post-turn usage.tool_invocations", () => {
     // U4 regression guard: when a turn finishes, the same tool appears in
     // both `usage.tool_invocations` (post-turn reconstruction) and the
@@ -3035,6 +3109,72 @@ describe("TaskThreadView", () => {
     // Exactly one "Finding sources" row, not two.
     openThinkingDisclosure();
     expect(screen.getAllByText("Finding sources")).toHaveLength(1);
+  });
+
+  it("surfaces an agent profile row while a mentioned profile turn is running", () => {
+    const rows = actionRowsForTurn(
+      {
+        id: "turn-agent-profile-running",
+        status: "running",
+        invocationSource: "chat_message",
+      },
+      {},
+      {
+        id: "u1",
+        role: "USER",
+        content: "Find current CEO of Stripe #Research",
+        mentions: [
+          {
+            targetType: "AGENT_PROFILE",
+            targetId: "research",
+            displayName: "Research",
+            rawText: "#Research",
+          },
+        ],
+      },
+    );
+
+    expect(rows[0]).toMatchObject({
+      title: "Agent Profile: Research",
+      detail: "Delegated via #Research. Waiting for profile lane activity.",
+      kind: "thinking",
+    });
+  });
+
+  it("renders finalized agent profile run model, token, cost, and status details", () => {
+    const rows = actionRowsForTurn(
+      {
+        id: "turn-agent-profile-finished",
+        status: "succeeded",
+        invocationSource: "chat_message",
+      },
+      {
+        tool_invocations: [
+          {
+            tool_name: "delegate_to_agent_profile",
+            agent_profile_run: {
+              profileSlug: "research",
+              profileName: "Research",
+              model: "anthropic.claude-3-5-haiku-20241022-v1:0",
+              inputTokens: 1200,
+              outputTokens: 321,
+              cachedReadTokens: 400,
+              costUsd: 0.0023,
+              durationMs: 12_000,
+              status: "completed",
+            },
+          },
+        ],
+      },
+    );
+
+    expect(rows[0]?.title).toBe("Agent Profile: Research");
+    expect(rows[0]?.detail).toContain("Profile: #research");
+    expect(rows[0]?.detail).toContain("Model: claude-3-5-haiku-20241022");
+    expect(rows[0]?.detail).toContain("Tokens: 1.2K in / 321 out (400 cached)");
+    expect(rows[0]?.detail).toContain("Cost: $0.0023");
+    expect(rows[0]?.detail).toContain("Duration: 12s");
+    expect(rows[0]?.detail).toContain("Status: completed");
   });
 
   it("renders one Thinking disclosure per turn, anchored to its user message in chronological order", () => {

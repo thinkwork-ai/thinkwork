@@ -1,4 +1,4 @@
-export type MentionTargetType = "user" | "agent";
+export type MentionTargetType = "user" | "agent" | "agent_profile";
 
 export interface MentionTarget {
   targetType: MentionTargetType;
@@ -53,7 +53,7 @@ export function parseMessageMentions(input: {
   }
 
   const content = input.content ?? "";
-  if (content.includes("@")) {
+  if (content.includes("@") || content.includes("#")) {
     for (const match of findTextMentions(content, input.targets)) {
       const key = mentionKey(match.targetType, match.targetId);
       if (!mentions.has(key)) mentions.set(key, match);
@@ -86,8 +86,9 @@ function findTextMentions(
   const claimedStartOffsets = new Set<number>();
 
   for (const { alias, target } of aliases) {
+    const trigger = target.targetType === "agent_profile" ? "[#@]" : "@";
     const pattern = new RegExp(
-      `(^|\\s)@${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
+      `(^|\\s)${trigger}${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
       "iu",
     );
     const match = pattern.exec(content);
@@ -112,7 +113,11 @@ function findTextMentions(
 
 function normalizeTargetType(value: string): MentionTargetType | null {
   const normalized = value.toLowerCase();
-  return normalized === "user" || normalized === "agent" ? normalized : null;
+  return normalized === "user" ||
+    normalized === "agent" ||
+    normalized === "agent_profile"
+    ? normalized
+    : null;
 }
 
 function mentionKey(targetType: string, targetId: string) {

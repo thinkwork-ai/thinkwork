@@ -90,7 +90,7 @@ describe("SignInPage", () => {
     render(<SignInPage />);
 
     expect(screen.getByRole("heading", { name: "ThinkWork" })).toBeTruthy();
-    expect(screen.getByText("Spaces")).toBeTruthy();
+    expect(screen.queryByText("Spaces")).toBeNull();
     expect(screen.getByText("Acme ThinkWork · dev · us-east-1")).toBeTruthy();
     expect(screen.getByText("Unsigned build-time fallback")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
@@ -140,7 +140,7 @@ describe("SignInPage", () => {
     render(<SignInPage />);
 
     expect(screen.getByRole("banner").textContent).toContain(
-      "ThinkWork Spaces",
+      "ThinkWork",
     );
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
   });

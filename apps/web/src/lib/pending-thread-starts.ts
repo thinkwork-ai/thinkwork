@@ -4,12 +4,20 @@ export interface PendingThreadStartAttachment {
   mimeType?: string | null;
 }
 
+export interface PendingThreadStartMention {
+  targetType: "USER" | "AGENT" | "AGENT_PROFILE";
+  targetId: string;
+  displayName: string;
+  rawText?: string;
+}
+
 export interface PendingThreadStart {
   threadId: string;
   title: string;
   content: string;
   expectAssistantResponse: boolean;
   startedAt?: string | null;
+  mentions?: PendingThreadStartMention[];
   /** Attached files, shown optimistically on the first user message. */
   attachments?: PendingThreadStartAttachment[];
 }

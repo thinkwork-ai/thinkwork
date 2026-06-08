@@ -23,6 +23,14 @@ const targets = [
     aliases: ["coordinator"],
     role: "coordinator",
   },
+  {
+    id: "agent_profile:profile-research",
+    targetType: "agent_profile" as const,
+    targetId: "profile-research",
+    displayName: "Research",
+    aliases: ["research"],
+    role: "Agent Profile",
+  },
 ];
 
 const mentions = [
@@ -41,6 +49,14 @@ const mentions = [
     rawText: "@Coordinator",
     startOffset: 18,
     endOffset: 30,
+  },
+  {
+    targetType: "agent_profile" as const,
+    targetId: "profile-research",
+    displayName: "Research",
+    rawText: "#Research",
+    startOffset: 31,
+    endOffset: 40,
   },
 ];
 

@@ -2038,6 +2038,7 @@ export type MessageMention = {
 
 export enum MessageMentionTargetType {
   Agent = 'AGENT',
+  AgentProfile = 'AGENT_PROFILE',
   User = 'USER'
 }
 
@@ -6244,6 +6245,8 @@ export type ThreadMentionTarget = {
   __typename?: 'ThreadMentionTarget';
   aliases: Array<Scalars['String']['output']>;
   avatarUrl?: Maybe<Scalars['String']['output']>;
+  /** Agent Profile description — shown as the picker's secondary row for profiles. */
+  description?: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
   /** User email — shown as the picker's secondary row. Null for agents. */
   email?: Maybe<Scalars['String']['output']>;

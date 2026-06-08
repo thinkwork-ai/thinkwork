@@ -29,7 +29,8 @@ const BOT_SVG = `<svg ${ICON_ATTRS}><path d="M12 8V4H8"/><rect width="16" height
 /** A committed mention the editor should render as an inline pill. */
 export interface TokenMention {
   displayName: string;
-  targetType: "USER" | "AGENT";
+  targetType: "USER" | "AGENT" | "AGENT_PROFILE";
+  rawText?: string;
 }
 
 interface SkillTokenSegment {
@@ -38,7 +39,8 @@ interface SkillTokenSegment {
   slug?: string;
   label?: string;
   displayName?: string;
-  targetType?: "USER" | "AGENT";
+  targetType?: "USER" | "AGENT" | "AGENT_PROFILE";
+  trigger?: "@" | "#";
 }
 
 const slugRe = /(^|\s)\/([\w.'-]+)/g;
@@ -78,22 +80,30 @@ export function parseValueToSegments(
     });
   }
 
-  const seenMentionNames = new Set<string>();
+  const seenMentionTokens = new Set<string>();
   for (const mention of mentions) {
     const name = mention.displayName;
-    if (!name || seenMentionNames.has(name)) continue;
-    seenMentionNames.add(name);
-    const re = new RegExp(`(^|\\s)@(${escapeRegExp(name)})`, "g");
+    if (!name) continue;
+    const trigger =
+      mention.rawText?.trim().startsWith("#") ||
+      mention.targetType === "AGENT_PROFILE"
+        ? "#"
+        : "@";
+    const token = mention.rawText?.trim() || `${trigger}${name}`;
+    if (seenMentionTokens.has(token)) continue;
+    seenMentionTokens.add(token);
+    const re = new RegExp(`(^|\\s)(${escapeRegExp(token)})`, "g");
     let mm: RegExpExecArray | null;
     while ((mm = re.exec(value))) {
       const start = mm.index + mm[1]!.length;
       spans.push({
         start,
-        end: start + 1 + name.length,
+        end: start + token.length,
         seg: {
           type: "mention",
           displayName: name,
           targetType: mention.targetType,
+          ...(trigger === "#" ? { trigger } : {}),
         },
       });
     }
@@ -141,13 +151,18 @@ function makeSkillPill(slug: string, label: string): HTMLElement {
 
 function makeMentionPill(
   displayName: string,
-  targetType: "USER" | "AGENT",
+  targetType: "USER" | "AGENT" | "AGENT_PROFILE",
+  trigger: "@" | "#" = targetType === "AGENT_PROFILE" ? "#" : "@",
 ): HTMLElement {
   const span = document.createElement("span");
   span.setAttribute("contenteditable", "false");
   span.dataset.mention = displayName;
+  span.dataset.mentionTrigger = trigger;
   span.className = `mention-pill ${TOKEN_CLASS}`;
-  const icon = targetType === "AGENT" ? BOT_SVG : USER_SVG;
+  const icon =
+    targetType === "AGENT" || targetType === "AGENT_PROFILE"
+      ? BOT_SVG
+      : USER_SVG;
   span.innerHTML = `${icon}<span>${escapeHtml(displayName)}</span>`;
   return span;
 }
@@ -162,7 +177,9 @@ export function renderSegments(
     if (seg.type === "skill") {
       el.appendChild(makeSkillPill(seg.slug!, seg.label!));
     } else if (seg.type === "mention") {
-      el.appendChild(makeMentionPill(seg.displayName!, seg.targetType!));
+      el.appendChild(
+        makeMentionPill(seg.displayName!, seg.targetType!, seg.trigger),
+      );
     } else if (seg.text) {
       el.appendChild(document.createTextNode(seg.text));
     }
@@ -184,7 +201,7 @@ export function serializeEditor(el: HTMLElement): string {
         if (child.dataset.slug) {
           out += `/${child.dataset.slug}`;
         } else if (child.dataset.mention) {
-          out += `@${child.dataset.mention}`;
+          out += `${child.dataset.mentionTrigger ?? "@"}${child.dataset.mention}`;
         } else if (child.tagName === "BR") {
           out += "\n";
         } else {

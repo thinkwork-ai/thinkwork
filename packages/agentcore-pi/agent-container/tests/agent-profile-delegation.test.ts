@@ -5,7 +5,6 @@ import {
   buildAgentProfileDelegationTool,
   executeAgentProfileDelegation,
   normalizeAgentProfiles,
-  parseAgentProfileSlashCommand,
   type ProfileDelegationToolOptions,
 } from "../src/agent-profile-delegation.js";
 import type { AgentProfileConfig } from "../src/agent-profile-adapter.js";
@@ -66,7 +65,7 @@ function researchProfile(
     instructions: "Research with sources.",
     routingGuidance: "Use this for research.",
     toolPolicy: {
-      builtInTools: ["read", "web_search", "web_extract"],
+      builtInTools: ["read", "web-search", "web-extract"],
       skills: ["source-review"],
       mcpServers: [
         {
@@ -178,19 +177,6 @@ describe("agent profile delegation", () => {
     ]);
   });
 
-  it("parses explicit /agent profile commands", () => {
-    expect(
-      parseAgentProfileSlashCommand("/agent research cite Stripe CEO"),
-    ).toEqual({
-      profileSlug: "research",
-      task: "cite Stripe CEO",
-    });
-    expect(parseAgentProfileSlashCommand("hello")).toBeNull();
-    expect(() => parseAgentProfileSlashCommand("/agent research")).toThrow(
-      /requires a profile slug/,
-    );
-  });
-
   it("runs a profile child loop with the profile model and narrowed tools", async () => {
     let captured:
       | Parameters<NonNullable<ProfileDelegationToolOptions["runLoop"]>>[0]
@@ -242,6 +228,58 @@ describe("agent profile delegation", () => {
       inputTokens: 10,
       outputTokens: 5,
       totalTokens: 15,
+    });
+  });
+
+  it("emits profile start, child tool, and completion activity with lane metadata", async () => {
+    let emitChildActivity: unknown;
+    const emitted: Array<{ eventType: string; message: string; payload?: unknown }> =
+      [];
+    const runLoop = vi.fn(async (_args, deps) => {
+      emitChildActivity = deps?.emitActivity;
+      deps?.emitActivity?.({
+        eventType: "tool_invocation_started",
+        message: "web_search",
+        stream: "step",
+        payload: {
+          tool_name: "web_search",
+          input_preview: "Stripe CEO",
+        },
+      });
+      return {
+        content: "Research handoff",
+        modelId: "anthropic/claude-haiku-4-5",
+        toolsCalled: ["web_search"],
+        toolInvocations: [],
+        toolCosts: [],
+      };
+    });
+
+    await executeAgentProfileDelegation({
+      options: await options({
+        runLoop,
+        emitActivity: (event) => emitted.push(event),
+      }),
+      profileSlug: "research",
+      task: "Find current sources",
+    });
+
+    expect(typeof emitChildActivity).toBe("function");
+    expect(emitted.map((event) => event.eventType)).toEqual([
+      "agent_profile_run_started",
+      "tool_invocation_started",
+      "agent_profile_run_completed",
+    ]);
+    expect(emitted[1]).toMatchObject({
+      message: "Research: web_search",
+      payload: {
+        profile_slug: "research",
+        profile_name: "Research",
+        model: "anthropic/claude-haiku-4-5",
+        lane_key: "profile:research",
+        child_event_type: "tool_invocation_started",
+        tool_name: "web_search",
+      },
     });
   });
 
@@ -302,6 +340,9 @@ describe("agent profile delegation", () => {
         modelId: "anthropic/claude-haiku-4-5",
         extensionToolNames: ["web_search", "web_extract"],
         threadId: expect.stringContaining(":profile:"),
+      }),
+      expect.objectContaining({
+        emitActivity: expect.any(Function),
       }),
     );
     expect(evidence).toMatchObject({

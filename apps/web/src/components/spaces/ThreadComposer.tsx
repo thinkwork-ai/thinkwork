@@ -16,7 +16,7 @@ import {
 } from "./MentionMenu";
 
 export interface ComposerMention {
-  targetType: "USER" | "AGENT";
+  targetType: "USER" | "AGENT" | "AGENT_PROFILE";
   targetId: string;
   displayName: string;
   rawText: string;
@@ -46,7 +46,12 @@ export function ThreadComposer({
     () =>
       mentionQuery === null
         ? []
-        : filterMentionTargets(mentionTargets, mentionQuery),
+        : filterMentionTargets(mentionTargets, mentionQuery.query, {
+            targetTypes:
+              mentionQuery.trigger === "#"
+                ? ["AGENT_PROFILE"]
+                : ["USER", "AGENT"],
+          }),
     [mentionQuery, mentionTargets],
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
@@ -72,8 +77,9 @@ export function ThreadComposer({
   }
 
   function selectMention(target: MentionTarget) {
-    const replacement = `@${target.displayName} `;
-    const query = mentionQuery ?? "";
+    const trigger = target.targetType === "AGENT_PROFILE" ? "#" : "@";
+    const replacement = `${trigger}${target.displayName} `;
+    const query = mentionQuery?.query ?? "";
     const prefix = content.slice(0, content.length - query.length - 1);
     const nextContent = `${prefix}${replacement}`;
     setContent(nextContent);
@@ -124,8 +130,8 @@ export function ThreadComposer({
       <div className="relative mx-auto max-w-4xl">
         {mentionQuery !== null ? (
           <MentionMenu
-            targets={mentionTargets}
-            query={mentionQuery}
+            targets={mentionOptions}
+            query={mentionQuery.query}
             activeIndex={activeMentionIndex}
             onSelect={selectMention}
           />
@@ -204,6 +210,6 @@ export function ThreadComposer({
 }
 
 function currentMentionQuery(content: string) {
-  const match = /(?:^|\s)@([\w.'-]*)$/u.exec(content);
-  return match ? match[1] : null;
+  const match = /(?:^|\s)([@#])([\w.'-]*)$/u.exec(content);
+  return match ? { trigger: match[1] as "@" | "#", query: match[2] ?? "" } : null;
 }

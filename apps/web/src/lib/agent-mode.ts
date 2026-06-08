@@ -11,7 +11,7 @@
 // composer module.
 
 export interface AgentModeMention {
-  targetType: "USER" | "AGENT";
+  targetType: "USER" | "AGENT" | "AGENT_PROFILE";
   targetId: string;
 }
 

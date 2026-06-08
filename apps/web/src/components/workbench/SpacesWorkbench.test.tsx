@@ -22,7 +22,10 @@ import {
   SendMessageMutation,
   SpacesQuery,
 } from "@/lib/graphql-queries";
-import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
+import {
+  SettingsAgentProfilesQuery,
+  SettingsTenantAgentQuery,
+} from "@/lib/settings-queries";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 import {
   clearPendingThreadStart,
@@ -180,6 +183,30 @@ beforeEach(() => {
         vi.fn(),
       ];
     }
+    if (query === SettingsAgentProfilesQuery) {
+      return [
+        {
+          data: {
+            agentProfiles: [
+              {
+                id: "profile-research",
+                slug: "research",
+                name: "Research",
+                description: "Searches the web and cites sources.",
+                routingGuidance: "Use for research subtasks.",
+                enabled: true,
+                spaces: [],
+              },
+            ],
+          },
+          error: undefined,
+          fetching: false,
+          stale: false,
+          hasNext: false,
+        },
+        vi.fn(),
+      ];
+    }
     return [
       {
         data: undefined,
@@ -211,6 +238,17 @@ describe("SpacesWorkbench", () => {
       expect(screen.getByLabelText("Send message")).toBeTruthy();
     });
     expect(createThread).not.toHaveBeenCalled();
+  });
+
+  it("shows Agent Profiles in the mention menu even when deployed mention targets are users-only", async () => {
+    render(<SpacesWorkbench />);
+
+    setComposerText("#");
+
+    expect(
+      await screen.findByRole("option", { name: /Research/i }),
+    ).toBeTruthy();
+    expect(screen.getByText("Searches the web and cites sources.")).toBeTruthy();
   });
 
   it("sends the first message of a new thread through managed AgentCore", async () => {
