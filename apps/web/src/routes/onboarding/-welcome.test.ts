@@ -8,6 +8,16 @@ const source = readFileSync(
 );
 
 describe("onboarding welcome route", () => {
+  it("uses the no-checkout path for browser-first deployment sessions", () => {
+    expect(source).toContain("NewEnvironmentInstaller");
+    expect(source).toContain("createDeploymentSession");
+    expect(source).toContain("requestDeploymentSessionTeardown");
+    expect(source).toContain("DEPLOYMENT_SESSION_STORAGE_KEY");
+    expect(source).toContain("State starts in the ThinkWork control plane");
+    expect(source).toContain("Teardown");
+    expect(source).toContain("if (!session_id || !ready || isAuthenticated)");
+  });
+
   it("returns OAuth users to the welcome flow before choosing a tenant identifier", () => {
     expect(source).toContain("rememberPostAuthRedirect");
     expect(source).toContain("startGoogleSignIn");

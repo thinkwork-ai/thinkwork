@@ -321,6 +321,7 @@ resource "aws_lambda_function" "handler" {
     "stripe-webhook",
     "stripe-portal",
     "stripe-subscription",
+    "deployment-sessions",
     "auth-me",
     "extension-proxy",
     "tenants",
@@ -932,17 +933,23 @@ locals {
 
     # Stripe billing (unauthenticated — checkout is pre-signup; webhook is
     # server-to-server with Stripe signature verification).
-    "POST /api/stripe/checkout-session"          = "stripe-checkout"
-    "OPTIONS /api/stripe/checkout-session"       = "stripe-checkout"
-    "POST /api/stripe/webhook"                   = "stripe-webhook"
-    "POST /api/stripe/portal-session"            = "stripe-portal"
-    "OPTIONS /api/stripe/portal-session"         = "stripe-portal"
-    "GET /api/stripe/subscription"               = "stripe-subscription"
-    "OPTIONS /api/stripe/subscription"           = "stripe-subscription"
-    "GET /api/auth/me"                           = "auth-me"
-    "OPTIONS /api/auth/me"                       = "auth-me"
-    "ANY /api/extensions/{extensionId}"          = "extension-proxy"
-    "ANY /api/extensions/{extensionId}/{proxy+}" = "extension-proxy"
+    "POST /api/stripe/checkout-session"                     = "stripe-checkout"
+    "OPTIONS /api/stripe/checkout-session"                  = "stripe-checkout"
+    "POST /api/stripe/webhook"                              = "stripe-webhook"
+    "POST /api/stripe/portal-session"                       = "stripe-portal"
+    "OPTIONS /api/stripe/portal-session"                    = "stripe-portal"
+    "GET /api/stripe/subscription"                          = "stripe-subscription"
+    "OPTIONS /api/stripe/subscription"                      = "stripe-subscription"
+    "POST /api/deployment-sessions"                         = "deployment-sessions"
+    "OPTIONS /api/deployment-sessions"                      = "deployment-sessions"
+    "GET /api/deployment-sessions/{sessionId}"              = "deployment-sessions"
+    "OPTIONS /api/deployment-sessions/{sessionId}"          = "deployment-sessions"
+    "POST /api/deployment-sessions/{sessionId}/teardown"    = "deployment-sessions"
+    "OPTIONS /api/deployment-sessions/{sessionId}/teardown" = "deployment-sessions"
+    "GET /api/auth/me"                                      = "auth-me"
+    "OPTIONS /api/auth/me"                                  = "auth-me"
+    "ANY /api/extensions/{extensionId}"                     = "extension-proxy"
+    "ANY /api/extensions/{extensionId}/{proxy+}"            = "extension-proxy"
 
     # Routines
     "ANY /api/routines/{proxy+}" = "routines"

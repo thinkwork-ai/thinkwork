@@ -273,6 +273,9 @@ build_handler "stripe-portal" \
 build_handler "stripe-subscription" \
   "$REPO_ROOT/packages/api/src/handlers/stripe-subscription.ts"
 
+build_handler "deployment-sessions" \
+  "$REPO_ROOT/packages/api/src/handlers/deployment-sessions.ts"
+
 build_handler "auth-me" \
   "$REPO_ROOT/packages/api/src/handlers/auth-me.ts"
 
