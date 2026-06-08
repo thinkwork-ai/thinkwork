@@ -442,7 +442,7 @@ describe("U1 - Twenty Terraform app module", () => {
     );
     expect(handlers).toMatch(/}, local\.cognee_env\)/);
     expect(handlers).toMatch(/"graphql-http" = merge\(\{/);
-    expect(handlers).toMatch(/}, local\.twenty_env\)/);
+    expect(handlers).toMatch(/}, local\.twenty_env, local\.kestra_env\)/);
     expect(handlers).not.toMatch(/TWENTY_URL\s*=/);
   });
 

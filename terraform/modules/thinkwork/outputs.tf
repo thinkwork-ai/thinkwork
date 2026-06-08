@@ -307,6 +307,66 @@ output "twenty_storage_file_system_id" {
   value       = local.twenty_provisioned ? module.twenty[0].twenty_storage_file_system_id : null
 }
 
+output "kestra_provisioned" {
+  description = "Whether the Kestra retained managed-app substrate is provisioned"
+  value       = local.kestra_provisioned
+}
+
+output "kestra_runtime_enabled" {
+  description = "Whether the Kestra runtime is enabled"
+  value       = local.kestra_runtime_enabled
+}
+
+output "kestra_url" {
+  description = "Public Kestra URL (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_url : null
+}
+
+output "kestra_alb_dns_name" {
+  description = "Public ALB DNS name for Kestra (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_alb_dns_name : null
+}
+
+output "kestra_alb_arn" {
+  description = "Public ALB ARN for Kestra (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_alb_arn : null
+}
+
+output "kestra_target_group_arn" {
+  description = "Target group ARN for Kestra (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_target_group_arn : null
+}
+
+output "kestra_cluster_arn" {
+  description = "ECS cluster ARN for Kestra (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_cluster_arn : null
+}
+
+output "kestra_service_name" {
+  description = "ECS service name for Kestra (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_service_name : null
+}
+
+output "kestra_log_group_name" {
+  description = "CloudWatch log group for Kestra (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_log_group_name : null
+}
+
+output "kestra_storage_bucket_name" {
+  description = "S3 bucket name backing Kestra internal storage (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_storage_bucket_name : null
+}
+
+output "kestra_database_name" {
+  description = "Dedicated PostgreSQL database name used by Kestra (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_database_name : null
+}
+
+output "kestra_basic_auth_secret_arn" {
+  description = "Secrets Manager ARN for the Kestra UI/API basic-auth service credential (null when kestra_provisioned = false)"
+  value       = local.kestra_provisioned ? module.kestra[0].kestra_basic_auth_secret_arn : null
+}
+
 output "admin_url" {
   description = "Deprecated compatibility alias for app_url"
   value       = local.end_user_app_url

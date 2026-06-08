@@ -302,6 +302,90 @@ variable "twenty_certificate_arn" {
   default     = ""
 }
 
+variable "kestra_provisioned" {
+  description = "Provision the retained Kestra managed-app substrate. Runtime can be parked independently with kestra_runtime_enabled."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_runtime_enabled" {
+  description = "Run the Kestra service when the retained substrate is provisioned."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_image_uri" {
+  description = "Kestra container image URI pinned to an immutable sha256 digest. Required when kestra_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_db_username" {
+  description = "Dedicated PostgreSQL username for Kestra."
+  type        = string
+  default     = "thinkwork_kestra"
+}
+
+variable "kestra_db_name" {
+  description = "Dedicated PostgreSQL database name for Kestra."
+  type        = string
+  default     = "thinkwork_kestra"
+}
+
+variable "kestra_db_password_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON password field for the dedicated Kestra database user. Required when kestra_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_basic_auth_secret_arn" {
+  description = "Secrets Manager ARN containing JSON username/password fields for the Kestra UI/API service credential. Required when kestra_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_public_url" {
+  description = "Public HTTPS URL for Kestra. Leave empty to derive https://orchestrate.<www_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_certificate_arn" {
+  description = "ACM certificate ARN for the Kestra public ALB. Leave empty to create a dedicated orchestrate.<www_domain> certificate when Kestra is provisioned."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_desired_count" {
+  description = "Desired Kestra standalone task count when kestra_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "kestra_storage_bucket_name" {
+  description = "Optional explicit S3 bucket name for Kestra internal storage."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_storage_force_destroy" {
+  description = "Whether Terraform may delete non-empty Kestra internal storage buckets during destroy. Enable only for explicitly approved destructive teardown."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_allowed_public_cidr_blocks" {
+  description = "CIDR blocks allowed to reach the public Kestra HTTPS ALB."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "kestra_kms_key_arns" {
+  description = "Optional KMS key ARNs needed to decrypt Kestra-injected secrets."
+  type        = list(string)
+  default     = []
+}
+
 variable "google_oauth_client_id" {
   description = "Google OAuth client ID (optional — leave empty to skip Google login)"
   type        = string
@@ -562,8 +646,11 @@ locals {
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
   crm_domain      = var.www_domain != "" ? "crm.${var.www_domain}" : ""
   twenty_url      = var.twenty_public_url != "" ? var.twenty_public_url : (local.crm_domain != "" ? "https://${local.crm_domain}" : "")
+  kestra_domain   = var.www_domain != "" ? "orchestrate.${var.www_domain}" : ""
+  kestra_url      = var.kestra_public_url != "" ? var.kestra_public_url : (local.kestra_domain != "" ? "https://${local.kestra_domain}" : "")
 
   twenty_managed_certificate_enabled = local.www_dns_enabled && var.twenty_provisioned && var.twenty_certificate_arn == "" && local.crm_domain != ""
+  kestra_managed_certificate_enabled = local.www_dns_enabled && var.kestra_provisioned && var.kestra_certificate_arn == "" && local.kestra_domain != ""
 }
 
 resource "aws_acm_certificate" "computer_sandbox" {
@@ -658,6 +745,52 @@ resource "aws_acm_certificate_validation" "twenty" {
   ]
 }
 
+resource "aws_acm_certificate" "kestra" {
+  count = local.kestra_managed_certificate_enabled ? 1 : 0
+
+  domain_name       = local.kestra_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "thinkwork-${var.stage}-kestra"
+  }
+}
+
+resource "cloudflare_record" "kestra_acm_validation" {
+  for_each = {
+    for dvo in flatten([
+      for cert in aws_acm_certificate.kestra : tolist(cert.domain_validation_options)
+      ]) : dvo.domain_name => {
+      name  = dvo.resource_record_name
+      value = dvo.resource_record_value
+      type  = dvo.resource_record_type
+    }
+  }
+
+  zone_id = var.cloudflare_zone_id
+  name    = trimsuffix(each.value.name, ".")
+  content = trimsuffix(each.value.value, ".")
+  type    = each.value.type
+  ttl     = 60
+  proxied = false
+  comment = "ACM DNS validation for ${each.key}"
+
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "kestra" {
+  count = local.kestra_managed_certificate_enabled ? 1 : 0
+
+  certificate_arn = aws_acm_certificate.kestra[0].arn
+  validation_record_fqdns = [
+    for record in cloudflare_record.kestra_acm_validation : record.hostname
+  ]
+}
+
 moved {
   from = module.www_dns[0].cloudflare_record.acm_validation["crm.thinkwork.ai"]
   to   = cloudflare_record.twenty_acm_validation["crm.thinkwork.ai"]
@@ -709,6 +842,20 @@ module "thinkwork" {
   twenty_email_from_name                     = var.twenty_email_from_name
   twenty_public_url                          = local.twenty_url
   twenty_certificate_arn                     = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : (local.twenty_managed_certificate_enabled ? aws_acm_certificate_validation.twenty[0].certificate_arn : "")
+  kestra_provisioned                         = var.kestra_provisioned
+  kestra_runtime_enabled                     = var.kestra_runtime_enabled
+  kestra_image_uri                           = var.kestra_image_uri
+  kestra_db_username                         = var.kestra_db_username
+  kestra_db_name                             = var.kestra_db_name
+  kestra_db_password_secret_arn              = var.kestra_db_password_secret_arn
+  kestra_basic_auth_secret_arn               = var.kestra_basic_auth_secret_arn
+  kestra_public_url                          = local.kestra_url
+  kestra_certificate_arn                     = var.kestra_certificate_arn != "" ? var.kestra_certificate_arn : (local.kestra_managed_certificate_enabled ? aws_acm_certificate_validation.kestra[0].certificate_arn : "")
+  kestra_desired_count                       = var.kestra_desired_count
+  kestra_storage_bucket_name                 = var.kestra_storage_bucket_name
+  kestra_storage_force_destroy               = var.kestra_storage_force_destroy
+  kestra_allowed_public_cidr_blocks          = var.kestra_allowed_public_cidr_blocks
+  kestra_kms_key_arns                        = var.kestra_kms_key_arns
   google_oauth_client_id                     = var.google_oauth_client_id
   google_oauth_client_secret                 = var.google_oauth_client_secret
   pre_signup_lambda_zip                      = var.pre_signup_lambda_zip
@@ -830,6 +977,12 @@ module "www_dns" {
   # this module owns only the public CNAME to the ALB.
   include_crm      = var.twenty_provisioned
   crm_alb_dns_name = module.thinkwork.twenty_alb_dns_name != null ? module.thinkwork.twenty_alb_dns_name : ""
+
+  # Kestra orchestration custom domain (orchestrate.<apex>). Kestra uses its
+  # own ACM certificate; this module owns only the public CNAME to the ALB.
+  include_kestra      = var.kestra_provisioned
+  kestra_domain       = local.kestra_domain
+  kestra_alb_dns_name = module.thinkwork.kestra_alb_dns_name != null ? module.thinkwork.kestra_alb_dns_name : ""
 }
 
 ################################################################################
@@ -1030,6 +1183,41 @@ output "twenty_worker_log_group_name" {
 output "twenty_cache_endpoint" {
   description = "ElastiCache primary endpoint for Twenty CRM (null when twenty_provisioned = false)"
   value       = module.thinkwork.twenty_cache_endpoint
+}
+
+output "kestra_provisioned" {
+  description = "Whether the Kestra retained managed-app substrate is provisioned"
+  value       = module.thinkwork.kestra_provisioned
+}
+
+output "kestra_runtime_enabled" {
+  description = "Whether the Kestra runtime is enabled"
+  value       = module.thinkwork.kestra_runtime_enabled
+}
+
+output "kestra_url" {
+  description = "Public Kestra URL (null when kestra_provisioned = false)"
+  value       = module.thinkwork.kestra_url
+}
+
+output "kestra_cluster_arn" {
+  description = "ECS cluster ARN for Kestra (null when kestra_provisioned = false)"
+  value       = module.thinkwork.kestra_cluster_arn
+}
+
+output "kestra_service_name" {
+  description = "ECS service name for Kestra (null when kestra_provisioned = false)"
+  value       = module.thinkwork.kestra_service_name
+}
+
+output "kestra_log_group_name" {
+  description = "CloudWatch log group for Kestra (null when kestra_provisioned = false)"
+  value       = module.thinkwork.kestra_log_group_name
+}
+
+output "kestra_storage_bucket_name" {
+  description = "S3 bucket name backing Kestra internal storage (null when kestra_provisioned = false)"
+  value       = module.thinkwork.kestra_storage_bucket_name
 }
 
 output "agentcore_memory_id" {

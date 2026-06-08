@@ -97,6 +97,10 @@ function buildTfvars(config: Record<string, string>): string {
     `# a pinned twenty_image_uri plus deploy-prepared database/encryption secrets.`,
     `twenty_provisioned     = false`,
     `twenty_runtime_enabled = false`,
+    `# Kestra orchestration is optional and disabled by default. Enabling it`,
+    `# requires a pinned kestra_image_uri plus deploy-prepared database/basic-auth secrets.`,
+    `kestra_provisioned     = false`,
+    `kestra_runtime_enabled = false`,
     ``,
     `# ── Auth ──────────────────────────────────────────────────────────`,
     `api_auth_secret = "${config.api_auth_secret}"`,
@@ -585,6 +589,76 @@ variable "twenty_certificate_arn" {
   default = ""
 }
 
+variable "kestra_provisioned" {
+  type    = bool
+  default = false
+}
+
+variable "kestra_runtime_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "kestra_image_uri" {
+  type    = string
+  default = ""
+}
+
+variable "kestra_db_username" {
+  type    = string
+  default = "thinkwork_kestra"
+}
+
+variable "kestra_db_name" {
+  type    = string
+  default = "thinkwork_kestra"
+}
+
+variable "kestra_db_password_secret_arn" {
+  type    = string
+  default = ""
+}
+
+variable "kestra_basic_auth_secret_arn" {
+  type    = string
+  default = ""
+}
+
+variable "kestra_public_url" {
+  type    = string
+  default = ""
+}
+
+variable "kestra_certificate_arn" {
+  type    = string
+  default = ""
+}
+
+variable "kestra_desired_count" {
+  type    = number
+  default = 1
+}
+
+variable "kestra_storage_bucket_name" {
+  type    = string
+  default = ""
+}
+
+variable "kestra_storage_force_destroy" {
+  type    = bool
+  default = false
+}
+
+variable "kestra_allowed_public_cidr_blocks" {
+  type    = list(string)
+  default = ["0.0.0.0/0"]
+}
+
+variable "kestra_kms_key_arns" {
+  type    = list(string)
+  default = []
+}
+
 variable "agentcore_memory_id" {
   type        = string
   default     = ""
@@ -684,6 +758,20 @@ module "thinkwork" {
   twenty_email_from_name = var.twenty_email_from_name
   twenty_public_url = var.twenty_public_url
   twenty_certificate_arn = var.twenty_certificate_arn
+  kestra_provisioned = var.kestra_provisioned
+  kestra_runtime_enabled = var.kestra_runtime_enabled
+  kestra_image_uri = var.kestra_image_uri
+  kestra_db_username = var.kestra_db_username
+  kestra_db_name = var.kestra_db_name
+  kestra_db_password_secret_arn = var.kestra_db_password_secret_arn
+  kestra_basic_auth_secret_arn = var.kestra_basic_auth_secret_arn
+  kestra_public_url = var.kestra_public_url
+  kestra_certificate_arn = var.kestra_certificate_arn
+  kestra_desired_count = var.kestra_desired_count
+  kestra_storage_bucket_name = var.kestra_storage_bucket_name
+  kestra_storage_force_destroy = var.kestra_storage_force_destroy
+  kestra_allowed_public_cidr_blocks = var.kestra_allowed_public_cidr_blocks
+  kestra_kms_key_arns = var.kestra_kms_key_arns
   agentcore_memory_id        = var.agentcore_memory_id
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
@@ -767,6 +855,30 @@ output "twenty_server_log_group_name" {
 
 output "twenty_worker_log_group_name" {
   value = module.thinkwork.twenty_worker_log_group_name
+}
+
+output "kestra_provisioned" {
+  value = module.thinkwork.kestra_provisioned
+}
+
+output "kestra_runtime_enabled" {
+  value = module.thinkwork.kestra_runtime_enabled
+}
+
+output "kestra_url" {
+  value = module.thinkwork.kestra_url
+}
+
+output "kestra_service_name" {
+  value = module.thinkwork.kestra_service_name
+}
+
+output "kestra_log_group_name" {
+  value = module.thinkwork.kestra_log_group_name
+}
+
+output "kestra_storage_bucket_name" {
+  value = module.thinkwork.kestra_storage_bucket_name
 }
 
 output "agentcore_memory_id" {

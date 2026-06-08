@@ -21,6 +21,11 @@ locals {
     # of carrying long ARNs in Lambda env vars.
     TWENTY = "${var.twenty_provisioned ? "1" : "0"}|${var.twenty_runtime_enabled ? "1" : "0"}|${var.twenty_url}"
   } : {}
+  kestra_env = var.kestra_provisioned ? {
+    # Keep Kestra managed-app status compact for graphql-http. Fields:
+    # provisioned|runtime|url|clusterArn|serviceName|logGroup|storageBucket|dbName|basicAuthSecretArn
+    KESTRA = "${var.kestra_provisioned ? "1" : "0"}|${var.kestra_runtime_enabled ? "1" : "0"}|${var.kestra_url}|${var.kestra_cluster_arn}|${var.kestra_service_name}|${var.kestra_log_group_name}|${var.kestra_storage_bucket_name}|${var.kestra_database_name}|${var.kestra_basic_auth_secret_arn}"
+  } : {}
 
   # Common environment variables shared by all API handlers
   common_env = merge({
@@ -224,7 +229,7 @@ locals {
       # + AWS_ACCOUNT_ID, which the Lambda already has. The runner
       # Lambda (separate function below) keeps an explicit
       # COMPLIANCE_EXPORTS_QUEUE_URL because its env is small.
-    }, local.twenty_env)
+    }, local.twenty_env, local.kestra_env)
     # U2 eval fan-out substrate. eval-runner does not dispatch to this
     # queue until U3; eval-worker is a throwing inert stub that redrives
     # accidental traffic to the DLQ.

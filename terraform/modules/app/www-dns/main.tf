@@ -14,6 +14,8 @@
 #   8. Optional computer.<domain> → app.<domain> 301 compatibility redirect.
 #   9. Optional crm.<domain> CNAME → Twenty CRM public ALB. The CRM ALB uses
 #      its own certificate; this module only owns the public CNAME.
+#   10. Optional orchestrate.<domain> CNAME → Kestra public ALB. The Kestra ALB
+#      uses its own certificate; this module only owns the public CNAME.
 #
 # Cloudflare records MUST be DNS-only (grey cloud). CloudFront terminates TLS
 # with the ACM cert and needs the real Host header.
@@ -42,6 +44,7 @@ locals {
   sandbox  = "sandbox.${var.domain}"
   api      = "api.${var.domain}"
   crm      = "crm.${var.domain}"
+  kestra   = var.kestra_domain != "" ? var.kestra_domain : "orchestrate.${var.domain}"
   name_id  = replace(var.domain, ".", "-")
 
   # ACM SANs: always include www, conditionally include docs, admin, computer,
@@ -62,7 +65,7 @@ locals {
 
   # Existing CNAME records stay gated on non-empty targets because their target
   # outputs are already known in the deployed stack. Newly bootstrapped records
-  # such as app/computer compatibility/sandbox/crm CNAMEs must gate only on
+  # such as app/computer compatibility/sandbox/crm/kestra CNAMEs must gate only on
   # explicit booleans so Terraform can plan the resource count before the new
   # load balancer exists.
   create_docs_record     = var.include_docs && var.docs_cloudfront_domain_name != ""
@@ -71,6 +74,7 @@ locals {
   create_computer_record = var.include_computer
   create_api_record      = var.include_api && var.api_gateway_id != ""
   create_crm_record      = var.include_crm
+  create_kestra_record   = var.include_kestra
 }
 
 ################################################################################
@@ -392,4 +396,20 @@ resource "cloudflare_record" "crm" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} crm → Twenty CRM public ALB"
+}
+
+################################################################################
+# orchestrate.<domain> → Kestra public ALB (optional)
+################################################################################
+
+resource "cloudflare_record" "kestra" {
+  count = local.create_kestra_record ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = local.kestra
+  content = var.kestra_alb_dns_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${var.stage} orchestrate → Kestra public ALB"
 }
