@@ -153,6 +153,14 @@ describe("Agent Profile resolvers", () => {
           execution_controls: expect.objectContaining({
             reviewGate: true,
             maxReviewLoops: 2,
+            loopPolicy: expect.objectContaining({
+              mode: "closed",
+              enabled: true,
+              reviewGate: true,
+              maxReviewLoops: 2,
+              externalReviewerPolicy: "never",
+              failBehavior: "return_blocker",
+            }),
           }),
         }),
       ]),
@@ -213,6 +221,10 @@ describe("Agent Profile resolvers", () => {
           instructions: "Go find it.",
           modelId: "model-fast",
           toolPolicy: JSON.stringify({ builtInTools: ["web-search"] }),
+          executionControls: JSON.stringify({
+            reviewGate: true,
+            maxReviewLoops: 2,
+          }),
           spaceIds: ["space-1"],
         },
       },
@@ -224,6 +236,15 @@ describe("Agent Profile resolvers", () => {
       slug: "fast-research",
       model_id: "model-fast",
       built_in_key: null,
+      execution_controls: expect.objectContaining({
+        reviewGate: true,
+        maxReviewLoops: 2,
+        loopPolicy: expect.objectContaining({
+          mode: "closed",
+          reviewGate: true,
+          maxReviewLoops: 2,
+        }),
+      }),
     });
     expect(insertedAssignmentValues).toEqual([
       {

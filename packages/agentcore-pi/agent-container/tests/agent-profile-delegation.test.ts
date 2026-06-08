@@ -155,6 +155,17 @@ describe("agent profile delegation", () => {
             maxRuntimeMs: 5000,
             maxTokens: 500,
             thinking: "low",
+            reviewGate: true,
+            maxReviewLoops: 2,
+            loopPolicy: {
+              mode: "closed",
+              enabled: true,
+              maxIterations: 2,
+              maxReviewLoops: 2,
+              reviewGate: true,
+              externalReviewerPolicy: "profile_required",
+              failBehavior: "best_effort_with_warning",
+            },
           },
         },
       ]),
@@ -173,6 +184,22 @@ describe("agent profile delegation", () => {
             },
           ],
         },
+        executionControls: expect.objectContaining({
+          maxRuntimeMs: 5000,
+          maxTokens: 500,
+          thinking: "low",
+          reviewGate: true,
+          maxReviewLoops: 2,
+          loopPolicy: {
+            mode: "closed",
+            enabled: true,
+            maxIterations: 2,
+            maxReviewLoops: 2,
+            reviewGate: true,
+            externalReviewerPolicy: "profile_required",
+            failBehavior: "best_effort_with_warning",
+          },
+        }),
       },
     ]);
   });
@@ -294,8 +321,11 @@ describe("agent profile delegation", () => {
 
   it("emits profile start, child tool, and completion activity with lane metadata", async () => {
     let emitChildActivity: unknown;
-    const emitted: Array<{ eventType: string; message: string; payload?: unknown }> =
-      [];
+    const emitted: Array<{
+      eventType: string;
+      message: string;
+      payload?: unknown;
+    }> = [];
     const runLoop = vi.fn(async (_args, deps) => {
       emitChildActivity = deps?.emitActivity;
       deps?.emitActivity?.({

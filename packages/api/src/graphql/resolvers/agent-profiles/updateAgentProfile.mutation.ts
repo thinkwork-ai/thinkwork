@@ -11,6 +11,7 @@ import {
   serializeAgentProfileFile,
   writeAgentProfileFileForTenant,
 } from "../../../lib/agent-profile-workspace-files.js";
+import { normalizeExecutionControlsForStorage } from "../../../lib/agent-profile-loop-policy.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   assertAvailableModel,
@@ -83,7 +84,9 @@ export async function updateAgentProfile(
     updates.skill_policy = parseJsonInput(input.skillPolicy) ?? {};
   }
   if (input.executionControls !== undefined) {
-    updates.execution_controls = parseJsonInput(input.executionControls) ?? {};
+    updates.execution_controls = normalizeExecutionControlsForStorage(
+      parseJsonInput(input.executionControls) ?? {},
+    );
   }
 
   let spaceIds: string[] | undefined;

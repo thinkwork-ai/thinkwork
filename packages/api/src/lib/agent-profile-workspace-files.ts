@@ -15,6 +15,7 @@ import {
   spaces,
   tenants,
 } from "../graphql/utils.js";
+import { normalizeExecutionControlsForStorage } from "./agent-profile-loop-policy.js";
 
 const PROFILE_PATH_RE = /^agents\/([a-z0-9][a-z0-9-]*)\.md$/;
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -71,7 +72,9 @@ export function serializeAgentProfileFile(
 ): string {
   const toolPolicy = asRecord(input.toolPolicy);
   const skillPolicy = asRecord(input.skillPolicy);
-  const executionControls = asRecord(input.executionControls);
+  const executionControls = normalizeExecutionControlsForStorage(
+    input.executionControls,
+  );
   const frontmatter: Record<string, unknown> = {
     name: input.name.trim(),
     model: input.modelId,
@@ -98,9 +101,11 @@ export function serializeAgentProfileFile(
     maxSubagentDepth: executionControls.maxSubagentDepth ?? 0,
     maxRuntimeMs: executionControls.maxRuntimeMs ?? null,
     maxTokens: executionControls.maxTokens ?? null,
+    costBudgetUsd: executionControls.costBudgetUsd ?? null,
     thinking: executionControls.thinking ?? null,
     reviewGate: executionControls.reviewGate ?? null,
     maxReviewLoops: executionControls.maxReviewLoops ?? null,
+    loopPolicy: executionControls.loopPolicy ?? null,
   });
 
   const yaml = stringifyYaml(frontmatter, { collectionStyle: "block" }).trim();
@@ -154,16 +159,7 @@ export function parseAgentProfileFile(input: {
       ),
     },
     skillPolicy: { skillSlugs: skills },
-    executionControls: compactRecord({
-      foreground: execution.foreground ?? true,
-      clarify: execution.clarify ?? false,
-      maxSubagentDepth: execution.maxSubagentDepth ?? 0,
-      maxRuntimeMs: execution.maxRuntimeMs ?? execution.maxRunTimeMs ?? null,
-      maxTokens: execution.maxTokens ?? null,
-      thinking: execution.thinking ?? null,
-      reviewGate: execution.reviewGate ?? null,
-      maxReviewLoops: execution.maxReviewLoops ?? null,
-    }),
+    executionControls: normalizeExecutionControlsForStorage(execution),
     spaceRefs: stringArray(frontmatter.spaces ?? frontmatter.spaceIds),
   };
 }

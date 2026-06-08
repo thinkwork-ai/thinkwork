@@ -4,6 +4,7 @@ import {
   serializeAgentProfileFile,
   writeAgentProfileFileForTenant,
 } from "../../../lib/agent-profile-workspace-files.js";
+import { normalizeExecutionControlsForStorage } from "../../../lib/agent-profile-loop-policy.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   assertAvailableModel,
@@ -50,6 +51,17 @@ export async function createAgentProfile(
     args.tenantId,
     input.spaceIds,
   );
+  const toolPolicy = (parseJsonInput(input.toolPolicy) ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const skillPolicy = (parseJsonInput(input.skillPolicy) ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const executionControls = normalizeExecutionControlsForStorage(
+    parseJsonInput(input.executionControls) ?? {},
+  );
 
   const [row] = await db
     .insert(agentProfiles)
@@ -63,16 +75,9 @@ export async function createAgentProfile(
       model_id: input.modelId,
       enabled: input.enabled ?? true,
       built_in_key: null,
-      tool_policy: (parseJsonInput(input.toolPolicy) ?? {}) as Record<
-        string,
-        unknown
-      >,
-      skill_policy: (parseJsonInput(input.skillPolicy) ?? {}) as Record<
-        string,
-        unknown
-      >,
-      execution_controls: (parseJsonInput(input.executionControls) ??
-        {}) as Record<string, unknown>,
+      tool_policy: toolPolicy,
+      skill_policy: skillPolicy,
+      execution_controls: executionControls,
       updated_at: new Date(),
     })
     .returning();
@@ -94,9 +99,9 @@ export async function createAgentProfile(
       instructions: input.instructions,
       modelId: input.modelId,
       enabled: input.enabled ?? true,
-      toolPolicy: parseJsonInput(input.toolPolicy) ?? {},
-      skillPolicy: parseJsonInput(input.skillPolicy) ?? {},
-      executionControls: parseJsonInput(input.executionControls) ?? {},
+      toolPolicy,
+      skillPolicy,
+      executionControls,
       spaceIds,
     }),
   });

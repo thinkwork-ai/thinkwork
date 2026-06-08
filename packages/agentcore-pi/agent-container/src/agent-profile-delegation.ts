@@ -17,6 +17,7 @@ import {
   AgentProfileAdapterError,
   compileAgentProfileRunRequest,
   runCompiledAgentProfile,
+  type AgentLoopPolicy,
   type AgentProfileConfig,
   type CompiledAgentProfileRunRequest,
   type ProfileChildRunResult,
@@ -105,6 +106,12 @@ function normalizeProfileConfig(value: unknown): AgentProfileConfig | null {
       maxRuntimeMs: numberValue(execution.maxRuntimeMs),
       maxExecutionTimeMs: numberValue(execution.maxExecutionTimeMs),
       maxTokens: numberValue(execution.maxTokens),
+      costBudgetUsd: numberValue(execution.costBudgetUsd),
+      reviewGate: booleanValue(execution.reviewGate),
+      maxReviewLoops: numberValue(execution.maxReviewLoops),
+      loopPolicy: normalizeLoopPolicy(
+        execution.loopPolicy ?? execution.loop_policy,
+      ),
     },
     contextPolicy: {
       systemPromptMode: "replace",
@@ -136,6 +143,66 @@ function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+function booleanValue(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function normalizeLoopPolicy(value: unknown): AgentLoopPolicy | undefined {
+  const record = recordValue(value);
+  if (record.mode !== "closed") return undefined;
+  const externalReviewerPolicy = asString(
+    record.externalReviewerPolicy ?? record.external_reviewer_policy,
+  );
+  const failBehavior = asString(record.failBehavior ?? record.fail_behavior);
+  if (
+    !["never", "explicit", "profile_required", "always"].includes(
+      externalReviewerPolicy,
+    ) ||
+    !["return_blocker", "best_effort_with_warning"].includes(failBehavior)
+  ) {
+    return undefined;
+  }
+  const maxIterations = numberValue(
+    record.maxIterations ?? record.max_iterations,
+  );
+  const maxReviewLoops = numberValue(
+    record.maxReviewLoops ?? record.max_review_loops,
+  );
+  if (!maxIterations || !maxReviewLoops) return undefined;
+  const policy = {
+    mode: "closed" as const,
+    enabled: booleanValue(record.enabled) ?? true,
+    maxIterations,
+    maxReviewLoops,
+    reviewGate: booleanValue(record.reviewGate ?? record.review_gate) ?? false,
+    externalReviewerPolicy: externalReviewerPolicy as
+      | "never"
+      | "explicit"
+      | "profile_required"
+      | "always",
+    failBehavior: failBehavior as "return_blocker" | "best_effort_with_warning",
+    ...(numberValue(record.maxRuntimeMs ?? record.max_runtime_ms) !== undefined
+      ? {
+          maxRuntimeMs: numberValue(
+            record.maxRuntimeMs ?? record.max_runtime_ms,
+          ),
+        }
+      : {}),
+    ...(numberValue(record.maxTokens ?? record.max_tokens) !== undefined
+      ? { maxTokens: numberValue(record.maxTokens ?? record.max_tokens) }
+      : {}),
+    ...(numberValue(record.costBudgetUsd ?? record.cost_budget_usd) !==
+    undefined
+      ? {
+          costBudgetUsd: numberValue(
+            record.costBudgetUsd ?? record.cost_budget_usd,
+          ),
+        }
+      : {}),
+  };
+  return policy;
 }
 
 function numberField(

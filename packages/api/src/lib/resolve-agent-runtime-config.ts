@@ -91,6 +91,10 @@ import {
 } from "./workspace-renderer/runtime-overrides-applier.js";
 import { discoverWorkspaceSkillsFromPaths } from "./skills-tree-walker.js";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
+import {
+  normalizeAgentProfileExecutionControls,
+  type AgentLoopPolicy,
+} from "./agent-profile-loop-policy.js";
 
 export interface SkillConfig {
   skillId: string;
@@ -164,9 +168,11 @@ export interface AgentProfileRuntimeConfig {
     maxSubagentDepth: number;
     maxRuntimeMs?: number;
     maxTokens?: number;
+    costBudgetUsd?: number;
     thinking?: string;
     reviewGate?: boolean;
     maxReviewLoops?: number;
+    loopPolicy: AgentLoopPolicy;
   };
 }
 
@@ -823,7 +829,9 @@ async function loadAgentProfileRuntimeConfigs(input: {
 
     const toolPolicy = normalizeRecord(profile.tool_policy);
     const skillPolicy = normalizeRecord(profile.skill_policy);
-    const executionControls = normalizeRecord(profile.execution_controls);
+    const executionControls = normalizeAgentProfileExecutionControls(
+      profile.execution_controls,
+    );
     const builtInTools = normalizeStringArray(toolPolicy.builtInTools);
     const mcpServerSlugs = normalizeStringArray(toolPolicy.mcpServers);
     const skillSlugs = normalizeStringArray(skillPolicy.skillSlugs);
@@ -872,24 +880,7 @@ async function loadAgentProfileRuntimeConfigs(input: {
       mcpServers,
       mcpToolAllowlist,
       skillSlugs,
-      executionControls: {
-        foreground: true,
-        clarify: executionControls.clarify === true,
-        maxSubagentDepth: 0,
-        ...optionalPositiveInt(
-          "maxRuntimeMs",
-          executionControls.maxRuntimeMs ??
-            executionControls.maxRunTimeMs ??
-            executionControls.maxExecutionTimeMs,
-        ),
-        ...optionalPositiveInt("maxTokens", executionControls.maxTokens),
-        ...optionalString("thinking", executionControls.thinking),
-        ...(executionControls.reviewGate === true ? { reviewGate: true } : {}),
-        ...optionalPositiveInt(
-          "maxReviewLoops",
-          executionControls.maxReviewLoops,
-        ),
-      },
+      executionControls,
     });
   }
 
@@ -928,26 +919,6 @@ function normalizeMcpToolNames(value: unknown): string[] {
         .filter((name) => name.length > 0),
     ),
   ];
-}
-
-function optionalPositiveInt(
-  key: string,
-  value: unknown,
-): Record<string, number> {
-  const numberValue =
-    typeof value === "number"
-      ? value
-      : typeof value === "string" && value.trim()
-        ? Number(value)
-        : NaN;
-  if (!Number.isSafeInteger(numberValue) || numberValue <= 0) return {};
-  return { [key]: numberValue };
-}
-
-function optionalString(key: string, value: unknown): Record<string, string> {
-  if (typeof value !== "string") return {};
-  const trimmed = value.trim();
-  return trimmed ? { [key]: trimmed } : {};
 }
 
 export async function loadWorkspaceSkillConfigs(input: {
