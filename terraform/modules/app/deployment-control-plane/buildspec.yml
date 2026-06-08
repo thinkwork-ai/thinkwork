@@ -87,6 +87,28 @@ phases:
             return default
 
 
+        def existing_stage_secret_field(stage, field):
+            try:
+                body = output(
+                    [
+                        "aws",
+                        "secretsmanager",
+                        "get-secret-value",
+                        "--secret-id",
+                        f"thinkwork-{stage}-db-credentials",
+                        "--query",
+                        "SecretString",
+                        "--output",
+                        "text",
+                    ]
+                )
+                secret = json.loads(body or "{}")
+                value = secret.get(field)
+                return value if isinstance(value, str) else ""
+            except Exception:
+                return ""
+
+
         def hcl_string(value):
             return json.dumps(value)
 
@@ -146,6 +168,8 @@ phases:
                 "databasePassword",
                 default=safe_get(payload, "dbPassword", "databasePassword", default=""),
             )
+            if not db_password:
+                db_password = existing_stage_secret_field(stage, "password")
             api_auth_secret = safe_get(
                 runner_secrets,
                 "apiAuthSecret",
