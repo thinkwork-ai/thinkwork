@@ -11,7 +11,10 @@ import { Badge, Button, Separator, cn } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
-import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
+import {
+  InlineShortcutText,
+  shortcutDisplayText,
+} from "@/components/workbench/InlineShortcutText";
 import {
   ExecutionTrace,
   type ExecutionTraceModelRouteTrace,
@@ -254,12 +257,17 @@ export function SettingsActivityThreadDetail({
   const latestSystemPrompt =
     turns.find((turn) => turn.systemPrompt?.trim())?.systemPrompt ?? null;
   const title = thread?.title?.trim() || thread?.identifier || "Thread";
+  const displayTitle = shortcutDisplayText(title, {
+    fallbackAgentProfiles: true,
+    fallbackMentions: true,
+    fallbackSkills: true,
+  });
   const identifier = thread?.identifier || `THREAD-${threadId.slice(0, 8)}`;
 
   usePageHeaderActions({
-    title,
-    documentTitle: `Activity Thread · ${title}`,
-    breadcrumbs: [...breadcrumbParents, { label: title }],
+    title: displayTitle,
+    documentTitle: `Activity Thread · ${displayTitle}`,
+    breadcrumbs: [...breadcrumbParents, { label: displayTitle }],
     action: (
       <Button
         type="button"

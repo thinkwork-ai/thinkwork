@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
   InlineShortcutText,
+  shortcutDisplayText,
   shortcutSegmentsForText,
 } from "./InlineShortcutText";
 
@@ -44,6 +45,22 @@ describe("InlineShortcutText", () => {
       expect.objectContaining({ label: "CE Plan", kind: "skill" }),
       expect.objectContaining({ label: "Research", kind: "agent-profile" }),
     ]);
+  });
+
+  it("converts shortcut tokens to plain display text for titles", () => {
+    expect(
+      shortcutDisplayText("#Research ask @Eric to run /ce-plan", {
+        mentions: [
+          {
+            targetType: "USER",
+            displayName: "Eric Odom",
+            rawText: "@Eric",
+          },
+        ],
+        skillCatalog: [{ slug: "ce-plan", displayName: "CE Plan" }],
+        fallbackAgentProfiles: true,
+      }),
+    ).toBe("Research ask Eric Odom to run CE Plan");
   });
 
   it("renders fallback mentions without rewriting email addresses", () => {

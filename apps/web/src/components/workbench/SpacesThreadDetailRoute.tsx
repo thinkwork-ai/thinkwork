@@ -27,7 +27,10 @@ import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions"
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
 import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
-import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
+import {
+  InlineShortcutText,
+  shortcutDisplayText,
+} from "@/components/workbench/InlineShortcutText";
 import {
   mergeAgentProfileMentionTargets,
   type AgentProfileMentionSource,
@@ -1256,8 +1259,15 @@ export function SpacesThreadDetailRoute({
   // titleContent (see AppTopBar/DesktopApplicationHeader). Degrades to the
   // title-only header when the thread has no resolved space yet (R4).
   const spaceLabel = spaceCrumbLabel(routeThread?.space ?? null);
+  const displayThreadTitle = shortcutDisplayText(threadTitle, {
+    mentionTargets,
+    skillCatalog,
+    fallbackAgentProfiles: true,
+    fallbackMentions: true,
+    fallbackSkills: true,
+  });
   const spaceBreadcrumbs = breadcrumbParents
-    ? [...breadcrumbParents, { label: threadTitle }]
+    ? [...breadcrumbParents, { label: displayThreadTitle }]
     : routeThread?.spaceId
       ? [
           {
@@ -1265,19 +1275,19 @@ export function SpacesThreadDetailRoute({
             href: "/threads",
             search: { spaceId: routeThread.spaceId, spaceName: spaceLabel },
           },
-          { label: threadTitle },
+          { label: displayThreadTitle },
         ]
       : undefined;
 
   usePageHeaderActions({
     backHref,
-    title: threadTitle,
+    title: displayThreadTitle,
     breadcrumbs: spaceBreadcrumbs,
     // Tab title gets the "Thread · " prefix to match the section pattern
     // used by Memory and other pages ("Memory · ThinkWork", etc.). The
     // in-page header keeps the bare thread title — no need to repeat
     // "Thread" inside the page the user is already on.
-    documentTitle: `${documentTitlePrefix} · ${threadTitle}`,
+    documentTitle: `${documentTitlePrefix} · ${displayThreadTitle}`,
     titleContent: routeThread ? (
       <ThreadTitleInlineRename
         threadId={threadId}
