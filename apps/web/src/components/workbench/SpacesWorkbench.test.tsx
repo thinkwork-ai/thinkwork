@@ -22,7 +22,7 @@ import {
   SendMessageMutation,
   SpacesQuery,
 } from "@/lib/graphql-queries";
-import { SettingsTenantDetailQuery } from "@/lib/settings-queries";
+import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 import {
   clearPendingThreadStart,
@@ -166,11 +166,11 @@ beforeEach(() => {
         vi.fn(),
       ];
     }
-    if (query === SettingsTenantDetailQuery) {
+    if (query === SettingsTenantAgentQuery) {
       return [
         {
           data: {
-            tenant: { settings: { defaultModel: tenantDefaultModel } },
+            agent: { model: tenantDefaultModel },
           },
           error: undefined,
           fetching: false,

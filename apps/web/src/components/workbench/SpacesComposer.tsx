@@ -449,12 +449,18 @@ export function SpacesComposer({
               className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1"
               data-testid="composer-action-controls"
             >
-              <ComposerModelPicker
-                models={approvedModels}
-                value={selectedModelId}
-                onValueChange={onSelectedModelChange}
-                disabled={disabled || isSubmitting}
-              />
+              {/* The model selector only matters when the turn is routed to
+                  the Agent — a non-agent send has no model to choose. Hide it
+                  when the Agent toggle is off so the composer doesn't advertise
+                  a model that won't be used. */}
+              {effectiveAgentEnabled ? (
+                <ComposerModelPicker
+                  models={approvedModels}
+                  value={selectedModelId}
+                  onValueChange={onSelectedModelChange}
+                  disabled={disabled || isSubmitting}
+                />
+              ) : null}
               <PromptInputSpeechButton
                 textareaRef={
                   textareaRef as React.RefObject<HTMLTextAreaElement | null>

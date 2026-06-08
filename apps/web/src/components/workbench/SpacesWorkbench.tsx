@@ -26,7 +26,7 @@ import {
   SendMessageMutation,
   SpacesQuery,
 } from "@/lib/graphql-queries";
-import { SettingsTenantDetailQuery } from "@/lib/settings-queries";
+import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
@@ -138,15 +138,16 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     });
   // Tenant's configured default model (Settings > Agents > Default model). New
   // threads fall back to this instead of the first approved model in the list.
-  const [{ data: tenantDetailData, fetching: tenantDetailFetching }] = useQuery(
-    {
-      query: SettingsTenantDetailQuery,
-      variables: { id: tenantId ?? "" },
-      pause: !tenantId,
-    },
-  );
-  const tenantDefaultModelId =
-    tenantDetailData?.tenant?.settings?.defaultModel ?? null;
+  // This reads the parent Agent's `model` (what the Agents page writes via
+  // updateTenantAgent), NOT tenant.settings.defaultModel — nothing populates
+  // that field, so reading it made the composer silently fall through to the
+  // first catalog model (e.g. GPT OSS 120B) instead of the configured default.
+  const [{ data: tenantAgentData, fetching: tenantAgentFetching }] = useQuery({
+    query: SettingsTenantAgentQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const tenantDefaultModelId = tenantAgentData?.agent?.model ?? null;
   // Tenant skill catalog for the `/skill` force-pin popup. No agent context yet
   // on the new-thread surface, so `installed` is unannotated and the picker
   // shows the full catalog; the blocklist guardrail is enforced at dispatch.
@@ -240,7 +241,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     // Wait for the tenant default to resolve before auto-picking, so a fast
     // approved-models response can't lock in the first model before the
     // configured default arrives.
-    if (tenantDetailFetching) return;
+    if (tenantAgentFetching) return;
     // `||` (not `??`) so an empty-string selection — which the Select control
     // can briefly emit on mount — still falls through to the tenant default.
     const nextModelId = chooseApprovedModelId(
@@ -257,7 +258,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     approvedModels,
     selectedModelId,
     tenantDefaultModelId,
-    tenantDetailFetching,
+    tenantAgentFetching,
   ]);
 
   function handleSelectedModelChange(modelId: string) {
