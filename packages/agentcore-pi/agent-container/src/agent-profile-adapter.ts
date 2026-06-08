@@ -23,6 +23,19 @@ export interface AgentProfileMcpGrant {
   toolWhitelist?: string[];
 }
 
+export interface AgentLoopPolicy {
+  mode: "closed";
+  enabled: boolean;
+  maxIterations: number;
+  maxReviewLoops: number;
+  reviewGate: boolean;
+  externalReviewerPolicy: "never" | "explicit" | "profile_required" | "always";
+  failBehavior: "return_blocker" | "best_effort_with_warning";
+  maxRuntimeMs?: number;
+  maxTokens?: number;
+  costBudgetUsd?: number;
+}
+
 export interface AgentProfileExecutionControls {
   thinking?: string;
   timeoutMs?: number;
@@ -32,6 +45,7 @@ export interface AgentProfileExecutionControls {
   costBudgetUsd?: number;
   reviewGate?: boolean;
   maxReviewLoops?: number;
+  loopPolicy?: AgentLoopPolicy;
 }
 
 export interface AgentProfileContextPolicy {
@@ -104,6 +118,7 @@ export interface CompiledAgentProfileRunRequest {
     costBudgetUsd?: number;
     reviewGate?: boolean;
     maxReviewLoops?: number;
+    loopPolicy?: AgentLoopPolicy;
   };
   telemetry: {
     source: "pi_agent_profile";
@@ -459,6 +474,7 @@ export function compileAgentProfileRunRequest(
       ...(execution.maxReviewLoops !== undefined
         ? { maxReviewLoops: execution.maxReviewLoops }
         : {}),
+      ...(execution.loopPolicy ? { loopPolicy: execution.loopPolicy } : {}),
     },
     telemetry: {
       source: "pi_agent_profile",
@@ -572,8 +588,12 @@ export function buildAgentProfileRunEvidence(input: {
     ...(usage.cachedWriteTokens !== undefined
       ? { cachedWriteTokens: usage.cachedWriteTokens }
       : {}),
-    ...(usage.totalTokens !== undefined ? { totalTokens: usage.totalTokens } : {}),
-    ...(input.result.costUsd !== undefined ? { costUsd: input.result.costUsd } : {}),
+    ...(usage.totalTokens !== undefined
+      ? { totalTokens: usage.totalTokens }
+      : {}),
+    ...(input.result.costUsd !== undefined
+      ? { costUsd: input.result.costUsd }
+      : {}),
     parentThreadTurnId: input.request.parentThreadTurnId,
     handoffSummary: input.result.content ?? null,
     toolInvocations: sanitizeProfileToolInvocations(

@@ -1,3 +1,5 @@
+import { defaultAgentLoopPolicy } from "../../../lib/agent-profile-loop-policy.js";
+
 export const BUILT_IN_AGENT_PROFILE_KEYS = [
   "research",
   "coding",
@@ -38,6 +40,7 @@ export const BUILT_IN_PROFILE_SEEDS: BuiltInProfileSeed[] = [
       foreground: true,
       clarify: false,
       maxSubagentDepth: 0,
+      loopPolicy: defaultAgentLoopPolicy(),
     },
   },
   {
@@ -55,6 +58,7 @@ export const BUILT_IN_PROFILE_SEEDS: BuiltInProfileSeed[] = [
       foreground: true,
       clarify: false,
       maxSubagentDepth: 0,
+      loopPolicy: defaultAgentLoopPolicy(),
     },
   },
   {
@@ -73,6 +77,7 @@ export const BUILT_IN_PROFILE_SEEDS: BuiltInProfileSeed[] = [
       foreground: true,
       clarify: false,
       maxSubagentDepth: 0,
+      loopPolicy: defaultAgentLoopPolicy(),
     },
   },
   {
@@ -93,6 +98,11 @@ export const BUILT_IN_PROFILE_SEEDS: BuiltInProfileSeed[] = [
       maxSubagentDepth: 0,
       reviewGate: true,
       maxReviewLoops: 2,
+      loopPolicy: defaultAgentLoopPolicy({
+        reviewGate: true,
+        maxReviewLoops: 2,
+        externalReviewerPolicy: "never",
+      }),
     },
   },
 ];

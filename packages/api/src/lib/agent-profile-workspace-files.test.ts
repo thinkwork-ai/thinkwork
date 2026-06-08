@@ -42,6 +42,15 @@ describe("agent profile workspace files", () => {
         thinking: "minimal",
         reviewGate: true,
         maxReviewLoops: 2,
+        loopPolicy: {
+          mode: "closed",
+          enabled: true,
+          maxIterations: 2,
+          maxReviewLoops: 2,
+          reviewGate: true,
+          externalReviewerPolicy: "profile_required",
+          failBehavior: "best_effort_with_warning",
+        },
       },
       spaceIds: ["space-research"],
     });
@@ -74,6 +83,15 @@ describe("agent profile workspace files", () => {
         thinking: "minimal",
         reviewGate: true,
         maxReviewLoops: 2,
+        loopPolicy: {
+          mode: "closed",
+          enabled: true,
+          maxIterations: 2,
+          maxReviewLoops: 2,
+          reviewGate: true,
+          externalReviewerPolicy: "profile_required",
+          failBehavior: "best_effort_with_warning",
+        },
       },
       spaceRefs: ["space-research"],
     });

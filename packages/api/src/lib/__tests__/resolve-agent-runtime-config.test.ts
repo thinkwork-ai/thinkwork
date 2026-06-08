@@ -918,6 +918,15 @@ describe("resolveAgentRuntimeConfig", () => {
           maxRuntimeMs: 30_000,
           reviewGate: true,
           maxReviewLoops: 2,
+          loopPolicy: {
+            mode: "closed",
+            enabled: true,
+            maxIterations: 2,
+            maxReviewLoops: 2,
+            reviewGate: true,
+            externalReviewerPolicy: "profile_required",
+            failBehavior: "best_effort_with_warning",
+          },
         },
       },
     ]);
@@ -942,6 +951,16 @@ describe("resolveAgentRuntimeConfig", () => {
           maxRuntimeMs: 30_000,
           reviewGate: true,
           maxReviewLoops: 2,
+          loopPolicy: {
+            mode: "closed",
+            enabled: true,
+            maxIterations: 2,
+            maxReviewLoops: 2,
+            reviewGate: true,
+            externalReviewerPolicy: "profile_required",
+            failBehavior: "best_effort_with_warning",
+            maxRuntimeMs: 30_000,
+          },
         }),
       }),
     ]);

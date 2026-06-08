@@ -9365,3 +9365,33 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `pnpm --filter @thinkwork/spaces typecheck`,
   `pnpm dlx prettier@3.8.2 --check apps/spaces/src/components/settings/ManagedApplicationsSection.tsx apps/spaces/src/components/settings/ManagedApplicationsSection.test.tsx`,
   and `git diff --check`.
+
+## Agent Profile Closed Loops - 2026-06-08
+
+- Plan: `docs/plans/2026-06-08-001-feat-agent-profile-closed-loops-plan.md`.
+- Target branch: `main`.
+- Current implementation unit: U1 — Normalize Loop Policy Through Agent Profile
+  Config.
+- Current branch: `codex/agent-profile-closed-loops-u1`.
+- Current worktree:
+  `.Codex/worktrees/agent-profile-closed-loops-u1`.
+- Pull request: [#2237](https://github.com/thinkwork-ai/thinkwork/pull/2237).
+- Status: PR open; CI pending.
+- Notes:
+  - Created the isolated U1 worktree from `origin/main` at `eccedada9`.
+  - Copied the closed-loop requirements and plan docs into the U1 worktree
+    because they were still untracked in the main checkout when autopilot
+    started.
+  - Started normalizing Agent Profile loop policy through API storage,
+    workspace `AGENTS.md` profile frontmatter, runtime profile config, and the
+    Pi Agent Profile adapter.
+- Local verification:
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/agent-profile-loop-policy.test.ts src/lib/agent-profile-workspace-files.test.ts src/lib/__tests__/resolve-agent-runtime-config.test.ts src/graphql/resolvers/agent-profiles/agentProfiles.resolver.test.ts`
+    passed: 41 tests.
+  - `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/agent-profile-delegation.test.ts agent-container/tests/agent-profile-adapter.test.ts`
+    passed: 13 tests.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/agentcore-pi typecheck` passed.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for touched docs, API, and
+    AgentCore-Pi files.
+  - `git diff --check` passed.
