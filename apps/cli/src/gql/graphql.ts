@@ -475,6 +475,8 @@ export type Applet = {
   stdlibVersionAtGeneration: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
   threadId?: Maybe<Scalars['ID']['output']>;
+  userId?: Maybe<Scalars['ID']['output']>;
+  userName?: Maybe<Scalars['String']['output']>;
   version: Scalars['Int']['output'];
 };
 
@@ -1745,6 +1747,7 @@ export type ManagedApplicationDeployment = {
   albArn?: Maybe<Scalars['String']['output']>;
   backendMode?: Maybe<Scalars['String']['output']>;
   clusterArn?: Maybe<Scalars['String']['output']>;
+  databaseName?: Maybe<Scalars['String']['output']>;
   description: Scalars['String']['output'];
   displayName: Scalars['String']['output'];
   enabled: Scalars['Boolean']['output'];
@@ -1763,6 +1766,7 @@ export type ManagedApplicationDeployment = {
   serviceName?: Maybe<Scalars['String']['output']>;
   serviceNames: Array<Scalars['String']['output']>;
   status: Scalars['String']['output'];
+  storageBucketName?: Maybe<Scalars['String']['output']>;
   targetGroupArn?: Maybe<Scalars['String']['output']>;
   url?: Maybe<Scalars['String']['output']>;
 };

@@ -93,7 +93,7 @@ function resolveDeploymentAction(
 
   if (typeof input?.enabled === "boolean") {
     if (input.enabled) return "ENABLE";
-    return key === "twenty" ? "PARK" : "DESTROY";
+    return key === "cognee" ? "DESTROY" : "PARK";
   }
 
   throw new GraphQLError("Managed application action is required", {
@@ -159,6 +159,20 @@ function deploymentVariablesFor(
 
   const enable = action === "ENABLE";
   const park = action === "PARK";
+  if (key === "kestra") {
+    return [
+      { name: "KESTRA_PROVISIONED", value: enable || park ? "true" : "false" },
+      {
+        name: "KESTRA_RUNTIME_ENABLED",
+        value: enable ? "true" : "false",
+      },
+      {
+        name: "KESTRA_DESTROY_DATA",
+        value: action === "DESTROY" ? "true" : "false",
+      },
+    ];
+  }
+
   return [
     { name: "TWENTY_PROVISIONED", value: enable || park ? "true" : "false" },
     {
@@ -192,6 +206,15 @@ function deploymentMessageFor(
 ): string {
   if (key === "cognee") {
     return `Knowledge Graph ${action === "ENABLE" ? "enable" : "disable"} deployment queued.`;
+  }
+  if (key === "kestra") {
+    if (action === "ENABLE") {
+      return "Kestra enable deployment queued.";
+    }
+    if (action === "DESTROY") {
+      return "Kestra destructive cleanup queued; runtime, internal storage, app secrets, and the dedicated database will be removed.";
+    }
+    return "Kestra runtime park deployment queued; flow definitions, execution history, storage, and credentials will be retained.";
   }
   if (action === "ENABLE") {
     return "Twenty CRM enable deployment queued.";

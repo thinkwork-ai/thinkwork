@@ -594,6 +594,12 @@ describe("GraphQL Schema Contract", () => {
       expect(managedApp.getFields().runtimeEnabled.type.toString()).toBe(
         "Boolean!",
       );
+      expect(managedApp.getFields().storageBucketName.type.toString()).toBe(
+        "String",
+      );
+      expect(managedApp.getFields().databaseName.type.toString()).toBe(
+        "String",
+      );
       expect(managedApp.getFields().managedMcpServerId.type.toString()).toBe(
         "ID",
       );

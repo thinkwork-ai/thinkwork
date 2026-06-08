@@ -168,6 +168,8 @@ type ManagedApplicationDeployment {
   serviceNames: [String!]!
   albArn: String
   targetGroupArn: String
+  storageBucketName: String
+  databaseName: String
   message: String
   managedMcpServerId: ID
   managedMcpStatus: String!

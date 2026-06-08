@@ -52,6 +52,9 @@ export function SettingsSidebar({
         ?.runtimeEnabled ??
       deployment?.twentyRuntimeEnabled ??
       false,
+    kestra:
+      deployment?.managedApplications.find((app) => app.key === "kestra")
+        ?.runtimeEnabled ?? false,
   };
 
   // Hide operator items until the role is known, to avoid a flash of operator
