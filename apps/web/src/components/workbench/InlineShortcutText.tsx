@@ -91,6 +91,31 @@ export function InlineShortcutText({
   return className ? <span className={className}>{nodes}</span> : <>{nodes}</>;
 }
 
+export function shortcutDisplayText(
+  text: string,
+  options: {
+    mentions?: ShortcutMention[];
+    mentionTargets?: MentionTarget[];
+    skillCatalog?: SkillOption[];
+    fallbackAgentProfiles?: boolean;
+    fallbackMentions?: boolean;
+    fallbackSkills?: boolean;
+  } = {},
+) {
+  const segments = shortcutSegmentsForText(text, options);
+  if (segments.length === 0) return text;
+
+  let cursor = 0;
+  let display = "";
+  for (const segment of segments) {
+    display += text.slice(cursor, segment.start);
+    display += segment.label;
+    cursor = segment.end;
+  }
+  display += text.slice(cursor);
+  return display;
+}
+
 export function shortcutSegmentsForText(
   text: string,
   options: {

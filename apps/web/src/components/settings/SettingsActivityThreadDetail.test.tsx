@@ -153,9 +153,11 @@ const turn = {
 };
 
 function mockActivityQueries(options?: {
+  thread?: typeof thread;
   turn?: typeof turn;
   traces?: Array<Record<string, unknown>>;
 }) {
+  const activeThread = options?.thread ?? thread;
   const activeTurn = options?.turn ?? turn;
   const traces = options?.traces ?? [
     {
@@ -204,7 +206,7 @@ function mockActivityQueries(options?: {
     ])
     .mockReturnValueOnce([
       {
-        data: { thread },
+        data: { thread: activeThread },
         fetching: false,
         error: undefined,
         stale: false,
@@ -297,6 +299,38 @@ describe("SettingsActivityThreadDetail", () => {
       screen.getByRole("button", { name: "Open thread properties" }),
     );
     expect(screen.getByText("Properties")).toBeTruthy();
+  });
+
+  it("uses shortcut display text for the Activity breadcrumb and document title", () => {
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({
+      thread: {
+        ...thread,
+        title: "#Research verify agent profile e2e",
+      },
+    });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    const headerArgs = usePageHeaderActionsMock.mock.calls.at(-1)?.[0];
+    expect(headerArgs.documentTitle).toBe(
+      "Activity Thread · Research verify agent profile e2e",
+    );
+    expect(headerArgs.breadcrumbs).toEqual([
+      { label: "Activity", href: "/settings/activity" },
+      { label: "Research verify agent profile e2e" },
+    ]);
+    expect(
+      screen.getByRole("heading", {
+        name: "Research verify agent profile e2e",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByText("#Research verify agent profile e2e")).toBeNull();
   });
 
   it("renders parent composer model evidence for non-overridden tool calls", () => {
