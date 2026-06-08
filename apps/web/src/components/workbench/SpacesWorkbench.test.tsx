@@ -248,7 +248,9 @@ describe("SpacesWorkbench", () => {
     expect(
       await screen.findByRole("option", { name: /Research/i }),
     ).toBeTruthy();
-    expect(screen.getByText("Searches the web and cites sources.")).toBeTruthy();
+    expect(
+      screen.getByText("Searches the web and cites sources."),
+    ).toBeTruthy();
   });
 
   it("sends the first message of a new thread through managed AgentCore", async () => {

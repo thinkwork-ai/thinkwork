@@ -583,5 +583,9 @@ function buildNewThreadMentionTargets(
     description: target.description,
   }));
 
-  return mergeAgentProfileMentionTargets(targets, agentProfiles, selectedSpaceId);
+  return mergeAgentProfileMentionTargets(
+    targets,
+    agentProfiles,
+    selectedSpaceId,
+  );
 }

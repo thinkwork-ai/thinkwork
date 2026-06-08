@@ -618,7 +618,9 @@ function dataUrlToFile(
 
 function currentMentionQuery(content: string) {
   const match = /(?:^|\s)([@#])([\w.'-]*)$/u.exec(content);
-  return match ? { trigger: match[1] as "@" | "#", query: match[2] ?? "" } : null;
+  return match
+    ? { trigger: match[1] as "@" | "#", query: match[2] ?? "" }
+    : null;
 }
 
 function hasDefaultAgentMentionAlias(content: string) {
