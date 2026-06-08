@@ -1753,6 +1753,10 @@ export async function handleInvocation(
     typeof args.payload.model === "string" && args.payload.model.trim()
       ? args.payload.model.trim()
       : "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+  const parentHistory = normalizeHistory(
+    args.payload.messages_history,
+    currentModelId,
+  );
   // Live activity emitter (plan 2026-06-03-001). Config (url/secret/api-url)
   // is snapshotted HERE, at coroutine entry, and never re-read from the env
   // mid-turn (env-shadowing guard). No-op when the host didn't opt in.
@@ -1779,6 +1783,7 @@ export async function handleInvocation(
     threadId: identity.threadId,
     gitSha: env.gitSha,
     identity,
+    parentHistory,
     runLoop,
     emitActivity: activityEmitter.emit,
   });
@@ -1951,10 +1956,7 @@ export async function handleInvocation(
       runResult = await runLoop(
         {
           message: userMessage,
-          history: normalizeHistory(
-            args.payload.messages_history,
-            currentModelId,
-          ),
+          history: parentHistory,
           // U6 — no prebuilt system prompt; the system-prompt extension's
           // before_agent_start hook composes and sets it for the turn.
           tools: bundle.tools,

@@ -8,6 +8,7 @@ import {
   runAgentLoop,
   type ActivityEmitEvent,
   type AgentProfileRunRecord,
+  type RunAgentLoopArgs,
   type RunAgentLoopResult,
   type ToolInvocationRecord,
 } from "@thinkwork/pi-runtime-core";
@@ -45,6 +46,7 @@ export interface ProfileDelegationToolOptions {
   threadId: string;
   gitSha: string;
   identity: unknown;
+  parentHistory?: RunAgentLoopArgs["history"];
   runLoop?: typeof runAgentLoop;
   emitActivity?: (event: ActivityEmitEvent) => void;
   now?: () => Date;
@@ -245,7 +247,7 @@ export function createProfileChildRunner(
         const result = await runLoop(
           {
             message: request.task,
-            history: [],
+            history: options.parentHistory ?? [],
             systemPrompt: profileSystemPrompt(request),
             tools: childSurface.tools,
             extensionFactories: options.extensionFactories,
