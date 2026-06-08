@@ -95,6 +95,7 @@ import {
   useSectionUnreadFilter,
 } from "@/lib/sidebar-section-prefs";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
+import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import {
   clearMissingThreadDeletes,
   setThreadDeletePending,
@@ -1933,7 +1934,12 @@ function ChatThreadRow({
                 className="min-w-0 flex-1 truncate text-sm font-normal"
                 data-thread-title-rename
               >
-                {title}
+                <InlineShortcutText
+                  text={title}
+                  fallbackAgentProfiles
+                  fallbackMentions
+                  fallbackSkills
+                />
               </span>
             </Link>
           </ContextMenuTrigger>

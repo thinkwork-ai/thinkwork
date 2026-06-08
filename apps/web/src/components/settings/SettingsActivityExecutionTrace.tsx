@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import { useTenant } from "@/context/TenantContext";
 import { useQuery, useSubscription } from "urql";
 import {
@@ -774,6 +775,27 @@ function buildTimelineFromUsage(
     });
   }
 
+  // Add parent tool call events from usage data before profile lanes. The
+  // delegate_to_agent_profile tool is the parent action that causes the child
+  // profile run, so it should appear before the Agent Profile lane it starts.
+  for (const ti of toolInvocations) {
+    const record = modelRoutingRecord(ti);
+    events.push({
+      type: "tool_call",
+      timestamp: "",
+      branch:
+        ti.type === "sub_agent"
+          ? `sub-agent:${(ti.tool_name || "").toLowerCase()}`
+          : "parent",
+      toolName: ti.tool_name || "unknown",
+      toolCallId: ti.id,
+      toolType: ti.type || "tool",
+      toolInput: ti.input_preview || "",
+      toolOutput: ti.output_preview || "",
+      ...extractToolModelEvidence(record),
+    });
+  }
+
   for (const run of agentProfileRuns) {
     const profileName = profileRunName(run);
     const profileSlug = profileRunSlug(run);
@@ -834,25 +856,6 @@ function buildTimelineFromUsage(
         ...extractToolModelEvidence(modelRoutingRecord(childTool)),
       });
     }
-  }
-
-  // Add tool call events from usage data
-  for (const ti of toolInvocations) {
-    const record = modelRoutingRecord(ti);
-    events.push({
-      type: "tool_call",
-      timestamp: "",
-      branch:
-        ti.type === "sub_agent"
-          ? `sub-agent:${(ti.tool_name || "").toLowerCase()}`
-          : "parent",
-      toolName: ti.tool_name || "unknown",
-      toolCallId: ti.id,
-      toolType: ti.type || "tool",
-      toolInput: ti.input_preview || "",
-      toolOutput: ti.output_preview || "",
-      ...extractToolModelEvidence(record),
-    });
   }
 
   if (responseText) {
@@ -1832,9 +1835,18 @@ const MessageRow = memo(function MessageRow({
         {expanded ? (
           <>
             <div className="text-sm text-muted-foreground prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:my-2 max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {content}
-              </ReactMarkdown>
+              {isUser ? (
+                <InlineShortcutText
+                  text={content}
+                  fallbackAgentProfiles
+                  fallbackMentions
+                  fallbackSkills
+                />
+              ) : (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {content}
+                </ReactMarkdown>
+              )}
             </div>
             {!isUser && (
               <div className="flex justify-end mt-1">
@@ -1855,7 +1867,12 @@ const MessageRow = memo(function MessageRow({
           </>
         ) : (
           <p className="text-sm text-muted-foreground line-clamp-1 break-all">
-            {firstLine}
+            <InlineShortcutText
+              text={firstLine}
+              fallbackAgentProfiles
+              fallbackMentions
+              fallbackSkills
+            />
           </p>
         )}
         {artifact && onOpenArtifact && (

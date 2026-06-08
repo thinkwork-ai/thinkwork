@@ -431,6 +431,22 @@ describe("SettingsActivityThreadDetail", () => {
         input_tokens: 12,
         output_tokens: 183,
         cached_read_tokens: 10000,
+        tool_invocations: [
+          {
+            id: "delegate-profile-1",
+            tool_name: "delegate_to_agent_profile",
+            type: "tool",
+            input_preview: '{"profile":"research"}',
+            output_preview: "Delegated to Research",
+            model_route: {
+              model: "moonshotai.kimi-k2.5",
+              input_tokens: 12,
+              output_tokens: 0,
+              cost_usd: 0.0014,
+              status: "parent_model",
+            },
+          },
+        ],
         agent_profile_runs: [
           {
             profileRunId: "profile-run-1",
@@ -493,6 +509,12 @@ describe("SettingsActivityThreadDetail", () => {
     );
 
     expect(screen.getByText("Research")).toBeTruthy();
+    const delegateRow = screen.getByText(/Tool: delegate_to_agent_profile/);
+    const researchRow = screen.getByText("Research");
+    expect(
+      delegateRow.compareDocumentPosition(researchRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByText("claude-haiku-4-5-20251001")).toBeTruthy();
     expect(screen.getByText(/88.*24.*5\.0K cached/)).toBeTruthy();
     expect(screen.getByText("1.6s")).toBeTruthy();

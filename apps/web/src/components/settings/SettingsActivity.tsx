@@ -15,6 +15,7 @@ import {
   type ChartConfig,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -140,7 +141,12 @@ export function SettingsActivity({
           return (
             <span className={`${COMPACT_TABLE_CELL} gap-2.5 pr-3`}>
               <span className="min-w-0 flex-1 truncate font-medium">
-                {item.title}
+                <InlineShortcutText
+                  text={item.title}
+                  fallbackAgentProfiles
+                  fallbackMentions
+                  fallbackSkills
+                />
               </span>
               <span className="ml-auto hidden shrink-0 items-center gap-3 sm:flex">
                 <Badge

@@ -3036,7 +3036,7 @@ describe("TaskThreadView", () => {
 
     expect(rows[0]?.title).toBe("Agent Profile: Research");
     expect(rows[0]?.detail).toContain("Model: claude-3-5-haiku-20241022");
-    expect(rows[1]?.title).toBe("Research: Finding sources");
+    expect(rows[0]?.children?.[0]?.title).toBe("Research: Finding sources");
 
     render(
       <TaskThreadView
@@ -3054,7 +3054,7 @@ describe("TaskThreadView", () => {
     const agentProfileSummary = screen
       .getByText("Agent Profile: Research")
       .closest("summary");
-    expect(agentProfileSummary?.querySelectorAll("svg")).toHaveLength(1);
+    expect(agentProfileSummary?.querySelectorAll("svg")).toHaveLength(2);
     expect(screen.getByText("Research: Finding sources")).toBeTruthy();
     expect(
       screen
@@ -3139,6 +3139,44 @@ describe("TaskThreadView", () => {
       detail: "Delegated via #Research. Waiting for profile lane activity.",
       kind: "thinking",
     });
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-agent-profile-running",
+          title: "Running profile",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            {
+              id: "u1",
+              role: "USER",
+              content: "Find current CEO of Stripe #Research",
+              mentions: [
+                {
+                  targetType: "AGENT_PROFILE",
+                  targetId: "research",
+                  displayName: "Research",
+                  rawText: "#Research",
+                },
+              ],
+            },
+          ],
+          turns: [
+            {
+              id: "turn-agent-profile-running",
+              status: "running",
+              invocationSource: "chat_message",
+            },
+          ],
+        }}
+      />,
+    );
+
+    openThinkingDisclosure();
+    const agentProfileSummary = screen
+      .getByText("Agent Profile: Research")
+      .closest("summary");
+    expect(agentProfileSummary?.querySelectorAll("svg")).toHaveLength(2);
   });
 
   it("renders finalized agent profile run model, token, cost, and status details", () => {
@@ -3168,13 +3206,14 @@ describe("TaskThreadView", () => {
       },
     );
 
-    expect(rows[0]?.title).toBe("Agent Profile: Research");
-    expect(rows[0]?.detail).toContain("Profile: #research");
-    expect(rows[0]?.detail).toContain("Model: claude-3-5-haiku-20241022");
-    expect(rows[0]?.detail).toContain("Tokens: 1.2K in / 321 out (400 cached)");
-    expect(rows[0]?.detail).toContain("Cost: $0.0023");
-    expect(rows[0]?.detail).toContain("Duration: 12s");
-    expect(rows[0]?.detail).toContain("Status: completed");
+    expect(rows[0]?.title).toBe("Using delegate to agent profile");
+    expect(rows[1]?.title).toBe("Agent Profile: Research");
+    expect(rows[1]?.detail).toContain("Profile: #research");
+    expect(rows[1]?.detail).toContain("Model: claude-3-5-haiku-20241022");
+    expect(rows[1]?.detail).toContain("Tokens: 1.2K in / 321 out (400 cached)");
+    expect(rows[1]?.detail).toContain("Cost: $0.0023");
+    expect(rows[1]?.detail).toContain("Duration: 12s");
+    expect(rows[1]?.detail).toContain("Status: completed");
   });
 
   it("renders one Thinking disclosure per turn, anchored to its user message in chronological order", () => {

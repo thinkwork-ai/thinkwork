@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
   type KeyboardEvent,
 } from "react";
 import { Pencil } from "lucide-react";
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 interface ThreadTitleInlineRenameProps {
   threadId: string;
   title: string;
+  displayTitle?: ReactNode;
   className?: string;
   editingClassName?: string;
   textClassName?: string;
@@ -36,6 +38,7 @@ interface ThreadTitleInlineRenameProps {
 export function ThreadTitleInlineRename({
   threadId,
   title,
+  displayTitle,
   className,
   editingClassName,
   textClassName,
@@ -195,7 +198,9 @@ export function ThreadTitleInlineRename({
             startRename();
           }}
         >
-          <span className={cn("block truncate", textClassName)}>{title}</span>
+          <span className={cn("block truncate", textClassName)}>
+            {displayTitle ?? title}
+          </span>
         </span>
       </ContextMenuTrigger>
       <ContextMenuContent alignOffset={2} className="w-44">
