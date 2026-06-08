@@ -14,8 +14,8 @@ status: in_progress
 - Current unit: U3 - Composite Terraform, deploy templates, DNS/status outputs.
 - Current branch: `codex/kestra-managed-app-u3`.
 - Current worktree: `.Codex/worktrees/kestra-managed-app-u3`.
-- Current PR: pending.
-- Status: local verification passed; PR pending.
+- Current PR: [#2242](https://github.com/thinkwork-ai/thinkwork/pull/2242).
+- Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
     Kestra requirements, and the managed-app/MCP lifecycle precedent.
