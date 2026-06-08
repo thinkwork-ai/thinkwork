@@ -135,3 +135,80 @@ export const managedApplicationDeploymentEvents = pgTable(
       .where(sql`${table.idempotency_key} IS NOT NULL`),
   ],
 );
+
+export const customerDeploymentSessions = pgTable(
+  "customer_deployment_sessions",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id").references(() => tenants.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("collecting_inputs"),
+    current_step_key: text("current_step_key").notNull().default("intake"),
+    requested_action: text("requested_action").notNull().default("deploy"),
+    client_token_hash: text("client_token_hash").notNull(),
+    source: text("source").notNull().default("browser"),
+    customer_name: text("customer_name").notNull(),
+    environment_name: text("environment_name").notNull(),
+    aws_account_id: text("aws_account_id").notNull(),
+    aws_region: text("aws_region").notNull(),
+    availability_zones: jsonb("availability_zones").notNull().default([]),
+    admin_name: text("admin_name").notNull(),
+    admin_email: text("admin_email").notNull(),
+    credentials_status: text("credentials_status")
+      .notNull()
+      .default("not_connected"),
+    runner_mode: text("runner_mode").notNull().default("hosted"),
+    terraform_backend: jsonb("terraform_backend").notNull().default({}),
+    session_config: jsonb("session_config").notNull().default({}),
+    error_message: text("error_message"),
+    expires_at: timestamp("expires_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("customer_deployment_sessions_status_idx").on(table.status),
+    index("customer_deployment_sessions_account_region_idx").on(
+      table.aws_account_id,
+      table.aws_region,
+    ),
+    index("customer_deployment_sessions_tenant_idx").on(table.tenant_id),
+  ],
+);
+
+export const customerDeploymentSessionEvents = pgTable(
+  "customer_deployment_session_events",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => customerDeploymentSessions.id, {
+        onDelete: "cascade",
+      }),
+    event_type: text("event_type").notNull(),
+    step_key: text("step_key"),
+    message: text("message").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    idempotency_key: text("idempotency_key"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("customer_deployment_session_events_session_created_idx").on(
+      table.session_id,
+      table.created_at,
+    ),
+    uniqueIndex("customer_deployment_session_events_idempotency_uidx")
+      .on(table.session_id, table.idempotency_key)
+      .where(sql`${table.idempotency_key} IS NOT NULL`),
+  ],
+);

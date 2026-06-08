@@ -7,7 +7,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, x-tenant-id, x-api-key",
+    "Content-Type, Authorization, x-tenant-id, x-api-key, x-thinkwork-deployment-token",
   "Access-Control-Max-Age": "3600",
 };
 
