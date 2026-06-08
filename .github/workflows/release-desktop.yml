@@ -19,6 +19,7 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 90
     permissions:
+      actions: write
       contents: write
     steps:
       - uses: actions/checkout@v4
@@ -168,6 +169,17 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#desktop-v}"
           gh release edit "v${version}" --repo "${GITHUB_REPOSITORY}" --draft=false
+
+      - name: Dispatch platform release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#desktop-v}"
+          gh workflow run release.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref main \
+            -f "release_tag=v${version}"
 
       - name: Build desktop SHA-256 manifest
         run: |
