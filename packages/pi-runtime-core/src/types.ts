@@ -12,6 +12,37 @@ export type AgentProfileRunStatus =
   | "interrupted"
   | "resource_limit_exceeded";
 
+export type AgentProfileLoopCompletionVerdict = "pass" | "revise" | "fail";
+
+export interface AgentProfileHandoffEvidence {
+  verdict: AgentProfileLoopCompletionVerdict;
+  summary: string;
+  confidence?: "low" | "medium" | "high";
+  evidence?: string[];
+  feedback?: string;
+}
+
+export interface AgentProfileLoopEvidence {
+  source: "thinkwork_agent_profile_loop";
+  loopId: string;
+  profileRunId: string;
+  owner: {
+    type: "profile";
+    profileId: string;
+    profileSlug: string;
+    profileName: string;
+  };
+  policy: unknown;
+  phases: Array<{
+    phase: string;
+    status: string;
+    summary?: string;
+    feedback?: string;
+  }>;
+  goalState: unknown;
+  handoff?: AgentProfileHandoffEvidence;
+}
+
 export interface AgentProfileRunRecord {
   profileRunId: string;
   profileId: string;
@@ -30,6 +61,8 @@ export interface AgentProfileRunRecord {
   costUsd?: number;
   parentThreadTurnId: string;
   handoffSummary: string | null;
+  handoff?: AgentProfileHandoffEvidence;
+  loopEvidence?: AgentProfileLoopEvidence;
   toolInvocations: ToolInvocationRecord[];
   laneKey: string;
   error?: string;

@@ -63,10 +63,10 @@ status: complete
 - Plan:
   `docs/plans/2026-06-08-001-feat-agent-profile-closed-loops-plan.md`.
 - Target branch: `main`.
-- Current unit: U2 - Spike Pi Goal Compatibility And Goal State Mapping.
-- Current branch: `codex/agent-profile-closed-loops-u2`.
+- Current unit: U3 - Add Specialist Loop Prompt And Handoff Contract.
+- Current branch: `codex/agent-profile-closed-loops-u3`.
 - Current worktree:
-  `.Codex/worktrees/agent-profile-closed-loops-u2`.
+  `.Codex/worktrees/agent-profile-closed-loops-u3`.
 - Status: in progress.
 - Notes:
   - U1 normalized Agent Profile loop policy through API/runtime config and was
@@ -94,6 +94,26 @@ status: complete
     - `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/agent-profile-adapter.test.ts`
       -> 8 tests passed.
     - `pnpm --filter @thinkwork/agentcore-pi typecheck` -> passed.
+    - Direct Prettier check over changed files -> passed.
+    - `git diff --check` -> passed.
+  - U2 was squash merged in PR
+    [#2238](https://github.com/thinkwork-ai/thinkwork/pull/2238) as
+    `da455597`.
+  - U2 worktree/branch were removed and the remote branch was deleted.
+  - Created isolated U3 worktree from `origin/main` at `da455597`.
+  - Started U3 specialist loop prompt and handoff evidence work: compiled
+    profile requests now carry normalized closed-loop policy, child profile
+    prompts describe Discovery -> Planning -> Execution -> Self-review ->
+    Iteration -> Handoff, and profile run evidence is being extended with
+    structured pass/revise/fail handoff metadata and non-chain-of-thought loop
+    phase evidence.
+  - U3 local verification passed:
+    - `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/agent-profile-adapter.test.ts agent-container/tests/agent-profile-delegation.test.ts`
+      -> 19 tests passed.
+    - `pnpm --filter @thinkwork/agentcore-pi typecheck` -> passed.
+    - `pnpm --filter @thinkwork/pi-runtime-core typecheck` -> passed.
+    - `pnpm --filter @thinkwork/pi-runtime-core exec vitest run test/agent-loop.test.ts`
+      -> 38 tests passed.
     - Direct Prettier check over changed files -> passed.
     - `git diff --check` -> passed.
 

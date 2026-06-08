@@ -118,7 +118,7 @@ export interface CompiledAgentProfileRunRequest {
     costBudgetUsd?: number;
     reviewGate?: boolean;
     maxReviewLoops?: number;
-    loopPolicy?: AgentLoopPolicy;
+    loopPolicy: AgentLoopPolicy;
   };
   telemetry: {
     source: "pi_agent_profile";
@@ -140,11 +140,57 @@ export interface ProfileChildRunResult {
   status?: AgentProfileRunStatus | string;
   usage?: ProfileChildRunUsage;
   costUsd?: number;
+  handoff?: AgentProfileHandoffEvidence;
   toolInvocations?: ToolInvocationRecord[];
   timedOut?: boolean;
   interrupted?: boolean;
   resourceLimitExceeded?: boolean;
   error?: string;
+}
+
+export type AgentProfileLoopPhase =
+  | "discovery"
+  | "planning"
+  | "execution"
+  | "self_review"
+  | "iteration"
+  | "handoff";
+
+export type AgentProfileLoopPhaseStatus =
+  | "completed"
+  | "revision_requested"
+  | "failed"
+  | "skipped";
+
+export interface AgentProfileHandoffEvidence {
+  verdict: AgentProfileLoopCompletionVerdict;
+  summary: string;
+  confidence?: "low" | "medium" | "high";
+  evidence?: string[];
+  feedback?: string;
+}
+
+export interface AgentProfileLoopPhaseEvidence {
+  phase: AgentProfileLoopPhase;
+  status: AgentProfileLoopPhaseStatus;
+  summary?: string;
+  feedback?: string;
+}
+
+export interface AgentProfileLoopEvidence {
+  source: "thinkwork_agent_profile_loop";
+  loopId: string;
+  profileRunId: string;
+  owner: {
+    type: "profile";
+    profileId: string;
+    profileSlug: string;
+    profileName: string;
+  };
+  policy: AgentLoopPolicy;
+  phases: AgentProfileLoopPhaseEvidence[];
+  goalState: AgentProfileLoopGoalState;
+  handoff?: AgentProfileHandoffEvidence;
 }
 
 export interface AgentProfileRunEvidence {
@@ -165,6 +211,8 @@ export interface AgentProfileRunEvidence {
   costUsd?: number;
   parentThreadTurnId: string;
   handoffSummary: string | null;
+  handoff?: AgentProfileHandoffEvidence;
+  loopEvidence: AgentProfileLoopEvidence;
   toolInvocations: ToolInvocationRecord[];
   laneKey: string;
   error?: string;
@@ -441,25 +489,25 @@ function defaultContextPolicy(
   };
 }
 
-function defaultLoopPolicyForRequest(
-  request: CompiledAgentProfileRunRequest,
+function defaultLoopPolicyFromExecution(
+  execution: AgentProfileExecutionControls,
 ): AgentLoopPolicy {
   return {
     mode: "closed",
     enabled: true,
     maxIterations: 1,
-    maxReviewLoops: request.execution.maxReviewLoops ?? 1,
-    reviewGate: request.execution.reviewGate ?? false,
+    maxReviewLoops: execution.maxReviewLoops ?? 1,
+    reviewGate: execution.reviewGate ?? false,
     externalReviewerPolicy: "explicit",
     failBehavior: "return_blocker",
-    ...(request.execution.maxRuntimeMs !== undefined
-      ? { maxRuntimeMs: request.execution.maxRuntimeMs }
+    ...(execution.maxRuntimeMs !== undefined
+      ? { maxRuntimeMs: execution.maxRuntimeMs }
       : {}),
-    ...(request.execution.maxTokens !== undefined
-      ? { maxTokens: request.execution.maxTokens }
+    ...(execution.maxTokens !== undefined
+      ? { maxTokens: execution.maxTokens }
       : {}),
-    ...(request.execution.costBudgetUsd !== undefined
-      ? { costBudgetUsd: request.execution.costBudgetUsd }
+    ...(execution.costBudgetUsd !== undefined
+      ? { costBudgetUsd: execution.costBudgetUsd }
       : {}),
   };
 }
@@ -507,6 +555,8 @@ export function compileAgentProfileRunRequest(
   });
   const now = args.now?.() ?? new Date();
   const execution = args.profile.executionControls ?? {};
+  const loopPolicy =
+    execution.loopPolicy ?? defaultLoopPolicyFromExecution(execution);
 
   return {
     profileRunId: args.idFactory?.() ?? randomUUID(),
@@ -551,7 +601,7 @@ export function compileAgentProfileRunRequest(
       ...(execution.maxReviewLoops !== undefined
         ? { maxReviewLoops: execution.maxReviewLoops }
         : {}),
-      ...(execution.loopPolicy ? { loopPolicy: execution.loopPolicy } : {}),
+      loopPolicy,
     },
     telemetry: {
       source: "pi_agent_profile",
@@ -615,6 +665,116 @@ function redactSecrets(value: unknown): unknown {
   return out;
 }
 
+function trimmedText(value: unknown, maxLength = 4_000): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.trim();
+  if (!text) return undefined;
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function normalizedVerdict(
+  value: unknown,
+): AgentProfileLoopCompletionVerdict | undefined {
+  const text = trimmedText(value, 32)?.toLowerCase();
+  if (text === "pass" || text === "revise" || text === "fail") return text;
+  return undefined;
+}
+
+function normalizedConfidence(
+  value: unknown,
+): AgentProfileHandoffEvidence["confidence"] | undefined {
+  const text = trimmedText(value, 32)?.toLowerCase();
+  if (text === "low" || text === "medium" || text === "high") return text;
+  return undefined;
+}
+
+function evidenceItems(value: unknown): string[] | undefined {
+  const items = Array.isArray(value)
+    ? value.flatMap((item) => {
+        const text = trimmedText(item, 600);
+        return text ? [text] : [];
+      })
+    : (trimmedText(value, 2_000)
+        ?.split(/\n|;|\s+\|\s+/)
+        .map((item) => item.trim())
+        .filter(Boolean) ?? []);
+  return items.length > 0 ? items.slice(0, 8) : undefined;
+}
+
+function labeledContentField(
+  content: string,
+  label: string,
+): string | undefined {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = content.match(
+    new RegExp(`^\\s*${escaped}\\s*:\\s*(.+)$`, "im"),
+  );
+  return trimmedText(match?.[1], 2_000);
+}
+
+function handoffFromRecord(
+  value: unknown,
+): AgentProfileHandoffEvidence | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const verdict = normalizedVerdict(record.verdict);
+  const summary = trimmedText(record.summary);
+  if (!verdict || !summary) return undefined;
+  return {
+    verdict,
+    summary,
+    ...(normalizedConfidence(record.confidence)
+      ? { confidence: normalizedConfidence(record.confidence) }
+      : {}),
+    ...(evidenceItems(record.evidence)
+      ? { evidence: evidenceItems(record.evidence) }
+      : {}),
+    ...(trimmedText(record.feedback)
+      ? { feedback: trimmedText(record.feedback) }
+      : {}),
+  };
+}
+
+function handoffFromContent(
+  content: string | null | undefined,
+): AgentProfileHandoffEvidence | undefined {
+  const text = trimmedText(content);
+  if (!text) return undefined;
+  const verdict = normalizedVerdict(labeledContentField(text, "Verdict"));
+  const summary =
+    labeledContentField(text, "Summary") ??
+    labeledContentField(text, "Handoff") ??
+    undefined;
+  if (!verdict || !summary) return undefined;
+  return {
+    verdict,
+    summary,
+    ...(normalizedConfidence(labeledContentField(text, "Confidence"))
+      ? {
+          confidence: normalizedConfidence(
+            labeledContentField(text, "Confidence"),
+          ),
+        }
+      : {}),
+    ...(evidenceItems(labeledContentField(text, "Evidence"))
+      ? { evidence: evidenceItems(labeledContentField(text, "Evidence")) }
+      : {}),
+    ...(trimmedText(labeledContentField(text, "Feedback"))
+      ? { feedback: trimmedText(labeledContentField(text, "Feedback")) }
+      : {}),
+  };
+}
+
+function profileHandoffEvidence(
+  result: ProfileChildRunResult,
+): AgentProfileHandoffEvidence | undefined {
+  return (
+    handoffFromRecord(result.handoff) ?? handoffFromContent(result.content)
+  );
+}
+
 export function sanitizeProfileToolInvocations(
   invocations: readonly ToolInvocationRecord[] = [],
 ): ToolInvocationRecord[] {
@@ -640,7 +800,8 @@ export function buildAgentProfileRunEvidence(input: {
   finishedAt: Date;
 }): AgentProfileRunEvidence {
   const usage = input.result.usage ?? {};
-  return {
+  const handoff = profileHandoffEvidence(input.result);
+  const evidence: Omit<AgentProfileRunEvidence, "loopEvidence"> = {
     profileRunId: input.request.profileRunId,
     profileId: input.request.profileId,
     profileSlug: input.request.profileSlug,
@@ -679,6 +840,17 @@ export function buildAgentProfileRunEvidence(input: {
     laneKey: input.request.telemetry.laneKey,
     ...(input.result.error ? { error: input.result.error } : {}),
   };
+  const loopEvidence = buildAgentProfileLoopEvidence({
+    request: input.request,
+    evidence,
+    handoff,
+    checkedAt: input.finishedAt,
+  });
+  return {
+    ...evidence,
+    ...(handoff ? { handoff } : {}),
+    loopEvidence,
+  };
 }
 
 function zeroGoalUsage(): AgentProfileLoopGoalUsage {
@@ -693,7 +865,17 @@ function zeroGoalUsage(): AgentProfileLoopGoalUsage {
 }
 
 function usageFromEvidence(
-  evidence: AgentProfileRunEvidence | undefined,
+  evidence:
+    | Pick<
+        AgentProfileRunEvidence,
+        | "inputTokens"
+        | "outputTokens"
+        | "cachedReadTokens"
+        | "cachedWriteTokens"
+        | "totalTokens"
+        | "costUsd"
+      >
+    | undefined,
 ): AgentProfileLoopGoalUsage {
   if (!evidence) return zeroGoalUsage();
   return {
@@ -707,7 +889,7 @@ function usageFromEvidence(
 }
 
 function loopGoalStatus(input: {
-  evidence?: AgentProfileRunEvidence;
+  evidence?: Pick<AgentProfileRunEvidence, "status">;
   verdict?: AgentProfileLoopCompletionVerdict;
 }): AgentProfileLoopGoalStatus {
   if (!input.evidence) return "active";
@@ -725,7 +907,19 @@ function loopGoalStatus(input: {
 
 export function buildAgentProfileLoopGoalState(input: {
   request: CompiledAgentProfileRunRequest;
-  evidence?: AgentProfileRunEvidence;
+  evidence?: Pick<
+    AgentProfileRunEvidence,
+    | "startedAt"
+    | "finishedAt"
+    | "model"
+    | "status"
+    | "inputTokens"
+    | "outputTokens"
+    | "cachedReadTokens"
+    | "cachedWriteTokens"
+    | "totalTokens"
+    | "costUsd"
+  >;
   completion?: {
     verdict: AgentProfileLoopCompletionVerdict;
     feedback?: string;
@@ -733,9 +927,7 @@ export function buildAgentProfileLoopGoalState(input: {
   };
   now?: () => Date;
 }): AgentProfileLoopGoalState {
-  const policy =
-    input.request.execution.loopPolicy ??
-    defaultLoopPolicyForRequest(input.request);
+  const policy = input.request.execution.loopPolicy;
   const usage = usageFromEvidence(input.evidence);
   const startedAt =
     input.evidence?.startedAt ?? input.request.telemetry.createdAt;
@@ -796,6 +988,98 @@ export function buildAgentProfileLoopGoalState(input: {
     },
     startedAt,
     updatedAt,
+  };
+}
+
+function phaseStatusForHandoff(
+  handoff: AgentProfileHandoffEvidence | undefined,
+): AgentProfileLoopPhaseStatus {
+  if (!handoff) return "completed";
+  if (handoff.verdict === "revise") return "revision_requested";
+  if (handoff.verdict === "fail") return "failed";
+  return "completed";
+}
+
+function buildAgentProfileLoopEvidence(input: {
+  request: CompiledAgentProfileRunRequest;
+  evidence: Omit<AgentProfileRunEvidence, "loopEvidence">;
+  handoff?: AgentProfileHandoffEvidence;
+  checkedAt: Date;
+}): AgentProfileLoopEvidence {
+  const goalState = buildAgentProfileLoopGoalState({
+    request: input.request,
+    evidence: input.evidence,
+    ...(input.handoff
+      ? {
+          completion: {
+            verdict: input.handoff.verdict,
+            ...(input.handoff.feedback
+              ? { feedback: input.handoff.feedback }
+              : {}),
+            checkedAt: input.checkedAt,
+          },
+        }
+      : {}),
+  });
+  const selfReviewStatus = phaseStatusForHandoff(input.handoff);
+
+  return {
+    source: "thinkwork_agent_profile_loop",
+    loopId: goalState.goalId,
+    profileRunId: input.request.profileRunId,
+    owner: goalState.owner,
+    policy: goalState.policy,
+    phases: [
+      {
+        phase: "discovery",
+        status: "completed",
+        summary: "Gathered the task inputs and available context.",
+      },
+      {
+        phase: "planning",
+        status: "completed",
+        summary: "Selected a bounded execution path for the delegated task.",
+      },
+      {
+        phase: "execution",
+        status: input.evidence.status === "completed" ? "completed" : "failed",
+        summary: "Produced delegated work within the profile capability set.",
+      },
+      {
+        phase: "self_review",
+        status: selfReviewStatus,
+        ...(input.handoff?.feedback
+          ? { feedback: input.handoff.feedback }
+          : {}),
+        summary: input.handoff
+          ? `Self-review verdict: ${input.handoff.verdict}.`
+          : "Self-review completed without structured handoff metadata.",
+      },
+      {
+        phase: "iteration",
+        status:
+          input.handoff?.verdict === "revise"
+            ? "revision_requested"
+            : "skipped",
+        ...(input.handoff?.feedback
+          ? { feedback: input.handoff.feedback }
+          : {}),
+        summary:
+          input.handoff?.verdict === "revise"
+            ? "Revision is required before the parent Agent should finalize."
+            : "No additional profile iteration was requested.",
+      },
+      {
+        phase: "handoff",
+        status: input.handoff?.verdict === "fail" ? "failed" : "completed",
+        summary:
+          input.handoff?.summary ??
+          input.evidence.handoffSummary ??
+          "Returned profile output to the parent Agent.",
+      },
+    ],
+    goalState,
+    ...(input.handoff ? { handoff: input.handoff } : {}),
   };
 }
 

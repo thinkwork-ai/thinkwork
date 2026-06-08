@@ -247,6 +247,20 @@ describe("agent profile delegation", () => {
       "execute_code",
     );
     expect(captured?.systemPrompt).toContain("Research with sources.");
+    expect(captured?.systemPrompt).toContain("Discovery");
+    expect(captured?.systemPrompt).toContain("Planning");
+    expect(captured?.systemPrompt).toContain("Execution");
+    expect(captured?.systemPrompt).toContain("Self-review");
+    expect(captured?.systemPrompt).toContain("Iteration");
+    expect(captured?.systemPrompt).toContain("Handoff");
+    expect(captured?.systemPrompt).toContain("Verdict: pass | revise | fail");
+    expect(captured?.systemPrompt).toContain(
+      "The parent Agent owns the final user-facing response",
+    );
+    expect(captured?.systemPrompt).toContain(
+      "Do not reveal private reasoning or chain-of-thought",
+    );
+    expect(captured?.systemPrompt).toContain("Max iterations: 1");
     expect(evidence).toMatchObject({
       profileSlug: "research",
       model: "anthropic/claude-haiku-4-5",
