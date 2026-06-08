@@ -11,10 +11,10 @@ status: complete
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U1 - Managed-app registry and release descriptors.
-- Current branch: `codex/kestra-managed-app-u1`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u1`.
-- Current PR: [#2239](https://github.com/thinkwork-ai/thinkwork/pull/2239).
+- Current unit: U2 - Terraform Kestra app module.
+- Current branch: `codex/kestra-managed-app-u2`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u2`.
+- Current PR: [#2241](https://github.com/thinkwork-ai/thinkwork/pull/2241).
 - Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
@@ -42,6 +42,21 @@ status: complete
     - `pnpm install` completed, but `canvas@2.11.2` logged a native fallback
       build failure on local Node 25 due to missing `pkg-config`/`pixman-1`.
       This did not affect U1-focused tests or typecheck.
+  - U1 PR [#2239](https://github.com/thinkwork-ai/thinkwork/pull/2239) passed
+    required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was squash
+    merged as `3e5f9c7d`.
+  - U1 remote branch was deleted and local worktree/branch were removed.
+  - Created isolated U2 worktree from `origin/main` at `3e5f9c7d`.
+  - Started U2 Terraform app module work for public ALB, ECS/Fargate, S3
+    internal storage, Postgres repository/queue configuration, ECS secret
+    injection, parking semantics, outputs, and module tests.
+  - U2 local verification passed:
+    - `terraform fmt -check -recursive terraform/modules/app/kestra` -> passed.
+    - `terraform -chdir=terraform/modules/app/kestra validate` -> passed.
+    - `terraform -chdir=terraform/modules/app/kestra test` -> 4 tests passed.
+    - `pnpm dlx prettier --check docs/plans/autopilot-status.md terraform/modules/app/kestra/README.md`
+      -> passed.
+    - `git diff --check` -> passed.
 
 ## Agent Profile Closed Loops - 2026-06-08
 
