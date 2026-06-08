@@ -19,6 +19,10 @@ import type {
   EnterpriseAwsStagePlan,
 } from "../src/commands/enterprise/aws-bootstrap.js";
 import type {
+  EnterpriseAwsDeploymentControlPlaneClient,
+  EnterpriseAwsDeploymentControlPlanePlan,
+} from "../src/commands/enterprise/aws-deployments.js";
+import type {
   EnterpriseGitHubBootstrapClient,
   GitHubEnvironmentPlan,
 } from "../src/commands/enterprise/github.js";
@@ -140,6 +144,8 @@ describe("enterprise bootstrap plan", () => {
   it("reuses existing mocked resources on repeated non-dry-run bootstrap", async () => {
     const root = tempRepo();
     const awsClient = new ExistingAwsClient();
+    const deploymentControlPlaneClient =
+      new ExistingDeploymentControlPlaneClient();
     const githubClient = new ExistingGitHubClient();
 
     const first = await runEnterpriseBootstrap(
@@ -154,6 +160,7 @@ describe("enterprise bootstrap plan", () => {
       {
         identity,
         awsClient,
+        deploymentControlPlaneClient,
         githubClient,
         saveDeployment: vi.fn(),
       },
@@ -170,6 +177,7 @@ describe("enterprise bootstrap plan", () => {
       {
         identity,
         awsClient,
+        deploymentControlPlaneClient,
         githubClient,
         saveDeployment: vi.fn(),
       },
@@ -177,7 +185,45 @@ describe("enterprise bootstrap plan", () => {
 
     expect(first.aws.every((step) => step.status === "reused")).toBe(true);
     expect(second.aws.every((step) => step.status === "reused")).toBe(true);
+    expect(deploymentControlPlaneClient.mutations).toEqual([
+      "thinkwork-dev-deployment-orchestrator",
+      "thinkwork-dev-deployment-orchestrator",
+    ]);
     expect(second.github.map((step) => step.status)).toContain("updated");
+  });
+
+  it("creates GitHub-free deployment control planes during mutating bootstrap", async () => {
+    const deploymentControlPlaneClient =
+      new ExistingDeploymentControlPlaneClient();
+
+    const result = await runEnterpriseBootstrap(
+      {
+        targetDir: tempRepo(),
+        customerSlug: "acme",
+        stages: ["dev"],
+        manifestSha256,
+        dryRun: false,
+      },
+      {
+        identity,
+        awsClient: new ExistingAwsClient(),
+        deploymentControlPlaneClient,
+        saveDeployment: vi.fn(),
+      },
+    );
+
+    expect(result.aws.map((step) => step.target)).toEqual(
+      expect.arrayContaining([
+        "acme-thinkwork-terraform-state",
+        "acme-thinkwork-terraform-locks",
+        "acme-thinkwork-release-artifacts",
+        "thinkwork-dev-deployment-orchestrator",
+      ]),
+    );
+    expect(deploymentControlPlaneClient.mutations).toEqual([
+      "thinkwork-dev-deployment-orchestrator",
+    ]);
+    expect(result.github).toEqual([]);
   });
 
   it("fails before GitHub mutation when AWS identity is missing for a mutating run", async () => {
@@ -194,6 +240,8 @@ describe("enterprise bootstrap plan", () => {
         {
           identity: null,
           awsClient: new ExistingAwsClient(),
+          deploymentControlPlaneClient:
+            new ExistingDeploymentControlPlaneClient(),
           githubClient,
           saveDeployment: vi.fn(),
         },
@@ -262,6 +310,8 @@ describe("enterprise bootstrap plan", () => {
         {
           identity,
           awsClient: new ExistingAwsClient(),
+          deploymentControlPlaneClient:
+            new ExistingDeploymentControlPlaneClient(),
           githubClient: new PermissionDeniedGitHubClient(),
           saveDeployment: vi.fn(),
         },
@@ -306,6 +356,19 @@ class ExistingAwsClient implements EnterpriseAwsBootstrapClient {
     role: EnterpriseAwsStagePlan,
   ): Promise<BootstrapStepResult> {
     return reused(role.roleArn);
+  }
+}
+
+class ExistingDeploymentControlPlaneClient
+  implements EnterpriseAwsDeploymentControlPlaneClient
+{
+  mutations: string[] = [];
+
+  async ensureDeploymentControlPlane(
+    controlPlane: EnterpriseAwsDeploymentControlPlanePlan,
+  ): Promise<BootstrapStepResult> {
+    this.mutations.push(controlPlane.stateMachineName);
+    return reused(controlPlane.stateMachineName);
   }
 }
 

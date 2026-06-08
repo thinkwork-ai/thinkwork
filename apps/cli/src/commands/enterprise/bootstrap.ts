@@ -36,6 +36,8 @@ import {
 } from "./github.js";
 import {
   buildEnterpriseAwsDeploymentControlPlanePlan,
+  TerraformEnterpriseAwsDeploymentControlPlaneClient,
+  type EnterpriseAwsDeploymentControlPlaneClient,
   type EnterpriseAwsDeploymentControlPlanePlan,
 } from "./aws-deployments.js";
 import {
@@ -93,6 +95,7 @@ export interface EnterpriseBootstrapResult {
 export interface EnterpriseBootstrapDependencies {
   identity?: AwsIdentity | null;
   awsClient?: EnterpriseAwsBootstrapClient;
+  deploymentControlPlaneClient?: EnterpriseAwsDeploymentControlPlaneClient;
   githubClient?: EnterpriseGitHubBootstrapClient;
   saveDeployment?: (config: EnterpriseDeploymentConfig) => void;
 }
@@ -213,6 +216,9 @@ export async function runEnterpriseBootstrap(
     : { written: [], preserved: [] };
 
   const awsClient = deps.awsClient ?? new AwsCliEnterpriseBootstrapClient();
+  const deploymentControlPlaneClient =
+    deps.deploymentControlPlaneClient ??
+    new TerraformEnterpriseAwsDeploymentControlPlaneClient();
   const githubClient =
     plan.repository && plan.github
       ? (deps.githubClient ??
@@ -303,6 +309,20 @@ export async function runEnterpriseBootstrap(
         plan.region,
       ),
     );
+    for (const controlPlane of plan.deploymentControlPlanes) {
+      awsResults.push(
+        await deploymentControlPlaneClient.ensureDeploymentControlPlane(
+          controlPlane,
+          {
+            accountId: plan.accountId,
+            region: plan.region,
+            release: plan.release,
+            stateBucket: plan.aws.stateBucket,
+            lockTable: plan.aws.lockTable,
+          },
+        ),
+      );
+    }
     if (plan.aws.oidcProviderArn) {
       awsResults.push(await awsClient.ensureOidcProvider(plan.accountId));
     }
