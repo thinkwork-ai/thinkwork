@@ -665,4 +665,119 @@ describe("SettingsActivityThreadDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Traces" }));
     expect(screen.getByText("profile:research")).toBeTruthy();
   });
+
+  it("interleaves each delegate tool with the Agent Profile lane it starts", () => {
+    const profileTurn = {
+      ...turn,
+      usageJson: JSON.stringify({
+        model: "moonshotai.kimi-k2.5",
+        input_tokens: 3500,
+        output_tokens: 69,
+        duration_ms: 16000,
+        tool_invocations: [
+          {
+            id: "profile-run-research",
+            tool_name: "delegate_to_agent_profile",
+            type: "tool",
+            args: { profileSlug: "research", task: "Find Stripe CEO" },
+            input_preview: '{"profileSlug":"research"}',
+            output_preview: "Delegated to Research",
+            agent_profile_run: {
+              profileRunId: "profile-run-research",
+              profileSlug: "research",
+            },
+            model_route: {
+              model: "moonshotai.kimi-k2.5",
+              input_tokens: 3500,
+              output_tokens: 35,
+              cost_usd: 0.0032,
+            },
+          },
+          {
+            id: "profile-run-reviewer",
+            tool_name: "delegate_to_agent_profile",
+            type: "tool",
+            args: { profileSlug: "reviewer", task: "Review research" },
+            input_preview: '{"profileSlug":"reviewer"}',
+            output_preview: "Delegated to Reviewer",
+            agent_profile_run: {
+              profileRunId: "profile-run-reviewer",
+              profileSlug: "reviewer",
+            },
+            model_route: {
+              model: "moonshotai.kimi-k2.5",
+              input_tokens: 3500,
+              output_tokens: 34,
+              cost_usd: 0.0032,
+            },
+          },
+        ],
+        agent_profile_runs: [
+          {
+            profileRunId: "profile-run-research",
+            profileSlug: "research",
+            profileName: "Research",
+            model: "moonshotai.kimi-k2.5",
+            inputTokens: 25000,
+            outputTokens: 133,
+            durationMs: 10500,
+            costUsd: 0.0154,
+            toolInvocations: [
+              {
+                id: "research-web-search",
+                tool_name: "web_search",
+                type: "tool",
+                input_preview: '{"query":"Stripe CEO"}',
+                output_preview: "Search results",
+              },
+            ],
+          },
+          {
+            profileRunId: "profile-run-reviewer",
+            profileSlug: "reviewer",
+            profileName: "Reviewer",
+            model: "moonshotai.kimi-k2.5",
+            inputTokens: 1100,
+            outputTokens: 104,
+            durationMs: 934,
+            costUsd: 0.001,
+            toolInvocations: [],
+          },
+        ],
+      }),
+      totalCost: 0.0227,
+    };
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({ turn: profileTurn, traces: [] });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    const delegateRows = screen.getAllByText(/Tool: delegate_to_agent_profile/);
+    const researchRow = screen.getByText("Research");
+    const researchToolRow = screen.getByText("Tool: web_search");
+    const reviewerRow = screen.getByText("Reviewer");
+
+    expect(delegateRows).toHaveLength(2);
+    expect(
+      delegateRows[0].compareDocumentPosition(researchRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      researchRow.compareDocumentPosition(researchToolRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      researchToolRow.compareDocumentPosition(delegateRows[1]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      delegateRows[1].compareDocumentPosition(reviewerRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
