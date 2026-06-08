@@ -11,6 +11,7 @@ import { Badge, Button, Separator, cn } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
+import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import {
   ExecutionTrace,
   type ExecutionTraceModelRouteTrace,
@@ -318,7 +319,12 @@ export function SettingsActivityThreadDetail({
               {identifier}
             </p>
             <h1 className="max-w-4xl text-3xl font-semibold leading-tight text-foreground">
-              {title}
+              <InlineShortcutText
+                text={title}
+                fallbackAgentProfiles
+                fallbackMentions
+                fallbackSkills
+              />
             </h1>
           </div>
 

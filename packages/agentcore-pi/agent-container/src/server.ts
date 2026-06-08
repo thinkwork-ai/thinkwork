@@ -208,6 +208,26 @@ function profileMentionTask(
   return task || message.trim();
 }
 
+function inferAutomaticAgentProfileSlug(
+  message: string,
+  profiles: AgentProfileConfig[],
+): string {
+  const normalized = message.toLowerCase();
+  const researchIntent =
+    /\b(research|source|sources|cite|citation|web search|search the web|latest|current|today|find current)\b/i.test(
+      normalized,
+    );
+  if (!researchIntent) return "";
+
+  const researchProfile = profiles.find((profile) => {
+    const builtInKey = profile.builtInKey?.toLowerCase() ?? "";
+    const slug = profile.slug.toLowerCase();
+    const name = profile.name.toLowerCase();
+    return builtInKey === "research" || slug === "research" || name === "research";
+  });
+  return researchProfile?.slug ?? "";
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -1887,14 +1907,18 @@ export async function handleInvocation(
     const requestedProfileSlug = asString(
       args.payload.requested_agent_profile_slug,
     ).toLowerCase();
-    if (requestedProfileSlug) {
+    const automaticProfileSlug = requestedProfileSlug
+      ? ""
+      : inferAutomaticAgentProfileSlug(userMessage, agentProfiles);
+    const selectedProfileSlug = requestedProfileSlug || automaticProfileSlug;
+    if (selectedProfileSlug) {
       const requestedProfile = agentProfiles.find(
-        (profile) => profile.slug === requestedProfileSlug,
+        (profile) => profile.slug === selectedProfileSlug,
       );
       const profileTask = profileMentionTask(userMessage, requestedProfile);
       const evidence = await executeAgentProfileDelegation({
         options: profileDelegationOptions(currentModelId),
-        profileSlug: requestedProfileSlug,
+        profileSlug: selectedProfileSlug,
         task: profileTask,
       });
       runResult = {
@@ -1906,10 +1930,10 @@ export async function handleInvocation(
             id: evidence.profileRunId,
             name: AGENT_PROFILE_TOOL_NAME,
             tool_name: AGENT_PROFILE_TOOL_NAME,
-            args: { profileSlug: requestedProfileSlug, task: profileTask },
+            args: { profileSlug: selectedProfileSlug, task: profileTask },
             result: { agent_profile_run: evidence },
             input_preview: JSON.stringify({
-              profileSlug: requestedProfileSlug,
+              profileSlug: selectedProfileSlug,
               task: profileTask,
             }).slice(0, 600),
             output_preview: (evidence.handoffSummary ?? "").slice(0, 600),

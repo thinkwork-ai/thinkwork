@@ -112,6 +112,68 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     expect(prompt).toContain("use `bash` for the Pi workspace/shell");
     expect(prompt).toContain("tenant Code Interpreter sandbox");
   });
+
+  it("adds Agent Profile routing guidance when delegation is available", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {
+        agent_profiles: [
+          {
+            slug: "research",
+            name: "Research",
+            modelId: "moonshotai.kimi-k2.5",
+            description: "Delegates focused research and source finding.",
+            routingGuidance: "Use for source-backed research subtasks.",
+          },
+          {
+            slug: "coding",
+            name: "Coding",
+            model_id: "anthropic.claude-haiku",
+            description: "Delegates code inspection and tests.",
+          },
+        ],
+      },
+      workspaceDir: "/ws",
+      availableToolNames: ["delegate_to_agent_profile", "web_search"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+
+    expect(prompt).toContain("## Agent Profile Delegation");
+    expect(prompt).toContain("`delegate_to_agent_profile` tool is available");
+    expect(prompt).toContain(
+      "- Research (#research, model moonshotai.kimi-k2.5): Delegates focused research and source finding. Routing guidance: Use for source-backed research subtasks.",
+    );
+    expect(prompt).toContain(
+      "- Coding (#coding, model anthropic.claude-haiku): Delegates code inspection and tests.",
+    );
+    expect(prompt.indexOf("## Runtime Tool Policy")).toBeLessThan(
+      prompt.indexOf("## Agent Profile Delegation"),
+    );
+    expect(prompt.indexOf("## Agent Profile Delegation")).toBeLessThan(
+      prompt.indexOf("AGENTS BODY"),
+    );
+  });
+
+  it("omits Agent Profile routing guidance when the delegation tool is unavailable", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {
+        agent_profiles: [
+          {
+            slug: "research",
+            name: "Research",
+            modelId: "moonshotai.kimi-k2.5",
+          },
+        ],
+      },
+      workspaceDir: "/ws",
+      availableToolNames: ["web_search"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+
+    expect(prompt).not.toContain("## Agent Profile Delegation");
+    expect(prompt).not.toContain("#research");
+  });
 });
 
 describe("createSystemPromptExtension", () => {

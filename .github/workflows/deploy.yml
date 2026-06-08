@@ -1013,6 +1013,36 @@ jobs:
             echo "TWENTY_ENCRYPTION_KEY_SECRET_ARN=$encryption_secret_arn"
           } >> "$GITHUB_ENV"
 
+      - name: Empty retired admin static site bucket
+        run: |
+          set -euo pipefail
+          if [ "${STAGE}" != "dev" ]; then
+            echo "Skipping retired admin bucket cleanup outside dev."
+            exit 0
+          fi
+
+          bucket="thinkwork-${STAGE}-admin"
+          if ! aws s3api head-bucket --bucket "$bucket" >/dev/null 2>&1; then
+            echo "Retired admin bucket ${bucket} is already gone."
+            exit 0
+          fi
+
+          echo "Emptying retired admin static-site bucket ${bucket} before Terraform destroys stale state."
+          aws s3 rm "s3://${bucket}" --recursive || true
+
+          object_versions=$(aws s3api list-object-versions --bucket "$bucket" --output json)
+          delete_payload=$(jq -c '
+            [
+              (.Versions // [])[] | {Key, VersionId}
+            ] + [
+              (.DeleteMarkers // [])[] | {Key, VersionId}
+            ] | {Objects: ., Quiet: true}
+          ' <<< "$object_versions")
+          object_count=$(jq '.Objects | length' <<< "$delete_payload")
+          if [ "$object_count" -gt 0 ]; then
+            aws s3api delete-objects --bucket "$bucket" --delete "$delete_payload" >/dev/null
+          fi
+
       - name: Terraform Apply
         working-directory: terraform/examples/greenfield
         env:

@@ -7,6 +7,7 @@ export interface PiInvocationPayload {
   current_user_email?: unknown;
   current_user_name?: unknown;
   eval_mode?: unknown;
+  agent_profiles?: unknown;
 }
 
 // System-prompt composition order. LLM attention is strongest at the start
@@ -127,6 +128,61 @@ function buildRuntimeToolPolicy(
   ].join("\n");
 }
 
+function buildAgentProfileRoutingPolicy(
+  payload: PiInvocationPayload,
+  toolNames: readonly string[] | undefined,
+): string {
+  const profiles = Array.isArray(payload.agent_profiles)
+    ? payload.agent_profiles.flatMap((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          return [];
+        }
+        const record = value as Record<string, unknown>;
+        const slug = asString(record.slug);
+        const name = asString(record.name);
+        const modelId = asString(record.modelId ?? record.model_id);
+        if (!slug || !name || !modelId) return [];
+        return [
+          {
+            slug,
+            name,
+            modelId,
+            description: asString(record.description),
+            routingGuidance: asString(
+              record.routingGuidance ?? record.routing_guidance,
+            ),
+          },
+        ];
+      })
+    : [];
+  const toolAvailable = new Set(toolNames ?? []).has(
+    "delegate_to_agent_profile",
+  );
+  if (!toolAvailable || profiles.length === 0) return "";
+
+  const profileLines = profiles.map((profile) => {
+    const notes = [
+      profile.description,
+      profile.routingGuidance
+        ? `Routing guidance: ${profile.routingGuidance}`
+        : "",
+    ].filter(Boolean);
+    return `- ${profile.name} (#${profile.slug}, model ${profile.modelId})${
+      notes.length ? `: ${notes.join(" ")}` : ""
+    }`;
+  });
+
+  return [
+    "## Agent Profile Delegation",
+    "",
+    "The `delegate_to_agent_profile` tool is available for specialized subtasks. Use it when a bounded part of the user's request matches an Agent Profile's routing guidance or expertise, including research, source finding, coding, implementation, testing, data analysis, spreadsheets, CRM, or quantitative review.",
+    "Delegate only the bounded subtask. After the profile returns, use its handoff summary to answer the user. Do not delegate when the user only needs a direct answer that you can complete with the parent agent's current context and tools.",
+    "",
+    "Available Agent Profiles:",
+    ...profileLines,
+  ].join("\n");
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -177,6 +233,11 @@ export async function composeSystemPromptFromFiles(
   const requesterProfilePolicy = buildRequesterProfilePolicy(includeUserMd);
   if (requesterProfilePolicy) parts.push(requesterProfilePolicy);
   parts.push(buildRuntimeToolPolicy(args.availableToolNames));
+  const agentProfilePolicy = buildAgentProfileRoutingPolicy(
+    args.payload,
+    args.availableToolNames,
+  );
+  if (agentProfilePolicy) parts.push(agentProfilePolicy);
 
   let filesLoaded = 0;
   for (const filename of PROMPT_FILES) {

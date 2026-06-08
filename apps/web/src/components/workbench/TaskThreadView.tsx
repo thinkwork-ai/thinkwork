@@ -107,6 +107,7 @@ import {
   GeneratedArtifactPreview,
   type GeneratedArtifact,
 } from "@/components/workbench/GeneratedArtifactCard";
+import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import { StreamingMessageBuffer } from "@/components/workbench/StreamingMessageBuffer";
 import {
   filterMentionTargets,
@@ -486,6 +487,8 @@ export function TaskThreadView({
                         infoPanelState?.onDownloadAttachment
                       }
                       currentUser={currentUser}
+                      mentionTargets={mentionTargets}
+                      skillCatalog={skillCatalog}
                     />
                   );
                 })
@@ -1520,6 +1523,8 @@ function TranscriptSegment({
   threadAttachments,
   onDownloadAttachment,
   currentUser,
+  mentionTargets,
+  skillCatalog,
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
@@ -1536,6 +1541,8 @@ function TranscriptSegment({
   threadAttachments: ThreadInfoAttachment[];
   onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
   currentUser?: CurrentUserIdentity | null;
+  mentionTargets?: MentionTarget[];
+  skillCatalog?: SkillOption[];
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
   // render via renderTypedParts (Reasoning + Tool + Response per part).
@@ -1553,6 +1560,8 @@ function TranscriptSegment({
         threadAttachments={threadAttachments}
         onDownloadAttachment={onDownloadAttachment}
         currentUser={currentUser}
+        mentionTargets={mentionTargets}
+        skillCatalog={skillCatalog}
       />
       {turn ? <ThreadTurnActivity turn={turn} message={message} /> : null}
       {isLatestUser ? (
@@ -1649,6 +1658,7 @@ function ThreadTurnActivity({
           detail={row.detail}
           kind={row.kind}
           hideIcon={row.hideIcon}
+          childrenRows={row.children}
         />
       ))}
       {turn.error ? (
@@ -1883,7 +1893,17 @@ function hasAssistantAfterLatestUser(messages: TaskThreadMessage[]) {
 // 10 lines x leading-5 (20px) of the user bubble's text rhythm.
 const COLLAPSE_MAX_HEIGHT_PX = 200;
 
-function CollapsibleUserMessageBody({ body }: { body: string }) {
+function CollapsibleUserMessageBody({
+  body,
+  mentions,
+  mentionTargets,
+  skillCatalog,
+}: {
+  body: string;
+  mentions?: TaskThreadMessage["mentions"];
+  mentionTargets?: MentionTarget[];
+  skillCatalog?: SkillOption[];
+}) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -1919,7 +1939,15 @@ function CollapsibleUserMessageBody({ body }: { body: string }) {
         className={cn("relative", collapsed && "overflow-hidden")}
         style={collapsed ? { maxHeight: COLLAPSE_MAX_HEIGHT_PX } : undefined}
       >
-        {body}
+        <InlineShortcutText
+          text={body}
+          mentions={mentions ?? []}
+          mentionTargets={mentionTargets ?? []}
+          skillCatalog={skillCatalog ?? []}
+          fallbackAgentProfiles
+          fallbackMentions
+          fallbackSkills
+        />
         {collapsed ? (
           <div
             aria-hidden="true"
@@ -1953,6 +1981,8 @@ function TranscriptMessage({
   threadAttachments,
   onDownloadAttachment,
   currentUser,
+  mentionTargets,
+  skillCatalog,
 }: {
   message: TaskThreadMessage;
   onOpenArtifact?: (artifactId: string) => void;
@@ -1965,6 +1995,8 @@ function TranscriptMessage({
   threadAttachments: ThreadInfoAttachment[];
   onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
   currentUser?: CurrentUserIdentity | null;
+  mentionTargets?: MentionTarget[];
+  skillCatalog?: SkillOption[];
 }) {
   const role = message.role.toUpperCase();
   const isUser = role === "USER";
@@ -2020,7 +2052,14 @@ function TranscriptMessage({
         >
           {isOwnMessage ? (
             <div className="grid min-w-0 gap-2">
-              {body ? <CollapsibleUserMessageBody body={body} /> : null}
+              {body ? (
+                <CollapsibleUserMessageBody
+                  body={body}
+                  mentions={message.mentions}
+                  mentionTargets={mentionTargets}
+                  skillCatalog={skillCatalog}
+                />
+              ) : null}
               {attachments.length > 0 ? (
                 <MessageAttachmentList
                   attachments={attachments}
@@ -3055,11 +3094,13 @@ function ActionRow({
   detail,
   kind,
   hideIcon = false,
+  childrenRows = [],
 }: {
   title: string;
   detail?: string;
   kind: "thinking" | "tool" | "source" | "code";
   hideIcon?: boolean;
+  childrenRows?: ActionRowData[];
 }) {
   const Icon =
     kind === "source"
@@ -3080,6 +3121,20 @@ function ActionRow({
         <pre className="ml-7 mt-2 max-w-[calc(100%-1.75rem)] whitespace-pre-wrap break-words rounded-lg bg-muted/30 p-3 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
           {detail}
         </pre>
+      ) : null}
+      {childrenRows.length > 0 ? (
+        <div className="ml-7 mt-2 grid min-w-0 max-w-[calc(100%-1.75rem)] gap-2 border-l border-white/10 pl-3">
+          {childrenRows.map((child, index) => (
+            <ActionRow
+              key={`${title}-child-${index}-${child.title}`}
+              title={child.title}
+              detail={child.detail}
+              kind={child.kind}
+              hideIcon={child.hideIcon}
+              childrenRows={child.children}
+            />
+          ))}
+        </div>
       ) : null}
     </details>
   );
@@ -3340,6 +3395,7 @@ interface ActionRowData {
   detail?: string;
   kind: "thinking" | "tool" | "source" | "code";
   hideIcon?: boolean;
+  children?: ActionRowData[];
 }
 
 // Exported for convergence testing (plan 2026-06-03-001 R1): live step events
@@ -3360,28 +3416,44 @@ export function actionRowsForTurn(
   if (workspaceDiagnosticsRow) rows.push(workspaceDiagnosticsRow);
   const agentCorePhasesRow = actionRowForAgentCorePhases(usage);
   if (agentCorePhasesRow) rows.push(agentCorePhasesRow);
+  const sortedEvents = [...(turn.events ?? [])].sort((a, b) => {
+    const ta = parseEventTimestamp(a.createdAt);
+    const tb = parseEventTimestamp(b.createdAt);
+    if (ta !== tb) return ta - tb;
+    return (a.id ?? "").localeCompare(b.id ?? "");
+  });
+  const profileEventChildren = profileChildRowsByProfileKey(sortedEvents);
 
   for (const invocation of toolInvocations) {
     const record = parseRecord(invocation);
     const agentProfileRun = agentProfileRunFromRecord(record);
-    if (agentProfileRun) {
-      const profileKey =
-        stringValue(agentProfileRun.profileRunId) ??
-        stringValue(agentProfileRun.profile_run_id) ??
-        stringValue(agentProfileRun.profileSlug) ??
-        stringValue(agentProfileRun.profile_slug) ??
-        "profile";
-      const key = `agent_profile:${profileKey.toLowerCase()}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      rows.push(agentProfileActionRow(agentProfileRun));
-      continue;
-    }
     const name =
       stringValue(record.tool_name) ||
       stringValue(record.toolName) ||
       stringValue(record.name) ||
       "tool";
+    if (agentProfileRun) {
+      const toolKey = name.toLowerCase();
+      if (!seen.has(toolKey)) {
+        seen.add(toolKey);
+        rows.push({
+          title: toolActionTitle(name),
+          detail: toolInvocationDetail(record),
+          kind: toolKind(name),
+        });
+      }
+      const profileKey = profileKeyFromAgentProfileRun(agentProfileRun);
+      const key = `agent_profile:${profileKey.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(
+        agentProfileActionRow(
+          agentProfileRun,
+          profileChildrenForAgentProfileRun(agentProfileRun, profileEventChildren),
+        ),
+      );
+      continue;
+    }
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -3410,13 +3482,13 @@ export function actionRowsForTurn(
     });
   }
 
-  const sortedEvents = [...(turn.events ?? [])].sort((a, b) => {
-    const ta = parseEventTimestamp(a.createdAt);
-    const tb = parseEventTimestamp(b.createdAt);
-    if (ta !== tb) return ta - tb;
-    return (a.id ?? "").localeCompare(b.id ?? "");
-  });
   for (const event of sortedEvents) {
+    if (isAgentProfileToolEvent(event)) continue;
+    if (stringValue(event.eventType)?.startsWith("agent_profile_run")) {
+      const payload = parseRecord(event.payload);
+      const profileKey = profileKeyFromAgentProfileRun(payload);
+      if (seen.has(`agent_profile:${profileKey.toLowerCase()}`)) continue;
+    }
     const row = actionRowForEvent(event);
     if (!row) continue;
     // Live tool_invocation_started events emitted by the Strands runtime
@@ -3440,12 +3512,9 @@ export function actionRowsForTurn(
     }
     if (stringValue(event.eventType)?.startsWith("agent_profile_run")) {
       const payload = parseRecord(event.payload);
-      const profileKey =
-        stringValue(payload.profile_run_id) ??
-        stringValue(payload.profileRunId) ??
-        stringValue(payload.profile_slug) ??
-        stringValue(payload.profileSlug);
-      if (profileKey) seen.add(`agent_profile:${profileKey.toLowerCase()}`);
+      const profileKey = profileKeyFromAgentProfileRun(payload);
+      row.children = profileChildrenForAgentProfileRun(payload, profileEventChildren);
+      seen.add(`agent_profile:${profileKey.toLowerCase()}`);
     }
     const key = `${event.eventType ?? row.title}:${row.detail ?? ""}`;
     if (seen.has(key)) continue;
@@ -3462,7 +3531,6 @@ export function actionRowsForTurn(
       title: `Agent Profile: ${profileMention.displayName}`,
       detail: `Delegated via ${profileMention.rawText ?? `#${profileMention.displayName}`}. Waiting for profile lane activity.`,
       kind: "thinking",
-      hideIcon: true,
     });
   }
 
@@ -3752,7 +3820,114 @@ function agentProfileRunFromRecord(record: Record<string, unknown>) {
   return null;
 }
 
-function agentProfileActionRow(run: Record<string, unknown>): ActionRowData {
+function isAgentProfileToolEvent(event: TaskThreadEvent) {
+  if (stringValue(event.eventType) !== "tool_invocation_started") return false;
+  const payload = parseRecord(event.payload);
+  return Boolean(
+    stringValue(payload.profile_slug) ||
+      stringValue(payload.profileSlug) ||
+      stringValue(payload.profile_name) ||
+      stringValue(payload.profileName) ||
+      stringValue(payload.profile_run_id) ||
+      stringValue(payload.profileRunId),
+  );
+}
+
+function profileKeyFromAgentProfileRun(run: Record<string, unknown>) {
+  return (
+    stringValue(run.profileRunId) ??
+    stringValue(run.profile_run_id) ??
+    stringValue(run.profileSlug) ??
+    stringValue(run.profile_slug) ??
+    stringValue(run.profileName) ??
+    stringValue(run.profile_name) ??
+    "profile"
+  );
+}
+
+function profileChildRowsByProfileKey(events: TaskThreadEvent[]) {
+  const rowsByKey = new Map<string, ActionRowData[]>();
+  for (const event of events) {
+    if (!isAgentProfileToolEvent(event)) continue;
+    const payload = parseRecord(event.payload);
+    const row = actionRowForEvent(event);
+    if (!row) continue;
+    const keys = agentProfileKeysForChildPayload(payload);
+    for (const key of keys) {
+      const normalizedKey = key.toLowerCase();
+      const rows = rowsByKey.get(normalizedKey) ?? [];
+      appendUniqueActionRow(rows, row);
+      rowsByKey.set(normalizedKey, rows);
+    }
+  }
+  return rowsByKey;
+}
+
+function profileChildrenForAgentProfileRun(
+  run: Record<string, unknown>,
+  eventChildren: Map<string, ActionRowData[]>,
+) {
+  const rows: ActionRowData[] = [];
+  for (const row of childToolRowsForAgentProfileRun(run)) {
+    appendUniqueActionRow(rows, row);
+  }
+  for (const key of agentProfileKeysForChildPayload(run)) {
+    for (const row of eventChildren.get(key.toLowerCase()) ?? []) {
+      appendUniqueActionRow(rows, row);
+    }
+  }
+  return rows;
+}
+
+function childToolRowsForAgentProfileRun(run: Record<string, unknown>) {
+  const profileName =
+    stringValue(agentProfileField(run, "profileName", "profile_name")) ??
+    "Agent Profile";
+  const rows: ActionRowData[] = [];
+  for (const value of parseArray(
+    agentProfileField(run, "toolInvocations", "tool_invocations"),
+  )) {
+    const record = parseRecord(value);
+    const name =
+      stringValue(record.tool_name) ||
+      stringValue(record.toolName) ||
+      stringValue(record.name);
+    if (!name) continue;
+    rows.push({
+      title: `${profileName}: ${toolActionTitle(name)}`,
+      detail:
+        toolInvocationDetail(record) ??
+        toolInvocationCompletionDetail(record) ??
+        undefined,
+      kind: toolKind(name),
+    });
+  }
+  return rows;
+}
+
+function agentProfileKeysForChildPayload(payload: Record<string, unknown>) {
+  return [
+    stringValue(payload.profileRunId),
+    stringValue(payload.profile_run_id),
+    stringValue(payload.profileSlug),
+    stringValue(payload.profile_slug),
+    stringValue(payload.profileName),
+    stringValue(payload.profile_name),
+  ].filter((key): key is string => Boolean(key));
+}
+
+function appendUniqueActionRow(rows: ActionRowData[], row: ActionRowData) {
+  const key = `${row.title}:${row.detail ?? ""}`;
+  if (rows.some((existing) => `${existing.title}:${existing.detail ?? ""}` === key)) {
+    return;
+  }
+  rows.push(row);
+}
+
+function agentProfileActionRow(
+  run: Record<string, unknown>,
+  children: ActionRowData[] = [],
+): ActionRowData {
   const displayName =
     stringValue(agentProfileField(run, "profileName", "profile_name")) ??
     displayNameFromMentionSlug(
@@ -3807,7 +3982,7 @@ function agentProfileActionRow(run: Record<string, unknown>): ActionRowData {
     title: `Agent Profile: ${displayName}`,
     detail: lines.join("\n") || undefined,
     kind: "thinking",
-    hideIcon: true,
+    children,
   };
 }
 

@@ -27,6 +27,7 @@ import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions"
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
 import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
+import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import {
   mergeAgentProfileMentionTargets,
   type AgentProfileMentionSource,
@@ -1281,6 +1282,16 @@ export function SpacesThreadDetailRoute({
       <ThreadTitleInlineRename
         threadId={threadId}
         title={threadTitle}
+        displayTitle={
+          <InlineShortcutText
+            text={threadTitle}
+            mentionTargets={mentionTargets}
+            skillCatalog={skillCatalog}
+            fallbackAgentProfiles
+            fallbackMentions
+            fallbackSkills
+          />
+        }
         className="min-w-0 max-w-[min(28rem,55vw)]"
         // Full-width while editing so long titles aren't clipped in the field.
         editingClassName="min-w-0 w-full flex-1"
