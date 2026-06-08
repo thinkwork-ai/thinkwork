@@ -33,6 +33,17 @@ const desktopRuntimeMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    to,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+    to: string;
+  }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
   createFileRoute: () => (options: unknown) => ({
     ...(options as object),
     useSearch: () => routerMocks.search,
@@ -94,6 +105,11 @@ describe("SignInPage", () => {
     expect(screen.getByText("Acme ThinkWork · dev · us-east-1")).toBeTruthy();
     expect(screen.getByText("Unsigned build-time fallback")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Create New Environment" })
+        .getAttribute("href"),
+    ).toBe("/onboarding/welcome");
     expect(screen.queryByText(/Sign in with the Google account/i)).toBeNull();
   });
 
@@ -213,10 +229,15 @@ describe("SignInPage", () => {
       "Connected to Acme ThinkWork · customer-dev · us-west-2",
     );
     expect(screen.getByText("Unsigned development profile")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
+    expect(screen.queryByText("File")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Create New Environment" }),
+    ).toBeTruthy();
   });
 
-  it("imports pasted desktop deployment profile JSON", async () => {
+  it("imports desktop deployment profile JSON from a deep link", async () => {
     const clearTokenStorage = vi.fn().mockResolvedValue(undefined);
     const importDeploymentProfile = vi.fn().mockResolvedValue({
       stage: "customer-dev",
@@ -241,6 +262,12 @@ describe("SignInPage", () => {
         trustLabel: "Unsigned development profile",
       },
     });
+    const deepLink: {
+      listener: ((callback: {
+        type: "deployment-profile";
+        json: string;
+      }) => void) | null;
+    } = { listener: null };
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
       getDesktopConfig: vi.fn().mockResolvedValue({
@@ -260,14 +287,29 @@ describe("SignInPage", () => {
       clearTokenStorage,
       startOAuth: vi.fn(),
       onOAuthError: () => () => {},
-      onDeepLink: () => () => {},
+      onDeepLink(
+        listener: (callback: {
+          type: "deployment-profile";
+          json: string;
+        }) => void,
+      ) {
+        deepLink.listener = listener;
+        return () => {
+          deepLink.listener = null;
+        };
+      },
     });
 
     render(<SignInPage />);
-    fireEvent.change(await screen.findByLabelText("Deployment profile JSON"), {
-      target: { value: '{"schemaVersion":1}' },
+    await screen.findByText("Connected to dev");
+    expect(screen.queryByLabelText("Deployment profile JSON")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
+    expect(screen.queryByText("File")).toBeNull();
+
+    deepLink.listener?.({
+      type: "deployment-profile",
+      json: '{"schemaVersion":1}',
     });
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() =>
       expect(importDeploymentProfile).toHaveBeenCalledWith({

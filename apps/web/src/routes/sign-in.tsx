@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { DesktopConfig } from "@thinkwork/desktop-ipc";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@thinkwork/ui";
@@ -33,7 +33,6 @@ export function SignInPage() {
     null,
   );
   const [isStartingOAuth, setIsStartingOAuth] = useState(false);
-  const [profileJson, setProfileJson] = useState("");
   const [isProfileBusy, setIsProfileBusy] = useState(false);
 
   const refreshDesktopConfig = useCallback(async () => {
@@ -110,7 +109,6 @@ export function SignInPage() {
       const config = await bridge.importDeploymentProfile({ json });
       await bridge.clearTokenStorage();
       setDesktopConfig(config);
-      setProfileJson("");
     } catch (profileError) {
       setError(
         profileError instanceof Error
@@ -118,36 +116,6 @@ export function SignInPage() {
           : "Deployment profile import failed.",
       );
       await refreshDesktopConfig().catch(() => undefined);
-    } finally {
-      setIsProfileBusy(false);
-    }
-  }
-
-  async function handleProfileFile(file: File | null | undefined) {
-    if (!file) return;
-    await importDesktopProfile(await file.text());
-  }
-
-  async function removeDesktopProfile() {
-    const bridge = getDesktopBridge();
-    if (!bridge || typeof bridge.removeDeploymentProfile !== "function") {
-      setError("Desktop profile removal is unavailable.");
-      return;
-    }
-
-    setError(null);
-    setIsProfileBusy(true);
-    try {
-      const config = await bridge.removeDeploymentProfile();
-      await bridge.clearTokenStorage();
-      setDesktopConfig(config);
-      setProfileJson("");
-    } catch (profileError) {
-      setError(
-        profileError instanceof Error
-          ? profileError.message
-          : "Deployment profile removal failed.",
-      );
     } finally {
       setIsProfileBusy(false);
     }
@@ -232,53 +200,6 @@ export function SignInPage() {
                 Missing {desktopConfig.missing.join(", ")}
               </p>
             )}
-            <div className="grid w-full gap-2">
-              <textarea
-                aria-label="Deployment profile JSON"
-                value={profileJson}
-                onChange={(event) => setProfileJson(event.target.value)}
-                rows={3}
-                className="min-h-20 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-left text-xs text-foreground shadow-sm outline-none focus:border-ring"
-                disabled={isProfileBusy || isAuthenticated}
-              />
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    isProfileBusy || isAuthenticated || !profileJson.trim()
-                  }
-                  onClick={() => void importDesktopProfile(profileJson)}
-                >
-                  Import
-                </Button>
-                <label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50">
-                  File
-                  <input
-                    aria-label="Deployment profile file"
-                    type="file"
-                    accept="application/json,.json"
-                    className="sr-only"
-                    disabled={isProfileBusy || isAuthenticated}
-                    onChange={(event) =>
-                      void handleProfileFile(event.currentTarget.files?.[0])
-                    }
-                  />
-                </label>
-                {desktopConfig.deployment?.source === "profile" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isProfileBusy || isAuthenticated}
-                    onClick={() => void removeDesktopProfile()}
-                  >
-                    Remove
-                  </Button>
-                )}
-              </div>
-            </div>
           </div>
         )}
         {!isDesktop && (
@@ -295,23 +216,32 @@ export function SignInPage() {
             </p>
           </div>
         )}
-        <Button
-          onClick={() => void handleGoogle()}
-          size="lg"
-          className="min-w-40"
-          disabled={
-            isLoading ||
-            isStartingOAuth ||
-            Boolean(desktopConfig && !desktopConfig.configured) ||
-            webConfigBlocked
-          }
-        >
-          {isLoading
-            ? "Checking session..."
-            : isStartingOAuth
-              ? "Opening..."
-              : "Log in"}
-        </Button>
+        <div className="flex flex-col items-center gap-4">
+          <Button
+            onClick={() => void handleGoogle()}
+            size="lg"
+            className="min-w-40"
+            disabled={
+              isLoading ||
+              isStartingOAuth ||
+              isProfileBusy ||
+              Boolean(desktopConfig && !desktopConfig.configured) ||
+              webConfigBlocked
+            }
+          >
+            {isLoading
+              ? "Checking session..."
+              : isStartingOAuth || isProfileBusy
+                ? "Opening..."
+                : "Log in"}
+          </Button>
+          <Link
+            to="/onboarding/welcome"
+            className="rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Create New Environment
+          </Link>
+        </div>
       </section>
     </main>
   );

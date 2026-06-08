@@ -5,6 +5,10 @@ const desktopRuntimeMocks = vi.hoisted(() => ({
   isDesktopBuild: vi.fn(() => false),
 }));
 const authMocks = vi.hoisted(() => ({ signOut: vi.fn() }));
+const routerMocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  pathname: "/threads/abc123",
+}));
 
 vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
 vi.mock("@/lib/composer-focus", () => ({
@@ -35,9 +39,9 @@ vi.mock("@tanstack/react-router", () => ({
       {children}
     </a>
   ),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => routerMocks.navigate,
   useRouterState: (opts?: { select?: (s: unknown) => unknown }) => {
-    const state = { location: { pathname: "/" } };
+    const state = { location: { pathname: routerMocks.pathname } };
     return opts?.select ? opts.select(state) : state;
   },
 }));
@@ -154,6 +158,8 @@ afterEach(() => {
   cleanup();
   desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
   authMocks.signOut.mockReset();
+  routerMocks.navigate.mockReset();
+  routerMocks.pathname = "/threads/abc123";
 });
 
 describe("SpacesSidebar", () => {
@@ -197,5 +203,10 @@ describe("SpacesSidebar", () => {
     // Confirming in the dialog performs the sign-out.
     fireEvent.click(screen.getByTestId("logout-confirm"));
     expect(authMocks.signOut).toHaveBeenCalledTimes(1);
+    expect(routerMocks.navigate).toHaveBeenCalledWith({
+      to: "/sign-in",
+      search: { next: "/threads/abc123" },
+      replace: true,
+    });
   });
 });
