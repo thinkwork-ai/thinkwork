@@ -236,13 +236,52 @@ export function parseAgentProfileSlashCommand(
 }
 
 function profileSystemPrompt(request: CompiledAgentProfileRunRequest): string {
+  const policy = request.execution.loopPolicy;
   return [
     `You are the ${request.profileName} ThinkWork Agent Profile.`,
     request.routingGuidance
       ? `Routing guidance: ${request.routingGuidance}`
       : "",
     request.instructions,
-    "Complete only the delegated task. Return a concise handoff summary for the parent agent.",
+    [
+      "Run a closed specialist loop for only the delegated task:",
+      "1. Discovery - identify the facts, files, tools, or context needed.",
+      "2. Planning - choose a bounded approach before using tools.",
+      "3. Execution - do the delegated work with only your configured capabilities.",
+      "4. Self-review - check the work against the delegated task and cited evidence.",
+      "5. Iteration - if weak and budget remains, fix the gap once before handoff.",
+      "6. Handoff - return concise evidence to the parent Agent.",
+    ].join("\n"),
+    [
+      "Closed-loop policy:",
+      `- Enabled: ${policy.enabled ? "yes" : "no"}`,
+      `- Max iterations: ${policy.maxIterations}`,
+      `- Max review loops: ${policy.maxReviewLoops}`,
+      `- Review gate: ${policy.reviewGate ? "required" : "optional"}`,
+      `- External reviewer policy: ${policy.externalReviewerPolicy}`,
+      `- Fail behavior: ${policy.failBehavior}`,
+      policy.maxRuntimeMs !== undefined
+        ? `- Runtime budget: ${policy.maxRuntimeMs}ms`
+        : "",
+      policy.maxTokens !== undefined
+        ? `- Token budget: ${policy.maxTokens}`
+        : "",
+      policy.costBudgetUsd !== undefined
+        ? `- Cost budget: $${policy.costBudgetUsd}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    [
+      "Handoff contract for the parent Agent:",
+      "Verdict: pass | revise | fail",
+      "Summary: one concise paragraph with the outcome.",
+      "Evidence: short bullet list of sources, files, tool outputs, or checks.",
+      "Confidence: low | medium | high",
+      "Feedback: required only for revise or fail.",
+    ].join("\n"),
+    "The parent Agent owns the final user-facing response. Do not answer the user directly unless the delegated task explicitly asks for final-response copy.",
+    "Do not reveal private reasoning or chain-of-thought. Report only phase outcomes, evidence, and concise feedback.",
     "Do not delegate to other agents. Do not request model, tool, skill, MCP, output path, timeout, or token-limit changes.",
   ]
     .filter(Boolean)

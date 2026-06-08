@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   AgentProfileAdapterError,
-  buildAgentProfileLoopGoalState,
   assertProfileMcpOperationAllowed,
+  buildAgentProfileLoopGoalState,
   compileAgentProfileRunRequest,
   runCompiledAgentProfile,
   sanitizeProfileToolInvocations,
   type AgentProfileConfig,
+  type AgentProfileLoopCompletionVerdict,
   type ProfileChildRunResult,
 } from "../src/agent-profile-adapter.js";
 import { McpToolRegistry } from "../src/mcp-registry.js";
@@ -134,6 +135,17 @@ describe("agent profile adapter", () => {
       maxSubagentDepth: 0,
       timeoutMs: 15_000,
       maxTokens: 2_000,
+      loopPolicy: {
+        mode: "closed",
+        enabled: true,
+        maxIterations: 1,
+        maxReviewLoops: 1,
+        reviewGate: false,
+        externalReviewerPolicy: "explicit",
+        failBehavior: "return_blocker",
+        maxTokens: 2_000,
+        costBudgetUsd: 0.05,
+      },
     });
     expect(runner.runProfile).toHaveBeenCalledWith(request);
     expect(evidence).toMatchObject({
@@ -147,6 +159,21 @@ describe("agent profile adapter", () => {
       costUsd: 0.001,
       handoffSummary: "Research handoff",
       laneKey: "profile:research",
+      loopEvidence: {
+        source: "thinkwork_agent_profile_loop",
+        loopId: "profile-loop:profile-run-1",
+        policy: {
+          mode: "closed",
+        },
+        phases: expect.arrayContaining([
+          expect.objectContaining({ phase: "discovery" }),
+          expect.objectContaining({ phase: "planning" }),
+          expect.objectContaining({ phase: "execution" }),
+          expect.objectContaining({ phase: "self_review" }),
+          expect.objectContaining({ phase: "iteration" }),
+          expect.objectContaining({ phase: "handoff" }),
+        ]),
+      },
     });
   });
 
@@ -443,5 +470,108 @@ describe("agent profile adapter", () => {
 
     expect(limitedGoal.status).toBe("budget_limited");
     expect(limitedGoal.continuation.hiddenContinuationAllowed).toBe(false);
+  });
+
+  it.each([
+    ["pass", "passed"],
+    ["revise", "revision_requested"],
+    ["fail", "failed"],
+  ] satisfies Array<[AgentProfileLoopCompletionVerdict, string]>)(
+    "captures structured %s handoff metadata on profile run evidence",
+    async (verdict, expectedStatus) => {
+      const request = compile({
+        executionControls: {
+          reviewGate: true,
+          maxReviewLoops: 2,
+          loopPolicy: {
+            mode: "closed",
+            enabled: true,
+            maxIterations: 2,
+            maxReviewLoops: 2,
+            reviewGate: true,
+            externalReviewerPolicy: "explicit",
+            failBehavior: "return_blocker",
+          },
+        },
+      });
+
+      const evidence = await runCompiledAgentProfile({
+        request,
+        runner: {
+          runProfile: async () => ({
+            content: "Fallback handoff body",
+            status: "completed",
+            handoff: {
+              verdict,
+              summary: "Verified the delegated work.",
+              confidence: "high",
+              evidence: ["Checked source A", "Checked source B"],
+              feedback: verdict === "pass" ? undefined : "Needs another pass.",
+            },
+          }),
+        },
+        now: vi
+          .fn()
+          .mockReturnValueOnce(new Date("2026-06-08T13:00:00.000Z"))
+          .mockReturnValueOnce(new Date("2026-06-08T13:00:01.000Z")),
+      });
+
+      expect(evidence.handoff).toEqual({
+        verdict,
+        summary: "Verified the delegated work.",
+        confidence: "high",
+        evidence: ["Checked source A", "Checked source B"],
+        ...(verdict === "pass" ? {} : { feedback: "Needs another pass." }),
+      });
+      expect(evidence.loopEvidence.handoff).toEqual(evidence.handoff);
+      expect(evidence.loopEvidence.goalState.status).toBe(expectedStatus);
+      expect(evidence.loopEvidence.goalState.completion).toMatchObject({
+        verdict,
+      });
+      expect(evidence.loopEvidence.phases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            phase: "self_review",
+            status:
+              verdict === "revise"
+                ? "revision_requested"
+                : verdict === "fail"
+                  ? "failed"
+                  : "completed",
+          }),
+        ]),
+      );
+    },
+  );
+
+  it("parses labeled handoff text without exposing hidden reasoning", async () => {
+    const evidence = await runCompiledAgentProfile({
+      request: compile(),
+      runner: {
+        runProfile: async () => ({
+          content: [
+            "Verdict: pass",
+            "Summary: The cited source supports the answer.",
+            "Evidence: Source one; Source two",
+            "Confidence: medium",
+          ].join("\n"),
+          status: "completed",
+        }),
+      },
+      now: vi
+        .fn()
+        .mockReturnValueOnce(new Date("2026-06-08T13:30:00.000Z"))
+        .mockReturnValueOnce(new Date("2026-06-08T13:30:01.000Z")),
+    });
+
+    expect(evidence.handoff).toEqual({
+      verdict: "pass",
+      summary: "The cited source supports the answer.",
+      evidence: ["Source one", "Source two"],
+      confidence: "medium",
+    });
+    expect(JSON.stringify(evidence.loopEvidence)).not.toContain(
+      "chain-of-thought",
+    );
   });
 });
