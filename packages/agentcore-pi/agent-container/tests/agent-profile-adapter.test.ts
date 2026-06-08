@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   AgentProfileAdapterError,
+  buildAgentProfileLoopGoalState,
   assertProfileMcpOperationAllowed,
   compileAgentProfileRunRequest,
   runCompiledAgentProfile,
@@ -101,16 +102,18 @@ describe("agent profile adapter", () => {
   it("compiles a child profile request with the explicit profile model", async () => {
     const request = compile();
     const runner = {
-      runProfile: vi.fn(async (): Promise<ProfileChildRunResult> => ({
-        content: "Research handoff",
-        status: "completed",
-        usage: {
-          inputTokens: 10,
-          outputTokens: 20,
-          totalTokens: 30,
-        },
-        costUsd: 0.001,
-      })),
+      runProfile: vi.fn(
+        async (): Promise<ProfileChildRunResult> => ({
+          content: "Research handoff",
+          status: "completed",
+          usage: {
+            inputTokens: 10,
+            outputTokens: 20,
+            totalTokens: 30,
+          },
+          costUsd: 0.001,
+        }),
+      ),
     };
 
     const evidence = await runCompiledAgentProfile({
@@ -155,10 +158,7 @@ describe("agent profile adapter", () => {
           task: "Find current sources",
           parentThreadTurnId: "turn-parent",
           parentModelId: "anthropic/claude-sonnet-4-5",
-          approvedModelIds: [
-            "anthropic/claude-haiku-4-5",
-            "openai/gpt-5-mini",
-          ],
+          approvedModelIds: ["anthropic/claude-haiku-4-5", "openai/gpt-5-mini"],
           availableToolNames: ["web_search", "web_extract", "read"],
           availableSkillNames: ["source-review"],
           mcpRegistry: registryWithTwentyTools(),
@@ -182,10 +182,7 @@ describe("agent profile adapter", () => {
           task: "Find current sources",
           parentThreadTurnId: "turn-parent",
           parentModelId: "anthropic/claude-sonnet-4-5",
-          approvedModelIds: [
-            "anthropic/claude-haiku-4-5",
-            "openai/gpt-5-mini",
-          ],
+          approvedModelIds: ["anthropic/claude-haiku-4-5", "openai/gpt-5-mini"],
           availableToolNames: ["web_search", "web_extract", "read"],
           availableSkillNames: ["source-review"],
           mcpRegistry: registryWithTwentyTools(),
@@ -204,10 +201,7 @@ describe("agent profile adapter", () => {
           task: "Find current sources",
           parentThreadTurnId: "turn-parent",
           parentModelId: "anthropic/claude-sonnet-4-5",
-          approvedModelIds: [
-            "anthropic/claude-haiku-4-5",
-            "openai/gpt-5-mini",
-          ],
+          approvedModelIds: ["anthropic/claude-haiku-4-5", "openai/gpt-5-mini"],
           availableToolNames: ["web_search"],
           availableSkillNames: [],
           mcpRegistry: registryWithTwentyTools(),
@@ -300,5 +294,154 @@ describe("agent profile adapter", () => {
       text: "Authorization: Bearer [REDACTED]",
     });
     expect(sanitized[0]?.input_preview).toBe('{"apiKey":"[REDACTED]"}');
+  });
+
+  it("builds a ThinkWork-owned loop goal state before package continuation is used", () => {
+    const request = compile({
+      executionControls: {
+        thinking: "low",
+        maxRuntimeMs: 45_000,
+        maxTokens: 4_000,
+        costBudgetUsd: 0.12,
+        reviewGate: true,
+        maxReviewLoops: 2,
+        loopPolicy: {
+          mode: "closed",
+          enabled: true,
+          maxIterations: 2,
+          maxReviewLoops: 2,
+          reviewGate: true,
+          externalReviewerPolicy: "explicit",
+          failBehavior: "return_blocker",
+          maxRuntimeMs: 45_000,
+          maxTokens: 4_000,
+          costBudgetUsd: 0.12,
+        },
+      },
+    });
+
+    const goal = buildAgentProfileLoopGoalState({
+      request,
+      now: () => new Date("2026-06-08T12:00:00.000Z"),
+    });
+
+    expect(goal).toMatchObject({
+      source: "thinkwork_agent_profile_loop",
+      goalId: "profile-loop:profile-run-1",
+      objective: "Find current sources",
+      parentThreadTurnId: "turn-parent",
+      status: "active",
+      owner: {
+        type: "profile",
+        profileSlug: "research",
+        profileName: "Research",
+      },
+      budget: {
+        maxIterations: 2,
+        maxReviewLoops: 2,
+        maxRuntimeMs: 45_000,
+        maxTokens: 4_000,
+        costBudgetUsd: 0.12,
+      },
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedReadTokens: 0,
+        cachedWriteTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      },
+      usageByModel: {},
+      continuation: {
+        mode: "thinkwork_managed",
+        hiddenContinuationAllowed: false,
+      },
+    });
+  });
+
+  it("captures loop completion verdict, usage, model breakdown, and budget-limited status", async () => {
+    const request = compile({
+      executionControls: {
+        maxTokens: 4_000,
+        costBudgetUsd: 0.12,
+        loopPolicy: {
+          mode: "closed",
+          enabled: true,
+          maxIterations: 2,
+          maxReviewLoops: 1,
+          reviewGate: true,
+          externalReviewerPolicy: "explicit",
+          failBehavior: "return_blocker",
+          maxTokens: 4_000,
+          costBudgetUsd: 0.12,
+        },
+      },
+    });
+    const evidence = await runCompiledAgentProfile({
+      request,
+      runner: {
+        runProfile: async () => ({
+          content: "Candidate needs one stronger source.",
+          status: "completed",
+          usage: {
+            inputTokens: 1_200,
+            outputTokens: 140,
+            cachedReadTokens: 300,
+            cachedWriteTokens: 20,
+            totalTokens: 1_660,
+          },
+          costUsd: 0.0034,
+        }),
+      },
+      now: vi
+        .fn()
+        .mockReturnValueOnce(new Date("2026-06-08T12:00:00.000Z"))
+        .mockReturnValueOnce(new Date("2026-06-08T12:00:02.500Z")),
+    });
+
+    const reviseGoal = buildAgentProfileLoopGoalState({
+      request,
+      evidence,
+      completion: {
+        verdict: "revise",
+        feedback: "Find a primary source.",
+        checkedAt: new Date("2026-06-08T12:00:03.000Z"),
+      },
+    });
+
+    expect(reviseGoal.status).toBe("revision_requested");
+    expect(reviseGoal.completion).toEqual({
+      verdict: "revise",
+      feedback: "Find a primary source.",
+      checkedAt: "2026-06-08T12:00:03.000Z",
+    });
+    expect(reviseGoal.usage).toEqual({
+      inputTokens: 1_200,
+      outputTokens: 140,
+      cachedReadTokens: 300,
+      cachedWriteTokens: 20,
+      totalTokens: 1_660,
+      costUsd: 0.0034,
+    });
+    expect(reviseGoal.usageByModel).toEqual({
+      "anthropic/claude-haiku-4-5": reviseGoal.usage,
+    });
+
+    const limitedEvidence = {
+      ...evidence,
+      status: "resource_limit_exceeded" as const,
+    };
+    const limitedGoal = buildAgentProfileLoopGoalState({
+      request,
+      evidence: limitedEvidence,
+      completion: {
+        verdict: "fail",
+        feedback: "Token budget exhausted.",
+      },
+      now: () => new Date("2026-06-08T12:00:04.000Z"),
+    });
+
+    expect(limitedGoal.status).toBe("budget_limited");
+    expect(limitedGoal.continuation.hiddenContinuationAllowed).toBe(false);
   });
 });

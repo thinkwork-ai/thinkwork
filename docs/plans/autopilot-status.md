@@ -6,6 +6,45 @@ status: complete
 
 # Autopilot Status Ledger
 
+## Agent Profile Closed Loops - 2026-06-08
+
+- Plan:
+  `docs/plans/2026-06-08-001-feat-agent-profile-closed-loops-plan.md`.
+- Target branch: `main`.
+- Current unit: U2 - Spike Pi Goal Compatibility And Goal State Mapping.
+- Current branch: `codex/agent-profile-closed-loops-u2`.
+- Current worktree:
+  `.Codex/worktrees/agent-profile-closed-loops-u2`.
+- Status: in progress.
+- Notes:
+  - U1 normalized Agent Profile loop policy through API/runtime config and was
+    squash merged in PR
+    [#2237](https://github.com/thinkwork-ai/thinkwork/pull/2237) as
+    `747190ee`.
+  - U1 CI passed after rebasing onto `main`: `cla`, `lint`, `test`,
+    `typecheck`, and `verify`.
+  - U1 worktree/branch were removed and the remote branch was deleted.
+  - Created isolated U2 worktree from `origin/main` at `747190ee`.
+  - Inspected `@ramarivera/pi-goal@0.1.11`: package exposes persisted goal
+    state, `/goal` commands, model goal tools, hidden follow-up continuation,
+    usage/model breakdown, and Pino logs. Direct package install is deferred
+    for in-turn closed loops because ThinkWork needs tenant-scoped storage,
+    managed continuation, model-catalog pricing, and finalization-controlled
+    accounting.
+  - Added a ThinkWork-owned `AgentProfileLoopGoalState` compatibility contract
+    in AgentCore-Pi so U3-U7 can use objective, policy budget, status, usage,
+    model breakdown, and completion verdict evidence without installing
+    `pi-goal` continuation behavior.
+  - Added `docs/solutions/agent-profile-pi-goal-compatibility-2026-06-08.md`
+    with the package-adoption decision and future open-loop adoption
+    constraints.
+  - U2 local verification passed:
+    - `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/agent-profile-adapter.test.ts`
+      -> 8 tests passed.
+    - `pnpm --filter @thinkwork/agentcore-pi typecheck` -> passed.
+    - Direct Prettier check over changed files -> passed.
+    - `git diff --check` -> passed.
+
 ## Agent Profiles And Pi Subagents - 2026-06-07
 
 - Plan:
