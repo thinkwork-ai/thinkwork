@@ -475,6 +475,8 @@ export type Applet = {
   stdlibVersionAtGeneration: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
   threadId?: Maybe<Scalars['ID']['output']>;
+  userId?: Maybe<Scalars['ID']['output']>;
+  userName?: Maybe<Scalars['String']['output']>;
   version: Scalars['Int']['output'];
 };
 

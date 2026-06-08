@@ -43,6 +43,7 @@ function createController(opts?: {
   theme?: "light" | "dark";
   themeOverrides?: Record<string, string>;
   fitContentHeight?: boolean;
+  handshakeTimeoutMs?: number;
 }) {
   const calls: PostMessageCall[] = [];
   // Build a fake contentWindow that records every postMessage call.
@@ -65,6 +66,10 @@ function createController(opts?: {
     version: "0.1.0",
     srcOverride: opts?.srcOverride ?? "https://sandbox.test/iframe-shell.html",
     sourceWindowOverride: fakeWindow,
+    // Disable the real-time handshake watchdog by default — these unit tests
+    // drive the handshake synchronously and never dispose(), so a live timer
+    // would leak. Tests that exercise the timeout pass an explicit value.
+    handshakeTimeoutMs: 0,
     ...opts,
   });
 
@@ -450,6 +455,58 @@ describe("IframeAppletController — dispose", () => {
     const { controller } = createController();
     controller.dispose();
     expect(() => controller.dispose()).not.toThrow();
+  });
+});
+
+describe("IframeAppletController — handshake timeout", () => {
+  it("fails closed with a diagnostic naming the parent origin when the iframe never acks", async () => {
+    vi.useFakeTimers();
+    try {
+      const onError = vi.fn();
+      const { controller } = createController({
+        handshakeTimeoutMs: 30,
+        onError,
+      });
+      const readyResult = controller.ready.catch((err) => err as Error);
+      vi.advanceTimersByTime(30);
+      const err = await readyResult;
+
+      expect(controller.statusValue).toBe("errored");
+      expect(onError).toHaveBeenCalledTimes(1);
+      const payload = onError.mock.calls[0]?.[0] as {
+        code: string;
+        message: string;
+      };
+      expect(payload.code).toBe("RUNTIME_ERROR");
+      expect(payload.message).toMatch(/did not respond/i);
+      // The diagnostic must name the allowlist so an operator can act on it.
+      expect(payload.message).toMatch(/allowlist/i);
+      expect(err).toBeInstanceOf(Error);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not fire the timeout once the iframe acks ready-with-component", async () => {
+    vi.useFakeTimers();
+    try {
+      const onError = vi.fn();
+      const { controller, fakeWindow } = createController({
+        handshakeTimeoutMs: 30,
+        onError,
+      });
+      postFromIframe(controller, fakeWindow, "ready-with-component", {
+        rendered: true,
+        renderedAt: "1970-01-01T00:00:00.000Z",
+      });
+      await controller.ready;
+      vi.advanceTimersByTime(60);
+
+      expect(onError).not.toHaveBeenCalled();
+      expect(controller.statusValue).toBe("ready");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

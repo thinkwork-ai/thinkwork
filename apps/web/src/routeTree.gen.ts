@@ -59,11 +59,15 @@ import { Route as AuthedSettingsUsersUserIdRouteImport } from "./routes/_authed/
 import { Route as AuthedSettingsSpacesSpaceIdRouteImport } from "./routes/_authed/settings.spaces.$spaceId";
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
+import { Route as AuthedSettingsMemoryWikiRouteImport } from "./routes/_authed/settings.memory.wiki";
+import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
+import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes/_authed/settings.memory.knowledge-bases";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
 import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_authed/settings.knowledge-bases.$kbId";
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
 import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./routes/_authed/settings.automations.$scheduledJobId";
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
+import { Route as AuthedSettingsApplicationsCogneeRouteImport } from "./routes/_authed/settings.applications.cognee";
 import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
 import { Route as AuthedSettingsActivityThreadIdRouteImport } from "./routes/_authed/settings.activity_.$threadId";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
@@ -356,6 +360,24 @@ const AuthedSettingsRoutinesRoutineIdRoute =
     path: "/routines/$routineId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsMemoryWikiRoute =
+  AuthedSettingsMemoryWikiRouteImport.update({
+    id: "/wiki",
+    path: "/wiki",
+    getParentRoute: () => AuthedSettingsMemoryRoute,
+  } as any);
+const AuthedSettingsMemoryKnowledgeGraphRoute =
+  AuthedSettingsMemoryKnowledgeGraphRouteImport.update({
+    id: "/knowledge-graph",
+    path: "/knowledge-graph",
+    getParentRoute: () => AuthedSettingsMemoryRoute,
+  } as any);
+const AuthedSettingsMemoryKnowledgeBasesRoute =
+  AuthedSettingsMemoryKnowledgeBasesRouteImport.update({
+    id: "/knowledge-bases",
+    path: "/knowledge-bases",
+    getParentRoute: () => AuthedSettingsMemoryRoute,
+  } as any);
 const AuthedSettingsMcpServersServerIdRoute =
   AuthedSettingsMcpServersServerIdRouteImport.update({
     id: "/mcp-servers/$serverId",
@@ -385,6 +407,12 @@ const AuthedSettingsArtifactsIdRoute =
     id: "/$id",
     path: "/$id",
     getParentRoute: () => AuthedSettingsArtifactsRoute,
+  } as any);
+const AuthedSettingsApplicationsCogneeRoute =
+  AuthedSettingsApplicationsCogneeRouteImport.update({
+    id: "/applications/cognee",
+    path: "/applications/cognee",
+    getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsAgentsProfileIdRoute =
   AuthedSettingsAgentsProfileIdRouteImport.update({
@@ -524,7 +552,7 @@ export interface FileRoutesByFullPath {
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
   "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
-  "/settings/memory": typeof AuthedSettingsMemoryRoute;
+  "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/settings/": typeof AuthedSettingsIndexRoute;
@@ -541,11 +569,15 @@ export interface FileRoutesByFullPath {
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
+  "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
+  "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
+  "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
+  "/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -594,7 +626,7 @@ export interface FileRoutesByTo {
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
   "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
-  "/settings/memory": typeof AuthedSettingsMemoryRoute;
+  "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/settings": typeof AuthedSettingsIndexRoute;
@@ -611,11 +643,15 @@ export interface FileRoutesByTo {
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
+  "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
+  "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
+  "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
+  "/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -672,7 +708,7 @@ export interface FileRoutesById {
   "/_authed/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/_authed/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
   "/_authed/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
-  "/_authed/settings/memory": typeof AuthedSettingsMemoryRoute;
+  "/_authed/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/_authed/settings/tools": typeof AuthedSettingsToolsRoute;
   "/_authed/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/_authed/settings/": typeof AuthedSettingsIndexRoute;
@@ -689,11 +725,15 @@ export interface FileRoutesById {
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/settings/activity_/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
+  "/_authed/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/_authed/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/_authed/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
+  "/_authed/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
+  "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
+  "/_authed/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/_authed/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -766,11 +806,15 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
+    | "/settings/applications/cognee"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
     | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
+    | "/settings/memory/knowledge-bases"
+    | "/settings/memory/knowledge-graph"
+    | "/settings/memory/wiki"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/spaces/$spaceId"
@@ -836,11 +880,15 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
+    | "/settings/applications/cognee"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
     | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
+    | "/settings/memory/knowledge-bases"
+    | "/settings/memory/knowledge-graph"
+    | "/settings/memory/wiki"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/spaces/$spaceId"
@@ -913,11 +961,15 @@ export interface FileRouteTypes {
     | "/_authed/_shell/threads/$id"
     | "/_authed/settings/activity_/$threadId"
     | "/_authed/settings/agents/$profileId"
+    | "/_authed/settings/applications/cognee"
     | "/_authed/settings/artifacts/$id"
     | "/_authed/settings/automations/$scheduledJobId"
     | "/_authed/settings/evaluations/$runId"
     | "/_authed/settings/knowledge-bases/$kbId"
     | "/_authed/settings/mcp-servers/$serverId"
+    | "/_authed/settings/memory/knowledge-bases"
+    | "/_authed/settings/memory/knowledge-graph"
+    | "/_authed/settings/memory/wiki"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
     | "/_authed/settings/spaces/$spaceId"
@@ -1313,6 +1365,27 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsRoutinesRoutineIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/memory/wiki": {
+      id: "/_authed/settings/memory/wiki";
+      path: "/wiki";
+      fullPath: "/settings/memory/wiki";
+      preLoaderRoute: typeof AuthedSettingsMemoryWikiRouteImport;
+      parentRoute: typeof AuthedSettingsMemoryRoute;
+    };
+    "/_authed/settings/memory/knowledge-graph": {
+      id: "/_authed/settings/memory/knowledge-graph";
+      path: "/knowledge-graph";
+      fullPath: "/settings/memory/knowledge-graph";
+      preLoaderRoute: typeof AuthedSettingsMemoryKnowledgeGraphRouteImport;
+      parentRoute: typeof AuthedSettingsMemoryRoute;
+    };
+    "/_authed/settings/memory/knowledge-bases": {
+      id: "/_authed/settings/memory/knowledge-bases";
+      path: "/knowledge-bases";
+      fullPath: "/settings/memory/knowledge-bases";
+      preLoaderRoute: typeof AuthedSettingsMemoryKnowledgeBasesRouteImport;
+      parentRoute: typeof AuthedSettingsMemoryRoute;
+    };
     "/_authed/settings/mcp-servers/$serverId": {
       id: "/_authed/settings/mcp-servers/$serverId";
       path: "/mcp-servers/$serverId";
@@ -1347,6 +1420,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/artifacts/$id";
       preLoaderRoute: typeof AuthedSettingsArtifactsIdRouteImport;
       parentRoute: typeof AuthedSettingsArtifactsRoute;
+    };
+    "/_authed/settings/applications/cognee": {
+      id: "/_authed/settings/applications/cognee";
+      path: "/applications/cognee";
+      fullPath: "/settings/applications/cognee";
+      preLoaderRoute: typeof AuthedSettingsApplicationsCogneeRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/agents/$profileId": {
       id: "/_authed/settings/agents/$profileId";
@@ -1618,6 +1698,23 @@ const AuthedSettingsArtifactsRouteWithChildren =
     AuthedSettingsArtifactsRouteChildren,
   );
 
+interface AuthedSettingsMemoryRouteChildren {
+  AuthedSettingsMemoryKnowledgeBasesRoute: typeof AuthedSettingsMemoryKnowledgeBasesRoute;
+  AuthedSettingsMemoryKnowledgeGraphRoute: typeof AuthedSettingsMemoryKnowledgeGraphRoute;
+  AuthedSettingsMemoryWikiRoute: typeof AuthedSettingsMemoryWikiRoute;
+}
+
+const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
+  AuthedSettingsMemoryKnowledgeBasesRoute:
+    AuthedSettingsMemoryKnowledgeBasesRoute,
+  AuthedSettingsMemoryKnowledgeGraphRoute:
+    AuthedSettingsMemoryKnowledgeGraphRoute,
+  AuthedSettingsMemoryWikiRoute: AuthedSettingsMemoryWikiRoute,
+};
+
+const AuthedSettingsMemoryRouteWithChildren =
+  AuthedSettingsMemoryRoute._addFileChildren(AuthedSettingsMemoryRouteChildren);
+
 interface AuthedSettingsRouteChildren {
   AuthedSettingsActivityRoute: typeof AuthedSettingsActivityRoute;
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
@@ -1628,12 +1725,13 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsKnowledgeGraphRoute: typeof AuthedSettingsKnowledgeGraphRoute;
   AuthedSettingsLocalWorkspaceRoute: typeof AuthedSettingsLocalWorkspaceRoute;
   AuthedSettingsManagedApplicationsRoute: typeof AuthedSettingsManagedApplicationsRoute;
-  AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRoute;
+  AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRouteWithChildren;
   AuthedSettingsToolsRoute: typeof AuthedSettingsToolsRoute;
   AuthedSettingsWikiRoute: typeof AuthedSettingsWikiRoute;
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
   AuthedSettingsActivityThreadIdRoute: typeof AuthedSettingsActivityThreadIdRoute;
   AuthedSettingsAgentsProfileIdRoute: typeof AuthedSettingsAgentsProfileIdRoute;
+  AuthedSettingsApplicationsCogneeRoute: typeof AuthedSettingsApplicationsCogneeRoute;
   AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   AuthedSettingsEvaluationsRunIdRoute: typeof AuthedSettingsEvaluationsRunIdRoute;
   AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
@@ -1671,12 +1769,13 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsLocalWorkspaceRoute: AuthedSettingsLocalWorkspaceRoute,
   AuthedSettingsManagedApplicationsRoute:
     AuthedSettingsManagedApplicationsRoute,
-  AuthedSettingsMemoryRoute: AuthedSettingsMemoryRoute,
+  AuthedSettingsMemoryRoute: AuthedSettingsMemoryRouteWithChildren,
   AuthedSettingsToolsRoute: AuthedSettingsToolsRoute,
   AuthedSettingsWikiRoute: AuthedSettingsWikiRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
   AuthedSettingsActivityThreadIdRoute: AuthedSettingsActivityThreadIdRoute,
   AuthedSettingsAgentsProfileIdRoute: AuthedSettingsAgentsProfileIdRoute,
+  AuthedSettingsApplicationsCogneeRoute: AuthedSettingsApplicationsCogneeRoute,
   AuthedSettingsAutomationsScheduledJobIdRoute:
     AuthedSettingsAutomationsScheduledJobIdRoute,
   AuthedSettingsEvaluationsRunIdRoute: AuthedSettingsEvaluationsRunIdRoute,

@@ -1,11 +1,6 @@
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import {
-  Button,
-  ToggleGroup,
-  ToggleGroupItem,
-  useSidebar,
-} from "@thinkwork/ui";
+import { Button, Tabs, TabsList, TabsTrigger, useSidebar } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
 
 export function AppTopBar() {
@@ -138,18 +133,20 @@ export function AppTopBar() {
 
       {tabs.length > 0 ? (
         <div className="flex flex-1 justify-center">
-          <ToggleGroup type="single" value={activeTab} variant="outline">
-            {tabs.map((tab) => (
-              <ToggleGroupItem
-                key={tab.to}
-                value={tab.to}
-                asChild
-                className="px-3 text-xs"
-              >
-                <Link to={tab.to}>{tab.label}</Link>
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+          <Tabs value={activeTab}>
+            <TabsList>
+              {tabs.map((tab) => (
+                <TabsTrigger
+                  key={tab.to}
+                  value={tab.to}
+                  asChild
+                  className="px-3"
+                >
+                  <Link to={tab.to}>{tab.label}</Link>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
       ) : null}
 

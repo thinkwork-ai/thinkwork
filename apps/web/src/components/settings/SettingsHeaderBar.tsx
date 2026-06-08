@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { cn, useIsMobile } from "@thinkwork/ui";
+import { cn, Tabs, TabsList, TabsTrigger, useIsMobile } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
 import {
@@ -25,6 +25,15 @@ export function SettingsHeaderBar() {
     actions?.breadcrumbs && actions.breadcrumbs.length > 0
       ? actions.breadcrumbs
       : settingsCrumbForPath(pathname);
+
+  // Optional in-header tab strip (e.g. the unified Memory page). Highlight the
+  // deepest tab whose href prefixes the current path so sub-routes stay active.
+  const tabs = actions?.tabs ?? [];
+  const activeTab =
+    [...tabs]
+      .reverse()
+      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ??
+    "";
 
   return (
     <header
@@ -80,10 +89,36 @@ export function SettingsHeaderBar() {
           </span>
         ) : null}
       </nav>
+      {tabs.length > 0 ? (
+        <div className="flex flex-1 justify-center">
+          <Tabs value={activeTab}>
+            <TabsList>
+              {tabs.map((tab) => (
+                <TabsTrigger
+                  key={tab.to}
+                  value={tab.to}
+                  asChild
+                  className="px-3"
+                >
+                  <Link to={tab.to}>{tab.label}</Link>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+      ) : null}
       {actions?.action ? (
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-1",
+            // Balance the left breadcrumb so centered tabs stay centered.
+            tabs.length > 0 ? "flex-1 justify-end" : "ml-auto",
+          )}
+        >
           {actions.action}
         </div>
+      ) : tabs.length > 0 ? (
+        <div className="flex-1" aria-hidden />
       ) : null}
     </header>
   );

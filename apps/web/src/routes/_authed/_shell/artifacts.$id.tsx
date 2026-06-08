@@ -166,11 +166,13 @@ export function AppletRouteContent({
   if (!applet) {
     return (
       <main className="flex h-svh items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">
-          {fetching
-            ? "Loading artifact..."
-            : error?.message || "Artifact not found."}
-        </p>
+        {fetching ? (
+          <AppletLoading />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {error?.message || "Artifact not found."}
+          </p>
+        )}
       </main>
     );
   }
@@ -195,7 +197,7 @@ export function AppletRouteContent({
     latestVersion > mountedSnapshot.version;
 
   const appPanel = (
-    <div className="grid h-full min-h-0 min-w-0 p-4">
+    <div className="grid h-full min-h-0 min-w-0">
       {hasNewerVersion ? (
         <div className="m-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="text-primary">
@@ -225,23 +227,30 @@ export function AppletRouteContent({
         </div>
       ) : null}
       {mountedSnapshot ? (
-        <AppletMount
-          key={`${mountedSnapshot.appId}:${mountedSnapshot.version}:${reloadNonce}`}
-          appId={mountedSnapshot.appId}
-          instanceId={mountedSnapshot.instanceId}
-          source={mountedSnapshot.source}
-          version={mountedSnapshot.version}
-          onHeaderActionChange={handleHeaderActionChange}
-          themeCss={mountedSnapshot.themeCss}
-          // Size the iframe to its reported content height so the only
-          // scrollbar lives on the surrounding AppCanvasPanel (which has
-          // `overflow-y-auto`). With the default `fitContentHeight=false`
-          // the iframe sizes to 100% of its parent and renders its own
-          // inner scrollbar, stacking against the panel's scrollbar.
-          // DraftAppletPreview and InlineAppletEmbed already use this mode;
-          // saved-app side panels were missed before.
-          fitContentHeight={true}
-        />
+        // Rounded, bordered frame so the artifact's corners match the Source/
+        // Config tabs (which use `rounded-md border`). `overflow-hidden` clips
+        // the square iframe corners; it is scroll-safe because the iframe runs
+        // in `fitContentHeight` mode (content-sized), so the only scrollbar
+        // lives on the surrounding AppCanvasPanel rather than this frame.
+        <div className="self-start overflow-hidden rounded-md border border-border/60">
+          <AppletMount
+            key={`${mountedSnapshot.appId}:${mountedSnapshot.version}:${reloadNonce}`}
+            appId={mountedSnapshot.appId}
+            instanceId={mountedSnapshot.instanceId}
+            source={mountedSnapshot.source}
+            version={mountedSnapshot.version}
+            onHeaderActionChange={handleHeaderActionChange}
+            themeCss={mountedSnapshot.themeCss}
+            // Size the iframe to its reported content height so the only
+            // scrollbar lives on the surrounding AppCanvasPanel (which has
+            // `overflow-y-auto`). With the default `fitContentHeight=false`
+            // the iframe sizes to 100% of its parent and renders its own
+            // inner scrollbar, stacking against the panel's scrollbar.
+            // DraftAppletPreview and InlineAppletEmbed already use this mode;
+            // saved-app side panels were missed before.
+            fitContentHeight={true}
+          />
+        </div>
       ) : (
         <AppletLoading />
       )}
@@ -268,7 +277,7 @@ export function AppletRouteContent({
 }
 
 const APPLET_TABS = [
-  { value: "app", label: "App" },
+  { value: "app", label: "Artifact" },
   { value: "source", label: "Source" },
   { value: "config", label: "Config" },
 ] as const;

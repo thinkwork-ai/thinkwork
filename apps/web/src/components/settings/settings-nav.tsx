@@ -1,16 +1,11 @@
 import type { ComponentType } from "react";
 import {
   AppWindow,
-  BookOpen,
   Bot,
   Brain,
-  BriefcaseBusiness,
   Clock,
-  CreditCard,
   FolderTree,
   History,
-  Layers3,
-  NotebookText,
   Repeat,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -19,11 +14,7 @@ import {
   Webhook,
   Wrench,
 } from "lucide-react";
-import {
-  IconChartBar,
-  IconPlanet,
-  IconTopologyStar3,
-} from "@tabler/icons-react";
+import { IconApps, IconChartBar, IconPlanet } from "@tabler/icons-react";
 import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
 export interface SettingsNavItem {
@@ -74,21 +65,15 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
-    label: "Billing",
-    to: "/settings/billing",
-    icon: CreditCard,
-    operatorOnly: true,
-  },
-  {
     label: "MCP Servers",
     to: "/settings/mcp-servers",
     icon: ModelContextProtocol,
     operatorOnly: true,
   },
   {
-    label: "Managed Applications",
+    label: "Applications",
     to: "/settings/managed-applications",
-    icon: Layers3,
+    icon: IconApps,
     operatorOnly: true,
   },
   {
@@ -103,33 +88,7 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     icon: AppWindow,
     operatorOnly: true,
   },
-  {
-    label: "CRM",
-    to: "/settings/crm",
-    icon: BriefcaseBusiness,
-    operatorOnly: true,
-    managedAppKey: "twenty",
-  },
-  {
-    label: "Knowledge Graph",
-    to: "/settings/knowledge-graph",
-    icon: IconTopologyStar3,
-    operatorOnly: true,
-    managedAppKey: "cognee",
-  },
-  {
-    label: "Knowledge Bases",
-    to: "/settings/knowledge-bases",
-    icon: BookOpen,
-    operatorOnly: true,
-  },
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
-  {
-    label: "Wiki Memory",
-    to: "/settings/wiki",
-    icon: NotebookText,
-    operatorOnly: true,
-  },
   {
     label: "Automations",
     to: "/settings/automations",

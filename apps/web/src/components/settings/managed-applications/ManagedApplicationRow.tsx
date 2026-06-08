@@ -1,128 +1,71 @@
+import { Link } from "@tanstack/react-router";
 import { Badge, Button } from "@thinkwork/ui";
-import { ExternalLink, Play, RotateCw, Trash2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import type {
   ManagedAppKey,
   ManagedApplication,
-  ManagedApplicationJob,
   RuntimeDeployment,
 } from "./types";
 
+/**
+ * A managed application as a clickable card: name + right-aligned status, with a
+ * short description. Lifecycle actions (deploy/destroy) live on the app's
+ * dedicated detail page, reached by clicking the card.
+ */
 export function ManagedApplicationRow({
   app,
   runtime,
-  latestJob,
-  busy,
-  onStartPlan,
-  onOpenPlan,
 }: {
   app: ManagedApplication;
   runtime?: RuntimeDeployment;
-  latestJob?: ManagedApplicationJob | null;
-  busy?: boolean;
-  onStartPlan: (operation: "ENABLE" | "DESTROY" | "UPGRADE") => void;
-  onOpenPlan: () => void;
 }) {
   const key = app.key as ManagedAppKey;
   const runtimeEnabled =
     runtime?.runtimeEnabled ?? app.currentStatus === "running";
-  const provisioned = runtime?.provisioned ?? runtimeEnabled;
-  const status =
-    latestJob && !terminalStatus(latestJob.status)
-      ? latestJob.status
-      : (runtime?.status ?? app.currentStatus);
-  const canDeploy = !runtimeEnabled;
-  const canDestroy = provisioned || runtimeEnabled;
-  const hasJob = !!latestJob || !!app.lastJobId;
+  const status = runtime?.status ?? app.currentStatus;
+  const detailPath =
+    key === "twenty" ? "/settings/crm" : "/settings/applications/cognee";
 
   return (
-    <div className="border-b border-border px-4 py-4 last:border-b-0">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-medium text-foreground">
-              {app.displayName}
-            </h3>
-            <Badge variant="outline" className={statusBadgeClassName(status)}>
-              {status}
-            </Badge>
-            {runtime?.url && runtime.runtimeEnabled ? (
-              <Button asChild type="button" variant="ghost" size="icon-sm">
-                <a
-                  href={runtime.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={`Open ${app.displayName}`}
-                  title={`Open ${app.displayName}`}
-                >
-                  <ExternalLink className="size-4" />
-                </a>
-              </Button>
-            ) : null}
-          </div>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {runtime?.message ?? managedAppDescription(key)}
-          </p>
-          <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-            <Fact label="Desired" value={app.desiredStatus} />
-            <Fact label="Release" value={app.selectedReleaseVersion ?? "..."} />
-            <Fact
-              label="Endpoint"
-              value={runtime?.url ?? runtime?.endpoint ?? "..."}
-            />
-            <Fact
-              label="Last job"
-              value={app.lastJobId ?? latestJob?.id ?? "..."}
-            />
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {hasJob ? (
+    <Link
+      to={detailPath}
+      aria-label={`Open ${app.displayName}`}
+      className="flex items-start justify-between gap-4 border-b border-border px-4 py-4 transition-colors last:border-b-0 hover:bg-muted/30"
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-1">
+          <h3 className="text-sm font-medium text-foreground">
+            {app.displayName}
+          </h3>
+          {runtime?.url && runtimeEnabled ? (
             <Button
               type="button"
-              variant="outline"
-              size="sm"
-              onClick={onOpenPlan}
+              variant="ghost"
+              size="icon-sm"
+              className="size-6 text-muted-foreground"
+              aria-label={`Open ${app.displayName} in a new tab`}
+              title={`Open ${app.displayName} in a new tab`}
+              onClick={(event) => {
+                // Don't trigger the card's drill-in navigation.
+                event.preventDefault();
+                event.stopPropagation();
+                window.open(runtime.url!, "_blank", "noopener,noreferrer");
+              }}
             >
-              <RotateCw className="size-4" />
-              View plan
-            </Button>
-          ) : null}
-          {canDeploy ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => onStartPlan("ENABLE")}
-            >
-              <Play className="size-4" />
-              Plan deploy
-            </Button>
-          ) : null}
-          {canDestroy ? (
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              disabled={busy}
-              onClick={() => onStartPlan("DESTROY")}
-            >
-              <Trash2 className="size-4" />
-              Plan destroy
+              <ExternalLink className="size-3.5" />
             </Button>
           ) : null}
         </div>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          {runtime?.message ?? managedAppDescription(key)}
+        </p>
       </div>
-    </div>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <span className="text-muted-foreground/70">{label}: </span>
-      <span className="break-all text-muted-foreground">{value}</span>
-    </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Badge variant="outline" className={statusBadgeClassName(status)}>
+          {status}
+        </Badge>
+      </div>
+    </Link>
   );
 }
 
@@ -131,10 +74,6 @@ function managedAppDescription(key: ManagedAppKey): string {
     return "Customer-owned CRM runtime with dedicated database, cache, files, and generated secrets.";
   }
   return "Knowledge graph runtime with dedicated graph/vector storage and provider credentials.";
-}
-
-function terminalStatus(status: string): boolean {
-  return ["succeeded", "failed", "rejected"].includes(status);
 }
 
 function statusBadgeClassName(status: string) {

@@ -876,6 +876,12 @@ const AppletPreviewFields = gql`
     modelId
     generatedAt
     stdlibVersionAtGeneration
+    # NOTE: userId/userName (the "User" column) are intentionally NOT queried
+    # here yet — the Applet.userId/userName resolver fields ship in this same
+    # branch but only take effect once the GraphQL Lambda deploys. Querying
+    # them before the backend is live hard-fails the whole applets list
+    # ([GraphQL] Cannot query field "userId" on type "Applet"). Re-add these
+    # two fields once the backend is deployed to light up the column.
     # Surface the underlying Artifact id + favoritedAt so the artifact
     # detail page can wire favorite/delete actions without a second
     # round-trip to fetch the artifact by appId.

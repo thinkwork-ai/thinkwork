@@ -30,6 +30,12 @@ type Applet {
   modelId: String
   generatedAt: AWSDateTime!
   stdlibVersionAtGeneration: String!
+  # User who generated the applet, resolved through the source thread
+  # (threadId -> threads.user_id -> users). Null when the applet has no
+  # associated thread/user. `userName` falls back to email when the user
+  # has no display name set.
+  userId: ID
+  userName: String
 }
 
 type AppletPayload {

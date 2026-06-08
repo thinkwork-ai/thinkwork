@@ -30,13 +30,13 @@ import {
   SendMessageMutation,
   SpacesQuery,
 } from "@/lib/graphql-queries";
+import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 import { setPendingThreadStart } from "@/lib/pending-thread-starts";
 import {
   chooseApprovedModelId,
-  readStoredModelId,
   writeStoredModelId,
   type ApprovedModelOption,
 } from "@/lib/approved-model-selection";
@@ -113,9 +113,13 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(
     spaceId ?? null,
   );
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
-    readStoredModelId(),
-  );
+  // A NEW thread always starts at the tenant Agent's configured default model
+  // (resolved below), NOT a previously remembered pick. Seeding from
+  // localStorage here let a stale stored model (e.g. GPT OSS 120B chosen once)
+  // permanently shadow the Agent default in chooseApprovedModelId. Start null
+  // so the auto-pick effect resolves to the Agent default; an explicit change
+  // in this composer still applies for the rest of the session.
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const {
     computers,
     fetching: computersFetching,
@@ -145,6 +149,18 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       pause: !tenantId,
       requestPolicy: "cache-and-network",
     });
+  // Tenant's configured default model (Settings > Agents > Default model). New
+  // threads fall back to this instead of the first approved model in the list.
+  // This reads the parent Agent's `model` (what the Agents page writes via
+  // updateTenantAgent), NOT tenant.settings.defaultModel — nothing populates
+  // that field, so reading it made the composer silently fall through to the
+  // first catalog model (e.g. GPT OSS 120B) instead of the configured default.
+  const [{ data: tenantAgentData, fetching: tenantAgentFetching }] = useQuery({
+    query: SettingsTenantAgentQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const tenantDefaultModelId = tenantAgentData?.agent?.model ?? null;
   const [{ data: agentProfilesData }] = useQuery<
     AgentProfilesMentionData,
     { tenantId: string }
@@ -249,14 +265,33 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
   const approvedModels = approvedModelData?.myApprovedModelCatalog;
   useEffect(() => {
     if (!approvedModels) return;
-    const nextModelId = chooseApprovedModelId(approvedModels, selectedModelId);
+    // Wait for the tenant default to resolve before auto-picking, so a fast
+    // approved-models response can't lock in the first model before the
+    // configured default arrives.
+    if (tenantAgentFetching) return;
+    // `||` (not `??`) so an empty-string selection — which the Select control
+    // can briefly emit on mount — still falls through to the tenant default.
+    const nextModelId = chooseApprovedModelId(
+      approvedModels,
+      selectedModelId || tenantDefaultModelId,
+    );
+    // Only set state here; don't persist. Storage holds explicit user choices
+    // (handleSelectedModelChange), so a fresh session always reflects the
+    // tenant's configured default rather than a previously auto-picked model.
     if (nextModelId !== selectedModelId) {
       setSelectedModelId(nextModelId);
-      writeStoredModelId(nextModelId);
     }
-  }, [approvedModels, selectedModelId]);
+  }, [
+    approvedModels,
+    selectedModelId,
+    tenantDefaultModelId,
+    tenantAgentFetching,
+  ]);
 
   function handleSelectedModelChange(modelId: string) {
+    // The Select control can emit an empty value during mount/teardown; ignore
+    // it so it can't wipe a valid selection (and reset to the first model).
+    if (!modelId) return;
     setSelectedModelId(modelId);
     writeStoredModelId(modelId);
   }
@@ -548,5 +583,9 @@ function buildNewThreadMentionTargets(
     description: target.description,
   }));
 
-  return mergeAgentProfileMentionTargets(targets, agentProfiles, selectedSpaceId);
+  return mergeAgentProfileMentionTargets(
+    targets,
+    agentProfiles,
+    selectedSpaceId,
+  );
 }

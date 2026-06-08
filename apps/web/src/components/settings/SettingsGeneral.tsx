@@ -31,7 +31,6 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
-import { ManagedApplicationsSection } from "@/components/settings/ManagedApplicationsSection";
 
 export function SettingsGeneral() {
   const { isOperator, roleResolved } = useTenant();
@@ -39,7 +38,7 @@ export function SettingsGeneral() {
   // Operators only — members never issue the deployment query (it is also
   // gated server-side in U8).
   const showOperator = roleResolved && isOperator;
-  const [deployResult, refetchDeployment] = useQuery({
+  const [deployResult] = useQuery({
     query: SettingsDeploymentStatusQuery,
     pause: !showOperator,
   });
@@ -77,15 +76,6 @@ export function SettingsGeneral() {
 
       {showOperator ? (
         <>
-          <ManagedApplicationsSection
-            deployment={deployment}
-            loading={deployResult.fetching}
-            unavailable={deploymentFailed}
-            onQueued={() =>
-              refetchDeployment({ requestPolicy: "network-only" })
-            }
-          />
-
           <SettingsSection label="Deployment">
             {deploymentFailed ? (
               <div className="p-4 text-sm text-muted-foreground">

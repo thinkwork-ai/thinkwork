@@ -8,6 +8,7 @@
     "prebuild": "pnpm --filter @thinkwork/deployment-profile build",
     "build": "vite build",
     "build:iframe-shell": "vite build --config vite.iframe-shell.config.ts",
+    "dev:iframe-shell": "VITE_ALLOWED_PARENT_ORIGINS=\"${VITE_ALLOWED_PARENT_ORIGINS:-http://localhost:5180,http://127.0.0.1:5180,http://localhost:5174,http://127.0.0.1:5174,thinkwork://app,thinkwork-dev://app}\" pnpm build:iframe-shell && npx --yes http-server dist/iframe-shell -p 5175 --cors -s",
     "preview": "vite preview",
     "test": "vitest run",
     "pretypecheck": "pnpm --filter @thinkwork/deployment-profile build",

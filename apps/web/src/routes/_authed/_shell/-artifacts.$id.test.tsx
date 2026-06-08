@@ -272,11 +272,11 @@ describe("operator Source/Config tabs", () => {
     expect(screen.queryByRole("tab", { name: "Source" })).toBeNull();
   });
 
-  it("renders App/Source/Config tabs for a resolved operator", async () => {
+  it("renders Artifact/Source/Config tabs for a resolved operator", async () => {
     setTenant({ isOperator: true, roleResolved: true });
     render(<AppletRouteContent appId={appId} />);
     await screen.findByTestId("applet-iframe-host");
-    expect(screen.getByRole("tab", { name: "App" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Artifact" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Source" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Config" })).toBeTruthy();
   });

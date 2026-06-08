@@ -14,8 +14,20 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { ManagedApplicationLifecycleActions } from "@/components/settings/managed-applications/ManagedApplicationLifecycleActions";
 
 export function SettingsCrm() {
+  usePageHeaderActions({
+    title: "Twenty CRM",
+    breadcrumbs: [
+      { label: "Applications", href: "/settings/managed-applications" },
+      { label: "Twenty CRM" },
+    ],
+    action: <ManagedApplicationLifecycleActions appKey="twenty" />,
+    actionKey: "twenty-crm:lifecycle",
+  });
+
   const [statusResult, refreshStatus] = useQuery({
     query: SettingsDeploymentStatusQuery,
   });
@@ -55,7 +67,7 @@ export function SettingsCrm() {
   return (
     <SettingsPane>
       <SettingsHeader
-        title="CRM"
+        title="Twenty CRM"
         description="Twenty CRM deployment for this ThinkWork stage."
       />
 

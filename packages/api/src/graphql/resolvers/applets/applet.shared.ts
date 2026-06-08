@@ -7,11 +7,13 @@ import {
   db,
   desc,
   eq,
+  inArray,
   lt,
   randomUUID,
   sql,
   tenantSettings,
   threads,
+  users,
 } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
@@ -121,14 +123,18 @@ export async function loadApplet(args: {
   return { artifact: row, metadata, source, themeCss };
 }
 
-export function toAppletPayload(input: {
+export async function toAppletPayload(input: {
   artifact: AppletArtifactRow & Record<string, unknown>;
   metadata: AppletMetadataV1;
   source: string;
   themeCss?: string;
 }) {
+  const usersByThread = await resolveAppletUsersByThread([input.artifact]);
+  const user = input.artifact.thread_id
+    ? usersByThread.get(input.artifact.thread_id)
+    : null;
   return {
-    applet: toAppletPreview(input.artifact, input.metadata),
+    applet: toAppletPreview(input.artifact, input.metadata, user),
     files: { [DEFAULT_APPLET_FILE]: input.source },
     source: input.source,
     metadata: input.metadata,
@@ -172,11 +178,16 @@ export async function listApplets(args: {
 
   const page = rows.slice(0, limit);
   const nextRow = rows[limit];
+  const usersByThread = await resolveAppletUsersByThread(page);
 
   return {
     nodes: page.map((row) => {
       const metadata = assertAppletArtifactAccess(row, caller);
-      return toAppletPreview(row, metadata);
+      return toAppletPreview(
+        row,
+        metadata,
+        row.thread_id ? usersByThread.get(row.thread_id) : null,
+      );
     }),
     nextCursor: nextRow ? serializeCursor(nextRow.created_at) : null,
   };
@@ -256,6 +267,7 @@ export async function listAdminApplets(args: {
 
   const page = rows.slice(0, limit);
   const nextRow = rows[limit];
+  const usersByThread = await resolveAppletUsersByThread(page);
 
   return {
     nodes: page.map((row) => {
@@ -263,7 +275,11 @@ export async function listAdminApplets(args: {
         tenantId: args.tenantId,
         userId: args.userId ?? null,
       });
-      return toAppletPreview(row, metadata);
+      return toAppletPreview(
+        row,
+        metadata,
+        row.thread_id ? usersByThread.get(row.thread_id) : null,
+      );
     }),
     nextCursor: nextRow ? serializeCursor(nextRow.created_at) : null,
   };
@@ -718,9 +734,15 @@ async function loadExistingForWrite(args: {
   return { artifact: row, metadata };
 }
 
+interface AppletUserInfo {
+  userId: string;
+  userName: string | null;
+}
+
 function toAppletPreview(
   artifact: AppletArtifactRow & Record<string, unknown>,
   metadata: AppletMetadataV1,
+  user?: AppletUserInfo | null,
 ) {
   return {
     artifact: artifactToCamel(artifact),
@@ -734,7 +756,49 @@ function toAppletPreview(
     modelId: metadata.modelId ?? null,
     generatedAt: metadata.generatedAt,
     stdlibVersionAtGeneration: metadata.stdlibVersionAtGeneration,
+    userId: user?.userId ?? null,
+    userName: user?.userName ?? null,
   };
+}
+
+/**
+ * Batch-resolve the generating user for a page of applet artifacts via the
+ * source thread (`artifacts.thread_id -> threads.user_id -> users`). Returns a
+ * map keyed by thread id; artifacts without a thread or whose thread has no
+ * user are simply absent (the preview then shows no user). One query per page,
+ * not per row.
+ */
+async function resolveAppletUsersByThread(
+  rows: Array<{ thread_id?: string | null }>,
+): Promise<Map<string, AppletUserInfo>> {
+  const threadIds = [
+    ...new Set(
+      rows
+        .map((row) => row.thread_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  if (threadIds.length === 0) return new Map();
+
+  const userRows = await db
+    .select({
+      threadId: threads.id,
+      userId: users.id,
+      name: users.name,
+      email: users.email,
+    })
+    .from(threads)
+    .innerJoin(users, eq(threads.user_id, users.id))
+    .where(inArray(threads.id, threadIds));
+
+  const byThread = new Map<string, AppletUserInfo>();
+  for (const row of userRows) {
+    byThread.set(row.threadId, {
+      userId: row.userId,
+      userName: row.name ?? row.email ?? null,
+    });
+  }
+  return byThread;
 }
 
 async function loadTenantAppletThemeCss(

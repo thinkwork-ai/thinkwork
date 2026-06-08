@@ -16,13 +16,10 @@ import { AppletsQuery } from "@/lib/graphql-queries";
 import { ArtifactsTable } from "./ArtifactsTable";
 import { ArtifactsToolbar } from "./ArtifactsToolbar";
 import {
-  ALL_KINDS,
   DEFAULT_SORT_BY,
-  TAB_ALL,
   filterArtifactItems,
   sortArtifactItems,
   toArtifactItem,
-  uniqueKinds,
   type ArtifactItem,
 } from "./artifacts-filtering";
 
@@ -207,18 +204,15 @@ function ArtifactsListBodyView({
 }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<string>(TAB_ALL);
-  const [kind, setKind] = useState<string>(ALL_KINDS);
 
-  const kinds = useMemo(() => uniqueKinds(items), [items]);
   // Fixed sort (generated, newest first) — no user-facing sort control.
   const sortedItems = useMemo(
     () => sortArtifactItems(items, DEFAULT_SORT_BY),
     [items],
   );
   const filtered = useMemo(
-    () => filterArtifactItems({ items: sortedItems, search, kind, tab }),
-    [sortedItems, search, kind, tab],
+    () => filterArtifactItems({ items: sortedItems, search }),
+    [sortedItems, search],
   );
 
   const handleRowClick = useCallback(
@@ -247,11 +241,6 @@ function ArtifactsListBodyView({
       <ArtifactsToolbar
         search={search}
         onSearchChange={setSearch}
-        tab={tab}
-        onTabChange={setTab}
-        kind={kind}
-        kinds={kinds}
-        onKindChange={setKind}
         showUserFilter={showUserFilter}
         userIdFilter={userIdFilter}
         onUserIdFilterChange={onUserIdFilterChange}

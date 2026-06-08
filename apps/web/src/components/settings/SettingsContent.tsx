@@ -4,6 +4,17 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 
 /**
+ * Null-rendering publisher for the page header. Kept as a child component (not
+ * a top-level hook call) so a parent that owns the header can suppress it by
+ * not rendering it — without a conditional `null` hook call that would clobber
+ * the parent's breadcrumb when an embedded child mounts/unmounts.
+ */
+function TablePaneHeader({ title }: { title: string }) {
+  usePageHeaderActions({ title, breadcrumbs: [{ label: title }] });
+  return null;
+}
+
+/**
  * Publishes a settings section's title (and optional action) to the settings
  * header bar as a single breadcrumb, and renders the prominent in-body page
  * heading (via {@link SettingsPageTitle}). The breadcrumb gives nav context;
@@ -102,6 +113,7 @@ export function SettingsTablePane({
   toolbar,
   loading,
   children,
+  embedded,
 }: {
   title: string;
   description?: string;
@@ -111,13 +123,17 @@ export function SettingsTablePane({
    *  toolbar stays visible) — mirroring the Memory page's load behavior. */
   loading?: boolean;
   children: ReactNode;
+  /** When true, this pane is hosted inside a parent that owns the page header
+   *  (e.g. the tabbed Memory page). Suppresses the header-bar breadcrumb so it
+   *  doesn't clobber the parent's; the in-body title still renders. */
+  embedded?: boolean;
 }) {
   // Title shows both as a header-bar breadcrumb and as the in-body page
   // heading. The search toolbar (left) and primary action (right, a muted
   // link) share a row above the table in the content body.
-  usePageHeaderActions({ title, breadcrumbs: [{ label: title }] });
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
+      {embedded ? null : <TablePaneHeader title={title} />}
       <SettingsPageTitle title={title} description={description} />
       {toolbar || actions ? (
         <div className="mb-3 flex shrink-0 items-center justify-between gap-3">

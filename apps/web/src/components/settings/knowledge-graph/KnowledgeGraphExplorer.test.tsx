@@ -17,7 +17,10 @@ const ingestSource = readFileSync(
   "utf8",
 );
 const settingsSource = readFileSync(
-  resolve(process.cwd(), "src/components/settings/SettingsKnowledgeGraph.tsx"),
+  resolve(
+    process.cwd(),
+    "src/components/settings/knowledge-graph/KnowledgeGraphTab.tsx",
+  ),
   "utf8",
 );
 const sheetSource = readFileSync(
@@ -82,8 +85,13 @@ describe("KnowledgeGraphExplorer", () => {
   });
 
   it("exposes thread search, selection, and manual ingest controls", () => {
-    expect(settingsSource).toContain("IconMessages");
-    expect(settingsSource).toContain("Open thread ingest");
+    // The Ontology tab is titled "Ontology" with a Data/Definitions toggle.
+    expect(settingsSource).toContain("Ontology");
+    expect(settingsSource).toContain("Definitions");
+    // Thread ingest opens from a right-aligned "Threads" link in the explorer
+    // toolbar.
+    expect(explorerSource).toContain("Threads");
+    expect(explorerSource).toContain("onThreadSheetOpenChange");
     expect(explorerSource).toContain("threadSheetOpen");
     expect(explorerSource).toContain("Thread Ingest");
     expect(explorerSource).toContain("Thread Detail");
