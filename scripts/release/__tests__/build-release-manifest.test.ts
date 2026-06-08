@@ -104,7 +104,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   );
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "twenty"],
+    ["cognee", "kestra", "twenty"],
   );
   assert.deepEqual(
     Object.fromEntries(
@@ -112,6 +112,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     ),
     {
       cognee: ["cognee"],
+      kestra: ["kestra"],
       twenty: ["twenty"],
     },
   );
@@ -236,7 +237,13 @@ test("CLI build script includes default managed apps when no overrides are passe
   ) as ThinkWorkReleaseManifest;
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "twenty"],
+    ["cognee", "kestra", "twenty"],
+  );
+  assert.deepEqual(
+    manifest.managedApps
+      .find((app) => app.id === "kestra")
+      ?.smokeContracts?.map((contract) => contract.command),
+    ["scripts/smoke/kestra-managed-app-smoke.mjs"],
   );
 });
 
@@ -283,9 +290,7 @@ test("buildReleaseManifest rejects duplicate logical artifact names", async () =
 
 test("spec parsers reject incomplete artifact and image definitions", () => {
   assert.deepEqual(
-    parseArtifactSpec(
-      "name=web,type=static-site,path=dist/release/web.tar.gz",
-    ),
+    parseArtifactSpec("name=web,type=static-site,path=dist/release/web.tar.gz"),
     {
       name: "web",
       type: "static-site",

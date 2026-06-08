@@ -10,6 +10,7 @@
     "./apply": "./src/apply.ts",
     "./apps/registry": "./src/apps/registry.ts",
     "./apps/cognee": "./src/apps/cognee.ts",
+    "./apps/kestra": "./src/apps/kestra.ts",
     "./apps/twenty": "./src/apps/twenty.ts"
   },
   "scripts": {

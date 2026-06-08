@@ -6,6 +6,43 @@ status: complete
 
 # Autopilot Status Ledger
 
+## Kestra Managed Application - 2026-06-08
+
+- Plan:
+  `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
+- Target branch: `main`.
+- Current unit: U1 - Managed-app registry and release descriptors.
+- Current branch: `codex/kestra-managed-app-u1`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u1`.
+- Current PR: [#2239](https://github.com/thinkwork-ai/thinkwork/pull/2239).
+- Status: PR open; CI pending.
+- Notes:
+  - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
+    Kestra requirements, and the managed-app/MCP lifecycle precedent.
+  - Created isolated U1 worktree from `origin/main` at `da4555973`.
+  - Added Kestra to the deployment-runner managed-app registry and parser.
+  - Added a Kestra adapter with retained/runtime deploy state, required pinned
+    image and secret inputs, status outputs, smoke contract metadata, and
+    destructive impact/pre-destroy evidence for app data, credentials, and
+    managed MCP cleanup.
+  - Added Kestra to default release manifest managed-app descriptors.
+  - Included the Kestra requirements, plan, and this status entry in the U1 PR
+    because the local Kestra planning docs were not yet present on `main`.
+  - Local verification passed:
+    - `pnpm --filter @thinkwork/deployment-runner test` -> 2 files passed, 12
+      tests passed.
+    - `pnpm --filter @thinkwork/deployment-runner typecheck` -> passed.
+    - `pnpm test:release` -> 9 tests passed.
+    - `pnpm dlx prettier --check` over U1-touched files -> passed.
+    - `git diff --check` -> passed.
+  - Local verification caveat:
+    - `pnpm format:check` could not start because `prettier` is not installed
+      in the worktree/root dependency graph. A direct `pnpm dlx prettier`
+      check over changed files passed.
+    - `pnpm install` completed, but `canvas@2.11.2` logged a native fallback
+      build failure on local Node 25 due to missing `pkg-config`/`pixman-1`.
+      This did not affect U1-focused tests or typecheck.
+
 ## Agent Profile Closed Loops - 2026-06-08
 
 - Plan:

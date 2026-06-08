@@ -561,6 +561,22 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
       ],
     },
     {
+      id: "kestra",
+      displayName: "Kestra",
+      terraformModule: {
+        source: `${TERRAFORM_MODULE_SOURCE}//modules/app/kestra`,
+        version,
+      },
+      requiredImages: ["kestra"],
+      smokeContracts: [
+        {
+          id: "kestra-health",
+          command: "scripts/smoke/kestra-managed-app-smoke.mjs",
+          required: true,
+        },
+      ],
+    },
+    {
       id: "twenty",
       displayName: "Twenty CRM",
       terraformModule: {
