@@ -28,6 +28,7 @@
 ################################################################################
 
 resource "aws_secretsmanager_secret" "stripe_api_credentials" {
+  count       = var.enable_stripe_billing ? 1 : 0
   name        = "thinkwork/${var.stage}/stripe/api-credentials"
   description = "Stripe API credentials (secret_key, publishable_key, webhook_signing_secret). Populate via `aws secretsmanager put-secret-value`; never via tfvars."
   tags = {
@@ -38,7 +39,8 @@ resource "aws_secretsmanager_secret" "stripe_api_credentials" {
 }
 
 resource "aws_secretsmanager_secret_version" "stripe_api_credentials_initial" {
-  secret_id = aws_secretsmanager_secret.stripe_api_credentials.id
+  count     = var.enable_stripe_billing ? 1 : 0
+  secret_id = aws_secretsmanager_secret.stripe_api_credentials[0].id
   secret_string = jsonencode({
     secret_key             = ""
     publishable_key        = ""

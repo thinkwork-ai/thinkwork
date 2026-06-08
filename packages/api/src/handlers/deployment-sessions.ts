@@ -386,7 +386,7 @@ async function requestTeardown(
           name: teardownExecutionName(session.id),
           input: JSON.stringify({
             phase: "teardown",
-            action: "teardown",
+            action: "destroy",
             sessionId: session.id,
             customerName: session.customer_name,
             environmentName: session.environment_name,

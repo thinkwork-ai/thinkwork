@@ -398,6 +398,12 @@ variable "agentcore_pi_function_arn" {
   default     = ""
 }
 
+variable "enable_agentcore_pi_invoke_policy" {
+  description = "Create the API Lambda IAM policy that permits invoking the Pi AgentCore Lambda."
+  type        = bool
+  default     = false
+}
+
 variable "admin_url" {
   description = "Deprecated compatibility input for the unified web app URL (e.g. https://app.thinkwork.ai)."
   type        = string
@@ -422,10 +428,22 @@ variable "stripe_price_ids_json" {
   default     = "{}"
 }
 
+variable "enable_stripe_billing" {
+  description = "Provision Stripe billing Lambdas, API routes, and credentials placeholder secret."
+  type        = bool
+  default     = true
+}
+
 variable "stripe_welcome_from_email" {
   description = "Override From: address on the Stripe post-checkout welcome email. Must be an SES-verified identity. Empty string falls back to the in-code default (hello@agents.thinkwork.ai, which uses the already-verified SES inbound domain). Set to hello@thinkwork.ai once the bare-apex sender identity is verified."
   type        = string
   default     = ""
+}
+
+variable "enable_slack_workspace_app" {
+  description = "Provision Slack workspace app Lambdas, API routes, and credentials placeholder secret."
+  type        = bool
+  default     = true
 }
 
 variable "appsync_realtime_url" {

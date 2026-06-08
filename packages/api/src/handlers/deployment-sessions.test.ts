@@ -265,7 +265,7 @@ describe("deployment session handler", () => {
     expect(payload).toEqual(
       expect.objectContaining({
         phase: "teardown",
-        action: "teardown",
+        action: "destroy",
         sessionId: SESSION_ID,
         awsAccountId: "123456789012",
       }),

@@ -9,12 +9,12 @@ output "state_machine_name" {
 }
 
 output "codebuild_project_name" {
-  description = "Name of the inert deployment runner CodeBuild project."
+  description = "Name of the deployment runner CodeBuild project."
   value       = aws_codebuild_project.runner.name
 }
 
 output "codebuild_project_arn" {
-  description = "ARN of the inert deployment runner CodeBuild project."
+  description = "ARN of the deployment runner CodeBuild project."
   value       = aws_codebuild_project.runner.arn
 }
 
@@ -52,4 +52,3 @@ output "secret_arns" {
   description = "Placeholder deployment secret ARNs keyed by purpose."
   value       = { for key, secret in aws_secretsmanager_secret.deployment : key => secret.arn }
 }
-

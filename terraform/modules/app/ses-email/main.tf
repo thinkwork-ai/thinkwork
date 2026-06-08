@@ -70,6 +70,12 @@ variable "email_inbound_fn_name" {
   default     = ""
 }
 
+variable "enable_email_inbound_lambda_action" {
+  description = "Attach the email-inbound Lambda action and invoke permission to SES receipt rules."
+  type        = bool
+  default     = false
+}
+
 variable "manage_active_rule_set" {
   description = "Activate the receipt rule set. Only ONE rule set can be active per region per account, so set false in secondary stages that share an account."
   type        = bool
@@ -95,7 +101,7 @@ locals {
 
   inbound_smtp  = "inbound-smtp.${var.region}.amazonaws.com"
   rule_set_name = "thinkwork-${var.stage}-email-rules"
-  has_lambda    = var.email_inbound_fn_arn != ""
+  has_lambda    = var.enable_email_inbound_lambda_action
   has_bucket    = var.inbound_bucket_name != ""
 }
 
