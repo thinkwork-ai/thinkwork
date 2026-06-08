@@ -66,14 +66,20 @@ locals {
     # getChatAgentInvokeFnArn falls back to null and sendMessage loses
     # message_history on the wakeup-processor fallback path.
     CHAT_AGENT_INVOKE_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke"
-    APP_URL                  = var.admin_url
-    WEB_URL                  = var.admin_url
-    ADMIN_URL                = var.admin_url
-    DOCS_URL                 = var.docs_url
-    APPSYNC_REALTIME_URL     = var.appsync_realtime_url
-    ECR_REPOSITORY_URL       = var.ecr_repository_url
-    AWS_ACCOUNT_ID           = var.account_id
-    NODE_OPTIONS             = "--enable-source-maps"
+    # APP_URL/WEB_URL were duplicate aliases of ADMIN_URL (all = var.admin_url)
+    # and pushed this Lambda's env block past AWS's hard 4KB limit, failing
+    # every Terraform apply (UpdateFunctionConfiguration 400 InvalidParameter:
+    # environment variables exceeded the 4KB limit). Every reader resolves via
+    # ADMIN_URL — stripe-webhook/stripe-portal use `APP_URL || WEB_URL ||
+    # ADMIN_URL`, mcp-oauth-client's candidate list includes ADMIN_URL, and
+    # deploymentStatus reads ADMIN_URL directly — so the single canonical
+    # ADMIN_URL is sufficient. Re-add aliases only after env vars move to SSM.
+    ADMIN_URL            = var.admin_url
+    DOCS_URL             = var.docs_url
+    APPSYNC_REALTIME_URL = var.appsync_realtime_url
+    ECR_REPOSITORY_URL   = var.ecr_repository_url
+    AWS_ACCOUNT_ID       = var.account_id
+    NODE_OPTIONS         = "--enable-source-maps"
     # Per-user OAuth wiring (Google Workspace today; Microsoft 365 follow-up).
     # Secret ARNs are the indirection; the actual client_id/client_secret
     # values live in Secrets Manager and are fetched by
