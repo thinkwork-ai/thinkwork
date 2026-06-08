@@ -97,10 +97,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-001-feat-agent-profile-closed-loops-plan.md`.
 - Target branch: `main`.
-- Current unit: U3 - Add Specialist Loop Prompt And Handoff Contract.
-- Current branch: `codex/agent-profile-closed-loops-u3`.
+- Current unit: U4 - Replace Special-Case Profile Chains With Parent-Owned Orchestration.
+- Current branch: `codex/agent-profile-closed-loops-u4`.
 - Current worktree:
-  `.Codex/worktrees/agent-profile-closed-loops-u3`.
+  `.Codex/worktrees/agent-profile-closed-loops-u4`.
 - Status: in progress.
 - Notes:
   - U1 normalized Agent Profile loop policy through API/runtime config and was
@@ -148,6 +148,24 @@ status: in_progress
     - `pnpm --filter @thinkwork/pi-runtime-core typecheck` -> passed.
     - `pnpm --filter @thinkwork/pi-runtime-core exec vitest run test/agent-loop.test.ts`
       -> 38 tests passed.
+    - Direct Prettier check over changed files -> passed.
+    - `git diff --check` -> passed.
+  - U3 was squash merged in PR
+    [#2240](https://github.com/thinkwork-ai/thinkwork/pull/2240) as
+    `d3095eb9`.
+  - U3 worktree/branch were removed and the remote branch was deleted.
+  - Created isolated U4 worktree from `origin/main` at `d3095eb9`.
+  - Started U4 parent-owned orchestration work: explicit, automatic, and
+    multi-profile routing now share one parent-owned profile orchestration path;
+    single-profile `#Research` turns no longer return raw profile handoffs; and
+    explicit Research + Reviewer turns can retry the specialist once from
+    structured Reviewer feedback when loop policy allows it.
+  - U4 local verification passed so far:
+    - `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/server.test.ts`
+      -> 60 tests passed.
+    - `pnpm --filter @thinkwork/agentcore-pi typecheck` -> passed.
+    - `pnpm --filter @thinkwork/agentcore-pi test` -> 28 test files passed,
+      476 tests passed, 5 todo.
     - Direct Prettier check over changed files -> passed.
     - `git diff --check` -> passed.
 

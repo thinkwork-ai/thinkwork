@@ -74,6 +74,7 @@ import {
   BUILTIN_TOOL_NAMES,
   collectToolCosts,
   createActivityEmitter,
+  type ActivityEmitEvent,
   type DelegationProvider,
   isFinalizeCallbackConfigured,
   normalizeHistory,
@@ -102,6 +103,7 @@ import {
   snapshotSecrets,
   validateMcpUrl,
   type IdentitySnapshot,
+  type LogFields,
   type RuntimeEnvSnapshot,
   type SecretsSnapshot,
 } from "./handler-context.js";
@@ -211,14 +213,6 @@ function stripProfileMentions(
     }
   }
   return task || message.trim();
-}
-
-function profileMentionTask(
-  message: string,
-  profile: AgentProfileConfig | undefined,
-): string {
-  if (!profile) return message.trim();
-  return stripProfileMentions(message, [profile]);
 }
 
 function explicitAgentProfileSlugsFromMessage(
@@ -348,6 +342,44 @@ function parentProfileChainMessage(input: {
   ].join("\n\n");
 }
 
+function isReviewerProfile(profile: AgentProfileConfig | undefined): boolean {
+  if (!profile) return false;
+  const builtInKey = profile.builtInKey?.toLowerCase() ?? "";
+  const slug = profile.slug.toLowerCase();
+  const name = profile.name.toLowerCase();
+  return (
+    builtInKey === "reviewer" || slug === "reviewer" || name === "reviewer"
+  );
+}
+
+function maxReviewLoopsForProfile(
+  profile: AgentProfileConfig | undefined,
+): number {
+  const loopPolicy = profile?.executionControls?.loopPolicy;
+  const configured =
+    loopPolicy?.maxReviewLoops ??
+    profile?.executionControls?.maxReviewLoops ??
+    1;
+  return Math.max(0, Math.min(5, Math.trunc(configured)));
+}
+
+function retrySpecialistTask(input: {
+  baseTask: string;
+  specialist: AgentProfileConfig;
+  reviewerRun: AgentProfileRunRecord;
+}): string {
+  const feedback =
+    input.reviewerRun.handoff?.feedback?.trim() ||
+    input.reviewerRun.handoff?.summary?.trim() ||
+    input.reviewerRun.handoffSummary?.trim() ||
+    "Reviewer requested revision without structured feedback.";
+  return [
+    `Original user request:\n${input.baseTask}`,
+    `Reviewer feedback:\n${feedback}`,
+    `Your task as ${input.specialist.name}: revise only the delegated work that the Reviewer identified. Return a new concise handoff to the parent Agent. Do not answer the user directly.`,
+  ].join("\n\n");
+}
+
 function combineProfileChainRunResult(input: {
   parent: RunAgentLoopResult;
   profileRuns: readonly AgentProfileRunRecord[];
@@ -375,6 +407,109 @@ function combineProfileChainRunResult(input: {
   };
 }
 
+async function runParentOwnedProfileOrchestration(input: {
+  originalMessage: string;
+  baseTask: string;
+  requestedProfiles: readonly AgentProfileConfig[];
+  profileDelegationOptions: ProfileDelegationToolOptions;
+  parentRunInput: Parameters<typeof runAgentLoop>[0];
+  runLoop: typeof runAgentLoop;
+  log: (entry: LogFields) => void;
+  emitActivity: (event: ActivityEmitEvent) => void;
+}): Promise<RunAgentLoopResult> {
+  const profileRuns: AgentProfileRunRecord[] = [];
+  const profileToolInvocations: ToolInvocationRecord[] = [];
+
+  const executeProfile = async (
+    profile: AgentProfileConfig,
+    task: string,
+  ): Promise<AgentProfileRunRecord> => {
+    const evidence = await executeAgentProfileDelegation({
+      options: input.profileDelegationOptions,
+      profileSlug: profile.slug,
+      task,
+    });
+    profileRuns.push(evidence);
+    profileToolInvocations.push(
+      syntheticProfileToolInvocation({
+        evidence,
+        profileSlug: profile.slug,
+        task,
+      }),
+    );
+    return evidence;
+  };
+
+  for (const profile of input.requestedProfiles) {
+    const evidence = await executeProfile(
+      profile,
+      profileChainTask({
+        baseTask: input.baseTask,
+        profile,
+        previousRuns: profileRuns,
+      }),
+    );
+    if (!isReviewerProfile(profile) || evidence.handoff?.verdict !== "revise") {
+      continue;
+    }
+
+    const specialist = [...input.requestedProfiles]
+      .slice(0, input.requestedProfiles.indexOf(profile))
+      .reverse()
+      .find((candidate) => !isReviewerProfile(candidate));
+    if (!specialist) continue;
+
+    const maxReviewLoops = Math.min(
+      maxReviewLoopsForProfile(specialist),
+      maxReviewLoopsForProfile(profile),
+    );
+    let reviewLoops = 0;
+    let reviewerEvidence = evidence;
+    while (
+      reviewerEvidence.handoff?.verdict === "revise" &&
+      reviewLoops < maxReviewLoops
+    ) {
+      await executeProfile(
+        specialist,
+        retrySpecialistTask({
+          baseTask: input.baseTask,
+          specialist,
+          reviewerRun: reviewerEvidence,
+        }),
+      );
+      reviewLoops += 1;
+      reviewerEvidence = await executeProfile(
+        profile,
+        profileChainTask({
+          baseTask: input.baseTask,
+          profile,
+          previousRuns: profileRuns,
+        }),
+      );
+    }
+  }
+
+  const parentResult = await input.runLoop(
+    {
+      ...input.parentRunInput,
+      message: parentProfileChainMessage({
+        originalMessage: input.originalMessage,
+        baseTask: input.baseTask,
+        runs: profileRuns,
+      }),
+    },
+    {
+      log: input.log,
+      emitActivity: input.emitActivity,
+    },
+  );
+  return combineProfileChainRunResult({
+    parent: parentResult,
+    profileRuns,
+    profileToolInvocations,
+  });
+}
+
 function inferAutomaticAgentProfileSlug(
   message: string,
   profiles: AgentProfileConfig[],
@@ -390,7 +525,9 @@ function inferAutomaticAgentProfileSlug(
     const builtInKey = profile.builtInKey?.toLowerCase() ?? "";
     const slug = profile.slug.toLowerCase();
     const name = profile.name.toLowerCase();
-    return builtInKey === "research" || slug === "research" || name === "research";
+    return (
+      builtInKey === "research" || slug === "research" || name === "research"
+    );
   });
   return researchProfile?.slug ?? "";
 }
@@ -2085,47 +2222,32 @@ export async function handleInvocation(
       requestedProfileSlugs.length > 0
         ? ""
         : inferAutomaticAgentProfileSlug(userMessage, agentProfiles);
-    const selectedProfileSlug =
-      requestedProfileSlugs.length === 1
-        ? requestedProfileSlugs[0]
-        : automaticProfileSlug;
-    if (requestedProfileSlugs.length > 1) {
-      const requestedProfiles = requestedProfileSlugs
+    const orchestrationProfileSlugs =
+      requestedProfileSlugs.length > 0
+        ? requestedProfileSlugs
+        : automaticProfileSlug
+          ? [automaticProfileSlug]
+          : [];
+    if (orchestrationProfileSlugs.length > 0) {
+      const requestedProfiles = orchestrationProfileSlugs
         .map((slug) => agentProfiles.find((profile) => profile.slug === slug))
         .filter(
           (profile): profile is AgentProfileConfig => profile !== undefined,
         );
-      const baseTask = stripProfileMentions(userMessage, requestedProfiles);
-      const profileRuns: AgentProfileRunRecord[] = [];
-      const profileToolInvocations: ToolInvocationRecord[] = [];
-
-      for (const profile of requestedProfiles) {
-        const profileTask = profileChainTask({
-          baseTask,
-          profile,
-          previousRuns: profileRuns,
-        });
-        const evidence = await executeAgentProfileDelegation({
-          options: profileDelegationOptions(currentModelId),
-          profileSlug: profile.slug,
-          task: profileTask,
-        });
-        profileRuns.push(evidence);
-        profileToolInvocations.push(
-          syntheticProfileToolInvocation({
-            evidence,
-            profileSlug: profile.slug,
-            task: profileTask,
-          }),
-        );
-      }
-
-      const parentResult = await runLoop(
-        {
+      const baseTask =
+        requestedProfileSlugs.length > 0
+          ? stripProfileMentions(userMessage, requestedProfiles)
+          : userMessage.trim();
+      runResult = await runParentOwnedProfileOrchestration({
+        originalMessage: userMessage,
+        baseTask,
+        requestedProfiles,
+        profileDelegationOptions: profileDelegationOptions(currentModelId),
+        parentRunInput: {
           message: parentProfileChainMessage({
             originalMessage: userMessage,
             baseTask,
-            runs: profileRuns,
+            runs: [],
           }),
           history: parentHistory,
           tools: bundle.tools,
@@ -2140,52 +2262,10 @@ export async function handleInvocation(
           sessionStore,
           sessionDir: "/tmp/pi-sessions",
         },
-        {
-          log: (entry) => logStructured(entry),
-          emitActivity: activityEmitter.emit,
-        },
-      );
-      runResult = combineProfileChainRunResult({
-        parent: parentResult,
-        profileRuns,
-        profileToolInvocations,
+        runLoop,
+        log: (entry) => logStructured(entry),
+        emitActivity: activityEmitter.emit,
       });
-    } else if (selectedProfileSlug) {
-      const requestedProfile = agentProfiles.find(
-        (profile) => profile.slug === selectedProfileSlug,
-      );
-      const profileTask = profileMentionTask(userMessage, requestedProfile);
-      const evidence = await executeAgentProfileDelegation({
-        options: profileDelegationOptions(currentModelId),
-        profileSlug: selectedProfileSlug,
-        task: profileTask,
-      });
-      runResult = {
-        content: evidence.handoffSummary ?? "",
-        modelId: currentModelId,
-        toolsCalled: [AGENT_PROFILE_TOOL_NAME],
-        toolInvocations: [
-          {
-            id: evidence.profileRunId,
-            name: AGENT_PROFILE_TOOL_NAME,
-            tool_name: AGENT_PROFILE_TOOL_NAME,
-            args: { profileSlug: selectedProfileSlug, task: profileTask },
-            result: { agent_profile_run: evidence },
-            input_preview: JSON.stringify({
-              profileSlug: selectedProfileSlug,
-              task: profileTask,
-            }).slice(0, 600),
-            output_preview: (evidence.handoffSummary ?? "").slice(0, 600),
-            status: evidence.status,
-            agent_profile_run: evidence,
-            started_at: evidence.startedAt,
-            finished_at: evidence.finishedAt,
-            runtime: "pi",
-          },
-        ],
-        agentProfileRuns: [evidence],
-        toolCosts: [],
-      };
     } else {
       runResult = await runLoop(
         {
