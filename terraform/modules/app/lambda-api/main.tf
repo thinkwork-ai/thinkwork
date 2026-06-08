@@ -781,9 +781,9 @@ resource "aws_iam_role_policy" "lambda_routines_stepfunctions" {
   })
 }
 
-resource "aws_iam_role_policy" "lambda_deployment_stepfunctions" {
-  name = "deployment-step-functions"
-  role = aws_iam_role.lambda.id
+resource "aws_iam_policy" "lambda_deployment_stepfunctions" {
+  name        = "thinkwork-${var.stage}-deployment-step-functions"
+  description = "Allow API Lambdas to start and inspect the deployment orchestrator."
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -804,6 +804,11 @@ resource "aws_iam_role_policy" "lambda_deployment_stepfunctions" {
       },
     ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_deployment_stepfunctions" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.lambda_deployment_stepfunctions.arn
 }
 
 ################################################################################
