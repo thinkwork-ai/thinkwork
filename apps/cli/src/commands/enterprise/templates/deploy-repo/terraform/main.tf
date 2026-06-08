@@ -280,6 +280,90 @@ variable "twenty_certificate_arn" {
   default     = ""
 }
 
+variable "kestra_provisioned" {
+  description = "Provision the retained Kestra managed-app substrate. Runtime can be parked independently with kestra_runtime_enabled."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_runtime_enabled" {
+  description = "Run the Kestra service when the retained substrate is provisioned."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_image_uri" {
+  description = "Kestra container image URI pinned to an immutable sha256 digest. Required when kestra_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_db_username" {
+  description = "Dedicated PostgreSQL username for Kestra."
+  type        = string
+  default     = "thinkwork_kestra"
+}
+
+variable "kestra_db_name" {
+  description = "Dedicated PostgreSQL database name for Kestra."
+  type        = string
+  default     = "thinkwork_kestra"
+}
+
+variable "kestra_db_password_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON password field for the dedicated Kestra database user. Required when kestra_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_basic_auth_secret_arn" {
+  description = "Secrets Manager ARN containing JSON username/password fields for the Kestra UI/API service credential. Required when kestra_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_public_url" {
+  description = "Public HTTPS URL for Kestra. Leave empty to derive from the composite module's Kestra domain settings."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_certificate_arn" {
+  description = "ACM certificate ARN for the Kestra public ALB. Required unless the composite module receives a www certificate ARN."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_desired_count" {
+  description = "Desired Kestra standalone task count when kestra_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "kestra_storage_bucket_name" {
+  description = "Optional explicit S3 bucket name for Kestra internal storage."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_storage_force_destroy" {
+  description = "Whether Terraform may delete non-empty Kestra internal storage buckets during destroy. Enable only for explicitly approved destructive teardown."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_allowed_public_cidr_blocks" {
+  description = "CIDR blocks allowed to reach the public Kestra HTTPS ALB."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "kestra_kms_key_arns" {
+  description = "Optional KMS key ARNs needed to decrypt Kestra-injected secrets."
+  type        = list(string)
+  default     = []
+}
+
 variable "lambda_artifact_bucket" {
   description = "Customer-owned S3 bucket containing pinned ThinkWork Lambda release artifacts."
   type        = string
@@ -338,6 +422,20 @@ module "thinkwork" {
   twenty_email_from_name                     = var.twenty_email_from_name
   twenty_public_url                          = var.twenty_public_url
   twenty_certificate_arn                     = var.twenty_certificate_arn
+  kestra_provisioned                         = var.kestra_provisioned
+  kestra_runtime_enabled                     = var.kestra_runtime_enabled
+  kestra_image_uri                           = var.kestra_image_uri
+  kestra_db_username                         = var.kestra_db_username
+  kestra_db_name                             = var.kestra_db_name
+  kestra_db_password_secret_arn              = var.kestra_db_password_secret_arn
+  kestra_basic_auth_secret_arn               = var.kestra_basic_auth_secret_arn
+  kestra_public_url                          = var.kestra_public_url
+  kestra_certificate_arn                     = var.kestra_certificate_arn
+  kestra_desired_count                       = var.kestra_desired_count
+  kestra_storage_bucket_name                 = var.kestra_storage_bucket_name
+  kestra_storage_force_destroy               = var.kestra_storage_force_destroy
+  kestra_allowed_public_cidr_blocks          = var.kestra_allowed_public_cidr_blocks
+  kestra_kms_key_arns                        = var.kestra_kms_key_arns
 
   lambda_artifact_bucket   = var.lambda_artifact_bucket
   lambda_artifact_prefix   = var.lambda_artifact_prefix
@@ -370,4 +468,28 @@ output "twenty_runtime_enabled" {
 
 output "twenty_url" {
   value = module.thinkwork.twenty_url
+}
+
+output "kestra_provisioned" {
+  value = module.thinkwork.kestra_provisioned
+}
+
+output "kestra_runtime_enabled" {
+  value = module.thinkwork.kestra_runtime_enabled
+}
+
+output "kestra_url" {
+  value = module.thinkwork.kestra_url
+}
+
+output "kestra_service_name" {
+  value = module.thinkwork.kestra_service_name
+}
+
+output "kestra_log_group_name" {
+  value = module.thinkwork.kestra_log_group_name
+}
+
+output "kestra_storage_bucket_name" {
+  value = module.thinkwork.kestra_storage_bucket_name
 }

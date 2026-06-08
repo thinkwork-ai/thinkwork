@@ -96,6 +96,24 @@ variable "crm_alb_dns_name" {
   default     = ""
 }
 
+variable "include_kestra" {
+  description = "When true, create a Cloudflare CNAME for the Kestra public ALB. The Kestra ALB uses its own certificate."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_domain" {
+  description = "Public hostname for Kestra. Defaults to orchestrate.<domain> when empty."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_alb_dns_name" {
+  description = "Public ALB DNS name for the Kestra app. Used as the target for the Kestra Cloudflare CNAME when include_kestra is true."
+  type        = string
+  default     = ""
+}
+
 variable "api_gateway_id" {
   description = "aws_apigatewayv2_api.id of the HTTP API to expose at api.<domain>. Required when include_api is true."
   type        = string

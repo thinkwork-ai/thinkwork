@@ -601,6 +601,111 @@ variable "twenty_kms_key_arns" {
   default     = []
 }
 
+variable "kestra_provisioned" {
+  description = "Provision the retained Kestra managed-app substrate. Runtime can be parked independently with kestra_runtime_enabled."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_runtime_enabled" {
+  description = "Run the Kestra ECS task when the retained substrate is provisioned. Set false to park runtime while retaining data resources."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_image_uri" {
+  description = "Kestra container image URI pinned to an immutable sha256 digest. Required when kestra_provisioned = true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.kestra_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.kestra_image_uri))
+    error_message = "kestra_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "kestra_db_username" {
+  description = "Dedicated PostgreSQL username for Kestra. Do not use the shared Aurora admin/master user."
+  type        = string
+  default     = "thinkwork_kestra"
+
+  validation {
+    condition     = !contains(["postgres", "thinkwork_admin", "rdsadmin"], lower(var.kestra_db_username))
+    error_message = "kestra_db_username must be a dedicated least-privilege Kestra database user."
+  }
+}
+
+variable "kestra_db_name" {
+  description = "Dedicated PostgreSQL database name for Kestra. Do not use the shared Thinkwork application database."
+  type        = string
+  default     = "thinkwork_kestra"
+
+  validation {
+    condition     = var.kestra_db_name != var.database_name && can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.kestra_db_name))
+    error_message = "kestra_db_name must be a valid PostgreSQL identifier distinct from the shared Thinkwork database name."
+  }
+}
+
+variable "kestra_db_password_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON password field for the dedicated Kestra database user. Required when kestra_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_basic_auth_secret_arn" {
+  description = "Secrets Manager ARN containing JSON username/password fields for the Kestra UI/API service credential. Required when kestra_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_domain" {
+  description = "Public hostname for Kestra. Leave empty to derive orchestrate.<www_domain> when www_domain is set."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_public_url" {
+  description = "Public HTTPS URL for Kestra. Leave empty to derive https://<kestra_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_certificate_arn" {
+  description = "ACM certificate ARN for the Kestra public ALB. Leave empty to reuse www_certificate_arn."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_desired_count" {
+  description = "Desired Kestra standalone task count when kestra_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "kestra_storage_bucket_name" {
+  description = "Optional explicit S3 bucket name for Kestra internal storage. Leave empty to derive one from stage and AWS account."
+  type        = string
+  default     = ""
+}
+
+variable "kestra_storage_force_destroy" {
+  description = "Allow Terraform to delete a non-empty Kestra internal storage bucket during explicitly approved destroy."
+  type        = bool
+  default     = false
+}
+
+variable "kestra_allowed_public_cidr_blocks" {
+  description = "CIDR blocks allowed to reach the public Kestra HTTPS ALB."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "kestra_kms_key_arns" {
+  description = "Optional KMS key ARNs needed to decrypt Kestra-injected secrets."
+  type        = list(string)
+  default     = []
+}
+
 variable "agentcore_memory_id" {
   description = "Optional pre-existing AgentCore Memory resource ID. When set, the agentcore-memory module skips provisioning and reuses this ID. Leave empty to auto-provision."
   type        = string

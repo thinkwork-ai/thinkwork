@@ -74,7 +74,7 @@ locals {
       storage:
         type: s3
         s3:
-          region: ${data.aws_region.current.region}
+          region: ${data.aws_region.current.name}
           bucket: ${aws_s3_bucket.kestra.bucket}
       tasks:
         tmp-dir:
@@ -88,8 +88,8 @@ locals {
   container_environment = [
     { name = "KESTRA_CONFIGURATION", value = local.kestra_configuration },
     { name = "JAVA_OPTS", value = var.java_opts },
-    { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.region },
-    { name = "AWS_REGION", value = data.aws_region.current.region },
+    { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
+    { name = "AWS_REGION", value = data.aws_region.current.name },
   ]
 
   container_secrets = [
@@ -511,7 +511,7 @@ resource "aws_ecs_task_definition" "kestra" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.kestra.name
-          awslogs-region        = data.aws_region.current.region
+          awslogs-region        = data.aws_region.current.name
           awslogs-stream-prefix = "kestra"
         }
       }

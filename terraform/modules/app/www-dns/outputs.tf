@@ -27,3 +27,8 @@ output "crm_custom_domain_name" {
   description = "Custom domain name for Twenty CRM (e.g. crm.thinkwork.ai). Empty string when include_crm is false."
   value       = var.include_crm ? "crm.${var.domain}" : ""
 }
+
+output "kestra_custom_domain_name" {
+  description = "Custom domain name for Kestra (e.g. orchestrate.thinkwork.ai). Empty string when include_kestra is false."
+  value       = var.include_kestra ? (var.kestra_domain != "" ? var.kestra_domain : "orchestrate.${var.domain}") : ""
+}

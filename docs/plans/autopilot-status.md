@@ -1,7 +1,7 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-30
-status: complete
+status: in_progress
 ---
 
 # Autopilot Status Ledger
@@ -11,11 +11,11 @@ status: complete
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U2 - Terraform Kestra app module.
-- Current branch: `codex/kestra-managed-app-u2`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u2`.
-- Current PR: [#2241](https://github.com/thinkwork-ai/thinkwork/pull/2241).
-- Status: PR open; CI pending.
+- Current unit: U3 - Composite Terraform, deploy templates, DNS/status outputs.
+- Current branch: `codex/kestra-managed-app-u3`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u3`.
+- Current PR: [#2242](https://github.com/thinkwork-ai/thinkwork/pull/2242).
+- Status: PR open; required CI passed; merge pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
     Kestra requirements, and the managed-app/MCP lifecycle precedent.
@@ -57,6 +57,40 @@ status: complete
     - `pnpm dlx prettier --check docs/plans/autopilot-status.md terraform/modules/app/kestra/README.md`
       -> passed.
     - `git diff --check` -> passed.
+  - U2 PR [#2241](https://github.com/thinkwork-ai/thinkwork/pull/2241)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was
+    squash merged as `9f271275`.
+  - U2 remote branch was deleted and local worktree/branch were removed.
+  - Created isolated U3 worktree from `origin/main` at `9f271275`.
+  - Started U3 Terraform composition work:
+    - added Kestra composite-module inputs, guardrails, outputs, and Lambda
+      GraphQL status env plumbing;
+    - wired the greenfield root to derive `https://orchestrate.<www_domain>`,
+      create a dedicated Kestra ACM certificate, publish the Kestra CNAME, and
+      expose status outputs;
+    - added Kestra variables, module inputs, and outputs to `thinkwork init`
+      and the enterprise deploy-repo Terraform template.
+  - U3 validation found and fixed an app-module compatibility issue where the
+    Kestra module used the AWS provider v6 `data.aws_region.current.region`
+    attribute while the greenfield stack still validates under provider v5.
+  - U3 local verification passed:
+    - `terraform -chdir=terraform/modules/app/kestra validate` -> passed with
+      provider v6 deprecation warnings for `data.aws_region.current.name`.
+    - `terraform -chdir=terraform/modules/app/kestra test` -> 4 tests passed.
+    - `terraform -chdir=terraform/modules/thinkwork validate` -> passed with
+      existing provider deprecation warnings.
+    - `terraform -chdir=terraform/modules/app/lambda-api validate` -> passed.
+    - `terraform -chdir=terraform/modules/app/www-dns validate` -> passed.
+    - `terraform -chdir=terraform/examples/greenfield validate` -> passed.
+    - `terraform fmt -check -recursive terraform/modules/app/kestra terraform/modules/thinkwork terraform/modules/app/lambda-api terraform/modules/app/www-dns terraform/examples/greenfield apps/cli/src/commands/enterprise/templates/deploy-repo/terraform`
+      -> passed.
+    - `pnpm --filter thinkwork-cli typecheck` -> passed.
+    - `pnpm --filter thinkwork-cli test` -> 62 files passed, 407 tests passed.
+    - `pnpm dlx prettier --check --ignore-unknown` over U3-touched docs/CLI
+      files -> passed.
+    - `git diff --check` -> passed.
+  - U3 PR [#2242](https://github.com/thinkwork-ai/thinkwork/pull/2242)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`).
 
 ## Agent Profile Closed Loops - 2026-06-08
 
