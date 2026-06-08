@@ -227,23 +227,30 @@ export function AppletRouteContent({
         </div>
       ) : null}
       {mountedSnapshot ? (
-        <AppletMount
-          key={`${mountedSnapshot.appId}:${mountedSnapshot.version}:${reloadNonce}`}
-          appId={mountedSnapshot.appId}
-          instanceId={mountedSnapshot.instanceId}
-          source={mountedSnapshot.source}
-          version={mountedSnapshot.version}
-          onHeaderActionChange={handleHeaderActionChange}
-          themeCss={mountedSnapshot.themeCss}
-          // Size the iframe to its reported content height so the only
-          // scrollbar lives on the surrounding AppCanvasPanel (which has
-          // `overflow-y-auto`). With the default `fitContentHeight=false`
-          // the iframe sizes to 100% of its parent and renders its own
-          // inner scrollbar, stacking against the panel's scrollbar.
-          // DraftAppletPreview and InlineAppletEmbed already use this mode;
-          // saved-app side panels were missed before.
-          fitContentHeight={true}
-        />
+        // Rounded, bordered frame so the artifact's corners match the Source/
+        // Config tabs (which use `rounded-md border`). `overflow-hidden` clips
+        // the square iframe corners; it is scroll-safe because the iframe runs
+        // in `fitContentHeight` mode (content-sized), so the only scrollbar
+        // lives on the surrounding AppCanvasPanel rather than this frame.
+        <div className="self-start overflow-hidden rounded-md border border-border/60">
+          <AppletMount
+            key={`${mountedSnapshot.appId}:${mountedSnapshot.version}:${reloadNonce}`}
+            appId={mountedSnapshot.appId}
+            instanceId={mountedSnapshot.instanceId}
+            source={mountedSnapshot.source}
+            version={mountedSnapshot.version}
+            onHeaderActionChange={handleHeaderActionChange}
+            themeCss={mountedSnapshot.themeCss}
+            // Size the iframe to its reported content height so the only
+            // scrollbar lives on the surrounding AppCanvasPanel (which has
+            // `overflow-y-auto`). With the default `fitContentHeight=false`
+            // the iframe sizes to 100% of its parent and renders its own
+            // inner scrollbar, stacking against the panel's scrollbar.
+            // DraftAppletPreview and InlineAppletEmbed already use this mode;
+            // saved-app side panels were missed before.
+            fitContentHeight={true}
+          />
+        </div>
       ) : (
         <AppletLoading />
       )}
