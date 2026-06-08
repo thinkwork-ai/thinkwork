@@ -156,9 +156,30 @@ function mockActivityQueries(options?: {
   thread?: typeof thread;
   turn?: typeof turn;
   traces?: Array<Record<string, unknown>>;
+  models?: Array<Record<string, unknown>>;
 }) {
   const activeThread = options?.thread ?? thread;
   const activeTurn = options?.turn ?? turn;
+  const models = options?.models ?? [
+    {
+      id: "model-haiku",
+      modelId: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      displayName: "Claude Haiku 4.5",
+      provider: "Anthropic",
+    },
+    {
+      id: "model-sonnet",
+      modelId: "us.anthropic.claude-sonnet-4-6",
+      displayName: "Sonnet 4.6",
+      provider: "Anthropic",
+    },
+    {
+      id: "model-kimi",
+      modelId: "moonshotai.kimi-k2.5",
+      displayName: "Kimi K2.5",
+      provider: "Moonshot",
+    },
+  ];
   const traces = options?.traces ?? [
     {
       traceId: "trace-1",
@@ -236,6 +257,16 @@ function mockActivityQueries(options?: {
     ])
     .mockReturnValueOnce([
       {
+        data: { modelCatalog: models },
+        fetching: false,
+        error: undefined,
+        stale: false,
+        hasNext: false,
+      },
+      vi.fn(),
+    ])
+    .mockReturnValueOnce([
+      {
         data: { threadTurns: [activeTurn] },
         fetching: false,
         error: undefined,
@@ -272,14 +303,14 @@ describe("SettingsActivityThreadDetail", () => {
       screen.getByRole("heading", { name: "what is SpaceX" }),
     ).toBeTruthy();
     expect(screen.getByText("CHAT-1043")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Activity" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "CHAT-1043" })).toBeTruthy();
     expect(screen.queryByText("Properties")).toBeNull();
     expect(screen.getByText("Thinking")).toBeTruthy();
     expect(screen.getByText("Tool: web_search")).toBeTruthy();
-    expect(screen.getByText("claude-haiku-4-5-20251001")).toBeTruthy();
+    expect(screen.getByText("Claude Haiku 4.5")).toBeTruthy();
     expect(screen.getByText(/1\.2K->34/)).toBeTruthy();
     expect(screen.getByText("$0.0012")).toBeTruthy();
-    expect(screen.getByText("succeeded")).toBeTruthy();
+    expect(screen.queryByText("succeeded")).toBeNull();
     expect(screen.queryByText(/not routed/i)).toBeNull();
     expect(screen.queryByText(/tokens unavailable/i)).toBeNull();
     expect(screen.getByText("Eric Odom")).toBeTruthy();
@@ -333,11 +364,61 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.queryByText("#Research verify agent profile e2e")).toBeNull();
   });
 
+  it("uses the full first user message when the stored title is clipped", () => {
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({
+      thread: {
+        ...thread,
+        title: "#Research explicit profile e2e: find the current ceo...",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "USER",
+                content:
+                  "#Research explicit profile e2e: find the current ceo of stripe today, cite one source, one sentence.",
+                createdAt: "2026-06-04T16:55:00.000Z",
+                sender: { displayName: "Eric Odom" },
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    const fullDisplayTitle =
+      "Research explicit profile e2e: find the current ceo of stripe today, cite one source, one sentence.";
+    const headerArgs = usePageHeaderActionsMock.mock.calls.at(-1)?.[0];
+    expect(headerArgs.documentTitle).toBe(
+      `Activity Thread · ${fullDisplayTitle}`,
+    );
+    expect(headerArgs.breadcrumbs).toEqual([
+      { label: "Activity", href: "/settings/activity" },
+      { label: fullDisplayTitle },
+    ]);
+    expect(
+      screen.getByRole("heading", { name: fullDisplayTitle }).className,
+    ).toContain("[text-wrap:wrap]");
+    expect(
+      screen.queryByText(
+        "#Research explicit profile e2e: find the current ceo...",
+      ),
+    ).toBeNull();
+  });
+
   it("renders parent composer model evidence for non-overridden tool calls", () => {
     const fallbackTurn = {
       ...turn,
       usageJson: JSON.stringify({
-        model: "moonshotai.kimi-k2.5",
+        model: "us.anthropic.claude-sonnet-4-6",
         input_tokens: 12,
         output_tokens: 417,
         cached_read_tokens: 17500,
@@ -392,13 +473,11 @@ describe("SettingsActivityThreadDetail", () => {
 
     expect(screen.getByText("Tool: web_search")).toBeTruthy();
     expect(screen.getByText("Tool: web_extract")).toBeTruthy();
-    expect(screen.getAllByText("moonshotai.kimi-k2.5").length).toBeGreaterThan(
-      0,
-    );
+    expect(screen.getAllByText("Kimi K2.5").length).toBeGreaterThan(0);
     expect(screen.getByText("6->209 (8.8K cached)")).toBeTruthy();
     expect(screen.getByText("6->208 (8.8K cached)")).toBeTruthy();
     expect(screen.getAllByText("$0.0044")).toHaveLength(2);
-    expect(screen.getAllByText("parent model")).toHaveLength(2);
+    expect(screen.queryByText("parent model")).toBeNull();
     expect(screen.queryByText(/not routed/i)).toBeNull();
     expect(screen.queryByText(/tokens unavailable/i)).toBeNull();
   });
@@ -451,20 +530,21 @@ describe("SettingsActivityThreadDetail", () => {
     );
 
     expect(screen.getByText("Tool: mcp_twenty-crm_execute_tool")).toBeTruthy();
-    expect(screen.getByText("claude-haiku-4-5-20251001")).toBeTruthy();
+    expect(screen.getByText("Claude Haiku 4.5")).toBeTruthy();
     expect(screen.getByText("91->13 (7 cached)")).toBeTruthy();
     expect(screen.getByText("$0.0004")).toBeTruthy();
-    expect(screen.getByText("completed")).toBeTruthy();
+    expect(screen.queryByText("completed")).toBeNull();
   });
 
   it("renders Agent Profile runs as nested steps with child tools and trace lane metadata", () => {
     const profileTurn = {
       ...turn,
       usageJson: JSON.stringify({
-        model: "moonshotai.kimi-k2.5",
+        model: "us.anthropic.claude-sonnet-4-6",
         input_tokens: 12,
         output_tokens: 183,
         cached_read_tokens: 10000,
+        duration_ms: 23200,
         tool_invocations: [
           {
             id: "delegate-profile-1",
@@ -473,7 +553,7 @@ describe("SettingsActivityThreadDetail", () => {
             input_preview: '{"profile":"research"}',
             output_preview: "Delegated to Research",
             model_route: {
-              model: "moonshotai.kimi-k2.5",
+              model: "us.anthropic.claude-sonnet-4-6",
               input_tokens: 12,
               output_tokens: 0,
               cost_usd: 0.0014,
@@ -487,7 +567,7 @@ describe("SettingsActivityThreadDetail", () => {
             profileId: "profile-research",
             profileSlug: "research",
             profileName: "Research",
-            model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+            model: "moonshotai.kimi-k2.5",
             status: "completed",
             inputTokens: 88,
             outputTokens: 24,
@@ -525,7 +605,7 @@ describe("SettingsActivityThreadDetail", () => {
           profileStatus: "completed",
           agentName: "Pi",
           runtimeType: "pi",
-          model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+          model: "moonshotai.kimi-k2.5",
           inputTokens: 88,
           outputTokens: 24,
           durationMs: 1600,
@@ -549,11 +629,32 @@ describe("SettingsActivityThreadDetail", () => {
       delegateRow.compareDocumentPosition(researchRow) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.getByText("claude-haiku-4-5-20251001")).toBeTruthy();
+    expect(screen.getAllByText("Kimi K2.5").length).toBeGreaterThan(0);
+    expect(screen.getByTitle("Input / Output tokens").textContent).toContain(
+      "100 → 207",
+    );
+    expect(screen.getByTitle("Input / Output tokens").textContent).toContain(
+      "15.0K cached",
+    );
+    expect(
+      screen.getAllByText((_content, node) =>
+        Boolean(
+          node?.textContent
+            ?.replace(/\s+/g, " ")
+            .includes("100 in + 207 out"),
+        ),
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Mixed")).toBeTruthy();
+    expect(
+      screen.getAllByText((_content, node) =>
+        Boolean(node?.textContent?.replace(/\s+/g, "").includes("100→207")),
+      ).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText(/88.*24.*5\.0K cached/)).toBeTruthy();
     expect(screen.getByText("1.6s")).toBeTruthy();
     expect(screen.getByText("$0.0017")).toBeTruthy();
-    expect(screen.getByText("completed")).toBeTruthy();
+    expect(screen.queryByText("completed")).toBeNull();
     expect(screen.getByText("Tool: web_search")).toBeTruthy();
     expect(screen.queryByText(/not routed/i)).toBeNull();
 

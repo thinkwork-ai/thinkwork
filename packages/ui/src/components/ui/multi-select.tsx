@@ -47,30 +47,34 @@ export interface AnimationConfig {
  * Variants for the multi-select component to handle different styles.
  * Uses class-variance-authority (cva) to define different styles based on "variant" prop.
  */
-const multiSelectVariants = cva("m-1 transition-all duration-300 ease-in-out", {
-	variants: {
-		variant: {
-			default: "border-foreground/10 text-foreground bg-card hover:bg-card/80",
-			secondary:
-				"border-foreground/10 bg-secondary text-secondary-foreground hover:bg-secondary/80",
-			destructive:
-				"border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-			inverted: "inverted",
+const multiSelectVariants = cva(
+	"transition-all duration-300 ease-in-out",
+	{
+		variants: {
+			variant: {
+				default:
+					"border-foreground/10 text-foreground bg-secondary hover:bg-secondary/80",
+				secondary:
+					"border-foreground/10 bg-secondary text-secondary-foreground hover:bg-secondary/80",
+				destructive:
+					"border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
+				inverted: "inverted",
+			},
+			badgeAnimation: {
+				bounce: "hover:-translate-y-1 hover:scale-110",
+				pulse: "hover:animate-pulse",
+				wiggle: "hover:animate-wiggle",
+				fade: "hover:opacity-80",
+				slide: "hover:translate-x-1",
+				none: "",
+			},
 		},
-		badgeAnimation: {
-			bounce: "hover:-translate-y-1 hover:scale-110",
-			pulse: "hover:animate-pulse",
-			wiggle: "hover:animate-wiggle",
-			fade: "hover:opacity-80",
-			slide: "hover:translate-x-1",
-			none: "",
+		defaultVariants: {
+			variant: "default",
+			badgeAnimation: "none",
 		},
-	},
-	defaultVariants: {
-		variant: "default",
-		badgeAnimation: "bounce",
-	},
-});
+	}
+);
 
 /**
  * Option interface for MultiSelect component
@@ -806,7 +810,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 								getAllOptions().length
 							} options selected. ${placeholder}`}
 							className={cn(
-								"flex p-1 rounded-md border min-h-10 h-auto items-center justify-between bg-inherit hover:bg-inherit [&_svg]:pointer-events-auto",
+								"flex rounded-lg border min-h-10 h-auto items-center justify-between px-2.5 py-1.5 bg-inherit hover:bg-inherit [&_svg]:pointer-events-auto",
 								autoSize ? "w-auto" : "w-full",
 								responsiveSettings.compactMode && "min-h-8 text-sm",
 								screenSize === "mobile" && "min-h-12 text-base",
@@ -821,7 +825,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 								<div className="flex justify-between items-center w-full">
 									<div
 										className={cn(
-											"flex items-center gap-1",
+											"flex items-center gap-1.5",
 											singleLine
 												? "overflow-x-auto multiselect-singleline-scroll"
 												: "flex-wrap",
@@ -861,8 +865,9 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 															multiSelectVariants({ variant }),
 															customStyle?.gradient &&
 																"text-white border-transparent",
+															"h-6 px-2 py-0 text-sm",
 															responsiveSettings.compactMode &&
-																"text-xs px-1.5 py-0.5",
+																"h-5 text-xs px-1.5 py-0",
 															screenSize === "mobile" &&
 																"max-w-[120px] truncate",
 															singleLine && "flex-shrink-0 whitespace-nowrap",
@@ -912,7 +917,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 																}
 															}}
 															aria-label={`Remove ${option.label} from selection`}
-															className="ml-1 h-3 w-3 cursor-pointer hover:bg-white/20 rounded-sm flex items-center justify-center focus:outline-none focus:ring-1 focus:ring-white/50">
+															className="ml-1 flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/50">
 															<XCircle
 																className={cn(
 																	"h-3 w-3",

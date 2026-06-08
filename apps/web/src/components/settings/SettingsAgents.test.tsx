@@ -34,6 +34,8 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain("SettingsTenantAgentQuery");
     expect(agentsSource).toContain("SettingsUpdateTenantAgentMutation");
     expect(agentsSource).toContain('search={{ file: "Agent/AGENTS.md" }}');
+    expect(agentsSource).toContain('aria-label="Open AGENTS.md"');
+    expect(agentsSource).not.toContain("Edit AGENTS.md");
 
     expect(generalSource).not.toContain("AgentConfigSection");
     expect(generalSource).not.toContain("SettingsTenantAgentQuery");
@@ -54,14 +56,28 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain("maxTokens");
     expect(agentsSource).toContain("agentProfileWorkspacePath");
     expect(agentsSource).toContain("Agent/agents/${profile.slug}.md");
+    expect(agentsSource).toContain("Open Agent Profile markdown");
+    expect(agentsSource).not.toContain("Advanced editor");
+    expect(agentsSource).toContain("text-[#54a9ff]");
+    expect(agentsSource).toContain("{builtIns} Tools");
+    expect(agentsSource).toContain("{mcps} MCP");
+    expect(agentsSource).toContain("{skills} Skills");
+    expect(agentsSource).toContain("All Spaces");
+    expect(agentsSource).not.toContain("{builtIns} built-ins");
+    expect(agentsSource).not.toContain("all Spaces");
   });
 
   it("keeps Agent Profile multi-select chips bounded inside settings rows", () => {
+    expect(agentsSource).toContain('className="w-full max-w-[32rem] min-w-0"');
     expect(agentsSource).toContain(
-      'className="w-[min(42rem,60vw)] min-w-[20rem]"',
+      "const visibleCount = Math.max(options.length, values.length, 1);",
     );
-    expect(agentsSource).toContain("maxCount={3}");
-    expect(agentsSource).toContain('maxWidth="42rem"');
+    expect(agentsSource).toContain("maxCount={visibleCount}");
+    expect(agentsSource).toContain('maxWidth="32rem"');
+    expect(agentsSource).toContain("dark:bg-input/30");
+    expect(agentsSource).toContain(
+      'popoverClassName="w-[var(--radix-popover-trigger-width)] max-w-[32rem]"',
+    );
     expect(agentsSource).not.toContain("singleLine");
   });
 

@@ -489,7 +489,7 @@ export function SettingsTools() {
 
   return (
     <SettingsTablePane
-      title="Built-in Tools"
+      title="Tool Library"
       description="Configure platform built-ins, provider credentials, and tenant agent access for this Space."
       loading={!tools && !error}
       toolbar={

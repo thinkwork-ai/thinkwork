@@ -59,7 +59,7 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
-    label: "Built-in Tools",
+    label: "Tool Library",
     to: "/settings/tools",
     icon: Wrench,
     operatorOnly: true,

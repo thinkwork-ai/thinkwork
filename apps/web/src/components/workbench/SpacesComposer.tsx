@@ -375,32 +375,13 @@ export function SpacesComposer({
               catalog={skillCatalog}
               mentions={mentions}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type @ to mention people, # for agent profiles, or / to pin a skill"
+              placeholder="Type @ to mention people, # for agent profiles, or / to use a skill"
               disabled={isComposerDisabled}
               autoFocus
             />
           </PromptInputBody>
           <PromptInputFooter className="px-2 pb-2">
             <PromptInputTools>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!agentForcedOn) {
-                    agentOverriddenRef.current = true;
-                    setAgentEnabled((value) => !value);
-                  }
-                }}
-                aria-label="Send to agent"
-                aria-pressed={effectiveAgentEnabled}
-                title={agentToggleTitle}
-                disabled={isComposerDisabled || agentForcedOn}
-                className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
-                  effectiveAgentEnabled && "text-[#54a9ff]",
-                )}
-              >
-                <Bot className="size-5" />
-              </button>
               <PromptInputAttachButton />
               {spaces.length > 0 && selectedSpaceId && onSelectedSpaceChange ? (
                 <Select
@@ -455,18 +436,31 @@ export function SpacesComposer({
               className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1"
               data-testid="composer-action-controls"
             >
-              {/* The model selector only matters when the turn is routed to
-                  the Agent — a non-agent send has no model to choose. Hide it
-                  when the Agent toggle is off so the composer doesn't advertise
-                  a model that won't be used. */}
-              {effectiveAgentEnabled ? (
-                <ComposerModelPicker
-                  models={approvedModels}
-                  value={selectedModelId}
-                  onValueChange={onSelectedModelChange}
-                  disabled={disabled || isSubmitting}
-                />
-              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!agentForcedOn) {
+                    agentOverriddenRef.current = true;
+                    setAgentEnabled((value) => !value);
+                  }
+                }}
+                aria-label="Send to agent"
+                aria-pressed={effectiveAgentEnabled}
+                title={agentToggleTitle}
+                disabled={isComposerDisabled || agentForcedOn}
+                className={cn(
+                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
+                  effectiveAgentEnabled && "text-[#54a9ff]",
+                )}
+              >
+                <Bot className="size-5" />
+              </button>
+              <ComposerModelPicker
+                models={approvedModels}
+                value={selectedModelId}
+                onValueChange={onSelectedModelChange}
+                disabled={disabled || isSubmitting || !effectiveAgentEnabled}
+              />
               <PromptInputSpeechButton
                 textareaRef={
                   textareaRef as React.RefObject<HTMLTextAreaElement | null>

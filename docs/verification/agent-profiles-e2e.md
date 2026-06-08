@@ -45,8 +45,9 @@ manually deploy or mutate production outside approved demo-tenant setup.
    - tools: `web_search`, `web_extract`
    - skills/MCP servers: only those needed for the demo task
    - Space access: leave empty for all Spaces, or restrict to the demo Space
-3. Configure Analyst and Coding similarly if they are part of the demo. If
-   Coding is restricted to Engineering, verify that it is unavailable elsewhere.
+3. Configure Analyst, Coding, and Reviewer similarly if they are part of the
+   demo. If Coding is restricted to Engineering, verify that it is unavailable
+   elsewhere.
 4. Confirm the demo user has approval for both the parent model and every
    profile model used in the run.
 
@@ -97,6 +98,21 @@ Expected in a Space where Coding is unavailable:
 - no Coding profile cost row is recorded;
 - Activity does not fabricate a Coding lane.
 
+Reviewer available:
+
+```text
+#Reviewer review the previous answer against the user's request and say whether it should pass or be revised.
+```
+
+Expected:
+
+- Reviewer profile runs on its configured model.
+- Activity shows nested Reviewer cost evidence.
+- Traces show `profile:reviewer`.
+- Reviewer execution controls include `reviewGate: true` and
+  `maxReviewLoops: 2`; the parent retry gate should consume those controls when
+  review-loop enforcement is enabled.
+
 ## Evidence Checklist For PRs
 
 When a PR ships profile model-stacking behavior or UI, include:
@@ -111,5 +127,6 @@ When a PR ships profile model-stacking behavior or UI, include:
 ## Cleanup
 
 After a demo, remove only temporary demo data through normal tenant data
-management paths. Keep built-in Research, Analyst, and Coding profiles available
-unless the customer-specific setup intentionally restricts them by Space.
+management paths. Keep built-in Research, Analyst, Coding, and Reviewer
+profiles available unless the customer-specific setup intentionally restricts
+them by Space.

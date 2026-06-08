@@ -12,83 +12,11 @@ import {
   spaces,
   snakeToCamel,
 } from "../../utils.js";
-
-export const BUILT_IN_AGENT_PROFILE_KEYS = [
-  "research",
-  "coding",
-  "analyst",
-] as const;
-
-const DEFAULT_PROFILE_MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
-
-type BuiltInProfileKey = (typeof BUILT_IN_AGENT_PROFILE_KEYS)[number];
-
-interface BuiltInProfileSeed {
-  built_in_key: BuiltInProfileKey;
-  slug: string;
-  name: string;
-  description: string;
-  routing_guidance: string;
-  instructions: string;
-  tool_policy: Record<string, unknown>;
-  skill_policy: Record<string, unknown>;
-  execution_controls: Record<string, unknown>;
-}
-
-const BUILT_IN_PROFILE_SEEDS: BuiltInProfileSeed[] = [
-  {
-    built_in_key: "research",
-    slug: "research",
-    name: "Research",
-    description: "Delegates focused research, source finding, and synthesis.",
-    routing_guidance:
-      "Use for web, document, and knowledge-gathering subtasks that need citations or source comparison.",
-    instructions:
-      "Research the assigned question, cite the sources you used, and return a concise answer with relevant evidence.",
-    tool_policy: { builtInTools: ["web-search", "web-extract"] },
-    skill_policy: { skillSlugs: [] },
-    execution_controls: {
-      foreground: true,
-      clarify: false,
-      maxSubagentDepth: 0,
-    },
-  },
-  {
-    built_in_key: "coding",
-    slug: "coding",
-    name: "Coding",
-    description: "Delegates code inspection, implementation, and test tasks.",
-    routing_guidance:
-      "Use for software engineering subtasks in Spaces where coding work is allowed.",
-    instructions:
-      "Inspect the relevant files, make scoped code recommendations or changes, and report verification clearly.",
-    tool_policy: { builtInTools: ["execute_code", "bash"] },
-    skill_policy: { skillSlugs: [] },
-    execution_controls: {
-      foreground: true,
-      clarify: false,
-      maxSubagentDepth: 0,
-    },
-  },
-  {
-    built_in_key: "analyst",
-    slug: "analyst",
-    name: "Analyst",
-    description:
-      "Delegates data analysis, metric review, and structured reporting.",
-    routing_guidance:
-      "Use for data, spreadsheet, CRM, and quantitative analysis subtasks.",
-    instructions:
-      "Analyze the assigned data or tool results, state assumptions, and return decision-ready findings.",
-    tool_policy: { builtInTools: [], mcpServers: [] },
-    skill_policy: { skillSlugs: [] },
-    execution_controls: {
-      foreground: true,
-      clarify: false,
-      maxSubagentDepth: 0,
-    },
-  },
-];
+import {
+  BUILT_IN_AGENT_PROFILE_KEYS,
+  BUILT_IN_PROFILE_SEEDS,
+  DEFAULT_PROFILE_MODEL_ID,
+} from "./built-in-agent-profiles.js";
 
 export function badInput(message: string): GraphQLError {
   return new GraphQLError(message, { extensions: { code: "BAD_USER_INPUT" } });

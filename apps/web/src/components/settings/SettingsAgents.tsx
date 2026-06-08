@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, FileCode, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, FileCode, Plus, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
@@ -176,10 +176,21 @@ export function SettingsAgents() {
         title="Agents"
         description="Configure the default Agent and reusable task profiles delegated through Pi subagents."
         actions={
-          <Button asChild type="button" variant="ghost" size="sm">
-            <Link to="/settings/local-workspace">
-              <FolderOpen className="mr-2 h-4 w-4" />
-              Workspace
+          <Button
+            asChild
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Open AGENTS.md"
+            title="Open AGENTS.md"
+          >
+            <Link
+              to="/settings/local-workspace"
+              search={{ file: "Agent/AGENTS.md" }}
+            >
+              <FileCode className="h-4 w-4" />
+              <span className="sr-only">Open AGENTS.md</span>
             </Link>
           </Button>
         }
@@ -261,6 +272,26 @@ export function SettingsAgentProfileDetail() {
       { label: "Agents", href: "/settings/agents" },
       { label: profile?.name ?? "Agent Profile" },
     ],
+    action: profile ? (
+      <Button
+        asChild
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="text-muted-foreground hover:text-foreground"
+        aria-label="Open Agent Profile markdown"
+        title="Open Agent Profile markdown"
+      >
+        <Link
+          to="/settings/local-workspace"
+          search={{ file: agentProfileWorkspacePath(profile) }}
+        >
+          <FileCode className="h-4 w-4" />
+          <span className="sr-only">Open Agent Profile markdown</span>
+        </Link>
+      </Button>
+    ) : undefined,
+    actionKey: profile ? `agent-profile-editor:${profile.id}` : undefined,
   });
 
   async function onDeleteProfile(profile: AgentProfileRow) {
@@ -332,17 +363,6 @@ export function SettingsAgentProfileDetail() {
             <Badge variant="outline">custom</Badge>
           )
         }
-        actions={
-          <Button asChild type="button" variant="outline" size="sm">
-            <Link
-              to="/settings/local-workspace"
-              search={{ file: agentProfileWorkspacePath(profile) }}
-            >
-              <FileCode className="mr-2 h-4 w-4" />
-              Advanced editor
-            </Link>
-          </Button>
-        }
       />
       <AgentProfileEditor
         key={profile.id}
@@ -404,17 +424,7 @@ function AgentConfigSection() {
           <span className="text-sm text-muted-foreground">Saving…</span>
         ) : errorMsg ? (
           <span className="text-sm text-destructive">{errorMsg}</span>
-        ) : (
-          <Button asChild type="button" variant="ghost" size="sm">
-            <Link
-              to="/settings/local-workspace"
-              search={{ file: "Agent/AGENTS.md" }}
-            >
-              <FileCode className="mr-2 h-4 w-4" />
-              Edit AGENTS.md
-            </Link>
-          </Button>
-        )
+        ) : null
       }
     >
       <SettingsRow
@@ -506,32 +516,24 @@ function ProfileListItem({
     >
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="truncate text-sm font-medium text-foreground">
+          <span className="truncate text-sm font-medium text-[#54a9ff]">
             {profile.name}
           </span>
-          <Badge variant={profile.enabled ? "outline" : "secondary"}>
-            {profile.enabled ? "enabled" : "disabled"}
+          <Badge variant="outline">
+            {profile.model?.displayName ?? profile.modelId}
           </Badge>
-          {profile.builtInKey ? (
-            <Badge variant="secondary">{profile.builtInKey}</Badge>
-          ) : null}
+          <Badge variant="outline">{builtIns} Tools</Badge>
+          <Badge variant="outline">{mcps} MCP</Badge>
+          <Badge variant="outline">{skills} Skills</Badge>
+          <Badge variant="outline">
+            {profile.spaces.length === 0
+              ? "All Spaces"
+              : `${profile.spaces.length} Spaces`}
+          </Badge>
         </div>
         <p className="mt-1 truncate text-sm text-muted-foreground">
           {profile.description ?? profile.routingGuidance ?? "Custom profile"}
         </p>
-        <div className="mt-2 flex flex-wrap gap-1">
-          <Badge variant="outline">
-            {profile.model?.displayName ?? profile.modelId}
-          </Badge>
-          <Badge variant="outline">{builtIns} built-ins</Badge>
-          <Badge variant="outline">{mcps} MCP</Badge>
-          <Badge variant="outline">{skills} skills</Badge>
-          <Badge variant="outline">
-            {profile.spaces.length === 0
-              ? "all Spaces"
-              : `${profile.spaces.length} Spaces`}
-          </Badge>
-        </div>
       </div>
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
     </button>
@@ -590,7 +592,7 @@ function AgentProfileEditor({
           description="Display name shown to the parent Agent."
         >
           <Input
-            className="w-80"
+            className="w-full max-w-80"
             value={draft.name}
             onChange={(e) => setDraftField(setDraft, "name", e.target.value)}
           />
@@ -603,7 +605,7 @@ function AgentProfileEditor({
             value={draft.modelId}
             onValueChange={(value) => setDraftField(setDraft, "modelId", value)}
           >
-            <SelectTrigger className="w-80">
+            <SelectTrigger className="w-full max-w-80">
               <SelectValue placeholder="Select model" />
             </SelectTrigger>
             <SelectContent>
@@ -645,7 +647,7 @@ function AgentProfileEditor({
           description="Short summary shown in profile lists."
         >
           <Textarea
-            className="w-[32rem] max-w-full"
+            className="w-full max-w-[32rem]"
             value={draft.description}
             onChange={(e) =>
               setDraftField(setDraft, "description", e.target.value)
@@ -658,7 +660,7 @@ function AgentProfileEditor({
           description="When the parent Agent should choose this profile."
         >
           <Textarea
-            className="w-[32rem] max-w-full"
+            className="w-full max-w-[32rem]"
             value={draft.routingGuidance}
             onChange={(e) =>
               setDraftField(setDraft, "routingGuidance", e.target.value)
@@ -671,7 +673,7 @@ function AgentProfileEditor({
           description="Prompt instructions for delegated profile runs."
         >
           <Textarea
-            className="w-[32rem] max-w-full"
+            className="w-full max-w-[32rem]"
             value={draft.instructions}
             onChange={(e) =>
               setDraftField(setDraft, "instructions", e.target.value)
@@ -681,68 +683,10 @@ function AgentProfileEditor({
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection label="Execution">
-        <SettingsRow
-          label="Max runtime"
-          description="Optional foreground runtime limit in milliseconds."
-        >
-          <Input
-            className="w-80"
-            type="number"
-            min={0}
-            placeholder="No limit"
-            value={draft.maxRuntimeMs}
-            onChange={(e) =>
-              setDraftField(setDraft, "maxRuntimeMs", e.target.value)
-            }
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Max tokens"
-          description="Optional token budget for delegated profile work."
-        >
-          <Input
-            className="w-80"
-            type="number"
-            min={0}
-            placeholder="No limit"
-            value={draft.maxTokens}
-            onChange={(e) =>
-              setDraftField(setDraft, "maxTokens", e.target.value)
-            }
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Thinking"
-          description="Reasoning budget preference for this profile."
-        >
-          <Select
-            value={draft.thinking || "default"}
-            onValueChange={(value) =>
-              setDraftField(
-                setDraft,
-                "thinking",
-                value === "default" ? "" : value,
-              )
-            }
-          >
-            <SelectTrigger className="w-80">
-              <SelectValue placeholder="Thinking" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="default">Default thinking</SelectItem>
-              <SelectItem value="minimal">Minimal</SelectItem>
-              <SelectItem value="standard">Standard</SelectItem>
-              <SelectItem value="extended">Extended</SelectItem>
-            </SelectContent>
-          </Select>
-        </SettingsRow>
-      </SettingsSection>
-
       <SettingsSection label="Capabilities">
         <SettingsRow
           label="Spaces"
-          description="Spaces where this Agent Profile is available. Empty means all Spaces."
+          description="Spaces where this Agent Profile is available. Empty means every Space."
         >
           <ChipMultiSelect
             options={spaces.map((space) => ({
@@ -797,6 +741,64 @@ function AgentProfileEditor({
         </SettingsRow>
       </SettingsSection>
 
+      <SettingsSection label="Execution">
+        <SettingsRow
+          label="Max runtime"
+          description="Optional foreground runtime limit in milliseconds."
+        >
+          <Input
+            className="w-full max-w-80"
+            type="number"
+            min={0}
+            placeholder="No limit"
+            value={draft.maxRuntimeMs}
+            onChange={(e) =>
+              setDraftField(setDraft, "maxRuntimeMs", e.target.value)
+            }
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Max tokens"
+          description="Optional token budget for delegated profile work."
+        >
+          <Input
+            className="w-full max-w-80"
+            type="number"
+            min={0}
+            placeholder="No limit"
+            value={draft.maxTokens}
+            onChange={(e) =>
+              setDraftField(setDraft, "maxTokens", e.target.value)
+            }
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Thinking"
+          description="Reasoning budget preference for this profile."
+        >
+          <Select
+            value={draft.thinking || "default"}
+            onValueChange={(value) =>
+              setDraftField(
+                setDraft,
+                "thinking",
+                value === "default" ? "" : value,
+              )
+            }
+          >
+            <SelectTrigger className="w-full max-w-80">
+              <SelectValue placeholder="Thinking" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">Default thinking</SelectItem>
+              <SelectItem value="minimal">Minimal</SelectItem>
+              <SelectItem value="standard">Standard</SelectItem>
+              <SelectItem value="extended">Extended</SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+      </SettingsSection>
+
       <div className="mb-8 flex justify-end">
         <div className="flex items-center gap-2">
           {custom ? (
@@ -841,21 +843,22 @@ function ChipMultiSelect({
   onChange: (values: string[]) => void;
   placeholder: string;
 }) {
+  const visibleCount = Math.max(options.length, values.length, 1);
   return (
-    <div className="w-[min(42rem,60vw)] min-w-[20rem]">
+    <div className="w-full max-w-[32rem] min-w-0">
       <MultiSelect
         options={options}
         defaultValue={values}
         onValueChange={onChange}
         placeholder={placeholder}
-        maxCount={3}
+        maxCount={visibleCount}
         minWidth="0px"
-        maxWidth="42rem"
+        maxWidth="32rem"
         searchable
         hideSelectAll
         deduplicateOptions
-        className="w-full justify-between bg-background"
-        popoverClassName="w-[min(42rem,85vw)]"
+        className="w-full justify-between border-input bg-transparent shadow-none hover:bg-transparent dark:bg-input/30 dark:hover:bg-input/50"
+        popoverClassName="w-[var(--radix-popover-trigger-width)] max-w-[32rem]"
       />
     </div>
   );

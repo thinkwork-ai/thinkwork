@@ -30,6 +30,8 @@ export interface AgentProfileExecutionControls {
   maxExecutionTimeMs?: number;
   maxTokens?: number;
   costBudgetUsd?: number;
+  reviewGate?: boolean;
+  maxReviewLoops?: number;
 }
 
 export interface AgentProfileContextPolicy {
@@ -100,6 +102,8 @@ export interface CompiledAgentProfileRunRequest {
     maxExecutionTimeMs?: number;
     maxTokens?: number;
     costBudgetUsd?: number;
+    reviewGate?: boolean;
+    maxReviewLoops?: number;
   };
   telemetry: {
     source: "pi_agent_profile";
@@ -450,6 +454,10 @@ export function compileAgentProfileRunRequest(
         : {}),
       ...(execution.costBudgetUsd !== undefined
         ? { costBudgetUsd: execution.costBudgetUsd }
+        : {}),
+      ...(execution.reviewGate === true ? { reviewGate: true } : {}),
+      ...(execution.maxReviewLoops !== undefined
+        ? { maxReviewLoops: execution.maxReviewLoops }
         : {}),
     },
     telemetry: {

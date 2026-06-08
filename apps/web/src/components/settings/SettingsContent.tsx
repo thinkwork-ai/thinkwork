@@ -191,15 +191,15 @@ export function SettingsRow({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3.5 last:border-b-0">
-      <div className="min-w-0">
+    <div className="flex flex-col gap-3 border-b border-border px-4 py-3.5 last:border-b-0 md:flex-row md:items-start md:justify-between md:gap-4">
+      <div className="min-w-0 md:w-56 md:min-w-56 md:shrink-0">
         <p className="text-sm font-medium text-foreground">{label}</p>
         {description ? (
           <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
         ) : null}
       </div>
       {children ? (
-        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground md:flex-1 md:justify-end">
           {children}
         </div>
       ) : null}

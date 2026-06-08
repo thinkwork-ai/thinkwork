@@ -99,6 +99,8 @@ export function serializeAgentProfileFile(
     maxRuntimeMs: executionControls.maxRuntimeMs ?? null,
     maxTokens: executionControls.maxTokens ?? null,
     thinking: executionControls.thinking ?? null,
+    reviewGate: executionControls.reviewGate ?? null,
+    maxReviewLoops: executionControls.maxReviewLoops ?? null,
   });
 
   const yaml = stringifyYaml(frontmatter, { collectionStyle: "block" }).trim();
@@ -159,6 +161,8 @@ export function parseAgentProfileFile(input: {
       maxRuntimeMs: execution.maxRuntimeMs ?? execution.maxRunTimeMs ?? null,
       maxTokens: execution.maxTokens ?? null,
       thinking: execution.thinking ?? null,
+      reviewGate: execution.reviewGate ?? null,
+      maxReviewLoops: execution.maxReviewLoops ?? null,
     }),
     spaceRefs: stringArray(frontmatter.spaces ?? frontmatter.spaceIds),
   };
