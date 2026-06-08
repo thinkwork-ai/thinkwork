@@ -426,6 +426,73 @@ function profileRunTools(
   return arrayOfRecords(profileRunField(run, "toolInvocations"));
 }
 
+function profileRunId(run: Record<string, unknown>): string | undefined {
+  return stringValue(profileRunField(run, "profileRunId"));
+}
+
+function nestedAgentProfileRunRecord(
+  value: unknown,
+): Record<string, unknown> | null {
+  const record = modelRoutingRecord(value);
+  const nested =
+    record.agent_profile_run ??
+    record.agentProfileRun ??
+    modelRoutingRecord(record.result).agent_profile_run ??
+    modelRoutingRecord(record.result).agentProfileRun;
+  const nestedRecord = modelRoutingRecord(nested);
+  return Object.keys(nestedRecord).length > 0 ? nestedRecord : null;
+}
+
+function profileRunIdFromToolInvocation(value: unknown): string | undefined {
+  const record = modelRoutingRecord(value);
+  const nested = nestedAgentProfileRunRecord(record);
+  return (
+    stringValue(profileRunField(nested ?? {}, "profileRunId")) ??
+    stringValue(record.profileRunId) ??
+    stringValue(record.profile_run_id) ??
+    (stringValue(record.tool_name) === "delegate_to_agent_profile" ||
+    stringValue(record.name) === "delegate_to_agent_profile"
+      ? stringValue(record.id)
+      : undefined)
+  );
+}
+
+function profileSlugFromToolInvocation(value: unknown): string | undefined {
+  const record = modelRoutingRecord(value);
+  const nested = nestedAgentProfileRunRecord(record);
+  const args = modelRoutingRecord(record.args);
+  return (
+    stringValue(profileRunField(nested ?? {}, "profileSlug")) ??
+    stringValue(record.profileSlug) ??
+    stringValue(record.profile_slug) ??
+    stringValue(args.profileSlug) ??
+    stringValue(args.profile_slug) ??
+    stringValue(args.profile)
+  );
+}
+
+function timelineToolEvent(ti: Record<string, unknown>): TimelineEvent {
+  const toolName =
+    stringValue(ti.tool_name) ?? stringValue(ti.toolName) ?? "unknown";
+  const record = modelRoutingRecord(ti);
+  return {
+    type: "tool_call",
+    timestamp: "",
+    branch:
+      ti.type === "sub_agent"
+        ? `sub-agent:${(toolName || "").toLowerCase()}`
+        : "parent",
+    toolName,
+    toolCallId: stringValue(ti.id) ?? stringValue(ti.toolCallId),
+    toolType: stringValue(ti.type) ?? "tool",
+    toolInput:
+      stringValue(ti.input_preview) ?? stringValue(ti.inputPreview) ?? "",
+    toolOutput:
+      stringValue(ti.output_preview) ?? stringValue(ti.outputPreview) ?? "",
+    ...extractToolModelEvidence(record),
+  };
+}
+
 function aggregateProfileRunTokens(
   agentProfileRuns: Record<string, unknown>[],
 ): TokenTotals {
@@ -838,6 +905,7 @@ type BranchSpan = {
   name: string;
   laneIndex: number;
   color: string;
+  departIdx: number;
   forkIdx: number;
   mergeIdx: number;
   eventIndices: number[];
@@ -877,28 +945,36 @@ function buildTimelineFromUsage(
     });
   }
 
-  // Add parent tool call events from usage data before profile lanes. The
-  // delegate_to_agent_profile tool is the parent action that causes the child
-  // profile run, so it should appear before the Agent Profile lane it starts.
-  for (const ti of toolInvocations) {
-    const record = modelRoutingRecord(ti);
-    events.push({
-      type: "tool_call",
-      timestamp: "",
-      branch:
-        ti.type === "sub_agent"
-          ? `sub-agent:${(ti.tool_name || "").toLowerCase()}`
-          : "parent",
-      toolName: ti.tool_name || "unknown",
-      toolCallId: ti.id,
-      toolType: ti.type || "tool",
-      toolInput: ti.input_preview || "",
-      toolOutput: ti.output_preview || "",
-      ...extractToolModelEvidence(record),
-    });
+  const renderedProfileRunKeys = new Set<string>();
+  const profileRunEntries = agentProfileRuns.map((run, index) => ({
+    run,
+    key: profileRunId(run) ?? `${profileRunSlug(run)}:${index}`,
+  }));
+
+  function matchingProfileRunForToolInvocation(ti: unknown) {
+    const toolProfileRunId = profileRunIdFromToolInvocation(ti);
+    if (toolProfileRunId) {
+      const match = profileRunEntries.find(
+        (entry) =>
+          !renderedProfileRunKeys.has(entry.key) &&
+          profileRunId(entry.run) === toolProfileRunId,
+      );
+      if (match) return match;
+    }
+
+    const toolProfileSlug = profileSlugFromToolInvocation(ti);
+    if (!toolProfileSlug) return null;
+    return (
+      profileRunEntries.find(
+        (entry) =>
+          !renderedProfileRunKeys.has(entry.key) &&
+          profileRunSlug(entry.run).toLowerCase() ===
+            toolProfileSlug.toLowerCase(),
+      ) ?? null
+    );
   }
 
-  for (const run of agentProfileRuns) {
+  function appendProfileRun(run: Record<string, unknown>) {
     const profileName = profileRunName(run);
     const profileSlug = profileRunSlug(run);
     const branch = `profile:${profileSlug}`;
@@ -916,7 +992,7 @@ function buildTimelineFromUsage(
         stringValue(profileRunField(run, "finishedAt")) ??
         "",
       branch,
-      profileRunId: stringValue(profileRunField(run, "profileRunId")),
+      profileRunId: profileRunId(run),
       profileId: stringValue(profileRunField(run, "profileId")),
       profileSlug,
       profileName,
@@ -958,6 +1034,24 @@ function buildTimelineFromUsage(
         ...extractToolModelEvidence(modelRoutingRecord(childTool)),
       });
     }
+  }
+
+  // Walk parent tool invocations in their recorded order. When a delegate tool
+  // points at a profile run, render that child lane immediately after the
+  // delegate so multi-profile turns read as delegate -> profile -> delegate.
+  for (const ti of toolInvocations) {
+    const matchingProfileRun = matchingProfileRunForToolInvocation(ti);
+    events.push(timelineToolEvent(modelRoutingRecord(ti)));
+    if (matchingProfileRun) {
+      renderedProfileRunKeys.add(matchingProfileRun.key);
+      appendProfileRun(matchingProfileRun.run);
+    }
+  }
+
+  for (const entry of profileRunEntries) {
+    if (renderedProfileRunKeys.has(entry.key)) continue;
+    renderedProfileRunKeys.add(entry.key);
+    appendProfileRun(entry.run);
   }
 
   if (responseText) {
@@ -1131,7 +1225,7 @@ function laneX(laneIndex: number): number {
 
 function buildBranches(events: TimelineEvent[]): BranchSpan[] {
   const branches: BranchSpan[] = [];
-  const activeLanes = new Set<number>();
+  const activeLanes = new Map<number, number>();
 
   for (let i = 0; i < events.length; i++) {
     const ev = events[i];
@@ -1166,14 +1260,23 @@ function buildBranches(events: TimelineEvent[]): BranchSpan[] {
       }
     }
 
+    let departIdx = i;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!isBranchLane(events[j].branch)) {
+        departIdx = j;
+        break;
+      }
+    }
+
     let lane = 0;
-    while (activeLanes.has(lane)) lane++;
-    activeLanes.add(lane);
+    while ((activeLanes.get(lane) ?? -1) > departIdx) lane++;
+    activeLanes.set(lane, mergeIdx);
 
     branches.push({
       name,
       laneIndex: lane,
       color: BRANCH_COLORS[branches.length % BRANCH_COLORS.length],
+      departIdx,
       forkIdx: i,
       mergeIdx,
       eventIndices,
@@ -1316,21 +1419,11 @@ function ExecutionTimeline({
   const contentPadding = hasBranches ? laneX(maxLane) + 14 : 34;
 
   const firstFork = hasBranches
-    ? Math.min(...branches.map((b) => b.forkIdx))
+    ? Math.min(...branches.map((b) => b.departIdx))
     : -1;
   const lastMerge = hasBranches
     ? Math.max(...branches.map((b) => b.mergeIdx))
     : -1;
-
-  let lastParentBeforeFork = 0;
-  if (hasBranches) {
-    for (let i = firstFork - 1; i >= 0; i--) {
-      if (!isBranchLane(events[i].branch)) {
-        lastParentBeforeFork = i;
-        break;
-      }
-    }
-  }
 
   return (
     <div className="px-3 space-y-2">
@@ -1388,7 +1481,7 @@ function ExecutionTimeline({
 
               {branches.map((branch) => {
                 const bx = laneX(branch.laneIndex);
-                const departY = lastParentBeforeFork * ROW_H + ROW_H / 2;
+                const departY = branch.departIdx * ROW_H + ROW_H / 2;
                 const mergeY = branch.mergeIdx * ROW_H + ROW_H / 2;
                 const forkEndY = departY + ROW_H;
                 const mergeStartY = mergeY - ROW_H;
