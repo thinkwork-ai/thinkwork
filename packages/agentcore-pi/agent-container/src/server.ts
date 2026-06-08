@@ -82,6 +82,7 @@ import {
   postFinalizeCallback,
   readActivityCallbackConfig,
   runAgentLoop,
+  type AgentProfileRunRecord,
   type ChildModelCaller,
   type InvocationResponse,
   type PiRetainStatus,
@@ -191,21 +192,187 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function profileAliases(profile: AgentProfileConfig): string[] {
+  return [profile.name, profile.slug].filter(Boolean);
+}
+
+function stripProfileMentions(
+  message: string,
+  profiles: readonly AgentProfileConfig[],
+): string {
+  let task = message.trim();
+  for (const profile of profiles) {
+    for (const alias of profileAliases(profile)) {
+      const pattern = new RegExp(
+        `(^|\\s)[#@]${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
+        "giu",
+      );
+      task = task.replace(pattern, "$1").trim();
+    }
+  }
+  return task || message.trim();
+}
+
 function profileMentionTask(
   message: string,
   profile: AgentProfileConfig | undefined,
 ): string {
   if (!profile) return message.trim();
-  const aliases = [profile.name, profile.slug].filter(Boolean);
-  let task = message.trim();
-  for (const alias of aliases) {
-    const pattern = new RegExp(
-      `(^|\\s)[#@]${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
-      "iu",
-    );
-    task = task.replace(pattern, "$1").trim();
+  return stripProfileMentions(message, [profile]);
+}
+
+function explicitAgentProfileSlugsFromMessage(
+  message: string,
+  profiles: readonly AgentProfileConfig[],
+): string[] {
+  const matches: Array<{ index: number; slug: string }> = [];
+  for (const profile of profiles) {
+    for (const alias of profileAliases(profile)) {
+      const pattern = new RegExp(
+        `(^|\\s)[#@]${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
+        "giu",
+      );
+      for (const match of message.matchAll(pattern)) {
+        matches.push({
+          index: match.index + (match[1]?.length ?? 0),
+          slug: profile.slug,
+        });
+      }
+    }
   }
-  return task || message.trim();
+  const seen = new Set<string>();
+  return matches
+    .sort((a, b) => a.index - b.index)
+    .flatMap((match) => {
+      if (seen.has(match.slug)) return [];
+      seen.add(match.slug);
+      return [match.slug];
+    });
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+        const text = asString(item);
+        return text ? [text] : [];
+      })
+    : [];
+}
+
+function requestedAgentProfileSlugs(input: {
+  payload: Record<string, unknown>;
+  message: string;
+  profiles: readonly AgentProfileConfig[];
+}): string[] {
+  const explicit = explicitAgentProfileSlugsFromMessage(
+    input.message,
+    input.profiles,
+  );
+  if (explicit.length > 0) return explicit;
+
+  const requested = [
+    ...stringArray(input.payload.requested_agent_profile_slugs),
+    asString(input.payload.requested_agent_profile_slug),
+  ].flatMap((slug) => {
+    const normalized = slug.toLowerCase();
+    return normalized ? [normalized] : [];
+  });
+  const seen = new Set<string>();
+  return requested.flatMap((slug) => {
+    if (seen.has(slug)) return [];
+    seen.add(slug);
+    return [slug];
+  });
+}
+
+function syntheticProfileToolInvocation(input: {
+  evidence: AgentProfileRunRecord;
+  profileSlug: string;
+  task: string;
+}): ToolInvocationRecord {
+  return {
+    id: input.evidence.profileRunId,
+    name: AGENT_PROFILE_TOOL_NAME,
+    tool_name: AGENT_PROFILE_TOOL_NAME,
+    args: { profileSlug: input.profileSlug, task: input.task },
+    result: { agent_profile_run: input.evidence },
+    input_preview: JSON.stringify({
+      profileSlug: input.profileSlug,
+      task: input.task,
+    }).slice(0, 600),
+    output_preview: (input.evidence.handoffSummary ?? "").slice(0, 600),
+    status: input.evidence.status,
+    agent_profile_run: input.evidence,
+    started_at: input.evidence.startedAt,
+    finished_at: input.evidence.finishedAt,
+    runtime: "pi",
+  };
+}
+
+function profileChainTask(input: {
+  baseTask: string;
+  profile: AgentProfileConfig | undefined;
+  previousRuns: readonly AgentProfileRunRecord[];
+}): string {
+  if (input.previousRuns.length === 0) return input.baseTask;
+  const priorHandoffs = input.previousRuns
+    .map((run, index) => {
+      const handoff = run.handoffSummary?.trim() || "(no handoff summary)";
+      return `${index + 1}. ${run.profileName}: ${handoff}`;
+    })
+    .join("\n\n");
+  const profileName = input.profile?.name ?? "Agent Profile";
+  return [
+    `Original user request:\n${input.baseTask}`,
+    `Prior agent profile handoffs:\n${priorHandoffs}`,
+    `Your task as ${profileName}: complete only your assigned review or specialty step using the prior handoffs. Return a concise handoff summary to the parent Agent. Do not answer the user directly.`,
+  ].join("\n\n");
+}
+
+function parentProfileChainMessage(input: {
+  originalMessage: string;
+  baseTask: string;
+  runs: readonly AgentProfileRunRecord[];
+}): string {
+  const handoffs = input.runs
+    .map((run, index) => {
+      const handoff = run.handoffSummary?.trim() || "(no handoff summary)";
+      return `${index + 1}. ${run.profileName} (${run.status}): ${handoff}`;
+    })
+    .join("\n\n");
+  return [
+    `Original user request:\n${input.baseTask}`,
+    `The user explicitly requested these Agent Profile handoffs in this turn:\n${handoffs}`,
+    "You are the parent Agent. Decide the next step from these handoffs and produce the final user-facing response. If a Reviewer handoff says the work passes, answer the user concisely using the verified result. If a Reviewer handoff identifies a blocking issue, do not present the unverified answer; either call the appropriate Agent Profile again with the feedback or explain the issue and next step.",
+    `Raw user message for reference:\n${input.originalMessage}`,
+  ].join("\n\n");
+}
+
+function combineProfileChainRunResult(input: {
+  parent: RunAgentLoopResult;
+  profileRuns: readonly AgentProfileRunRecord[];
+  profileToolInvocations: readonly ToolInvocationRecord[];
+}): RunAgentLoopResult {
+  return {
+    ...input.parent,
+    toolsCalled: [
+      ...new Set([
+        ...input.profileToolInvocations.map(
+          (invocation) => invocation.tool_name,
+        ),
+        ...input.parent.toolsCalled,
+      ]),
+    ],
+    toolInvocations: [
+      ...input.profileToolInvocations,
+      ...input.parent.toolInvocations,
+    ],
+    agentProfileRuns: [
+      ...input.profileRuns,
+      ...(input.parent.agentProfileRuns ?? []),
+    ],
+    toolCosts: input.parent.toolCosts,
+  };
 }
 
 function inferAutomaticAgentProfileSlug(
@@ -1909,14 +2076,81 @@ export async function handleInvocation(
       count: bundle.tools.length,
     });
     runLoopStart = Date.now();
-    const requestedProfileSlug = asString(
-      args.payload.requested_agent_profile_slug,
-    ).toLowerCase();
-    const automaticProfileSlug = requestedProfileSlug
-      ? ""
-      : inferAutomaticAgentProfileSlug(userMessage, agentProfiles);
-    const selectedProfileSlug = requestedProfileSlug || automaticProfileSlug;
-    if (selectedProfileSlug) {
+    const requestedProfileSlugs = requestedAgentProfileSlugs({
+      payload: args.payload,
+      message: userMessage,
+      profiles: agentProfiles,
+    });
+    const automaticProfileSlug =
+      requestedProfileSlugs.length > 0
+        ? ""
+        : inferAutomaticAgentProfileSlug(userMessage, agentProfiles);
+    const selectedProfileSlug =
+      requestedProfileSlugs.length === 1
+        ? requestedProfileSlugs[0]
+        : automaticProfileSlug;
+    if (requestedProfileSlugs.length > 1) {
+      const requestedProfiles = requestedProfileSlugs
+        .map((slug) => agentProfiles.find((profile) => profile.slug === slug))
+        .filter(
+          (profile): profile is AgentProfileConfig => profile !== undefined,
+        );
+      const baseTask = stripProfileMentions(userMessage, requestedProfiles);
+      const profileRuns: AgentProfileRunRecord[] = [];
+      const profileToolInvocations: ToolInvocationRecord[] = [];
+
+      for (const profile of requestedProfiles) {
+        const profileTask = profileChainTask({
+          baseTask,
+          profile,
+          previousRuns: profileRuns,
+        });
+        const evidence = await executeAgentProfileDelegation({
+          options: profileDelegationOptions(currentModelId),
+          profileSlug: profile.slug,
+          task: profileTask,
+        });
+        profileRuns.push(evidence);
+        profileToolInvocations.push(
+          syntheticProfileToolInvocation({
+            evidence,
+            profileSlug: profile.slug,
+            task: profileTask,
+          }),
+        );
+      }
+
+      const parentResult = await runLoop(
+        {
+          message: parentProfileChainMessage({
+            originalMessage: userMessage,
+            baseTask,
+            runs: profileRuns,
+          }),
+          history: parentHistory,
+          tools: bundle.tools,
+          extensionFactories: bundle.extensionFactories,
+          extensionToolNames: bundle.extensionToolNames,
+          modelId: args.payload.model,
+          threadId: identity.threadId,
+          gitSha: env.gitSha,
+          identity,
+          cwd: env.workspaceDir,
+          agentDir: env.piAgentDir,
+          sessionStore,
+          sessionDir: "/tmp/pi-sessions",
+        },
+        {
+          log: (entry) => logStructured(entry),
+          emitActivity: activityEmitter.emit,
+        },
+      );
+      runResult = combineProfileChainRunResult({
+        parent: parentResult,
+        profileRuns,
+        profileToolInvocations,
+      });
+    } else if (selectedProfileSlug) {
       const requestedProfile = agentProfiles.find(
         (profile) => profile.slug === selectedProfileSlug,
       );
