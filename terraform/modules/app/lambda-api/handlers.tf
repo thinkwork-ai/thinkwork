@@ -27,6 +27,12 @@ locals {
     KESTRA = "${var.kestra_provisioned ? "1" : "0"}|${var.kestra_runtime_enabled ? "1" : "0"}|${var.kestra_url}|${var.kestra_cluster_arn}|${var.kestra_service_name}|${var.kestra_log_group_name}|${var.kestra_storage_bucket_name}|${var.kestra_database_name}|${var.kestra_basic_auth_secret_arn}"
   } : {}
   optional_integration_handler_names = concat(
+    trimspace(var.deployment_state_machine_arn) == "" ? [
+      # Host-only onboarding/deployment API. Customer foundations disable the
+      # deployment control plane, so release-based customer installs must not
+      # require this Lambda artifact or expose these routes.
+      "deployment-sessions",
+    ] : [],
     var.enable_stripe_billing ? [] : [
       "stripe-checkout",
       "stripe-webhook",
