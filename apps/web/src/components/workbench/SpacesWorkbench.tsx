@@ -33,7 +33,6 @@ import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-select
 import { setPendingThreadStart } from "@/lib/pending-thread-starts";
 import {
   chooseApprovedModelId,
-  readStoredModelId,
   writeStoredModelId,
   type ApprovedModelOption,
 } from "@/lib/approved-model-selection";
@@ -104,9 +103,13 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(
     spaceId ?? null,
   );
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
-    readStoredModelId(),
-  );
+  // A NEW thread always starts at the tenant Agent's configured default model
+  // (resolved below), NOT a previously remembered pick. Seeding from
+  // localStorage here let a stale stored model (e.g. GPT OSS 120B chosen once)
+  // permanently shadow the Agent default in chooseApprovedModelId. Start null
+  // so the auto-pick effect resolves to the Agent default; an explicit change
+  // in this composer still applies for the rest of the session.
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const {
     computers,
     fetching: computersFetching,

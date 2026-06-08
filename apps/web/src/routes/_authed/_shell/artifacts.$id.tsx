@@ -197,7 +197,7 @@ export function AppletRouteContent({
     latestVersion > mountedSnapshot.version;
 
   const appPanel = (
-    <div className="grid h-full min-h-0 min-w-0 p-4">
+    <div className="grid h-full min-h-0 min-w-0">
       {hasNewerVersion ? (
         <div className="m-4 flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="text-primary">
