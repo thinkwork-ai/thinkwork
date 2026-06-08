@@ -310,6 +310,158 @@ describe("handleInvocation — happy path", () => {
     });
   });
 
+  it("chains multiple explicit profile mentions and returns the parent Agent response", async () => {
+    const calls: Array<{
+      modelId: unknown;
+      message: unknown;
+      systemPrompt: unknown;
+    }> = [];
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        message:
+          "#Research Find the current CEO of Stripe today and cite one source. Keep it concise. Please use #Reviewer to verify.",
+        model: "anthropic/claude-sonnet-4-5",
+        approved_model_ids: [
+          "anthropic/claude-sonnet-4-5",
+          "anthropic/claude-haiku-4-5",
+          "moonshotai/kimi-k2.5",
+        ],
+        web_search_config: { provider: "exa", apiKey: "exa-key" },
+        agent_profiles: [
+          {
+            id: "profile-research",
+            slug: "research",
+            name: "Research",
+            modelId: "anthropic/claude-haiku-4-5",
+            builtInKey: "research",
+            instructions: "Research with sources.",
+            builtInTools: ["web-search"],
+          },
+          {
+            id: "profile-reviewer",
+            slug: "reviewer",
+            name: "Reviewer",
+            modelId: "moonshotai/kimi-k2.5",
+            builtInKey: "reviewer",
+            instructions: "Review the handoff for accuracy.",
+            builtInTools: [],
+          },
+        ],
+      }),
+      deps: makeDeps({
+        runAgentLoop: async ({ modelId, message, systemPrompt }) => {
+          calls.push({ modelId, message, systemPrompt });
+          if (modelId === "anthropic/claude-haiku-4-5") {
+            expect(String(message)).not.toContain("#Reviewer");
+            return {
+              content:
+                "Research handoff: Patrick Collison is CEO. Source: Stripe newsroom.",
+              modelId: String(modelId),
+              toolsCalled: ["web_search"],
+              toolInvocations: [],
+              usage: {
+                input: 10,
+                output: 5,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 15,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 0,
+                },
+              },
+            };
+          }
+          if (modelId === "moonshotai/kimi-k2.5") {
+            expect(String(message)).toContain("Research handoff");
+            return {
+              content:
+                "Reviewer handoff: PASS. The answer is supported by the cited source.",
+              modelId: String(modelId),
+              toolsCalled: [],
+              toolInvocations: [],
+              usage: {
+                input: 6,
+                output: 4,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 10,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 0,
+                },
+              },
+            };
+          }
+          expect(String(message)).toContain("Research handoff");
+          expect(String(message)).toContain("Reviewer handoff");
+          return {
+            content:
+              "Final answer: Patrick Collison is the current CEO of Stripe, verified by the reviewer.",
+            modelId: String(modelId),
+            toolsCalled: [],
+            toolInvocations: [],
+            usage: {
+              input: 3,
+              output: 2,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 5,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+    expect(calls.map((call) => call.modelId)).toEqual([
+      "anthropic/claude-haiku-4-5",
+      "moonshotai/kimi-k2.5",
+      "anthropic/claude-sonnet-4-5",
+    ]);
+    const body = result.body as Record<string, unknown>;
+    expect(body.agent_profile_runs).toEqual([
+      expect.objectContaining({
+        profileSlug: "research",
+        handoffSummary: expect.stringContaining("Patrick Collison"),
+      }),
+      expect.objectContaining({
+        profileSlug: "reviewer",
+        handoffSummary: expect.stringContaining("PASS"),
+      }),
+    ]);
+    expect(body.response).toMatchObject({
+      content: expect.stringContaining("Final answer"),
+      agent_profile_runs: [
+        expect.objectContaining({ profileSlug: "research" }),
+        expect.objectContaining({ profileSlug: "reviewer" }),
+      ],
+    });
+    expect(body.tool_invocations).toEqual([
+      expect.objectContaining({
+        tool_name: "delegate_to_agent_profile",
+        agent_profile_run: expect.objectContaining({ profileSlug: "research" }),
+      }),
+      expect.objectContaining({
+        tool_name: "delegate_to_agent_profile",
+        agent_profile_run: expect.objectContaining({ profileSlug: "reviewer" }),
+      }),
+    ]);
+  });
+
   it("automatically delegates source-backed research prompts to the Research profile", async () => {
     let childModel: unknown;
     let childMessage: unknown;
