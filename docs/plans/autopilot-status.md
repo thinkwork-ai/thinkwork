@@ -15,7 +15,7 @@ status: in_progress
 - Current branch: `codex/kestra-managed-app-u3`.
 - Current worktree: `.Codex/worktrees/kestra-managed-app-u3`.
 - Current PR: [#2242](https://github.com/thinkwork-ai/thinkwork/pull/2242).
-- Status: PR open; CI pending.
+- Status: PR open; required CI passed; merge pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
     Kestra requirements, and the managed-app/MCP lifecycle precedent.
@@ -89,6 +89,8 @@ status: in_progress
     - `pnpm dlx prettier --check --ignore-unknown` over U3-touched docs/CLI
       files -> passed.
     - `git diff --check` -> passed.
+  - U3 PR [#2242](https://github.com/thinkwork-ai/thinkwork/pull/2242)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`).
 
 ## Agent Profile Closed Loops - 2026-06-08
 
