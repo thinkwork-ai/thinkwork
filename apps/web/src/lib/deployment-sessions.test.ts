@@ -3,6 +3,7 @@ import {
   createDeploymentSession,
   readDeploymentSession,
   requestDeploymentSessionTeardown,
+  startDeploymentSession,
 } from "./deployment-sessions";
 
 const fetchMock = vi.fn();
@@ -48,9 +49,14 @@ describe("deployment session client", () => {
     );
   });
 
-  it("uses the resume token for reads and teardown", async () => {
+  it("uses the resume token for reads, start, and teardown", async () => {
     fetchMock
       .mockResolvedValueOnce(response({ session: { id: "session-1" } }))
+      .mockResolvedValueOnce(
+        response({
+          session: { id: "session-1", status: "deploying" },
+        }),
+      )
       .mockResolvedValueOnce(
         response({
           session: { id: "session-1", status: "teardown_requested" },
@@ -58,6 +64,10 @@ describe("deployment session client", () => {
       );
 
     await readDeploymentSession({
+      sessionId: "session-1",
+      clientToken: "token-1",
+    });
+    await startDeploymentSession({
       sessionId: "session-1",
       clientToken: "token-1",
     });
@@ -77,6 +87,16 @@ describe("deployment session client", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      "https://api.example.com/api/deployment-sessions/session-1/start",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "x-thinkwork-deployment-token": "token-1",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       "https://api.example.com/api/deployment-sessions/session-1/teardown",
       expect.objectContaining({
         method: "POST",

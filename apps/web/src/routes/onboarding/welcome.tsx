@@ -31,6 +31,7 @@ import {
   createDeploymentSession,
   readDeploymentSession,
   requestDeploymentSessionTeardown,
+  startDeploymentSession,
   type DeploymentSession,
   type DeploymentSessionResume,
 } from "@/lib/deployment-sessions";
@@ -317,6 +318,24 @@ function NewEnvironmentInstaller() {
     }
   }
 
+  async function startDeployment() {
+    if (!resume) return;
+    setError(null);
+    setLoadingLabel("Starting deployment...");
+    try {
+      const nextSession = await startDeploymentSession(resume);
+      setSession(nextSession);
+    } catch (startError) {
+      setError(
+        startError instanceof Error
+          ? startError.message
+          : "Deployment could not be started.",
+      );
+    } finally {
+      setLoadingLabel(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-10">
@@ -364,6 +383,7 @@ function NewEnvironmentInstaller() {
                 session={session}
                 loadingLabel={loadingLabel}
                 error={error}
+                onStart={() => void startDeployment()}
               />
             ) : (
               <form
@@ -483,11 +503,19 @@ function SessionStatus({
   session,
   loadingLabel,
   error,
+  onStart,
 }: {
   session: DeploymentSession;
   loadingLabel: string | null;
   error: string | null;
+  onStart: () => void;
 }) {
+  const canStart = [
+    "ready_for_credentials",
+    "runner_not_configured",
+    "failed",
+  ].includes(session.status);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -502,6 +530,21 @@ function SessionStatus({
           {session.status.replace(/_/g, " ")}
         </span>
       </div>
+
+      {canStart ? (
+        <div className="flex items-center justify-end border-y border-border py-4">
+          <Button
+            type="button"
+            onClick={onStart}
+            disabled={Boolean(loadingLabel)}
+          >
+            {loadingLabel === "Starting deployment..." ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+            ) : null}
+            Start deployment
+          </Button>
+        </div>
+      ) : null}
 
       <dl className="grid gap-4 sm:grid-cols-2">
         <Fact

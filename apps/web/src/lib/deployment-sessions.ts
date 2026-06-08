@@ -76,6 +76,19 @@ export async function readDeploymentSession(
   return result.session;
 }
 
+export async function startDeploymentSession(
+  resume: DeploymentSessionResume,
+): Promise<DeploymentSession> {
+  const result = await requestJson<{ session: DeploymentSession }>(
+    `/api/deployment-sessions/${encodeURIComponent(resume.sessionId)}/start`,
+    {
+      method: "POST",
+      headers: deploymentSessionHeaders(resume.clientToken),
+    },
+  );
+  return result.session;
+}
+
 export async function requestDeploymentSessionTeardown(
   resume: DeploymentSessionResume,
 ): Promise<DeploymentSession> {

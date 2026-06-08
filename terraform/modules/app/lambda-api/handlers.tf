@@ -123,6 +123,10 @@ locals {
       JOB_TRIGGER_ARN      = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger"
       JOB_TRIGGER_ROLE_ARN = var.job_scheduler_role_arn
     }
+    "deployment-sessions" = {
+      THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
+      THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
+    }
     # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
     # model works; the planner + section-writer cap themselves at ~500
     # records / 25 new pages per invocation so a 480 s timeout covers
@@ -944,6 +948,8 @@ locals {
     "OPTIONS /api/deployment-sessions"                      = "deployment-sessions"
     "GET /api/deployment-sessions/{sessionId}"              = "deployment-sessions"
     "OPTIONS /api/deployment-sessions/{sessionId}"          = "deployment-sessions"
+    "POST /api/deployment-sessions/{sessionId}/start"       = "deployment-sessions"
+    "OPTIONS /api/deployment-sessions/{sessionId}/start"    = "deployment-sessions"
     "POST /api/deployment-sessions/{sessionId}/teardown"    = "deployment-sessions"
     "OPTIONS /api/deployment-sessions/{sessionId}/teardown" = "deployment-sessions"
     "GET /api/auth/me"                                      = "auth-me"

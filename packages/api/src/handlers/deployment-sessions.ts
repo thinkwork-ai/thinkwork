@@ -11,6 +11,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
+import { StartExecutionCommand, SFNClient } from "@aws-sdk/client-sfn";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import {
@@ -28,6 +29,7 @@ import {
 
 const SESSION_TOKEN_BYTES = 32;
 const SESSION_TTL_DAYS = 14;
+const sfn = new SFNClient({});
 
 type CreateSessionBody = {
   customerName?: unknown;
@@ -63,6 +65,13 @@ export async function handler(
     );
     if (sessionMatch && method === "GET") {
       return readSession(sessionMatch[1]!, event);
+    }
+
+    const startMatch = path.match(
+      /^\/api\/deployment-sessions\/([0-9a-fA-F-]+)\/start$/,
+    );
+    if (startMatch && method === "POST") {
+      return startDeployment(startMatch[1]!, event);
     }
 
     const teardownMatch = path.match(
@@ -155,6 +164,178 @@ async function readSession(
   return json({ session: toSessionPayload(session, events) });
 }
 
+async function startDeployment(
+  sessionId: string,
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const session = await loadSession(sessionId);
+  if (!session) return notFound("Deployment session not found");
+  if (!isAuthorizedSessionRequest(session, event)) {
+    return forbidden("Deployment session token is invalid");
+  }
+
+  if (
+    session.status === "teardown_requested" ||
+    session.status === "destroyed"
+  ) {
+    return error("Deployment cannot start after teardown is requested", 409);
+  }
+
+  const priorRun = deploymentRunConfig(session.session_config);
+  if (priorRun.executionArn) {
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "deployment_start_reused",
+      stepKey: "foundation",
+      message: "Deployment execution is already running for this session.",
+      payload: {
+        executionArn: priorRun.executionArn,
+        stateMachineArn: priorRun.stateMachineArn,
+      },
+      idempotencyKey: "deployment_start_reused",
+    });
+    const events = await loadSessionEvents(session.id);
+    return json({ session: toSessionPayload(session, events) });
+  }
+
+  const stateMachineArn = deploymentStateMachineArn();
+  const evidenceBucket = deploymentEvidenceBucket();
+  if (!stateMachineArn) {
+    const [updated] = await db
+      .update(customerDeploymentSessions)
+      .set({
+        status: "runner_not_configured",
+        current_step_key: "foundation",
+        runner_mode: "step_functions",
+        error_message: "Deployment state machine ARN is not configured.",
+        session_config: {
+          ...objectConfig(session.session_config),
+          stateAuthority: "thinkwork-control-plane",
+          runnerConfigured: false,
+        },
+        updated_at: new Date(),
+      })
+      .where(eq(customerDeploymentSessions.id, session.id))
+      .returning();
+
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "runner_not_configured",
+      stepKey: "foundation",
+      message:
+        "Deployment runner is not configured yet. The session is saved and can be resumed after the platform release is updated.",
+      payload: { requiredEnv: "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN" },
+      idempotencyKey: "runner_not_configured",
+    });
+    const events = await loadSessionEvents(session.id);
+    return json({ session: toSessionPayload(updated ?? session, events) });
+  }
+
+  await db
+    .update(customerDeploymentSessions)
+    .set({
+      status: "starting",
+      current_step_key: "foundation",
+      runner_mode: "step_functions",
+      terraform_backend: {
+        stateMachineArn,
+        evidenceBucket,
+      },
+      error_message: null,
+      updated_at: new Date(),
+    })
+    .where(eq(customerDeploymentSessions.id, session.id));
+
+  await appendSessionEvent({
+    sessionId: session.id,
+    eventType: "deployment_start_requested",
+    stepKey: "foundation",
+    message: "Standard deployment runbook requested.",
+    payload: {
+      stateMachineArn,
+      evidenceBucket,
+    },
+    idempotencyKey: "deployment_start_requested",
+  });
+
+  try {
+    const response = await sfn.send(
+      new StartExecutionCommand({
+        stateMachineArn,
+        name: deploymentExecutionName(session.id),
+        input: JSON.stringify({
+          phase: "deploy",
+          action: "deploy",
+          sessionId: session.id,
+          customerName: session.customer_name,
+          environmentName: session.environment_name,
+          awsAccountId: session.aws_account_id,
+          awsRegion: session.aws_region,
+          availabilityZones: session.availability_zones,
+          firstAdmin: {
+            name: session.admin_name,
+            email: session.admin_email,
+          },
+          source: session.source,
+          evidenceBucket,
+        }),
+      }),
+    );
+    const executionArn = response.executionArn ?? null;
+    const [updated] = await db
+      .update(customerDeploymentSessions)
+      .set({
+        status: "deploying",
+        current_step_key: "foundation",
+        session_config: {
+          ...objectConfig(session.session_config),
+          stateAuthority: "thinkwork-control-plane",
+          runnerConfigured: true,
+          deploymentRun: {
+            executionArn,
+            stateMachineArn,
+            evidenceBucket,
+            startedAt: new Date().toISOString(),
+          },
+        },
+        updated_at: new Date(),
+      })
+      .where(eq(customerDeploymentSessions.id, session.id))
+      .returning();
+
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "deployment_execution_started",
+      stepKey: "foundation",
+      message: "Deployment execution started.",
+      payload: { executionArn, stateMachineArn },
+      idempotencyKey: "deployment_execution_started",
+    });
+    const events = await loadSessionEvents(session.id);
+    return json({ session: toSessionPayload(updated ?? session, events) });
+  } catch (err) {
+    const [failed] = await db
+      .update(customerDeploymentSessions)
+      .set({
+        status: "failed",
+        error_message: (err as Error).message,
+        updated_at: new Date(),
+      })
+      .where(eq(customerDeploymentSessions.id, session.id))
+      .returning();
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "deployment_execution_failed",
+      stepKey: "foundation",
+      message: (err as Error).message,
+      payload: { stateMachineArn },
+      idempotencyKey: "deployment_execution_failed",
+    });
+    const events = await loadSessionEvents(session.id);
+    return json({ session: toSessionPayload(failed ?? session, events) });
+  }
+}
+
 async function requestTeardown(
   sessionId: string,
   event: APIGatewayProxyEventV2,
@@ -194,6 +375,83 @@ async function requestTeardown(
       ? "teardown_already_complete"
       : `teardown_requested:${session.requested_action}`,
   });
+
+  const stateMachineArn = deploymentStateMachineArn();
+  const priorTeardown = teardownRunConfig(session.session_config);
+  if (!terminal && stateMachineArn && !priorTeardown.executionArn) {
+    try {
+      const response = await sfn.send(
+        new StartExecutionCommand({
+          stateMachineArn,
+          name: teardownExecutionName(session.id),
+          input: JSON.stringify({
+            phase: "teardown",
+            action: "teardown",
+            sessionId: session.id,
+            customerName: session.customer_name,
+            environmentName: session.environment_name,
+            awsAccountId: session.aws_account_id,
+            awsRegion: session.aws_region,
+            availabilityZones: session.availability_zones,
+            evidenceBucket: deploymentEvidenceBucket(),
+          }),
+        }),
+      );
+      const executionArn = response.executionArn ?? null;
+      const [destroying] = await db
+        .update(customerDeploymentSessions)
+        .set({
+          status: "destroying",
+          runner_mode: "step_functions",
+          session_config: {
+            ...objectConfig(session.session_config),
+            teardownRun: {
+              executionArn,
+              stateMachineArn,
+              startedAt: new Date().toISOString(),
+            },
+          },
+          updated_at: new Date(),
+        })
+        .where(eq(customerDeploymentSessions.id, session.id))
+        .returning();
+
+      await appendSessionEvent({
+        sessionId: session.id,
+        eventType: "teardown_execution_started",
+        stepKey: "teardown",
+        message: "Teardown execution started.",
+        payload: { executionArn, stateMachineArn },
+        idempotencyKey: "teardown_execution_started",
+      });
+      const events = await loadSessionEvents(session.id);
+      return json({
+        session: toSessionPayload(destroying ?? updated ?? session, events),
+      });
+    } catch (err) {
+      const [failed] = await db
+        .update(customerDeploymentSessions)
+        .set({
+          status: "teardown_failed",
+          error_message: (err as Error).message,
+          updated_at: new Date(),
+        })
+        .where(eq(customerDeploymentSessions.id, session.id))
+        .returning();
+      await appendSessionEvent({
+        sessionId: session.id,
+        eventType: "teardown_execution_failed",
+        stepKey: "teardown",
+        message: (err as Error).message,
+        payload: { stateMachineArn },
+        idempotencyKey: "teardown_execution_failed",
+      });
+      const events = await loadSessionEvents(session.id);
+      return json({
+        session: toSessionPayload(failed ?? updated ?? session, events),
+      });
+    }
+  }
 
   const events = await loadSessionEvents(session.id);
   return json({ session: toSessionPayload(updated ?? session, events) });
@@ -350,6 +608,72 @@ function constantTimeEquals(left: string, right: string): boolean {
     leftBuffer.length === rightBuffer.length &&
     timingSafeEqual(leftBuffer, rightBuffer)
   );
+}
+
+function deploymentStateMachineArn(): string | null {
+  return (
+    process.env.THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN ||
+    process.env.DEPLOYMENT_STATE_MACHINE_ARN ||
+    null
+  );
+}
+
+function deploymentEvidenceBucket(): string | null {
+  return (
+    process.env.THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET ||
+    process.env.DEPLOYMENT_EVIDENCE_BUCKET ||
+    null
+  );
+}
+
+function deploymentExecutionName(sessionId: string): string {
+  return `tw-session-${sessionId.replace(/-/g, "").slice(0, 48)}`;
+}
+
+function teardownExecutionName(sessionId: string): string {
+  return `tw-teardown-${sessionId.replace(/-/g, "").slice(0, 46)}`;
+}
+
+function objectConfig(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function deploymentRunConfig(value: unknown): {
+  executionArn?: string;
+  stateMachineArn?: string;
+} {
+  const config = objectConfig(value);
+  const deploymentRun = objectConfig(config.deploymentRun);
+  return {
+    executionArn:
+      typeof deploymentRun.executionArn === "string"
+        ? deploymentRun.executionArn
+        : undefined,
+    stateMachineArn:
+      typeof deploymentRun.stateMachineArn === "string"
+        ? deploymentRun.stateMachineArn
+        : undefined,
+  };
+}
+
+function teardownRunConfig(value: unknown): {
+  executionArn?: string;
+  stateMachineArn?: string;
+} {
+  const config = objectConfig(value);
+  const teardownRun = objectConfig(config.teardownRun);
+  return {
+    executionArn:
+      typeof teardownRun.executionArn === "string"
+        ? teardownRun.executionArn
+        : undefined,
+    stateMachineArn:
+      typeof teardownRun.stateMachineArn === "string"
+        ? teardownRun.stateMachineArn
+        : undefined,
+  };
 }
 
 function toSessionPayload(
