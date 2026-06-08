@@ -600,6 +600,8 @@ module "api" {
   job_scheduler_role_arn                        = module.job_triggers.job_scheduler_role_arn
   routines_execution_role_arn                   = module.routines_stepfunctions.execution_role_arn
   routines_log_group_arn                        = module.routines_stepfunctions.log_group_arn
+  deployment_state_machine_arn                  = var.enable_deployment_control_plane ? module.deployment_control_plane[0].state_machine_arn : ""
+  deployment_evidence_bucket                    = var.enable_deployment_control_plane ? module.deployment_control_plane[0].evidence_bucket_name : ""
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   wiki_compile_model_id                         = var.wiki_compile_model_id
   company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id

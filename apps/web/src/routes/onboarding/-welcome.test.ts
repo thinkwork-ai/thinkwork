@@ -11,6 +11,8 @@ describe("onboarding welcome route", () => {
   it("uses the no-checkout path for browser-first deployment sessions", () => {
     expect(source).toContain("NewEnvironmentInstaller");
     expect(source).toContain("createDeploymentSession");
+    expect(source).toContain("startDeploymentSession");
+    expect(source).toContain("Start deployment");
     expect(source).toContain("requestDeploymentSessionTeardown");
     expect(source).toContain("DEPLOYMENT_SESSION_STORAGE_KEY");
     expect(source).toContain("State starts in the ThinkWork control plane");

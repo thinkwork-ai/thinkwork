@@ -484,6 +484,18 @@ variable "routines_log_group_arn" {
   default     = ""
 }
 
+variable "deployment_state_machine_arn" {
+  description = "ARN of the GitHub-free deployment orchestration state machine. Passed only to the deployment-sessions handler."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_evidence_bucket" {
+  description = "S3 bucket name that stores deployment runner evidence. Passed only to the deployment-sessions handler."
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # Phase 3 U4 — compliance-outbox-drainer Aurora credentials
 # ---------------------------------------------------------------------------

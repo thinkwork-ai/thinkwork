@@ -781,6 +781,31 @@ resource "aws_iam_role_policy" "lambda_routines_stepfunctions" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_deployment_stepfunctions" {
+  name = "deployment-step-functions"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DeploymentExecution"
+        Effect = "Allow"
+        Action = [
+          "states:StartExecution",
+          "states:StopExecution",
+          "states:DescribeExecution",
+          "states:GetExecutionHistory",
+        ]
+        Resource = [
+          "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-deployment-*",
+          "arn:aws:states:${var.region}:${var.account_id}:execution:thinkwork-${var.stage}-deployment-*:*",
+        ]
+      },
+    ]
+  })
+}
+
 ################################################################################
 # Placeholder Lambda — proves the infrastructure works
 #
