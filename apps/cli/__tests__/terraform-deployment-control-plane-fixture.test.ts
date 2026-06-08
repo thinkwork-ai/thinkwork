@@ -49,6 +49,9 @@ describe("deployment control plane Terraform fixture", () => {
     expect(source).toMatch(/type\s*=\s*"NO_SOURCE"/);
     expect(source).toMatch(/ThinkWork deployment runner stub/);
     expect(source).toMatch(/deployment-evidence\.json/);
+    expect(source).toMatch(/THINKWORK_DEPLOYMENT_INPUT/);
+    expect(source).toMatch(/States\.JsonToString\(\$\)/);
+    expect(source).toMatch(/sessions\/\{\}\/\{\}/);
     expect(source).toMatch(/aws_cloudwatch_log_group" "state_machine"/);
     expect(source).toMatch(/aws_cloudwatch_log_group" "codebuild"/);
   });
@@ -73,7 +76,10 @@ describe("deployment control plane Terraform fixture", () => {
     expect(vars).toMatch(/variable "release_manifest_sha256"/);
     expect(outputs).toMatch(/output "state_machine_arn"/);
     expect(outputs).toMatch(/output "appconfig_configuration_profile_id"/);
-    expect(readme).toContain("intentionally inert in U2");
+    expect(readme).toContain("intentionally evidence-only");
+    expect(readme).toContain(
+      "sessions/<session>/<action>/deployment-evidence.json",
+    );
   });
 
   it("is wired through the composite module with disable-safe outputs", () => {

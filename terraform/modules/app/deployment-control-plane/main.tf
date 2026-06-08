@@ -2,9 +2,9 @@
 # Deployment Control Plane — App Module
 #
 # AWS-native substrate for GitHub-free customer deployments. This module is
-# intentionally inert in U2: the Step Functions state machine invokes a stub
-# CodeBuild project that records evidence but does not run Terraform apply yet.
-# U4/U5 swap in the live runner contract.
+# intentionally starts as an evidence-producing runner: the Step Functions state
+# machine invokes CodeBuild, passes session metadata, and records evidence, but
+# does not run Terraform apply yet. U4/U5 swap in the live runner contract.
 ################################################################################
 
 terraform {
@@ -257,7 +257,7 @@ resource "aws_iam_role_policy" "codebuild" {
 
 resource "aws_codebuild_project" "runner" {
   name          = local.codebuild_project_name
-  description   = "Inert ThinkWork deployment runner stub for ${var.stage}."
+  description   = "ThinkWork deployment runner evidence stub for ${var.stage}."
   service_role  = aws_iam_role.codebuild.arn
   build_timeout = 30
 
@@ -307,8 +307,30 @@ resource "aws_codebuild_project" "runner" {
         build:
           commands:
             - echo "ThinkWork deployment runner stub for $THINKWORK_STAGE"
-            - printf '{"status":"stub","stage":"%s","release":"%s"}\n' "$THINKWORK_STAGE" "$THINKWORK_RELEASE_VERSION" > deployment-evidence.json
-            - aws s3 cp deployment-evidence.json "s3://$THINKWORK_EVIDENCE_BUCKET/stub/$CODEBUILD_BUILD_ID/deployment-evidence.json"
+            - |
+              python3 - <<'PY'
+              import json
+              import os
+              from datetime import datetime, timezone
+
+              payload = json.loads(os.environ.get("THINKWORK_DEPLOYMENT_INPUT") or "{}")
+              evidence = {
+                  "status": "stub",
+                  "stage": os.environ.get("THINKWORK_STAGE"),
+                  "release": os.environ.get("THINKWORK_RELEASE_VERSION"),
+                  "action": os.environ.get("THINKWORK_DEPLOYMENT_ACTION"),
+                  "sessionId": os.environ.get("THINKWORK_DEPLOYMENT_SESSION_ID"),
+                  "environmentName": payload.get("environmentName"),
+                  "awsAccountId": payload.get("awsAccountId"),
+                  "awsRegion": payload.get("awsRegion"),
+                  "codebuildBuildId": os.environ.get("CODEBUILD_BUILD_ID"),
+                  "recordedAt": datetime.now(timezone.utc).isoformat(),
+              }
+              with open("deployment-evidence.json", "w", encoding="utf-8") as handle:
+                  json.dump(evidence, handle, indent=2, sort_keys=True)
+                  handle.write("\n")
+              PY
+            - aws s3 cp deployment-evidence.json "s3://$THINKWORK_EVIDENCE_BUCKET/$THINKWORK_EVIDENCE_PREFIX/deployment-evidence.json"
     BUILDSPEC
   }
 
@@ -397,7 +419,7 @@ resource "aws_sfn_state_machine" "deployment" {
   }
 
   definition = jsonencode({
-    Comment = "Inert ThinkWork deployment control-plane stub. Live orchestration is added in later units."
+    Comment = "ThinkWork deployment control-plane evidence stub. Live Terraform orchestration is added in later units."
     StartAt = "RunDeploymentStub"
     States = {
       RunDeploymentStub = {
@@ -407,9 +429,24 @@ resource "aws_sfn_state_machine" "deployment" {
           ProjectName = aws_codebuild_project.runner.name
           EnvironmentVariablesOverride = [
             {
-              Name  = "THINKWORK_DEPLOYMENT_ACTION"
-              Type  = "PLAINTEXT"
-              Value = "stub"
+              Name      = "THINKWORK_DEPLOYMENT_ACTION"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.action"
+            },
+            {
+              Name      = "THINKWORK_DEPLOYMENT_SESSION_ID"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.sessionId"
+            },
+            {
+              Name      = "THINKWORK_DEPLOYMENT_INPUT"
+              Type      = "PLAINTEXT"
+              "Value.$" = "States.JsonToString($)"
+            },
+            {
+              Name      = "THINKWORK_EVIDENCE_PREFIX"
+              Type      = "PLAINTEXT"
+              "Value.$" = "States.Format('sessions/{}/{}', $.sessionId, $.action)"
             },
           ]
         }
