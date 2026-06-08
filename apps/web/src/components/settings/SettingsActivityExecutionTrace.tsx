@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
@@ -16,6 +16,7 @@ import {
 } from "@thinkwork/ui";
 import { formatCost } from "@/lib/settings-activity";
 import { extractSkillName } from "./skill-row-label";
+import { SettingsModelCatalogQuery } from "@/lib/settings-queries";
 import {
   SettingsActivityThreadTurnsQuery,
   ThreadTurnEventsQuery,
@@ -200,6 +201,7 @@ type TimelineEvent = {
   outputTokens?: number;
   cacheReadTokens?: number;
   costUsd?: number;
+  durationMs?: number;
   requestId?: string;
   inputPreview?: string;
   outputPreview?: string;
@@ -251,6 +253,14 @@ type ToolModelEvidence = Pick<
   | "routeUnavailableReason"
 >;
 
+type ModelDisplayNames = Map<string, string>;
+
+type TokenTotals = {
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+};
+
 export interface ExecutionTraceModelRouteTrace {
   parentRequestId?: string | null;
   toolCallId?: string | null;
@@ -293,6 +303,47 @@ function shortModelId(modelId: string): string {
     .replace(/^us\.anthropic\./, "")
     .replace(/^anthropic\./, "")
     .replace(/-v\d+:\d+$/, "");
+}
+
+function modelCatalogKeys(modelId: string): string[] {
+  const trimmed = modelId.trim();
+  return trimmed.startsWith("us.") ? [trimmed, trimmed.slice(3)] : [trimmed];
+}
+
+function displayModelName(
+  modelId: string | null | undefined,
+  modelDisplayNames?: ModelDisplayNames,
+): string | null {
+  if (!modelId?.trim()) return null;
+  for (const key of modelCatalogKeys(modelId)) {
+    const displayName = modelDisplayNames?.get(key);
+    if (displayName) return displayName;
+  }
+  return shortModelId(modelId);
+}
+
+function ModelNameBadge({
+  modelId,
+  label,
+  title,
+  modelDisplayNames,
+}: {
+  modelId?: string | null;
+  label?: string | null;
+  title?: string | null;
+  modelDisplayNames?: ModelDisplayNames;
+}) {
+  const badgeLabel = label ?? displayModelName(modelId, modelDisplayNames);
+  if (!badgeLabel) return null;
+  return (
+    <Badge
+      variant="outline"
+      title={title ?? modelId ?? badgeLabel}
+      className="max-w-36 truncate px-1.5 py-0 text-[9px] text-muted-foreground"
+    >
+      {badgeLabel}
+    </Badge>
+  );
 }
 
 function numberValue(value: unknown): number | null {
@@ -373,6 +424,57 @@ function profileRunTools(
   run: Record<string, unknown>,
 ): Record<string, unknown>[] {
   return arrayOfRecords(profileRunField(run, "toolInvocations"));
+}
+
+function aggregateProfileRunTokens(
+  agentProfileRuns: Record<string, unknown>[],
+): TokenTotals {
+  return agentProfileRuns.reduce<TokenTotals>(
+    (sum, run) => ({
+      inputTokens: sum.inputTokens + profileRunTokens(run, "inputTokens"),
+      outputTokens: sum.outputTokens + profileRunTokens(run, "outputTokens"),
+      cachedReadTokens:
+        sum.cachedReadTokens + profileRunTokens(run, "cachedReadTokens"),
+    }),
+    { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0 },
+  );
+}
+
+function aggregateTurnTokens(usage: Record<string, unknown> | null): {
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+} {
+  const agentProfileRuns = Array.isArray(usage?.agent_profile_runs)
+    ? (usage.agent_profile_runs as Record<string, unknown>[])
+    : [];
+  const profileTotals = aggregateProfileRunTokens(agentProfileRuns);
+  return {
+    inputTokens: (numberValue(usage?.input_tokens) ?? 0) + profileTotals.inputTokens,
+    outputTokens:
+      (numberValue(usage?.output_tokens) ?? 0) + profileTotals.outputTokens,
+    cachedReadTokens:
+      (numberValue(usage?.cached_read_tokens) ?? 0) +
+      profileTotals.cachedReadTokens,
+  };
+}
+
+function collectTimelineModelNames(
+  events: TimelineEvent[],
+  modelDisplayNames?: ModelDisplayNames,
+): string[] {
+  const names = new Set<string>();
+  for (const event of events) {
+    const modelIds = [
+      event.modelId,
+      event.routeModelId,
+      event.profileModelId,
+    ].filter((modelId): modelId is string => Boolean(modelId?.trim()));
+    for (const modelId of modelIds) {
+      names.add(displayModelName(modelId, modelDisplayNames) ?? modelId);
+    }
+  }
+  return [...names];
 }
 
 function extractToolModelEvidence(
@@ -680,11 +782,14 @@ function formatRouteTokens(event: TimelineEvent): string | null {
   return `${input}->${output}${cached}`;
 }
 
-function routeEvidenceLines(event: TimelineEvent): string[] {
+function routeEvidenceLines(
+  event: TimelineEvent,
+  modelDisplayNames?: ModelDisplayNames,
+): string[] {
   const status = routeStatusLabel(event.routeStatus);
   const lines = [];
   lines.push(
-    `Model: ${event.routeModelId ? shortModelId(event.routeModelId) : "--"}`,
+    `Model: ${displayModelName(event.routeModelId, modelDisplayNames) ?? "--"}`,
   );
   lines.push(`Tokens: ${formatRouteTokens(event) ?? "--"}`);
   lines.push(
@@ -705,28 +810,26 @@ function routeEvidenceLines(event: TimelineEvent): string[] {
   return lines;
 }
 
-function ToolRouteDetail({ event }: { event: TimelineEvent }) {
+function ToolRouteDetail({
+  event,
+  modelDisplayNames,
+}: {
+  event: TimelineEvent;
+  modelDisplayNames?: ModelDisplayNames;
+}) {
   const routed = hasConcreteRouteEvidence(event);
   if (!routed) return null;
   const tokenLabel = formatRouteTokens(event);
-  const status = routeStatusLabel(event.routeStatus);
   return (
     <span className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
-      <span className="max-w-40 truncate font-mono">
-        {event.routeModelId ? shortModelId(event.routeModelId) : "--"}
-      </span>
       {tokenLabel ? <span className="tabular-nums">{tokenLabel}</span> : null}
       {event.routeCostUsd != null ? (
         <span className="tabular-nums">{formatCost(event.routeCostUsd)}</span>
       ) : null}
-      {status ? (
-        <Badge
-          variant="outline"
-          className="px-1.5 py-0 text-[9px] text-muted-foreground"
-        >
-          {status}
-        </Badge>
-      ) : null}
+      <ModelNameBadge
+        modelId={event.routeModelId}
+        modelDisplayNames={modelDisplayNames}
+      />
     </span>
   );
 }
@@ -751,6 +854,7 @@ function buildTimelineFromUsage(
   model?: string,
   inputTokens?: number,
   outputTokens?: number,
+  durationMs?: number,
   totalCost?: number,
   turnEvents?: any[],
   modelRouteTraces?: ExecutionTraceModelRouteTrace[],
@@ -760,16 +864,14 @@ function buildTimelineFromUsage(
 
   // Add LLM call if we have model info
   if (model) {
-    const shortModel = model
-      .replace(/^us\.anthropic\./, "")
-      .replace(/-v\d+:\d+$/, "");
     events.push({
       type: "llm",
       timestamp: "",
       branch: "parent",
-      modelId: shortModel,
+      modelId: model,
       inputTokens: inputTokens || 0,
       outputTokens: outputTokens || 0,
+      durationMs,
       costUsd: totalCost || 0,
       toolUses: toolInvocations.map((ti: any) => ti.tool_name).filter(Boolean),
     });
@@ -1094,9 +1196,13 @@ function ExecutionTimeline({
   model,
   inputTokens,
   outputTokens,
+  summaryInputTokens,
+  summaryOutputTokens,
+  durationMs,
   totalCostFromTurn,
   responseText,
   agentName,
+  modelDisplayNames,
   modelRouteTraces,
   modelRoutedToolCalls = [],
   agentProfileRuns = [],
@@ -1108,9 +1214,13 @@ function ExecutionTimeline({
   model?: string;
   inputTokens?: number;
   outputTokens?: number;
+  summaryInputTokens?: number;
+  summaryOutputTokens?: number;
+  durationMs?: number;
   totalCostFromTurn?: number;
   responseText: string;
   agentName?: string | null;
+  modelDisplayNames?: ModelDisplayNames;
   modelRouteTraces?: ExecutionTraceModelRouteTrace[];
   modelRoutedToolCalls?: Record<string, unknown>[];
   onViewDetail: (title: string, content: string) => void;
@@ -1156,6 +1266,7 @@ function ExecutionTimeline({
           model,
           inputTokens,
           outputTokens,
+          durationMs,
           totalCostFromTurn,
           turnEvents,
           modelRouteTraces,
@@ -1164,6 +1275,11 @@ function ExecutionTimeline({
 
   if (events.length === 0) return null;
 
+  const timelineModelNames = collectTimelineModelNames(
+    events,
+    modelDisplayNames,
+  );
+  const hasMixedModels = timelineModelNames.length > 1;
   const totalCost =
     invocations.length > 0
       ? invocations.reduce(
@@ -1172,14 +1288,18 @@ function ExecutionTimeline({
         )
       : (totalCostFromTurn ?? 0);
   const totalInputTokens =
-    invocations.length > 0
+    summaryInputTokens != null
+      ? summaryInputTokens
+      : invocations.length > 0
       ? invocations.reduce(
           (sum: number, inv: any) => sum + (inv.inputTokenCount || 0),
           0,
         )
       : (inputTokens ?? 0);
   const totalOutputTokens =
-    invocations.length > 0
+    summaryOutputTokens != null
+      ? summaryOutputTokens
+      : invocations.length > 0
       ? invocations.reduce(
           (sum: number, inv: any) => sum + (inv.outputTokenCount || 0),
           0,
@@ -1336,29 +1456,51 @@ function ExecutionTimeline({
           let clickContent = "";
 
           if (ev.type === "llm") {
-            icon = <Cpu className="h-3.5 w-3.5 text-muted-foreground" />;
-            label = ev.modelId || "LLM";
+            const eventInputTokens = summaryInputTokens ?? ev.inputTokens ?? 0;
+            const eventOutputTokens =
+              summaryOutputTokens ?? ev.outputTokens ?? 0;
+            icon = (
+              <Bot className="h-3.5 w-3.5" style={{ color: RESPONSE_COLOR }} />
+            );
+            label = agentName || "Agent";
             rightDetail = (
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {formatTokens(ev.inputTokens || 0)}→
-                {formatTokens(ev.outputTokens || 0)}
-                {ev.cacheReadTokens ? (
-                  <span className="text-green-500 ml-1">
-                    ({formatTokens(ev.cacheReadTokens)} cached)
+              <span className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+                <span className="tabular-nums">
+                  {formatTokens(eventInputTokens)}→
+                  {formatTokens(eventOutputTokens)}
+                  {ev.cacheReadTokens ? (
+                    <span className="text-green-500 ml-1">
+                      ({formatTokens(ev.cacheReadTokens)} cached)
+                    </span>
+                  ) : null}
+                </span>
+                {ev.durationMs != null ? (
+                  <span className="tabular-nums">
+                    {formatDuration(ev.durationMs)}
                   </span>
-                ) : null}{" "}
-                {formatCost(ev.costUsd || 0)}
+                ) : null}
+                <span className="tabular-nums">{formatCost(ev.costUsd || 0)}</span>
+                <ModelNameBadge
+                  modelId={ev.modelId}
+                  label={hasMixedModels ? "Mixed" : undefined}
+                  title={
+                    hasMixedModels
+                      ? `Models: ${timelineModelNames.join(", ")}`
+                      : undefined
+                  }
+                  modelDisplayNames={modelDisplayNames}
+                />
               </span>
             );
             const parts: string[] = [];
             parts.push(
-              `Request: ${ev.requestId}  ·  ${ev.timestamp}  ·  ${ev.inputTokens} in → ${ev.outputTokens} out  ·  ${formatCost(ev.costUsd || 0)}`,
+              `Request: ${ev.requestId}  ·  ${ev.timestamp}  ·  ${eventInputTokens} in → ${eventOutputTokens} out  ·  ${ev.durationMs != null ? `${formatDuration(ev.durationMs)}  ·  ` : ""}${formatCost(ev.costUsd || 0)}  ·  ${hasMixedModels ? `Mixed (${timelineModelNames.join(", ")})` : (displayModelName(ev.modelId, modelDisplayNames) ?? "--")}`,
             );
             if (ev.inputPreview)
               parts.push(`── INPUT ──\n\n${ev.inputPreview}`);
             if (ev.outputPreview)
               parts.push(`── OUTPUT ──\n\n${ev.outputPreview}`);
-            clickTitle = `${ev.modelId}${isOnBranch ? ` (${branch!.name})` : ""}`;
+            clickTitle = `${label}${isOnBranch ? ` (${branch!.name})` : ""}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "profile_run") {
             icon = (
@@ -1375,11 +1517,6 @@ function ExecutionTimeline({
             }`;
             rightDetail = (
               <span className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
-                {ev.profileModelId ? (
-                  <span className="max-w-40 truncate font-mono">
-                    {shortModelId(ev.profileModelId)}
-                  </span>
-                ) : null}
                 <span className="tabular-nums">{tokenLabel}</span>
                 <span className="tabular-nums">
                   {formatDuration(ev.profileDurationMs)}
@@ -1387,12 +1524,10 @@ function ExecutionTimeline({
                 <span className="tabular-nums">
                   {formatCost(ev.profileCostUsd || 0)}
                 </span>
-                <Badge
-                  variant="outline"
-                  className="px-1.5 py-0 text-[9px] text-muted-foreground"
-                >
-                  {routeStatusLabel(ev.profileStatus) || "profile"}
-                </Badge>
+                <ModelNameBadge
+                  modelId={ev.profileModelId}
+                  modelDisplayNames={modelDisplayNames}
+                />
               </span>
             );
             const parts: string[] = [];
@@ -1402,7 +1537,7 @@ function ExecutionTimeline({
                 "── PROFILE RUN ──",
                 "",
                 `Profile run: ${ev.profileRunId || "--"}`,
-                `Model: ${ev.profileModelId ? shortModelId(ev.profileModelId) : "--"}`,
+                `Model: ${displayModelName(ev.profileModelId, modelDisplayNames) ?? "--"}`,
                 `Tokens: ${tokenLabel}`,
                 `Duration: ${formatDuration(ev.profileDurationMs)}`,
                 `Cost: ${formatCost(ev.profileCostUsd || 0)}`,
@@ -1472,7 +1607,12 @@ function ExecutionTimeline({
                 </span>
               );
             } else {
-              rightDetail = <ToolRouteDetail event={ev} />;
+              rightDetail = (
+                <ToolRouteDetail
+                  event={ev}
+                  modelDisplayNames={modelDisplayNames}
+                />
+              );
             }
             const parts: string[] = [];
             const detailHeader = isSub
@@ -1483,7 +1623,7 @@ function ExecutionTimeline({
             const detailName = isSkill ? skillName : ev.toolName;
             parts.push(`${detailHeader}  ·  ${detailName}`);
             parts.push(
-              `── MODEL ROUTING ──\n\n${routeEvidenceLines(ev).join("\n")}`,
+              `── MODEL ROUTING ──\n\n${routeEvidenceLines(ev, modelDisplayNames).join("\n")}`,
             );
             if (ev.toolInput) parts.push(`── INPUT ──\n\n${ev.toolInput}`);
             if (ev.toolOutput) parts.push(`── OUTPUT ──\n\n${ev.toolOutput}`);
@@ -1533,10 +1673,12 @@ function ExecutionTimeline({
 function TurnRow({
   turn,
   agentName,
+  modelDisplayNames,
   modelRouteTraces,
 }: {
   turn: any;
   agentName?: string | null;
+  modelDisplayNames?: ModelDisplayNames;
   modelRouteTraces?: ExecutionTraceModelRouteTrace[];
 }) {
   const [open, setOpen] = useState(false);
@@ -1558,7 +1700,6 @@ function TurnRow({
   const durationMs = usage?.duration_ms as number | undefined;
   const inputTokens = usage?.input_tokens;
   const outputTokens = usage?.output_tokens;
-  const cachedTokens = usage?.cached_read_tokens;
   const toolInvocations = Array.isArray(usage?.tool_invocations)
     ? (usage.tool_invocations as any[])
     : Array.isArray(usage?.tools_called)
@@ -1574,6 +1715,12 @@ function TurnRow({
   const agentProfileRuns = Array.isArray(usage?.agent_profile_runs)
     ? (usage.agent_profile_runs as Record<string, unknown>[])
     : [];
+  const aggregateTokens = aggregateTurnTokens(usage);
+  const hasAggregateTokens =
+    aggregateTokens.inputTokens > 0 ||
+    aggregateTokens.outputTokens > 0 ||
+    aggregateTokens.cachedReadTokens > 0 ||
+    inputTokens != null;
   const title = "Thinking";
   const sourceLabel = formatInvocationSource(
     turn.triggerName || turn.invocationSource,
@@ -1623,14 +1770,17 @@ function TurnRow({
 
           {/* Metrics row */}
           <div className="mt-1 flex min-w-0 flex-1 items-center justify-end gap-3 overflow-hidden text-xs text-muted-foreground">
-            {inputTokens != null && (
+            {hasAggregateTokens && (
               <span
                 className="flex min-w-0 items-center gap-0.5 truncate"
                 title="Input / Output tokens"
               >
                 <Zap className="h-3 w-3" />
-                {formatTokens(inputTokens)} → {formatTokens(outputTokens)}
-                {cachedTokens ? ` (${formatTokens(cachedTokens)} cached)` : ""}
+                {formatTokens(aggregateTokens.inputTokens)} →{" "}
+                {formatTokens(aggregateTokens.outputTokens)}
+                {aggregateTokens.cachedReadTokens
+                  ? ` (${formatTokens(aggregateTokens.cachedReadTokens)} cached)`
+                  : ""}
               </span>
             )}
             {durationMs != null && (
@@ -1696,9 +1846,13 @@ function TurnRow({
                   ? usage.output_tokens
                   : 0
               }
+              summaryInputTokens={aggregateTokens.inputTokens}
+              summaryOutputTokens={aggregateTokens.outputTokens}
+              durationMs={durationMs}
               totalCostFromTurn={turn.totalCost || 0}
               responseText={result?.response ? String(result.response) : ""}
               agentName={agentName}
+              modelDisplayNames={modelDisplayNames}
               modelRouteTraces={modelRouteTraces}
               modelRoutedToolCalls={modelRoutedToolCalls}
               agentProfileRuns={agentProfileRuns}
@@ -1924,6 +2078,7 @@ type TimelineItem =
 interface ExecutionTraceProps {
   threadId: string;
   tenantId: string;
+  activityLabel?: string | null;
   messages?: ChatMessage[];
   modelRouteTraces?: ExecutionTraceModelRouteTrace[];
   agentMap?: Map<string, AgentRef>;
@@ -1941,6 +2096,7 @@ interface ExecutionTraceProps {
 export function ExecutionTrace({
   threadId,
   tenantId,
+  activityLabel,
   messages = [],
   modelRouteTraces = [],
   agentMap,
@@ -1949,6 +2105,9 @@ export function ExecutionTrace({
   userLabel,
   onOpenArtifact,
 }: ExecutionTraceProps) {
+  const [modelCatalogResult] = useQuery({
+    query: SettingsModelCatalogQuery,
+  });
   const [result, reexecuteTurns] = useQuery({
     query: SettingsActivityThreadTurnsQuery,
     variables: { tenantId, threadId: threadId, limit: 50 },
@@ -1967,6 +2126,16 @@ export function ExecutionTrace({
   }, [turnSub.data, threadId, reexecuteTurns]);
 
   const turns = (result.data as any)?.threadTurns ?? [];
+  const modelDisplayNames = useMemo(() => {
+    const names: ModelDisplayNames = new Map();
+    for (const model of modelCatalogResult.data?.modelCatalog ?? []) {
+      if (!model.modelId || !model.displayName) continue;
+      for (const key of modelCatalogKeys(model.modelId)) {
+        names.set(key, model.displayName);
+      }
+    }
+    return names;
+  }, [modelCatalogResult.data?.modelCatalog]);
 
   // Build merged timeline (turns + messages sorted by date)
   const timeline: TimelineItem[] = [
@@ -1993,19 +2162,18 @@ export function ExecutionTrace({
   ).length;
   const totalTokens = turns.reduce((sum: number, t: any) => {
     const u = parseJsonField(t.usageJson);
-    return (
-      sum + (Number(u?.input_tokens) || 0) + (Number(u?.output_tokens) || 0)
-    );
+    const aggregateTokens = aggregateTurnTokens(u);
+    return sum + aggregateTokens.inputTokens + aggregateTokens.outputTokens;
   }, 0);
 
   const activityHeader = (
-    <div className="flex items-center justify-between">
-      <h3 className="text-sm font-medium flex items-center gap-1.5">
-        <Activity className="h-3.5 w-3.5" />
-        Activity
+    <div className="flex items-center justify-between gap-4 pr-1">
+      <h3 className="flex min-w-0 items-center gap-1.5 font-mono text-sm font-medium text-muted-foreground">
+        <Activity className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{activityLabel || "Activity"}</span>
       </h3>
       {totalTurns > 0 && (
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <Cpu className="h-3.5 w-3.5" />
             {totalTurns} turn{totalTurns !== 1 ? "s" : ""} ({succeededTurns}{" "}
@@ -2059,6 +2227,7 @@ export function ExecutionTrace({
                     ? agentMap?.get(item.turn.agentId)?.name
                     : null
                 }
+                modelDisplayNames={modelDisplayNames}
               />
             ) : (
               <MessageRow

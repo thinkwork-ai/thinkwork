@@ -7,7 +7,7 @@ import {
 } from "react";
 import { ChevronRight, ExternalLink, FileText, Info } from "lucide-react";
 import { useQuery, useSubscription } from "urql";
-import { Badge, Button, Separator, cn } from "@thinkwork/ui";
+import { Badge, Button, cn } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
@@ -314,19 +314,16 @@ export function SettingsActivityThreadDetail({
   }
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto">
+    <div className="h-full min-h-0 w-full overflow-y-auto bg-background">
       <div
         className={cn(
-          "grid gap-6 p-6",
+          "grid w-full max-w-none gap-6 p-6",
           propertiesOpen && "md:grid-cols-[minmax(0,1fr)_320px]",
         )}
       >
-        <main className="min-w-0">
+        <main className="w-full min-w-0">
           <div className="mb-8">
-            <p className="mb-3 font-mono text-sm uppercase tracking-wide text-muted-foreground">
-              {identifier}
-            </p>
-            <h1 className="max-w-4xl text-3xl font-semibold leading-tight text-foreground">
+            <h1 className="w-full max-w-none break-words text-xl font-semibold leading-snug text-foreground sm:text-2xl">
               <InlineShortcutText
                 text={title}
                 fallbackAgentProfiles
@@ -336,13 +333,12 @@ export function SettingsActivityThreadDetail({
             </h1>
           </div>
 
-          <Separator className="mb-8" />
-
           <section className="mb-10">
             {tenantId ? (
               <ExecutionTrace
                 threadId={threadId}
                 tenantId={tenantId}
+                activityLabel={identifier}
                 messages={executionMessages}
                 defaultAgentName="ThinkWork"
                 assistantLabel="ThinkWork"
