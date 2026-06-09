@@ -17,8 +17,9 @@ status: in_progress
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
-  merged.
-- Status: U4 implementation in progress.
+  merged; U4 PR [#2290](https://github.com/thinkwork-ai/thinkwork/pull/2290)
+  opened.
+- Status: U4 PR opened; monitoring required CI.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
