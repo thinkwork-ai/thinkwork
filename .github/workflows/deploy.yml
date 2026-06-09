@@ -1131,7 +1131,15 @@ jobs:
           fi
 
           new_kestra_password() {
-            openssl rand -hex 32 | tr -d '\n'
+            printf 'K3stra-%s' "$(openssl rand -hex 32 | tr -d '\n')"
+          }
+
+          kestra_basic_auth_password_valid() {
+            local password="$1"
+            [ "${#password}" -ge 8 ] \
+              && [[ "$password" =~ [A-Z] ]] \
+              && [[ "$password" =~ [a-z] ]] \
+              && [[ "$password" =~ [0-9] ]]
           }
 
           db_secret_selector="${KESTRA_DB_PASSWORD_SECRET_ARN:-$KESTRA_DB_PASSWORD_SECRET_ID}"
@@ -1243,7 +1251,7 @@ jobs:
               --secret-id "$basic_auth_secret_arn" \
               --query SecretString --output text)
             kestra_basic_auth_password=$(jq -r '.password // empty' <<< "$basic_auth_json")
-            if [ -z "$kestra_basic_auth_password" ] || [ "$kestra_basic_auth_password" = "PLACEHOLDER_SET_VIA_CI" ]; then
+            if [ -z "$kestra_basic_auth_password" ] || [ "$kestra_basic_auth_password" = "PLACEHOLDER_SET_VIA_CI" ] || ! kestra_basic_auth_password_valid "$kestra_basic_auth_password"; then
               kestra_basic_auth_password=$(new_kestra_password)
               echo "::add-mask::$kestra_basic_auth_password"
               basic_auth_json=$(jq -n \

@@ -11,11 +11,12 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U12 - Kestra control MCP URL/credential derivation.
-- Current branch: `codex/kestra-managed-app-u12-destroy-proof`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u12-destroy-proof`.
+- Current unit: U13 - Kestra basic-auth deploy remediation and live
+  deploy/destroy proof.
+- Current branch: `codex/kestra-managed-app-u13-final-proof`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u13-final-proof`.
 - Current PR:
-  [#2261](https://github.com/thinkwork-ai/thinkwork/pull/2261).
+  [#2263](https://github.com/thinkwork-ai/thinkwork/pull/2263).
 - Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
@@ -428,6 +429,48 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
       because package links were not present yet (`vitest`/`tsc` not found).
       `pnpm install --ignore-scripts` linked dependencies and the reruns
       passed.
+  - U12 PR [#2261](https://github.com/thinkwork-ai/thinkwork/pull/2261)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was
+    squash merged as `4aa0c063`.
+  - U12 post-merge deploy proof:
+    - main deploy run
+      [27184029023](https://github.com/thinkwork-ai/thinkwork/actions/runs/27184029023)
+      completed successfully;
+    - `Terraform Apply`, `Restart Kestra runtime after database prep`, and
+      `Deploy Summary` all passed;
+    - read-only ECS status showed `thinkwork-dev-kestra-service` desired `1`,
+      running `1`, pending `0`, with rollout completed.
+  - Created isolated U13 worktree from `origin/main` at `db4d6296`.
+  - U13 live smoke discovery:
+    - rerunning
+      `SMOKE_ENABLE_KESTRA_CONTROL_MCP=1 node scripts/smoke/kestra-control-mcp-smoke.mjs`
+      after U12 deploy got past runtime, URL, and credential-secret discovery,
+      then failed flow upsert with Kestra API `401`;
+    - direct read-only API probes with the deployed basic-auth secret also
+      returned `401` for `/api/v1/main/namespaces` and `/api/v1/main/flows`;
+    - Kestra's `settings` table contained
+      `kestra.server.authentication-configuration-error` reporting
+      `Invalid password for Basic Authentication. The password must have 8 chars, one upper, one lower and one number`;
+    - official Kestra troubleshooting docs confirm OSS API requests accept
+      Basic auth headers and that configured credentials take precedence over
+      setup-page credentials.
+  - U13 fix in progress:
+    - update the deploy workflow Kestra secret generator to create passwords
+      with uppercase, lowercase, and numeric characters;
+    - rotate existing Kestra basic-auth secrets that are empty, still
+      placeholders, or fail the runtime password rule before Terraform applies
+      and ECS is forced into a new deployment.
+  - U13 local verification passed:
+    - `pnpm exec vitest run __tests__/terraform-kestra-fixture.test.ts` from
+      `apps/cli` -> 1 file passed, 9 tests passed.
+    - Ruby YAML parse of `.github/workflows/deploy.yml` -> passed.
+    - `pnpm dlx prettier@3.8.2 --check .github/workflows/deploy.yml apps/cli/__tests__/terraform-kestra-fixture.test.ts`
+      -> passed.
+    - `git diff --check` -> passed.
+  - U13 local verification caveat:
+    - The first focused vitest attempt in the fresh worktree failed because
+      package links were not present yet (`Command "vitest" not found`).
+      `pnpm install --ignore-scripts` linked dependencies and the rerun passed.
 
 ## Agent Profile Closed Loops - 2026-06-08
 
