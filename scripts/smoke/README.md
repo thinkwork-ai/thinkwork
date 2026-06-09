@@ -129,6 +129,10 @@ Passing live mode means:
 - the public `https://.../` endpoint returns success or an authentication
   challenge.
 
+After destructive destroy, the expected managed-app proof is an explicit
+unprovisioned skip plus deployment evidence showing Kestra retained state,
+storage, credentials, and managed MCP configuration were removed.
+
 ## Kestra control MCP smoke
 
 The Kestra control MCP smoke is dry-run by default:
@@ -155,6 +159,16 @@ class is rejected, upserts the safe flow, starts one execution, polls it to a
 terminal state, and records a logs preview. Set `SMOKE_KESTRA_CONTROL_MUTATE=0`
 to keep the live smoke to `initialize`, `tools/list`, and validation-only MCP
 calls.
+
+Use this smoke for the customer Kestra control plane only. Public Kestra
+catalog/docs MCP servers are read-only authoring context and are not proof that
+the customer's managed Kestra runtime can validate, upsert, execute, or inspect
+flows.
+
+After destructive destroy, the control MCP smoke should not be treated as a
+healthy-runtime check. The expected cleanup proof is that Settings -> MCP
+Servers no longer has the system-managed Kestra Control row and the app-owned
+MCP bearer token/configuration are removed.
 
 ## GitHub-free foundation smoke
 

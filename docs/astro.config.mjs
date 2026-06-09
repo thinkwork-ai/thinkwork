@@ -173,6 +173,14 @@ export default defineConfig({
                       slug: "applications/admin/webhooks",
                     },
                     {
+                      label: "Managed Applications",
+                      slug: "applications/admin/managed-applications",
+                    },
+                    {
+                      label: "Kestra",
+                      slug: "applications/admin/kestra",
+                    },
+                    {
                       label: "Artifacts",
                       slug: "applications/admin/artifacts",
                     },

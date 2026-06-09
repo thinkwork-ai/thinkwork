@@ -78,6 +78,29 @@ MCP servers become visible to agents by being **assigned to an agent template**.
 
 Once assigned to a template, the MCP server flows down to every agent created from that template via the template sync flow.
 
+## System-managed MCP servers
+
+Some rows are owned by managed applications rather than by an operator-created
+registration form. They may appear in Settings -> MCP Servers so operators can
+confirm assignment and connection state, but their lifecycle belongs to the
+app-specific settings page.
+
+| Server         | Owner              | Authentication model                                                             | Operator action                                                                  |
+| -------------- | ------------------ | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Twenty CRM     | Twenty managed app | Per-user OAuth against the managed Twenty runtime                                | Users connect their own OAuth token; repair the row from Settings -> CRM         |
+| Kestra Control | Kestra managed app | Tenant API key to ThinkWork `/mcp/kestra`, backed by Secrets Manager secret refs | Repair the row from Settings -> Applications -> Kestra; do not paste credentials |
+
+System-managed rows should not be duplicated with manual registrations. If a
+row is missing or stale, use the app page's install/repair action so ThinkWork
+can preserve managed metadata, default-agent assignment, and secret references.
+
+Kestra deserves one extra distinction: public Kestra catalog or docs MCP
+servers are authoring context only. They can help agents discover plugins,
+blueprints, and examples, but they do not authenticate to the customer's
+managed Kestra runtime. The **Kestra Control** row points at ThinkWork's
+`/mcp/kestra` endpoint and is the only v1 path for agents to validate, upsert,
+execute, and inspect customer Kestra flows.
+
 ### OAuth flow from the admin UI
 
 Although per-user tokens normally come from Spaces/Desktop or mobile Settings,
@@ -131,6 +154,9 @@ The admin UI does not currently expose an in-place rotate button — rotation ha
 
 - **REST, not GraphQL.** MCP server management does not flow through urql, so there's no live subscription for MCP state changes. The list fetches on mount and after mutations.
 - **No in-place key rotation.** Rotating a tenant API key currently requires delete + re-register.
+- **Managed rows are repaired from app pages.** System-managed rows such as
+  Twenty CRM and Kestra Control are reconciled by their owning managed app, not
+  by manual delete/recreate flows.
 - **Tool list is a snapshot.** Test connection caches the tool list at the time of the test. If the MCP server adds or removes tools, the cached list is stale until the next test.
 - **Admin OAuth popup flow is rudimentary.** The admin-side OAuth button opens a browser popup and relies on the user completing the flow manually; end-user Spaces/Desktop Settings has the supported desktop return flow.
 
@@ -138,5 +164,6 @@ The admin UI does not currently expose an in-place rotate button — rotation ha
 
 - [Mobile — Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — the per-user token flow that complements this page
 - [Agent Templates](/applications/web/agent-templates/) — where MCP servers are assigned to templates
+- [Admin — Kestra](/applications/admin/kestra/) — Kestra control MCP lifecycle and verification
 - [MCP Tools (concept)](/concepts/mcp-tools/) — the full MCP integration model, token lifecycle, and runtime behavior
 - [Built-in Tools](/applications/web/builtin-tools/) — the other path for exposing external capabilities (non-MCP provider tools)
