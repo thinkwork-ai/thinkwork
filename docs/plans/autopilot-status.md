@@ -10,15 +10,15 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U2 - Finish The Full-Environment Controller Run
-  Contract.
-- Current branch: `codex/u2-controller-run-contract`.
+- Current implementation unit: U3 - Move ThinkWork Dev To The Deployment
+  Controller First.
+- Current branch: `codex/u3-dev-controller-dogfood`.
 - Current worktree:
-  `.Codex/worktrees/u2-controller-run-contract`.
+  `.Codex/worktrees/u3-dev-controller-dogfood`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
-  opened.
-- Status: U2 PR opened; monitoring required CI.
+  merged; U3 PR not opened yet.
+- Status: U3 in progress.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -49,6 +49,15 @@ status: in_progress
     session events, writes controller input summaries, redacted Terraform vars,
     plan summaries, and outputs as deployment evidence, supports `update` in the
     runner action contract, and keeps Slack/Stripe disabled in base install.
+  - U2 PR #2287 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+    `test`) and was squash merged as `c30f825`.
+  - U2 remote branch was already deleted by GitHub merge handling; local U2
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U3 worktree from `origin/main` at `c30f825`.
+  - U3 adds a dev dogfood path where `thinkwork deploy --controller` or manual
+    `deploy.yml` with `use_controller=true` starts the dev deployment
+    controller with an explicit release manifest URL/digest and skips the
+    legacy direct Terraform apply for that workflow run.
 - Local verification:
   - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
     passed: 7 tests.
@@ -86,6 +95,12 @@ status: in_progress
   - U2 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
     Prettier-managed files passed.
   - U2 `git diff --check` passed.
+  - U3 `pnpm --filter thinkwork-cli test -- deploy.test.ts` passed: 3 tests.
+  - U3 `pnpm --filter thinkwork-cli typecheck` passed.
+  - U3 `pnpm --filter thinkwork-cli build` passed.
+  - U3 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - U3 `git diff --check` passed.
 
 ## Tenant Model Catalog - 2026-06-09
 

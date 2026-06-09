@@ -13,6 +13,30 @@ on:
         description: "Run optional post-deploy smoke tests"
         type: boolean
         default: false
+      use_controller:
+        description: "Start the dev deployment controller instead of direct Terraform apply"
+        type: boolean
+        default: false
+      controller_action:
+        description: "Deployment controller action"
+        type: choice
+        default: update
+        options:
+          - plan
+          - deploy
+          - update
+      release_version:
+        description: "Release version for controller mode, for example v0.1.0-canary.134"
+        type: string
+        default: ""
+      release_manifest_url:
+        description: "Release manifest URL for controller mode"
+        type: string
+        default: ""
+      release_manifest_sha256:
+        description: "Release manifest SHA-256 for controller mode"
+        type: string
+        default: ""
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -365,6 +389,114 @@ jobs:
             --query '{id:agentRuntimeId,name:agentRuntimeName,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
             --output json || echo "WARN: get-agent-runtime returned non-zero after update; Deploy Summary will perform the tolerant drift probe."
 
+  # ── Dev deployment-controller dogfood path ──────────────────────
+  deployment-controller-update:
+    name: Deployment Controller Update
+    if: github.event_name == 'workflow_dispatch' && inputs.use_controller == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Start dev deployment controller
+        env:
+          CONTROLLER_ACTION: ${{ inputs.controller_action }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          RELEASE_MANIFEST_URL: ${{ inputs.release_manifest_url }}
+          RELEASE_MANIFEST_SHA256: ${{ inputs.release_manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RELEASE_VERSION" ] || [ -z "$RELEASE_MANIFEST_URL" ] || [ -z "$RELEASE_MANIFEST_SHA256" ]; then
+            echo "release_version, release_manifest_url, and release_manifest_sha256 are required when use_controller=true." >&2
+            exit 1
+          fi
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          STATE_MACHINE_ARN="arn:aws:states:${AWS_REGION}:${ACCOUNT_ID}:stateMachine:thinkwork-${STAGE}-deployment-orchestrator"
+          SESSION_ID="gha-${STAGE}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          EVIDENCE_BUCKET="thinkwork-${STAGE}-${ACCOUNT_ID}-deploy-evidence"
+          INPUT_JSON=$(jq -n \
+            --arg action "$CONTROLLER_ACTION" \
+            --arg sessionId "$SESSION_ID" \
+            --arg stage "$STAGE" \
+            --arg accountId "$ACCOUNT_ID" \
+            --arg region "$AWS_REGION" \
+            --arg evidenceBucket "$EVIDENCE_BUCKET" \
+            --arg releaseVersion "$RELEASE_VERSION" \
+            --arg manifestUrl "$RELEASE_MANIFEST_URL" \
+            --arg manifestSha256 "$RELEASE_MANIFEST_SHA256" \
+            '{
+              schemaVersion: 1,
+              contract: "thinkwork.deployment.controller.v1",
+              phase: $action,
+              action: $action,
+              sessionId: $sessionId,
+              customerName: "ThinkWork",
+              environmentName: $stage,
+              awsAccountId: $accountId,
+              awsRegion: $region,
+              evidenceBucket: $evidenceBucket,
+              evidence: {
+                bucket: $evidenceBucket,
+                prefix: ("sessions/" + $sessionId + "/" + $action),
+                expectedArtifacts: [
+                  "controller-input-summary.json",
+                  "redacted-terraform-vars.json",
+                  "terraform-plan.json",
+                  "terraform-outputs.json",
+                  "deployment-evidence.json"
+                ]
+              },
+              releaseVersion: $releaseVersion,
+              releaseManifestUrl: $manifestUrl,
+              releaseManifestSha256: $manifestSha256,
+              release: {
+                version: $releaseVersion,
+                manifestUrl: $manifestUrl,
+                manifestSha256: $manifestSha256
+              },
+              session: {
+                id: $sessionId,
+                source: "github-actions",
+                requestedAction: $action
+              },
+              operation: {
+                kind: "foundation",
+                action: $action,
+                plan: true,
+                apply: ($action != "plan"),
+                destroy: false
+              },
+              features: {
+                baseInstall: {
+                  cognee: false,
+                  slack: false,
+                  stripe: false,
+                  twenty: false
+                },
+                optionalApps: []
+              },
+              terraform: {
+                stateRecovery: {
+                  mode: "state",
+                  recoverByTags: false
+                }
+              }
+            }')
+          EXECUTION_ARN=$(aws stepfunctions start-execution \
+            --state-machine-arn "$STATE_MACHINE_ARN" \
+            --name "tw-${SESSION_ID}" \
+            --input "$INPUT_JSON" \
+            --query executionArn \
+            --output text)
+          echo "Started deployment controller execution: $EXECUTION_ARN"
+          echo "state_machine_arn=$STATE_MACHINE_ARN" >> "$GITHUB_STEP_SUMMARY"
+          echo "execution_arn=$EXECUTION_ARN" >> "$GITHUB_STEP_SUMMARY"
+
   # ── Terraform apply ──────────────────────────────────────────────
   terraform-apply:
     name: Terraform Apply
@@ -391,6 +523,7 @@ jobs:
     if: >-
       always() && !cancelled()
       && needs.build-lambdas.result == 'success'
+      && !(github.event_name == 'workflow_dispatch' && inputs.use_controller == true)
       && (
         needs.detect-changes.outputs.terraform == 'true' ||
         needs.detect-changes.outputs.lambdas == 'true' ||

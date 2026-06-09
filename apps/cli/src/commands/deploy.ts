@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +42,9 @@ export interface DeployCommandOptions extends EnterpriseDeployOptions {
   stage?: string;
   component: string;
   yes?: boolean;
+  controller?: boolean;
+  controllerAction?: string;
+  sessionId?: string;
 }
 
 export interface DeployCommandDependencies {
@@ -49,7 +52,69 @@ export interface DeployCommandDependencies {
   enterpriseDeploy?: (
     opts: DeployCommandOptions,
   ) => Promise<EnterpriseDeployResult>;
+  controllerDeploy?: (
+    opts: DeployCommandOptions,
+  ) => Promise<ControllerDeployResult>;
   shouldUseEnterprise?: (opts: DeployCommandOptions) => boolean;
+}
+
+export interface ControllerDeployResult {
+  stateMachineArn: string;
+  executionArn: string | null;
+  payload: ControllerDeployInput;
+}
+
+export interface ControllerDeployInput {
+  schemaVersion: 1;
+  contract: "thinkwork.deployment.controller.v1";
+  phase: string;
+  action: "plan" | "deploy" | "update";
+  sessionId: string;
+  customerName: string;
+  environmentName: string;
+  awsAccountId: string;
+  awsRegion: string;
+  evidenceBucket: string;
+  evidence: {
+    bucket: string;
+    prefix: string;
+    expectedArtifacts: string[];
+  };
+  releaseVersion: string;
+  releaseManifestUrl: string;
+  releaseManifestSha256: string;
+  release: {
+    version: string;
+    manifestUrl: string;
+    manifestSha256: string;
+  };
+  session: {
+    id: string;
+    source: "cli";
+    requestedAction: string;
+  };
+  operation: {
+    kind: "foundation";
+    action: "plan" | "deploy" | "update";
+    plan: true;
+    apply: boolean;
+    destroy: false;
+  };
+  features: {
+    baseInstall: {
+      cognee: false;
+      slack: false;
+      stripe: false;
+      twenty: false;
+    };
+    optionalApps: [];
+  };
+  terraform: {
+    stateRecovery: {
+      mode: "state";
+      recoverByTags: false;
+    };
+  };
 }
 
 export interface ConfirmLocalDeployStageDependencies {
@@ -90,6 +155,19 @@ export function registerDeployCommand(
       "--local-terraform",
       "Force the local Terraform deploy path even inside an enterprise deployment repo",
     )
+    .option(
+      "--controller",
+      "Start the deployment controller instead of running local Terraform",
+    )
+    .option(
+      "--controller-action <action>",
+      "Deployment controller action (plan|deploy|update)",
+      "update",
+    )
+    .option(
+      "--session-id <id>",
+      "Stable deployment controller session id for evidence correlation",
+    )
     .option("--release-version <version>", "Pinned ThinkWork release version")
     .option("--manifest-url <url>", "Pinned ThinkWork release manifest URL")
     .option(
@@ -122,6 +200,15 @@ export async function runDeployCommand(
   opts: DeployCommandOptions,
   deps: DeployCommandDependencies = {},
 ): Promise<void> {
+  if (opts.controller) {
+    const controllerDeploy = deps.controllerDeploy ?? runControllerDeploy;
+    const result = await controllerDeploy(opts);
+    printSuccess(
+      `Deployment controller execution started: ${result.executionArn ?? "unknown execution ARN"}`,
+    );
+    return;
+  }
+
   const shouldUseEnterprise =
     deps.shouldUseEnterprise ?? shouldUseEnterpriseDeploy;
   if (shouldUseEnterprise(opts)) {
@@ -133,6 +220,172 @@ export async function runDeployCommand(
 
   const localDeploy = deps.localDeploy ?? runLocalTerraformDeploy;
   await localDeploy(opts);
+}
+
+export async function runControllerDeploy(
+  opts: DeployCommandOptions,
+): Promise<ControllerDeployResult> {
+  const stage = await resolveStage({ flag: opts.stage });
+  const identity = getAwsIdentity();
+  printHeader("deployment-controller", stage, identity);
+
+  if (!identity) {
+    throw new Error(
+      "Could not resolve AWS identity. Is the AWS CLI configured?",
+    );
+  }
+  if (!opts.manifestUrl || !opts.manifestSha256) {
+    throw new Error(
+      "--manifest-url and --manifest-sha256 are required for controller deploys.",
+    );
+  }
+
+  const action = normalizeControllerDeployAction(opts.controllerAction);
+  const sessionId =
+    opts.sessionId ??
+    `cli-${stage}-${new Date().toISOString().replace(/[^0-9TZ]/g, "")}`;
+  const stateMachineArn = controllerStateMachineArn({
+    stage,
+    region: identity.region,
+    accountId: identity.account,
+  });
+  const payload = buildControllerDeployInput({
+    action,
+    stage,
+    accountId: identity.account,
+    region: identity.region,
+    releaseVersion: opts.releaseVersion ?? "unresolved",
+    manifestUrl: opts.manifestUrl,
+    manifestSha256: opts.manifestSha256,
+    sessionId,
+  });
+  const args = [
+    "stepfunctions",
+    "start-execution",
+    "--state-machine-arn",
+    stateMachineArn,
+    "--name",
+    controllerExecutionName(sessionId),
+    "--input",
+    JSON.stringify(payload),
+    "--region",
+    identity.region,
+    "--output",
+    "json",
+  ];
+  if (opts.profile) args.push("--profile", opts.profile);
+
+  const started = spawnSync("aws", args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (started.status !== 0) {
+    throw new Error(
+      `Deployment controller start failed: ${started.stderr || started.stdout}`,
+    );
+  }
+
+  const parsed = JSON.parse(started.stdout || "{}") as {
+    executionArn?: string;
+  };
+  return {
+    stateMachineArn,
+    executionArn: parsed.executionArn ?? null,
+    payload,
+  };
+}
+
+export function buildControllerDeployInput(options: {
+  action: "plan" | "deploy" | "update";
+  stage: string;
+  accountId: string;
+  region: string;
+  releaseVersion: string;
+  manifestUrl: string;
+  manifestSha256: string;
+  sessionId: string;
+}): ControllerDeployInput {
+  const evidenceBucket = `thinkwork-${options.stage}-${options.accountId}-deploy-evidence`;
+  const evidencePrefix = `sessions/${options.sessionId}/${options.action}`;
+  return {
+    schemaVersion: 1,
+    contract: "thinkwork.deployment.controller.v1",
+    phase: options.action,
+    action: options.action,
+    sessionId: options.sessionId,
+    customerName: "ThinkWork",
+    environmentName: options.stage,
+    awsAccountId: options.accountId,
+    awsRegion: options.region,
+    evidenceBucket,
+    evidence: {
+      bucket: evidenceBucket,
+      prefix: evidencePrefix,
+      expectedArtifacts: [
+        "controller-input-summary.json",
+        "redacted-terraform-vars.json",
+        "terraform-plan.json",
+        "terraform-outputs.json",
+        "deployment-evidence.json",
+      ],
+    },
+    releaseVersion: options.releaseVersion,
+    releaseManifestUrl: options.manifestUrl,
+    releaseManifestSha256: options.manifestSha256,
+    release: {
+      version: options.releaseVersion,
+      manifestUrl: options.manifestUrl,
+      manifestSha256: options.manifestSha256,
+    },
+    session: {
+      id: options.sessionId,
+      source: "cli",
+      requestedAction: options.action,
+    },
+    operation: {
+      kind: "foundation",
+      action: options.action,
+      plan: true,
+      apply: options.action !== "plan",
+      destroy: false,
+    },
+    features: {
+      baseInstall: {
+        cognee: false,
+        slack: false,
+        stripe: false,
+        twenty: false,
+      },
+      optionalApps: [],
+    },
+    terraform: {
+      stateRecovery: {
+        mode: "state",
+        recoverByTags: false,
+      },
+    },
+  };
+}
+
+export function controllerStateMachineArn(options: {
+  stage: string;
+  region: string;
+  accountId: string;
+}): string {
+  return `arn:aws:states:${options.region}:${options.accountId}:stateMachine:thinkwork-${options.stage}-deployment-orchestrator`;
+}
+
+function controllerExecutionName(sessionId: string): string {
+  return `tw-${sessionId.replace(/[^A-Za-z0-9-_]/g, "-").slice(0, 77)}`;
+}
+
+function normalizeControllerDeployAction(
+  action: string | undefined,
+): "plan" | "deploy" | "update" {
+  if (action === "plan" || action === "deploy" || action === "update") {
+    return action;
+  }
+  throw new Error("--controller-action must be one of: plan, deploy, update");
 }
 
 export async function runLocalTerraformDeploy(
