@@ -52,6 +52,15 @@ const FIT_COLUMN_META = {
 const MODEL_ID_COLUMN_META = {
   meta: { headClassName: "px-4", cellClassName: "min-w-0" },
 };
+const IMPORT_NAME_COLUMN_META = {
+  meta: { headClassName: "px-4", cellClassName: "max-w-0" },
+};
+const IMPORT_FIT_COLUMN_META = {
+  meta: {
+    headClassName: "w-px whitespace-nowrap",
+    cellClassName: "w-px whitespace-nowrap",
+  },
+};
 const NUMERIC_COLUMN_META = {
   meta: {
     headClassName: "whitespace-nowrap text-right",
@@ -366,7 +375,6 @@ function ImportModelsDialog({
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({});
   const [candidatesResult, refetchCandidates] = useQuery({
     query: SettingsBedrockModelImportCandidatesQuery,
     variables: { tenantId },
@@ -382,7 +390,6 @@ function ImportModelsDialog({
       setSearch("");
       setSelected({});
       setDisplayNames({});
-      setEnabled({});
     }
   }, [open]);
 
@@ -424,9 +431,6 @@ function ImportModelsDialog({
       ...current,
       [candidate.modelId]: current[candidate.modelId] ?? candidate.displayName,
     }));
-    if (!checked) {
-      setEnabled((current) => ({ ...current, [candidate.modelId]: false }));
-    }
   }
 
   async function submitImport() {
@@ -439,8 +443,7 @@ function ImportModelsDialog({
           modelId: candidate.modelId,
           displayName:
             displayNames[candidate.modelId]?.trim() || candidate.displayName,
-          enabled:
-            Boolean(enabled[candidate.modelId]) && canEnableModel(candidate),
+          enabled: false,
         })),
       },
     });
@@ -465,39 +468,44 @@ function ImportModelsDialog({
       {
         id: "selected",
         header: "",
-        size: 44,
         meta: {
-          cellClassName: "whitespace-nowrap",
-          headClassName: "whitespace-nowrap",
+          headClassName: "w-px whitespace-nowrap align-top",
+          cellClassName: "w-px whitespace-nowrap align-top",
         },
         cell: ({ row }) => (
-          <Checkbox
-            aria-label={`Select ${row.original.displayName}`}
-            checked={Boolean(selected[row.original.modelId])}
-            disabled={row.original.alreadyImported}
-            onCheckedChange={(checked) =>
-              toggleSelected(row.original, checked === true)
-            }
-          />
+          <div className="flex min-h-16 items-start pt-3">
+            <Checkbox
+              aria-label={`Select ${row.original.displayName}`}
+              checked={Boolean(selected[row.original.modelId])}
+              disabled={row.original.alreadyImported}
+              onCheckedChange={(checked) =>
+                toggleSelected(row.original, checked === true)
+              }
+            />
+          </div>
         ),
       },
       {
         accessorKey: "displayName",
         header: "Name",
-        meta: {
-          cellClassName: "min-w-0",
-          headClassName: "px-4",
-        },
+        ...IMPORT_NAME_COLUMN_META,
         cell: ({ row }) => (
-          <div className="min-w-0 space-y-1">
-            <div
-              className="truncate font-medium"
-              title={row.original.displayName}
-            >
-              {row.original.displayName}
+          <div className="flex min-h-16 min-w-0 flex-col justify-start gap-1 pb-3 pt-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className="min-w-0 truncate font-medium"
+                title={row.original.displayName}
+              >
+                {row.original.displayName}
+              </span>
+              {row.original.alreadyImported ? (
+                <Badge variant="outline" className="shrink-0">
+                  imported
+                </Badge>
+              ) : null}
             </div>
             <code
-              className="block truncate text-xs text-muted-foreground"
+              className="block min-w-0 truncate text-xs text-muted-foreground"
               title={row.original.modelId}
             >
               {row.original.modelId}
@@ -514,98 +522,19 @@ function ImportModelsDialog({
                     [row.original.modelId]: event.target.value,
                   }))
                 }
-                className="h-8"
+                className="h-8 min-w-0"
               />
             ) : null}
           </div>
         ),
       },
-      {
-        accessorKey: "providerName",
-        header: "Provider",
-        size: 170,
-        meta: {
-          cellClassName: "whitespace-nowrap",
-          headClassName: "whitespace-nowrap",
-        },
-        cell: ({ row }) => (
-          <Badge variant="secondary">{row.original.providerName}</Badge>
-        ),
-      },
-      {
-        id: "pricing",
-        header: "Pricing",
-        size: 150,
-        meta: {
-          cellClassName: "whitespace-nowrap",
-          headClassName: "whitespace-nowrap",
-        },
-        cell: ({ row }) =>
-          canEnableModel(row.original) ? (
-            <span className="text-sm">{pricingText(row.original)}</span>
-          ) : (
-            <span className="text-sm text-muted-foreground">N/A</span>
-          ),
-      },
-      {
-        id: "enabled",
-        header: "Enable",
-        size: 88,
-        meta: {
-          cellClassName: "whitespace-nowrap",
-          headClassName: "whitespace-nowrap",
-        },
-        cell: ({ row }) => {
-          const allowed = canEnableModel(row.original);
-          const checked = Boolean(enabled[row.original.modelId]) && allowed;
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <Switch
-                    aria-label={`Enable ${row.original.displayName} on import`}
-                    checked={checked}
-                    disabled={
-                      row.original.alreadyImported ||
-                      !selected[row.original.modelId] ||
-                      !allowed
-                    }
-                    onCheckedChange={(checked) =>
-                      setEnabled((current) => ({
-                        ...current,
-                        [row.original.modelId]: checked,
-                      }))
-                    }
-                  />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {allowed ? "Enable after import" : "Pricing unresolved"}
-              </TooltipContent>
-            </Tooltip>
-          );
-        },
-      },
-      {
-        id: "imported",
-        header: "",
-        size: 96,
-        meta: {
-          cellClassName: "whitespace-nowrap",
-          headClassName: "whitespace-nowrap",
-        },
-        cell: ({ row }) =>
-          row.original.alreadyImported ? (
-            <Badge variant="outline">imported</Badge>
-          ) : null,
-      },
     ],
-    [displayNames, enabled, selected],
+    [displayNames, selected],
   );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(88vh,760px)] max-w-5xl flex-col overflow-hidden">
+      <DialogContent className="flex h-[min(88vh,760px)] w-[min(94vw,1180px)] max-w-none flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Import Bedrock models</DialogTitle>
           <DialogDescription>
@@ -646,10 +575,9 @@ function ImportModelsDialog({
             <DataTable
               columns={columns}
               data={candidates}
-              pageSize={10}
+              pageSize={0}
               allowHorizontalScroll={false}
               scrollable
-              tableClassName="w-full table-fixed"
               emptyState={
                 <div className="py-8 text-center text-sm text-muted-foreground">
                   No import candidates.
