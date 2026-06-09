@@ -118,6 +118,101 @@ describe("managedApplicationHealthCheck", () => {
     expect(Date.parse(result.checkedAt)).not.toBeNaN();
   });
 
+  it("returns unhealthy without fetching when Kestra is not provisioned", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await mod.managedApplicationHealthCheck(
+      null,
+      { key: "kestra" },
+      cognito,
+    );
+
+    expect(result).toMatchObject({
+      key: "kestra",
+      healthy: false,
+      statusCode: null,
+      latencyMs: 0,
+      endpoint: null,
+      message: "Kestra is not provisioned for this stage.",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns parked status without fetching when Kestra runtime is disabled", async () => {
+    vi.stubEnv("KESTRA", "1|0|https://orchestrate.example.com");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await mod.managedApplicationHealthCheck(
+      null,
+      { key: "orchestrate" },
+      cognito,
+    );
+
+    expect(result).toMatchObject({
+      key: "kestra",
+      healthy: false,
+      statusCode: 503,
+      latencyMs: 0,
+      endpoint: "https://orchestrate.example.com",
+      message:
+        "Kestra runtime is parked; flow definitions, execution history, storage, and credentials are retained.",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("probes Kestra public endpoint when the runtime is enabled", async () => {
+    vi.stubEnv("KESTRA", "1|1|https://orchestrate.example.com/");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await mod.managedApplicationHealthCheck(
+      null,
+      { key: "kestra" },
+      cognito,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://orchestrate.example.com/",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(result).toMatchObject({
+      key: "kestra",
+      healthy: true,
+      statusCode: 200,
+      endpoint: "https://orchestrate.example.com/",
+      message: "Kestra public endpoint is reachable.",
+    });
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+    expect(Date.parse(result.checkedAt)).not.toBeNaN();
+  });
+
+  it("treats Kestra public authentication challenge as reachable", async () => {
+    vi.stubEnv("KESTRA", "1|1|https://orchestrate.example.com/");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await mod.managedApplicationHealthCheck(
+      null,
+      { key: "kestra" },
+      cognito,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://orchestrate.example.com/",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(result).toMatchObject({
+      key: "kestra",
+      healthy: true,
+      statusCode: 401,
+      endpoint: "https://orchestrate.example.com/",
+      message:
+        "Kestra public endpoint is reachable and requires authentication.",
+    });
+  });
+
   it("rejects unknown managed application keys", async () => {
     await expect(
       mod.managedApplicationHealthCheck(null, { key: "nope" }, cognito),

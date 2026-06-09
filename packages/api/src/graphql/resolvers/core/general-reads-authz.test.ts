@@ -96,6 +96,12 @@ describe("deploymentStatus authz", () => {
           enabled: false,
           managedMcpStatus: "not_ready",
         }),
+        expect.objectContaining({
+          key: "kestra",
+          status: "disabled",
+          enabled: false,
+          managedMcpStatus: "not_ready",
+        }),
       ]),
     );
   });
@@ -200,6 +206,50 @@ describe("deploymentStatus authz", () => {
           enabled: false,
           provisioned: false,
           runtimeEnabled: false,
+        }),
+      ]),
+    );
+  });
+
+  it("expands Kestra compact deployment status into managed app fields", async () => {
+    mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
+    vi.stubEnv(
+      "KESTRA",
+      [
+        "1",
+        "1",
+        "https://orchestrate.example.com",
+        "cluster-arn",
+        "kestra-service",
+        "/thinkwork/dev/kestra",
+        "kestra-bucket",
+        "thinkwork_kestra",
+        "secret-arn",
+      ].join("|"),
+    );
+
+    const result = await deploymentStatusMod.deploymentStatus(
+      null,
+      {},
+      service,
+    );
+
+    expect(result.managedApplications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "kestra",
+          displayName: "Kestra",
+          status: "running",
+          enabled: true,
+          provisioned: true,
+          runtimeEnabled: true,
+          url: "https://orchestrate.example.com",
+          logGroupNames: ["/thinkwork/dev/kestra"],
+          serviceNames: ["kestra-service"],
+          storageBucketName: "kestra-bucket",
+          databaseName: "thinkwork_kestra",
+          managedMcpStatus: "missing",
+          managedMcpInstallAvailable: false,
         }),
       ]),
     );

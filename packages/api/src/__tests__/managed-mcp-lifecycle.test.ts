@@ -179,6 +179,8 @@ function runningTwenty() {
     serviceNames: [],
     albArn: null,
     targetGroupArn: null,
+    storageBucketName: null,
+    databaseName: null,
     message: null,
     managedMcpServerId: null,
     managedMcpStatus: "missing",

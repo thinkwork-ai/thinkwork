@@ -1,4 +1,4 @@
-export type ManagedApplicationKey = "cognee" | "twenty";
+export type ManagedApplicationKey = "cognee" | "twenty" | "kestra";
 
 export type CogneeStatus = {
   enabled: boolean;
@@ -15,6 +15,20 @@ export type TwentyStatus = {
   workerServiceName: string | null;
   serverLogGroupName: string | null;
   workerLogGroupName: string | null;
+  albArn: string | null;
+  targetGroupArn: string | null;
+  malformed: boolean;
+};
+
+export type KestraStatus = {
+  provisioned: boolean;
+  runtimeEnabled: boolean;
+  url: string | null;
+  clusterArn: string | null;
+  serviceName: string | null;
+  logGroupName: string | null;
+  storageBucketName: string | null;
+  databaseName: string | null;
   albArn: string | null;
   targetGroupArn: string | null;
   malformed: boolean;
@@ -38,6 +52,8 @@ export type ManagedApplicationStatus = {
   serviceNames: string[];
   albArn: string | null;
   targetGroupArn: string | null;
+  storageBucketName: string | null;
+  databaseName: string | null;
   message: string | null;
   managedMcpServerId: string | null;
   managedMcpStatus: string;
@@ -60,6 +76,9 @@ export function normalizeManagedApplicationKey(
   }
   if (key === "twenty" || key === "crm" || key === "twenty-crm") {
     return "twenty";
+  }
+  if (key === "kestra" || key === "orchestration" || key === "orchestrate") {
+    return "kestra";
   }
   return null;
 }
@@ -180,16 +199,77 @@ export function readTwentyStatus(): TwentyStatus {
   };
 }
 
+export function readKestraStatus(): KestraStatus {
+  const raw = process.env.KESTRA || process.env.KESTRA_STATUS;
+  const fallbackUrl = process.env.KESTRA_URL || null;
+
+  if (!raw) {
+    const provisioned = truthyFlag(process.env.KESTRA_PROVISIONED);
+    const defaults = deriveKestraDefaults(provisioned);
+    return {
+      provisioned,
+      runtimeEnabled: truthyFlag(process.env.KESTRA_RUNTIME_ENABLED),
+      url: fallbackUrl,
+      clusterArn: process.env.KESTRA_CLUSTER_ARN || defaults.clusterArn,
+      serviceName: process.env.KESTRA_SERVICE_NAME || defaults.serviceName,
+      logGroupName: process.env.KESTRA_LOG_GROUP_NAME || defaults.logGroupName,
+      storageBucketName:
+        process.env.KESTRA_STORAGE_BUCKET_NAME || defaults.storageBucketName,
+      databaseName: process.env.KESTRA_DATABASE_NAME || defaults.databaseName,
+      albArn: process.env.KESTRA_ALB_ARN || null,
+      targetGroupArn: process.env.KESTRA_TARGET_GROUP_ARN || null,
+      malformed: false,
+    };
+  }
+
+  const parts = raw.split("|");
+  const malformed = parts.length < 2;
+  const provisioned = truthyFlag(parts[0]);
+  const defaults = deriveKestraDefaults(provisioned && !malformed);
+  return {
+    provisioned,
+    runtimeEnabled: truthyFlag(parts[1]),
+    url: nonEmpty(parts[2]) ?? fallbackUrl,
+    clusterArn:
+      nonEmpty(parts[3]) ??
+      process.env.KESTRA_CLUSTER_ARN ??
+      defaults.clusterArn,
+    serviceName:
+      nonEmpty(parts[4]) ??
+      process.env.KESTRA_SERVICE_NAME ??
+      defaults.serviceName,
+    logGroupName:
+      nonEmpty(parts[5]) ??
+      process.env.KESTRA_LOG_GROUP_NAME ??
+      defaults.logGroupName,
+    storageBucketName:
+      nonEmpty(parts[6]) ??
+      process.env.KESTRA_STORAGE_BUCKET_NAME ??
+      defaults.storageBucketName,
+    databaseName:
+      nonEmpty(parts[7]) ??
+      process.env.KESTRA_DATABASE_NAME ??
+      defaults.databaseName,
+    albArn: process.env.KESTRA_ALB_ARN || null,
+    targetGroupArn: process.env.KESTRA_TARGET_GROUP_ARN || null,
+    malformed,
+  };
+}
+
 export function readManagedApplications(): ManagedApplicationStatus[] {
-  return [cogneeManagedApplication(), twentyManagedApplication()];
+  return [
+    cogneeManagedApplication(),
+    twentyManagedApplication(),
+    kestraManagedApplication(),
+  ];
 }
 
 export function readManagedApplication(
   key: ManagedApplicationKey,
 ): ManagedApplicationStatus {
-  return key === "cognee"
-    ? cogneeManagedApplication()
-    : twentyManagedApplication();
+  if (key === "cognee") return cogneeManagedApplication();
+  if (key === "twenty") return twentyManagedApplication();
+  return kestraManagedApplication();
 }
 
 function cogneeManagedApplication(): ManagedApplicationStatus {
@@ -227,6 +307,8 @@ function cogneeManagedApplication(): ManagedApplicationStatus {
     serviceNames: serviceName ? [serviceName] : [],
     albArn: null,
     targetGroupArn: null,
+    storageBucketName: null,
+    databaseName: null,
     message: cognee.enabled
       ? null
       : "Cognee is not provisioned for this stage.",
@@ -274,6 +356,8 @@ function twentyManagedApplication(): ManagedApplicationStatus {
     serviceNames,
     albArn: twenty.albArn,
     targetGroupArn: twenty.targetGroupArn,
+    storageBucketName: null,
+    databaseName: null,
     message: twentyStatusMessage(status),
     managedMcpServerId: null,
     managedMcpStatus: "missing",
@@ -285,6 +369,63 @@ function twentyManagedApplication(): ManagedApplicationStatus {
         ? "Twenty CRM MCP server has not been registered yet."
         : null,
   };
+}
+
+function kestraManagedApplication(): ManagedApplicationStatus {
+  const kestra = readKestraStatus();
+  const status = kestra.malformed
+    ? "unknown"
+    : kestra.runtimeEnabled
+      ? "running"
+      : kestra.provisioned
+        ? "parked"
+        : "disabled";
+
+  return {
+    key: "kestra",
+    displayName: "Kestra",
+    description: "Workflow orchestration runtime managed by ThinkWork.",
+    status,
+    enabled: kestra.runtimeEnabled && !kestra.malformed,
+    provisioned: kestra.provisioned && !kestra.malformed,
+    runtimeEnabled: kestra.runtimeEnabled && !kestra.malformed,
+    url: kestra.url,
+    endpoint: kestra.url,
+    backendMode: null,
+    logGroupName: kestra.logGroupName,
+    logGroupNames: kestra.logGroupName ? [kestra.logGroupName] : [],
+    clusterArn: kestra.clusterArn,
+    serviceName: kestra.serviceName,
+    serviceNames: kestra.serviceName ? [kestra.serviceName] : [],
+    albArn: kestra.albArn,
+    targetGroupArn: kestra.targetGroupArn,
+    storageBucketName: kestra.storageBucketName,
+    databaseName: kestra.databaseName,
+    message: kestraStatusMessage(status),
+    managedMcpServerId: null,
+    managedMcpStatus: kestra.runtimeEnabled ? "missing" : "not_ready",
+    managedMcpInstalled: false,
+    managedMcpInstallAvailable: false,
+    managedMcpMessage:
+      status === "running" && kestra.url
+        ? "Kestra control MCP registration will be reconciled by the managed control service."
+        : "Kestra control MCP registration requires the runtime to be running.",
+  };
+}
+
+function kestraStatusMessage(
+  status: ManagedApplicationStatus["status"],
+): string | null {
+  if (status === "parked") {
+    return "Kestra runtime is parked; flow definitions, execution history, storage, and credentials are retained.";
+  }
+  if (status === "disabled") {
+    return "Kestra has not been provisioned for this stage.";
+  }
+  if (status === "unknown") {
+    return "Kestra deployment status could not be parsed.";
+  }
+  return null;
 }
 
 function twentyStatusMessage(
@@ -300,6 +441,41 @@ function twentyStatusMessage(
     return "Twenty CRM deployment status could not be parsed.";
   }
   return null;
+}
+
+function deriveKestraDefaults(
+  provisioned: boolean,
+): Pick<
+  KestraStatus,
+  | "clusterArn"
+  | "serviceName"
+  | "logGroupName"
+  | "storageBucketName"
+  | "databaseName"
+> {
+  if (!provisioned) {
+    return {
+      clusterArn: null,
+      serviceName: null,
+      logGroupName: null,
+      storageBucketName: null,
+      databaseName: null,
+    };
+  }
+
+  const stage = process.env.STAGE || "unknown";
+  const region = process.env.AWS_REGION || "us-east-1";
+  const accountId = process.env.AWS_ACCOUNT_ID || null;
+
+  return {
+    clusterArn: accountId
+      ? `arn:aws:ecs:${region}:${accountId}:cluster/thinkwork-${stage}-kestra-cluster`
+      : null,
+    serviceName: `thinkwork-${stage}-kestra-service`,
+    logGroupName: `/thinkwork/${stage}/kestra`,
+    storageBucketName: null,
+    databaseName: null,
+  };
 }
 
 function truthyFlag(value: unknown): boolean {

@@ -8,7 +8,7 @@ import {
 } from "./managedApplications.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
 
-const TWENTY_HEALTH_TIMEOUT_MS = 3500;
+const MANAGED_APPLICATION_HEALTH_TIMEOUT_MS = 3500;
 
 export const managedApplicationHealthCheck = async (
   _parent: any,
@@ -34,7 +34,11 @@ export const managedApplicationHealthCheck = async (
     return { key, ...result };
   }
 
-  return twentyHealthCheck();
+  if (key === "twenty") {
+    return twentyHealthCheck();
+  }
+
+  return kestraHealthCheck();
 };
 
 async function twentyHealthCheck() {
@@ -70,7 +74,7 @@ async function twentyHealthCheck() {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
-    TWENTY_HEALTH_TIMEOUT_MS,
+    MANAGED_APPLICATION_HEALTH_TIMEOUT_MS,
   );
   try {
     const response = await fetch(healthUrl(endpoint), {
@@ -109,6 +113,82 @@ async function twentyHealthCheck() {
   }
 }
 
-function healthUrl(endpoint: string): string {
-  return `${endpoint.replace(/\/+$/, "")}/healthz`;
+async function kestraHealthCheck() {
+  const application = readManagedApplication("kestra");
+  const startedAt = Date.now();
+  const checkedAt = new Date(startedAt).toISOString();
+  const endpoint = application.url;
+
+  if (!application.provisioned || !endpoint) {
+    return {
+      key: "kestra",
+      healthy: false,
+      statusCode: null,
+      latencyMs: 0,
+      endpoint,
+      checkedAt,
+      message: "Kestra is not provisioned for this stage.",
+    };
+  }
+
+  if (!application.runtimeEnabled) {
+    return {
+      key: "kestra",
+      healthy: false,
+      statusCode: 503,
+      latencyMs: 0,
+      endpoint,
+      checkedAt,
+      message:
+        "Kestra runtime is parked; flow definitions, execution history, storage, and credentials are retained.",
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    MANAGED_APPLICATION_HEALTH_TIMEOUT_MS,
+  );
+  try {
+    const response = await fetch(healthUrl(endpoint, "/"), {
+      method: "GET",
+      signal: controller.signal,
+    });
+    const latencyMs = Date.now() - startedAt;
+    const healthy = response.ok || response.status === 401;
+    return {
+      key: "kestra",
+      healthy,
+      statusCode: response.status,
+      latencyMs,
+      endpoint,
+      checkedAt,
+      message: response.ok
+        ? "Kestra public endpoint is reachable."
+        : response.status === 401
+          ? "Kestra public endpoint is reachable and requires authentication."
+          : `Kestra public endpoint returned ${response.status}.`,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? "Kestra health check timed out."
+        : "Kestra health check could not be completed.";
+    return {
+      key: "kestra",
+      healthy: false,
+      statusCode: null,
+      latencyMs,
+      endpoint,
+      checkedAt,
+      message,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function healthUrl(endpoint: string, path = "/healthz"): string {
+  return `${endpoint.replace(/\/+$/, "")}${path}`;
 }

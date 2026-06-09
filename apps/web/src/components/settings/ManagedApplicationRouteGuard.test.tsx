@@ -74,4 +74,33 @@ describe("ManagedApplicationRouteGuard", () => {
     expect(screen.getByText("CRM settings")).toBeTruthy();
     expect(screen.queryByText("Navigate to /settings/general")).toBeNull();
   });
+
+  it("renders disabled app routes when disabled state is explicitly allowed", () => {
+    useQueryMock.mockReturnValue([
+      {
+        fetching: false,
+        data: {
+          deploymentStatus: {
+            managedApplications: [
+              {
+                key: "kestra",
+                provisioned: false,
+                runtimeEnabled: false,
+              },
+            ],
+          },
+        },
+      },
+      vi.fn(),
+    ]);
+
+    render(
+      <ManagedApplicationRouteGuard appKey="kestra" allowDisabled>
+        <div>Kestra settings</div>
+      </ManagedApplicationRouteGuard>,
+    );
+
+    expect(screen.getByText("Kestra settings")).toBeTruthy();
+    expect(screen.queryByText("Navigate to /settings/general")).toBeNull();
+  });
 });

@@ -11,11 +11,11 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U3 - Composite Terraform, deploy templates, DNS/status outputs.
-- Current branch: `codex/kestra-managed-app-u3`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u3`.
-- Current PR: [#2242](https://github.com/thinkwork-ai/thinkwork/pull/2242).
-- Status: PR open; required CI passed; merge pending.
+- Current unit: U4 - API status, health, and Applications UI.
+- Current branch: `codex/kestra-managed-app-u4`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u4`.
+- Current PR: [#2244](https://github.com/thinkwork-ai/thinkwork/pull/2244).
+- Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
     Kestra requirements, and the managed-app/MCP lifecycle precedent.
@@ -91,6 +91,51 @@ status: in_progress
     - `git diff --check` -> passed.
   - U3 PR [#2242](https://github.com/thinkwork-ai/thinkwork/pull/2242)
     passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`).
+  - U3 was squash merged as `840566af`; remote branch was deleted and local
+    worktree/branch were removed.
+  - Created isolated U4 worktree from `origin/main` at `840566af`.
+  - Started U4 API status, health, and Applications UI work:
+    - added Kestra managed application status parsing from the compact
+      Terraform `KESTRA` environment payload;
+    - exposed generic `storageBucketName` and `databaseName` deployment fields
+      through GraphQL and generated clients;
+    - added Kestra health checks, lifecycle variable handling, and legacy
+      deployment mutation aliases;
+    - added the `/settings/applications/kestra` route, settings page, app-list
+      drill-in, and operator route guard support for disabled-but-manageable
+      apps.
+  - U4 review adjustment:
+    - Changed the Kestra GraphQL health check from a public `/health` request to
+      a public endpoint reachability/auth-surface probe. Kestra's documented
+      `/health` endpoint is on the internal management port, which is already
+      used by the ALB target group; later live smokes should verify target
+      health/AWS evidence for the management endpoint.
+  - U4 local verification passed:
+    - `pnpm schema:build` -> passed.
+    - `pnpm --filter thinkwork-cli codegen` -> passed.
+    - `pnpm --filter @thinkwork/web codegen` -> passed.
+    - `pnpm --filter @thinkwork/mobile codegen` -> passed.
+    - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/core/managedApplications.test.ts src/graphql/resolvers/core/managedApplicationHealthCheck.query.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts src/__tests__/graphql-contract.test.ts src/__tests__/managed-mcp-lifecycle.test.ts`
+      -> 6 files passed, 159 tests passed.
+    - `pnpm --filter @thinkwork/web test -- src/components/settings/ManagedApplicationRouteGuard.test.tsx src/components/settings/SettingsKestraApplication.test.tsx src/components/settings/SettingsCrm.test.tsx src/components/settings/managed-applications/ManagedApplicationsPage.test.tsx src/lib/graphql-queries.schema.test.ts`
+      -> 5 files passed, 21 tests passed.
+    - `pnpm --filter @thinkwork/api typecheck` -> passed.
+    - `pnpm --filter @thinkwork/web typecheck` -> passed.
+    - `pnpm --filter thinkwork-cli typecheck` -> passed.
+    - `pnpm --filter @thinkwork/api test` -> 436 files passed, 3 skipped;
+      3,723 tests passed, 9 skipped.
+    - `pnpm --filter @thinkwork/web test` -> 138 files passed, 958 tests
+      passed.
+    - `pnpm --filter @thinkwork/web build` -> passed.
+    - Direct Prettier write over U4 hand-written files -> unchanged after
+      cleanup.
+    - `git diff --check` -> passed.
+  - U4 local verification caveat:
+    - The root `pnpm format` script could not start because `prettier` is not
+      linked into the root `node_modules/.bin` in this worktree. Prettier is
+      present in pnpm's virtual store; invoking that binary directly over
+      U4-touched hand-written files succeeded. A first broad direct Prettier
+      invocation touched unrelated files and was restored before verification.
 
 ## Agent Profile Closed Loops - 2026-06-08
 

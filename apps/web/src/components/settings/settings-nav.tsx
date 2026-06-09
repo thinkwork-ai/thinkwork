@@ -27,7 +27,7 @@ export interface SettingsNavItem {
   /** When true, only render in the desktop build (needs the local bridge). */
   desktopOnly?: boolean;
   /** Optional managed app that must be runtime-enabled before the item shows. */
-  managedAppKey?: "cognee" | "twenty";
+  managedAppKey?: "cognee" | "twenty" | "kestra";
 }
 
 // General first (visible to all), then operator-only sections. Appearance is
@@ -141,7 +141,9 @@ export function visibleSettingsNavItems(opts: {
   isOperator: boolean;
   roleResolved: boolean;
   isDesktop: boolean;
-  managedApplications?: Partial<Record<"cognee" | "twenty", boolean>>;
+  managedApplications?: Partial<
+    Record<"cognee" | "twenty" | "kestra", boolean>
+  >;
 }): SettingsNavItem[] {
   return SETTINGS_NAV_ITEMS.filter(
     (item) =>

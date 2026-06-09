@@ -16,6 +16,8 @@ describe("managed application status helpers", () => {
     );
     expect(mod.normalizeManagedApplicationKey("crm")).toBe("twenty");
     expect(mod.normalizeManagedApplicationKey("twenty-crm")).toBe("twenty");
+    expect(mod.normalizeManagedApplicationKey("orchestration")).toBe("kestra");
+    expect(mod.normalizeManagedApplicationKey("orchestrate")).toBe("kestra");
     expect(mod.normalizeManagedApplicationKey("unknown")).toBeNull();
   });
 
@@ -75,6 +77,65 @@ describe("managed application status helpers", () => {
         "/thinkwork/dev/twenty/server",
         "/thinkwork/dev/twenty/worker",
       ],
+    });
+  });
+
+  it("classifies Kestra enabled, parked, disabled, and malformed states", () => {
+    vi.stubEnv(
+      "KESTRA",
+      "1|1|https://orchestrate.example.com|cluster|service|/logs|bucket|db",
+    );
+    expect(mod.readManagedApplication("kestra")).toMatchObject({
+      key: "kestra",
+      status: "running",
+      enabled: true,
+      provisioned: true,
+      runtimeEnabled: true,
+      url: "https://orchestrate.example.com",
+      storageBucketName: "bucket",
+      databaseName: "db",
+      managedMcpInstallAvailable: false,
+    });
+
+    vi.stubEnv("KESTRA", "1|0|https://orchestrate.example.com");
+    expect(mod.readManagedApplication("kestra")).toMatchObject({
+      status: "parked",
+      enabled: false,
+      provisioned: true,
+      runtimeEnabled: false,
+      message:
+        "Kestra runtime is parked; flow definitions, execution history, storage, and credentials are retained.",
+    });
+
+    vi.stubEnv("KESTRA", "0|0|");
+    expect(mod.readManagedApplication("kestra")).toMatchObject({
+      status: "disabled",
+      enabled: false,
+      provisioned: false,
+    });
+
+    vi.stubEnv("KESTRA", "bad-value");
+    expect(mod.readManagedApplication("kestra")).toMatchObject({
+      status: "unknown",
+      enabled: false,
+      provisioned: false,
+      runtimeEnabled: false,
+    });
+  });
+
+  it("derives Kestra service and log details from compact status", () => {
+    vi.stubEnv("STAGE", "dev");
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
+    vi.stubEnv("KESTRA", "1|1|https://orchestrate.example.com");
+
+    expect(mod.readManagedApplication("kestra")).toMatchObject({
+      key: "kestra",
+      status: "running",
+      clusterArn:
+        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-kestra-cluster",
+      serviceNames: ["thinkwork-dev-kestra-service"],
+      logGroupNames: ["/thinkwork/dev/kestra"],
     });
   });
 });

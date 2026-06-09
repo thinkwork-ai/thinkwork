@@ -52,6 +52,9 @@ describe("ManagedApplicationsPage", () => {
         .getByRole("link", { name: /open twenty crm/i })
         .getAttribute("href"),
     ).toBe("/settings/crm");
+    expect(
+      screen.getByRole("link", { name: /open kestra/i }).getAttribute("href"),
+    ).toBe("/settings/applications/kestra");
   });
 
   it("does not render row-level lifecycle buttons", () => {
@@ -88,6 +91,18 @@ const managedApps = [
     lastJobId: null,
     updatedAt: "2026-06-06T12:00:00Z",
   },
+  {
+    __typename: "ManagedApplication",
+    id: "app-kestra",
+    key: "kestra",
+    displayName: "Kestra",
+    desiredStatus: "disabled",
+    currentStatus: "disabled",
+    selectedReleaseVersion: "2026.06.06",
+    selectedManifestDigest: "sha256:manifest",
+    lastJobId: null,
+    updatedAt: "2026-06-06T12:00:00Z",
+  },
 ];
 
 const deploymentStatus = {
@@ -112,6 +127,8 @@ const deploymentStatus = {
       serviceNames: [],
       albArn: null,
       targetGroupArn: null,
+      storageBucketName: null,
+      databaseName: null,
       message: "Cognee is running.",
       managedMcpServerId: null,
       managedMcpStatus: "missing",
@@ -138,12 +155,43 @@ const deploymentStatus = {
       serviceNames: [],
       albArn: null,
       targetGroupArn: null,
+      storageBucketName: null,
+      databaseName: null,
       message: "Twenty CRM is running.",
       managedMcpServerId: null,
       managedMcpStatus: "missing",
       managedMcpInstalled: false,
       managedMcpInstallAvailable: false,
       managedMcpMessage: null,
+    },
+    {
+      __typename: "ManagedApplicationDeployment",
+      key: "kestra",
+      displayName: "Kestra",
+      description: "Workflow orchestration runtime managed by ThinkWork.",
+      status: "disabled",
+      enabled: false,
+      provisioned: false,
+      runtimeEnabled: false,
+      url: null,
+      endpoint: null,
+      backendMode: null,
+      logGroupName: null,
+      logGroupNames: [],
+      clusterArn: null,
+      serviceName: null,
+      serviceNames: [],
+      albArn: null,
+      targetGroupArn: null,
+      storageBucketName: null,
+      databaseName: null,
+      message: "Kestra has not been provisioned for this stage.",
+      managedMcpServerId: null,
+      managedMcpStatus: "not_ready",
+      managedMcpInstalled: false,
+      managedMcpInstallAvailable: false,
+      managedMcpMessage:
+        "Kestra control MCP registration requires the runtime to be running.",
     },
   ],
 };

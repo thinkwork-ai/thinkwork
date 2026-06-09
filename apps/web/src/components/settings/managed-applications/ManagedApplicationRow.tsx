@@ -24,7 +24,11 @@ export function ManagedApplicationRow({
     runtime?.runtimeEnabled ?? app.currentStatus === "running";
   const status = runtime?.status ?? app.currentStatus;
   const detailPath =
-    key === "twenty" ? "/settings/crm" : "/settings/applications/cognee";
+    key === "twenty"
+      ? "/settings/crm"
+      : key === "kestra"
+        ? "/settings/applications/kestra"
+        : "/settings/applications/cognee";
 
   return (
     <Link
@@ -72,6 +76,9 @@ export function ManagedApplicationRow({
 function managedAppDescription(key: ManagedAppKey): string {
   if (key === "twenty") {
     return "Customer-owned CRM runtime with dedicated database, cache, files, and generated secrets.";
+  }
+  if (key === "kestra") {
+    return "Workflow orchestration runtime with dedicated database, internal storage, and generated credentials.";
   }
   return "Knowledge graph runtime with dedicated graph/vector storage and provider credentials.";
 }

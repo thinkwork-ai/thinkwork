@@ -77,6 +77,8 @@ export const SettingsDeploymentStatusQuery = graphql(`
         serviceNames
         albArn
         targetGroupArn
+        storageBucketName
+        databaseName
         message
         managedMcpServerId
         managedMcpStatus
