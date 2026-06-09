@@ -173,9 +173,23 @@ interface DeploymentReleaseRow {
   deployable: boolean;
 }
 
+interface DeploymentReleaseUpdateResult {
+  executionArn: string;
+  stateMachineArn: string;
+  evidenceBucket?: string | null;
+  evidencePrefix: string;
+  message: string;
+  release: Pick<
+    DeploymentReleaseRow,
+    "version" | "manifestUrl" | "manifestSha256" | "signed" | "deployable"
+  >;
+}
+
 function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
   const [selectedRelease, setSelectedRelease] =
     useState<DeploymentReleaseRow | null>(null);
+  const [lastDeployment, setLastDeployment] =
+    useState<DeploymentReleaseUpdateResult | null>(null);
   const [result] = useQuery({
     query: SettingsDeploymentReleasesQuery,
     variables: { limit: 10 },
@@ -203,10 +217,11 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
       });
       return;
     }
+    const deployResult = response.data
+      ?.startDeploymentReleaseUpdate as DeploymentReleaseUpdateResult | null;
+    if (deployResult) setLastDeployment(deployResult);
     toast.success("Release deploy started", {
-      description:
-        response.data?.startDeploymentReleaseUpdate.message ??
-        selectedRelease.version,
+      description: deployResult?.message ?? selectedRelease.version,
     });
     setSelectedRelease(null);
   }
@@ -245,6 +260,35 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
           ))}
         </div>
       )}
+
+      {lastDeployment ? (
+        <div className="border-t border-border p-4 text-sm">
+          <div className="mb-3">
+            <div className="font-medium">Deployment controller started</div>
+            <div className="text-muted-foreground">
+              {lastDeployment.message}
+            </div>
+          </div>
+          <div className="grid gap-3">
+            <ConfirmFact
+              label="Release"
+              value={lastDeployment.release.version}
+            />
+            <ConfirmFact
+              label="Execution"
+              value={lastDeployment.executionArn}
+            />
+            <ConfirmFact
+              label="Evidence"
+              value={
+                lastDeployment.evidenceBucket
+                  ? `${lastDeployment.evidenceBucket}/${lastDeployment.evidencePrefix}`
+                  : lastDeployment.evidencePrefix
+              }
+            />
+          </div>
+        </div>
+      ) : null}
 
       <Dialog
         open={Boolean(selectedRelease)}

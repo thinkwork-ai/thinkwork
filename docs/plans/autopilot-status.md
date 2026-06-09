@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U8 - Harden deployment profile and client
-  binding.
-- Current branch: `codex/u8-profile-client-binding`.
+- Current implementation unit: U9 - TEI proving run and operator
+  documentation, starting with release-deploy operator proof.
+- Current branch: `codex/u9-release-deploy-proof`.
 - Current worktree:
-  `.Codex/worktrees/u8-profile-client-binding`.
+  `.Codex/worktrees/u9-release-deploy-proof`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -23,9 +23,10 @@ status: in_progress
   merged; U6 PR [#2292](https://github.com/thinkwork-ai/thinkwork/pull/2292)
   merged; U7 PR [#2293](https://github.com/thinkwork-ai/thinkwork/pull/2293)
   merged; U8 PR [#2294](https://github.com/thinkwork-ai/thinkwork/pull/2294)
+  merged; U9 PR [#2295](https://github.com/thinkwork-ai/thinkwork/pull/2295)
   opened.
-- Status: U8 PR #2294 opened and CI pending. `v0.1.0-canary.136` and
-  `desktop-v0.1.0-canary.136` release runs passed, publishing desktop
+- Status: U9 PR #2295 opened and CI pending. `v0.1.0-canary.136`
+  and `desktop-v0.1.0-canary.136` release runs passed, publishing desktop
   installers, updater metadata, `thinkwork-release.json`, and
   `platform-artifacts.tar.gz`.
 - Notes:
@@ -249,6 +250,15 @@ status: in_progress
 - U8 keeps sign-out behavior explicit by exposing local-session clearing for
   stale-profile recovery while preserving the hosted Cognito logout redirect for
   normal user sign-out.
+- U8 PR #2294 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+  `test`) and was squash merged as `f406268b`.
+- U8 remote branch was already deleted by GitHub merge handling; local U8
+  worktree and branch were removed after syncing `origin/main`.
+- Created isolated U9 worktree from `origin/main` at `f406268b`.
+- U9 release-deploy operator proof makes General Settings retain the deployment
+  controller execution ARN and evidence pointer after an operator selects a
+  release and clicks `Confirm Deploy`, instead of dropping those details after a
+  toast.
 - U7 local verification:
   - `pnpm schema:build` passed.
   - GraphQL codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
@@ -276,6 +286,13 @@ status: in_progress
   - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
     Prettier-managed files passed.
   - `git diff --check` passed.
+- U9 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsGeneral.test.tsx`
+    passed: 1 test.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
 - CI:
   - U5 PR #2291 initial checks: `cla`, `lint`, `verify`, and `typecheck`
     passed.
