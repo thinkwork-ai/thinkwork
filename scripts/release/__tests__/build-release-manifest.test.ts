@@ -243,7 +243,10 @@ test("CLI build script includes default managed apps when no overrides are passe
     manifest.managedApps
       .find((app) => app.id === "kestra")
       ?.smokeContracts?.map((contract) => contract.command),
-    ["scripts/smoke/kestra-managed-app-smoke.mjs"],
+    [
+      "scripts/smoke/kestra-managed-app-smoke.mjs",
+      "scripts/smoke/kestra-control-mcp-smoke.mjs",
+    ],
   );
 });
 

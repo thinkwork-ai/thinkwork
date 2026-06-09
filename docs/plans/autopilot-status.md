@@ -11,12 +11,11 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U6 - Managed MCP reconciliation and credential-secret runtime
-  path.
-- Current branch: `codex/kestra-managed-app-u6`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u6`.
+- Current unit: U7 - Deployment and agent-level smokes.
+- Current branch: `codex/kestra-managed-app-u7`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u7`.
 - Current PR:
-  [#2249](https://github.com/thinkwork-ai/thinkwork/pull/2249).
+  [#2250](https://github.com/thinkwork-ai/thinkwork/pull/2250).
 - Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
@@ -210,6 +209,40 @@ status: in_progress
     with `main`; rebased cleanly on the newer `origin/main` and reran the
     focused API/web suites plus `git diff --check` before pushing the refreshed
     branch.
+  - U6 PR [#2249](https://github.com/thinkwork-ai/thinkwork/pull/2249)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) after
+    the refresh and was squash merged as `18649438`; the remote branch was
+    deleted and local worktree/branch were removed.
+  - Created isolated U7 worktree from `origin/main` at `18649438`.
+  - Started U7 smoke work:
+    - adding Kestra managed-app and control-MCP smoke scripts with dry-run and
+      live modes;
+    - wiring both Kestra smoke contracts into the release manifest;
+    - documenting the smoke commands, live requirements, mutation toggle, and
+      evidence behavior.
+  - U7 local verification passed:
+    - `COMPUTER_ENV_FILE=none node scripts/smoke/kestra-managed-app-smoke.mjs`
+      -> dry-run passed and emitted a `kestra-managed-app` evidence envelope.
+    - `COMPUTER_ENV_FILE=none node scripts/smoke/kestra-control-mcp-smoke.mjs`
+      -> dry-run passed and emitted a `kestra-control-mcp` evidence envelope.
+    - `pnpm test:release` -> 9 tests passed.
+    - `pnpm --filter @thinkwork/release-manifest test` -> 1 file passed, 6
+      tests passed.
+    - `pnpm -r --if-present typecheck` -> passed.
+    - `pnpm -r --if-present lint` -> passed.
+    - `pnpm -r --if-present test` -> passed after rebuilding Electron in the
+      fresh worktree; API passed 436 files with 3 skipped, Web passed 138
+      files, and the earlier desktop rerun passed 15 files.
+    - Direct Prettier check over U7-touched files -> passed.
+    - `git diff --check` -> passed.
+  - U7 local verification caveat:
+    - The first full workspace test attempt failed in `apps/desktop` because
+      `pnpm install --ignore-scripts` left Electron to self-install
+      concurrently during tests, causing an `EEXIST` symlink error. Running
+      `pnpm rebuild electron` repaired the generated dependency state; the
+      desktop suite and the subsequent full workspace test rerun passed.
+  - U7 PR [#2250](https://github.com/thinkwork-ai/thinkwork/pull/2250) opened
+    from the current `origin/main`; CI pending.
 
 ## Agent Profile Closed Loops - 2026-06-08
 

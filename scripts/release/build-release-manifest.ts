@@ -574,6 +574,11 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
           command: "scripts/smoke/kestra-managed-app-smoke.mjs",
           required: true,
         },
+        {
+          id: "kestra-control-mcp",
+          command: "scripts/smoke/kestra-control-mcp-smoke.mjs",
+          required: true,
+        },
       ],
     },
     {
