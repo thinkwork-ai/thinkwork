@@ -35,8 +35,8 @@ thinkwork deploy \
   --controller \
   --stage dev \
   --controller-action update \
-  --release-version v0.1.0-canary.134 \
-  --manifest-url https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json \
+  --release-version v0.1.0-canary.137 \
+  --manifest-url https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.137/thinkwork-release.json \
   --manifest-sha256 <sha256>
 ```
 
@@ -52,6 +52,12 @@ The controller execution writes evidence under
 `sessions/<session-id>/<action>/` in the deployment evidence bucket. A dev update
 is not considered proven until the controller execution, runtime profile, and
 foundation smoke evidence are all recorded.
+
+Use a release where the shared GitHub Release contains the coordinated operator
+surface: desktop installers/updater metadata for clients plus
+`thinkwork-release.json` and `platform-artifacts.tar.gz` for the deployment
+controller. `v0.1.0-canary.137` is the first TEI proving candidate recorded with
+that complete asset set.
 
 ## Deployment Model
 

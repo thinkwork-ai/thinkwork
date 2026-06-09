@@ -1,21 +1,20 @@
 ---
 title: "TEI new environment deployment end-to-end verification"
-date: 2026-06-08
+date: 2026-06-09
 status: active
 ---
 
 # TEI New Environment Deployment End-to-End Verification
 
 This runbook proves a fresh ThinkWork deployment path against the `tei` AWS
-profile. It separates the currently implemented local Terraform deployment from
-the newer AWS-native deployment control-plane substrate.
+profile using the release manifest/controller contract that backs the browser
+Releases flow. It records each gate so failures are either fixed before moving
+on or captured as product gaps with exact evidence.
 
-Known scope boundary: the Step Functions/CodeBuild deployment control plane is
-currently provisioned as an inert runner. It creates orchestration, evidence,
-AppConfig, SSM, and CodeBuild resources, but it does not yet clone source or run
-Terraform. A passing run today proves the new environment deploys and the
-GitHub-free substrate can be bootstrapped; it does not prove customer-owned
-Step Functions can replace GitHub Actions end to end yet.
+Known scope boundary: the lower-level enterprise bootstrap command still labels
+the generated CodeBuild project as an inert deployment runner. Treat any
+control-plane execution that does not run Terraform as a product gap for this
+TEI proof; do not paper over it with AWS console fixes.
 
 ## Test Envelope
 
@@ -26,7 +25,11 @@ Step Functions can replace GitHub Actions end to end yet.
 - Region: `us-east-1`
 - Stage: `tei-e2e`
 - Customer slug: `tei`
-- Release under test: `0.1.0-canary.116`
+- Release under test: `v0.1.0-canary.137`
+- Release manifest URL:
+  `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.137/thinkwork-release.json`
+- Release manifest SHA-256:
+  `7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f`
 - Repo checkout: `/Users/ericodom/Projects/thinkwork`
 - Isolated deploy root: `/tmp/thinkwork-tei-e2e-greenfield`
 - Isolated enterprise bootstrap root: `/tmp/thinkwork-tei-e2e-bootstrap`
@@ -43,7 +46,9 @@ export AWS_PROFILE=tei
 export AWS_REGION=us-east-1
 export THINKWORK_STAGE=tei-e2e
 export THINKWORK_CUSTOMER=tei
-export THINKWORK_RELEASE_VERSION=0.1.0-canary.116
+export THINKWORK_RELEASE_VERSION=v0.1.0-canary.137
+export THINKWORK_MANIFEST_URL=https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.137/thinkwork-release.json
+export THINKWORK_MANIFEST_SHA256=7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f
 export THINKWORK_ACCOUNT_ID=637423202447
 ```
 
@@ -54,13 +59,15 @@ aws sts get-caller-identity --profile "$AWS_PROFILE" --output json
 pnpm --dir apps/cli dev doctor -s "$THINKWORK_STAGE" --profile "$AWS_PROFILE"
 ```
 
-Observed result on 2026-06-08:
+Observed result on 2026-06-09:
 
 - AWS identity resolved to account `637423202447`.
 - Terraform CLI resolved to `v1.9.8`.
 - AWS CLI resolved to `aws-cli/2.34.52`.
 - Bedrock access check for `anthropic.claude-3-haiku` passed.
 - Doctor passed only after `AWS_REGION=us-east-1` was set.
+- `v0.1.0-canary.137` release manifest downloaded successfully and hashed to
+  `7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f`.
 
 Dry-run the top-level bootstrap path:
 
@@ -71,6 +78,8 @@ pnpm --dir apps/cli dev deploy \
   --stage "$THINKWORK_STAGE" \
   --profile "$AWS_PROFILE" \
   --release-version "$THINKWORK_RELEASE_VERSION" \
+  --manifest-url "$THINKWORK_MANIFEST_URL" \
+  --manifest-sha256 "$THINKWORK_MANIFEST_SHA256" \
   --dry-run \
   --no-wait \
   --no-run-smokes
@@ -88,6 +97,8 @@ pnpm --dir apps/cli dev enterprise bootstrap /tmp/thinkwork-tei-e2e-bootstrap \
   --region "$AWS_REGION" \
   --account-id "$THINKWORK_ACCOUNT_ID" \
   --release-version "$THINKWORK_RELEASE_VERSION" \
+  --manifest-url "$THINKWORK_MANIFEST_URL" \
+  --manifest-sha256 "$THINKWORK_MANIFEST_SHA256" \
   --identity-provider none \
   --dry-run
 ```
@@ -103,6 +114,9 @@ Expected planned resources:
 - Deployment SSM/AppConfig profile pointers for `tei-e2e`
 - No GitHub repository configured
 
+Observed result on 2026-06-09: both dry-runs passed with
+`v0.1.0-canary.137`, proving the previous missing-manifest blocker is resolved.
+
 ## Phase 1: Bootstrap GitHub-Free Substrate
 
 This phase mutates AWS resources. Run only when ready to create the GitHub-free
@@ -115,6 +129,8 @@ pnpm --dir apps/cli dev enterprise bootstrap /tmp/thinkwork-tei-e2e-bootstrap \
   --region "$AWS_REGION" \
   --account-id "$THINKWORK_ACCOUNT_ID" \
   --release-version "$THINKWORK_RELEASE_VERSION" \
+  --manifest-url "$THINKWORK_MANIFEST_URL" \
+  --manifest-sha256 "$THINKWORK_MANIFEST_SHA256" \
   --identity-provider none \
   --yes
 ```
@@ -372,24 +388,25 @@ cleanup blocker.
 
 Use this table during the run:
 
-| Gate                                 | Result                | Evidence                                                  |
-| ------------------------------------ | --------------------- | --------------------------------------------------------- |
-| AWS profile and Bedrock doctor       | PASS on 2026-06-08    | Doctor output                                             |
-| GitHub-free bootstrap dry-run        | PASS on 2026-06-08    | CLI dry-run output                                        |
-| GitHub-free substrate live bootstrap | BLOCKED on 2026-06-08 | Missing published `thinkwork-release.json` manifest asset |
-| Local new-environment plan           | Not run               | Terraform plan                                            |
-| Local new-environment deploy         | Not run               | Terraform apply + outputs                                 |
-| Foundation bootstrap smoke           | Not run               | `foundation-smoke.json`                                   |
-| First admin login                    | Not run               | `thinkwork me` + browser proof                            |
-| Managed-app UI smoke                 | Not run               | Browser proof + smoke evidence                            |
-| Desktop profile selection            | Not run               | Desktop launch proof                                      |
-| Mobile profile selection             | Not run               | Mobile launch proof                                       |
-| Cleanup                              | Not run               | Empty resource queries                                    |
+| Gate                                 | Result             | Evidence                                                  |
+| ------------------------------------ | ------------------ | --------------------------------------------------------- |
+| AWS profile and Bedrock doctor       | PASS on 2026-06-09 | Doctor output for account `637423202447`                  |
+| Release manifest asset and digest    | PASS on 2026-06-09 | `v0.1.0-canary.137` manifest SHA-256                      |
+| GitHub-free bootstrap dry-run        | PASS on 2026-06-09 | CLI dry-run output for top-level and enterprise bootstrap |
+| GitHub-free substrate live bootstrap | Not run            | Awaiting live AWS mutation step                           |
+| Local new-environment plan           | Not run            | Terraform plan                                            |
+| Local new-environment deploy         | Not run            | Terraform apply + outputs                                 |
+| Foundation bootstrap smoke           | Not run            | `foundation-smoke.json`                                   |
+| First admin login                    | Not run            | `thinkwork me` + browser proof                            |
+| Managed-app UI smoke                 | Not run            | Browser proof + smoke evidence                            |
+| Desktop profile selection            | Not run            | Desktop launch proof                                      |
+| Mobile profile selection             | Not run            | Mobile launch proof                                       |
+| Cleanup                              | Not run            | Empty resource queries                                    |
 
 The deployment is not fully accepted until every non-stub gate passes or is
 explicitly recorded as a product gap with a follow-up issue.
 
-## 2026-06-08 Step 2 Blocker
+## 2026-06-08 Step 2 Blocker - Resolved 2026-06-09
 
 Live Step 2 was attempted with:
 
@@ -422,3 +439,8 @@ or obvious TEI bootstrap buckets were present after the failed attempt.
 Next action: publish or identify a real ThinkWork release manifest asset, then
 rerun Step 2 using either the release version or explicit `--manifest-url` and
 `--manifest-sha256`.
+
+Resolution: `v0.1.0-canary.137` now exposes both `thinkwork-release.json` and
+`platform-artifacts.tar.gz` on the shared GitHub Release. The manifest SHA-256
+is recorded in this runbook, and the safe dry-run gates pass with explicit
+manifest URL and digest.

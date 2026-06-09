@@ -58,6 +58,12 @@ Individual artifact URLs in the manifest are a compatibility path; new
 deployment controller runs should consume the bundle and verify every contained
 artifact against the manifest before staging it.
 
+Desktop assets may be published by a separate workflow, but operators should see
+one coordinated release version. The human-facing release should contain
+desktop installers, updater metadata, `thinkwork-release.json`, and
+`platform-artifacts.tar.gz` before the release is treated as a deployable
+environment update.
+
 ## Upgrade Evidence
 
 Release upgrade evidence should record:
