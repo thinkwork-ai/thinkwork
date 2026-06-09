@@ -10,17 +10,17 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-001-feat-tenant-model-catalog-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U6 - AWS IAM and deployment wiring.
-- Current branch: `codex/tenant-model-catalog-u6`.
-- Current worktree: `.Codex/worktrees/tenant-model-catalog-u6`.
+- Current implementation unit: U7 - Regenerate schemas, update docs, and verify end to end.
+- Current branch: `codex/tenant-model-catalog-u7`.
+- Current worktree: `.Codex/worktrees/tenant-model-catalog-u7`.
 - Pull request:
-  [#2281](https://github.com/thinkwork-ai/thinkwork/pull/2281). U5 PR
+  U6 PR [#2281](https://github.com/thinkwork-ai/thinkwork/pull/2281), U5 PR
   [#2280](https://github.com/thinkwork-ai/thinkwork/pull/2280), U4 PR
   [#2279](https://github.com/thinkwork-ai/thinkwork/pull/2279), U3 PR
   [#2275](https://github.com/thinkwork-ai/thinkwork/pull/2275), U2 PR
   [#2273](https://github.com/thinkwork-ai/thinkwork/pull/2273) and U1 PR
   [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) were merged.
-- Status: U6 PR open; CI pending.
+- Status: U7 implementation in progress.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
@@ -232,6 +232,40 @@ status: in_progress
   - `terraform fmt -check terraform/modules/app/lambda-api/main.tf` passed.
   - `bash scripts/build-lambdas.sh graphql-http` passed and produced the
     `graphql-http` artifact with the bundled SDK set.
+- U6 CI:
+  - PR #2281 passed required checks: `cla`, `lint`, `test`, `typecheck`, and
+    `verify`.
+- U6 merge/cleanup:
+  - PR #2281 was squash merged as `ea129057`.
+  - The remote branch was deleted by GitHub merge handling; the local U6
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U7 worktree from `origin/main` at `ea129057`.
+- U7 started docs and final verification:
+  - added the admin Model Catalog documentation page and sidebar entry;
+  - added the Model Catalog import end-to-end verification runbook;
+  - cross-linked Agent Templates, Evaluations, Settings, and the Admin overview
+    to the Model Catalog behavior;
+  - reran schema build and CLI/web/mobile GraphQL codegen; no generated-file
+    diff remained.
+- U7 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm schema:build` passed.
+  - GraphQL codegen passed for `thinkwork-cli`, `@thinkwork/web`, and
+    `@thinkwork/mobile`; `@thinkwork/api` has no `codegen` script.
+  - `pnpm --filter @thinkwork/docs build` passed.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsModelCatalog.test.tsx`
+    passed: 4 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `pnpm --filter @thinkwork/mobile exec tsc --noEmit` is not a supported
+    package script and currently fails on existing mobile diagnostics unrelated
+    to this unit.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over U7 touched docs
+    passed.
+  - `git diff --check` passed.
 
 ## Kestra Managed Application - 2026-06-08
 
