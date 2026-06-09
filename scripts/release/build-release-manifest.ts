@@ -12,6 +12,7 @@ import {
   signReleaseManifest,
   validateReleaseManifest,
   type ManagedAppDescriptor,
+  type ReleaseArtifactBundle,
   type ReleaseArtifact,
   type ReleaseArtifactType,
   type RuntimeImage,
@@ -34,6 +35,12 @@ export interface RuntimeImageInput {
   architecture: RuntimeImageArchitecture;
 }
 
+export interface ReleaseArtifactBundleInput {
+  name: string;
+  path: string;
+  contains?: string[];
+}
+
 export interface BuildReleaseManifestOptions {
   version: string;
   gitSha: string;
@@ -41,6 +48,8 @@ export interface BuildReleaseManifestOptions {
   outputPath?: string;
   baseUrl?: string;
   artifacts?: ReleaseArtifactInput[];
+  artifactBundles?: ReleaseArtifactBundleInput[];
+  bundleArtifactUrls?: boolean;
   lambdaDir?: string;
   runtimeImages?: RuntimeImageInput[];
   minCliVersion?: string;
@@ -60,6 +69,8 @@ interface ParsedArgs {
   outputPath?: string;
   baseUrl?: string;
   artifactSpecs: string[];
+  artifactBundleSpecs: string[];
+  bundleArtifactUrls: boolean;
   imageSpecs: string[];
   lambdaDir?: string;
   minCliVersion?: string;
@@ -91,6 +102,15 @@ function joinReleaseUrl(
   const normalized = normalizeBaseUrl(baseUrl);
   if (!normalized) return null;
   return `${normalized}/${encodeURIComponent(fileName)}`;
+}
+
+function artifactUrlFor(
+  baseUrl: string | undefined,
+  fileName: string,
+  bundledArtifacts: boolean,
+): string | null {
+  if (bundledArtifacts) return null;
+  return joinReleaseUrl(baseUrl, fileName);
 }
 
 function relativeToArtifactRoot(
@@ -170,6 +190,7 @@ export async function buildReleaseManifest(
   const explicitArtifacts = options.artifacts ?? [];
   const lambdaArtifacts = await collectLambdaArtifacts(options.lambdaDir);
   const artifactInputs = [...lambdaArtifacts, ...explicitArtifacts];
+  const bundledArtifacts = (options.artifactBundles?.length ?? 0) > 0;
   const names = new Set<string>();
   const artifacts: ReleaseArtifact[] = [];
 
@@ -203,7 +224,11 @@ export async function buildReleaseManifest(
       type: artifact.type,
       fileName,
       relativePath: relativeToArtifactRoot(artifactRoot, artifactPath),
-      url: joinReleaseUrl(options.baseUrl, fileName),
+      url: artifactUrlFor(
+        options.baseUrl,
+        fileName,
+        bundledArtifacts && !options.bundleArtifactUrls,
+      ),
       sha256: await sha256File(artifactPath),
       sizeBytes: fileStat.size,
     });
@@ -218,7 +243,14 @@ export async function buildReleaseManifest(
     .map(assertRuntimeImage)
     .sort((left, right) => left.name.localeCompare(right.name));
 
-  return {
+  const artifactBundles = await buildArtifactBundles({
+    artifactRoot,
+    baseUrl: options.baseUrl,
+    bundles: options.artifactBundles ?? [],
+    artifacts,
+  });
+
+  const manifest: ThinkWorkReleaseManifest = {
     schemaVersion: RELEASE_MANIFEST_SCHEMA_VERSION,
     release: {
       version,
@@ -246,6 +278,7 @@ export async function buildReleaseManifest(
       minRunnerVersion: normalizeVersion(options.minRunnerVersion ?? version),
       profileSchemaVersion: options.profileSchemaVersion ?? 1,
     },
+    ...(artifactBundles.length > 0 ? { artifactBundles } : {}),
     artifacts,
     runtimeImages,
     managedApps: (options.managedApps ?? defaultManagedApps(version)).sort(
@@ -258,6 +291,45 @@ export async function buildReleaseManifest(
   };
 
   return validateReleaseManifest(manifest);
+}
+
+async function buildArtifactBundles(args: {
+  artifactRoot: string;
+  baseUrl: string | undefined;
+  bundles: ReleaseArtifactBundleInput[];
+  artifacts: ReleaseArtifact[];
+}): Promise<ReleaseArtifactBundle[]> {
+  const bundles: ReleaseArtifactBundle[] = [];
+  for (const bundle of args.bundles) {
+    const bundlePath = path.resolve(bundle.path);
+    let fileStat;
+    try {
+      fileStat = await stat(bundlePath);
+    } catch {
+      throw new Error(
+        `Required release artifact bundle "${bundle.name}" is missing: ${bundlePath}`,
+      );
+    }
+    if (!fileStat.isFile()) {
+      throw new Error(
+        `Release artifact bundle "${bundle.name}" is not a file: ${bundlePath}`,
+      );
+    }
+    const fileName = path.basename(bundlePath);
+    bundles.push({
+      name: bundle.name,
+      fileName,
+      relativePath: relativeToArtifactRoot(args.artifactRoot, bundlePath),
+      url: joinReleaseUrl(args.baseUrl, fileName),
+      sha256: await sha256File(bundlePath),
+      sizeBytes: fileStat.size,
+      contains:
+        bundle.contains && bundle.contains.length > 0
+          ? bundle.contains
+          : args.artifacts.map((artifact) => artifact.name),
+    });
+  }
+  return bundles.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function parseKeyValueSpec(spec: string): Record<string, string> {
@@ -294,6 +366,20 @@ export function parseArtifactSpec(spec: string): ReleaseArtifactInput {
     path: values.path,
     required:
       values.required === undefined ? true : values.required !== "false",
+  };
+}
+
+export function parseArtifactBundleSpec(
+  spec: string,
+): ReleaseArtifactBundleInput {
+  const values = parseKeyValueSpec(spec);
+  if (!values.name || !values.path) {
+    throw new Error(`Artifact bundle spec must include name and path: ${spec}`);
+  }
+  return {
+    name: values.name,
+    path: values.path,
+    contains: values.contains ? splitCsvList(values.contains) : undefined,
   };
 }
 
@@ -360,6 +446,8 @@ function parseArgs(argv: string[]): ParsedArgs {
   const parsed: ParsedArgs = {
     artifactRoot: "dist/release",
     artifactSpecs: [],
+    artifactBundleSpecs: [],
+    bundleArtifactUrls: false,
     imageSpecs: [],
     managedAppSpecs: [],
     acceptedKeyIds: [],
@@ -393,6 +481,13 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--artifact":
         parsed.artifactSpecs.push(requireValue(arg, next));
         index += 1;
+        break;
+      case "--artifact-bundle":
+        parsed.artifactBundleSpecs.push(requireValue(arg, next));
+        index += 1;
+        break;
+      case "--bundle-artifact-urls":
+        parsed.bundleArtifactUrls = true;
         break;
       case "--image":
         parsed.imageSpecs.push(requireValue(arg, next));
@@ -497,6 +592,8 @@ async function main(): Promise<void> {
     baseUrl: args.baseUrl,
     lambdaDir: args.lambdaDir,
     artifacts: args.artifactSpecs.map(parseArtifactSpec),
+    artifactBundles: args.artifactBundleSpecs.map(parseArtifactBundleSpec),
+    bundleArtifactUrls: args.bundleArtifactUrls,
     runtimeImages: args.imageSpecs.map(parseRuntimeImageSpec),
     minCliVersion: args.minCliVersion,
     minRunnerVersion: args.minRunnerVersion,

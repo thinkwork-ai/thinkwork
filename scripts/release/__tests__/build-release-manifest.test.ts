@@ -10,12 +10,13 @@ import { promisify } from "node:util";
 import {
   signReleaseManifest,
   verifyReleaseManifest,
-  type ThinkWorkReleaseManifest,
   type ReleaseManifestSignature,
+  type ThinkWorkReleaseManifest,
   type TrustedReleaseKey,
 } from "../../../packages/release-manifest/src/index";
 import {
   buildReleaseManifest,
+  parseArtifactBundleSpec,
   parseArtifactSpec,
   parseManagedAppSpec,
   parseRuntimeImageSpec,
@@ -35,6 +36,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   await mkdir(staticDir, { recursive: true });
   await writeFile(path.join(lambdaDir, "graphql-http.zip"), "lambda-bytes");
   await writeFile(path.join(staticDir, "web.tar.gz"), "web-bytes");
+  await writeFile(path.join(root, "platform-artifacts.tar.gz"), "bundle");
 
   const manifest = await buildReleaseManifest({
     version: "v1.2.3",
@@ -44,6 +46,12 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     baseUrl:
       "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/",
     createdAt: "2026-05-18T00:00:00.000Z",
+    artifactBundles: [
+      {
+        name: "platform",
+        path: path.join(root, "platform-artifacts.tar.gz"),
+      },
+    ],
     artifacts: [
       {
         name: "web",
@@ -91,7 +99,15 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   );
   assert.equal(
     manifest.artifacts[0]?.url,
-    "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/graphql-http.zip",
+    null,
+  );
+  assert.deepEqual(manifest.artifactBundles?.[0]?.contains, [
+    "graphql-http",
+    "web",
+  ]);
+  assert.equal(
+    manifest.artifactBundles?.[0]?.url,
+    "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/platform-artifacts.tar.gz",
   );
   assert.equal(manifest.artifacts[0]?.sha256.length, 64);
   assert.deepEqual(
@@ -299,6 +315,16 @@ test("spec parsers reject incomplete artifact and image definitions", () => {
       type: "static-site",
       path: "dist/release/web.tar.gz",
       required: true,
+    },
+  );
+  assert.deepEqual(
+    parseArtifactBundleSpec(
+      "name=platform,path=dist/release/platform-artifacts.tar.gz,contains=web|graphql-http",
+    ),
+    {
+      name: "platform",
+      path: "dist/release/platform-artifacts.tar.gz",
+      contains: ["web", "graphql-http"],
     },
   );
 
