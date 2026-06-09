@@ -166,30 +166,75 @@ jobs:
           );
           expected.add(`@thinkwork.desktop-${version}.dmg.blockmap`);
 
-          const files = [];
-          function walk(dir) {
-            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-              const entryPath = path.join(dir, entry.name);
-              if (entry.isDirectory()) {
-                walk(entryPath);
-              } else {
-                files.push(entryPath);
-              }
-            }
-          }
-          walk(distDir);
+          const files = fs
+            .readdirSync(distDir, { withFileTypes: true })
+            .filter((entry) => entry.isFile())
+            .map((entry) => path.join(distDir, entry.name));
 
-          const missing = [];
-          for (const assetName of expected) {
+          function findOne(assetName, predicate) {
+            const matches = files.filter((file) => predicate(path.basename(file), file));
+            if (matches.length === 1) {
+              return matches[0];
+            }
+            if (matches.length > 1) {
+              console.error(`Multiple desktop artifacts match ${assetName}:`);
+              for (const file of matches) {
+                console.error(`  ${file}`);
+              }
+              process.exit(1);
+            }
+            return null;
+          }
+
+          function findSource(assetName) {
             const slashName = assetName.replace("@thinkwork.desktop", "@thinkwork/desktop");
-            const source = files.find((file) => {
+            const exact = findOne(assetName, (basename, file) => {
               const normalized = file.split(path.sep).join("/");
               return (
-                path.basename(file) === assetName ||
+                basename === assetName ||
                 normalized.endsWith(`/${assetName}`) ||
                 normalized.endsWith(`/${slashName}`)
               );
             });
+            if (exact) {
+              return exact;
+            }
+
+            const versionSegment = `-${version}`;
+            const zipArch = assetName.match(/-([^-]+)-mac\.zip$/)?.[1];
+            if (zipArch) {
+              return findOne(
+                assetName,
+                (basename) =>
+                  basename.includes(versionSegment) &&
+                  basename.endsWith(`-${zipArch}.zip`),
+              );
+            }
+
+            if (assetName.endsWith(".dmg.blockmap")) {
+              return findOne(
+                assetName,
+                (basename) =>
+                  basename.includes(versionSegment) && basename.endsWith(".dmg.blockmap"),
+              );
+            }
+
+            if (assetName.endsWith(".dmg")) {
+              return findOne(
+                assetName,
+                (basename) =>
+                  basename.includes(versionSegment) &&
+                  basename.endsWith(".dmg") &&
+                  !basename.endsWith(".dmg.blockmap"),
+              );
+            }
+
+            return null;
+          }
+
+          const missing = [];
+          for (const assetName of expected) {
+            const source = findSource(assetName);
             if (!source) {
               missing.push(assetName);
               continue;

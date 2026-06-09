@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U12 - release contract repair after TEI update
-  proof exposed mutable/incomplete GitHub Release assets.
-- Current branch: `codex/u12-tei-update-proof`.
+- Current implementation unit: U13 - desktop release asset staging repair after
+  `.139` exposed electron-builder product-name filenames.
+- Current branch: `codex/u13-release-asset-staging`.
 - Current worktree:
-  `.Codex/worktrees/u12-tei-update-proof`.
+  `.Codex/worktrees/u13-release-asset-staging`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -27,7 +27,8 @@ status: in_progress
   merged; U9 PR [#2296](https://github.com/thinkwork-ai/thinkwork/pull/2296)
   merged; U10 PR [#2297](https://github.com/thinkwork-ai/thinkwork/pull/2297)
   merged; U11 PR [#2298](https://github.com/thinkwork-ai/thinkwork/pull/2298)
-  merged; U12 PR pending.
+  merged; U12 PR [#2300](https://github.com/thinkwork-ai/thinkwork/pull/2300)
+  merged; U13 PR pending.
 - Status: U11 merged and deployed to main. TEI's customer deployment controller
   was refreshed to the U11 runner and `.137` selected-release pins, then TEI
   update execution `tei-e2e-update-137-20260609204430` failed closed because
@@ -41,9 +42,15 @@ status: in_progress
   created the GitHub Release, and Release Desktop run
   [27234845226](https://github.com/thinkwork-ai/thinkwork/actions/runs/27234845226)
   deployed web metadata but failed installer verification because only
-  `latest-mac.yml` and `canary-mac.yml` were attached. U12 is repairing the
-  release workflows so a release page becomes a complete, idempotent install
-  contract before retrying TEI with a fresh canary.
+  `latest-mac.yml` and `canary-mac.yml` were attached. U12 repaired the release
+  workflows so desktop and platform publishing are idempotent when either
+  workflow creates the release first. Cutting `.139` then exposed the remaining
+  desktop staging gap: electron-builder emitted product-name artifacts such as
+  `ThinkWork Spaces (Canary)-0.1.0-canary.139-arm64.dmg`, while updater metadata
+  expected GitHub asset names such as
+  `@thinkwork.desktop-0.1.0-canary.139.dmg`. U13 maps product-name build outputs
+  to the updater metadata names before upload, then will retry with a fresh
+  canary.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
