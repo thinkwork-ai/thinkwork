@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -299,7 +300,7 @@ describe("SettingsModelCatalog", () => {
     ).toBeTruthy();
   });
 
-  it("imports selected Bedrock candidates with display names and pricing-gated enablement", async () => {
+  it("imports selected Bedrock candidates with display names", async () => {
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /import/i }));
@@ -307,8 +308,43 @@ describe("SettingsModelCatalog", () => {
       name: /import bedrock models/i,
     });
     expect(importDialog.className).toContain("h-[min(88vh,760px)]");
+    expect(importDialog.className).toContain("w-[min(94vw,1180px)]");
+    expect(importDialog.className).toContain("max-w-none");
     expect(screen.queryByText("Capabilities")).toBeNull();
-    expect(screen.getByText("N/A")).toBeTruthy();
+    expect(within(importDialog).queryByText("Provider")).toBeNull();
+    expect(within(importDialog).queryByText("Pricing")).toBeNull();
+    expect(within(importDialog).queryByText("Enable")).toBeNull();
+    expect(within(importDialog).queryByText("N/A")).toBeNull();
+
+    const importTable = within(importDialog).getByRole("table");
+    expect(importTable.className).not.toContain("table-fixed");
+    expect(importTable.querySelectorAll("col")).toHaveLength(0);
+    expect(
+      within(importDialog).getByText("Name").closest("th")?.className,
+    ).toContain("px-4");
+    expect(
+      within(importDialog).getByText("us.anthropic.claude-sonnet-4-6")
+        .className,
+    ).toContain("truncate");
+    expect(
+      within(importDialog)
+        .getByRole("checkbox", { name: /select claude sonnet 4.6/i })
+        .closest("div")?.className,
+    ).toContain("items-start");
+    expect(
+      within(importDialog).getByText("Claude Sonnet 4.6").closest("div")
+        ?.parentElement?.className,
+    ).toContain("min-h-16");
+    expect(
+      within(importDialog).getByText("Claude Sonnet 4.6").closest("div")
+        ?.parentElement?.className,
+    ).toContain("pb-3");
+    expect(
+      within(importDialog).getByText("Claude Sonnet 4.6").closest("div")
+        ?.parentElement?.className,
+    ).toContain("pt-2");
+    expect(within(importDialog).queryByText(/rows per page/i)).toBeNull();
+    expect(within(importDialog).queryByText(/page 1 of/i)).toBeNull();
 
     fireEvent.click(
       screen.getByRole("checkbox", {
@@ -321,16 +357,11 @@ describe("SettingsModelCatalog", () => {
         target: { value: "Executive Sonnet" },
       },
     );
-    fireEvent.click(
-      screen.getByRole("switch", {
+    expect(
+      screen.queryByRole("switch", {
         name: /enable claude sonnet 4.6 on import/i,
       }),
-    );
-
-    const unresolvedImportToggle = screen.getByRole("switch", {
-      name: /enable titan text lite on import/i,
-    }) as HTMLButtonElement;
-    expect(unresolvedImportToggle.disabled).toBe(true);
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /import selected/i }));
 
@@ -342,7 +373,7 @@ describe("SettingsModelCatalog", () => {
             {
               modelId: "us.anthropic.claude-sonnet-4-6",
               displayName: "Executive Sonnet",
-              enabled: true,
+              enabled: false,
             },
           ],
         },
