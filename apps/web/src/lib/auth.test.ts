@@ -70,6 +70,19 @@ describe("getGoogleSignInUrl", () => {
   });
 });
 
+describe("getHostedSignInUrl", () => {
+  it("uses the Cognito hosted UI without forcing an identity provider", async () => {
+    stubLocation("https://app.example");
+    const { getHostedSignInUrl } = await import("./auth");
+
+    const url = new URL(getHostedSignInUrl());
+    expect(url.pathname).toBe("/oauth2/authorize");
+    expect(url.searchParams.get("identity_provider")).toBeNull();
+    expect(url.searchParams.get("prompt")).toBeNull();
+    expect(url.searchParams.get("client_id")).toBe("test-client-id");
+  });
+});
+
 describe("signOut", () => {
   it("redirects through the Cognito /logout endpoint to clear the hosted-UI session", async () => {
     const { signOut } = await import("./auth");
