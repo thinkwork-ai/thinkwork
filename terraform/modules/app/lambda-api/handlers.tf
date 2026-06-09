@@ -23,8 +23,9 @@ locals {
   } : {}
   kestra_env = var.kestra_provisioned ? {
     # Keep Kestra managed-app status compact for graphql-http. Fields:
-    # provisioned|runtime|url|clusterArn|serviceName|logGroup|storageBucket|dbName|basicAuthSecretArn
-    KESTRA = "${var.kestra_provisioned ? "1" : "0"}|${var.kestra_runtime_enabled ? "1" : "0"}|${var.kestra_url}|${var.kestra_cluster_arn}|${var.kestra_service_name}|${var.kestra_log_group_name}|${var.kestra_storage_bucket_name}|${var.kestra_database_name}|${var.kestra_basic_auth_secret_arn}"
+    # provisioned|runtime. graphql-http is close to Lambda's 4 KB environment
+    # ceiling, so the resolver derives stable names/URLs from stage + account.
+    KESTRA = "${var.kestra_provisioned ? "1" : "0"}|${var.kestra_runtime_enabled ? "1" : "0"}"
   } : {}
   optional_integration_handler_names = concat(
     trimspace(var.deployment_state_machine_arn) == "" ? [

@@ -127,15 +127,19 @@ describe("managed application status helpers", () => {
     vi.stubEnv("STAGE", "dev");
     vi.stubEnv("AWS_REGION", "us-east-1");
     vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
-    vi.stubEnv("KESTRA", "1|1|https://orchestrate.example.com");
+    vi.stubEnv("WWW_URL", "https://thinkwork.example.com");
+    vi.stubEnv("KESTRA", "1|1");
 
     expect(mod.readManagedApplication("kestra")).toMatchObject({
       key: "kestra",
       status: "running",
+      url: "https://orchestrate.thinkwork.example.com",
       clusterArn:
         "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-kestra-cluster",
       serviceNames: ["thinkwork-dev-kestra-service"],
       logGroupNames: ["/thinkwork/dev/kestra"],
+      storageBucketName: "tw-dev-kestra-123456789012",
+      databaseName: "thinkwork_kestra",
     });
   });
 });

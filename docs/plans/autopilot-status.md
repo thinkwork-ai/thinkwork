@@ -11,12 +11,12 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U9 - Deploy workflow Kestra wiring and proof readiness.
-- Current branch: `codex/kestra-managed-app-u9-deploy-pipeline`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u9-deploy-pipeline`.
+- Current unit: U10 - Live deploy/destroy proof and corrective fixes.
+- Current branch: `codex/kestra-managed-app-u10-control-plane`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u10-control-plane`.
 - Current PR:
-  [#2254](https://github.com/thinkwork-ai/thinkwork/pull/2254).
-- Status: PR open; CI pending.
+  [#2256](https://github.com/thinkwork-ai/thinkwork/pull/2256).
+- Status: fixing live deploy failure exposed by the normal managed-app pipeline.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
     Kestra requirements, and the managed-app/MCP lifecycle precedent.
@@ -285,6 +285,61 @@ status: in_progress
     - `pnpm dlx actionlint .github/workflows/deploy.yml` downloaded a package
       with no binary and the upstream Go actionlint path could not run because
       `go` is not installed in the local environment.
+  - U9 PR [#2254](https://github.com/thinkwork-ai/thinkwork/pull/2254)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was
+    squash merged as `7d672550`.
+  - U9 post-merge deploy proof:
+    - push deploy run
+      [27179784948](https://github.com/thinkwork-ai/thinkwork/actions/runs/27179784948)
+      completed successfully with Kestra disabled;
+    - subsequent `main` deploy run
+      [27180192274](https://github.com/thinkwork-ai/thinkwork/actions/runs/27180192274)
+      completed successfully after the SHA-pinned deployment-source checkout
+      fix landed on `main`.
+  - Created isolated U10 worktree from `origin/main` at `b6e6d67`.
+  - U10 live enable proof started through deployed GraphQL
+    `setManagedApplicationDeployment(input: { key: "kestra", action: ENABLE })`,
+    which queued workflow-dispatch deploy run
+    [27180673294](https://github.com/thinkwork-ai/thinkwork/actions/runs/27180673294)
+    from `main`.
+  - U10 live enable run reached the Kestra-specific workflow path:
+    `Resolve Kestra deployment inputs`, `Prepare Kestra runtime secrets and
+database`, `Empty Kestra retained storage before destructive destroy`, and
+    `Terraform Apply` all started in the normal deploy pipeline.
+  - U10 live enable run created the Kestra ACM certificate, Cloudflare
+    validation/CNAME records, ALB, ECS cluster/service, log group, task roles,
+    S3 storage bucket, target group, and one running ECS task, then failed when
+    Terraform tried to update `thinkwork-dev-api-graphql-http`.
+  - U10 blocker/fix:
+    - deploy run
+      [27180673294](https://github.com/thinkwork-ai/thinkwork/actions/runs/27180673294)
+      failed with AWS Lambda `InvalidParameterValueException` because adding
+      the full Kestra status payload made the `graphql-http` environment block
+      exceed Lambda's 4 KB limit;
+    - corrective branch shrinks Terraform's `KESTRA` env value to
+      `provisioned|runtime`, derives Kestra URL, ECS names, log group, storage
+      bucket, and database defaults in the API resolver, and derives the
+      default Kestra basic-auth secret name for managed MCP cleanup instead of
+      carrying the long secret ARN in Lambda env.
+  - U10 local verification for the fix passed:
+    - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/managedApplications.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts src/__tests__/managed-mcp-lifecycle.test.ts`
+      -> 3 files passed, 22 tests passed.
+    - `pnpm exec vitest run __tests__/terraform-kestra-fixture.test.ts` from
+      `apps/cli` -> 1 file passed, 8 tests passed.
+    - `pnpm --filter @thinkwork/api typecheck` -> passed.
+    - `terraform fmt terraform/modules/app/lambda-api/handlers.tf` -> passed.
+    - `terraform -chdir=terraform/modules/app/lambda-api init -backend=false -input=false && terraform -chdir=terraform/modules/app/lambda-api validate`
+      -> passed.
+    - `git diff --check` -> passed.
+  - U10 local verification caveat:
+    - root `pnpm format:check` could not start because the root Prettier binary
+      is not linked in this checkout (`sh: prettier: command not found`).
+  - U10 PR [#2256](https://github.com/thinkwork-ai/thinkwork/pull/2256)
+    initially failed the required `test` check because
+    `apps/cli/__tests__/terraform-kestra-fixture.test.ts` still asserted that
+    the compact `KESTRA` Lambda env payload contained storage-bucket and
+    basic-auth ARN fields. The branch was patched to make the fixture enforce
+    the shorter payload instead.
 
 ## Agent Profile Closed Loops - 2026-06-08
 

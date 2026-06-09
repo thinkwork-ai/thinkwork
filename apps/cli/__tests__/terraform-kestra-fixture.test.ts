@@ -171,8 +171,15 @@ describe("Kestra Terraform managed app composition", () => {
     expect(vars).toMatch(/variable "kestra_basic_auth_secret_arn"/);
     expect(handlers).toMatch(/kestra_env = var\.kestra_provisioned \? {/);
     expect(handlers).toMatch(/KESTRA = "\$\{var\.kestra_provisioned/);
-    expect(handlers).toMatch(/var\.kestra_storage_bucket_name/);
-    expect(handlers).toMatch(/var\.kestra_basic_auth_secret_arn/);
+    expect(handlers).toMatch(
+      /KESTRA = "\$\{var\.kestra_provisioned \? "1" : "0"\}\|\$\{var\.kestra_runtime_enabled \? "1" : "0"\}"/,
+    );
+    expect(handlers).not.toMatch(
+      /KESTRA = ".*var\.kestra_storage_bucket_name/s,
+    );
+    expect(handlers).not.toMatch(
+      /KESTRA = ".*var\.kestra_basic_auth_secret_arn/s,
+    );
     expect(handlers).toMatch(/}, local\.cognee_env\)/);
     expect(handlers).toMatch(/}, local\.twenty_env, local\.kestra_env\)/);
   });
