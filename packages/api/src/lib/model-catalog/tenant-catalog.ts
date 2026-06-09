@@ -45,6 +45,8 @@ export type UpdateTenantModelCatalogEntryInput = {
   tenantId: string;
   modelId: string;
   displayName?: string | null;
+  inputCostPerMillion?: number | null;
+  outputCostPerMillion?: number | null;
   enabled?: boolean | null;
 };
 
@@ -333,6 +335,7 @@ export async function updateTenantModelCatalogEntry(
   options: { db?: Db } = {},
 ): Promise<TenantModelCatalogEntry | null> {
   const db = options.db ?? defaultDb;
+  const now = new Date();
   const current = await getTenantModelCatalogEntry(
     {
       tenantId: input.tenantId,
@@ -351,8 +354,34 @@ export async function updateTenantModelCatalogEntry(
     throw new Error("Display name cannot be blank.");
   }
 
+  const hasManualPricing =
+    input.inputCostPerMillion !== undefined ||
+    input.outputCostPerMillion !== undefined;
+  let manualInputCost: string | null = null;
+  let manualOutputCost: string | null = null;
+
+  if (hasManualPricing) {
+    if (
+      input.inputCostPerMillion == null ||
+      input.outputCostPerMillion == null
+    ) {
+      throw new Error("Input and output token prices are required together.");
+    }
+    if (
+      !Number.isFinite(input.inputCostPerMillion) ||
+      !Number.isFinite(input.outputCostPerMillion) ||
+      input.inputCostPerMillion < 0 ||
+      input.outputCostPerMillion < 0
+    ) {
+      throw new Error("Token prices must be non-negative numbers.");
+    }
+    manualInputCost = input.inputCostPerMillion.toFixed(4);
+    manualOutputCost = input.outputCostPerMillion.toFixed(4);
+  }
+
   if (
     input.enabled === true &&
+    !hasManualPricing &&
     (current.pricingStatus !== "resolved" ||
       !current.inputCostPerMillion ||
       !current.outputCostPerMillion)
@@ -361,10 +390,25 @@ export async function updateTenantModelCatalogEntry(
   }
 
   const patch: Partial<typeof tenantModelCatalog.$inferInsert> = {
-    updated_at: new Date(),
+    updated_at: now,
   };
   if (displayName !== undefined) {
     patch.display_name = displayName;
+  }
+  if (hasManualPricing) {
+    await db
+      .update(modelCatalog)
+      .set({
+        input_cost_per_million: manualInputCost,
+        output_cost_per_million: manualOutputCost,
+        updated_at: now,
+      })
+      .where(eq(modelCatalog.model_id, input.modelId));
+
+    patch.pricing_status = "resolved";
+    patch.pricing_source = "manual";
+    patch.pricing_diagnostics = { source: "operator_manual" };
+    patch.last_priced_at = now;
   }
   if (input.enabled !== undefined && input.enabled !== null) {
     patch.enabled = input.enabled;

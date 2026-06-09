@@ -44,15 +44,18 @@ type CandidateRow = BedrockModelImportCandidate;
 const RESOLVED_PRICING = "resolved";
 const CATALOG_PROVIDER_LABEL = "Bedrock";
 const FIT_COLUMN_META = {
-  meta: { headClassName: "w-px", cellClassName: "w-px whitespace-nowrap" },
+  meta: {
+    headClassName: "whitespace-nowrap",
+    cellClassName: "whitespace-nowrap",
+  },
 };
 const MODEL_ID_COLUMN_META = {
-  meta: { headClassName: "px-4", cellClassName: "max-w-0" },
+  meta: { headClassName: "px-4", cellClassName: "min-w-0" },
 };
 const NUMERIC_COLUMN_META = {
   meta: {
-    headClassName: "w-px text-right",
-    cellClassName: "w-px whitespace-nowrap text-right",
+    headClassName: "whitespace-nowrap text-right",
+    cellClassName: "whitespace-nowrap text-right",
   },
 };
 
@@ -70,10 +73,6 @@ function pricingBadgeVariant(status: string) {
   }
 }
 
-function lifecycleBadgeVariant(status: string | null | undefined) {
-  return status?.toLowerCase() === "active" ? "default" : "outline";
-}
-
 function canEnableModel(
   row: Pick<
     CatalogRow | CandidateRow,
@@ -85,18 +84,6 @@ function canEnableModel(
     row.inputCostPerMillion != null &&
     row.outputCostPerMillion != null
   );
-}
-
-function candidateCapabilities(row: CandidateRow) {
-  const capabilities = [
-    row.supportsStreaming ? "Streaming" : null,
-    row.supportsVision ? "Vision" : null,
-    row.supportsTools ? "Tools" : null,
-    ...row.inputModalities.map((value) => `${value.toLowerCase()} in`),
-    ...row.outputModalities.map((value) => `${value.toLowerCase()} out`),
-  ].filter((value): value is string => Boolean(value));
-
-  return Array.from(new Set(capabilities));
 }
 
 function catalogCapabilities(row: CatalogRow) {
@@ -120,6 +107,25 @@ function pricingText(
     inputCostPerMillion: row.inputCostPerMillion,
     outputCostPerMillion: row.outputCostPerMillion,
   });
+}
+
+function priceInputValue(value: number | null | undefined) {
+  return value == null ? "" : String(value);
+}
+
+function modelUpdateErrorMessage(error: {
+  graphQLErrors?: Array<{ message?: string }>;
+  message?: string;
+}) {
+  const message = error.graphQLErrors?.[0]?.message ?? error.message ?? "";
+  if (
+    message.includes("inputCostPerMillion") ||
+    message.includes("outputCostPerMillion") ||
+    message.includes("UpdateTenantModelCatalogEntryInput")
+  ) {
+    return "Manual pricing requires the latest API deployment. The local UI is newer than the deployed GraphQL schema.";
+  }
+  return message || "Unknown update error.";
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -202,9 +208,13 @@ export function SettingsModelCatalog() {
       {
         accessorKey: "displayName",
         header: "Name",
+        size: 144,
         ...FIT_COLUMN_META,
         cell: ({ row }) => (
-          <div className="whitespace-nowrap font-medium text-foreground">
+          <div
+            className="truncate font-medium text-foreground"
+            title={row.original.displayName}
+          >
             {row.original.displayName}
           </div>
         ),
@@ -212,6 +222,7 @@ export function SettingsModelCatalog() {
       {
         accessorKey: "provider",
         header: "Provider",
+        size: 120,
         ...FIT_COLUMN_META,
         cell: ({ row }) => (
           <Badge variant="secondary">{CATALOG_PROVIDER_LABEL}</Badge>
@@ -223,7 +234,7 @@ export function SettingsModelCatalog() {
         ...MODEL_ID_COLUMN_META,
         cell: ({ row }) => (
           <code
-            className="block truncate text-xs text-muted-foreground"
+            className="block min-w-0 truncate text-xs text-muted-foreground"
             title={row.original.modelId}
           >
             {row.original.modelId}
@@ -233,6 +244,7 @@ export function SettingsModelCatalog() {
       {
         accessorKey: "inputCostPerMillion",
         header: "Input",
+        size: 86,
         ...NUMERIC_COLUMN_META,
         cell: ({ row }) => (
           <span className="tabular-nums">
@@ -243,6 +255,7 @@ export function SettingsModelCatalog() {
       {
         accessorKey: "outputCostPerMillion",
         header: "Output",
+        size: 92,
         ...NUMERIC_COLUMN_META,
         cell: ({ row }) => (
           <span className="tabular-nums">
@@ -452,9 +465,10 @@ function ImportModelsDialog({
       {
         id: "selected",
         header: "",
+        size: 44,
         meta: {
-          cellClassName: "w-px",
-          headClassName: "w-px",
+          cellClassName: "whitespace-nowrap",
+          headClassName: "whitespace-nowrap",
         },
         cell: ({ row }) => (
           <Checkbox
@@ -470,12 +484,22 @@ function ImportModelsDialog({
       {
         accessorKey: "displayName",
         header: "Name",
+        meta: {
+          cellClassName: "min-w-0",
+          headClassName: "px-4",
+        },
         cell: ({ row }) => (
-          <div className="min-w-64 space-y-1">
-            <div className="whitespace-nowrap font-medium">
+          <div className="min-w-0 space-y-1">
+            <div
+              className="truncate font-medium"
+              title={row.original.displayName}
+            >
               {row.original.displayName}
             </div>
-            <code className="block whitespace-nowrap text-xs text-muted-foreground">
+            <code
+              className="block truncate text-xs text-muted-foreground"
+              title={row.original.modelId}
+            >
               {row.original.modelId}
             </code>
             {selected[row.original.modelId] ? (
@@ -499,6 +523,11 @@ function ImportModelsDialog({
       {
         accessorKey: "providerName",
         header: "Provider",
+        size: 170,
+        meta: {
+          cellClassName: "whitespace-nowrap",
+          headClassName: "whitespace-nowrap",
+        },
         cell: ({ row }) => (
           <Badge variant="secondary">{row.original.providerName}</Badge>
         ),
@@ -506,41 +535,25 @@ function ImportModelsDialog({
       {
         id: "pricing",
         header: "Pricing",
-        cell: ({ row }) => (
-          <div className="space-y-1 whitespace-nowrap">
-            <Badge variant={pricingBadgeVariant(row.original.pricingStatus)}>
-              {row.original.pricingStatus}
-            </Badge>
-            <div className="text-xs text-muted-foreground">
-              {pricingText(row.original)}
-            </div>
-          </div>
-        ),
-      },
-      {
-        id: "capabilities",
-        header: "Capabilities",
-        cell: ({ row }) => (
-          <div className="flex min-w-52 flex-wrap gap-1">
-            <Badge
-              variant={lifecycleBadgeVariant(row.original.lifecycleStatus)}
-            >
-              {row.original.lifecycleStatus ?? "unknown"}
-            </Badge>
-            {candidateCapabilities(row.original).map((capability) => (
-              <Badge key={capability} variant="outline">
-                {capability}
-              </Badge>
-            ))}
-          </div>
-        ),
+        size: 150,
+        meta: {
+          cellClassName: "whitespace-nowrap",
+          headClassName: "whitespace-nowrap",
+        },
+        cell: ({ row }) =>
+          canEnableModel(row.original) ? (
+            <span className="text-sm">{pricingText(row.original)}</span>
+          ) : (
+            <span className="text-sm text-muted-foreground">N/A</span>
+          ),
       },
       {
         id: "enabled",
         header: "Enable",
+        size: 88,
         meta: {
-          cellClassName: "w-px",
-          headClassName: "w-px",
+          cellClassName: "whitespace-nowrap",
+          headClassName: "whitespace-nowrap",
         },
         cell: ({ row }) => {
           const allowed = canEnableModel(row.original);
@@ -576,9 +589,10 @@ function ImportModelsDialog({
       {
         id: "imported",
         header: "",
+        size: 96,
         meta: {
-          cellClassName: "w-px",
-          headClassName: "w-px",
+          cellClassName: "whitespace-nowrap",
+          headClassName: "whitespace-nowrap",
         },
         cell: ({ row }) =>
           row.original.alreadyImported ? (
@@ -591,7 +605,7 @@ function ImportModelsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(88vh,760px)] max-w-6xl grid-rows-[auto_auto_minmax(0,1fr)_auto] flex-col overflow-hidden">
+      <DialogContent className="flex h-[min(88vh,760px)] max-w-5xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Import Bedrock models</DialogTitle>
           <DialogDescription>
@@ -633,7 +647,9 @@ function ImportModelsDialog({
               columns={columns}
               data={candidates}
               pageSize={10}
-              tableClassName="w-max min-w-full table-auto"
+              allowHorizontalScroll={false}
+              scrollable
+              tableClassName="w-full table-fixed"
               emptyState={
                 <div className="py-8 text-center text-sm text-muted-foreground">
                   No import candidates.
@@ -687,33 +703,78 @@ function ModelDetailsDialog({
   onSaved: () => void;
 }) {
   const [displayName, setDisplayName] = useState("");
+  const [inputPrice, setInputPrice] = useState("");
+  const [outputPrice, setOutputPrice] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [state, updateCatalogEntry] = useMutation(
     SettingsUpdateTenantModelCatalogEntryMutation,
   );
 
   useEffect(() => {
     setDisplayName(row?.displayName ?? "");
+    setInputPrice(priceInputValue(row?.inputCostPerMillion));
+    setOutputPrice(priceInputValue(row?.outputCostPerMillion));
+    setSaveError(null);
   }, [row]);
 
   async function save() {
     if (!row || !tenantId) return;
+    setSaveError(null);
+    const inputPriceText = inputPrice.trim();
+    const outputPriceText = outputPrice.trim();
+    const priceInputChanged =
+      inputPriceText !== priceInputValue(row.inputCostPerMillion) ||
+      outputPriceText !== priceInputValue(row.outputCostPerMillion);
+    const pricePatch: {
+      inputCostPerMillion?: number;
+      outputCostPerMillion?: number;
+    } = {};
+
+    if (priceInputChanged) {
+      if (!inputPriceText || !outputPriceText) {
+        setSaveError("Input and output pricing are required together.");
+        toast.error("Enter both token prices", {
+          description: "Input and output pricing are required together.",
+        });
+        return;
+      }
+
+      const parsedInputPrice = Number(inputPriceText);
+      const parsedOutputPrice = Number(outputPriceText);
+      if (
+        !Number.isFinite(parsedInputPrice) ||
+        !Number.isFinite(parsedOutputPrice) ||
+        parsedInputPrice < 0 ||
+        parsedOutputPrice < 0
+      ) {
+        setSaveError("Token prices must be non-negative numbers.");
+        toast.error("Token prices must be non-negative numbers");
+        return;
+      }
+
+      pricePatch.inputCostPerMillion = parsedInputPrice;
+      pricePatch.outputCostPerMillion = parsedOutputPrice;
+    }
+
     const result = await updateCatalogEntry({
       input: {
         tenantId,
         modelId: row.modelId,
         displayName: displayName.trim(),
+        ...pricePatch,
       },
     });
 
     if (result.error) {
-      toast.error("Could not rename model", {
-        description:
-          result.error.graphQLErrors[0]?.message ?? result.error.message,
+      const description = modelUpdateErrorMessage(result.error);
+      setSaveError(description);
+      toast.error("Could not update model", {
+        description,
       });
       return;
     }
 
-    toast.success("Display name updated");
+    toast.success("Model updated");
     onSaved();
     onOpenChange(false);
   }
@@ -742,6 +803,45 @@ function ModelDetailsDialog({
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
               />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="model-input-price"
+                >
+                  Input price
+                </label>
+                <Input
+                  id="model-input-price"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.0001"
+                  type="number"
+                  value={inputPrice}
+                  onChange={(event) => setInputPrice(event.target.value)}
+                  placeholder="USD per 1M input tokens"
+                />
+              </div>
+              <div className="grid gap-2">
+                <label
+                  className="text-sm font-medium"
+                  htmlFor="model-output-price"
+                >
+                  Output price
+                </label>
+                <Input
+                  id="model-output-price"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.0001"
+                  type="number"
+                  value={outputPrice}
+                  onChange={(event) => setOutputPrice(event.target.value)}
+                  placeholder="USD per 1M output tokens"
+                />
+              </div>
             </div>
 
             <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
@@ -775,6 +875,15 @@ function ModelDetailsDialog({
                 </TooltipContent>
               </Tooltip>
             </div>
+
+            {saveError ? (
+              <div
+                className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                role="alert"
+              >
+                {saveError}
+              </div>
+            ) : null}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <DetailItem label="Provider">{CATALOG_PROVIDER_LABEL}</DetailItem>
@@ -838,7 +947,7 @@ function ModelDetailsDialog({
             disabled={!displayName.trim() || state.fetching}
             onClick={save}
           >
-            Save
+            {state.fetching ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
