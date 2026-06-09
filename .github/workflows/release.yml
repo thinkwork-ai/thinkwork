@@ -343,13 +343,28 @@ jobs:
           name: thinkwork-release-assets
           path: dist/release
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_REF_NAME }}
-          body_path: notes.md
-          generate_release_notes: false
-          prerelease: ${{ contains(env.RELEASE_REF_NAME, '-canary.') }}
+      - name: Upsert release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prerelease_args=()
+          if [[ "$RELEASE_REF_NAME" == *"-canary."* ]]; then
+            prerelease_args=(--prerelease)
+          fi
+
+          if gh release view "$RELEASE_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --notes-file notes.md \
+              "${prerelease_args[@]}"
+          else
+            gh release create "$RELEASE_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$RELEASE_REF_NAME" \
+              --notes-file notes.md \
+              "${prerelease_args[@]}"
+          fi
 
       - name: Publish deployable release assets
         run: bash scripts/release/publish-release-assets.sh "$RELEASE_REF_NAME" dist/release
