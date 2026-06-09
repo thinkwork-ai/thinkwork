@@ -1876,15 +1876,6 @@ function ExecutionTimeline({
                   modelId={ev.profileModelId}
                   modelDisplayNames={modelDisplayNames}
                 />
-                {loopSummary ? (
-                  <Badge
-                    variant="outline"
-                    title="Loop phase and verdict"
-                    className="max-w-32 truncate px-1.5 py-0 text-[9px] text-muted-foreground"
-                  >
-                    {loopSummary}
-                  </Badge>
-                ) : null}
               </span>
             );
             const parts: string[] = [];

@@ -670,7 +670,6 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.getByText(/88.*24.*5\.0K cached/)).toBeTruthy();
     expect(screen.getByText("1.6s")).toBeTruthy();
     expect(screen.getByText("$0.0017")).toBeTruthy();
-    expect(screen.getByText("Verification · Pass · iteration 0")).toBeTruthy();
     expect(screen.queryByText("completed")).toBeNull();
     expect(screen.getByText("Tool: web_search")).toBeTruthy();
     expect(screen.queryByText(/not routed/i)).toBeNull();
@@ -824,7 +823,6 @@ describe("SettingsActivityThreadDetail", () => {
     ).toBeTruthy();
     expect(researchRow.closest("button")?.dataset.branchLane).toBe("0");
     expect(reviewerRow.closest("button")?.dataset.branchLane).toBe("0");
-    expect(screen.getByText("Verification · Pass · iteration 0")).toBeTruthy();
   });
 
   it("renders retry profile runs as separate sequential segments", () => {
@@ -969,9 +967,5 @@ describe("SettingsActivityThreadDetail", () => {
     expect(researchRows[0].closest("button")?.dataset.branchLane).toBe("0");
     expect(reviewerRow.closest("button")?.dataset.branchLane).toBe("0");
     expect(researchRows[1].closest("button")?.dataset.branchLane).toBe("0");
-    expect(
-      screen.getByText("Verification · Revise · iteration 0"),
-    ).toBeTruthy();
-    expect(screen.getByText("Iteration · Pass · iteration 1")).toBeTruthy();
   });
 });
