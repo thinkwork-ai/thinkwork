@@ -20,6 +20,39 @@ workflow is required.
   operating model.
 </Aside>
 
+## ThinkWork Dev Dogfood
+
+ThinkWork dev is the first controller-managed environment. GitHub Actions still
+builds, tests, and publishes release artifacts, but dev release updates should
+be run by selecting an explicit release manifest and starting the dev deployment
+controller. In controller mode, GitHub Actions starts Step Functions and skips
+the legacy direct Terraform apply job.
+
+From a local operator shell:
+
+```bash
+thinkwork deploy \
+  --controller \
+  --stage dev \
+  --controller-action update \
+  --release-version v0.1.0-canary.134 \
+  --manifest-url https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json \
+  --manifest-sha256 <sha256>
+```
+
+From GitHub Actions, run `Deploy` manually with:
+
+- `use_controller=true`
+- `controller_action=update`
+- `release_version=<tag>`
+- `release_manifest_url=<thinkwork-release.json URL>`
+- `release_manifest_sha256=<manifest SHA-256>`
+
+The controller execution writes evidence under
+`sessions/<session-id>/<action>/` in the deployment evidence bucket. A dev update
+is not considered proven until the controller execution, runtime profile, and
+foundation smoke evidence are all recorded.
+
 ## Deployment Model
 
 ```text
