@@ -97,10 +97,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     ),
     ["lambda:graphql-http:graphql-http.zip", "static-site:web:web.tar.gz"],
   );
-  assert.equal(
-    manifest.artifacts[0]?.url,
-    null,
-  );
+  assert.equal(manifest.artifacts[0]?.url, null);
   assert.deepEqual(manifest.artifactBundles?.[0]?.contains, [
     "graphql-http",
     "web",
@@ -174,6 +171,41 @@ test("signing helpers can verify the generated manifest", async () => {
       trustedKeys: [trustedKey],
       now: "2026-06-07T00:00:00.000Z",
     }),
+  );
+});
+
+test("buildReleaseManifest can keep artifact URLs when bundleArtifactUrls is requested", async () => {
+  const root = await makeTempReleaseRoot();
+  const lambdaDir = path.join(root, "lambdas");
+  await mkdir(lambdaDir, { recursive: true });
+  await writeFile(path.join(lambdaDir, "graphql-http.zip"), "lambda-bytes");
+  await writeFile(path.join(root, "platform-artifacts.tar.gz"), "bundle");
+
+  const manifest = await buildReleaseManifest({
+    version: "v1.2.3",
+    gitSha: "abc123",
+    artifactRoot: root,
+    lambdaDir,
+    baseUrl:
+      "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3",
+    artifactBundles: [
+      {
+        name: "platform",
+        path: path.join(root, "platform-artifacts.tar.gz"),
+      },
+    ],
+    bundleArtifactUrls: true,
+    createdAt: "2026-05-18T00:00:00.000Z",
+  });
+
+  assert.equal(
+    manifest.artifacts.find((artifact) => artifact.name === "graphql-http")
+      ?.url,
+    "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/graphql-http.zip",
+  );
+  assert.equal(
+    manifest.artifactBundles?.[0]?.url,
+    "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/platform-artifacts.tar.gz",
   );
 });
 

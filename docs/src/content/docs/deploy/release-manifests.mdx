@@ -16,7 +16,8 @@ The manifest includes:
 - manifest schema version
 - release version
 - compatibility bounds
-- artifact URLs and SHA-256 hashes
+- artifact metadata and SHA-256 hashes
+- artifact bundle metadata for machine-consumed platform payloads
 - Terraform module or bundle references
 - deployment runner/build image reference
 - managed-app descriptors for Cognee and Twenty
@@ -29,15 +30,33 @@ The manifest includes:
 1. Verify the manifest signature with a pinned trusted ThinkWork public key.
 2. Reject expired or revoked signing keys.
 3. Verify compatibility bounds for the CLI and runner.
-4. Download artifacts only after the manifest is trusted.
-5. Verify every artifact SHA-256 before Terraform, static assets, or runtime
-   bundles consume it.
-6. Record the manifest digest on deployment jobs and smoke evidence.
+4. Resolve releases by explicit version/tag plus manifest digest. Do not use
+   GitHub's `Latest` badge as deployment authority for canary validation.
+5. Download artifact bundles only after the manifest is trusted.
+6. Verify the platform bundle SHA-256, extract it with traversal/link checks,
+   and verify every contained artifact SHA-256 before Terraform, static assets,
+   or runtime bundles consume it.
+7. Record the manifest digest, bundle digest, and staged artifact digests on
+   deployment jobs and smoke evidence.
 
 <Aside type="caution">
   Never proceed with a placeholder digest such as `CHANGE_ME`. If the manifest
   digest cannot be resolved and verified, stop before any deployment mutation.
 </Aside>
+
+## GitHub Release Assets
+
+Human-facing GitHub Releases should stay small. For deployable platform
+releases, the expected machine-consumed assets are:
+
+- `thinkwork-release.json`
+- `thinkwork-release.sig.json` when release signing is enabled
+- `platform-artifacts.tar.gz`
+
+The platform bundle contains backend Lambda zips and static-site archives.
+Individual artifact URLs in the manifest are a compatibility path; new
+deployment controller runs should consume the bundle and verify every contained
+artifact against the manifest before staging it.
 
 ## Upgrade Evidence
 
@@ -45,6 +64,7 @@ Release upgrade evidence should record:
 
 - previous release version and manifest digest
 - target release version and manifest digest
+- platform bundle digest and staged artifact digests
 - Step Functions execution ARN
 - CodeBuild build ARN/id
 - Terraform plan and apply artifact keys

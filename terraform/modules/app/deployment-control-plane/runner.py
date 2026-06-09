@@ -4,9 +4,9 @@ import os
 import secrets
 import subprocess
 import tarfile
-import urllib.request
 import urllib.parse
-from datetime import datetime, timezone
+import urllib.request
+from datetime import UTC, datetime
 from pathlib import Path
 
 WORK = Path("/tmp/thinkwork-platform-deploy")
@@ -14,7 +14,8 @@ RELEASE = WORK / "release"
 SOURCE = WORK / "source"
 TF = WORK / "terraform"
 MANIFEST = RELEASE / "thinkwork-release.json"
-STARTED_AT = datetime.now(timezone.utc).isoformat()
+STARTED_AT = datetime.now(UTC).isoformat()
+RELEASE_EVIDENCE = {}
 
 
 def run(args, **kwargs):
@@ -44,6 +45,120 @@ def download(url, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url, timeout=120) as response:
         destination.write_bytes(response.read())
+
+
+def safe_join(base, relative_path):
+    relative = Path(relative_path)
+    if relative.is_absolute():
+        raise RuntimeError(f"Archive member path must be relative: {relative_path}")
+    resolved_base = base.resolve()
+    resolved = (base / relative).resolve()
+    if resolved != resolved_base and resolved_base not in resolved.parents:
+        raise RuntimeError(f"Archive member escapes destination: {relative_path}")
+    return resolved
+
+
+def safe_extract_tar_file(archive_path, destination):
+    destination.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive_path, "r:*") as tar:
+        members = tar.getmembers()
+        for member in members:
+            if member.issym() or member.islnk():
+                raise RuntimeError(f"Archive member links are not allowed: {member.name}")
+            if not (member.isfile() or member.isdir()):
+                raise RuntimeError(f"Archive member type is not allowed: {member.name}")
+            safe_join(destination, member.name)
+        tar.extractall(destination, members=members)
+
+
+def release_artifacts_by_name(manifest):
+    return {
+        artifact.get("name"): artifact
+        for artifact in manifest.get("artifacts", [])
+        if isinstance(artifact.get("name"), str)
+    }
+
+
+def artifact_bundle_url(bundle):
+    url = bundle.get("url")
+    if not url:
+        raise RuntimeError(f"Release artifact bundle {bundle.get('name')} is missing url")
+    return url
+
+
+def bundle_extract_dir(bundle):
+    name = str(bundle.get("name") or "platform")
+    safe_name = "".join(ch if ch.isalnum() or ch in "._=-" else "_" for ch in name)
+    return RELEASE / "bundles" / safe_name
+
+
+def download_and_extract_artifact_bundles(manifest):
+    artifacts = release_artifacts_by_name(manifest)
+    bundled_paths = {}
+    bundle_evidence = []
+
+    for bundle in manifest.get("artifactBundles", []) or []:
+        bundle_name = bundle.get("name")
+        bundle_path = safe_join(
+            RELEASE,
+            str(bundle.get("relativePath") or bundle.get("fileName")),
+        )
+        download(artifact_bundle_url(bundle), bundle_path)
+        digest = sha256_file(bundle_path)
+        if digest != bundle.get("sha256"):
+            raise RuntimeError(f"Artifact bundle digest mismatch for {bundle_name}")
+
+        extract_dir = bundle_extract_dir(bundle)
+        safe_extract_tar_file(bundle_path, extract_dir)
+
+        contained = []
+        for artifact_name in bundle.get("contains", []):
+            artifact = artifacts.get(artifact_name)
+            if not artifact:
+                raise RuntimeError(
+                    f"Release artifact bundle {bundle_name} references unknown artifact {artifact_name}"
+                )
+            artifact_path = safe_join(extract_dir, artifact["relativePath"])
+            if not artifact_path.is_file():
+                raise RuntimeError(
+                    f"Release artifact {artifact_name} is missing from bundle {bundle_name}"
+                )
+            bundled_paths[artifact_name] = artifact_path
+            contained.append(artifact_name)
+
+        bundle_evidence.append(
+            {
+                "name": bundle_name,
+                "fileName": bundle.get("fileName"),
+                "sha256": digest,
+                "contains": contained,
+            }
+        )
+
+    return bundled_paths, bundle_evidence
+
+
+def materialize_release_artifact(artifact, bundled_paths):
+    destination = safe_join(RELEASE, artifact["relativePath"])
+    url = artifact.get("url")
+    if url:
+        download(url, destination)
+        source = "url"
+    else:
+        bundled_path = bundled_paths.get(artifact.get("name"))
+        if not bundled_path:
+            raise RuntimeError(
+                f"Release artifact {artifact.get('name')} is missing url and is not available in an artifact bundle"
+            )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.resolve() != bundled_path.resolve():
+            destination.write_bytes(bundled_path.read_bytes())
+        source = "bundle"
+
+    digest = sha256_file(destination)
+    if digest != artifact.get("sha256"):
+        raise RuntimeError(f"Artifact digest mismatch for {artifact.get('name')}")
+    return destination, digest, source
 
 
 def secret_payload(payload):
@@ -688,6 +803,7 @@ output "twenty_runtime_enabled" {{ value = module.thinkwork.twenty_runtime_enabl
 
 
 def sync_release_artifacts():
+    global RELEASE_EVIDENCE
     manifest_url = os.environ.get("THINKWORK_RELEASE_MANIFEST_URL")
     expected = os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256", "").lower()
     if not manifest_url:
@@ -700,19 +816,23 @@ def sync_release_artifacts():
         )
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    bundled_paths, bundle_evidence = download_and_extract_artifact_bundles(manifest)
     lambda_prefix = f"releases/{os.environ['THINKWORK_RELEASE_VERSION']}/lambdas"
     static_files = {}
+    artifact_evidence = []
     for artifact in manifest.get("artifacts", []):
         if artifact.get("type") not in {"lambda", "static-site"}:
             continue
-        url = artifact.get("url")
-        if not url:
-            raise RuntimeError(f"Release artifact {artifact.get('name')} is missing url")
-        destination = RELEASE / artifact["relativePath"]
-        download(url, destination)
-        digest = sha256_file(destination)
-        if digest != artifact.get("sha256"):
-            raise RuntimeError(f"Artifact digest mismatch for {artifact.get('name')}")
+        destination, digest, source = materialize_release_artifact(artifact, bundled_paths)
+        artifact_evidence.append(
+            {
+                "name": artifact.get("name"),
+                "type": artifact.get("type"),
+                "fileName": artifact.get("fileName"),
+                "sha256": digest,
+                "source": source,
+            }
+        )
         if artifact.get("type") == "lambda":
             run(
                 [
@@ -725,6 +845,11 @@ def sync_release_artifacts():
             )
         else:
             static_files[artifact.get("name")] = destination
+    RELEASE_EVIDENCE = {
+        "manifestSha256": actual,
+        "bundles": bundle_evidence,
+        "artifacts": artifact_evidence,
+    }
     return static_files
 
 
@@ -829,7 +954,7 @@ def runtime_profile(outputs, vars_json):
         "cognitoDomain": cognito_domain,
         "cognitoUserPoolId": output_value("user_pool_id"),
         "cognitoClientId": output_value("admin_client_id"),
-        "issuedAt": datetime.now(timezone.utc).isoformat(),
+        "issuedAt": datetime.now(UTC).isoformat(),
     }
     vite_env = {
         "VITE_API_URL": profile["apiEndpoint"],
@@ -865,8 +990,7 @@ def sync_static(outputs_path, static_files, vars_json):
             continue
         target = RELEASE / f"extract-{artifact_name}"
         target.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(archive, "r:gz") as tar:
-            tar.extractall(target)
+        safe_extract_tar_file(archive, target)
         run(["aws", "s3", "sync", "--delete", str(target), f"s3://{bucket}/"])
         if artifact_name == "web":
             index_path = target / "index.html"
@@ -933,10 +1057,12 @@ def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None)
         "codebuildBuildId": os.environ.get("CODEBUILD_BUILD_ID"),
         "terraformExitCode": terraform_exit_code,
         "startedAt": STARTED_AT,
-        "recordedAt": datetime.now(timezone.utc).isoformat(),
+        "recordedAt": datetime.now(UTC).isoformat(),
     }
     if error:
         evidence["error"] = str(error)
+    if RELEASE_EVIDENCE:
+        evidence["releaseArtifacts"] = RELEASE_EVIDENCE
     Path("deployment-evidence.json").write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
