@@ -231,6 +231,8 @@ input UpdateTenantModelCatalogEntryInput {
   tenantId: ID!
   modelId: String!
   displayName: String
+  inputCostPerMillion: Float
+  outputCostPerMillion: Float
   enabled: Boolean
 }
 

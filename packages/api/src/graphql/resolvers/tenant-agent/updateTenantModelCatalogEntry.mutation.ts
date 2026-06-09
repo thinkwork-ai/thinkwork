@@ -12,16 +12,39 @@ type UpdateTenantModelCatalogEntryArgs = {
     tenantId: string;
     modelId: string;
     displayName?: string | null;
+    inputCostPerMillion?: number | null;
+    outputCostPerMillion?: number | null;
     enabled?: boolean | null;
   };
 };
+
+function hasValidManualPricing(
+  inputCostPerMillion: number | null | undefined,
+  outputCostPerMillion: number | null | undefined,
+) {
+  return (
+    inputCostPerMillion != null &&
+    outputCostPerMillion != null &&
+    Number.isFinite(inputCostPerMillion) &&
+    Number.isFinite(outputCostPerMillion) &&
+    inputCostPerMillion >= 0 &&
+    outputCostPerMillion >= 0
+  );
+}
 
 export async function updateTenantModelCatalogEntry(
   _parent: unknown,
   args: UpdateTenantModelCatalogEntryArgs,
   ctx: GraphQLContext,
 ) {
-  const { tenantId, modelId, displayName, enabled } = args.input;
+  const {
+    tenantId,
+    modelId,
+    displayName,
+    enabled,
+    inputCostPerMillion,
+    outputCostPerMillion,
+  } = args.input;
   await requireTenantAdmin(ctx, tenantId);
 
   const current = await getTenantModelCatalogEntry({
@@ -42,8 +65,22 @@ export async function updateTenantModelCatalogEntry(
     });
   }
 
+  const updatingPricing =
+    inputCostPerMillion !== undefined || outputCostPerMillion !== undefined;
+  if (updatingPricing) {
+    if (!hasValidManualPricing(inputCostPerMillion, outputCostPerMillion)) {
+      throw new GraphQLError(
+        "Input and output token prices must be non-negative numbers.",
+        {
+          extensions: { code: "BAD_USER_INPUT" },
+        },
+      );
+    }
+  }
+
   if (
     enabled === true &&
+    !updatingPricing &&
     (current.pricingStatus !== "resolved" ||
       !current.inputCostPerMillion ||
       !current.outputCostPerMillion)
@@ -60,6 +97,8 @@ export async function updateTenantModelCatalogEntry(
     tenantId,
     modelId,
     displayName: trimmedDisplayName,
+    inputCostPerMillion,
+    outputCostPerMillion,
     enabled,
   });
   if (!updated) {

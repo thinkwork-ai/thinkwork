@@ -174,6 +174,18 @@ describe("SettingsModelCatalog", () => {
     expect(catalogTable.className).toContain("table-fixed");
     expect(catalogTable.className).not.toContain("w-max");
 
+    const columnWidths = Array.from(
+      catalogTable.querySelectorAll("col"),
+      (col) => col.getAttribute("style") ?? "",
+    );
+    expect(columnWidths).toEqual([
+      "width: 144px;",
+      "width: 120px;",
+      "",
+      "width: 86px;",
+      "width: 92px;",
+    ]);
+
     expect(screen.getByText("Tenant Sonnet")).toBeTruthy();
     expect(screen.getByText("Bedrock")).toBeTruthy();
     expect(
@@ -228,12 +240,78 @@ describe("SettingsModelCatalog", () => {
     });
   });
 
+  it("saves manual input and output token prices", async () => {
+    catalogRows.splice(0, catalogRows.length, missingPriceModel);
+
+    renderPage();
+
+    fireEvent.click(screen.getByText("Tenant Titan"));
+    fireEvent.change(screen.getByLabelText("Input price"), {
+      target: { value: "0.55" },
+    });
+    fireEvent.change(screen.getByLabelText("Output price"), {
+      target: { value: "2.19" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateCatalogEntryMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          modelId: "amazon.titan-text-lite-v1",
+          displayName: "Tenant Titan",
+          inputCostPerMillion: 0.55,
+          outputCostPerMillion: 2.19,
+        },
+      });
+    });
+  });
+
+  it("shows an inline error when the deployed API does not support manual pricing yet", async () => {
+    catalogRows.splice(0, catalogRows.length, missingPriceModel);
+    updateCatalogEntryMock.mockResolvedValueOnce({
+      error: {
+        graphQLErrors: [
+          {
+            message:
+              'Field "inputCostPerMillion" is not defined by type "UpdateTenantModelCatalogEntryInput".',
+          },
+        ],
+        message: "GraphQL validation failed",
+      },
+    });
+
+    renderPage();
+
+    fireEvent.click(screen.getByText("Tenant Titan"));
+    fireEvent.change(screen.getByLabelText("Input price"), {
+      target: { value: "0.55" },
+    });
+    fireEvent.change(screen.getByLabelText("Output price"), {
+      target: { value: "2.19" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText(
+        /manual pricing requires the latest api deployment/i,
+      ),
+    ).toBeTruthy();
+  });
+
   it("imports selected Bedrock candidates with display names and pricing-gated enablement", async () => {
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /import/i }));
+    const importDialog = await screen.findByRole("dialog", {
+      name: /import bedrock models/i,
+    });
+    expect(importDialog.className).toContain("h-[min(88vh,760px)]");
+    expect(screen.queryByText("Capabilities")).toBeNull();
+    expect(screen.getByText("N/A")).toBeTruthy();
+
     fireEvent.click(
-      await screen.findByRole("checkbox", {
+      screen.getByRole("checkbox", {
         name: /select claude sonnet 4.6/i,
       }),
     );

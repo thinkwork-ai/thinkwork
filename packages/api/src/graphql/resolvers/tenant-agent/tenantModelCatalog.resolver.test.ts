@@ -266,4 +266,66 @@ describe("tenant model catalog resolvers", () => {
 
     expect(mockUpdateTenantModelCatalogEntry).not.toHaveBeenCalled();
   });
+
+  it("allows manual token pricing updates for unresolved tenant rows", async () => {
+    mockGetTenantModelCatalogEntry.mockResolvedValue(unresolvedTenantRow);
+    mockUpdateTenantModelCatalogEntry.mockResolvedValue({
+      ...unresolvedTenantRow,
+      inputCostPerMillion: "0.5500",
+      outputCostPerMillion: "2.1900",
+      pricingStatus: "resolved",
+      pricingSource: "manual",
+    });
+
+    const row = await updateTenantModelCatalogEntry(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          modelId: "us.anthropic.claude-sonnet-4-6",
+          inputCostPerMillion: 0.55,
+          outputCostPerMillion: 2.19,
+        },
+      },
+      ctx,
+    );
+
+    expect(row).toEqual(
+      expect.objectContaining({
+        inputCostPerMillion: "0.5500",
+        outputCostPerMillion: "2.1900",
+        pricingStatus: "resolved",
+      }),
+    );
+    expect(mockUpdateTenantModelCatalogEntry).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      modelId: "us.anthropic.claude-sonnet-4-6",
+      displayName: undefined,
+      inputCostPerMillion: 0.55,
+      outputCostPerMillion: 2.19,
+      enabled: undefined,
+    });
+  });
+
+  it("rejects partial manual token pricing updates", async () => {
+    mockGetTenantModelCatalogEntry.mockResolvedValue(unresolvedTenantRow);
+
+    await expect(
+      updateTenantModelCatalogEntry(
+        null,
+        {
+          input: {
+            tenantId: "tenant-1",
+            modelId: "us.anthropic.claude-sonnet-4-6",
+            inputCostPerMillion: 0.55,
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+
+    expect(mockUpdateTenantModelCatalogEntry).not.toHaveBeenCalled();
+  });
 });
