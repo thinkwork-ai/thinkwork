@@ -108,6 +108,13 @@ export async function handler(
       return revokeBootstrapCredentialLease(leaseMatch[1]!, event);
     }
 
+    const authorityTransferMatch = path.match(
+      /^\/api\/deployment-sessions\/([0-9a-fA-F-]+)\/authority-transfer$/,
+    );
+    if (authorityTransferMatch && method === "POST") {
+      return completeAuthorityTransfer(authorityTransferMatch[1]!, event);
+    }
+
     const startMatch = path.match(
       /^\/api\/deployment-sessions\/([0-9a-fA-F-]+)\/start$/,
     );
@@ -221,7 +228,10 @@ async function startDeployment(
   ) {
     return error("Deployment cannot start after teardown is requested", 409);
   }
-  if (session.credentials_status !== "validated") {
+  if (
+    session.credentials_status !== "validated" &&
+    session.credentials_status !== "transferred"
+  ) {
     return error(
       "Bootstrap credential lease must be validated before deployment starts",
       409,
@@ -245,7 +255,7 @@ async function startDeployment(
     return json({ session: toSessionPayload(session, events) });
   }
 
-  const stateMachineArn = deploymentStateMachineArn();
+  const stateMachineArn = deploymentStateMachineArnForSession(session);
   const evidenceBucket = deploymentEvidenceBucket();
   if (!stateMachineArn) {
     const [updated] = await db
@@ -586,6 +596,127 @@ async function revokeBootstrapCredentialLease(
   }
 }
 
+async function completeAuthorityTransfer(
+  sessionId: string,
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const session = await loadSession(sessionId);
+  if (!session) return notFound("Deployment session not found");
+  if (!isAuthorizedSessionRequest(session, event)) {
+    return forbidden("Deployment session token is invalid");
+  }
+
+  const proof = authorityTransferProof(parseBody(event));
+  if ("error" in proof) return error(proof.error, 400);
+
+  const lease = await loadLatestBootstrapCredentialLease(session.id);
+  if (!lease) {
+    return error(
+      "Bootstrap credential lease is required before authority transfer",
+      409,
+    );
+  }
+
+  const now = new Date();
+  try {
+    await deleteBootstrapCredentialLeaseSecret({
+      secretRef: String(lease.secret_arn),
+    });
+  } catch (err) {
+    await db
+      .update(bootstrapCredentialLeases)
+      .set({
+        status: "failed_cleanup",
+        failed_cleanup_reason: (err as Error).message,
+        updated_at: now,
+      })
+      .where(eq(bootstrapCredentialLeases.id, lease.id as string));
+
+    const [failed] = await db
+      .update(customerDeploymentSessions)
+      .set({
+        status: "authority_transfer_failed",
+        error_message:
+          "Bootstrap credential lease cleanup failed after authority transfer.",
+        updated_at: now,
+      })
+      .where(eq(customerDeploymentSessions.id, session.id))
+      .returning();
+
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "authority_transfer_cleanup_failed",
+      stepKey: "authority_transfer",
+      message:
+        "Customer controller proof was received, but the bootstrap credential lease could not be deleted.",
+      payload: {
+        leaseId: lease.id,
+        controller: proof.controller,
+        errorName: errorName(err),
+        credentialMaterialPersisted: false,
+      },
+      idempotencyKey: "authority_transfer_cleanup_failed",
+    });
+    const events = await loadSessionEvents(session.id);
+    return json({ session: toSessionPayload(failed ?? session, events) }, 500);
+  }
+
+  await db
+    .update(bootstrapCredentialLeases)
+    .set({
+      status: "transferred",
+      transferred_at: now,
+      revoked_at: now,
+      updated_at: now,
+    })
+    .where(eq(bootstrapCredentialLeases.id, lease.id as string));
+
+  const [updated] = await db
+    .update(customerDeploymentSessions)
+    .set({
+      status: "authority_transferred",
+      current_step_key: "first_admin",
+      credentials_status: "transferred",
+      runner_mode: "customer_controller",
+      session_config: {
+        ...objectConfig(session.session_config),
+        authorityTransfer: {
+          transferredAt: now.toISOString(),
+          controller: proof.controller,
+          release: proof.release,
+          profile: proof.profile,
+          bootstrapCredentialLease: {
+            id: lease.id,
+            status: "transferred",
+            secretFingerprint: lease.secret_fingerprint,
+            credentialMaterialPersisted: false,
+          },
+        },
+      },
+      updated_at: now,
+    })
+    .where(eq(customerDeploymentSessions.id, session.id))
+    .returning();
+
+  await appendSessionEvent({
+    sessionId: session.id,
+    eventType: "authority_transferred",
+    stepKey: "authority_transfer",
+    message:
+      "Customer AWS controller owns future deployment operations. Bootstrap credential lease deleted.",
+    payload: {
+      controller: proof.controller,
+      release: proof.release,
+      leaseId: lease.id,
+      credentialMaterialPersisted: false,
+    },
+    idempotencyKey: "authority_transferred",
+  });
+
+  const events = await loadSessionEvents(session.id);
+  return json({ session: toSessionPayload(updated ?? session, events) });
+}
+
 async function requestTeardown(
   sessionId: string,
   event: APIGatewayProxyEventV2,
@@ -626,7 +757,7 @@ async function requestTeardown(
       : `teardown_requested:${session.requested_action}`,
   });
 
-  const stateMachineArn = deploymentStateMachineArn();
+  const stateMachineArn = deploymentStateMachineArnForSession(session);
   const priorTeardown = teardownRunConfig(session.session_config);
   if (!terminal && stateMachineArn && !priorTeardown.executionArn) {
     try {
@@ -881,6 +1012,18 @@ function deploymentStateMachineArn(): string | null {
   );
 }
 
+function deploymentStateMachineArnForSession(session: {
+  session_config?: unknown;
+}): string | null {
+  const transfer = objectConfig(
+    objectConfig(session.session_config).authorityTransfer,
+  );
+  const controller = objectConfig(transfer.controller);
+  return (
+    stringField(controller, "stateMachineArn") || deploymentStateMachineArn()
+  );
+}
+
 function deploymentEvidenceBucket(): string | null {
   return (
     process.env.THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET ||
@@ -1010,6 +1153,51 @@ function errorName(err: unknown): string {
   return err && typeof err === "object" && "name" in err
     ? String((err as { name?: unknown }).name)
     : "Error";
+}
+
+function authorityTransferProof(body: unknown):
+  | {
+      controller: Record<string, unknown>;
+      profile: Record<string, unknown>;
+      release: Record<string, unknown>;
+    }
+  | { error: string } {
+  const payload = objectConfig(body);
+  const profile = objectConfig(payload.profile);
+  const controller = objectConfig(payload.controller || profile.controller);
+  const release = objectConfig(payload.release);
+  const controllerArn = stringField(controller, "stateMachineArn");
+  const profileApi =
+    stringField(profile, "apiEndpoint") || stringField(profile, "apiUrl");
+  const cognitoUserPoolId = stringField(profile, "cognitoUserPoolId");
+  if (!controllerArn) {
+    return { error: "Customer controller stateMachineArn is required" };
+  }
+  if (!profileApi || !cognitoUserPoolId) {
+    return {
+      error: "Customer deployment profile is missing required runtime fields",
+    };
+  }
+  return {
+    controller,
+    profile,
+    release: {
+      version:
+        stringField(release, "version") ||
+        stringField(profile, "releaseVersion"),
+      manifestUrl:
+        stringField(release, "manifestUrl") ||
+        stringField(profile, "releaseManifestUrl"),
+      manifestSha256:
+        stringField(release, "manifestSha256") ||
+        stringField(profile, "releaseManifestSha256"),
+    },
+  };
+}
+
+function stringField(source: Record<string, unknown>, key: string): string {
+  const value = source[key];
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function objectConfig(value: unknown): Record<string, unknown> {

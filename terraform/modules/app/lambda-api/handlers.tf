@@ -987,6 +987,8 @@ locals {
       "POST /api/deployment-sessions/{sessionId}/bootstrap-credential-lease"    = "deployment-sessions"
       "DELETE /api/deployment-sessions/{sessionId}/bootstrap-credential-lease"  = "deployment-sessions"
       "OPTIONS /api/deployment-sessions/{sessionId}/bootstrap-credential-lease" = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/authority-transfer"            = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/authority-transfer"         = "deployment-sessions"
       "POST /api/deployment-sessions/{sessionId}/start"                         = "deployment-sessions"
       "OPTIONS /api/deployment-sessions/{sessionId}/start"                      = "deployment-sessions"
       "POST /api/deployment-sessions/{sessionId}/teardown"                      = "deployment-sessions"

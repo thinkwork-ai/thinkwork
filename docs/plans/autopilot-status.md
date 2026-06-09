@@ -10,16 +10,18 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U4 - Add BootstrapCredentialLease.
-- Current branch: `codex/u4-bootstrap-credential-lease`.
+- Current implementation unit: U5 - Transfer authority into customer AWS.
+- Current branch: `codex/u5-authority-transfer`.
 - Current worktree:
-  `.Codex/worktrees/u4-bootstrap-credential-lease`.
+  `.Codex/worktrees/u5-authority-transfer`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
   merged; U4 PR [#2290](https://github.com/thinkwork-ai/thinkwork/pull/2290)
+  merged; U5 PR [#2291](https://github.com/thinkwork-ai/thinkwork/pull/2291)
   opened.
-- Status: U4 PR opened; monitoring required CI.
+- Status: U5 CI failed once on web sign-in tests; fix pushed and monitoring
+  rerun.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -129,7 +131,53 @@ status: in_progress
   - U4 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
     Prettier-managed files passed.
   - U4 `git diff --check` passed.
+- U4 PR #2290 passed required CI (`cla`, `lint`, `Migration Drift Precheck
+(dev)`, `verify`, `test`, `typecheck`) after the scoped dev migration apply
+  noted below, and was squash merged as `aa48e0ed`.
+- U4 remote branch was already deleted by GitHub merge handling; local U4
+  worktree and branch were removed after syncing `origin/main`.
+- Created isolated U5 worktree from `origin/main` at `aa48e0ed`.
+- U5 extends deployment profiles with customer account, selected release, and
+  controller identity metadata; projects those fields into web runtime config;
+  writes controller identity into customer runtime profile outputs; adds a
+  no-op/status controller proof action; and adds a possession-token gated
+  `/authority-transfer` endpoint that records transfer proof, revokes the
+  bootstrap credential lease, marks the deployment session as
+  `authority_transferred`, and routes future deployment/teardown starts through
+  the customer controller ARN.
+- U5 keeps authority transfer recoverable: cleanup failures mark the session
+  `authority_transfer_failed` and leave the lease metadata for remediation
+  instead of falsely declaring transfer complete.
+  - U5 local verification:
+  - `pnpm --filter @thinkwork/deployment-profile test` passed: 14 tests.
+  - `pnpm --filter @thinkwork/deployment-profile typecheck` passed.
+  - `pnpm --filter @thinkwork/api test -- deployment-sessions.test.ts` passed:
+    13 tests.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 12 tests.
+  - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - `terraform fmt -check terraform/modules/app/deployment-control-plane terraform/modules/app/lambda-api terraform/modules/thinkwork`
+    passed.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - `git diff --check` passed.
 - CI:
+  - U5 PR #2291 initial checks: `cla`, `lint`, `verify`, and `typecheck`
+    passed.
+  - U5 PR #2291 `test` failed because the web sign-in snapshot treated new
+    optional account/release/controller deployment-profile metadata as required
+    OAuth fields, blocking login in existing web and desktop flows.
+  - Fixed `apps/web/src/lib/deployment-profile.ts` to validate only the actual
+    required OAuth/runtime fields for login readiness while preserving optional
+    authority metadata when present.
+  - U5 post-fix local verification:
+    `pnpm --filter @thinkwork/web exec vitest run src/routes/-sign-in.test.tsx`
+    passed: 11 tests; `pnpm --filter @thinkwork/web typecheck` passed.
   - U4 PR #2290 initial checks: `cla`, `lint`, and `verify` passed.
   - `Migration Drift Precheck (dev)` failed because the new hand-written
     migration objects from `0156_bootstrap_credential_leases.sql` were not yet

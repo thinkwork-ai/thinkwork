@@ -374,6 +374,92 @@ describe("deployment session handler", () => {
     );
   });
 
+  it("marks authority transferred only after profile proof and lease deletion", async () => {
+    mockSecretsSend.mockResolvedValue({});
+    const session = sessionRow({
+      credentials_status: "validated",
+      session_config: {
+        bootstrapCredentialLease: {
+          id: "lease-1",
+          status: "validated",
+        },
+      },
+    });
+    selectQueue.push([session]);
+    selectQueue.push([
+      {
+        id: "lease-1",
+        session_id: SESSION_ID,
+        status: "validated",
+        secret_arn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/deployment-bootstrap-leases/session/lease",
+        secret_fingerprint: "abc123",
+      },
+    ]);
+    returningQueue.push([
+      {
+        ...session,
+        status: "authority_transferred",
+        current_step_key: "first_admin",
+        credentials_status: "transferred",
+        runner_mode: "customer_controller",
+      },
+    ]);
+    selectQueue.push([{ id: "event-1", event_type: "authority_transferred" }]);
+
+    const response = await mod.handler(
+      event(
+        "POST",
+        `/api/deployment-sessions/${SESSION_ID}/authority-transfer`,
+        authorityTransferBody(),
+        { "x-thinkwork-deployment-token": "correct-token" },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    const deleteCommand = mockSecretsSend.mock.calls[0]?.[0] as {
+      input: Record<string, unknown>;
+    };
+    expect(deleteCommand.input).toEqual(
+      expect.objectContaining({
+        ForceDeleteWithoutRecovery: true,
+      }),
+    );
+    expect(updateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "transferred",
+          revoked_at: expect.any(Date),
+        }),
+        expect.objectContaining({
+          status: "authority_transferred",
+          credentials_status: "transferred",
+          runner_mode: "customer_controller",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(updateCalls)).not.toContain(
+      "super-secret-access-key-value",
+    );
+  });
+
+  it("rejects authority transfer without readable controller and profile proof", async () => {
+    const session = sessionRow({ credentials_status: "validated" });
+    selectQueue.push([session]);
+
+    const response = await mod.handler(
+      event(
+        "POST",
+        `/api/deployment-sessions/${SESSION_ID}/authority-transfer`,
+        { profile: {}, controller: {} },
+        { "x-thinkwork-deployment-token": "correct-token" },
+      ),
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(mockSecretsSend).not.toHaveBeenCalled();
+  });
+
   it("requires a validated bootstrap credential lease before deployment start", async () => {
     const session = sessionRow({ credentials_status: "not_connected" });
     selectQueue.push([session]);
@@ -621,6 +707,62 @@ describe("deployment session handler", () => {
     expect(JSON.stringify(command.input)).not.toContain("password");
     expect(JSON.parse(response.body || "{}").session.status).toBe("deploying");
   });
+
+  it("starts teardown through the customer controller after authority transfer", async () => {
+    mockSfnSend.mockResolvedValue({
+      executionArn:
+        "arn:aws:states:us-east-1:123456789012:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-teardown",
+    });
+    const session = sessionRow({
+      status: "authority_transferred",
+      credentials_status: "transferred",
+      runner_mode: "customer_controller",
+      session_config: {
+        authorityTransfer: {
+          controller: {
+            stateMachineArn:
+              "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+          },
+        },
+      },
+    });
+    selectQueue.push([session]);
+    returningQueue.push([
+      {
+        ...session,
+        status: "teardown_requested",
+        current_step_key: "teardown",
+        requested_action: "teardown",
+      },
+    ]);
+    returningQueue.push([
+      {
+        ...session,
+        status: "destroying",
+        current_step_key: "teardown",
+        requested_action: "teardown",
+        runner_mode: "customer_controller",
+      },
+    ]);
+    selectQueue.push([
+      { id: "event-1", event_type: "teardown_execution_started" },
+    ]);
+
+    const response = await mod.handler(
+      event(
+        "POST",
+        `/api/deployment-sessions/${SESSION_ID}/teardown`,
+        {},
+        { "x-thinkwork-deployment-token": "correct-token" },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    const command = mockSfnSend.mock.calls[0]?.[0] as {
+      input: { input: string; stateMachineArn: string; name: string };
+    };
+    expect(command.input.stateMachineArn).toContain("thinkwork-tei-e2e");
+  });
 });
 
 function event(
@@ -665,5 +807,39 @@ function sessionRow(overrides: Record<string, unknown> = {}) {
     created_at: "2026-06-08T00:00:00.000Z",
     updated_at: "2026-06-08T00:00:00.000Z",
     ...overrides,
+  };
+}
+
+function authorityTransferBody() {
+  return {
+    profile: {
+      stage: "tei-e2e",
+      region: "us-east-1",
+      accountId: "123456789012",
+      releaseVersion: "v0.1.0-canary.134",
+      releaseManifestUrl: "https://example.com/thinkwork-release.json",
+      releaseManifestSha256: "a".repeat(64),
+      apiEndpoint: "https://api.example.com",
+      graphqlHttpUrl: "https://api.example.com/graphql",
+      appsyncUrl: "https://appsync.example.com/graphql",
+      appsyncRealtimeUrl: "wss://appsync.example.com/graphql",
+      cognitoUserPoolId: "us-east-1_abc",
+      cognitoClientId: "client-id",
+      controller: {
+        stateMachineArn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+        stateMachineName: "thinkwork-tei-e2e-deployment-orchestrator",
+      },
+    },
+    controller: {
+      stateMachineArn:
+        "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+      stateMachineName: "thinkwork-tei-e2e-deployment-orchestrator",
+    },
+    release: {
+      version: "v0.1.0-canary.134",
+      manifestUrl: "https://example.com/thinkwork-release.json",
+      manifestSha256: "a".repeat(64),
+    },
   };
 }

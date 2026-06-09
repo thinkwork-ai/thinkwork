@@ -358,6 +358,26 @@ resource "aws_codebuild_project" "runner" {
     }
 
     environment_variable {
+      name  = "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN"
+      value = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:${local.state_machine_name}"
+    }
+
+    environment_variable {
+      name  = "THINKWORK_DEPLOYMENT_STATE_MACHINE_NAME"
+      value = local.state_machine_name
+    }
+
+    environment_variable {
+      name  = "THINKWORK_DEPLOYMENT_RUNNER_PROJECT_ARN"
+      value = "arn:aws:codebuild:${var.region}:${var.account_id}:project/${local.codebuild_project_name}"
+    }
+
+    environment_variable {
+      name  = "THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME"
+      value = local.codebuild_project_name
+    }
+
+    environment_variable {
       name  = "THINKWORK_TERRAFORM_STATE_BUCKET"
       value = var.terraform_state_bucket
     }
