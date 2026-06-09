@@ -324,6 +324,42 @@ resource "aws_iam_role_policy_attachment" "lambda_bedrock_knowledge_base" {
   policy_arn = aws_iam_policy.lambda_bedrock_knowledge_base.arn
 }
 
+# Settings -> Model Catalog imports call Bedrock's foundation-model catalog and
+# AWS Price List APIs from graphql-http. These read/list APIs do not support
+# useful resource scoping, so keep the wildcard grant isolated in a managed
+# policy instead of adding to the shared role's already large inline policy set.
+resource "aws_iam_policy" "lambda_model_catalog_import_read" {
+  name        = "thinkwork-${var.stage}-api-model-catalog-import-read"
+  description = "Read Bedrock model metadata and AWS Price List products for tenant model imports"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:ListFoundationModels",
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "pricing:DescribeServices",
+          "pricing:GetAttributeValues",
+          "pricing:GetProducts",
+        ]
+        Resource = "*"
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_model_catalog_import_read" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.lambda_model_catalog_import_read.arn
+}
+
 # graphql-http's Knowledge Graph health check validates the private Cognee
 # service from outside the VPC by reading ECS service steadiness and ALB target
 # health. Keep this as a managed policy: the shared Lambda role is already near
