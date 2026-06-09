@@ -1,17 +1,36 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Badge, Button, DataTable, Input, Switch } from "@thinkwork/ui";
+import {
+  Badge,
+  Button,
+  DataTable,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+} from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
-  deleteMcpServer,
+  createMcpServer,
   isManagedMcpServer,
   listMcpServers,
   listUserMcpServers,
   setMcpServerEnabled,
   type McpServer,
 } from "@/lib/mcp-api";
-import { SettingsTablePane } from "@/components/settings/SettingsContent";
+import {
+  SettingsTablePane,
+  settingsLinkActionClassName,
+} from "@/components/settings/SettingsContent";
 
 export function SettingsMcpServers() {
   const { tenant, tenantId, userId } = useTenant();
@@ -21,6 +40,7 @@ export function SettingsMcpServers() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
 
   const load = useCallback(() => {
     if (!tenantSlug) return;
@@ -67,22 +87,6 @@ export function SettingsMcpServers() {
       }
     },
     [tenantSlug, load],
-  );
-
-  const remove = useCallback(
-    async (id: string) => {
-      if (!tenantSlug) return;
-      setPending((p) => ({ ...p, [id]: true }));
-      try {
-        await deleteMcpServer(tenantSlug, id);
-        setServers((prev) => prev?.filter((s) => s.id !== id) ?? prev);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to remove");
-      } finally {
-        setPending((p) => ({ ...p, [id]: false }));
-      }
-    },
-    [tenantSlug],
   );
 
   const columns = useMemo<ColumnDef<McpServer>[]>(
@@ -171,75 +175,194 @@ export function SettingsMcpServers() {
           );
         },
       },
-      {
-        id: "actions",
-        header: "",
-        size: 90,
-        cell: ({ row }) => {
-          const server = row.original;
-          if (isManagedMcpServer(server)) {
-            return (
-              <span className="text-sm text-muted-foreground">System</span>
-            );
-          }
-          return (
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={pending[server.id]}
-              onClick={(e) => {
-                e.stopPropagation();
-                remove(server.id);
-              }}
-            >
-              Remove
-            </Button>
-          );
-        },
-      },
     ],
-    [pending, toggle, remove],
+    [pending, toggle],
   );
 
   return (
-    <SettingsTablePane
-      title="MCP Servers"
-      description="Connect MCP tool servers and manage the tools they expose to agents."
-      loading={!servers && !error}
-      toolbar={
-        error ? (
-          <p className="text-sm text-destructive">{error}</p>
-        ) : (
-          <Input
-            placeholder="Search servers…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="max-w-sm"
-          />
-        )
-      }
-    >
-      <DataTable
-        columns={columns}
-        data={servers ?? []}
-        filterValue={search}
-        filterColumn="name"
-        scrollable
-        allowHorizontalScroll={false}
-        pageSize={25}
-        tableClassName="table-fixed"
-        onRowClick={(row) =>
-          navigate({
-            to: "/settings/mcp-servers/$serverId",
-            params: { serverId: row.id },
-          })
+    <>
+      <SettingsTablePane
+        title="MCP Servers"
+        description="Connect MCP tool servers and manage the tools they expose to agents."
+        loading={!servers && !error}
+        actions={
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className={settingsLinkActionClassName}
+          >
+            + New MCP Server
+          </button>
         }
-        emptyState={
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            No MCP servers configured.
-          </div>
+        toolbar={
+          error ? (
+            <p className="text-sm text-destructive">{error}</p>
+          ) : (
+            <Input
+              placeholder="Search servers…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="max-w-sm"
+            />
+          )
         }
+      >
+        <DataTable
+          columns={columns}
+          data={servers ?? []}
+          filterValue={search}
+          filterColumn="name"
+          scrollable
+          allowHorizontalScroll={false}
+          pageSize={25}
+          tableClassName="table-fixed"
+          onRowClick={(row) =>
+            navigate({
+              to: "/settings/mcp-servers/$serverId",
+              params: { serverId: row.id },
+            })
+          }
+          emptyState={
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No MCP servers configured.
+            </div>
+          }
+        />
+      </SettingsTablePane>
+      <NewMcpServerDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        tenantSlug={tenantSlug}
+        onCreated={() => {
+          setAddOpen(false);
+          load();
+        }}
       />
-    </SettingsTablePane>
+    </>
+  );
+}
+
+function NewMcpServerDialog({
+  open,
+  onOpenChange,
+  tenantSlug,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tenantSlug: string | null;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [authType, setAuthType] = useState("none");
+  const [apiKey, setApiKey] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Reset the form each time the dialog opens.
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setUrl("");
+      setAuthType("none");
+      setApiKey("");
+      setErrorMsg(null);
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  const canSubmit =
+    !!tenantSlug &&
+    name.trim().length > 0 &&
+    url.trim().length > 0 &&
+    (authType !== "tenant_api_key" || apiKey.trim().length > 0) &&
+    !submitting;
+
+  async function onSubmit() {
+    if (!tenantSlug || !canSubmit) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await createMcpServer(tenantSlug, {
+        name: name.trim(),
+        url: url.trim(),
+        authType,
+        ...(authType === "tenant_api_key" ? { apiKey: apiKey.trim() } : {}),
+      });
+      onCreated();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to add server");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New MCP server</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Name</label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My MCP server"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">URL</label>
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com/mcp"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Authentication</label>
+            <Select value={authType} onValueChange={setAuthType}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="tenant_api_key">API key</SelectItem>
+                <SelectItem value="oauth">OAuth</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {authType === "tenant_api_key" ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">API key</label>
+              <Input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Secret token"
+              />
+            </div>
+          ) : null}
+          {authType === "oauth" ? (
+            <p className="text-xs text-muted-foreground">
+              Connect this server&apos;s OAuth from its detail page after adding
+              it.
+            </p>
+          ) : null}
+          {errorMsg ? (
+            <p className="text-sm text-destructive">{errorMsg}</p>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={onSubmit} disabled={!canSubmit}>
+            {submitting ? "Adding…" : "Add server"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

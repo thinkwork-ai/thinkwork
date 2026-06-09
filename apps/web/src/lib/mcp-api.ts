@@ -64,6 +64,23 @@ export function listMcpServers(
   return request("/api/skills/mcp-servers", { tenantSlug });
 }
 
+export function createMcpServer(
+  tenantSlug: string,
+  payload: {
+    name: string;
+    url: string;
+    transport?: string;
+    authType?: string;
+    apiKey?: string;
+  },
+): Promise<{ id: string; slug: string; created?: boolean; updated?: boolean }> {
+  return request("/api/skills/mcp-servers", {
+    method: "POST",
+    tenantSlug,
+    body: JSON.stringify(payload),
+  });
+}
+
 export function setMcpServerEnabled(
   tenantSlug: string,
   serverId: string,

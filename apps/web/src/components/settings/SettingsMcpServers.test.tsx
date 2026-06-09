@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -6,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   setHeader: vi.fn(),
   listMcpServers: vi.fn(),
   listUserMcpServers: vi.fn(),
-  deleteMcpServer: vi.fn(),
+  createMcpServer: vi.fn(),
   setMcpServerEnabled: vi.fn(),
 }));
 
@@ -32,7 +38,7 @@ vi.mock("@/lib/mcp-api", async (importOriginal) => {
     ...actual,
     listMcpServers: mocks.listMcpServers,
     listUserMcpServers: mocks.listUserMcpServers,
-    deleteMcpServer: mocks.deleteMcpServer,
+    createMcpServer: mocks.createMcpServer,
     setMcpServerEnabled: mocks.setMcpServerEnabled,
   };
 });
@@ -44,7 +50,7 @@ beforeEach(() => {
   mocks.setHeader.mockReset();
   mocks.listMcpServers.mockReset();
   mocks.listUserMcpServers.mockReset();
-  mocks.deleteMcpServer.mockReset();
+  mocks.createMcpServer.mockReset();
   mocks.setMcpServerEnabled.mockReset();
 });
 
@@ -98,12 +104,41 @@ describe("SettingsMcpServers", () => {
     expect(await screen.findByText("Twenty CRM")).toBeTruthy();
     expect(screen.getByText("Kestra")).toBeTruthy();
     expect(screen.getAllByText("managed")).toHaveLength(2);
-    expect(screen.getAllByText("System")).toHaveLength(2);
-    await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: /remove/i })).toHaveLength(
-        1,
-      );
-    });
+    // The inline Remove/System column is gone — removal lives in the detail view.
+    expect(screen.queryByText("System")).toBeNull();
+    expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
     expect(screen.getByText("not connected")).toBeTruthy();
+  });
+
+  it("adds a server through the New MCP Server dialog", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.createMcpServer.mockResolvedValue({
+      id: "new-1",
+      slug: "my-server",
+      created: true,
+    });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ New MCP Server" }));
+    expect(await screen.findByText("New MCP server")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("My MCP server"), {
+      target: { value: "My Server" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("https://example.com/mcp"), {
+      target: { value: "https://my.example/mcp" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add server" }));
+
+    await waitFor(() => {
+      expect(mocks.createMcpServer).toHaveBeenCalledWith("thinkwork", {
+        name: "My Server",
+        url: "https://my.example/mcp",
+        authType: "none",
+      });
+    });
   });
 });
