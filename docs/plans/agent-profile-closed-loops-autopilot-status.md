@@ -9,10 +9,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-001-feat-agent-profile-closed-loops-plan.md`.
 - Target branch: `main`.
-- Current unit: U7 - Add Loop Controls To Settings -> Agents.
-- Current branch: `codex/agent-profile-closed-loops-u7`.
+- Current unit: U8 - Update Verification And Institutional Docs.
+- Current branch: `codex/agent-profile-closed-loops-u8`.
 - Current worktree:
-  `.Codex/worktrees/agent-profile-closed-loops-u7`.
+  `.Codex/worktrees/agent-profile-closed-loops-u8`.
 - Status: implementation in progress.
 
 ## Progress
@@ -46,7 +46,13 @@ status: in_progress
   [#2253](https://github.com/thinkwork-ai/thinkwork/pull/2253) as
   `391b174`.
 - U7 adds operator-facing Loop / Review controls to Settings -> Agents profile
-  detail, writing the authored policy into `executionControls.loopPolicy`.
+  detail, writing the authored policy into `executionControls.loopPolicy`. It
+  was squash merged in PR
+  [#2257](https://github.com/thinkwork-ai/thinkwork/pull/2257) as
+  `56497e6`.
+- U8 updates the closed-loop verification runbook and institutional solution
+  notes so Research -> Reviewer -> parent-answer behavior can be validated
+  before releases.
 
 ## U5 Verification
 
@@ -97,3 +103,11 @@ status: in_progress
   rendered the Loop / Review section with Closed mode, max iterations 1, review
   gate defaults, External reviewer `Never`, max review loops 2, and failure
   behavior `Return blocker`.
+
+## U8 Verification
+
+- `pnpm dlx prettier@3.6.2 --write` was run on U8-touched Markdown files.
+- `rg -n "/agent\\s"` returned no matches in U8-touched verification and
+  solution docs, confirming the runbook no longer points at the old slash-agent
+  shortcut.
+- `git diff --check` passed.
