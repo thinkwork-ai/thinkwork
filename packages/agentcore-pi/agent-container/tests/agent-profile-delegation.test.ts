@@ -250,10 +250,15 @@ describe("agent profile delegation", () => {
     expect(captured?.systemPrompt).toContain("Discovery");
     expect(captured?.systemPrompt).toContain("Planning");
     expect(captured?.systemPrompt).toContain("Execution");
-    expect(captured?.systemPrompt).toContain("Self-review");
+    expect(captured?.systemPrompt).toContain("Verification");
+    expect(captured?.systemPrompt).toContain("internal Verifier/Reviewer");
     expect(captured?.systemPrompt).toContain("Iteration");
     expect(captured?.systemPrompt).toContain("Handoff");
+    expect(captured?.systemPrompt).toContain("Review gate: required");
     expect(captured?.systemPrompt).toContain("Verdict: pass | revise | fail");
+    expect(captured?.systemPrompt).toContain(
+      "A verifier verdict is required for every Agent Profile run",
+    );
     expect(captured?.systemPrompt).toContain(
       "The parent Agent owns the final user-facing response",
     );

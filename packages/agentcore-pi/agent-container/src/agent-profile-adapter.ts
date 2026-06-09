@@ -497,7 +497,7 @@ function defaultLoopPolicyFromExecution(
     enabled: true,
     maxIterations: 1,
     maxReviewLoops: execution.maxReviewLoops ?? 1,
-    reviewGate: execution.reviewGate ?? false,
+    reviewGate: execution.reviewGate ?? true,
     externalReviewerPolicy: "explicit",
     failBehavior: "return_blocker",
     ...(execution.maxRuntimeMs !== undefined

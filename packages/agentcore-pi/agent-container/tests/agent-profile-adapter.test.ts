@@ -140,7 +140,7 @@ describe("agent profile adapter", () => {
         enabled: true,
         maxIterations: 1,
         maxReviewLoops: 1,
-        reviewGate: false,
+        reviewGate: true,
         externalReviewerPolicy: "explicit",
         failBehavior: "return_blocker",
         maxTokens: 2_000,

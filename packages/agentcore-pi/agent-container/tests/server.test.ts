@@ -375,6 +375,8 @@ describe("handleInvocation — happy path", () => {
         runAgentLoop: async ({ modelId, message, systemPrompt }) => {
           calls.push({ modelId, message, systemPrompt });
           if (modelId === "anthropic/claude-haiku-4-5") {
+            expect(String(systemPrompt)).toContain("internal Verifier/Reviewer");
+            expect(String(systemPrompt)).toContain("Review gate: required");
             expect(String(message)).not.toContain("#Reviewer");
             return {
               content:
