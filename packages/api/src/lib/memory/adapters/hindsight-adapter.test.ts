@@ -303,3 +303,186 @@ function row(overrides: Record<string, unknown>) {
     ...overrides,
   };
 }
+
+describe("HindsightAdapter bank configuration", () => {
+  const DESIRED = {
+    observations_mission: "Durable institutional facts about the business",
+    enable_observations: true,
+    enable_auto_consolidation: true,
+  };
+
+  beforeEach(() => {
+    executeMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  function jsonResponse(body: unknown, ok = true, status = 200) {
+    return {
+      ok,
+      status,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    };
+  }
+
+  function retainConversationArgs() {
+    return {
+      tenantId: TENANT_ID,
+      ownerType: "user" as const,
+      ownerId: USER_ID,
+      threadId: "11111111-2222-3333-4444-555555555555",
+      messages: [
+        {
+          role: "user" as const,
+          content: "hello",
+          timestamp: "2026-06-09T10:00:00.000Z",
+        },
+      ],
+    };
+  }
+
+  it("PUTs desired config when the bank has no overrides", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: {} }))
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const calls = fetchMock.mock.calls;
+    expect(String(calls[0]?.[0])).toBe(
+      `https://hindsight.example/v1/default/banks/user_${USER_ID}/config`,
+    );
+    expect(calls[0]?.[1]?.method).toBe("GET");
+    expect(calls[1]?.[1]?.method).toBe("PUT");
+    expect(JSON.parse(calls[1]?.[1]?.body as string)).toEqual(DESIRED);
+    expect(String(calls[2]?.[0])).toContain("/memories");
+  });
+
+  it("skips the PUT when overrides already match", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: DESIRED }))
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const methods = fetchMock.mock.calls.map((c) => c[1]?.method);
+    expect(methods).toEqual(["GET", "POST"]);
+  });
+
+  it("PUTs when one configured field drifted", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          config: {},
+          overrides: { ...DESIRED, observations_mission: "stale mission" },
+        }),
+      )
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const methods = fetchMock.mock.calls.map((c) => c[1]?.method);
+    expect(methods).toEqual(["GET", "PUT", "POST"]);
+  });
+
+  it("proceeds with the write and does not cache when config GET fails", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init: any) => {
+      if (String(url).endsWith("/config")) {
+        return Promise.resolve(jsonResponse({ error: "boom" }, false, 500));
+      }
+      return Promise.resolve(jsonResponse({ ok: true }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+    await adapter.retainConversation(retainConversationArgs());
+
+    const configCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).endsWith("/config"),
+    );
+    const memoryCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("/memories"),
+    );
+    // GET retried on the second write (failure not cached); both writes landed.
+    expect(configCalls).toHaveLength(2);
+    expect(memoryCalls).toHaveLength(2);
+  });
+
+  it("caches a configured bank for the container lifetime", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: DESIRED }))
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+    await adapter.retainConversation(retainConversationArgs());
+
+    const configCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).endsWith("/config"),
+    );
+    expect(configCalls).toHaveLength(1);
+  });
+
+  it("is a no-op when no bank config is set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const configCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).endsWith("/config"),
+    );
+    expect(configCalls).toHaveLength(0);
+  });
+
+  it("resolveBankConfigFromEnv reads env lazily and returns null when unset", async () => {
+    const { resolveBankConfigFromEnv } = await import("./hindsight-adapter.js");
+    expect(resolveBankConfigFromEnv({})).toBeNull();
+    expect(
+      resolveBankConfigFromEnv({
+        HINDSIGHT_BANK_OBSERVATIONS_MISSION: "institutional facts",
+        HINDSIGHT_BANK_ENABLE_OBSERVATIONS: "true",
+        HINDSIGHT_BANK_ENABLE_AUTO_CONSOLIDATION: "false",
+      }),
+    ).toEqual({
+      observations_mission: "institutional facts",
+      enable_observations: true,
+      enable_auto_consolidation: false,
+    });
+  });
+});
