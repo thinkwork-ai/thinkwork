@@ -17,8 +17,9 @@ status: in_progress
   `.Codex/worktrees/u3-dev-controller-dogfood`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
-  merged; U3 PR not opened yet.
-- Status: U3 in progress.
+  merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
+  opened.
+- Status: U3 PR opened; monitoring required CI.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
