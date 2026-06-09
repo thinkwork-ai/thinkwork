@@ -129,6 +129,15 @@ status: in_progress
   - U4 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
     Prettier-managed files passed.
   - U4 `git diff --check` passed.
+- CI:
+  - U4 PR #2290 initial checks: `cla`, `lint`, and `verify` passed.
+  - `Migration Drift Precheck (dev)` failed because the new hand-written
+    migration objects from `0156_bootstrap_credential_leases.sql` were not yet
+    present in the dev database.
+  - Applied `packages/database-pg/drizzle/0156_bootstrap_credential_leases.sql`
+    to the dev database only.
+  - Local scoped drift reporter passed after the dev apply:
+    `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0156_bootstrap_credential_leases.sql`.
 
 ## Tenant Model Catalog - 2026-06-09
 
