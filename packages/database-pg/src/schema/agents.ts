@@ -15,6 +15,7 @@ import {
   uniqueIndex,
   index,
   primaryKey,
+  check,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
@@ -278,6 +279,61 @@ export const modelCatalog = pgTable("model_catalog", {
     .default(sql`now()`),
 });
 
+export const tenantModelCatalog = pgTable(
+  "tenant_model_catalog",
+  {
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    model_id: text("model_id")
+      .references(() => modelCatalog.model_id, { onDelete: "cascade" })
+      .notNull(),
+    display_name: text("display_name").notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    pricing_status: text("pricing_status").notNull().default("missing"),
+    pricing_source: text("pricing_source"),
+    pricing_diagnostics: jsonb("pricing_diagnostics")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    last_priced_at: timestamp("last_priced_at", { withTimezone: true }),
+    import_source: text("import_source").notNull().default("backfill"),
+    import_payload: jsonb("import_payload")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    imported_by_user_id: uuid("imported_by_user_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    imported_at: timestamp("imported_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenant_id, table.model_id] }),
+    index("idx_tenant_model_catalog_tenant_enabled").on(
+      table.tenant_id,
+      table.enabled,
+    ),
+    index("idx_tenant_model_catalog_model").on(table.model_id),
+    check(
+      "tenant_model_catalog_pricing_status_allowed",
+      sql`${table.pricing_status} IN ('resolved', 'missing', 'ambiguous', 'error')`,
+    ),
+    check(
+      "tenant_model_catalog_enabled_requires_resolved_pricing",
+      sql`${table.enabled} IS FALSE OR ${table.pricing_status} = 'resolved'`,
+    ),
+  ],
+);
+
 export const userModelApprovals = pgTable(
   "user_model_approvals",
   {
@@ -540,6 +596,24 @@ export const userModelApprovalsRelations = relations(
     model: one(modelCatalog, {
       fields: [userModelApprovals.model_id],
       references: [modelCatalog.model_id],
+    }),
+  }),
+);
+
+export const tenantModelCatalogRelations = relations(
+  tenantModelCatalog,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [tenantModelCatalog.tenant_id],
+      references: [tenants.id],
+    }),
+    model: one(modelCatalog, {
+      fields: [tenantModelCatalog.model_id],
+      references: [modelCatalog.model_id],
+    }),
+    importedBy: one(users, {
+      fields: [tenantModelCatalog.imported_by_user_id],
+      references: [users.id],
     }),
   }),
 );

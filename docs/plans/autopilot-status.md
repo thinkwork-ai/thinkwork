@@ -6,6 +6,48 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Tenant Model Catalog - 2026-06-09
+
+- Plan: `docs/plans/2026-06-09-001-feat-tenant-model-catalog-plan.md`.
+- Target branch: `main`.
+- Current implementation unit: U1 - Add tenant catalog persistence.
+- Current branch: `codex/tenant-model-catalog-u1`.
+- Current worktree: `.Codex/worktrees/tenant-model-catalog-u1`.
+- Pull request: not opened yet.
+- Status: local verification passed; preparing PR.
+- Notes:
+  - Started autopilot execution after reading AGENTS.md, the tenant model
+    catalog plan, and the referenced requirements.
+  - Created the isolated U1 worktree from `origin/main` at `f5a28a5f8`.
+  - Copied the tenant model catalog requirements and plan docs into the U1
+    worktree because they were still untracked in the main checkout when
+    autopilot started.
+  - Migration numbering on `origin/main` has advanced past the draft plan's
+    `0150`; U1 uses `0155_tenant_model_catalog.sql`, the next free slot.
+- Local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/database-pg exec vitest run __tests__/migration-0155-tenant-model-catalog.test.ts`
+    passed: 4 tests.
+  - `pnpm --filter @thinkwork/database-pg test` passed: 24 files, 201 tests.
+  - `pnpm --filter @thinkwork/database-pg typecheck` passed.
+  - `pnpm --filter @thinkwork/api exec vitest run src/__tests__/graphql-contract.test.ts`
+    passed: 116 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `pnpm --filter @thinkwork/mobile typecheck` was not runnable because the
+    mobile package has no `typecheck` script.
+  - `pnpm schema:build` passed and did not leave a `terraform/schema.graphql`
+    diff.
+  - GraphQL codegen passed for `thinkwork-cli`, `@thinkwork/web`, and
+    `@thinkwork/mobile`.
+  - `pnpm dlx prettier@3.8.2 --check` over touched non-generated
+    Prettier-managed files passed.
+  - `git diff --check` passed.
+- CI: not started.
+- Merge/cleanup: pending.
+
 ## Kestra Managed Application - 2026-06-08
 
 - Plan:

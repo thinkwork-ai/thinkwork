@@ -5957,6 +5957,32 @@ export type TenantMember = {
   user?: Maybe<User>;
 };
 
+export type TenantModelCatalogEntry = {
+  __typename?: 'TenantModelCatalogEntry';
+  canonicalDisplayName: Scalars['String']['output'];
+  contextWindow?: Maybe<Scalars['Int']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  displayName: Scalars['String']['output'];
+  enabled: Scalars['Boolean']['output'];
+  importPayload: Scalars['AWSJSON']['output'];
+  importSource: Scalars['String']['output'];
+  importedAt: Scalars['AWSDateTime']['output'];
+  importedByUserId?: Maybe<Scalars['ID']['output']>;
+  inputCostPerMillion?: Maybe<Scalars['Float']['output']>;
+  lastPricedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  maxOutputTokens?: Maybe<Scalars['Int']['output']>;
+  modelId: Scalars['String']['output'];
+  outputCostPerMillion?: Maybe<Scalars['Float']['output']>;
+  pricingDiagnostics: Scalars['AWSJSON']['output'];
+  pricingSource?: Maybe<Scalars['String']['output']>;
+  pricingStatus: Scalars['String']['output'];
+  provider: Scalars['String']['output'];
+  supportsTools?: Maybe<Scalars['Boolean']['output']>;
+  supportsVision?: Maybe<Scalars['Boolean']['output']>;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
 export type TenantSettings = {
   __typename?: 'TenantSettings';
   autoCloseThreadMinutes?: Maybe<Scalars['Int']['output']>;
