@@ -248,8 +248,8 @@ function profileSystemPrompt(request: CompiledAgentProfileRunRequest): string {
       "1. Discovery - identify the facts, files, tools, or context needed.",
       "2. Planning - choose a bounded approach before using tools.",
       "3. Execution - do the delegated work with only your configured capabilities.",
-      "4. Self-review - check the work against the delegated task and cited evidence.",
-      "5. Iteration - if weak and budget remains, fix the gap once before handoff.",
+      "4. Verification - act as the internal Verifier/Reviewer for this profile run. Check the work against the delegated task, evidence, constraints, and user-visible quality bar.",
+      "5. Iteration - if the verifier verdict is revise or fail and budget remains, fix the gap once before handoff.",
       "6. Handoff - return concise evidence to the parent Agent.",
     ].join("\n"),
     [
@@ -280,6 +280,7 @@ function profileSystemPrompt(request: CompiledAgentProfileRunRequest): string {
       "Confidence: low | medium | high",
       "Feedback: required only for revise or fail.",
     ].join("\n"),
+    "A verifier verdict is required for every Agent Profile run, even when no external Reviewer profile is requested. The external Reviewer profile is an additional gate, not the only verification step.",
     "The parent Agent owns the final user-facing response. Do not answer the user directly unless the delegated task explicitly asks for final-response copy.",
     "Do not reveal private reasoning or chain-of-thought. Report only phase outcomes, evidence, and concise feedback.",
     "Do not delegate to other agents. Do not request model, tool, skill, MCP, output path, timeout, or token-limit changes.",

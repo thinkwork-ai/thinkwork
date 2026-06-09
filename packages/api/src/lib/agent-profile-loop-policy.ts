@@ -46,7 +46,7 @@ const DEFAULT_LOOP_POLICY: AgentLoopPolicy = {
   enabled: true,
   maxIterations: 1,
   maxReviewLoops: 1,
-  reviewGate: false,
+  reviewGate: true,
   externalReviewerPolicy: "explicit",
   failBehavior: "return_blocker",
 };
