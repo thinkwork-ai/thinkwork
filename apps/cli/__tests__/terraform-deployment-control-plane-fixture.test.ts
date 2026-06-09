@@ -69,6 +69,13 @@ describe("deployment control plane Terraform fixture", () => {
     expect(runner).toMatch(/deployment-evidence\.json/);
     expect(runner).toMatch(/"terraform", "init"/);
     expect(runner).toMatch(/"terraform", "apply"/);
+    expect(runner).toMatch(/"git", "clone", "--no-checkout"/);
+    expect(runner).toMatch(
+      /"git", "-C", str\(SOURCE\), "fetch", "--depth", "1", "origin", ref/,
+    );
+    expect(runner).toMatch(
+      /"git", "-C", str\(SOURCE\), "checkout", "--detach", "FETCH_HEAD"/,
+    );
     expect(runner).toMatch(/initialize_greenfield_database/);
     expect(runner).toMatch(/output "appsync_api_key"/);
     expect(runner).toMatch(/output "auth_domain"/);
