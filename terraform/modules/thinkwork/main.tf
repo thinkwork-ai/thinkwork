@@ -907,6 +907,10 @@ module "hindsight" {
   db_security_group_id = module.database.db_security_group_id
   database_url         = module.database.database_url
   image_tag            = var.hindsight_image_tag
+
+  enable_auto_consolidation     = var.hindsight_enable_auto_consolidation
+  consolidation_dedup_threshold = var.hindsight_consolidation_dedup_threshold
+  observations_mission          = var.hindsight_observations_mission
 }
 
 module "cognee" {
