@@ -1,6 +1,14 @@
-import { useQuery } from "urql";
+import { useState } from "react";
+import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Select,
   SelectContent,
   SelectItem,
@@ -24,7 +32,11 @@ import {
   useEditorFontSize,
   useEditorWrap,
 } from "@/lib/editor-prefs";
-import { SettingsDeploymentStatusQuery } from "@/lib/settings-queries";
+import {
+  SettingsDeploymentReleasesQuery,
+  SettingsDeploymentStatusQuery,
+  SettingsStartDeploymentReleaseUpdateMutation,
+} from "@/lib/settings-queries";
 import {
   SettingsHeader,
   SettingsPane,
@@ -111,6 +123,8 @@ export function SettingsGeneral() {
             )}
           </SettingsSection>
 
+          <DeploymentReleasesSection enabled={showOperator} />
+
           {!deploymentFailed ? (
             <SettingsSection label="Resources & URLs">
               <ResourceRow
@@ -143,6 +157,153 @@ export function SettingsGeneral() {
         </>
       ) : null}
     </SettingsPane>
+  );
+}
+
+interface DeploymentReleaseRow {
+  version: string;
+  name?: string | null;
+  prerelease: boolean;
+  draft: boolean;
+  publishedAt?: string | null;
+  htmlUrl: string;
+  manifestUrl: string;
+  manifestSha256: string;
+  signed: boolean;
+  deployable: boolean;
+}
+
+function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
+  const [selectedRelease, setSelectedRelease] =
+    useState<DeploymentReleaseRow | null>(null);
+  const [result] = useQuery({
+    query: SettingsDeploymentReleasesQuery,
+    variables: { limit: 10 },
+    pause: !enabled,
+  });
+  const [updateState, startReleaseUpdate] = useMutation(
+    SettingsStartDeploymentReleaseUpdateMutation,
+  );
+  const releases = (result.data?.deploymentReleases ??
+    []) as DeploymentReleaseRow[];
+
+  async function confirmDeploy() {
+    if (!selectedRelease) return;
+    const response = await startReleaseUpdate({
+      input: {
+        version: selectedRelease.version,
+        manifestUrl: selectedRelease.manifestUrl,
+        manifestSha256: selectedRelease.manifestSha256,
+        idempotencyKey: `settings-release-${selectedRelease.version}`,
+      },
+    });
+    if (response.error) {
+      toast.error("Release deploy failed", {
+        description: response.error.message,
+      });
+      return;
+    }
+    toast.success("Release deploy started", {
+      description:
+        response.data?.startDeploymentReleaseUpdate.message ??
+        selectedRelease.version,
+    });
+    setSelectedRelease(null);
+  }
+
+  return (
+    <SettingsSection label="Releases">
+      {result.fetching ? (
+        <div className="p-4 text-sm text-muted-foreground">
+          Loading releases…
+        </div>
+      ) : result.error ? (
+        <div className="p-4 text-sm text-muted-foreground">
+          Releases unavailable.
+        </div>
+      ) : releases.length === 0 ? (
+        <div className="p-4 text-sm text-muted-foreground">
+          No deployable release manifests found.
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {releases.map((release) => (
+            <SettingsRow
+              key={release.version}
+              label={release.version}
+              description={releaseDescription(release)}
+            >
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSelectedRelease(release)}
+                disabled={!release.deployable || updateState.fetching}
+              >
+                Deploy
+              </Button>
+            </SettingsRow>
+          ))}
+        </div>
+      )}
+
+      <Dialog
+        open={Boolean(selectedRelease)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedRelease(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Deploy release?</DialogTitle>
+            <DialogDescription>
+              Start the deployment controller for this ThinkWork environment.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRelease ? (
+            <div className="space-y-3 text-sm">
+              <ConfirmFact label="Release" value={selectedRelease.version} />
+              <ConfirmFact
+                label="Manifest"
+                value={selectedRelease.manifestUrl}
+              />
+              <ConfirmFact
+                label="SHA-256"
+                value={selectedRelease.manifestSha256}
+              />
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setSelectedRelease(null)}
+              disabled={updateState.fetching}
+            >
+              Cancel
+            </Button>
+            <Button onClick={confirmDeploy} disabled={updateState.fetching}>
+              {updateState.fetching ? "Deploying…" : "Confirm Deploy"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </SettingsSection>
+  );
+}
+
+function releaseDescription(release: DeploymentReleaseRow): string {
+  const parts = [
+    release.signed ? "signed manifest" : "unsigned canary",
+    release.publishedAt ? new Date(release.publishedAt).toLocaleString() : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function ConfirmFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="break-all font-mono text-xs">{value}</div>
+    </div>
   );
 }
 

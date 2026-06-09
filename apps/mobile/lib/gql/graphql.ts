@@ -1184,6 +1184,31 @@ export type DeploymentEvidence = {
   urls: Array<Scalars["String"]["output"]>;
 };
 
+export type DeploymentRelease = {
+  __typename?: "DeploymentRelease";
+  deployable: Scalars["Boolean"]["output"];
+  draft: Scalars["Boolean"]["output"];
+  htmlUrl: Scalars["String"]["output"];
+  manifestSha256: Scalars["String"]["output"];
+  manifestUrl: Scalars["String"]["output"];
+  name?: Maybe<Scalars["String"]["output"]>;
+  prerelease: Scalars["Boolean"]["output"];
+  publishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  signatureUrl?: Maybe<Scalars["String"]["output"]>;
+  signed: Scalars["Boolean"]["output"];
+  version: Scalars["String"]["output"];
+};
+
+export type DeploymentReleaseUpdate = {
+  __typename?: "DeploymentReleaseUpdate";
+  evidenceBucket?: Maybe<Scalars["String"]["output"]>;
+  evidencePrefix: Scalars["String"]["output"];
+  executionArn?: Maybe<Scalars["String"]["output"]>;
+  message: Scalars["String"]["output"];
+  release: DeploymentRelease;
+  stateMachineArn: Scalars["String"]["output"];
+};
+
 export type DeploymentStatus = {
   __typename?: "DeploymentStatus";
   accountId?: Maybe<Scalars["String"]["output"]>;
@@ -2382,6 +2407,7 @@ export type Mutation = {
   setSpaceTools: Space;
   setUserModelApproval: Array<UserModelCatalogEntry>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
+  startDeploymentReleaseUpdate: DeploymentReleaseUpdate;
   startEvalRun: EvalRun;
   startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
   startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
@@ -3091,6 +3117,10 @@ export type MutationStartCustomerOnboardingArgs = {
   input: StartCustomerOnboardingInput;
 };
 
+export type MutationStartDeploymentReleaseUpdateArgs = {
+  input: StartDeploymentReleaseUpdateInput;
+};
+
 export type MutationStartEvalRunArgs = {
   input: StartEvalRunInput;
   tenantId: Scalars["ID"]["input"];
@@ -3703,6 +3733,7 @@ export type Query = {
   customerOnboardingSpace?: Maybe<Space>;
   customizeBindings?: Maybe<CustomizeBindings>;
   deploymentEvidence: DeploymentEvidence;
+  deploymentReleases: Array<DeploymentRelease>;
   deploymentStatus: DeploymentStatus;
   evalResultSpans: Array<EvalSpan>;
   evalRun?: Maybe<EvalRun>;
@@ -4065,6 +4096,10 @@ export type QueryCustomerOnboardingSpaceArgs = {
 
 export type QueryDeploymentEvidenceArgs = {
   jobId: Scalars["ID"]["input"];
+};
+
+export type QueryDeploymentReleasesArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
 export type QueryEvalResultSpansArgs = {
@@ -5451,6 +5486,13 @@ export type StartCustomerOnboardingPayload = {
   missingFields: Array<Scalars["String"]["output"]>;
   thread: Thread;
   threadId: Scalars["ID"]["output"];
+};
+
+export type StartDeploymentReleaseUpdateInput = {
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  manifestSha256: Scalars["String"]["input"];
+  manifestUrl: Scalars["String"]["input"];
+  version: Scalars["String"]["input"];
 };
 
 export type StartEvalRunInput = {
