@@ -71,6 +71,7 @@ import { Route as AuthedSettingsApplicationsKestraRouteImport } from "./routes/_
 import { Route as AuthedSettingsApplicationsCogneeRouteImport } from "./routes/_authed/settings.applications.cognee";
 import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
 import { Route as AuthedSettingsActivityThreadIdRouteImport } from "./routes/_authed/settings.activity_.$threadId";
+import { Route as AuthedSettingsActivityThreadsRouteImport } from "./routes/_authed/settings.activity.threads";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
 import { Route as AuthedShellSpacesSpaceIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId";
 import { Route as AuthedShellMemoryPagesRouteImport } from "./routes/_authed/_shell/memory.pages";
@@ -433,6 +434,12 @@ const AuthedSettingsActivityThreadIdRoute =
     path: "/activity/$threadId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsActivityThreadsRoute =
+  AuthedSettingsActivityThreadsRouteImport.update({
+    id: "/threads",
+    path: "/threads",
+    getParentRoute: () => AuthedSettingsActivityRoute,
+  } as any);
 const AuthedShellThreadsIdRoute = AuthedShellThreadsIdRouteImport.update({
   id: "/threads/$id",
   path: "/threads/$id",
@@ -550,7 +557,7 @@ export interface FileRoutesByFullPath {
   "/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/new": typeof AuthedShellNewRoute;
-  "/settings/activity": typeof AuthedSettingsActivityRoute;
+  "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
@@ -574,6 +581,7 @@ export interface FileRoutesByFullPath {
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/settings/activity/threads": typeof AuthedSettingsActivityThreadsRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
@@ -626,7 +634,7 @@ export interface FileRoutesByTo {
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/new": typeof AuthedShellNewRoute;
-  "/settings/activity": typeof AuthedSettingsActivityRoute;
+  "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
@@ -649,6 +657,7 @@ export interface FileRoutesByTo {
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/settings/activity/threads": typeof AuthedSettingsActivityThreadsRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
@@ -708,7 +717,7 @@ export interface FileRoutesById {
   "/_authed/_shell/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/_authed/_shell/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
-  "/_authed/settings/activity": typeof AuthedSettingsActivityRoute;
+  "/_authed/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/_authed/settings/billing": typeof AuthedSettingsBillingRoute;
@@ -732,6 +741,7 @@ export interface FileRoutesById {
   "/_authed/_shell/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/_authed/_shell/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/_authed/settings/activity/threads": typeof AuthedSettingsActivityThreadsRoute;
   "/_authed/settings/activity_/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/_authed/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
@@ -814,6 +824,7 @@ export interface FileRouteTypes {
     | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
+    | "/settings/activity/threads"
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
     | "/settings/applications/cognee"
@@ -889,6 +900,7 @@ export interface FileRouteTypes {
     | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
+    | "/settings/activity/threads"
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
     | "/settings/applications/cognee"
@@ -971,6 +983,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory/pages"
     | "/_authed/_shell/spaces/$spaceId"
     | "/_authed/_shell/threads/$id"
+    | "/_authed/settings/activity/threads"
     | "/_authed/settings/activity_/$threadId"
     | "/_authed/settings/agents/$profileId"
     | "/_authed/settings/applications/cognee"
@@ -1462,6 +1475,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsActivityThreadIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/activity/threads": {
+      id: "/_authed/settings/activity/threads";
+      path: "/threads";
+      fullPath: "/settings/activity/threads";
+      preLoaderRoute: typeof AuthedSettingsActivityThreadsRouteImport;
+      parentRoute: typeof AuthedSettingsActivityRoute;
+    };
     "/_authed/_shell/threads/$id": {
       id: "/_authed/_shell/threads/$id";
       path: "/threads/$id";
@@ -1702,6 +1722,20 @@ const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
   AuthedShellRouteChildren,
 );
 
+interface AuthedSettingsActivityRouteChildren {
+  AuthedSettingsActivityThreadsRoute: typeof AuthedSettingsActivityThreadsRoute;
+}
+
+const AuthedSettingsActivityRouteChildren: AuthedSettingsActivityRouteChildren =
+  {
+    AuthedSettingsActivityThreadsRoute: AuthedSettingsActivityThreadsRoute,
+  };
+
+const AuthedSettingsActivityRouteWithChildren =
+  AuthedSettingsActivityRoute._addFileChildren(
+    AuthedSettingsActivityRouteChildren,
+  );
+
 interface AuthedSettingsArtifactsRouteChildren {
   AuthedSettingsArtifactsIdRoute: typeof AuthedSettingsArtifactsIdRoute;
   AuthedSettingsArtifactsIndexRoute: typeof AuthedSettingsArtifactsIndexRoute;
@@ -1736,7 +1770,7 @@ const AuthedSettingsMemoryRouteWithChildren =
   AuthedSettingsMemoryRoute._addFileChildren(AuthedSettingsMemoryRouteChildren);
 
 interface AuthedSettingsRouteChildren {
-  AuthedSettingsActivityRoute: typeof AuthedSettingsActivityRoute;
+  AuthedSettingsActivityRoute: typeof AuthedSettingsActivityRouteWithChildren;
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
   AuthedSettingsArtifactsRoute: typeof AuthedSettingsArtifactsRouteWithChildren;
   AuthedSettingsBillingRoute: typeof AuthedSettingsBillingRoute;
@@ -1780,7 +1814,7 @@ interface AuthedSettingsRouteChildren {
 }
 
 const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
-  AuthedSettingsActivityRoute: AuthedSettingsActivityRoute,
+  AuthedSettingsActivityRoute: AuthedSettingsActivityRouteWithChildren,
   AuthedSettingsAnalyticsRoute: AuthedSettingsAnalyticsRoute,
   AuthedSettingsArtifactsRoute: AuthedSettingsArtifactsRouteWithChildren,
   AuthedSettingsBillingRoute: AuthedSettingsBillingRoute,
