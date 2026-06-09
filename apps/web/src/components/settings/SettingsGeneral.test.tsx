@@ -63,7 +63,21 @@ beforeEach(() => {
   startReleaseUpdateMock.mockReset().mockResolvedValue({
     data: {
       startDeploymentReleaseUpdate: {
+        executionArn:
+          "arn:aws:states:us-east-1:123456789012:execution:thinkwork-dev-deployment:release-134",
+        stateMachineArn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment",
+        evidenceBucket: "thinkwork-dev-evidence",
+        evidencePrefix: "settings/releases/v0.1.0-canary.134/run-1",
         message: "Deployment update requested for v0.1.0-canary.134.",
+        release: {
+          version: "v0.1.0-canary.134",
+          manifestUrl:
+            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
+          manifestSha256: "a".repeat(64),
+          signed: false,
+          deployable: true,
+        },
       },
     },
   });
@@ -130,6 +144,17 @@ describe("SettingsGeneral releases", () => {
         },
       }),
     );
+    expect(screen.getByText("Deployment controller started")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "arn:aws:states:us-east-1:123456789012:execution:thinkwork-dev-deployment:release-134",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "thinkwork-dev-evidence/settings/releases/v0.1.0-canary.134/run-1",
+      ),
+    ).toBeTruthy();
   });
 });
 
