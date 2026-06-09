@@ -59,6 +59,7 @@ const ENTERPRISE_TEMPLATE_MAIN = resolve(
   REPO_ROOT,
   "apps/cli/src/commands/enterprise/templates/deploy-repo/terraform/main.tf",
 );
+const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -321,5 +322,20 @@ describe("Kestra Terraform managed app composition", () => {
     expect(outputs).toMatch(/output "kestra_database_name"/);
     expect(outputs).toMatch(/output "kestra_basic_auth_secret_arn"/);
     expect(outputs).toMatch(/output "kestra_runtime_enabled"/);
+  });
+
+  it("prepares Kestra basic-auth secrets that satisfy runtime password rules", () => {
+    const workflow = read(DEPLOY_WORKFLOW);
+
+    expect(workflow).toMatch(/Prepare Kestra runtime secrets and database/);
+    expect(workflow).toMatch(/printf 'K3stra-%s'/);
+    expect(workflow).toMatch(/kestra_basic_auth_password_valid\(\)/);
+    expect(workflow).toMatch(/\[\s*"\$\{#password\}"\s*-ge\s*8\s*\]/);
+    expect(workflow).toMatch(/\[\[ "\$password" =~ \[A-Z\] \]\]/);
+    expect(workflow).toMatch(/\[\[ "\$password" =~ \[a-z\] \]\]/);
+    expect(workflow).toMatch(/\[\[ "\$password" =~ \[0-9\] \]\]/);
+    expect(workflow).toMatch(
+      /! kestra_basic_auth_password_valid "\$kestra_basic_auth_password"/,
+    );
   });
 });
