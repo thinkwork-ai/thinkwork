@@ -128,6 +128,55 @@ describe("release manifest contract", () => {
     expect(releaseManifestSha256(parsed)).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("validates artifact bundles against known artifacts", () => {
+    const parsed = validateReleaseManifest(
+      manifest({
+        artifactBundles: [
+          {
+            name: "platform",
+            fileName: "platform-artifacts.tar.gz",
+            relativePath: "platform-artifacts.tar.gz",
+            url: "https://example.test/platform-artifacts.tar.gz",
+            sha256:
+              "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+            sizeBytes: 4,
+            contains: ["graphql-http"],
+          },
+        ],
+        artifacts: [
+          {
+            ...manifest().artifacts[0]!,
+            url: null,
+          },
+        ],
+      }),
+    );
+
+    expect(parsed.artifactBundles?.[0]?.contains).toEqual(["graphql-http"]);
+    expect(parsed.artifacts[0]?.url).toBeNull();
+  });
+
+  it("rejects artifact bundles that reference unknown artifacts", () => {
+    expect(() =>
+      validateReleaseManifest(
+        manifest({
+          artifactBundles: [
+            {
+              name: "platform",
+              fileName: "platform-artifacts.tar.gz",
+              relativePath: "platform-artifacts.tar.gz",
+              url: "https://example.test/platform-artifacts.tar.gz",
+              sha256:
+                "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+              sizeBytes: 4,
+              contains: ["missing-artifact"],
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/unknown artifact missing-artifact/);
+  });
+
   it("rejects malformed component and smoke contract blocks", () => {
     const missingRunner = manifest() as unknown as Record<string, unknown>;
     delete (missingRunner.components as Record<string, unknown>)

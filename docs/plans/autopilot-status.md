@@ -6,6 +6,57 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Deployment Controller Process - 2026-06-09
+
+- Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
+- Target branch: `main`.
+- Current implementation unit: U1 - Make Bundled Release Manifests Executable
+  By The Controller.
+- Current branch: `codex/u1-release-bundle-controller`.
+- Current worktree:
+  `.Codex/worktrees/u1-release-bundle-controller`.
+- Pull request: https://github.com/thinkwork-ai/thinkwork/pull/2285.
+- Status: PR opened; monitoring required CI.
+- Notes:
+  - Started autopilot execution after reading `AGENTS.md`, the deployment
+    controller process plan, `ce-work`, and the prior GitHub-free AWS
+    control-plane solution doc.
+  - Created isolated U1 worktree from `origin/main` at `7857aa116`.
+  - Implemented platform bundle consumption in
+    `terraform/modules/app/deployment-control-plane/runner.py`: downloads and
+    verifies `artifactBundles`, rejects unsafe tar members, stages Lambda/static
+    artifacts from bundle contents when individual artifact URLs are null, and
+    records manifest/bundle/artifact digests in deployment evidence.
+  - Added focused Python coverage in
+    `terraform/modules/app/deployment-control-plane/test_runner_bundle.py` for
+    bundled staging, path traversal rejection, link rejection, missing bundle
+    fail-closed behavior, and artifact hash mismatch.
+  - Added release manifest contract coverage for `artifactBundles` and release
+    builder coverage for `bundleArtifactUrls`.
+  - Updated release manifest docs to describe the expected GitHub Release asset
+    set and explicit version/digest selection.
+- Local verification:
+  - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 7 tests.
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/release-manifest test` passed: 8 tests.
+  - `pnpm test:release` passed: 12 tests.
+  - `pnpm --filter @thinkwork/release-manifest typecheck` passed.
+  - `pnpm --filter @thinkwork/release-manifest build` passed.
+  - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - `pnpm --filter @thinkwork/docs build` passed with existing docs warnings:
+    missing optional Starlight i18n directory, one page without an outer HTML
+    element, npm unknown-config warnings from Pagefind, and missing Astro
+    `site` for sitemap generation.
+  - `git diff --check` passed.
+
 ## Tenant Model Catalog - 2026-06-09
 
 - Plan: `docs/plans/2026-06-09-001-feat-tenant-model-catalog-plan.md`.
