@@ -603,6 +603,19 @@ describe("processFinalize reconcile seam", () => {
               durationMs: 900,
               handoffSummary: "Research handoff",
               laneKey: "profile:research",
+              loopEvidence: {
+                loopId: "loop-research-1",
+                ownerType: "profile",
+                ownerSlug: "research",
+                iterations: [
+                  {
+                    index: 0,
+                    phase: "handoff",
+                    status: "completed",
+                    verdict: "pass",
+                  },
+                ],
+              },
               toolInvocations: [
                 {
                   id: "child-tool-1",
@@ -641,6 +654,16 @@ describe("processFinalize reconcile seam", () => {
           profile_name: "Research",
           lane_key: "profile:research",
           profile_status: "completed",
+          loop_id: "loop-research-1",
+          loop_owner_type: "profile",
+          loop_owner_slug: "research",
+          loop_iteration_index: 0,
+          loop_phase: "handoff",
+          loop_status: "completed",
+          loop_verdict: "pass",
+          loop_evidence: expect.objectContaining({
+            loopId: "loop-research-1",
+          }),
         }),
       }),
     );
@@ -661,6 +684,11 @@ describe("processFinalize reconcile seam", () => {
           status: "completed",
           lane_key: "profile:research",
           handoff_summary: "Research handoff",
+          loop_evidence: expect.objectContaining({
+            loopId: "loop-research-1",
+            ownerType: "profile",
+            ownerSlug: "research",
+          }),
           tool_invocations: [
             expect.objectContaining({ tool_name: "web_search" }),
           ],
@@ -678,9 +706,172 @@ describe("processFinalize reconcile seam", () => {
         inputTokens: 120,
         outputTokens: 40,
         costUsd: 1.23,
+        loopEvidence: expect.objectContaining({
+          loopId: "loop-research-1",
+          ownerType: "profile",
+          ownerSlug: "research",
+        }),
         toolInvocations: [expect.objectContaining({ tool_name: "web_search" })],
       }),
     ]);
+    expect(succeededUpdate.usage_json).toMatchObject({
+      input_tokens: 1120,
+      output_tokens: 240,
+      cached_read_tokens: 8,
+      cost_usd: 2.46,
+      parent_usage: {
+        model: "moonshotai.kimi-k2.5",
+        input_tokens: 1000,
+        output_tokens: 200,
+        cached_read_tokens: 0,
+        cost_usd: 1.23,
+      },
+    });
+  });
+
+  it("aggregates Research, Reviewer, and retry profile tokens into the turn summary", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        trace_id: "trace-loop",
+        duration_ms: 50,
+        status: "completed",
+        response: {
+          content: "Parent final answer",
+          agent_profile_runs: [
+            {
+              profileRunId: "research-1",
+              profileId: "profile-research",
+              profileSlug: "research",
+              profileName: "Research",
+              model: "anthropic.claude-haiku",
+              status: "completed",
+              inputTokens: 100,
+              outputTokens: 20,
+              durationMs: 900,
+              loopEvidence: {
+                loopId: "loop-research-1",
+                ownerType: "profile",
+                ownerSlug: "research",
+                iterations: [
+                  { index: 0, phase: "handoff", status: "completed" },
+                ],
+              },
+            },
+            {
+              profileRunId: "reviewer-1",
+              profileId: "profile-reviewer",
+              profileSlug: "reviewer",
+              profileName: "Reviewer",
+              model: "anthropic.claude-haiku",
+              status: "completed",
+              inputTokens: 30,
+              outputTokens: 10,
+              durationMs: 200,
+              loopEvidence: {
+                loopId: "loop-reviewer-1",
+                ownerType: "profile",
+                ownerSlug: "reviewer",
+                iterations: [
+                  {
+                    index: 0,
+                    phase: "final_review",
+                    status: "completed",
+                    verdict: "pass",
+                  },
+                ],
+              },
+            },
+            {
+              profileRunId: "research-2",
+              profileId: "profile-research",
+              profileSlug: "research",
+              profileName: "Research",
+              model: "anthropic.claude-haiku",
+              status: "completed",
+              inputTokens: 50,
+              outputTokens: 15,
+              durationMs: 600,
+              loopEvidence: {
+                loopId: "loop-research-2",
+                ownerType: "profile",
+                ownerSlug: "research",
+                iterations: [
+                  {
+                    index: 1,
+                    phase: "iteration",
+                    status: "completed",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 1000,
+          output_tokens: 200,
+          cached_read_tokens: 5,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    const succeededUpdate = mocks.updateSets.find((value: any) =>
+      Boolean(value?.usage_json?.agent_profile_runs),
+    ) as any;
+    expect(succeededUpdate.usage_json).toMatchObject({
+      input_tokens: 1180,
+      output_tokens: 245,
+      cached_read_tokens: 5,
+      cost_usd: 4.92,
+      parent_usage: {
+        input_tokens: 1000,
+        output_tokens: 200,
+        cached_read_tokens: 5,
+        cost_usd: 1.23,
+      },
+    });
+    expect(succeededUpdate.usage_json.agent_profile_runs).toEqual([
+      expect.objectContaining({ profileRunId: "research-1" }),
+      expect.objectContaining({
+        profileRunId: "reviewer-1",
+        loopEvidence: expect.objectContaining({
+          ownerSlug: "reviewer",
+          iterations: [
+            expect.objectContaining({
+              phase: "final_review",
+              verdict: "pass",
+            }),
+          ],
+        }),
+      }),
+      expect.objectContaining({
+        profileRunId: "research-2",
+        loopEvidence: expect.objectContaining({
+          iterations: [
+            expect.objectContaining({
+              index: 1,
+              phase: "iteration",
+            }),
+          ],
+        }),
+      }),
+    ]);
+    expect(mocks.recordCostEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: `${TURN_ID}:profile:reviewer-1:model`,
+        metadata: expect.objectContaining({
+          profile_slug: "reviewer",
+          loop_owner_slug: "reviewer",
+          loop_phase: "final_review",
+          loop_verdict: "pass",
+          reviewer_role: true,
+        }),
+      }),
+    );
   });
 
   it("records failed Agent Profile runs as events without child LLM cost rows", async () => {

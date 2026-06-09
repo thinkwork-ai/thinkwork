@@ -54,8 +54,31 @@ export interface FinalizeAgentProfileRun {
   parentThreadTurnId?: string;
   handoffSummary?: string;
   laneKey?: string;
+  loopEvidence?: AgentLoopEvidence;
   error?: string;
   toolInvocations?: Array<Record<string, unknown>>;
+}
+
+export interface AgentLoopEvidence {
+  loopId?: string;
+  ownerType?: "parent" | "profile";
+  ownerSlug?: string;
+  policy?: Record<string, unknown>;
+  iterations?: AgentLoopEvidenceIteration[];
+  goalState?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface AgentLoopEvidenceIteration {
+  index?: number;
+  phase?: string;
+  status?: string;
+  summary?: string;
+  verdict?: string;
+  feedback?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  [key: string]: unknown;
 }
 
 export interface FinalizePayload {

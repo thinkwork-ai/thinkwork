@@ -56,6 +56,7 @@ import {
 } from "./notify.js";
 import { reconcileChangedFiles, type ReconcileReport } from "./reconcile.js";
 import type {
+  AgentLoopEvidence,
   FinalizeAgentProfileRun,
   FinalizePayload,
   FinalizeResponse,
@@ -403,14 +404,32 @@ export async function processFinalize(
     reconcileReport,
     reconcileDurationMs,
   );
-  const turnUsage = {
+  const aggregateUsage = aggregateTurnUsage({
+    parent: {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cachedReadTokens: usage.cachedReadTokens,
+      costUsd: parentCostUsd,
+    },
+    modelRoutedToolCalls,
+    agentProfileRuns,
+  });
+  const parentUsage = {
     model: usage.model || agentModel || null,
-    duration_ms: durationMs,
-    runtime_type: runtimeType,
     input_tokens: usage.inputTokens,
     output_tokens: usage.outputTokens,
     cached_read_tokens: usage.cachedReadTokens,
     cost_usd: parentCostUsd,
+  };
+  const turnUsage = {
+    model: usage.model || agentModel || null,
+    duration_ms: durationMs,
+    runtime_type: runtimeType,
+    input_tokens: aggregateUsage.inputTokens,
+    output_tokens: aggregateUsage.outputTokens,
+    cached_read_tokens: aggregateUsage.cachedReadTokens,
+    cost_usd: aggregateUsage.costUsd,
+    parent_usage: parentUsage,
     diagnostics,
     tools_called: invokeResult.tools_called ?? [],
     tool_costs: toolCosts.map((tc) => ({
@@ -664,6 +683,7 @@ export interface AgentProfileRunEvidence {
   parentThreadTurnId?: string;
   handoffSummary?: string;
   laneKey: string;
+  loopEvidence?: AgentLoopEvidence;
   error?: string;
   toolInvocations: Array<Record<string, unknown>>;
 }
@@ -706,6 +726,74 @@ function arrayOfRecords(value: unknown): Array<Record<string, unknown>> {
     : [];
 }
 
+function normalizeLoopEvidence(value: unknown): AgentLoopEvidence | undefined {
+  const record = readRecord(value);
+  if (Object.keys(record).length === 0) return undefined;
+
+  const ownerType = stringValue(record.ownerType ?? record.owner_type);
+  const loopId = stringValue(record.loopId ?? record.loop_id);
+  const ownerSlug = stringValue(record.ownerSlug ?? record.owner_slug);
+  const iterations = Array.isArray(record.iterations)
+    ? record.iterations.map((iteration) => {
+        const iterationRecord = readRecord(iteration);
+        return {
+          ...iterationRecord,
+          ...(optionalNumberValue(iterationRecord.index) !== undefined
+            ? { index: optionalNumberValue(iterationRecord.index) }
+            : {}),
+          ...(stringValue(iterationRecord.phase)
+            ? { phase: stringValue(iterationRecord.phase) }
+            : {}),
+          ...(stringValue(iterationRecord.status)
+            ? { status: stringValue(iterationRecord.status) }
+            : {}),
+          ...(stringValue(iterationRecord.verdict)
+            ? { verdict: stringValue(iterationRecord.verdict) }
+            : {}),
+        };
+      })
+    : undefined;
+
+  return {
+    ...record,
+    ...(loopId ? { loopId } : {}),
+    ...(ownerType === "parent" || ownerType === "profile" ? { ownerType } : {}),
+    ...(ownerSlug ? { ownerSlug } : {}),
+    ...(Object.keys(readRecord(record.policy)).length > 0
+      ? { policy: readRecord(record.policy) }
+      : {}),
+    ...(iterations ? { iterations } : {}),
+  };
+}
+
+function loopMetadataFromEvidence(
+  evidence: AgentLoopEvidence | undefined,
+): Record<string, unknown> {
+  if (!evidence) return {};
+  const iterations = Array.isArray(evidence.iterations)
+    ? evidence.iterations
+    : [];
+  const reviewerRole =
+    evidence.ownerSlug === "reviewer" ||
+    iterations.some((iteration) => iteration.phase === "final_review");
+  const latestIteration = iterations.at(-1);
+  return {
+    loop_evidence: evidence,
+    ...(evidence.loopId ? { loop_id: evidence.loopId } : {}),
+    ...(evidence.ownerType ? { loop_owner_type: evidence.ownerType } : {}),
+    ...(evidence.ownerSlug ? { loop_owner_slug: evidence.ownerSlug } : {}),
+    ...(latestIteration?.index !== undefined
+      ? { loop_iteration_index: latestIteration.index }
+      : {}),
+    ...(latestIteration?.phase ? { loop_phase: latestIteration.phase } : {}),
+    ...(latestIteration?.status ? { loop_status: latestIteration.status } : {}),
+    ...(latestIteration?.verdict
+      ? { loop_verdict: latestIteration.verdict }
+      : {}),
+    ...(reviewerRole ? { reviewer_role: true } : {}),
+  };
+}
+
 function normalizeAgentProfileRun(
   value: unknown,
 ): AgentProfileRunEvidence | null {
@@ -737,6 +825,9 @@ function normalizeAgentProfileRun(
     stringValue(record.laneKey) ??
     stringValue(record.lane_key) ??
     `profile:${profileSlug}`;
+  const loopEvidence = normalizeLoopEvidence(
+    record.loopEvidence ?? record.loop_evidence,
+  );
 
   return {
     profileRunId,
@@ -758,6 +849,7 @@ function normalizeAgentProfileRun(
     toolInvocations: arrayOfRecords(
       record.toolInvocations ?? record.tool_invocations,
     ),
+    ...(loopEvidence ? { loopEvidence } : {}),
     ...(optionalNumberValue(
       record.cachedWriteTokens ?? record.cached_write_tokens,
     ) !== undefined
@@ -1215,6 +1307,7 @@ async function recordAgentProfileRunEvidence(input: {
       profile_name: run.profileName,
       lane_key: run.laneKey,
       profile_status: run.status,
+      ...loopMetadataFromEvidence(run.loopEvidence),
       ...(run.error ? { error: run.error } : {}),
     };
 
@@ -1287,6 +1380,7 @@ async function recordAgentProfileRunEvidence(input: {
           status: run.status,
           lane_key: run.laneKey,
           handoff_summary: run.handoffSummary,
+          loop_evidence: run.loopEvidence,
           tool_invocations: run.toolInvocations,
           ...(run.error ? { error: run.error } : {}),
         },
@@ -1309,6 +1403,63 @@ async function recordAgentProfileRunEvidence(input: {
       );
     }
   }
+}
+
+function aggregateTurnUsage(input: {
+  parent: {
+    inputTokens: number;
+    outputTokens: number;
+    cachedReadTokens: number;
+    costUsd?: number | null;
+  };
+  modelRoutedToolCalls: ModelRoutedToolCallEvidence[];
+  agentProfileRuns: AgentProfileRunEvidence[];
+}): {
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  costUsd: number | null;
+} {
+  const inputTokens =
+    input.parent.inputTokens +
+    input.modelRoutedToolCalls.reduce(
+      (sum, call) => sum + call.inputTokens,
+      0,
+    ) +
+    input.agentProfileRuns.reduce((sum, run) => sum + run.inputTokens, 0);
+  const outputTokens =
+    input.parent.outputTokens +
+    input.modelRoutedToolCalls.reduce(
+      (sum, call) => sum + call.outputTokens,
+      0,
+    ) +
+    input.agentProfileRuns.reduce((sum, run) => sum + run.outputTokens, 0);
+  const cachedReadTokens =
+    input.parent.cachedReadTokens +
+    input.modelRoutedToolCalls.reduce(
+      (sum, call) => sum + call.cachedReadTokens,
+      0,
+    ) +
+    input.agentProfileRuns.reduce((sum, run) => sum + run.cachedReadTokens, 0);
+  const costValues = [
+    input.parent.costUsd,
+    ...input.modelRoutedToolCalls.map((call) => call.costUsd),
+    ...input.agentProfileRuns.map((run) => run.costUsd),
+  ].filter(
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value),
+  );
+  return {
+    inputTokens,
+    outputTokens,
+    cachedReadTokens,
+    costUsd:
+      costValues.length > 0
+        ? Math.round(
+            costValues.reduce((sum, value) => sum + value, 0) * 1_000_000,
+          ) / 1_000_000
+        : null,
+  };
 }
 
 function readRecord(value: unknown): Record<string, unknown> {

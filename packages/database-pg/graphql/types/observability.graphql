@@ -24,6 +24,15 @@ type TraceEvent {
   profileName: String
   laneKey: String
   profileStatus: String
+  loopId: String
+  loopOwnerType: String
+  loopOwnerSlug: String
+  loopIterationIndex: Int
+  loopPhase: String
+  loopStatus: String
+  loopVerdict: String
+  reviewerRole: Boolean
+  loopEvidence: AWSJSON
   modelRoutingStatus: String
   ruleSource: AWSJSON
   match: AWSJSON

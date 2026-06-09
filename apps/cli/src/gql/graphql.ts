@@ -6416,6 +6416,14 @@ export type TraceEvent = {
   eventType?: Maybe<Scalars['String']['output']>;
   inputTokens?: Maybe<Scalars['Int']['output']>;
   laneKey?: Maybe<Scalars['String']['output']>;
+  loopEvidence?: Maybe<Scalars['AWSJSON']['output']>;
+  loopId?: Maybe<Scalars['String']['output']>;
+  loopIterationIndex?: Maybe<Scalars['Int']['output']>;
+  loopOwnerSlug?: Maybe<Scalars['String']['output']>;
+  loopOwnerType?: Maybe<Scalars['String']['output']>;
+  loopPhase?: Maybe<Scalars['String']['output']>;
+  loopStatus?: Maybe<Scalars['String']['output']>;
+  loopVerdict?: Maybe<Scalars['String']['output']>;
   match?: Maybe<Scalars['AWSJSON']['output']>;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   model?: Maybe<Scalars['String']['output']>;
@@ -6428,6 +6436,7 @@ export type TraceEvent = {
   profileSlug?: Maybe<Scalars['String']['output']>;
   profileStatus?: Maybe<Scalars['String']['output']>;
   requestId?: Maybe<Scalars['String']['output']>;
+  reviewerRole?: Maybe<Scalars['Boolean']['output']>;
   ruleSource?: Maybe<Scalars['AWSJSON']['output']>;
   runtimeType?: Maybe<Scalars['String']['output']>;
   source?: Maybe<Scalars['String']['output']>;

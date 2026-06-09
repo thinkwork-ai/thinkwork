@@ -77,6 +77,29 @@ export const threadTraces = async (
         typeof metadata.profile_status === "string"
           ? metadata.profile_status
           : null,
+      loopId: typeof metadata.loop_id === "string" ? metadata.loop_id : null,
+      loopOwnerType:
+        typeof metadata.loop_owner_type === "string"
+          ? metadata.loop_owner_type
+          : null,
+      loopOwnerSlug:
+        typeof metadata.loop_owner_slug === "string"
+          ? metadata.loop_owner_slug
+          : null,
+      loopIterationIndex:
+        typeof metadata.loop_iteration_index === "number"
+          ? metadata.loop_iteration_index
+          : null,
+      loopPhase:
+        typeof metadata.loop_phase === "string" ? metadata.loop_phase : null,
+      loopStatus:
+        typeof metadata.loop_status === "string" ? metadata.loop_status : null,
+      loopVerdict:
+        typeof metadata.loop_verdict === "string"
+          ? metadata.loop_verdict
+          : null,
+      reviewerRole: metadata.reviewer_role === true,
+      loopEvidence: metadata.loop_evidence ?? null,
       modelRoutingStatus:
         typeof metadata.model_routing_status === "string"
           ? metadata.model_routing_status
