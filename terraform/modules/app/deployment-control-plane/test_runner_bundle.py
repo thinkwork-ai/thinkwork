@@ -198,6 +198,43 @@ def test_payload_release_selection_overrides_stale_runner_environment(
     assert runner.os.environ["THINKWORK_RELEASE_MANIFEST_SHA256"] == manifest_sha
 
 
+def test_registry_module_source_checks_out_release_manifest_sha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    manifest_path = tmp_path / "thinkwork-release.json"
+    manifest = {
+        "schemaVersion": 1,
+        "release": {
+            "version": "0.1.0-canary.137",
+            "gitSha": "f9ebf20d2e4d592df44e66252d6c7894746689c9",
+            "createdAt": "2026-06-09T19:33:51.126Z",
+        },
+        "artifacts": [],
+        "runtimeImages": [],
+    }
+    write_manifest(manifest_path, manifest)
+
+    monkeypatch.setattr(runner, "MANIFEST", manifest_path)
+
+    assert runner.source_repo_and_ref(
+        "thinkwork-ai/thinkwork/aws",
+        "v0.1.0-canary.137",
+    ) == (
+        "https://github.com/thinkwork-ai/thinkwork.git",
+        "f9ebf20d2e4d592df44e66252d6c7894746689c9",
+    )
+
+
+def test_github_module_source_checks_out_https_repo() -> None:
+    runner = load_runner()
+
+    assert runner.source_repo_and_ref(
+        "github.com/thinkwork-ai/thinkwork//terraform/modules/thinkwork?ref=abc123",
+        "main",
+    ) == ("https://github.com/thinkwork-ai/thinkwork.git", "abc123")
+
+
 def test_safe_extract_rejects_archive_path_traversal(tmp_path: Path) -> None:
     runner = load_runner()
     archive_path = tmp_path / "evil.tar.gz"

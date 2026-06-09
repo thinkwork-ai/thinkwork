@@ -411,12 +411,31 @@ def release_runtime_image(name):
     return ""
 
 
+def release_git_sha():
+    if not MANIFEST.exists():
+        return ""
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    release = manifest.get("release")
+    if isinstance(release, dict):
+        git_sha = release.get("gitSha")
+        return git_sha if isinstance(git_sha, str) else ""
+    return ""
+
+
 def source_repo_and_ref(module_source, release_version):
     source = module_source.removeprefix("git::")
     source_path, _, query = source.partition("?")
     params = urllib.parse.parse_qs(query)
     ref = params.get("ref", [release_version])[0]
-    if ".git//" in source_path:
+    if source_path == "thinkwork-ai/thinkwork/aws":
+        repo = "https://github.com/thinkwork-ai/thinkwork.git"
+        ref = release_git_sha() or release_version
+    elif source_path.startswith("github.com/"):
+        github_source = source_path
+        if "//terraform/" in github_source:
+            github_source = github_source.split("//terraform/", 1)[0]
+        repo = f"https://{github_source.removesuffix('.git')}.git"
+    elif ".git//" in source_path:
         repo = source_path.split(".git//", 1)[0] + ".git"
     elif "//terraform/" in source_path:
         repo = source_path.split("//terraform/", 1)[0]
