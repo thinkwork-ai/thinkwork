@@ -6,6 +6,9 @@ const {
   mockUpdate,
   mockDelete,
   mockRequireAdminOrServiceCaller,
+  mockAssertTenantModelAvailable,
+  mockGetTenantModelCatalogEntry,
+  mockListTenantModelCatalog,
   mockSnakeToCamel,
   tables,
 } = vi.hoisted(() => ({
@@ -14,6 +17,9 @@ const {
   mockUpdate: vi.fn(),
   mockDelete: vi.fn(),
   mockRequireAdminOrServiceCaller: vi.fn(),
+  mockAssertTenantModelAvailable: vi.fn(),
+  mockGetTenantModelCatalogEntry: vi.fn(),
+  mockListTenantModelCatalog: vi.fn(),
   mockSnakeToCamel: vi.fn((row: Record<string, unknown>) => {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(row)) {
@@ -79,6 +85,12 @@ vi.mock("../core/authz.js", () => ({
   requireAdminOrServiceCaller: mockRequireAdminOrServiceCaller,
 }));
 
+vi.mock("../../../lib/model-catalog/tenant-catalog.js", () => ({
+  assertTenantModelAvailable: mockAssertTenantModelAvailable,
+  getTenantModelCatalogEntry: mockGetTenantModelCatalogEntry,
+  listTenantModelCatalog: mockListTenantModelCatalog,
+}));
+
 let listMod: typeof import("./agentProfiles.query.js");
 let createMod: typeof import("./createAgentProfile.mutation.js");
 let updateMod: typeof import("./updateAgentProfile.mutation.js");
@@ -92,6 +104,12 @@ beforeEach(async () => {
   mockDelete.mockReset();
   mockRequireAdminOrServiceCaller.mockReset();
   mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
+  mockAssertTenantModelAvailable.mockReset();
+  mockAssertTenantModelAvailable.mockResolvedValue({ modelId: "model-fast" });
+  mockGetTenantModelCatalogEntry.mockReset();
+  mockGetTenantModelCatalogEntry.mockResolvedValue({ modelId: "model-parent" });
+  mockListTenantModelCatalog.mockReset();
+  mockListTenantModelCatalog.mockResolvedValue([{ modelId: "model-fast" }]);
   mockSnakeToCamel.mockClear();
   listMod = await import("./agentProfiles.query.js");
   createMod = await import("./createAgentProfile.mutation.js");
@@ -184,7 +202,6 @@ describe("Agent Profile resolvers", () => {
           { builtInKey: "reviewer" },
         ]),
       )
-      .mockReturnValueOnce(queryRows([{ modelId: "model-fast" }]))
       .mockReturnValueOnce(queryRows([{ id: "space-1" }]));
     const insertedProfileValues: unknown[] = [];
     const insertedAssignmentValues: unknown[] = [];

@@ -73,7 +73,7 @@ export async function updateAgentProfile(
     updates.instructions = input.instructions;
   if (input.modelId !== undefined) {
     if (!input.modelId) throw badInput("Model is required");
-    await assertAvailableModel(input.modelId);
+    await assertAvailableModel(args.tenantId, input.modelId);
     updates.model_id = input.modelId;
   }
   if (input.enabled !== undefined) updates.enabled = input.enabled ?? true;

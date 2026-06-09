@@ -16,7 +16,7 @@ import {
 } from "@thinkwork/ui";
 import { formatCost } from "@/lib/settings-activity";
 import { extractSkillName } from "./skill-row-label";
-import { SettingsModelCatalogQuery } from "@/lib/settings-queries";
+import { SettingsTenantModelCatalogQuery } from "@/lib/settings-queries";
 import {
   SettingsActivityThreadTurnsQuery,
   ThreadTurnEventsQuery,
@@ -1059,10 +1059,10 @@ function mergeRouteEvidence(
 function hasConcreteRouteEvidence(event: TimelineEvent): boolean {
   return Boolean(
     event.routeModelId ||
-      event.routeStatus ||
-      event.routeInputTokens != null ||
-      event.routeOutputTokens != null ||
-      event.routeCostUsd != null,
+    event.routeStatus ||
+    event.routeInputTokens != null ||
+    event.routeOutputTokens != null ||
+    event.routeCostUsd != null,
   );
 }
 
@@ -2468,7 +2468,9 @@ export function ExecutionTrace({
   onOpenArtifact,
 }: ExecutionTraceProps) {
   const [modelCatalogResult] = useQuery({
-    query: SettingsModelCatalogQuery,
+    query: SettingsTenantModelCatalogQuery,
+    variables: { tenantId, includeDisabled: false },
+    pause: !tenantId,
   });
   const [result, reexecuteTurns] = useQuery({
     query: SettingsActivityThreadTurnsQuery,
@@ -2490,14 +2492,14 @@ export function ExecutionTrace({
   const turns = (result.data as any)?.threadTurns ?? [];
   const modelDisplayNames = useMemo(() => {
     const names: ModelDisplayNames = new Map();
-    for (const model of modelCatalogResult.data?.modelCatalog ?? []) {
+    for (const model of modelCatalogResult.data?.tenantModelCatalog ?? []) {
       if (!model.modelId || !model.displayName) continue;
       for (const key of modelCatalogKeys(model.modelId)) {
         names.set(key, model.displayName);
       }
     }
     return names;
-  }, [modelCatalogResult.data?.modelCatalog]);
+  }, [modelCatalogResult.data?.tenantModelCatalog]);
 
   // Build merged timeline (turns + messages sorted by date)
   const timeline: TimelineItem[] = [

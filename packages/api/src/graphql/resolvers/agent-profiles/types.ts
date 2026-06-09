@@ -4,22 +4,18 @@ import {
   db,
   eq,
   inArray,
-  modelCatalog,
   spaces,
-  snakeToCamel,
 } from "../../utils.js";
+import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
 import { toGraphqlSpace } from "../spaces/shared.js";
 import { toProfileAssignmentGraphql } from "./shared.js";
 
 export const agentProfileTypeResolvers = {
   model: async (parent: any) => {
     const modelId = parent.modelId ?? parent.model_id;
-    if (!modelId) return null;
-    const [row] = await db
-      .select()
-      .from(modelCatalog)
-      .where(eq(modelCatalog.model_id, modelId));
-    return row ? snakeToCamel(row) : null;
+    const tenantId = parent.tenantId ?? parent.tenant_id;
+    if (!tenantId || !modelId) return null;
+    return getTenantModelCatalogEntry({ tenantId, modelId });
   },
   spaceAssignments: async (parent: any) => {
     const profileId = parent.id;
