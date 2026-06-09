@@ -1,10 +1,9 @@
 ################################################################################
 # Deployment Control Plane — App Module
 #
-# AWS-native substrate for GitHub-free customer deployments. This module is
-# intentionally starts as an evidence-producing runner: the Step Functions state
-# machine invokes CodeBuild, passes session metadata, and records evidence, but
-# does not run Terraform apply yet. U4/U5 swap in the live runner contract.
+# AWS-native substrate for GitHub-free customer deployments. Step Functions
+# invokes CodeBuild, passes session metadata, stages release artifacts, runs
+# Terraform, and records evidence.
 ################################################################################
 
 terraform {
@@ -17,21 +16,28 @@ terraform {
 }
 
 locals {
-  name_prefix             = "thinkwork-${var.stage}-deployment"
-  evidence_bucket_name    = "thinkwork-${var.stage}-${var.account_id}-deploy-evidence"
-  ssm_prefix              = "/thinkwork/${var.stage}/deployment"
-  appconfig_name          = "thinkwork-${var.stage}-deployment"
-  configuration_profile   = "deployment-config"
-  state_machine_name      = "${local.name_prefix}-orchestrator"
-  codebuild_project_name  = "${local.name_prefix}-runner"
-  codebuild_log_group     = "/aws/codebuild/${local.codebuild_project_name}"
-  state_machine_log_group = "/aws/vendedlogs/states/${local.state_machine_name}"
+  name_prefix              = "thinkwork-${var.stage}-deployment"
+  evidence_bucket_name     = "thinkwork-${var.stage}-${var.account_id}-deploy-evidence"
+  ssm_prefix               = "/thinkwork/${var.stage}/deployment"
+  appconfig_name           = "thinkwork-${var.stage}-deployment"
+  configuration_profile    = "deployment-config"
+  state_machine_name       = "${local.name_prefix}-orchestrator"
+  codebuild_project_name   = "${local.name_prefix}-runner"
+  codebuild_log_group      = "/aws/codebuild/${local.codebuild_project_name}"
+  state_machine_log_group  = "/aws/vendedlogs/states/${local.state_machine_name}"
+  terraform_module_is_git  = startswith(var.terraform_module_source, "git::") || startswith(var.terraform_module_source, "github.com/")
+  terraform_module_version = var.terraform_module_version != "" ? var.terraform_module_version : (local.terraform_module_is_git ? "" : trimprefix(var.release_version, "v"))
 
-  release_parameters = {
+  deployment_parameters = {
     for key, value in {
       selected_release_version         = var.release_version
       selected_release_manifest_url    = var.release_manifest_url
       selected_release_manifest_sha256 = var.release_manifest_sha256
+      terraform_state_bucket           = var.terraform_state_bucket
+      terraform_lock_table             = var.terraform_lock_table
+      release_artifact_bucket          = var.release_artifact_bucket
+      terraform_module_source          = var.terraform_module_source
+      terraform_module_version         = local.terraform_module_version
     } : key => value if value != ""
   }
 
@@ -73,6 +79,21 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "evidence" {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
+  }
+}
+
+resource "aws_s3_object" "runner_script" {
+  bucket = aws_s3_bucket.evidence.id
+  key    = "runner/thinkwork-runner.py"
+  source = "${path.module}/runner.py"
+  etag   = filemd5("${path.module}/runner.py")
+
+  server_side_encryption = "AES256"
+
+  tags = {
+    Name    = "${local.name_prefix}-runner-script"
+    Stage   = var.stage
+    Purpose = "deployment-runner"
   }
 }
 
@@ -134,12 +155,13 @@ resource "aws_appconfig_configuration_profile" "deployment" {
   }
 }
 
-resource "aws_ssm_parameter" "release" {
-  for_each = local.release_parameters
+resource "aws_ssm_parameter" "deployment" {
+  for_each = local.deployment_parameters
 
-  name  = "${local.ssm_prefix}/${replace(each.key, "_", "-")}"
-  type  = "String"
-  value = each.value
+  name      = "${local.ssm_prefix}/${replace(each.key, "_", "-")}"
+  type      = "String"
+  value     = each.value
+  overwrite = true
 
   tags = {
     Name    = "${local.ssm_prefix}/${replace(each.key, "_", "-")}"
@@ -199,7 +221,7 @@ resource "aws_iam_role" "codebuild" {
 }
 
 resource "aws_iam_role_policy" "codebuild" {
-  name = "deployment-runner-stub"
+  name = "deployment-runner"
   role = aws_iam_role.codebuild.id
 
   policy = jsonencode({
@@ -215,15 +237,29 @@ resource "aws_iam_role_policy" "codebuild" {
       },
       {
         Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:ListBucket",
-        ]
+        Action = "s3:*"
         Resource = [
           aws_s3_bucket.evidence.arn,
           "${aws_s3_bucket.evidence.arn}/*",
+          "arn:aws:s3:::${var.terraform_state_bucket}",
+          "arn:aws:s3:::${var.terraform_state_bucket}/*",
+          "arn:aws:s3:::${var.release_artifact_bucket}",
+          "arn:aws:s3:::${var.release_artifact_bucket}/*",
+          "arn:aws:s3:::thinkwork-${var.stage}-*",
+          "arn:aws:s3:::thinkwork-${var.stage}-*/*",
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:CreateTable",
+          "dynamodb:DeleteItem",
+          "dynamodb:DescribeTable",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+        ]
+        Resource = "arn:aws:dynamodb:${var.region}:${var.account_id}:table/${var.terraform_lock_table}"
       },
       {
         Effect = "Allow"
@@ -251,15 +287,49 @@ resource "aws_iam_role_policy" "codebuild" {
           ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/${var.stage}/deployment/*"]
         )
       },
+      {
+        Effect = "Allow"
+        Action = [
+          "acm:*",
+          "apigateway:*",
+          "appsync:*",
+          "bedrock:*",
+          "bedrock-agentcore:*",
+          "cloudfront:*",
+          "cloudwatch:*",
+          "cognito-identity:*",
+          "cognito-idp:*",
+          "dynamodb:*",
+          "ec2:*",
+          "ecr:*",
+          "ecs:*",
+          "elasticfilesystem:*",
+          "elasticloadbalancing:*",
+          "events:*",
+          "iam:*",
+          "kms:*",
+          "lambda:*",
+          "logs:*",
+          "rds:*",
+          "scheduler:*",
+          "secretsmanager:*",
+          "ses:*",
+          "sqs:*",
+          "ssm:*",
+          "states:*",
+          "xray:*",
+        ]
+        Resource = "*"
+      },
     ]
   })
 }
 
 resource "aws_codebuild_project" "runner" {
   name          = local.codebuild_project_name
-  description   = "ThinkWork deployment runner evidence stub for ${var.stage}."
+  description   = "ThinkWork deployment runner for ${var.stage}."
   service_role  = aws_iam_role.codebuild.arn
-  build_timeout = 30
+  build_timeout = 480
 
   artifacts {
     type = "NO_ARTIFACTS"
@@ -268,6 +338,7 @@ resource "aws_codebuild_project" "runner" {
   environment {
     compute_type                = "BUILD_GENERAL1_SMALL"
     image                       = "aws/codebuild/standard:7.0"
+    privileged_mode             = true
     type                        = "LINUX_CONTAINER"
     image_pull_credentials_type = "CODEBUILD"
 
@@ -287,6 +358,46 @@ resource "aws_codebuild_project" "runner" {
     }
 
     environment_variable {
+      name  = "THINKWORK_TERRAFORM_STATE_BUCKET"
+      value = var.terraform_state_bucket
+    }
+
+    environment_variable {
+      name  = "THINKWORK_TERRAFORM_LOCK_TABLE"
+      value = var.terraform_lock_table
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RELEASE_ARTIFACT_BUCKET"
+      value = var.release_artifact_bucket
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RUNNER_SCRIPT_S3_URI"
+      value = "s3://${aws_s3_bucket.evidence.bucket}/${aws_s3_object.runner_script.key}"
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RELEASE_MANIFEST_URL"
+      value = var.release_manifest_url
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RELEASE_MANIFEST_SHA256"
+      value = var.release_manifest_sha256
+    }
+
+    environment_variable {
+      name  = "THINKWORK_TERRAFORM_MODULE_SOURCE"
+      value = var.terraform_module_source
+    }
+
+    environment_variable {
+      name  = "THINKWORK_TERRAFORM_MODULE_VERSION"
+      value = local.terraform_module_version
+    }
+
+    environment_variable {
       name  = "THINKWORK_SSM_PREFIX"
       value = local.ssm_prefix
     }
@@ -301,37 +412,7 @@ resource "aws_codebuild_project" "runner" {
 
   source {
     type      = "NO_SOURCE"
-    buildspec = <<-BUILDSPEC
-      version: 0.2
-      phases:
-        build:
-          commands:
-            - echo "ThinkWork deployment runner stub for $THINKWORK_STAGE"
-            - |
-              python3 - <<'PY'
-              import json
-              import os
-              from datetime import datetime, timezone
-
-              payload = json.loads(os.environ.get("THINKWORK_DEPLOYMENT_INPUT") or "{}")
-              evidence = {
-                  "status": "stub",
-                  "stage": os.environ.get("THINKWORK_STAGE"),
-                  "release": os.environ.get("THINKWORK_RELEASE_VERSION"),
-                  "action": os.environ.get("THINKWORK_DEPLOYMENT_ACTION"),
-                  "sessionId": os.environ.get("THINKWORK_DEPLOYMENT_SESSION_ID"),
-                  "environmentName": payload.get("environmentName"),
-                  "awsAccountId": payload.get("awsAccountId"),
-                  "awsRegion": payload.get("awsRegion"),
-                  "codebuildBuildId": os.environ.get("CODEBUILD_BUILD_ID"),
-                  "recordedAt": datetime.now(timezone.utc).isoformat(),
-              }
-              with open("deployment-evidence.json", "w", encoding="utf-8") as handle:
-                  json.dump(evidence, handle, indent=2, sort_keys=True)
-                  handle.write("\n")
-              PY
-            - aws s3 cp deployment-evidence.json "s3://$THINKWORK_EVIDENCE_BUCKET/$THINKWORK_EVIDENCE_PREFIX/deployment-evidence.json"
-    BUILDSPEC
+    buildspec = file("${path.module}/buildspec.yml")
   }
 
   tags = {
@@ -413,16 +494,16 @@ resource "aws_sfn_state_machine" "deployment" {
   role_arn = aws_iam_role.state_machine.arn
 
   logging_configuration {
-    include_execution_data = true
+    include_execution_data = false
     level                  = "ALL"
     log_destination        = "${aws_cloudwatch_log_group.state_machine.arn}:*"
   }
 
   definition = jsonencode({
-    Comment = "ThinkWork deployment control-plane evidence stub. Live Terraform orchestration is added in later units."
-    StartAt = "RunDeploymentStub"
+    Comment = "ThinkWork deployment control plane. Runs release-pinned Terraform from CodeBuild and records evidence."
+    StartAt = "RunDeployment"
     States = {
-      RunDeploymentStub = {
+      RunDeployment = {
         Type     = "Task"
         Resource = "arn:aws:states:::codebuild:startBuild.sync"
         Parameters = {

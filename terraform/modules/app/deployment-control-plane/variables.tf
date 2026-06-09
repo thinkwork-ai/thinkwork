@@ -28,6 +28,33 @@ variable "release_manifest_sha256" {
   type        = string
 }
 
+variable "terraform_state_bucket" {
+  description = "Customer-owned S3 bucket that stores the ThinkWork app Terraform state."
+  type        = string
+}
+
+variable "terraform_lock_table" {
+  description = "Customer-owned DynamoDB table used for Terraform state locking."
+  type        = string
+}
+
+variable "release_artifact_bucket" {
+  description = "Customer-owned S3 bucket where the runner stages release Lambda artifacts for Terraform."
+  type        = string
+}
+
+variable "terraform_module_source" {
+  description = "Terraform Registry source for the ThinkWork composite module."
+  type        = string
+  default     = "thinkwork-ai/thinkwork/aws"
+}
+
+variable "terraform_module_version" {
+  description = "Terraform Registry module version to deploy. Defaults to release_version when empty."
+  type        = string
+  default     = ""
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention for deployment runner logs."
   type        = number
@@ -39,4 +66,3 @@ variable "create_secret_placeholders" {
   type        = bool
   default     = true
 }
-

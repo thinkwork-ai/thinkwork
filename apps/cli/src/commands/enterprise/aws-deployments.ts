@@ -1,10 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +14,9 @@ export interface EnterpriseAwsDeploymentControlPlanePlan {
   stateMachineName: string;
   codeBuildProjectName: string;
   evidenceBucket: string;
+  stateBucket: string;
+  lockTable: string;
+  artifactBucket: string;
   ssmPrefix: string;
   appConfigApplicationName: string;
   appConfigEnvironmentName: string;
@@ -48,6 +46,7 @@ export interface EnterpriseAwsDeploymentControlPlaneApplyOptions {
   release: EnterpriseReleasePin;
   stateBucket: string;
   lockTable: string;
+  artifactBucket: string;
 }
 
 export interface EnterpriseAwsDeploymentControlPlaneClient {
@@ -63,6 +62,9 @@ export function buildEnterpriseAwsDeploymentControlPlanePlan(options: {
   region: string;
   stages: string[];
   release: EnterpriseReleasePin;
+  stateBucket: string;
+  lockTable: string;
+  artifactBucket: string;
 }): EnterpriseAwsDeploymentControlPlanePlan[] {
   return options.stages.map((stage) => {
     const prefix = `thinkwork-${stage}-deployment`;
@@ -72,6 +74,9 @@ export function buildEnterpriseAwsDeploymentControlPlanePlan(options: {
       stateMachineName: `${prefix}-orchestrator`,
       codeBuildProjectName: `${prefix}-runner`,
       evidenceBucket: `thinkwork-${stage}-${options.accountId}-deploy-evidence`,
+      stateBucket: options.stateBucket,
+      lockTable: options.lockTable,
+      artifactBucket: options.artifactBucket,
       ssmPrefix,
       appConfigApplicationName: prefix,
       appConfigEnvironmentName: stage,
@@ -95,9 +100,7 @@ export function buildEnterpriseAwsDeploymentControlPlanePlan(options: {
   });
 }
 
-export class TerraformEnterpriseAwsDeploymentControlPlaneClient
-  implements EnterpriseAwsDeploymentControlPlaneClient
-{
+export class TerraformEnterpriseAwsDeploymentControlPlaneClient implements EnterpriseAwsDeploymentControlPlaneClient {
   async ensureDeploymentControlPlane(
     controlPlane: EnterpriseAwsDeploymentControlPlanePlan,
     options: EnterpriseAwsDeploymentControlPlaneApplyOptions,
@@ -196,6 +199,12 @@ module "deployment_control_plane" {
   release_version         = ${hclString(options.release.version)}
   release_manifest_url    = ${hclString(options.release.manifestUrl)}
   release_manifest_sha256 = ${hclString(options.release.manifestSha256 ?? "")}
+
+  terraform_state_bucket  = ${hclString(options.stateBucket)}
+  terraform_lock_table    = ${hclString(options.lockTable)}
+  release_artifact_bucket = ${hclString(options.artifactBucket)}
+
+  terraform_module_version = ${hclString(options.release.terraformModuleVersion)}
 }
 `;
 }

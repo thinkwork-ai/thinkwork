@@ -20,6 +20,7 @@
 locals {
   memory_retain_fn_name = "thinkwork-${var.stage}-api-memory-retain"
   memory_retain_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.memory_retain_fn_name}"
+  pi_image_uri          = "${var.ecr_repository_url}:pi-latest"
 }
 
 ################################################################################
@@ -268,13 +269,44 @@ resource "aws_cloudwatch_log_group" "agentcore_pi" {
 # Lambda Container Image
 ################################################################################
 
+resource "terraform_data" "seed_pi_image" {
+  count = var.source_image_uri != "" ? 1 : 0
+
+  triggers_replace = {
+    source_image_uri = var.source_image_uri
+    target_image_uri = local.pi_image_uri
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      repo_root="${abspath("${path.module}/../../../..")}"
+      aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${var.account_id}.dkr.ecr.${var.region}.amazonaws.com
+      if docker pull "${var.source_image_uri}"; then
+        source_id="$(docker image inspect --format '{{.Id}}' "${var.source_image_uri}")"
+        docker tag "$source_id" "${local.pi_image_uri}"
+      else
+        echo "Unable to pull release image ${var.source_image_uri}; building Pi image from $repo_root"
+        docker build \
+          -f "$repo_root/packages/agentcore-pi/agent-container/Dockerfile" \
+          -t "${local.pi_image_uri}" \
+          "$repo_root"
+      fi
+      docker push "${local.pi_image_uri}"
+    EOT
+  }
+}
+
 resource "aws_lambda_function" "agentcore_pi" {
   function_name = "thinkwork-${var.stage}-agentcore-pi"
   role          = aws_iam_role.agentcore_pi.arn
   package_type  = "Image"
-  image_uri     = "${var.ecr_repository_url}:pi-latest"
+  image_uri     = local.pi_image_uri
   timeout       = 900
   memory_size   = 2048
+
+  depends_on = [terraform_data.seed_pi_image]
 
   environment {
     variables = {

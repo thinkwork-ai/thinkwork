@@ -32,6 +32,12 @@ variable "ecr_repository_url" {
   type        = string
 }
 
+variable "source_image_uri" {
+  description = "Optional release image URI to copy into ecr_repository_url:pi-latest before creating the Pi Lambda. Used by GitHub-free customer deployments."
+  type        = string
+  default     = ""
+}
+
 variable "async_dlq_arn" {
   description = "SQS DLQ ARN for failed `kind=run_skill` async invokes. Shared AgentCore queue for operator inspection."
   type        = string

@@ -216,7 +216,7 @@ resource "aws_iam_role_policy" "runner_s3_allow" {
 }
 
 resource "aws_iam_role_policy" "runner_secrets" {
-  count = length(var.database_secret_arn) > 0 ? 1 : 0
+  count = var.enable_runner_database_secret_access ? 1 : 0
   name  = "exports-runner-secrets"
   role  = aws_iam_role.runner_lambda.id
 

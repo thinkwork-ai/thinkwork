@@ -386,7 +386,7 @@ resource "aws_iam_role_policy" "lambda_ses_send" {
 # Allow API Lambdas to directly invoke the Pi AgentCore Lambda. Used by
 # chat-agent-invoke, wake-up, retry, and skill-run paths via InvokeCommand.
 resource "aws_iam_role_policy" "lambda_agentcore_invoke" {
-  count = var.agentcore_pi_function_arn != "" ? 1 : 0
+  count = var.enable_agentcore_pi_invoke_policy ? 1 : 0
   name  = "agentcore-invoke"
   role  = aws_iam_role.lambda.id
 

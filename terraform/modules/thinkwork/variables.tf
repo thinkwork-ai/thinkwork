@@ -122,6 +122,36 @@ variable "deployment_release_manifest_sha256" {
   default     = ""
 }
 
+variable "deployment_terraform_state_bucket" {
+  description = "Customer-owned S3 bucket used by the GitHub-free deployment runner for ThinkWork app Terraform state. Empty uses the legacy thinkwork-terraform-state bucket name."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_terraform_lock_table" {
+  description = "Customer-owned DynamoDB table used by the GitHub-free deployment runner for ThinkWork app Terraform state locking. Empty uses the legacy thinkwork-terraform-locks table name."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_release_artifact_bucket" {
+  description = "Customer-owned S3 bucket used by the GitHub-free deployment runner to stage release Lambda artifacts. Empty uses the legacy thinkwork-release-artifacts bucket name."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_terraform_module_source" {
+  description = "Terraform Registry source the GitHub-free deployment runner should use for the ThinkWork composite module."
+  type        = string
+  default     = "thinkwork-ai/thinkwork/aws"
+}
+
+variable "deployment_terraform_module_version" {
+  description = "Terraform Registry module version the GitHub-free deployment runner should deploy. Empty derives from deployment_release_version."
+  type        = string
+  default     = ""
+}
+
 variable "deployment_control_plane_log_retention_days" {
   description = "CloudWatch log retention for deployment control-plane state machine and runner logs."
   type        = number
@@ -279,8 +309,8 @@ variable "cognee_db_name" {
   default     = "thinkwork_cognee"
 
   validation {
-    condition     = var.cognee_db_name != var.database_name && can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.cognee_db_name))
-    error_message = "cognee_db_name must be a valid PostgreSQL identifier distinct from the shared Thinkwork database name."
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.cognee_db_name))
+    error_message = "cognee_db_name must be a valid PostgreSQL identifier."
   }
 }
 
@@ -471,8 +501,8 @@ variable "twenty_db_name" {
   default     = "thinkwork_twenty"
 
   validation {
-    condition     = var.twenty_db_name != var.database_name && can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.twenty_db_name))
-    error_message = "twenty_db_name must be a valid PostgreSQL identifier distinct from the shared Thinkwork database name."
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.twenty_db_name))
+    error_message = "twenty_db_name must be a valid PostgreSQL identifier."
   }
 }
 
@@ -774,6 +804,12 @@ variable "lambda_artifact_prefix" {
   default     = "latest/lambdas"
 }
 
+variable "agentcore_pi_source_image_uri" {
+  description = "Optional release image URI copied into the stage AgentCore ECR repository before creating the Pi Lambda."
+  type        = string
+  default     = ""
+}
+
 variable "require_lambda_artifacts" {
   description = "Fail planning unless either lambda_zips_dir or lambda_artifact_bucket/lambda_artifact_prefix is configured. Enterprise deployment repos should set this to true."
   type        = bool
@@ -938,6 +974,18 @@ variable "stripe_price_ids_json" {
   description = "JSON object mapping internal plan names to Stripe price IDs for this stage, e.g. {\"starter\":\"price_...\",\"team\":\"price_...\"}. Non-secret; per-stage. Exposed to Lambdas as STRIPE_PRICE_IDS_JSON env var. The secret_key, publishable_key, and webhook_signing_secret live in Secrets Manager at thinkwork/<stage>/stripe/api-credentials — never in tfvars."
   type        = string
   default     = "{}"
+}
+
+variable "enable_stripe_billing" {
+  description = "Provision Stripe billing Lambdas, API routes, and credentials placeholder secret."
+  type        = bool
+  default     = true
+}
+
+variable "enable_slack_workspace_app" {
+  description = "Provision Slack workspace app Lambdas, API routes, and credentials placeholder secret."
+  type        = bool
+  default     = true
 }
 
 # ---------------------------------------------------------------------------

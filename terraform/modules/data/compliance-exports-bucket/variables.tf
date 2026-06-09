@@ -38,6 +38,12 @@ variable "database_secret_arn" {
   default     = ""
 }
 
+variable "enable_runner_database_secret_access" {
+  description = "Grant the compliance export runner role access to database_secret_arn."
+  type        = bool
+  default     = false
+}
+
 variable "expiration_days" {
   description = "Number of days an export object lives before lifecycle expiration. SOC2 walkthrough auditors typically download artifacts within hours; 7 days is the audit-window default."
   type        = number

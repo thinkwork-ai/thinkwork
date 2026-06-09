@@ -26,6 +26,28 @@ locals {
     # provisioned|runtime|url|clusterArn|serviceName|logGroup|storageBucket|dbName|basicAuthSecretArn
     KESTRA = "${var.kestra_provisioned ? "1" : "0"}|${var.kestra_runtime_enabled ? "1" : "0"}|${var.kestra_url}|${var.kestra_cluster_arn}|${var.kestra_service_name}|${var.kestra_log_group_name}|${var.kestra_storage_bucket_name}|${var.kestra_database_name}|${var.kestra_basic_auth_secret_arn}"
   } : {}
+  optional_integration_handler_names = concat(
+    trimspace(var.deployment_state_machine_arn) == "" ? [
+      # Host-only onboarding/deployment API. Customer foundations disable the
+      # deployment control plane, so release-based customer installs must not
+      # require this Lambda artifact or expose these routes.
+      "deployment-sessions",
+    ] : [],
+    var.enable_stripe_billing ? [] : [
+      "stripe-checkout",
+      "stripe-webhook",
+      "stripe-portal",
+      "stripe-subscription",
+    ],
+    var.enable_slack_workspace_app ? [] : [
+      "oauth-authorize",
+      "oauth-callback",
+      "slack-events",
+      "slack-slash-command",
+      "slack-interactivity",
+      "slack-oauth-install",
+    ],
+  )
 
   # Common environment variables shared by all API handlers
   common_env = merge({
@@ -101,7 +123,7 @@ locals {
     # packages/api/src/lib/stripe-credentials.ts at cold-start. Price IDs
     # are non-secret per-stage config carried as a plain JSON env var so
     # staging/prod can use different products without a secret rotation.
-    STRIPE_CREDENTIALS_SECRET_ARN = aws_secretsmanager_secret.stripe_api_credentials.arn
+    STRIPE_CREDENTIALS_SECRET_ARN = var.enable_stripe_billing ? aws_secretsmanager_secret.stripe_api_credentials[0].arn : ""
     STRIPE_PRICE_IDS_JSON         = var.stripe_price_ids_json
     STRIPE_CHECKOUT_SUCCESS_URL   = "${var.admin_url}/onboarding/welcome?session_id={CHECKOUT_SESSION_ID}"
     STRIPE_CHECKOUT_CANCEL_URL    = "${var.www_url}/cloud"
@@ -116,7 +138,7 @@ locals {
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
   # introduce a self-referential dependency inside the handler for_each.
   slack_handler_env = {
-    SLACK_APP_CREDENTIALS_SECRET_ARN = aws_secretsmanager_secret.slack_app_credentials.arn
+    SLACK_APP_CREDENTIALS_SECRET_ARN = var.enable_slack_workspace_app ? aws_secretsmanager_secret.slack_app_credentials[0].arn : ""
   }
 
   handler_extra_env = {
@@ -275,7 +297,7 @@ locals {
 # ---------------------------------------------------------------------------
 
 resource "aws_lambda_function" "handler" {
-  for_each = local.deploy_lambda_handlers ? toset([
+  for_each = local.deploy_lambda_handlers ? setsubtract(toset([
     "graphql-http",
     "chat-agent-invoke",
     # Mobile agent harness: cloud Bedrock Converse proxy + completed-turn
@@ -510,7 +532,7 @@ resource "aws_lambda_function" "handler" {
     # 60+ unrelated handlers. Pre-merge step: `terraform state mv`
     # the existing handler["compliance-anchor-watchdog"] address to the
     # new standalone resource (see U8b plan operator-step section).
-  ]) : toset([])
+  ]), toset(local.optional_integration_handler_names)) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
   role          = aws_iam_role.lambda.arn
@@ -828,317 +850,320 @@ resource "aws_scheduler_schedule" "compliance_outbox_drainer" {
 locals {
   # Map of route_key → handler name for API Gateway
   api_routes = local.deploy_lambda_handlers ? {
-    # GraphQL — the main API entry point
-    "POST /graphql" = "graphql-http"
-    "GET /graphql"  = "graphql-http"
+    for route_key, handler_name in {
+      # GraphQL — the main API entry point
+      "POST /graphql" = "graphql-http"
+      "GET /graphql"  = "graphql-http"
 
-    # Health check (keep placeholder alive too)
-    # "GET /health" is handled by placeholder
+      # Health check (keep placeholder alive too)
+      # "GET /health" is handled by placeholder
 
-    # Agents
-    "ANY /api/agents/{proxy+}" = "agents"
-    "ANY /api/agents"          = "agents"
+      # Agents
+      "ANY /api/agents/{proxy+}" = "agents"
+      "ANY /api/agents"          = "agents"
 
-    # Agent actions (start/stop/heartbeat/budget)
-    "ANY /api/agent-actions/{proxy+}" = "agent-actions"
+      # Agent actions (start/stop/heartbeat/budget)
+      "ANY /api/agent-actions/{proxy+}" = "agent-actions"
 
-    # Desktop-local Pi tombstones. Specific routes before broad REST handlers;
-    # OPTIONS is handled inside the Lambda before auth.
-    "POST /api/desktop/runtime-session"               = "desktop-runtime-session"
-    "OPTIONS /api/desktop/runtime-session"            = "desktop-runtime-session"
-    "POST /api/desktop/workspace-prewarm"             = "desktop-workspace-prewarm"
-    "OPTIONS /api/desktop/workspace-prewarm"          = "desktop-workspace-prewarm"
-    "POST /api/desktop/managed-delegation"            = "managed-delegation"
-    "OPTIONS /api/desktop/managed-delegation"         = "managed-delegation"
-    "POST /api/desktop/eval-runs"                     = "desktop-eval-runs"
-    "OPTIONS /api/desktop/eval-runs"                  = "desktop-eval-runs"
-    "POST /api/desktop/eval-runs/{runId}/sessions"    = "desktop-eval-runs"
-    "OPTIONS /api/desktop/eval-runs/{runId}/sessions" = "desktop-eval-runs"
-    "POST /api/desktop/eval-runs/{runId}/results"     = "desktop-eval-runs"
-    "OPTIONS /api/desktop/eval-runs/{runId}/results"  = "desktop-eval-runs"
+      # Desktop-local Pi tombstones. Specific routes before broad REST handlers;
+      # OPTIONS is handled inside the Lambda before auth.
+      "POST /api/desktop/runtime-session"               = "desktop-runtime-session"
+      "OPTIONS /api/desktop/runtime-session"            = "desktop-runtime-session"
+      "POST /api/desktop/workspace-prewarm"             = "desktop-workspace-prewarm"
+      "OPTIONS /api/desktop/workspace-prewarm"          = "desktop-workspace-prewarm"
+      "POST /api/desktop/managed-delegation"            = "managed-delegation"
+      "OPTIONS /api/desktop/managed-delegation"         = "managed-delegation"
+      "POST /api/desktop/eval-runs"                     = "desktop-eval-runs"
+      "OPTIONS /api/desktop/eval-runs"                  = "desktop-eval-runs"
+      "POST /api/desktop/eval-runs/{runId}/sessions"    = "desktop-eval-runs"
+      "OPTIONS /api/desktop/eval-runs/{runId}/sessions" = "desktop-eval-runs"
+      "POST /api/desktop/eval-runs/{runId}/results"     = "desktop-eval-runs"
+      "OPTIONS /api/desktop/eval-runs/{runId}/results"  = "desktop-eval-runs"
 
-    # Mobile agent harness model proxy (cloud Bedrock Converse). OPTIONS is
-    # handled inside the Lambda before auth.
-    "POST /api/model/converse"    = "model-converse"
-    "OPTIONS /api/model/converse" = "model-converse"
+      # Mobile agent harness model proxy (cloud Bedrock Converse). OPTIONS is
+      # handled inside the Lambda before auth.
+      "POST /api/model/converse"    = "model-converse"
+      "OPTIONS /api/model/converse" = "model-converse"
 
-    # Mobile agent harness turn persistence (append a completed turn). OPTIONS
-    # handled inside the Lambda before auth.
-    "POST /api/threads/record-turn"    = "record-turn"
-    "OPTIONS /api/threads/record-turn" = "record-turn"
-    "POST /api/mobile/turn-session"    = "mobile-turn-session"
-    "OPTIONS /api/mobile/turn-session" = "mobile-turn-session"
+      # Mobile agent harness turn persistence (append a completed turn). OPTIONS
+      # handled inside the Lambda before auth.
+      "POST /api/threads/record-turn"    = "record-turn"
+      "OPTIONS /api/threads/record-turn" = "record-turn"
+      "POST /api/mobile/turn-session"    = "mobile-turn-session"
+      "OPTIONS /api/mobile/turn-session" = "mobile-turn-session"
 
-    # Mobile local Pi built-in tool proxy. This is intentionally separate from
-    # /api/mcp because web_search is a ThinkWork platform capability, not an
-    # MCP connector.
-    "POST /api/mobile/tools/web-search"    = "mobile-tools"
-    "OPTIONS /api/mobile/tools/web-search" = "mobile-tools"
-    "POST /api/tasks/status"               = "task-status-tool"
-    "OPTIONS /api/tasks/status"            = "task-status-tool"
+      # Mobile local Pi built-in tool proxy. This is intentionally separate from
+      # /api/mcp because web_search is a ThinkWork platform capability, not an
+      # MCP connector.
+      "POST /api/mobile/tools/web-search"    = "mobile-tools"
+      "OPTIONS /api/mobile/tools/web-search" = "mobile-tools"
+      "POST /api/tasks/status"               = "task-status-tool"
+      "OPTIONS /api/tasks/status"            = "task-status-tool"
 
-    # Mobile agent harness MCP proxy — tenant-scoped tools/list + tools/call
-    # over the signed-in user's Cognito idToken. One Lambda, two routes;
-    # OPTIONS handled inside the Lambda before auth.
-    "POST /api/mcp/tools/list"    = "mcp-proxy"
-    "OPTIONS /api/mcp/tools/list" = "mcp-proxy"
-    "POST /api/mcp/tools/call"    = "mcp-proxy"
-    "OPTIONS /api/mcp/tools/call" = "mcp-proxy"
+      # Mobile agent harness MCP proxy — tenant-scoped tools/list + tools/call
+      # over the signed-in user's Cognito idToken. One Lambda, two routes;
+      # OPTIONS handled inside the Lambda before auth.
+      "POST /api/mcp/tools/list"    = "mcp-proxy"
+      "OPTIONS /api/mcp/tools/list" = "mcp-proxy"
+      "POST /api/mcp/tools/call"    = "mcp-proxy"
+      "OPTIONS /api/mcp/tools/call" = "mcp-proxy"
 
-    # Messages
-    "ANY /api/messages/{proxy+}" = "messages"
-    "ANY /api/messages"          = "messages"
+      # Messages
+      "ANY /api/messages/{proxy+}" = "messages"
+      "ANY /api/messages"          = "messages"
 
-    # Tenants
-    "ANY /api/tenants/{proxy+}" = "tenants"
-    "ANY /api/tenants"          = "tenants"
+      # Tenants
+      "ANY /api/tenants/{proxy+}" = "tenants"
+      "ANY /api/tenants"          = "tenants"
 
-    # Users
-    "ANY /api/users/{proxy+}" = "users"
-    "ANY /api/users"          = "users"
+      # Users
+      "ANY /api/users/{proxy+}" = "users"
+      "ANY /api/users"          = "users"
 
-    # Invites
-    "ANY /api/invites/{proxy+}" = "invites"
-    "ANY /api/invites"          = "invites"
+      # Invites
+      "ANY /api/invites/{proxy+}" = "invites"
+      "ANY /api/invites"          = "invites"
 
-    # Compliance audit-event emit (Phase 3 U6) — narrow Bearer
-    # API_AUTH_SECRET endpoint, runtime clients post here.
-    "POST /api/compliance/events" = "compliance-events"
+      # Compliance audit-event emit (Phase 3 U6) — narrow Bearer
+      # API_AUTH_SECRET endpoint, runtime clients post here.
+      "POST /api/compliance/events" = "compliance-events"
 
-    # Skills
-    "ANY /api/skills/{proxy+}" = "skills"
-    "ANY /api/skills"          = "skills"
+      # Skills
+      "ANY /api/skills/{proxy+}" = "skills"
+      "ANY /api/skills"          = "skills"
 
-    # User Memory MCP OAuth/resource-server unblocker. These endpoints are
-    # enough for `codex mcp login thinkwork-user-memory-dev` to discover OAuth,
-    # register as a public PKCE client, sign the user in through Cognito, and
-    # receive a bearer token for the User Memory MCP resource.
-    "GET /.well-known/oauth-protected-resource"          = "mcp-oauth"
-    "GET /.well-known/oauth-protected-resource/{proxy+}" = "mcp-oauth"
-    "GET /.well-known/oauth-authorization-server"        = "mcp-oauth"
-    "GET /.well-known/openid-configuration"              = "mcp-oauth"
-    "GET /mcp/oauth/jwks"                                = "mcp-oauth"
-    "POST /mcp/oauth/register"                           = "mcp-oauth"
-    "GET /mcp/oauth/authorize"                           = "mcp-oauth"
-    "GET /mcp/oauth/callback"                            = "mcp-oauth"
-    "POST /mcp/oauth/token"                              = "mcp-oauth"
-    "POST /mcp/oauth/revoke"                             = "mcp-oauth"
-    "ANY /mcp/user-memory"                               = "mcp-user-memory"
-    "ANY /mcp/context-engine"                            = "mcp-context-engine"
+      # User Memory MCP OAuth/resource-server unblocker. These endpoints are
+      # enough for `codex mcp login thinkwork-user-memory-dev` to discover OAuth,
+      # register as a public PKCE client, sign the user in through Cognito, and
+      # receive a bearer token for the User Memory MCP resource.
+      "GET /.well-known/oauth-protected-resource"          = "mcp-oauth"
+      "GET /.well-known/oauth-protected-resource/{proxy+}" = "mcp-oauth"
+      "GET /.well-known/oauth-authorization-server"        = "mcp-oauth"
+      "GET /.well-known/openid-configuration"              = "mcp-oauth"
+      "GET /mcp/oauth/jwks"                                = "mcp-oauth"
+      "POST /mcp/oauth/register"                           = "mcp-oauth"
+      "GET /mcp/oauth/authorize"                           = "mcp-oauth"
+      "GET /mcp/oauth/callback"                            = "mcp-oauth"
+      "POST /mcp/oauth/token"                              = "mcp-oauth"
+      "POST /mcp/oauth/revoke"                             = "mcp-oauth"
+      "ANY /mcp/user-memory"                               = "mcp-user-memory"
+      "ANY /mcp/context-engine"                            = "mcp-context-engine"
 
-    # Brain v0 service-auth writeback.
-    "POST /api/brain/agent-write"    = "brain-agent-write"
-    "OPTIONS /api/brain/agent-write" = "brain-agent-write"
+      # Brain v0 service-auth writeback.
+      "POST /api/brain/agent-write"    = "brain-agent-write"
+      "OPTIONS /api/brain/agent-write" = "brain-agent-write"
 
-    # Activity
-    "ANY /api/activity/{proxy+}" = "activity"
-    "ANY /api/activity"          = "activity"
+      # Activity
+      "ANY /api/activity/{proxy+}" = "activity"
+      "ANY /api/activity"          = "activity"
 
-    # Connections + OAuth
-    "ANY /api/connections/{proxy+}" = "connections"
-    "ANY /api/connections"          = "connections"
-    "GET /api/oauth/authorize"      = "oauth-authorize"
-    "GET /api/oauth/callback"       = "oauth-callback"
+      # Connections + OAuth
+      "ANY /api/connections/{proxy+}" = "connections"
+      "ANY /api/connections"          = "connections"
+      "GET /api/oauth/authorize"      = "oauth-authorize"
+      "GET /api/oauth/callback"       = "oauth-callback"
 
-    # Stripe billing (unauthenticated — checkout is pre-signup; webhook is
-    # server-to-server with Stripe signature verification).
-    "POST /api/stripe/checkout-session"                     = "stripe-checkout"
-    "OPTIONS /api/stripe/checkout-session"                  = "stripe-checkout"
-    "POST /api/stripe/webhook"                              = "stripe-webhook"
-    "POST /api/stripe/portal-session"                       = "stripe-portal"
-    "OPTIONS /api/stripe/portal-session"                    = "stripe-portal"
-    "GET /api/stripe/subscription"                          = "stripe-subscription"
-    "OPTIONS /api/stripe/subscription"                      = "stripe-subscription"
-    "POST /api/deployment-sessions"                         = "deployment-sessions"
-    "OPTIONS /api/deployment-sessions"                      = "deployment-sessions"
-    "GET /api/deployment-sessions/{sessionId}"              = "deployment-sessions"
-    "OPTIONS /api/deployment-sessions/{sessionId}"          = "deployment-sessions"
-    "POST /api/deployment-sessions/{sessionId}/start"       = "deployment-sessions"
-    "OPTIONS /api/deployment-sessions/{sessionId}/start"    = "deployment-sessions"
-    "POST /api/deployment-sessions/{sessionId}/teardown"    = "deployment-sessions"
-    "OPTIONS /api/deployment-sessions/{sessionId}/teardown" = "deployment-sessions"
-    "GET /api/auth/me"                                      = "auth-me"
-    "OPTIONS /api/auth/me"                                  = "auth-me"
-    "ANY /api/extensions/{extensionId}"                     = "extension-proxy"
-    "ANY /api/extensions/{extensionId}/{proxy+}"            = "extension-proxy"
+      # Stripe billing (unauthenticated — checkout is pre-signup; webhook is
+      # server-to-server with Stripe signature verification).
+      "POST /api/stripe/checkout-session"                     = "stripe-checkout"
+      "OPTIONS /api/stripe/checkout-session"                  = "stripe-checkout"
+      "POST /api/stripe/webhook"                              = "stripe-webhook"
+      "POST /api/stripe/portal-session"                       = "stripe-portal"
+      "OPTIONS /api/stripe/portal-session"                    = "stripe-portal"
+      "GET /api/stripe/subscription"                          = "stripe-subscription"
+      "OPTIONS /api/stripe/subscription"                      = "stripe-subscription"
+      "POST /api/deployment-sessions"                         = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions"                      = "deployment-sessions"
+      "GET /api/deployment-sessions/{sessionId}"              = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}"          = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/start"       = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/start"    = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/teardown"    = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/teardown" = "deployment-sessions"
+      "GET /api/auth/me"                                      = "auth-me"
+      "OPTIONS /api/auth/me"                                  = "auth-me"
+      "ANY /api/extensions/{extensionId}"                     = "extension-proxy"
+      "ANY /api/extensions/{extensionId}/{proxy+}"            = "extension-proxy"
 
-    # Routines
-    "ANY /api/routines/{proxy+}" = "routines"
-    "ANY /api/routines"          = "routines"
+      # Routines
+      "ANY /api/routines/{proxy+}" = "routines"
+      "ANY /api/routines"          = "routines"
 
-    # Budgets
-    "ANY /api/budgets/{proxy+}" = "budgets"
-    "ANY /api/budgets"          = "budgets"
+      # Budgets
+      "ANY /api/budgets/{proxy+}" = "budgets"
+      "ANY /api/budgets"          = "budgets"
 
-    # Guardrails
-    "ANY /api/guardrails/{proxy+}" = "guardrails"
-    "ANY /api/guardrails"          = "guardrails"
+      # Guardrails
+      "ANY /api/guardrails/{proxy+}" = "guardrails"
+      "ANY /api/guardrails"          = "guardrails"
 
-    # Scheduled Jobs
-    "ANY /api/scheduled-jobs/{proxy+}" = "scheduled-jobs"
-    "ANY /api/scheduled-jobs"          = "scheduled-jobs"
-    "ANY /api/thread-turns/{proxy+}"   = "scheduled-jobs"
-    "ANY /api/thread-turns"            = "scheduled-jobs"
+      # Scheduled Jobs
+      "ANY /api/scheduled-jobs/{proxy+}" = "scheduled-jobs"
+      "ANY /api/scheduled-jobs"          = "scheduled-jobs"
+      "ANY /api/thread-turns/{proxy+}"   = "scheduled-jobs"
+      "ANY /api/thread-turns"            = "scheduled-jobs"
 
-    # Job Schedule Manager (EventBridge CRUD)
-    "ANY /api/job-schedules/{proxy+}" = "job-schedule-manager"
-    "ANY /api/job-schedules"          = "job-schedule-manager"
+      # Job Schedule Manager (EventBridge CRUD)
+      "ANY /api/job-schedules/{proxy+}" = "job-schedule-manager"
+      "ANY /api/job-schedules"          = "job-schedule-manager"
 
-    # Integration webhooks (Unit 8 — composable-skills). Each integration
-    # has its own Lambda + a specific route under /webhooks/{integration}/
-    # {tenantId}. Specific routes take precedence over the {proxy+}
-    # catch-all below, which still owns the legacy PRD-19 webhook-token
-    # surface.
-    "POST /webhooks/crm-opportunity/{tenantId}" = "webhook-crm-opportunity"
-    "POST /webhooks/task-event/{tenantId}"      = "webhook-task-event"
+      # Integration webhooks (Unit 8 — composable-skills). Each integration
+      # has its own Lambda + a specific route under /webhooks/{integration}/
+      # {tenantId}. Specific routes take precedence over the {proxy+}
+      # catch-all below, which still owns the legacy PRD-19 webhook-token
+      # surface.
+      "POST /webhooks/crm-opportunity/{tenantId}" = "webhook-crm-opportunity"
+      "POST /webhooks/task-event/{tenantId}"      = "webhook-task-event"
 
-    # Webhooks (public trigger) — legacy PRD-19 tokenized webhooks.
-    "POST /webhooks/{proxy+}" = "webhooks"
+      # Webhooks (public trigger) — legacy PRD-19 tokenized webhooks.
+      "POST /webhooks/{proxy+}" = "webhooks"
 
-    # Webhooks admin
-    "ANY /api/webhooks/{proxy+}" = "webhooks-admin"
-    "ANY /api/webhooks"          = "webhooks-admin"
+      # Webhooks admin
+      "ANY /api/webhooks/{proxy+}" = "webhooks-admin"
+      "ANY /api/webhooks"          = "webhooks-admin"
 
-    # Workspace files
-    "ANY /api/workspaces/{proxy+}" = "workspace-files"
+      # Workspace files
+      "ANY /api/workspaces/{proxy+}" = "workspace-files"
 
-    # Knowledge bases
-    "ANY /api/knowledge-bases/{proxy+}" = "knowledge-base-files"
+      # Knowledge bases
+      "ANY /api/knowledge-bases/{proxy+}" = "knowledge-base-files"
 
-    # Email
-    "POST /api/email/send" = "email-send"
+      # Email
+      "POST /api/email/send" = "email-send"
 
-    # Slack workspace app ingress. These unauthenticated public endpoints
-    # verify Slack signatures in handler code before any tenant work happens.
-    "POST /slack/events"        = "slack-events"
-    "POST /slack/slash-command" = "slack-slash-command"
-    "POST /slack/interactivity" = "slack-interactivity"
-    "GET /slack/oauth/install"  = "slack-oauth-install"
-    "POST /slack/oauth/install" = "slack-oauth-install"
+      # Slack workspace app ingress. These unauthenticated public endpoints
+      # verify Slack signatures in handler code before any tenant work happens.
+      "POST /slack/events"        = "slack-events"
+      "POST /slack/slash-command" = "slack-slash-command"
+      "POST /slack/interactivity" = "slack-interactivity"
+      "GET /slack/oauth/install"  = "slack-oauth-install"
+      "POST /slack/oauth/install" = "slack-oauth-install"
 
-    # Memory
-    "ANY /api/memory/{proxy+}" = "memory"
+      # Memory
+      "ANY /api/memory/{proxy+}" = "memory"
 
-    # Artifacts
-    "POST /api/artifacts/{proxy+}" = "artifact-deliver"
+      # Artifacts
+      "POST /api/artifacts/{proxy+}" = "artifact-deliver"
 
-    # Recipes
-    "POST /api/recipe-refresh" = "recipe-refresh"
+      # Recipes
+      "POST /api/recipe-refresh" = "recipe-refresh"
 
-    # GitHub App
-    "ANY /api/github-app/{proxy+}" = "github-app"
-    "POST /api/github/webhook"     = "github-app"
+      # GitHub App
+      "ANY /api/github-app/{proxy+}" = "github-app"
+      "POST /api/github/webhook"     = "github-app"
 
-    # AgentCore Code Sandbox (plan Unit 10 + Unit 11). The runtime calls
-    # both with Bearer API_AUTH_SECRET before + after every
-    # executeCode. 429 on quota denial, 201 on audit-row insert.
-    "POST /api/sandbox/quota/check-and-increment" = "sandbox-quota-check"
-    "POST /api/sandbox/invocations"               = "sandbox-invocation-log"
+      # AgentCore Code Sandbox (plan Unit 10 + Unit 11). The runtime calls
+      # both with Bearer API_AUTH_SECRET before + after every
+      # executeCode. 429 on quota denial, 201 on audit-row insert.
+      "POST /api/sandbox/quota/check-and-increment" = "sandbox-quota-check"
+      "POST /api/sandbox/invocations"               = "sandbox-invocation-log"
 
-    # Routines ASL validator (plan 2026-05-01-004 §U5). Bearer
-    # API_AUTH_SECRET. Chat builder + publish flow POST the candidate
-    # ASL document; returns { valid, errors, warnings }.
-    "POST /api/routines/validate"    = "routine-asl-validator"
-    "OPTIONS /api/routines/validate" = "routine-asl-validator"
+      # Routines ASL validator (plan 2026-05-01-004 §U5). Bearer
+      # API_AUTH_SECRET. Chat builder + publish flow POST the candidate
+      # ASL document; returns { valid, errors, warnings }.
+      "POST /api/routines/validate"    = "routine-asl-validator"
+      "OPTIONS /api/routines/validate" = "routine-asl-validator"
 
-    # Routines step-event ingest (plan 2026-05-01-005 §U9). Task wrappers
-    # (routine-task-python, routine-resume) POST per-step status
-    # transitions; the EventBridge rule in routines-stepfunctions/main.tf
-    # POSTs SFN execution-state-change events here for the agent_invoke
-    # recipe path (no wrapper Lambda). Bearer API_AUTH_SECRET. Idempotent
-    # via partial unique index on (execution_id, node_id, status,
-    # started_at) — see migration 0056.
-    "POST /api/routines/step"         = "routine-step-callback"
-    "OPTIONS /api/routines/step"      = "routine-step-callback"
-    "POST /api/routines/execution"    = "routine-execution-callback"
-    "OPTIONS /api/routines/execution" = "routine-execution-callback"
+      # Routines step-event ingest (plan 2026-05-01-005 §U9). Task wrappers
+      # (routine-task-python, routine-resume) POST per-step status
+      # transitions; the EventBridge rule in routines-stepfunctions/main.tf
+      # POSTs SFN execution-state-change events here for the agent_invoke
+      # recipe path (no wrapper Lambda). Bearer API_AUTH_SECRET. Idempotent
+      # via partial unique index on (execution_id, node_id, status,
+      # started_at) — see migration 0056.
+      "POST /api/routines/step"         = "routine-step-callback"
+      "OPTIONS /api/routines/step"      = "routine-step-callback"
+      "POST /api/routines/execution"    = "routine-execution-callback"
+      "OPTIONS /api/routines/execution" = "routine-execution-callback"
 
-    # chat-agent-finalize — AgentCore runtime POSTs here at end-of-turn so
-    # the post-AgentCore bookkeeping runs out-of-band from chat-agent-invoke.
-    # Bearer API_AUTH_SECRET. Plan 2026-05-22-006.
-    "POST /api/threads/{threadId}/finalize"    = "chat-agent-finalize"
-    "OPTIONS /api/threads/{threadId}/finalize" = "chat-agent-finalize"
+      # chat-agent-finalize — AgentCore runtime POSTs here at end-of-turn so
+      # the post-AgentCore bookkeeping runs out-of-band from chat-agent-invoke.
+      # Bearer API_AUTH_SECRET. Plan 2026-05-22-006.
+      "POST /api/threads/{threadId}/finalize"    = "chat-agent-finalize"
+      "OPTIONS /api/threads/{threadId}/finalize" = "chat-agent-finalize"
 
-    # chat-agent-activity — Pi runtime POSTs here mid-turn to stream live
-    # agent activity to the Spaces thread. Bearer API_AUTH_SECRET, best-effort.
-    # Plan 2026-06-03-001.
-    "POST /api/threads/{threadId}/activity"    = "chat-agent-activity"
-    "OPTIONS /api/threads/{threadId}/activity" = "chat-agent-activity"
+      # chat-agent-activity — Pi runtime POSTs here mid-turn to stream live
+      # agent activity to the Spaces thread. Bearer API_AUTH_SECRET, best-effort.
+      # Plan 2026-06-03-001.
+      "POST /api/threads/{threadId}/activity"    = "chat-agent-activity"
+      "OPTIONS /api/threads/{threadId}/activity" = "chat-agent-activity"
 
-    # Skill-run dispatcher runtime-config fetch. Service-auth GET.
-    "GET /api/agents/runtime-config" = "agents-runtime-config"
+      # Skill-run dispatcher runtime-config fetch. Service-auth GET.
+      "GET /api/agents/runtime-config" = "agents-runtime-config"
 
-    # Admin-Ops MCP server — single JSON-RPC endpoint. Managed agents
-    # (and anyone else) POST with Bearer <tenant-scoped token> issued by
-    # the mcp-admin-keys handler below. The shared API_AUTH_SECRET is
-    # retained as a break-glass superuser path for bootstrap/debug.
-    "POST /mcp/admin" = "admin-ops-mcp"
+      # Admin-Ops MCP server — single JSON-RPC endpoint. Managed agents
+      # (and anyone else) POST with Bearer <tenant-scoped token> issued by
+      # the mcp-admin-keys handler below. The shared API_AUTH_SECRET is
+      # retained as a break-glass superuser path for bootstrap/debug.
+      "POST /mcp/admin" = "admin-ops-mcp"
 
-    # MCP admin key management — per-tenant Bearer token CRUD. Tokens
-    # are shown ONCE at creation (POST returns raw value); server stores
-    # sha256 hash only. These specific routes take precedence over the
-    # existing `ANY /api/tenants/{proxy+}` route (tenants handler) per
-    # API Gateway v2's most-specific-match rule.
-    "POST /api/tenants/{tenantId}/mcp-admin-keys"           = "mcp-admin-keys"
-    "GET /api/tenants/{tenantId}/mcp-admin-keys"            = "mcp-admin-keys"
-    "DELETE /api/tenants/{tenantId}/mcp-admin-keys/{keyId}" = "mcp-admin-keys"
+      # MCP admin key management — per-tenant Bearer token CRUD. Tokens
+      # are shown ONCE at creation (POST returns raw value); server stores
+      # sha256 hash only. These specific routes take precedence over the
+      # existing `ANY /api/tenants/{proxy+}` route (tenants handler) per
+      # API Gateway v2's most-specific-match rule.
+      "POST /api/tenants/{tenantId}/mcp-admin-keys"           = "mcp-admin-keys"
+      "GET /api/tenants/{tenantId}/mcp-admin-keys"            = "mcp-admin-keys"
+      "DELETE /api/tenants/{tenantId}/mcp-admin-keys/{keyId}" = "mcp-admin-keys"
 
-    # One-shot tenant provisioning for the admin-ops MCP. Mints a fresh
-    # tkm_ key + stores it in Secrets Manager at
-    # thinkwork/<stage>/mcp/<tenantId>/admin-ops + upserts the
-    # tenant_mcp_servers row so the runtime picks the server up for
-    # any agent that gets it assigned via agent_mcp_servers.
-    "POST /api/tenants/{tenantId}/mcp-admin-provision" = "mcp-admin-provision"
+      # One-shot tenant provisioning for the admin-ops MCP. Mints a fresh
+      # tkm_ key + stores it in Secrets Manager at
+      # thinkwork/<stage>/mcp/<tenantId>/admin-ops + upserts the
+      # tenant_mcp_servers row so the runtime picks the server up for
+      # any agent that gets it assigned via agent_mcp_servers.
+      "POST /api/tenants/{tenantId}/mcp-admin-provision" = "mcp-admin-provision"
 
-    # MCP server admin approval (plan §U11, SI-5). Plugin-uploaded MCP
-    # servers land with status='pending'; these routes flip them to
-    # approved/rejected. Cognito JWT only (mcp-approval handler rejects
-    # apikey callers) — the admin SPA is the sole UI surface.
-    "POST /api/tenants/{tenantId}/mcp-servers/{serverId}/approve"    = "mcp-approval"
-    "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/approve" = "mcp-approval"
-    "POST /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"     = "mcp-approval"
-    "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"  = "mcp-approval"
+      # MCP server admin approval (plan §U11, SI-5). Plugin-uploaded MCP
+      # servers land with status='pending'; these routes flip them to
+      # approved/rejected. Cognito JWT only (mcp-approval handler rejects
+      # apikey callers) — the admin SPA is the sole UI surface.
+      "POST /api/tenants/{tenantId}/mcp-servers/{serverId}/approve"    = "mcp-approval"
+      "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/approve" = "mcp-approval"
+      "POST /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"     = "mcp-approval"
+      "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"  = "mcp-approval"
 
-    # Plugin upload admin surface (plan §U10). Web app drives the full
-    # flow: POST /presign → browser PUT to presigned S3 URL → POST /upload
-    # (validator + three-phase install saga). GET routes back the admin's
-    # plugin history view. handleCors() short-circuits OPTIONS before auth
-    # — required for the browser to preflight successfully.
-    "POST /api/plugins/presign"       = "plugin-upload"
-    "OPTIONS /api/plugins/presign"    = "plugin-upload"
-    "POST /api/plugins/upload"        = "plugin-upload"
-    "OPTIONS /api/plugins/upload"     = "plugin-upload"
-    "GET /api/plugins"                = "plugin-upload"
-    "OPTIONS /api/plugins"            = "plugin-upload"
-    "GET /api/plugins/{uploadId}"     = "plugin-upload"
-    "OPTIONS /api/plugins/{uploadId}" = "plugin-upload"
+      # Plugin upload admin surface (plan §U10). Web app drives the full
+      # flow: POST /presign → browser PUT to presigned S3 URL → POST /upload
+      # (validator + three-phase install saga). GET routes back the admin's
+      # plugin history view. handleCors() short-circuits OPTIONS before auth
+      # — required for the browser to preflight successfully.
+      "POST /api/plugins/presign"       = "plugin-upload"
+      "OPTIONS /api/plugins/presign"    = "plugin-upload"
+      "POST /api/plugins/upload"        = "plugin-upload"
+      "OPTIONS /api/plugins/upload"     = "plugin-upload"
+      "GET /api/plugins"                = "plugin-upload"
+      "OPTIONS /api/plugins"            = "plugin-upload"
+      "GET /api/plugins/{uploadId}"     = "plugin-upload"
+      "OPTIONS /api/plugins/{uploadId}" = "plugin-upload"
 
-    # Finance pilot U2 — thread-attachment upload (presign + finalize).
-    # Cognito JWT; tenant pinned via threads.tenant_id lookup. OPTIONS
-    # is handled inside the Lambda before auth.
-    "POST /api/threads/{threadId}/attachments/presign"     = "thread-attachments-presign"
-    "OPTIONS /api/threads/{threadId}/attachments/presign"  = "thread-attachments-presign"
-    "POST /api/threads/{threadId}/attachments/finalize"    = "thread-attachments-finalize"
-    "OPTIONS /api/threads/{threadId}/attachments/finalize" = "thread-attachments-finalize"
+      # Finance pilot U2 — thread-attachment upload (presign + finalize).
+      # Cognito JWT; tenant pinned via threads.tenant_id lookup. OPTIONS
+      # is handled inside the Lambda before auth.
+      "POST /api/threads/{threadId}/attachments/presign"     = "thread-attachments-presign"
+      "OPTIONS /api/threads/{threadId}/attachments/presign"  = "thread-attachments-presign"
+      "POST /api/threads/{threadId}/attachments/finalize"    = "thread-attachments-finalize"
+      "OPTIONS /api/threads/{threadId}/attachments/finalize" = "thread-attachments-finalize"
 
-    # U9-remainder of finance pilot — tenant-pinned download endpoint.
-    "GET /api/threads/{threadId}/attachments/{attachmentId}/download"     = "thread-attachment-download"
-    "OPTIONS /api/threads/{threadId}/attachments/{attachmentId}/download" = "thread-attachment-download"
+      # U9-remainder of finance pilot — tenant-pinned download endpoint.
+      "GET /api/threads/{threadId}/attachments/{attachmentId}/download"     = "thread-attachment-download"
+      "OPTIONS /api/threads/{threadId}/attachments/{attachmentId}/download" = "thread-attachment-download"
 
-    # Fat-folder bundle import. OPTIONS is handled inside the Lambda before auth.
-    "POST /api/agents/{agentId}/import-bundle"    = "folder-bundle-import"
-    "OPTIONS /api/agents/{agentId}/import-bundle" = "folder-bundle-import"
+      # Fat-folder bundle import. OPTIONS is handled inside the Lambda before auth.
+      "POST /api/agents/{agentId}/import-bundle"    = "folder-bundle-import"
+      "OPTIONS /api/agents/{agentId}/import-bundle" = "folder-bundle-import"
 
-    # Resolved Capability Manifest write endpoint (plan §U15). The runtime
-    # posts one row per agent-session-start. Shared
-    # API_AUTH_SECRET; no tenant OAuth.
-    "POST /api/runtime/manifests"    = "manifest-log"
-    "OPTIONS /api/runtime/manifests" = "manifest-log"
+      # Resolved Capability Manifest write endpoint (plan §U15). The runtime
+      # posts one row per agent-session-start. Shared
+      # API_AUTH_SECRET; no tenant OAuth.
+      "POST /api/runtime/manifests"    = "manifest-log"
+      "OPTIONS /api/runtime/manifests" = "manifest-log"
 
-    # SI-7 catalog-list read (plan §U15 pt 3/3). The runtime fetches
-    # the allowed slug set once per session-start. Shared API_AUTH_SECRET.
-    "GET /api/runtime/capability-catalog"     = "capability-catalog-list"
-    "OPTIONS /api/runtime/capability-catalog" = "capability-catalog-list"
+      # SI-7 catalog-list read (plan §U15 pt 3/3). The runtime fetches
+      # the allowed slug set once per session-start. Shared API_AUTH_SECRET.
+      "GET /api/runtime/capability-catalog"     = "capability-catalog-list"
+      "OPTIONS /api/runtime/capability-catalog" = "capability-catalog-list"
+    } : route_key => handler_name
+    if !contains(local.optional_integration_handler_names, handler_name)
   } : {}
 }
 
@@ -1167,6 +1192,49 @@ resource "aws_lambda_permission" "handler_apigw" {
   function_name = aws_lambda_function.handler[each.key].function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+################################################################################
+# EventBridge → routine-execution-callback
+################################################################################
+
+resource "aws_cloudwatch_event_rule" "routine_sfn_state_change" {
+  count       = local.deploy_lambda_handlers ? 1 : 0
+  name        = "thinkwork-${var.stage}-routines-sfn-state-change"
+  description = "Forward routine Step Functions execution state changes to the callback Lambda."
+
+  event_pattern = jsonencode({
+    source        = ["aws.states"]
+    "detail-type" = ["Step Functions Execution Status Change"]
+    detail = {
+      stateMachineArn = [
+        {
+          prefix = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-routine-"
+        },
+      ]
+    }
+  })
+
+  tags = {
+    Name  = "thinkwork-${var.stage}-routines-sfn-state-change"
+    Stage = var.stage
+  }
+}
+
+resource "aws_cloudwatch_event_target" "routine_sfn_state_change" {
+  count     = local.deploy_lambda_handlers ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.routine_sfn_state_change[0].name
+  target_id = "routine-execution-callback"
+  arn       = aws_lambda_function.handler["routine-execution-callback"].arn
+}
+
+resource "aws_lambda_permission" "routine_sfn_state_change" {
+  count         = local.deploy_lambda_handlers ? 1 : 0
+  statement_id  = "AllowEventBridgeInvokeRoutineExecutionCallback"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.handler["routine-execution-callback"].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.routine_sfn_state_change[0].arn
 }
 
 # ---------------------------------------------------------------------------

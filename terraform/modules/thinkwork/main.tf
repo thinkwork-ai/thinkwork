@@ -503,7 +503,8 @@ module "compliance_exports" {
   # compliance.export_jobs and SELECT on compliance.audit_events.
   # Without this grant the runner throws AccessDenied at first SQS
   # invocation (deploy run 25561658625 failed the smoke gate this way).
-  database_secret_arn = module.database.graphql_db_secret_arn
+  database_secret_arn                  = module.database.graphql_db_secret_arn
+  enable_runner_database_secret_access = true
 }
 
 module "database" {
@@ -561,6 +562,12 @@ module "appsync" {
   subscription_schema = local.subscription_schema
 }
 
+locals {
+  deployment_terraform_state_bucket  = var.deployment_terraform_state_bucket != "" ? var.deployment_terraform_state_bucket : "thinkwork-terraform-state"
+  deployment_terraform_lock_table    = var.deployment_terraform_lock_table != "" ? var.deployment_terraform_lock_table : "thinkwork-terraform-locks"
+  deployment_release_artifact_bucket = var.deployment_release_artifact_bucket != "" ? var.deployment_release_artifact_bucket : "thinkwork-release-artifacts"
+}
+
 module "deployment_control_plane" {
   count  = var.enable_deployment_control_plane ? 1 : 0
   source = "../app/deployment-control-plane"
@@ -572,6 +579,13 @@ module "deployment_control_plane" {
   release_version         = var.deployment_release_version
   release_manifest_url    = var.deployment_release_manifest_url
   release_manifest_sha256 = var.deployment_release_manifest_sha256
+
+  terraform_state_bucket  = local.deployment_terraform_state_bucket
+  terraform_lock_table    = local.deployment_terraform_lock_table
+  release_artifact_bucket = local.deployment_release_artifact_bucket
+
+  terraform_module_source  = var.deployment_terraform_module_source
+  terraform_module_version = var.deployment_terraform_module_version
 
   log_retention_days         = var.deployment_control_plane_log_retention_days
   create_secret_placeholders = var.deployment_control_plane_create_secret_placeholders
@@ -654,6 +668,7 @@ module "api" {
   db_password                                   = var.db_password
   agentcore_pi_function_name                    = module.agentcore_pi.agentcore_pi_function_name
   agentcore_pi_function_arn                     = module.agentcore_pi.agentcore_pi_function_arn
+  enable_agentcore_pi_invoke_policy             = true
   hindsight_endpoint                            = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                           = module.agentcore_memory.memory_id
   memory_engine                                 = local.resolved_memory_engine
@@ -697,6 +712,8 @@ module "api" {
   routines_log_group_arn                        = module.routines_stepfunctions.log_group_arn
   deployment_state_machine_arn                  = var.enable_deployment_control_plane ? module.deployment_control_plane[0].state_machine_arn : ""
   deployment_evidence_bucket                    = var.enable_deployment_control_plane ? module.deployment_control_plane[0].evidence_bucket_name : ""
+  enable_stripe_billing                         = var.enable_stripe_billing
+  enable_slack_workspace_app                    = var.enable_slack_workspace_app
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   wiki_compile_model_id                         = var.wiki_compile_model_id
   company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
@@ -758,6 +775,7 @@ module "agentcore_pi" {
   bucket_name = module.s3.bucket_name
 
   ecr_repository_url = module.agentcore_platform.ecr_repository_url
+  source_image_uri   = var.agentcore_pi_source_image_uri
   async_dlq_arn      = module.agentcore_platform.agentcore_async_dlq_arn
 
   hindsight_endpoint                     = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
@@ -826,6 +844,21 @@ moved {
   to   = module.agentcore_platform.aws_sqs_queue.agentcore_async_dlq
 }
 
+moved {
+  from = module.routines_stepfunctions.aws_cloudwatch_event_rule.sfn_state_change[0]
+  to   = module.api.aws_cloudwatch_event_rule.routine_sfn_state_change[0]
+}
+
+moved {
+  from = module.routines_stepfunctions.aws_cloudwatch_event_target.sfn_state_change[0]
+  to   = module.api.aws_cloudwatch_event_target.routine_sfn_state_change[0]
+}
+
+moved {
+  from = module.routines_stepfunctions.aws_lambda_permission.sfn_state_change[0]
+  to   = module.api.aws_lambda_permission.routine_sfn_state_change[0]
+}
+
 module "crons" {
   source = "../app/crons"
 
@@ -849,13 +882,12 @@ module "routines_stepfunctions" {
   account_id = var.account_id
   region     = var.region
 
-  # Phase B U9: EventBridge → routine-execution-callback. Constructed
-  # from the lambda-api naming convention rather than referencing the
-  # module output directly to avoid a cycle (lambda-api consumes
-  # routines_execution_role_arn from this module). The function exists
-  # for_each-iterated under aws_lambda_function.handler[*] in lambda-api;
-  # the ARN follows the deterministic naming pattern.
-  execution_callback_lambda_arn = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-routine-execution-callback"
+  # The Lambda API module owns EventBridge → routine-execution-callback
+  # wiring because it owns the callback function resource. Keeping the
+  # callback disabled here avoids a cycle: lambda-api needs the routines
+  # execution role/log group outputs, while the callback permission needs
+  # the lambda-api function to exist.
+  execution_callback_lambda_arn = ""
 }
 
 module "hindsight" {
@@ -992,9 +1024,10 @@ module "ses" {
   parent_domain = var.ses_parent_domain
   tenant_slugs  = var.ses_tenant_slugs
 
-  inbound_bucket_name   = module.s3.bucket_name
-  email_inbound_fn_arn  = module.api.email_inbound_fn_arn
-  email_inbound_fn_name = module.api.email_inbound_fn_name
+  inbound_bucket_name                = module.s3.bucket_name
+  email_inbound_fn_arn               = module.api.email_inbound_fn_arn
+  email_inbound_fn_name              = module.api.email_inbound_fn_name
+  enable_email_inbound_lambda_action = true
 
   manage_active_rule_set = var.ses_manage_active_rule_set
 }
@@ -1022,6 +1055,7 @@ module "computer_site" {
 
   stage         = var.stage
   site_name     = "computer"
+  bucket_name   = "thinkwork-${var.stage}-${var.account_id}-computer"
   is_spa        = true
   custom_domain = local.end_user_app_domain
   custom_domain_aliases = local.computer_compat_redirect_enabled ? [
@@ -1103,6 +1137,7 @@ module "computer_sandbox_site" {
 
   stage           = var.stage
   site_name       = "computer-sandbox"
+  bucket_name     = "thinkwork-${var.stage}-${var.account_id}-computer-sandbox"
   is_spa          = false
   custom_domain   = var.computer_sandbox_domain
   certificate_arn = var.computer_sandbox_certificate_arn
@@ -1147,6 +1182,7 @@ module "docs_site" {
 
   stage           = var.stage
   site_name       = "docs"
+  bucket_name     = "thinkwork-${var.stage}-${var.account_id}-docs"
   custom_domain   = var.docs_domain
   certificate_arn = var.docs_certificate_arn
 }
@@ -1160,6 +1196,7 @@ module "www_site" {
 
   stage           = var.stage
   site_name       = "www"
+  bucket_name     = "thinkwork-${var.stage}-${var.account_id}-www"
   custom_domain   = var.www_domain
   certificate_arn = var.www_certificate_arn
   # is_spa defaults to false — SSG output, directory URIs get rewritten to index.html

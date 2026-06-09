@@ -79,7 +79,6 @@ locals {
     "notifyInboxItemUpdate",
     "notifyThreadTurnUpdate",
     "notifyThreadTurnStep",
-    "publishComputerThreadChunk",
     "notifyOrgUpdate",
     "notifyCostRecorded",
     "notifyEvalRunUpdate",

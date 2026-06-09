@@ -20,6 +20,7 @@
 ################################################################################
 
 resource "aws_secretsmanager_secret" "slack_app_credentials" {
+  count       = var.enable_slack_workspace_app ? 1 : 0
   name        = "thinkwork/${var.stage}/slack/app"
   description = "Slack workspace app credentials (signing_secret, client_id, client_secret). Populate via Secrets Manager; never via tfvars."
   tags = {
@@ -30,7 +31,8 @@ resource "aws_secretsmanager_secret" "slack_app_credentials" {
 }
 
 resource "aws_secretsmanager_secret_version" "slack_app_credentials_initial" {
-  secret_id = aws_secretsmanager_secret.slack_app_credentials.id
+  count     = var.enable_slack_workspace_app ? 1 : 0
+  secret_id = aws_secretsmanager_secret.slack_app_credentials[0].id
   secret_string = jsonencode({
     signing_secret = ""
     client_id      = ""

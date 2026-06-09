@@ -155,6 +155,9 @@ export function buildEnterpriseBootstrapPlan(
     region,
     stages,
     release,
+    stateBucket,
+    lockTable,
+    artifactBucket,
   });
   const github = repository
     ? buildEnterpriseGitHubBootstrapPlan({
@@ -319,6 +322,7 @@ export async function runEnterpriseBootstrap(
             release: plan.release,
             stateBucket: plan.aws.stateBucket,
             lockTable: plan.aws.lockTable,
+            artifactBucket: plan.aws.artifactBucket,
           },
         ),
       );
