@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "kind": "kestra-control-mcp",
+  "generatedAt": "2026-06-09T05:24:33.741Z",
+  "ok": true,
+  "release": {
+    "version": null,
+    "previousVersion": null,
+    "manifestDigest": null,
+    "previousManifestDigest": null
+  },
+  "aws": {
+    "stepFunctionsExecutionArn": null,
+    "codeBuildBuildArn": null,
+    "codeBuildBuildId": null,
+    "region": "us-east-1"
+  },
+  "artifacts": {
+    "terraformPlanKey": null,
+    "terraformApplyKey": null,
+    "smokeResultKey": null,
+    "cloudWatchLogsUrl": null
+  },
+  "result": {
+    "ok": true,
+    "graphql": {
+      "deploymentStatus": {
+        "stage": "dev",
+        "region": "us-east-1",
+        "managedApplications": [
+          {
+            "key": "cognee",
+            "status": "running",
+            "provisioned": true,
+            "runtimeEnabled": true,
+            "url": null,
+            "managedMcpServerId": null,
+            "managedMcpStatus": "not_applicable",
+            "managedMcpInstalled": false,
+            "managedMcpMessage": null
+          },
+          {
+            "key": "twenty",
+            "status": "running",
+            "provisioned": true,
+            "runtimeEnabled": true,
+            "url": "https://crm.thinkwork.ai",
+            "managedMcpServerId": "5d50f8cc-e7df-40b0-bf9f-b7bf20638e11",
+            "managedMcpStatus": "installed",
+            "managedMcpInstalled": true,
+            "managedMcpMessage": null
+          },
+          {
+            "key": "kestra",
+            "status": "running",
+            "provisioned": true,
+            "runtimeEnabled": true,
+            "url": "https://orchestrate.thinkwork.ai",
+            "managedMcpServerId": "7349c65c-23ac-4e94-bd06-3bbad1968065",
+            "managedMcpStatus": "installed",
+            "managedMcpInstalled": true,
+            "managedMcpMessage": null
+          }
+        ]
+      }
+    },
+    "mcp": {
+      "endpoint": "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/mcp/kestra",
+      "serverInfo": {
+        "name": "thinkwork-kestra-control",
+        "version": "0.1.0"
+      },
+      "toolNames": [
+        "kestra_namespaces_list",
+        "kestra_flows_get",
+        "kestra_flows_validate",
+        "kestra_flows_upsert",
+        "kestra_executions_start",
+        "kestra_executions_get",
+        "kestra_executions_logs",
+        "kestra_plugins_search"
+      ]
+    },
+    "safeValidation": {
+      "valid": true,
+      "namespace": "thinkwork.smoke",
+      "flowId": "agent_control_smoke",
+      "errors": [],
+      "warnings": [],
+      "namespacePolicy": {
+        "allowedPrefix": "thinkwork"
+      }
+    },
+    "unsafeValidation": {
+      "valid": false,
+      "namespace": "thinkwork.smoke",
+      "flowId": "agent_control_smoke_unsafe",
+      "errors": [
+        "flow contains Docker or host-execution task runner configuration that is not supported by the managed Fargate runtime"
+      ],
+      "warnings": [],
+      "namespacePolicy": {
+        "allowedPrefix": "thinkwork"
+      }
+    },
+    "mutationProof": {
+      "skipped": false,
+      "namespace": "thinkwork.smoke",
+      "flowId": "agent_control_smoke",
+      "executionId": "6GNTbImgJkPBdBN2oZz3jp",
+      "upsert": {
+        "namespace": "thinkwork.smoke",
+        "flowId": "agent_control_smoke",
+        "flow": {
+          "id": "agent_control_smoke",
+          "namespace": "thinkwork.smoke",
+          "revision": 1,
+          "disabled": false,
+          "deleted": false,
+          "tasks": [
+            {
+              "id": "log",
+              "type": "io.kestra.plugin.core.log.Log",
+              "message": "ThinkWork Kestra managed-app smoke"
+            }
+          ],
+          "source": "id: agent_control_smoke\nnamespace: thinkwork.smoke\n\ntasks:\n  - id: log\n    type: io.kestra.plugin.core.log.Log\n    message: ThinkWork Kestra managed-app smoke"
+        },
+        "warnings": []
+      },
+      "execution": {
+        "id": "6GNTbImgJkPBdBN2oZz3jp",
+        "namespace": "thinkwork.smoke",
+        "flowId": "agent_control_smoke",
+        "state": "SUCCESS",
+        "startDate": null,
+        "endDate": null
+      },
+      "logsPreview": "{\"logs\":[{\"namespace\":\"thinkwork.smoke\",\"flowId\":\"agent_control_smoke\",\"taskId\":\"log\",\"executionId\":\"6GNTbImgJkPBdBN2oZz3jp\",\"taskRunId\":\"3ZfkjqUbk5aRycvY0qoTXR\",\"attemptNumber\":0,\"timestamp\":\"2026-06-09T05:24:32.339742Z\",\"level\":\"INFO\",\"thread\":\"worker_0\",\"message\":\"ThinkWork Kestra managed-app smoke\"}]}"
+    }
+  }
+}

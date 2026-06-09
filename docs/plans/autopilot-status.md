@@ -11,13 +11,12 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U13 - Kestra basic-auth deploy remediation and live
-  deploy/destroy proof.
-- Current branch: `codex/kestra-managed-app-u13-final-proof`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u13-final-proof`.
+- Current unit: U14 - final live proof and status evidence.
+- Current branch: `codex/kestra-managed-app-u14-final-proof`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u14-final-proof`.
 - Current PR:
-  [#2263](https://github.com/thinkwork-ai/thinkwork/pull/2263).
-- Status: PR open; CI pending.
+  [#2265](https://github.com/thinkwork-ai/thinkwork/pull/2265).
+- Status: final proof PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
     Kestra requirements, and the managed-app/MCP lifecycle precedent.
@@ -471,6 +470,67 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
     - The first focused vitest attempt in the fresh worktree failed because
       package links were not present yet (`Command "vitest" not found`).
       `pnpm install --ignore-scripts` linked dependencies and the rerun passed.
+  - U13 PR [#2263](https://github.com/thinkwork-ai/thinkwork/pull/2263)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was
+    squash merged as `e96b490d`; the remote branch and local worktree/branch
+    were removed.
+  - U13 post-merge deploy proof:
+    - main deploy run
+      [27185203442](https://github.com/thinkwork-ai/thinkwork/actions/runs/27185203442)
+      completed successfully after rotating the invalid Kestra basic-auth
+      secret;
+    - `Prepare Kestra runtime secrets and database`, `Terraform Apply`,
+      `Restart Kestra runtime after database prep`, and `Deploy Summary` all
+      passed;
+    - read-only ECS status showed `thinkwork-dev-kestra-service` desired `1`,
+      running `1`, pending `0`, with rollout completed;
+    - direct Kestra API probes using the deployed basic-auth secret no longer
+      returned `401`, and the Kestra `settings` table no longer contained
+      `kestra.server.authentication-configuration-error`.
+  - Created isolated U14 worktree from `origin/main` at `e96b490d`.
+  - U14 live control-MCP proof:
+    - reran
+      `SMOKE_ENABLE_KESTRA_CONTROL_MCP=1 SMOKE_WRITE_EVIDENCE=1 node scripts/smoke/kestra-control-mcp-smoke.mjs`
+      against the deployed dev API;
+    - GraphQL reported Kestra `running`, `provisioned=true`,
+      `runtimeEnabled=true`, and managed MCP server
+      `7349c65c-23ac-4e94-bd06-3bbad1968065` installed;
+    - the MCP endpoint listed the curated Kestra tools:
+      `kestra_namespaces_list`, `kestra_flows_get`, `kestra_flows_validate`,
+      `kestra_flows_upsert`, `kestra_executions_start`,
+      `kestra_executions_get`, `kestra_executions_logs`, and
+      `kestra_plugins_search`;
+    - safe flow validation passed, while an unsafe Docker/host-execution flow
+      was rejected by policy;
+    - mutation proof upserted `thinkwork.smoke/agent_control_smoke`, started
+      execution `6GNTbImgJkPBdBN2oZz3jp`, reached `SUCCESS`, and logs included
+      `ThinkWork Kestra managed-app smoke`;
+    - evidence was written to
+      `docs/verification/kestra/control-mcp-smoke-live.json`.
+  - U14 live destroy proof:
+    - refreshed the dev CLI session with `pnpm dev -- me --stage dev` after a
+      stale Cognito token caused the first GraphQL mutation attempt to return
+      HTTP `500`;
+    - called the deployed GraphQL mutation
+      `setManagedApplicationDeployment(input: { key: "kestra", action: DESTROY })`,
+      which queued the normal workflow-dispatch deploy run;
+    - destroy deploy run
+      [27185832746](https://github.com/thinkwork-ai/thinkwork/actions/runs/27185832746)
+      completed successfully;
+    - `Prepare Kestra runtime secrets and database`,
+      `Empty Kestra retained storage before destructive destroy`,
+      `Terraform Apply`, `Restart Kestra runtime after database prep`,
+      `Destroy Kestra retained data`, and `Deploy Summary` all passed;
+    - GraphQL reported Kestra `disabled`, `provisioned=false`,
+      `runtimeEnabled=false`, no managed MCP server id, no storage bucket, and
+      no database name;
+    - read-only AWS checks showed the Kestra ECS cluster and service
+      `INACTIVE`, and the retained S3 bucket, Kestra DB secret, Kestra
+      basic-auth secret, and ALB target group missing;
+    - a read-only Postgres catalog query showed both the dedicated
+      `thinkwork_kestra` database and `thinkwork_kestra` role absent;
+    - destroy evidence was recorded in
+      `docs/verification/kestra/destroy-live.json`.
 
 ## Agent Profile Closed Loops - 2026-06-08
 
