@@ -14,10 +14,10 @@ status: in_progress
 - Current branch: `codex/tenant-model-catalog-u3`.
 - Current worktree: `.Codex/worktrees/tenant-model-catalog-u3`.
 - Pull request:
-  pending. U2 PR
+  [#2275](https://github.com/thinkwork-ai/thinkwork/pull/2275). U2 PR
   [#2273](https://github.com/thinkwork-ai/thinkwork/pull/2273) and U1 PR
   [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) were merged.
-- Status: U3 implementation in progress.
+- Status: U3 PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
