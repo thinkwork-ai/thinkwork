@@ -105,26 +105,26 @@ function toMemoryItems(data: unknown): MemoryItem[] {
             ? u.memory_unit_id
             : `unit-${index}`;
       const score = typeof u.score === "number" ? u.score : undefined;
-      // Observation signals (fact type, freshness trend, proof count) are
-      // parsed defensively — field names are verified empirically against the
-      // deployed Hindsight (wire-format rule); absent fields stay undefined.
+      // Observation signals, verified empirically against deployed Hindsight
+      // 0.5.0 (wire-format rule): recall responses carry the fact type as
+      // `type` (not `fact_type`) and the proof set as `source_fact_ids`; no
+      // freshness field is exposed yet (kept defensively for image bumps).
       const meta = (
         u.metadata && typeof u.metadata === "object" ? u.metadata : {}
       ) as Record<string, unknown>;
-      const factType =
-        typeof u.fact_type === "string"
-          ? u.fact_type
-          : typeof meta.fact_type === "string"
-            ? meta.fact_type
-            : undefined;
+      const factType = [u.fact_type, u.type, meta.fact_type].find(
+        (v): v is string => typeof v === "string" && v.trim().length > 0,
+      );
       const freshness = [u.freshness, u.trend, meta.freshness, meta.trend].find(
         (v): v is string => typeof v === "string" && v.trim().length > 0,
       );
-      const proofCount = [
-        u.proof_count,
-        u.evidence_count,
-        meta.proof_count,
-      ].find((v): v is number => typeof v === "number" && Number.isFinite(v));
+      const proofCount =
+        [u.proof_count, u.evidence_count, meta.proof_count].find(
+          (v): v is number => typeof v === "number" && Number.isFinite(v),
+        ) ??
+        (Array.isArray(u.source_fact_ids) && u.source_fact_ids.length > 0
+          ? u.source_fact_ids.length
+          : undefined);
       return {
         id,
         content: text,

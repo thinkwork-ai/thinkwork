@@ -693,3 +693,66 @@ describe("HindsightAdapter observation consumption", () => {
     );
   });
 });
+
+describe("HindsightAdapter deployed recall wire format (Hindsight 0.5.0)", () => {
+  beforeEach(() => {
+    executeMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("parses `type` and `source_fact_ids` as fact type and proof count", async () => {
+    // Shape captured from the deployed dev recall response: observations
+    // carry `type` (not `fact_type`) and the proof set as `source_fact_ids`;
+    // no freshness field is exposed by 0.5.0.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "obs-wire",
+            text: "consolidated belief from the wire",
+            type: "observation",
+            source_fact_ids: ["f1", "f2", "f3"],
+            document_id: null,
+            context: "",
+            metadata: {},
+          },
+          {
+            id: "raw-wire",
+            text: "raw fact from the wire",
+            type: "world",
+            source_fact_ids: null,
+            metadata: {},
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    const result = await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      query: "wire",
+    });
+
+    const obs = result.find((r) => r.record.id === "obs-wire");
+    const raw = result.find((r) => r.record.id === "raw-wire");
+    expect(obs?.record.metadata?.factType).toBe("observation");
+    expect(obs?.record.metadata?.proofCount).toBe(3);
+    expect(obs?.record.metadata?.freshness).toBeNull();
+    expect(obs?.record.sourceType).toBe("system_reflection");
+    expect(raw?.record.metadata?.factType).toBe("world");
+    // Identical fallback scores (no score fields on the wire): observation
+    // outranks the raw fact only via the type-derived tie-break.
+    const obsIdx = result.findIndex((r) => r.record.id === "obs-wire");
+    expect(obsIdx).toBe(0);
+  });
+});

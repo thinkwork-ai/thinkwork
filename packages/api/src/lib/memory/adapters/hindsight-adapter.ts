@@ -876,8 +876,11 @@ export class HindsightAdapter implements MemoryAdapter {
       unit.metadata && typeof unit.metadata === "object"
         ? (unit.metadata as Record<string, unknown>).fact_type
         : undefined;
+    // SQL rows carry `fact_type`; the deployed recall HTTP response carries
+    // `type` instead (verified empirically on dev, Hindsight 0.5.0).
     const factType: string | null =
       (unit.fact_type as string | null | undefined) ||
+      (typeof unit.type === "string" ? unit.type : null) ||
       (typeof metaFactType === "string" ? metaFactType : null) ||
       null;
     return {
@@ -900,9 +903,9 @@ export class HindsightAdapter implements MemoryAdapter {
       metadata: {
         bankId,
         factType,
-        // Observation freshness trend (stable/strengthening/weakening/new/
-        // stale). Field name verified empirically against the deployed
-        // Hindsight (wire-format rule); absent fields map to null.
+        // Observation freshness trend. NOT exposed by the deployed 0.5.0
+        // recall response (verified empirically on dev) — parsed defensively
+        // for forward-compat with image bumps; null until then.
         freshness:
           stringField(unit.freshness) ??
           stringField(unit.trend) ??
@@ -916,10 +919,15 @@ export class HindsightAdapter implements MemoryAdapter {
         occurredEnd: toISO(unit.occurred_end),
         mentionedAt: toISO(unit.mentioned_at),
         accessCount: unit.access_count ?? null,
+        // SQL rows carry proof_count; recall HTTP responses carry the proof
+        // set itself as `source_fact_ids` (verified empirically on dev).
         proofCount:
           coerceCount(unit.proof_count) ??
           coerceCount(unit.evidence_count) ??
           coerceCount(unit.metadata?.proof_count) ??
+          (Array.isArray(unit.source_fact_ids)
+            ? unit.source_fact_ids.length
+            : null) ??
           null,
         context: unit.context ?? null,
         raw: unit.metadata ?? null,
@@ -1092,6 +1100,8 @@ function inferSourceType(unit: any): ThinkWorkMemoryRecord["sourceType"] {
     return "explicit_remember";
   if (ctx === "thread_turn") return "thread_turn";
   if (ctx === "system_reflection") return "system_reflection";
-  if (unit.fact_type === "observation") return "system_reflection";
+  // SQL rows carry fact_type; recall HTTP responses carry `type`.
+  if (unit.fact_type === "observation" || unit.type === "observation")
+    return "system_reflection";
   return "thread_turn";
 }

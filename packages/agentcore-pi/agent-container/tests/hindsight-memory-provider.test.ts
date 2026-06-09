@@ -321,3 +321,34 @@ describe("observation signal parsing", () => {
     });
   });
 });
+
+describe("deployed recall wire format (Hindsight 0.5.0)", () => {
+  it("parses `type` and `source_fact_ids` observation signals", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        memory_units: [
+          {
+            id: "obs-wire",
+            text: "consolidated belief",
+            type: "observation",
+            source_fact_ids: ["f1", "f2"],
+            metadata: {},
+          },
+        ],
+      }),
+    );
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.recall({ query: "wire" });
+
+    expect(result.memories[0]).toEqual({
+      id: "obs-wire",
+      content: "consolidated belief",
+      factType: "observation",
+      proofCount: 2,
+    });
+  });
+});
