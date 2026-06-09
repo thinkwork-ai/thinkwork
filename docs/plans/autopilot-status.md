@@ -11,12 +11,12 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U10 - Live deploy/destroy proof and corrective fixes.
-- Current branch: `codex/kestra-managed-app-u10-control-plane`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u10-control-plane`.
+- Current unit: U11 - Kestra control MCP runtime env fix.
+- Current branch: `codex/kestra-managed-app-u11-proof`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u11-proof`.
 - Current PR:
-  [#2256](https://github.com/thinkwork-ai/thinkwork/pull/2256).
-- Status: fixing live deploy failure exposed by the normal managed-app pipeline.
+  [#2259](https://github.com/thinkwork-ai/thinkwork/pull/2259).
+- Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
     Kestra requirements, and the managed-app/MCP lifecycle precedent.
@@ -340,6 +340,50 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
     the compact `KESTRA` Lambda env payload contained storage-bucket and
     basic-auth ARN fields. The branch was patched to make the fixture enforce
     the shorter payload instead.
+  - U10 PR [#2256](https://github.com/thinkwork-ai/thinkwork/pull/2256)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was
+    squash merged as `987058dc`; the remote branch and local worktree/branch
+    were removed.
+  - U10 post-merge deploy proof:
+    - main deploy run
+      [27181660141](https://github.com/thinkwork-ai/thinkwork/actions/runs/27181660141)
+      completed successfully with Kestra enabled;
+    - GraphQL `deploymentStatus` reported Kestra `running`,
+      `provisioned=true`, `runtimeEnabled=true`,
+      `url=https://orchestrate.thinkwork.ai`, service
+      `thinkwork-dev-kestra-service`, log group `/thinkwork/dev/kestra`, bucket
+      `tw-dev-kestra-487219502366`, and database `thinkwork_kestra`;
+    - ECS reported desired `1`, running `1`, pending `0`, rollout completed,
+      and the ALB target group reached healthy;
+    - `installManagedApplicationMcpServer(key: "kestra")` succeeded and
+      returned managed MCP server id `7349c65c-23ac-4e94-bd06-3bbad1968065`.
+  - U11 live smoke discovery:
+    - `SMOKE_ENABLE_KESTRA_MANAGED_APP=1 node scripts/smoke/kestra-managed-app-smoke.mjs`
+      passed against `https://orchestrate.thinkwork.ai`, with GraphQL health
+      and public reachability healthy and managed MCP status `installed`;
+    - `SMOKE_ENABLE_KESTRA_CONTROL_MCP=1 node scripts/smoke/kestra-control-mcp-smoke.mjs`
+      initialized the MCP endpoint and listed tools, then failed during live
+      flow upsert because `thinkwork-dev-api-kestra-control-mcp` did not
+      receive the compact `KESTRA` runtime-status env var and therefore
+      concluded Kestra was not running.
+  - U11 fix in progress:
+    - wire `local.kestra_env` into the `kestra-control-mcp` Lambda handler env
+      in `terraform/modules/app/lambda-api/handlers.tf`;
+    - extend the Terraform Kestra fixture test so it proves both GraphQL and
+      Kestra control MCP receive the compact deployment status.
+  - U11 local verification passed:
+    - `terraform fmt terraform/modules/app/lambda-api/handlers.tf` -> passed.
+    - `terraform -chdir=terraform/modules/app/lambda-api init -backend=false -input=false && terraform -chdir=terraform/modules/app/lambda-api validate`
+      -> passed.
+    - `pnpm exec vitest run __tests__/terraform-kestra-fixture.test.ts` from
+      `apps/cli` -> 1 file passed, 8 tests passed.
+  - U11 local verification caveat:
+    - The first focused vitest attempt in the fresh worktree failed because
+      package links were not present yet (`Command "vitest" not found`).
+      `pnpm install` completed and the rerun passed. During install,
+      `canvas@2.11.2` logged a local Node 25 native fallback build failure due
+      to missing `pkg-config`/`pixman-1`; it did not affect this unit's
+      Terraform fixture test.
 
 ## Agent Profile Closed Loops - 2026-06-08
 
