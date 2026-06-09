@@ -153,6 +153,12 @@ variable "api_auth_secret" {
   default     = ""
 }
 
+variable "bootstrap_credential_lease_kms_key_id" {
+  description = "Optional KMS key ID or ARN used by Secrets Manager for temporary bootstrap credential leases. Empty uses the AWS-managed Secrets Manager key."
+  type        = string
+  default     = ""
+}
+
 variable "extension_proxy_backends_json" {
   description = "JSON map of enabled Admin extension ids to allowlisted backend base URLs. Example: {\"customer-module\":{\"baseUrl\":\"https://extension.example.com\"}}"
   type        = string

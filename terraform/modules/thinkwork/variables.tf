@@ -164,6 +164,12 @@ variable "deployment_control_plane_create_secret_placeholders" {
   default     = true
 }
 
+variable "bootstrap_credential_lease_kms_key_id" {
+  description = "Optional KMS key ID or ARN used by Secrets Manager for temporary customer bootstrap credential leases. Empty uses the AWS-managed Secrets Manager key."
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # BYO Foundation (all optional — defaults to creating everything)
 # ---------------------------------------------------------------------------

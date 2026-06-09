@@ -10,16 +10,16 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U3 - Move ThinkWork Dev To The Deployment
-  Controller First.
-- Current branch: `codex/u3-dev-controller-dogfood`.
+- Current implementation unit: U4 - Add BootstrapCredentialLease.
+- Current branch: `codex/u4-bootstrap-credential-lease`.
 - Current worktree:
-  `.Codex/worktrees/u3-dev-controller-dogfood`.
+  `.Codex/worktrees/u4-bootstrap-credential-lease`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
+  merged; U4 PR [#2290](https://github.com/thinkwork-ai/thinkwork/pull/2290)
   opened.
-- Status: U3 PR opened; monitoring required CI.
+- Status: U4 PR opened; monitoring required CI.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -59,6 +59,16 @@ status: in_progress
     `deploy.yml` with `use_controller=true` starts the dev deployment
     controller with an explicit release manifest URL/digest and skips the
     legacy direct Terraform apply for that workflow run.
+  - U3 PR #2289 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+    `test`) and was squash merged as `0bd3d871`.
+  - U3 remote branch was already deleted by GitHub merge handling; local U3
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U4 worktree from `origin/main` at `0bd3d871`.
+  - U4 adds `bootstrap_credential_leases` DB metadata, a Secrets
+    Manager-backed `BootstrapCredentialLease` helper, possession-gated REST
+    endpoints to connect/revoke the lease, and minimal browser wiring so
+    temporary STS credentials or an assumable role are posted to the server
+    lease vault without entering local storage.
 - Local verification:
   - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
     passed: 7 tests.
@@ -102,6 +112,32 @@ status: in_progress
   - U3 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
     Prettier-managed files passed.
   - U3 `git diff --check` passed.
+  - U4 `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - U4 `pnpm --filter @thinkwork/api test -- deployment-sessions.test.ts`
+    passed: 10 tests.
+  - U4 `pnpm --filter @thinkwork/web exec vitest run src/routes/onboarding/-welcome.test.ts`
+    passed: 4 tests.
+  - U4 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U4 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U4 `pnpm --filter @thinkwork/database-pg typecheck` passed.
+  - U4 `pnpm schema:build` passed; GraphQL codegen passed for
+    `thinkwork-cli`, `@thinkwork/web`, and `@thinkwork/mobile`.
+  - U4 `terraform fmt -check terraform/modules/app/lambda-api terraform/modules/thinkwork`
+    passed.
+  - U4 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - U4 `git diff --check` passed.
+- CI:
+  - U4 PR #2290 initial checks: `cla`, `lint`, and `verify` passed.
+  - `Migration Drift Precheck (dev)` failed because the new hand-written
+    migration objects from `0156_bootstrap_credential_leases.sql` were not yet
+    present in the dev database.
+  - Applied `packages/database-pg/drizzle/0156_bootstrap_credential_leases.sql`
+    to the dev database only.
+  - Local scoped drift reporter passed after the dev apply:
+    `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0156_bootstrap_credential_leases.sql`.
 
 ## Tenant Model Catalog - 2026-06-09
 

@@ -12,9 +12,15 @@ import type {
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { StartExecutionCommand, SFNClient } from "@aws-sdk/client-sfn";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
 import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
+import { asc, desc, eq } from "drizzle-orm";
+import {
+  bootstrapCredentialLeases,
   customerDeploymentSessionEvents,
   customerDeploymentSessions,
 } from "@thinkwork/database-pg/schema";
@@ -26,6 +32,14 @@ import {
   notFound,
   forbidden,
 } from "../lib/response.js";
+import {
+  bootstrapCredentialLeasePublicMetadata,
+  bootstrapCredentialLeaseSecretName,
+  deleteBootstrapCredentialLeaseSecret,
+  putBootstrapCredentialLeaseSecret,
+  validateBootstrapCredentialLease,
+  type BootstrapCredentialLeaseBody,
+} from "../lib/bootstrap-credential-lease.js";
 
 const SESSION_TOKEN_BYTES = 32;
 const SESSION_TTL_DAYS = 14;
@@ -82,6 +96,16 @@ export async function handler(
     );
     if (sessionMatch && method === "GET") {
       return readSession(sessionMatch[1]!, event);
+    }
+
+    const leaseMatch = path.match(
+      /^\/api\/deployment-sessions\/([0-9a-fA-F-]+)\/bootstrap-credential-lease$/,
+    );
+    if (leaseMatch && method === "POST") {
+      return connectBootstrapCredentialLease(leaseMatch[1]!, event);
+    }
+    if (leaseMatch && method === "DELETE") {
+      return revokeBootstrapCredentialLease(leaseMatch[1]!, event);
     }
 
     const startMatch = path.match(
@@ -196,6 +220,12 @@ async function startDeployment(
     session.status === "destroyed"
   ) {
     return error("Deployment cannot start after teardown is requested", 409);
+  }
+  if (session.credentials_status !== "validated") {
+    return error(
+      "Bootstrap credential lease must be validated before deployment starts",
+      409,
+    );
   }
 
   const priorRun = deploymentRunConfig(session.session_config);
@@ -350,6 +380,212 @@ async function startDeployment(
   }
 }
 
+async function connectBootstrapCredentialLease(
+  sessionId: string,
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const session = await loadSession(sessionId);
+  if (!session) return notFound("Deployment session not found");
+  if (!isAuthorizedSessionRequest(session, event)) {
+    return forbidden("Deployment session token is invalid");
+  }
+  if (
+    session.status === "teardown_requested" ||
+    session.status === "destroyed"
+  ) {
+    return error(
+      "Bootstrap credentials cannot be connected after teardown",
+      409,
+    );
+  }
+
+  let lease;
+  try {
+    lease = validateBootstrapCredentialLease(
+      parseBody(event) as BootstrapCredentialLeaseBody,
+    );
+  } catch (err) {
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "bootstrap_credential_lease_rejected",
+      stepKey: "connect_aws",
+      message: (err as Error).message,
+      payload: { credentialMaterialPersisted: false },
+      idempotencyKey: `bootstrap_credential_lease_rejected:${Date.now()}`,
+    });
+    return error((err as Error).message, 400);
+  }
+
+  const leaseId = randomUUID();
+  const secretName = bootstrapCredentialLeaseSecretName({
+    sessionId: session.id,
+    leaseId,
+  });
+  let secretArn: string;
+  try {
+    secretArn = await putBootstrapCredentialLeaseSecret({
+      secretName,
+      payload: lease.secretPayload,
+      sessionId: session.id,
+      leaseId,
+      leaseType: lease.leaseType,
+      expiresAt: lease.expiresAt,
+    });
+  } catch (err) {
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "bootstrap_credential_lease_failed",
+      stepKey: "connect_aws",
+      message:
+        "Bootstrap credential lease could not be stored in the server-side vault.",
+      payload: {
+        credentialMaterialPersisted: false,
+        errorName: errorName(err),
+      },
+      idempotencyKey: `bootstrap_credential_lease_failed:${Date.now()}`,
+    });
+    return error("Bootstrap credential lease could not be stored", 502);
+  }
+
+  const now = new Date();
+  await db.insert(bootstrapCredentialLeases).values({
+    id: leaseId,
+    session_id: session.id,
+    status: "validated",
+    lease_type: lease.leaseType,
+    secret_arn: secretArn,
+    secret_fingerprint: lease.secretFingerprint,
+    external_id_hash: lease.externalIdHash,
+    role_arn: lease.roleArn,
+    expires_at: lease.expiresAt,
+    validated_at: now,
+    audit_metadata: lease.auditMetadata,
+  });
+
+  const publicLease = {
+    id: leaseId,
+    status: "validated",
+    ...bootstrapCredentialLeasePublicMetadata(lease),
+  };
+  const [updated] = await db
+    .update(customerDeploymentSessions)
+    .set({
+      status: "ready_to_deploy",
+      current_step_key: "foundation",
+      credentials_status: "validated",
+      session_config: {
+        ...objectConfig(session.session_config),
+        bootstrapCredentialLease: publicLease,
+      },
+      updated_at: now,
+    })
+    .where(eq(customerDeploymentSessions.id, session.id))
+    .returning();
+
+  await appendSessionEvent({
+    sessionId: session.id,
+    eventType: "bootstrap_credential_lease_validated",
+    stepKey: "connect_aws",
+    message:
+      "Bootstrap credential lease validated and stored in the server-side vault.",
+    payload: publicLease,
+    idempotencyKey: "bootstrap_credential_lease_validated",
+  });
+
+  const events = await loadSessionEvents(session.id);
+  return json({ session: toSessionPayload(updated ?? session, events) });
+}
+
+async function revokeBootstrapCredentialLease(
+  sessionId: string,
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const session = await loadSession(sessionId);
+  if (!session) return notFound("Deployment session not found");
+  if (!isAuthorizedSessionRequest(session, event)) {
+    return forbidden("Deployment session token is invalid");
+  }
+
+  const lease = await loadLatestBootstrapCredentialLease(session.id);
+  if (!lease) {
+    const events = await loadSessionEvents(session.id);
+    return json({ session: toSessionPayload(session, events) });
+  }
+
+  const now = new Date();
+  try {
+    await deleteBootstrapCredentialLeaseSecret({
+      secretRef: String(lease.secret_arn),
+    });
+    await db
+      .update(bootstrapCredentialLeases)
+      .set({
+        status: "revoked",
+        revoked_at: now,
+        updated_at: now,
+      })
+      .where(eq(bootstrapCredentialLeases.id, lease.id as string));
+
+    const [updated] = await db
+      .update(customerDeploymentSessions)
+      .set({
+        credentials_status: "revoked",
+        current_step_key: "connect_aws",
+        session_config: {
+          ...objectConfig(session.session_config),
+          bootstrapCredentialLease: {
+            id: lease.id,
+            status: "revoked",
+            secretFingerprint: lease.secret_fingerprint,
+            credentialMaterialPersisted: false,
+          },
+        },
+        updated_at: now,
+      })
+      .where(eq(customerDeploymentSessions.id, session.id))
+      .returning();
+
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "bootstrap_credential_lease_revoked",
+      stepKey: "connect_aws",
+      message: "Bootstrap credential lease revoked and deleted from the vault.",
+      payload: {
+        leaseId: lease.id,
+        secretFingerprint: lease.secret_fingerprint,
+        credentialMaterialPersisted: false,
+      },
+      idempotencyKey: "bootstrap_credential_lease_revoked",
+    });
+    const events = await loadSessionEvents(session.id);
+    return json({ session: toSessionPayload(updated ?? session, events) });
+  } catch (err) {
+    await db
+      .update(bootstrapCredentialLeases)
+      .set({
+        status: "failed_cleanup",
+        failed_cleanup_reason: (err as Error).message,
+        updated_at: now,
+      })
+      .where(eq(bootstrapCredentialLeases.id, lease.id as string));
+
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "bootstrap_credential_lease_cleanup_failed",
+      stepKey: "connect_aws",
+      message: "Bootstrap credential lease cleanup failed.",
+      payload: {
+        leaseId: lease.id,
+        errorName: errorName(err),
+        credentialMaterialPersisted: false,
+      },
+      idempotencyKey: "bootstrap_credential_lease_cleanup_failed",
+    });
+    const events = await loadSessionEvents(session.id);
+    return json({ session: toSessionPayload(session, events) }, 500);
+  }
+}
+
 async function requestTeardown(
   sessionId: string,
   event: APIGatewayProxyEventV2,
@@ -489,6 +725,16 @@ async function loadSessionEvents(sessionId: string) {
     .from(customerDeploymentSessionEvents)
     .where(eq(customerDeploymentSessionEvents.session_id, sessionId))
     .orderBy(asc(customerDeploymentSessionEvents.created_at));
+}
+
+async function loadLatestBootstrapCredentialLease(sessionId: string) {
+  const [lease] = await db
+    .select()
+    .from(bootstrapCredentialLeases)
+    .where(eq(bootstrapCredentialLeases.session_id, sessionId))
+    .orderBy(desc(bootstrapCredentialLeases.created_at))
+    .limit(1);
+  return lease ?? null;
 }
 
 async function appendSessionEvent(args: {
@@ -758,6 +1004,12 @@ function deploymentExecutionName(sessionId: string): string {
 
 function teardownExecutionName(sessionId: string): string {
   return `tw-teardown-${sessionId.replace(/-/g, "").slice(0, 46)}`;
+}
+
+function errorName(err: unknown): string {
+  return err && typeof err === "object" && "name" in err
+    ? String((err as { name?: unknown }).name)
+    : "Error";
 }
 
 function objectConfig(value: unknown): Record<string, unknown> {
