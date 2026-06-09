@@ -14,13 +14,14 @@ status: in_progress
 - Current branch: `codex/tenant-model-catalog-u7`.
 - Current worktree: `.Codex/worktrees/tenant-model-catalog-u7`.
 - Pull request:
-  U6 PR [#2281](https://github.com/thinkwork-ai/thinkwork/pull/2281), U5 PR
+  [#2282](https://github.com/thinkwork-ai/thinkwork/pull/2282). U6 PR
+  [#2281](https://github.com/thinkwork-ai/thinkwork/pull/2281), U5 PR
   [#2280](https://github.com/thinkwork-ai/thinkwork/pull/2280), U4 PR
   [#2279](https://github.com/thinkwork-ai/thinkwork/pull/2279), U3 PR
   [#2275](https://github.com/thinkwork-ai/thinkwork/pull/2275), U2 PR
   [#2273](https://github.com/thinkwork-ai/thinkwork/pull/2273) and U1 PR
   [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) were merged.
-- Status: U7 implementation in progress.
+- Status: U7 PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
