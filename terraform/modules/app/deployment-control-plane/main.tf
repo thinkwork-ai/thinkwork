@@ -82,6 +82,21 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "evidence" {
   }
 }
 
+resource "aws_s3_object" "runner_script" {
+  bucket = aws_s3_bucket.evidence.id
+  key    = "runner/thinkwork-runner.py"
+  source = "${path.module}/runner.py"
+  etag   = filemd5("${path.module}/runner.py")
+
+  server_side_encryption = "AES256"
+
+  tags = {
+    Name    = "${local.name_prefix}-runner-script"
+    Stage   = var.stage
+    Purpose = "deployment-runner"
+  }
+}
+
 resource "aws_cloudwatch_log_group" "codebuild" {
   name              = local.codebuild_log_group
   retention_in_days = var.log_retention_days
@@ -355,6 +370,11 @@ resource "aws_codebuild_project" "runner" {
     environment_variable {
       name  = "THINKWORK_RELEASE_ARTIFACT_BUCKET"
       value = var.release_artifact_bucket
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RUNNER_SCRIPT_S3_URI"
+      value = "s3://${aws_s3_bucket.evidence.bucket}/${aws_s3_object.runner_script.key}"
     }
 
     environment_variable {

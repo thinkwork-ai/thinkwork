@@ -9573,6 +9573,48 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `pnpm --filter @thinkwork/spaces typecheck`,
   `pnpm dlx prettier@3.8.2 --check apps/spaces/src/components/settings/ManagedApplicationsSection.tsx apps/spaces/src/components/settings/ManagedApplicationsSection.test.tsx`,
   and `git diff --check`.
+- TEI GitHub-free deployment verification reached Step 8
+  (Bootstrap/Login First Admin) for stage `tei-e2e` in AWS account
+  `637423202447`, region `us-east-1`. Step Functions deploy execution
+  `tei-e2e-20260608234110-deploy9` succeeded after the runner reused the
+  existing Aurora DB secret instead of rotating the password. API health
+  returned HTTP 200 at
+  `https://8puq24dl63.execute-api.us-east-1.amazonaws.com/health`, app
+  CloudFront returned HTTP 200 at `https://d1eqjv7ijcmtqz.cloudfront.net`,
+  and the base API route list contained no Slack, Stripe, or host
+  deployment-session routes. The new database was missing schema after
+  Terraform deploy; manual TEI repair initialized the empty DB from ordered
+  `packages/database-pg/drizzle/*.sql` migrations, skipped the greenfield-only
+  S3 backup export in `0031_thread_cleanup_drops.sql`, populated compliance
+  role secrets/roles for the compliance grants, then successfully ran
+  `bootstrapUser` for `eric@homecareintel.com`. Workspace defaults seeded to
+  `s3://thinkwork-tei-e2e-storage/tenants/original-moose-497/...`, and
+  authenticated `me` returned one user, one tenant, and one tenant member.
+  Follow-up in progress on branch `codex/live-platform-deployment-runner`:
+  make the deployment runner perform this greenfield DB initialization itself
+  after Terraform apply so the browser onboarding flow does not require a
+  manual schema step.
+- Deployment runner follow-up validated on TEI. The inline CodeBuild
+  buildspec exceeded AWS's buildspec size limit once the greenfield database
+  initializer was added, so the runner is now uploaded as
+  `runner/thinkwork-runner.py` in the deployment evidence bucket and downloaded
+  by a small buildspec wrapper. Control-plane apply succeeded, then Step
+  Functions execution `tei-e2e-20260609000347-deploy10` / CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:ddc484cb-b472-432c-9a84-ce029542d0d9`
+  completed successfully using that S3-hosted runner. Terraform applied
+  cleanly, deployment evidence was written, app/API outputs were refreshed,
+  and base API route verification again showed no Slack, Stripe, or
+  host-deployment-session routes in the customer install. Current process
+  state: Step 6 deploy, Step 7 foundation smoke, and Step 8 first-admin
+  bootstrap are complete; Step 9 managed-app smoke, Step 10 desktop/mobile
+  profile configuration, and Step 11 cleanup remain.
+- TEI post-deploy10 smoke passed for the base application: CloudFront app
+  returned HTTP 200, API `/health` returned HTTP 200, authenticated `me`
+  returned the first admin user and tenant, and `deploymentStatus` reported
+  Cognee plus Twenty CRM as visible managed applications with
+  `enabled=false`, `provisioned=false`, and `runtimeEnabled=false`.
+  `managedApplications` planning rows exist for both with desired status
+  `disabled`. Optional Slack and Stripe remain excluded from the base install.
 
 ## Agent Profile Closed Loops - 2026-06-08
 

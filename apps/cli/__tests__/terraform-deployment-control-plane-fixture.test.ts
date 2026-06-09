@@ -22,6 +22,10 @@ const CONTROL_PLANE_BUILDSPEC = resolve(
   REPO_ROOT,
   "terraform/modules/app/deployment-control-plane/buildspec.yml",
 );
+const CONTROL_PLANE_RUNNER = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/deployment-control-plane/runner.py",
+);
 const CONTROL_PLANE_README = resolve(
   REPO_ROOT,
   "terraform/modules/app/deployment-control-plane/README.md",
@@ -47,22 +51,30 @@ describe("deployment control plane Terraform fixture", () => {
   it("creates Step Functions and a live CodeBuild runner substrate", () => {
     const source = read(CONTROL_PLANE_MAIN);
     const buildspec = read(CONTROL_PLANE_BUILDSPEC);
+    const runner = read(CONTROL_PLANE_RUNNER);
 
     expect(source).toMatch(/resource "aws_sfn_state_machine" "deployment"/);
     expect(source).toMatch(/arn:aws:states:::codebuild:startBuild\.sync/);
     expect(source).toMatch(/resource "aws_codebuild_project" "runner"/);
+    expect(source).toMatch(/resource "aws_s3_object" "runner_script"/);
     expect(source).toMatch(/type\s*=\s*"NO_SOURCE"/);
     expect(source).toMatch(/buildspec = file/);
-    expect(buildspec).toMatch(/deployment-evidence\.json/);
+    expect(buildspec).toMatch(/THINKWORK_RUNNER_SCRIPT_S3_URI/);
+    expect(buildspec).toMatch(/python3 \/tmp\/thinkwork-runner\.py/);
+    expect(source).toMatch(/THINKWORK_RUNNER_SCRIPT_S3_URI/);
     expect(source).toMatch(/THINKWORK_DEPLOYMENT_INPUT/);
     expect(source).toMatch(/States\.JsonToString\(\$\)/);
     expect(source).toMatch(/sessions\/\{\}\/\{\}/);
     expect(source).toMatch(/include_execution_data\s*=\s*false/);
-    expect(buildspec).toMatch(/"terraform", "init"/);
-    expect(buildspec).toMatch(/"terraform", "apply"/);
-    expect(buildspec).toMatch(/enable_cognee\s+= false/);
-    expect(buildspec).toMatch(/twenty_provisioned\s+= false/);
-    expect(buildspec).toMatch(/twenty_runtime_enabled\s+= false/);
+    expect(runner).toMatch(/deployment-evidence\.json/);
+    expect(runner).toMatch(/"terraform", "init"/);
+    expect(runner).toMatch(/"terraform", "apply"/);
+    expect(runner).toMatch(/initialize_greenfield_database/);
+    expect(runner).toMatch(/enable_cognee\s+= false/);
+    expect(runner).toMatch(/twenty_provisioned\s+= false/);
+    expect(runner).toMatch(/twenty_runtime_enabled\s+= false/);
+    expect(runner).toMatch(/enable_stripe_billing\s+= false/);
+    expect(runner).toMatch(/enable_slack_workspace_app\s+= false/);
     expect(source).toMatch(/aws_cloudwatch_log_group" "state_machine"/);
     expect(source).toMatch(/aws_cloudwatch_log_group" "codebuild"/);
   });
