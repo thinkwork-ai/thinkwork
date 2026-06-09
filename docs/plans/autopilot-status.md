@@ -10,16 +10,17 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-001-feat-tenant-model-catalog-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U5 - Downstream tenant catalog consumers.
-- Current branch: `codex/tenant-model-catalog-u5`.
-- Current worktree: `.Codex/worktrees/tenant-model-catalog-u5`.
+- Current implementation unit: U6 - AWS IAM and deployment wiring.
+- Current branch: `codex/tenant-model-catalog-u6`.
+- Current worktree: `.Codex/worktrees/tenant-model-catalog-u6`.
 - Pull request:
-  [#2280](https://github.com/thinkwork-ai/thinkwork/pull/2280). U4 PR
+  [#2281](https://github.com/thinkwork-ai/thinkwork/pull/2281). U5 PR
+  [#2280](https://github.com/thinkwork-ai/thinkwork/pull/2280), U4 PR
   [#2279](https://github.com/thinkwork-ai/thinkwork/pull/2279), U3 PR
   [#2275](https://github.com/thinkwork-ai/thinkwork/pull/2275), U2 PR
   [#2273](https://github.com/thinkwork-ai/thinkwork/pull/2273) and U1 PR
   [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) were merged.
-- Status: U5 PR open; CI pending.
+- Status: U6 PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
@@ -208,6 +209,29 @@ status: in_progress
   - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over U5 touched files
     passed.
   - `git diff --check` passed.
+- U5 CI:
+  - PR #2280 passed required checks: `cla`, `lint`, `test`, `typecheck`, and
+    `verify`.
+- U5 merge/cleanup:
+  - PR #2280 was squash merged as `b88c9f8f`.
+  - The remote branch was deleted by GitHub merge handling; the local U5
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U6 worktree from `origin/main` at `b88c9f8f`.
+- U6 started AWS IAM and deployment wiring:
+  - added a managed policy attachment for `graphql-http` Bedrock
+    `ListFoundationModels` and AWS Price List read actions;
+  - added CLI fixture coverage for the Terraform grant and for keeping
+    `@aws-sdk/client-pricing` bundled into the `graphql-http` artifact.
+- U6 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-model-catalog-fixture.test.ts`
+    passed: 2 tests.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `terraform fmt -check terraform/modules/app/lambda-api/main.tf` passed.
+  - `bash scripts/build-lambdas.sh graphql-http` passed and produced the
+    `graphql-http` artifact with the bundled SDK set.
 
 ## Kestra Managed Application - 2026-06-08
 
