@@ -169,7 +169,7 @@ describe("agent profile adapter", () => {
           expect.objectContaining({ phase: "discovery" }),
           expect.objectContaining({ phase: "planning" }),
           expect.objectContaining({ phase: "execution" }),
-          expect.objectContaining({ phase: "self_review" }),
+          expect.objectContaining({ phase: "verification" }),
           expect.objectContaining({ phase: "iteration" }),
           expect.objectContaining({ phase: "handoff" }),
         ]),
@@ -531,7 +531,7 @@ describe("agent profile adapter", () => {
       expect(evidence.loopEvidence.phases).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            phase: "self_review",
+            phase: "verification",
             status:
               verdict === "revise"
                 ? "revision_requested"
