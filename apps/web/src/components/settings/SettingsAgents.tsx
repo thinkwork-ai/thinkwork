@@ -25,7 +25,7 @@ import {
   SettingsAgentProfilesQuery,
   SettingsCreateAgentProfileMutation,
   SettingsDeleteAgentProfileMutation,
-  SettingsModelCatalogQuery,
+  SettingsTenantModelCatalogQuery,
   SettingsTenantAgentQuery,
   SettingsUpdateAgentProfileMutation,
   SettingsUpdateTenantAgentMutation,
@@ -420,7 +420,11 @@ function AgentConfigSection() {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
-  const [catalogResult] = useQuery({ query: SettingsModelCatalogQuery });
+  const [catalogResult] = useQuery({
+    query: SettingsTenantModelCatalogQuery,
+    variables: { tenantId: tenantId ?? "", includeDisabled: false },
+    pause: !tenantId,
+  });
   const [saveState, save] = useMutation(SettingsUpdateTenantAgentMutation);
 
   const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
@@ -436,7 +440,7 @@ function AgentConfigSection() {
     }
   }, [agent]);
 
-  const catalog = catalogResult.data?.modelCatalog ?? [];
+  const catalog = catalogResult.data?.tenantModelCatalog ?? [];
   const catalogFailed = !!catalogResult.error;
 
   async function persist(input: {
@@ -510,7 +514,7 @@ function AgentConfigSection() {
             </SelectTrigger>
             <SelectContent>
               {catalog.map((m) => (
-                <SelectItem key={m.id} value={m.modelId}>
+                <SelectItem key={m.modelId} value={m.modelId}>
                   {m.displayName}
                 </SelectItem>
               ))}

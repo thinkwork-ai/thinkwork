@@ -46,7 +46,7 @@ export async function createAgentProfile(
   const input = args.input;
   const slug = normalizeProfileSlug(input.slug ?? input.name);
   assertCustomProfileSlugAvailable(slug);
-  await assertAvailableModel(input.modelId);
+  await assertAvailableModel(args.tenantId, input.modelId);
   const spaceIds = await assertSpacesBelongToTenant(
     args.tenantId,
     input.spaceIds,

@@ -23,7 +23,7 @@ import {
   SettingsCostSummaryQuery,
   SettingsCostTimeSeriesQuery,
   SettingsCostByUserQuery,
-  SettingsModelCatalogQuery,
+  SettingsTenantModelCatalogQuery,
 } from "@/lib/settings-queries";
 import {
   SettingsHeader,
@@ -69,7 +69,11 @@ export function SettingsAnalytics() {
     variables: { tenantId: tenantId ?? "", days: 30 },
     pause: !tenantId,
   });
-  const [catalogR] = useQuery({ query: SettingsModelCatalogQuery });
+  const [catalogR] = useQuery({
+    query: SettingsTenantModelCatalogQuery,
+    variables: { tenantId: tenantId ?? "", includeDisabled: false },
+    pause: !tenantId,
+  });
 
   const loading =
     (summaryR.fetching && !summaryR.data) ||
@@ -78,7 +82,7 @@ export function SettingsAnalytics() {
   const displayNames = useMemo(
     () =>
       new Map(
-        (catalogR.data?.modelCatalog ?? []).map((m) => [
+        (catalogR.data?.tenantModelCatalog ?? []).map((m) => [
           m.modelId,
           m.displayName,
         ]),

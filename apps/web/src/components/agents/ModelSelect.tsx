@@ -8,7 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@thinkwork/ui";
-import { SettingsModelCatalogQuery } from "@/lib/settings-queries";
+import { useTenant } from "@/context/TenantContext";
+import { SettingsTenantModelCatalogQuery } from "@/lib/settings-queries";
 
 /** Adapters that only support Anthropic models */
 const ANTHROPIC_ONLY_ADAPTERS = new Set(["sdk"]);
@@ -33,8 +34,13 @@ export function ModelSelect({
   adapterType?: string;
   className?: string;
 }) {
-  const [result] = useQuery({ query: SettingsModelCatalogQuery });
-  const models = result.data?.modelCatalog ?? [];
+  const { tenantId } = useTenant();
+  const [result] = useQuery({
+    query: SettingsTenantModelCatalogQuery,
+    variables: { tenantId: tenantId ?? "", includeDisabled: false },
+    pause: !tenantId,
+  });
+  const models = result.data?.tenantModelCatalog ?? [];
 
   const compatible = models.filter((m) => isCompatible(m.modelId, adapterType));
   const incompatible = models.filter(

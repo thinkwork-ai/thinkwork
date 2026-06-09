@@ -55,7 +55,6 @@ import {
   spaces,
   agentProfiles,
   agentProfileSpaceAssignments,
-  modelCatalog,
   userModelApprovals,
   tenantMcpServers,
 } from "@thinkwork/database-pg/schema";
@@ -95,6 +94,7 @@ import {
   normalizeAgentProfileExecutionControls,
   type AgentLoopPolicy,
 } from "./agent-profile-loop-policy.js";
+import { listTenantModelCatalogByIds } from "./model-catalog/tenant-catalog.js";
 
 export interface SkillConfig {
   skillId: string;
@@ -745,12 +745,18 @@ async function loadAgentProfileRuntimeConfigs(input: {
 
   if (profileRows.length === 0) return [];
 
-  const availableModelRows = await db
-    .select({ model_id: modelCatalog.model_id })
-    .from(modelCatalog)
-    .where(eq(modelCatalog.is_available, true));
+  const profileModelIds = [
+    ...new Set(profileRows.map((profile) => profile.model_id)),
+  ];
+  const availableModelRows = await listTenantModelCatalogByIds(
+    {
+      tenantId: input.tenantId,
+      modelIds: profileModelIds,
+    },
+    { db },
+  );
   const availableModelIds = new Set(
-    availableModelRows.map((row) => row.model_id),
+    availableModelRows.map((row) => row.modelId),
   );
 
   let approvedModelIds: Set<string> | null = null;

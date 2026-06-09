@@ -4,13 +4,13 @@ import {
   asc,
   db,
   eq,
-  modelCatalog,
   skillCatalog,
   spaces,
   tenantBuiltinTools,
   tenantMcpServers,
   snakeToCamel,
 } from "../../utils.js";
+import { listTenantModelCatalog } from "../../../lib/model-catalog/tenant-catalog.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { toGraphqlSpace } from "../spaces/shared.js";
 import { ensureBuiltInAgentProfiles } from "./shared.js";
@@ -29,11 +29,7 @@ export async function agentProfileEditorCatalog(
 
   const [models, spaceRows, skillRows, builtinToolRows, mcpServerRows] =
     await Promise.all([
-      db
-        .select()
-        .from(modelCatalog)
-        .where(eq(modelCatalog.is_available, true))
-        .orderBy(asc(modelCatalog.display_name)),
+      listTenantModelCatalog({ tenantId: args.tenantId }),
       db
         .select()
         .from(spaces)
@@ -71,7 +67,7 @@ export async function agentProfileEditorCatalog(
   );
 
   return {
-    models: models.map(snakeToCamel),
+    models,
     spaces: spaceRows.map(toGraphqlSpace),
     skills: skillRows,
     builtInTools,
