@@ -18,6 +18,11 @@ STARTED_AT = datetime.now(UTC).isoformat()
 RELEASE_EVIDENCE = {}
 CONTROLLER_EVIDENCE = {}
 TERRAFORM_EVIDENCE = {}
+PLATFORM_UPDATE_MIGRATIONS = [
+    "0149_user_model_approvals.sql",
+    "0152_agent_profiles.sql",
+    "0155_tenant_model_catalog.sql",
+]
 
 
 def run(args, **kwargs):
@@ -596,6 +601,15 @@ DROP TABLE IF EXISTS public.thread_comments CASCADE;
         psql(database_url, file=path, variables={"stage": vars_json["stage"]})
 
 
+def apply_platform_update_migrations(database_url, vars_json, migration_names):
+    migrations = SOURCE / "packages/database-pg/drizzle"
+    for name in migration_names:
+        path = migrations / name
+        if not path.is_file():
+            raise RuntimeError(f"Required platform migration is missing: {path}")
+        psql(database_url, file=path, variables={"stage": vars_json["stage"]})
+
+
 def seed_platform_bootstrap_defaults(database_url):
     psql(
         database_url,
@@ -751,7 +765,13 @@ def push_database_schema(outputs_path, vars_json):
     database_url = database_url_from_outputs(outputs)
     if not psql_output(database_url, "SELECT to_regclass('public.tenants')").strip():
         initialize_greenfield_database(database_url, outputs, vars_json)
+    apply_platform_update_migrations(database_url, vars_json, PLATFORM_UPDATE_MIGRATIONS)
     seed_platform_bootstrap_defaults(database_url)
+    apply_platform_update_migrations(
+        database_url,
+        vars_json,
+        ["0155_tenant_model_catalog.sql"],
+    )
 
 
 def write_runner_files(payload, runner_secrets):

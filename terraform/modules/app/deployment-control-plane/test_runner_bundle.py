@@ -68,6 +68,13 @@ def release_manifest(bundle_path: Path, bundle_sha: str, artifacts: list[dict]) 
     }
 
 
+def write_drizzle_files(source_dir: Path, names: list[str]) -> None:
+    migrations = source_dir / "packages/database-pg/drizzle"
+    migrations.mkdir(parents=True)
+    for name in names:
+        (migrations / name).write_text(f"-- {name}\n", encoding="utf-8")
+
+
 def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -134,6 +141,97 @@ def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
     assert runner.RELEASE_EVIDENCE["manifestSha256"] == manifest_sha
     assert runner.RELEASE_EVIDENCE["bundles"][0]["contains"] == ["graphql-http", "web"]
     assert {artifact["source"] for artifact in runner.RELEASE_EVIDENCE["artifacts"]} == {"bundle"}
+
+
+def test_push_database_schema_updates_existing_db_with_platform_migrations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    source_dir = tmp_path / "source"
+    outputs_path = tmp_path / "outputs.json"
+    outputs_path.write_text("{}", encoding="utf-8")
+    write_drizzle_files(source_dir, runner.PLATFORM_UPDATE_MIGRATIONS)
+    calls: list[tuple[str, str | None]] = []
+
+    monkeypatch.setattr(runner, "SOURCE", source_dir)
+    monkeypatch.setenv("THINKWORK_TERRAFORM_MODULE_SOURCE", "thinkwork-ai/thinkwork/aws")
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.141")
+    monkeypatch.setattr(runner, "checkout_source", lambda *_args: None)
+    monkeypatch.setattr(runner, "database_url_from_outputs", lambda _outputs: "postgres://db")
+    monkeypatch.setattr(
+        runner,
+        "psql_output",
+        lambda _database_url, _sql: "public.tenants",
+    )
+    monkeypatch.setattr(
+        runner,
+        "initialize_greenfield_database",
+        lambda *_args: calls.append(("initialize", None)),
+    )
+    monkeypatch.setattr(
+        runner,
+        "seed_platform_bootstrap_defaults",
+        lambda _database_url: calls.append(("seed", None)),
+    )
+
+    def record_psql(_database_url, sql=None, file=None, variables=None):
+        calls.append(("psql", Path(file).name if file else "sql"))
+
+    monkeypatch.setattr(runner, "psql", record_psql)
+
+    runner.push_database_schema(outputs_path, {"stage": "tei-e2e"})
+
+    assert calls == [
+        ("psql", "0149_user_model_approvals.sql"),
+        ("psql", "0152_agent_profiles.sql"),
+        ("psql", "0155_tenant_model_catalog.sql"),
+        ("seed", None),
+        ("psql", "0155_tenant_model_catalog.sql"),
+    ]
+
+
+def test_push_database_schema_backfills_tenant_catalog_after_greenfield_seed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    source_dir = tmp_path / "source"
+    outputs_path = tmp_path / "outputs.json"
+    outputs_path.write_text("{}", encoding="utf-8")
+    write_drizzle_files(source_dir, runner.PLATFORM_UPDATE_MIGRATIONS)
+    calls: list[tuple[str, str | None]] = []
+
+    monkeypatch.setattr(runner, "SOURCE", source_dir)
+    monkeypatch.setenv("THINKWORK_TERRAFORM_MODULE_SOURCE", "thinkwork-ai/thinkwork/aws")
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.141")
+    monkeypatch.setattr(runner, "checkout_source", lambda *_args: None)
+    monkeypatch.setattr(runner, "database_url_from_outputs", lambda _outputs: "postgres://db")
+    monkeypatch.setattr(runner, "psql_output", lambda _database_url, _sql: "")
+    monkeypatch.setattr(
+        runner,
+        "initialize_greenfield_database",
+        lambda *_args: calls.append(("initialize", None)),
+    )
+    monkeypatch.setattr(
+        runner,
+        "seed_platform_bootstrap_defaults",
+        lambda _database_url: calls.append(("seed", None)),
+    )
+
+    def record_psql(_database_url, sql=None, file=None, variables=None):
+        calls.append(("psql", Path(file).name if file else "sql"))
+
+    monkeypatch.setattr(runner, "psql", record_psql)
+
+    runner.push_database_schema(outputs_path, {"stage": "tei-e2e"})
+
+    assert calls == [
+        ("initialize", None),
+        ("psql", "0149_user_model_approvals.sql"),
+        ("psql", "0152_agent_profiles.sql"),
+        ("psql", "0155_tenant_model_catalog.sql"),
+        ("seed", None),
+        ("psql", "0155_tenant_model_catalog.sql"),
+    ]
 
 
 def test_payload_release_selection_overrides_stale_runner_environment(
