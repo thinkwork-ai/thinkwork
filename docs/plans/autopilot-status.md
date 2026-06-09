@@ -16,8 +16,9 @@ status: in_progress
 - Current worktree:
   `.Codex/worktrees/u2-controller-run-contract`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
-  merged; U2 PR not opened yet.
-- Status: U2 in progress.
+  merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
+  opened.
+- Status: U2 PR opened; monitoring required CI.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
