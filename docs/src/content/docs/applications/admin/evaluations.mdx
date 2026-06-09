@@ -51,12 +51,15 @@ The model column shortens Bedrock IDs so `us.anthropic.claude-haiku-4-5-20251001
 
 The dialog is where a run gets started. It has two inputs:
 
-| Field          | Purpose                                                                                                                                  |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Model**      | Optional override of the platform agent's default eval model (Kimi K2.5). Non-default overrides must be available in `model_catalog`.    |
-| **Categories** | Multi-select pills. Click **All Categories** to run every enabled test case; click individual chips to run a subset.                     |
+| Field          | Purpose                                                                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Model**      | Optional override of the platform agent's default eval model. Overrides must be enabled in the tenant [Model Catalog](/applications/admin/model-catalog/). |
+| **Categories** | Multi-select pills. Click **All Categories** to run every enabled test case; click individual chips to run a subset.                                       |
 
 On submit the dialog calls `startEvalRun`, the row shows up in Recent Runs as `pending`, and the `eval-runner` Lambda picks it up asynchronously. The invocation target is always the tenant platform agent (see [Agent target](#agent-target) above).
+
+If an override is absent from the tenant catalog or has been disabled there, the
+API rejects the run instead of falling back to a globally seeded model.
 
 ## Studio — test case list
 

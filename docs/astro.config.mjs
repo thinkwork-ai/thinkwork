@@ -169,6 +169,10 @@ export default defineConfig({
                       slug: "applications/admin/evaluations",
                     },
                     {
+                      label: "Model Catalog",
+                      slug: "applications/admin/model-catalog",
+                    },
+                    {
                       label: "Webhooks",
                       slug: "applications/admin/webhooks",
                     },

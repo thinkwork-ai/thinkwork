@@ -146,6 +146,8 @@ The Configuration tab includes the template's runtime selector:
 
 The template runtime is retained for template-backed flows. It is not the primary user-facing control for normal Space operation. See [Runtime Configuration](/concepts/agents/runtime-selection/) for tenant-agent defaults and Space overrides.
 
+Template model choices are constrained by the tenant [Model Catalog](/applications/admin/model-catalog/). A globally known Bedrock model does not appear here unless the tenant catalog has an enabled row for it. Disabling a model in Model Catalog prevents new template/profile selections from using that model while preserving historical traces that already reference the raw Bedrock model ID.
+
 ## The Workspace tab
 
 The template detail page has a **Workspace** tab alongside **Configuration** and **MCP Servers**. This is where the template's inheritance base for workspace files lives — `AGENTS.md`, `CONTEXT.md`, `GUARDRAILS.md`, `TOOLS.md`, `skills/<slug>/SKILL.md`, and so on.

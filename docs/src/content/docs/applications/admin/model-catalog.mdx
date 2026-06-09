@@ -1,0 +1,134 @@
+---
+title: Admin - Model Catalog
+description: Tenant-scoped Bedrock model governance for imports, pricing health, display names, user approvals, and runtime availability.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Model Catalog is the operator surface for deciding which AWS Bedrock foundation
+models a tenant can use. It keeps the raw Bedrock model ID as the runtime
+identifier, while giving the tenant its own display name, enabled state, pricing
+health, and import record.
+
+**Route:** `/settings/model-catalog`  
+**File:** `apps/web/src/routes/_authed/settings.model-catalog.tsx`
+
+<Aside type="note">
+  Model Catalog is tenant-scoped. A model being present in the global
+  `model_catalog` registry is not enough for runtime use; the tenant must have
+  an enabled `tenant_model_catalog` row.
+</Aside>
+
+## What operators see
+
+The page opens on a compact table of models already configured for the tenant.
+Rows show:
+
+| Column   | Meaning                                            |
+| -------- | -------------------------------------------------- |
+| Name     | Tenant display name                                |
+| Provider | `Bedrock` in v1                                    |
+| Model ID | Immutable Bedrock model ID, truncated in the table |
+| Input    | Input-token cost per million tokens                |
+| Output   | Output-token cost per million tokens               |
+
+Click a row to open the model details dialog. The dialog shows the full model
+ID, canonical provider/name, pricing status, pricing diagnostics, capability
+metadata, context window, max output tokens, import source, enabled state, and
+the editable tenant display name.
+
+## Importing Bedrock models
+
+The **Import** action asks the API to list Bedrock foundation models and resolve
+token pricing from AWS Price List. The browser never receives AWS credentials;
+`graphql-http` performs both AWS calls server-side.
+
+The import dialog shows candidate rows with Bedrock metadata, pricing status,
+and whether the model is already configured for the tenant. Operators can select
+one or more candidates, adjust display names before import, and choose whether
+priced rows should be enabled immediately.
+
+Pricing states are intentionally explicit:
+
+| State       | Import behavior                                                                |
+| ----------- | ------------------------------------------------------------------------------ |
+| `resolved`  | Input/output token prices were matched. The model can be imported enabled.     |
+| `missing`   | No matching AWS Price List product was found. The tenant row imports disabled. |
+| `ambiguous` | Multiple plausible AWS Price List products matched. The row imports disabled.  |
+| `error`     | AWS lookup failed or could not be parsed. The row imports disabled.            |
+
+Unresolved pricing is visible in the row details. Operators cannot manually type
+token prices in v1; fixing pricing means updating the resolver or waiting for AWS
+Price List data to become matchable, then importing or refreshing through the
+normal product flow.
+
+## Display names and immutable fields
+
+The tenant display name is editable after import. Use it for concise operator
+labels such as `Haiku 4.5`, `Sonnet 4.6`, or `Kimi K2.5`.
+
+These fields are immutable from the edit dialog:
+
+- provider
+- Bedrock model ID
+- canonical Bedrock name
+- token prices and pricing source
+- capability metadata
+
+Runtime payloads, approvals, costs, and traces continue to store the Bedrock
+model ID. Display names are for humans.
+
+## Enabled state
+
+The enabled toggle is tenant availability. Disabling a model removes it from
+tenant model selectors and prevents new agent profile, eval, and runtime paths
+from accepting that model.
+
+Existing historical traces still render because trace and cost events keep the
+raw model ID. Older events can fall back to the global catalog or legacy pricing
+fallbacks when they predate the tenant catalog row.
+
+## Relationship to user approvals
+
+User model approvals remain per-user, but the tenant catalog is the upstream
+gate.
+
+- A user cannot be approved for a model that is absent or disabled in the tenant
+  catalog.
+- Disabling a tenant model makes it unavailable even if older user approval rows
+  still exist.
+- Re-enabling a priced tenant model makes it eligible for user approval again.
+
+This keeps tenant governance separate from per-user entitlement.
+
+## Data model
+
+| Table                  | Role                                                                 |
+| ---------------------- | -------------------------------------------------------------------- |
+| `model_catalog`        | Global Bedrock metadata, canonical model ID, and canonical prices    |
+| `tenant_model_catalog` | Tenant display name, enabled state, pricing health, and import state |
+| `user_model_approvals` | Per-user approval rows constrained by tenant catalog availability    |
+
+The effective GraphQL rows join `tenant_model_catalog` to `model_catalog`.
+Tenant-facing views prefer the tenant display name; runtime-facing paths keep
+the raw model ID.
+
+## Operational notes
+
+- Deployed stacks must include the Lambda IAM permissions for
+  `bedrock:ListFoundationModels` and AWS Price List read actions before import
+  candidates can load.
+- Bedrock model access is still controlled by the customer's AWS account.
+  Importing a row does not grant AWS Bedrock model access by itself.
+- Price List is queried at import time in v1. Automatic periodic price refresh
+  is a future extension.
+
+## Related
+
+- [Agent Templates](/applications/admin/agent-templates/) - template model
+  selectors use enabled tenant catalog rows
+- [Evaluations](/applications/admin/evaluations/) - eval model overrides must be
+  enabled in the tenant catalog
+- [Humans](/applications/admin/humans/) - user approvals are constrained by the
+  tenant catalog
+- [Model Catalog import verification](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/verification/model-catalog-import-e2e.md) - live verification checklist

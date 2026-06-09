@@ -19,6 +19,11 @@ Optional infrastructure toggles such as Cognee and Twenty CRM live in
 Spaces/Desktop Settings -> General. The Settings page remains a read-only
 deployment readout.
 
+Model availability is the one Settings-area surface that is intentionally
+operator-managed at runtime: use [Model Catalog](/applications/admin/model-catalog/)
+to import Bedrock models, inspect AWS Price List pricing health, edit tenant
+display names, and enable or disable tenant model availability.
+
 ## Organization
 
 | Field         | Notes                                                                |
@@ -149,6 +154,7 @@ The deliberately heavy use of "No — Terraform" is the design philosophy: tenan
 ## Related pages
 
 - [Humans](/applications/web/humans/) — tenant member management (the mutable counterpart to this page)
+- [Model Catalog](/applications/admin/model-catalog/) — Bedrock model imports, tenant display names, and availability
 - [Managed Applications](/applications/web/managed-applications/) — optional Cognee and Twenty CRM deployment controls
 - [Deploy Configuration](/deploy/configuration/) — the Terraform reference for every field on this page
 - [CLI](/applications/cli/) — the tool used to change Terraform-backed settings and redeploy
