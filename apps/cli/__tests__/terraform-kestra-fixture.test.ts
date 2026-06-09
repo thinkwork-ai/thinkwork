@@ -161,7 +161,7 @@ describe("Kestra Terraform managed app composition", () => {
     );
   });
 
-  it("passes compact Kestra deployment status into graphql-http env", () => {
+  it("passes compact Kestra deployment status into GraphQL and control MCP env", () => {
     const handlers = read(LAMBDA_API_HANDLERS);
     const vars = read(LAMBDA_API_VARS);
 
@@ -182,6 +182,7 @@ describe("Kestra Terraform managed app composition", () => {
     );
     expect(handlers).toMatch(/}, local\.cognee_env\)/);
     expect(handlers).toMatch(/}, local\.twenty_env, local\.kestra_env\)/);
+    expect(handlers).toMatch(/"kestra-control-mcp"\s*=\s*local\.kestra_env/);
   });
 
   it("adds orchestrate.<domain> DNS support without rotating the shared site certificate", () => {

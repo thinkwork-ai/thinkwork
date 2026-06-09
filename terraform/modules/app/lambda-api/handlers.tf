@@ -194,6 +194,7 @@ locals {
       CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
       CONTEXT_ENGINE_MEMORY_TIMEOUT_MS = "20000"
     }
+    "kestra-control-mcp" = local.kestra_env
     # Bedrock KB provisioning. Per-handler (not common_env) so these don't bloat
     # the already-near-4KB graphql-http env. Bedrock's RDS-backed KB needs the
     # cluster ARN + the KB service role (passed at CreateKnowledgeBase time).

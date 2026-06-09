@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "kind": "kestra-managed-app",
+  "generatedAt": "2026-06-09T03:42:42.538Z",
+  "ok": true,
+  "release": {
+    "version": null,
+    "previousVersion": null,
+    "manifestDigest": null,
+    "previousManifestDigest": null
+  },
+  "aws": {
+    "stepFunctionsExecutionArn": null,
+    "codeBuildBuildArn": null,
+    "codeBuildBuildId": null,
+    "region": "us-east-1"
+  },
+  "artifacts": {
+    "terraformPlanKey": null,
+    "terraformApplyKey": null,
+    "smokeResultKey": null,
+    "cloudWatchLogsUrl": null
+  },
+  "result": {
+    "ok": true,
+    "status": {
+      "provisioned": true,
+      "runtimeEnabled": true,
+      "url": "https://orchestrate.thinkwork.ai",
+      "source": "graphql",
+      "status": "running",
+      "message": null,
+      "managedMcpStatus": "installed"
+    },
+    "publicHealth": {
+      "endpoint": "https://orchestrate.thinkwork.ai/",
+      "healthy": true,
+      "statusCode": 200,
+      "latencyMs": 298,
+      "message": "Kestra public endpoint is reachable."
+    },
+    "graphqlHealth": {
+      "healthy": true,
+      "statusCode": 200,
+      "latencyMs": 119,
+      "endpoint": "https://orchestrate.thinkwork.ai",
+      "message": "Kestra public endpoint is reachable."
+    },
+    "terraform": {
+      "available": true,
+      "kestra_provisioned": true,
+      "kestra_runtime_enabled": true,
+      "kestra_url": "https://orchestrate.thinkwork.ai",
+      "kestra_cluster_arn": "arn:aws:ecs:us-east-1:487219502366:cluster/thinkwork-dev-kestra-cluster",
+      "kestra_service_name": "thinkwork-dev-kestra-service",
+      "kestra_log_group_name": "/thinkwork/dev/kestra",
+      "kestra_storage_bucket_name": "tw-dev-kestra-487219502366"
+    },
+    "graphql": {
+      "deploymentStatus": {
+        "stage": "dev",
+        "region": "us-east-1",
+        "managedApplications": [
+          {
+            "key": "cognee",
+            "status": "running",
+            "provisioned": true,
+            "runtimeEnabled": true,
+            "url": null,
+            "message": null,
+            "managedMcpStatus": "not_applicable",
+            "managedMcpInstalled": false
+          },
+          {
+            "key": "twenty",
+            "status": "running",
+            "provisioned": true,
+            "runtimeEnabled": true,
+            "url": "https://crm.thinkwork.ai",
+            "message": null,
+            "managedMcpStatus": "installed",
+            "managedMcpInstalled": true
+          },
+          {
+            "key": "kestra",
+            "status": "running",
+            "provisioned": true,
+            "runtimeEnabled": true,
+            "url": "https://orchestrate.thinkwork.ai",
+            "message": null,
+            "managedMcpStatus": "installed",
+            "managedMcpInstalled": true
+          }
+        ]
+      }
+    }
+  }
+}
