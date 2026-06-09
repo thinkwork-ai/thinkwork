@@ -73,6 +73,19 @@ export interface OpenedSession {
   durable?: boolean;
 }
 
+function assistantFailureMessage(
+  message: AssistantMessage | undefined,
+): string | undefined {
+  if (!message) return undefined;
+  const record = message as { stopReason?: unknown; errorMessage?: unknown };
+  if (record.stopReason !== "error") return undefined;
+  const detail =
+    typeof record.errorMessage === "string" && record.errorMessage.trim()
+      ? record.errorMessage.trim()
+      : "Pi agent returned an assistant error.";
+  return detail;
+}
+
 /**
  * A live mid-turn activity event the host can stream to the client (plan
  * 2026-06-03-001). Emitted per tool/skill/phase boundary (Phase 1) and per
@@ -770,6 +783,16 @@ export async function runAgentLoop(
       }
     }
 
+    const assistant = [...session.messages]
+      .reverse()
+      .find(
+        (message): message is AssistantMessage => message.role === "assistant",
+      );
+    const assistantFailure = assistantFailureMessage(assistant);
+    if (assistantFailure) {
+      throw new Error(assistantFailure);
+    }
+
     // Persist the durable session only after a successful turn — a failed turn
     // leaves the stored session at its prior good state for the retry to resume.
     // Persistence is best-effort: the assistant reply is already valid, so a
@@ -792,12 +815,6 @@ export async function runAgentLoop(
         });
       }
     }
-
-    const assistant = [...session.messages]
-      .reverse()
-      .find(
-        (message): message is AssistantMessage => message.role === "assistant",
-      );
 
     const modelRoutedToolCalls = toolInvocations.flatMap((invocation) =>
       invocation.model_routing ? [invocation.model_routing] : [],
