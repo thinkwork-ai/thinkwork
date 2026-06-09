@@ -122,6 +122,7 @@ resource "terraform_data" "cognee_configuration_guardrails" {
     cognee_backend_mode            = var.cognee_backend_mode
     cognee_desired_count           = var.cognee_desired_count
     cognee_image_uri               = var.cognee_image_uri
+    cognee_db_name                 = var.cognee_db_name
     cognee_db_password_secret_arn  = var.cognee_db_password_secret_arn
     cognee_llm_provider            = var.cognee_llm_provider
     cognee_embedding_provider      = var.cognee_embedding_provider
@@ -143,6 +144,11 @@ resource "terraform_data" "cognee_configuration_guardrails" {
     precondition {
       condition     = var.cognee_db_password_secret_arn != module.database.graphql_db_secret_arn
       error_message = "enable_cognee requires a dedicated Cognee database secret, not the shared Thinkwork admin database secret."
+    }
+
+    precondition {
+      condition     = var.cognee_db_name != var.database_name
+      error_message = "cognee_db_name must be distinct from the shared Thinkwork database name."
     }
 
     precondition {
