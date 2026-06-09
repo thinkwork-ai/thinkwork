@@ -19,7 +19,7 @@ const authContextMocks = vi.hoisted(() => ({
 }));
 
 const authMocks = vi.hoisted(() => ({
-  getGoogleSignInUrl: vi.fn(),
+  getHostedSignInUrl: vi.fn(),
 }));
 
 const desktopRuntimeMocks = vi.hoisted(() => ({
@@ -57,7 +57,7 @@ vi.mock("@/context/AuthContext", () => ({
 }));
 
 vi.mock("@/lib/auth", () => ({
-  getGoogleSignInUrl: authMocks.getGoogleSignInUrl,
+  getHostedSignInUrl: authMocks.getHostedSignInUrl,
 }));
 
 vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
@@ -80,7 +80,7 @@ beforeEach(() => {
     isAuthenticated: false,
     isLoading: false,
   });
-  authMocks.getGoogleSignInUrl.mockReturnValue("https://auth.example/login");
+  authMocks.getHostedSignInUrl.mockReturnValue("https://auth.example/login");
   routerMocks.search = { next: undefined };
   desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
 });

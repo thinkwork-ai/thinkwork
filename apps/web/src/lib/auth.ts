@@ -388,7 +388,7 @@ function parseIdToken(session: CognitoUserSession): AuthUser {
 }
 
 // ---------------------------------------------------------------------------
-// Google OAuth — federated sign-in via Cognito hosted UI
+// Cognito hosted UI sign-in
 // ---------------------------------------------------------------------------
 
 function getCognitoDomainBase(): string {
@@ -400,18 +400,29 @@ function getCognitoDomainBase(): string {
 }
 
 export function getGoogleSignInUrl(): string {
+  return getHostedSignInUrl({
+    identityProvider: "Google",
+    prompt: "select_account",
+  });
+}
+
+export function getHostedSignInUrl(options?: {
+  identityProvider?: string;
+  prompt?: string;
+}): string {
   const redirectUri = `${window.location.origin}/auth/callback`;
-  // `prompt=select_account` is forwarded to Google so the account chooser is
-  // shown every time. Without it, Google silently re-uses its session cookie
-  // and the user can never switch identities by signing back in.
   const params = new URLSearchParams({
-    identity_provider: "Google",
     response_type: "code",
     client_id: readRuntimeEnv("VITE_COGNITO_CLIENT_ID"),
     redirect_uri: redirectUri,
     scope: "openid email profile",
-    prompt: "select_account",
   });
+  if (options?.identityProvider) {
+    params.set("identity_provider", options.identityProvider);
+  }
+  if (options?.prompt) {
+    params.set("prompt", options.prompt);
+  }
   return `${getCognitoDomainBase()}/oauth2/authorize?${params.toString()}`;
 }
 

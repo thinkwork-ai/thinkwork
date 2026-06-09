@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@thinkwork/ui";
 import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
 import { useAuth } from "@/context/AuthContext";
-import { getGoogleSignInUrl } from "@/lib/auth";
+import { getHostedSignInUrl } from "@/lib/auth";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import {
   getDesktopBridge,
@@ -156,7 +156,7 @@ export function SignInPage() {
       return;
     }
 
-    window.location.href = getGoogleSignInUrl();
+    window.location.href = getHostedSignInUrl();
   }
 
   const webConfigBlocked = !isDesktop && !webDeploymentProfile.okForOAuth;
