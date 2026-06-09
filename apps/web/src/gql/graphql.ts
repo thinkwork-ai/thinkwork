@@ -557,6 +557,30 @@ export enum ArtifactType {
   Report = 'REPORT'
 }
 
+export type BedrockModelImportCandidate = {
+  __typename?: 'BedrockModelImportCandidate';
+  alreadyImported: Scalars['Boolean']['output'];
+  customizationsSupported: Array<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  enabled: Scalars['Boolean']['output'];
+  inferenceTypesSupported: Array<Scalars['String']['output']>;
+  inputCostPerMillion?: Maybe<Scalars['Float']['output']>;
+  inputModalities: Array<Scalars['String']['output']>;
+  lifecycleStatus?: Maybe<Scalars['String']['output']>;
+  modelId: Scalars['String']['output'];
+  modelName: Scalars['String']['output'];
+  outputCostPerMillion?: Maybe<Scalars['Float']['output']>;
+  outputModalities: Array<Scalars['String']['output']>;
+  pricingDiagnostics: Scalars['AWSJSON']['output'];
+  pricingSource?: Maybe<Scalars['String']['output']>;
+  pricingStatus: Scalars['String']['output'];
+  provider: Scalars['String']['output'];
+  providerName: Scalars['String']['output'];
+  supportsStreaming: Scalars['Boolean']['output'];
+  supportsTools: Scalars['Boolean']['output'];
+  supportsVision: Scalars['Boolean']['output'];
+};
+
 export type BootstrapResult = {
   __typename?: 'BootstrapResult';
   isNew: Scalars['Boolean']['output'];
@@ -1316,6 +1340,17 @@ export type ImportN8nRoutineInput = {
   pdiCredentialSlug?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
   workflowUrl: Scalars['String']['input'];
+};
+
+export type ImportTenantBedrockModelInput = {
+  displayName?: InputMaybe<Scalars['String']['input']>;
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  modelId: Scalars['String']['input'];
+};
+
+export type ImportTenantBedrockModelsInput = {
+  models: Array<ImportTenantBedrockModelInput>;
+  tenantId: Scalars['ID']['input'];
 };
 
 export type InboxItem = {
@@ -2240,6 +2275,7 @@ export type Mutation = {
   enableWorkflow: WorkflowBinding;
   escalateThread: Thread;
   importN8nRoutine: Routine;
+  importTenantBedrockModels: Array<TenantModelCatalogEntry>;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
   inviteMember: TenantMember;
   markThreadsRead: MarkThreadsReadResult;
@@ -2361,6 +2397,7 @@ export type Mutation = {
   updateTenantAgent: Agent;
   updateTenantCredential: TenantCredential;
   updateTenantMember: TenantMember;
+  updateTenantModelCatalogEntry: TenantModelCatalogEntry;
   /**
    * Platform-operator-only mutation — see UpdateTenantPolicyInput. Changes
    * are audited in tenant_policy_events and must satisfy the compound
@@ -2733,6 +2770,11 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationImportN8nRoutineArgs = {
   input: ImportN8nRoutineInput;
+};
+
+
+export type MutationImportTenantBedrockModelsArgs = {
+  input: ImportTenantBedrockModelsInput;
 };
 
 
@@ -3354,6 +3396,11 @@ export type MutationUpdateTenantMemberArgs = {
 };
 
 
+export type MutationUpdateTenantModelCatalogEntryArgs = {
+  input: UpdateTenantModelCatalogEntryInput;
+};
+
+
 export type MutationUpdateTenantPolicyArgs = {
   input: UpdateTenantPolicyInput;
   tenantId: Scalars['ID']['input'];
@@ -3743,6 +3790,7 @@ export type Query = {
   applets: AppletConnection;
   artifact?: Maybe<Artifact>;
   artifacts: Array<Artifact>;
+  bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
   brainEnrichmentSources: Array<BrainEnrichmentSourceAvailability>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
@@ -3897,6 +3945,7 @@ export type Query = {
   tenantEntityPage?: Maybe<TenantEntityPage>;
   tenantMembers: Array<TenantMember>;
   tenantMentionTargets: Array<ThreadMentionTarget>;
+  tenantModelCatalog: Array<TenantModelCatalogEntry>;
   /**
    * List the caller-tenant's skill catalog (the derived skill_catalog index) for
    * composer/skill pickers. When `agentId` is provided, entries are annotated
@@ -4100,6 +4149,11 @@ export type QueryArtifactsArgs = {
   tenantId: Scalars['ID']['input'];
   threadId?: InputMaybe<Scalars['ID']['input']>;
   type?: InputMaybe<ArtifactType>;
+};
+
+
+export type QueryBedrockModelImportCandidatesArgs = {
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -4606,6 +4660,12 @@ export type QueryTenantMembersArgs = {
 
 
 export type QueryTenantMentionTargetsArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryTenantModelCatalogArgs = {
+  includeDisabled?: InputMaybe<Scalars['Boolean']['input']>;
   tenantId: Scalars['ID']['input'];
 };
 
@@ -6676,6 +6736,13 @@ export type UpdateTenantMemberInput = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateTenantModelCatalogEntryInput = {
+  displayName?: InputMaybe<Scalars['String']['input']>;
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  modelId: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 /**

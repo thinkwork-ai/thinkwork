@@ -41,6 +41,13 @@ export type TenantModelPricing = {
   source: "tenant_model_catalog";
 };
 
+export type UpdateTenantModelCatalogEntryInput = {
+  tenantId: string;
+  modelId: string;
+  displayName?: string | null;
+  enabled?: boolean | null;
+};
+
 type TenantModelCatalogRow = {
   id: string;
   tenantId: string;
@@ -319,4 +326,66 @@ export async function upsertTenantModelCatalogEntry(
         updated_at: now,
       },
     });
+}
+
+export async function updateTenantModelCatalogEntry(
+  input: UpdateTenantModelCatalogEntryInput,
+  options: { db?: Db } = {},
+): Promise<TenantModelCatalogEntry | null> {
+  const db = options.db ?? defaultDb;
+  const current = await getTenantModelCatalogEntry(
+    {
+      tenantId: input.tenantId,
+      modelId: input.modelId,
+      includeDisabled: true,
+    },
+    { db },
+  );
+  if (!current) return null;
+
+  const displayName =
+    input.displayName === undefined || input.displayName === null
+      ? undefined
+      : input.displayName.trim();
+  if (displayName !== undefined && displayName.length === 0) {
+    throw new Error("Display name cannot be blank.");
+  }
+
+  if (
+    input.enabled === true &&
+    (current.pricingStatus !== "resolved" ||
+      !current.inputCostPerMillion ||
+      !current.outputCostPerMillion)
+  ) {
+    throw new Error("Cannot enable a model without resolved token pricing.");
+  }
+
+  const patch: Partial<typeof tenantModelCatalog.$inferInsert> = {
+    updated_at: new Date(),
+  };
+  if (displayName !== undefined) {
+    patch.display_name = displayName;
+  }
+  if (input.enabled !== undefined && input.enabled !== null) {
+    patch.enabled = input.enabled;
+  }
+
+  await db
+    .update(tenantModelCatalog)
+    .set(patch)
+    .where(
+      and(
+        eq(tenantModelCatalog.tenant_id, input.tenantId),
+        eq(tenantModelCatalog.model_id, input.modelId),
+      ),
+    );
+
+  return getTenantModelCatalogEntry(
+    {
+      tenantId: input.tenantId,
+      modelId: input.modelId,
+      includeDisabled: true,
+    },
+    { db },
+  );
 }
