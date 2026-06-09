@@ -1,15 +1,16 @@
 import { createFileRoute, redirect, Outlet } from "@tanstack/react-router";
 import { getIdToken } from "@/lib/auth";
-
-const COGNITO_CONFIGURED = !!(
-  import.meta.env.VITE_COGNITO_USER_POOL_ID &&
-  import.meta.env.VITE_COGNITO_CLIENT_ID
-);
+import { readRuntimeEnv } from "@/lib/runtime-config";
 
 export const Route = createFileRoute("/_authed")({
   beforeLoad: async () => {
     // Skip auth gate when Cognito isn't configured (local dev without deploy)
-    if (!COGNITO_CONFIGURED) return;
+    if (
+      !readRuntimeEnv("VITE_COGNITO_USER_POOL_ID") ||
+      !readRuntimeEnv("VITE_COGNITO_CLIENT_ID")
+    ) {
+      return;
+    }
 
     // Use getIdToken (which has the localStorage fallback) instead of
     // getCurrentSession. amazon-cognito-identity-js can't reconstruct an

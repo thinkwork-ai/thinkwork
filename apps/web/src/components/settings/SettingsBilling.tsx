@@ -1,11 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  AlertCircle,
-  Check,
-  ExternalLink,
-  Loader2,
-  Star,
-} from "lucide-react";
+import { AlertCircle, Check, ExternalLink, Loader2, Star } from "lucide-react";
 import {
   Badge,
   Button,
@@ -25,8 +19,7 @@ import {
 } from "@/components/settings/SettingsContent";
 import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
-
-const API_URL = import.meta.env.VITE_API_URL || "";
+import { readRuntimeEnv } from "@/lib/runtime-config";
 
 interface SubscriptionState {
   plan: string;
@@ -63,9 +56,12 @@ export function SettingsBilling() {
       try {
         const token = await getToken();
         if (!token) throw new Error("Not signed in");
-        const res = await fetch(`${API_URL}/api/stripe/subscription`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(
+          `${readRuntimeEnv("VITE_API_URL")}/api/stripe/subscription`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || `HTTP ${res.status}`);
@@ -92,14 +88,17 @@ export function SettingsBilling() {
     try {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      const res = await fetch(`${API_URL}/api/stripe/checkout-session`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const res = await fetch(
+        `${readRuntimeEnv("VITE_API_URL")}/api/stripe/checkout-session`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ plan: planId }),
         },
-        body: JSON.stringify({ plan: planId }),
-      });
+      );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);
@@ -126,14 +125,17 @@ export function SettingsBilling() {
     try {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      const res = await fetch(`${API_URL}/api/stripe/portal-session`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const res = await fetch(
+        `${readRuntimeEnv("VITE_API_URL")}/api/stripe/portal-session`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: flow === "home" ? undefined : JSON.stringify({ flow }),
         },
-        body: flow === "home" ? undefined : JSON.stringify({ flow }),
-      });
+      );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);

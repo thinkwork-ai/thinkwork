@@ -8,6 +8,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 import { setGraphqlTenantId } from "@/lib/graphql-client";
+import { readRuntimeEnv } from "@/lib/runtime-config";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,8 +74,6 @@ const TenantContext = createContext<TenantContextValue | null>(null);
 // Provider
 // ---------------------------------------------------------------------------
 
-const API_URL = import.meta.env.VITE_API_URL || "";
-
 /**
  * Tenant-discovery fallback for Google-federated users. Cognito JWTs from
  * Google OAuth do not carry `custom:tenant_id` until the pre-token Lambda
@@ -90,7 +89,7 @@ async function discoverCallerViaAuthMe(): Promise<{
   role: TenantRole | null;
 }> {
   const empty = { tenantId: null, userId: null, role: null };
-  if (!API_URL) return empty;
+  if (!readRuntimeEnv("VITE_API_URL")) return empty;
   try {
     const data = await apiFetch<{
       tenantId?: string | null;
@@ -135,7 +134,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   }, [effectiveTenantId, tenant?.id]);
 
   async function fetchTenant(targetTenantId: string) {
-    if (!targetTenantId || !API_URL) {
+    if (!targetTenantId || !readRuntimeEnv("VITE_API_URL")) {
       setIsLoading(false);
       return;
     }

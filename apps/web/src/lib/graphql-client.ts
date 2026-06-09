@@ -5,19 +5,28 @@ import {
   subscriptionExchange,
 } from "@urql/core";
 import { print, type DocumentNode } from "graphql";
+import { readRuntimeEnv } from "@/lib/runtime-config";
 
 // HTTP endpoint for queries/mutations (API Gateway). apps/web Phase 1
 // AppSync carries the subscription-only realtime schema.
 // Collapse accidental double slashes in the path (the api_endpoint terraform
 // output carries a trailing slash, so `${base}/graphql` yields `…com//graphql`)
 // while preserving the `https://` scheme separator.
-const GRAPHQL_HTTP_URL = (import.meta.env.VITE_GRAPHQL_HTTP_URL || "").replace(
-  /([^:]\/)\/+/g,
-  "$1",
-);
-const GRAPHQL_APPSYNC_URL = import.meta.env.VITE_GRAPHQL_URL || "";
-const GRAPHQL_WS_URL = import.meta.env.VITE_GRAPHQL_WS_URL || "";
-const GRAPHQL_API_KEY = import.meta.env.VITE_GRAPHQL_API_KEY || "";
+function graphqlHttpUrl(): string {
+  return readRuntimeEnv("VITE_GRAPHQL_HTTP_URL").replace(/([^:]\/)\/+/g, "$1");
+}
+
+function graphqlAppsyncUrl(): string {
+  return readRuntimeEnv("VITE_GRAPHQL_URL");
+}
+
+function graphqlWsUrl(): string {
+  return readRuntimeEnv("VITE_GRAPHQL_WS_URL");
+}
+
+function graphqlApiKey(): string {
+  return readRuntimeEnv("VITE_GRAPHQL_API_KEY");
+}
 
 // Token provider — called on every request so Cognito can refresh expired tokens.
 // AuthContext sets this to auth.getIdToken after sign-in.
@@ -92,8 +101,9 @@ function authHeaders(): Record<string, string> {
   if (currentTenantId) {
     headers["x-tenant-id"] = currentTenantId;
   }
-  if (GRAPHQL_API_KEY) {
-    headers["x-api-key"] = GRAPHQL_API_KEY;
+  const apiKey = graphqlApiKey();
+  if (apiKey) {
+    headers["x-api-key"] = apiKey;
   }
   if (cachedToken && !isExpiredJwt(cachedToken)) {
     headers.Authorization = cachedToken;
@@ -119,8 +129,8 @@ function isExpiredJwt(token: string): boolean {
 }
 
 export function buildAppSyncAuthHost(
-  graphqlUrl = GRAPHQL_APPSYNC_URL,
-  realtimeUrl = GRAPHQL_WS_URL,
+  graphqlUrl = graphqlAppsyncUrl(),
+  realtimeUrl = graphqlWsUrl(),
 ): string {
   const sourceUrl =
     graphqlUrl ||
@@ -133,9 +143,9 @@ export function buildAppSyncAuthHost(
 }
 
 export function buildAppSyncRealtimeUrl(
-  graphqlUrl = GRAPHQL_APPSYNC_URL,
-  realtimeUrl = GRAPHQL_WS_URL,
-  apiKey = GRAPHQL_API_KEY,
+  graphqlUrl = graphqlAppsyncUrl(),
+  realtimeUrl = graphqlWsUrl(),
+  apiKey = graphqlApiKey(),
 ): string {
   const host = buildAppSyncAuthHost(graphqlUrl, realtimeUrl);
   const websocketUrl = realtimeUrl
@@ -282,7 +292,7 @@ class AppSyncSubscriptionClient {
           extensions: {
             authorization: {
               host,
-              "x-api-key": GRAPHQL_API_KEY,
+              "x-api-key": graphqlApiKey(),
             },
           },
         },
@@ -309,40 +319,31 @@ class AppSyncSubscriptionClient {
   }
 }
 
-const appSyncClient = buildAppSyncRealtimeUrl()
-  ? new AppSyncSubscriptionClient()
-  : null;
+const appSyncClient = new AppSyncSubscriptionClient();
 
 export const graphqlClient = new Client({
   url:
-    GRAPHQL_HTTP_URL ||
+    graphqlHttpUrl() ||
     "https://placeholder.api.us-east-1.amazonaws.com/graphql",
   exchanges: [
     cacheExchange,
     fetchExchange,
-    ...(appSyncClient
-      ? [
-          subscriptionExchange({
-            forwardSubscription(request) {
-              const query = serializeGraphqlQuery(request.query);
-              const variables = (request.variables || {}) as Record<
-                string,
-                unknown
-              >;
-              return {
-                subscribe(sink) {
-                  const unsubscribe = appSyncClient.subscribe(
-                    query,
-                    variables,
-                    sink as Sink,
-                  );
-                  return { unsubscribe };
-                },
-              };
-            },
-          }),
-        ]
-      : []),
+    subscriptionExchange({
+      forwardSubscription(request) {
+        const query = serializeGraphqlQuery(request.query);
+        const variables = (request.variables || {}) as Record<string, unknown>;
+        return {
+          subscribe(sink) {
+            const unsubscribe = appSyncClient.subscribe(
+              query,
+              variables,
+              sink as Sink,
+            );
+            return { unsubscribe };
+          },
+        };
+      },
+    }),
   ],
   fetchOptions: (): RequestInit => ({
     method: "POST",

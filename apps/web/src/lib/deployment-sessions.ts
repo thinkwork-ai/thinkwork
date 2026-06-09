@@ -127,9 +127,10 @@ async function requestJson<T>(
 }
 
 export function apiBaseUrl(): string {
-  const explicit = import.meta.env.VITE_API_URL || "";
+  const explicit = readRuntimeEnv("VITE_API_URL");
   if (explicit) return explicit.replace(/\/+$/, "");
-  const graphql = import.meta.env.VITE_GRAPHQL_HTTP_URL || "";
+  const graphql = readRuntimeEnv("VITE_GRAPHQL_HTTP_URL");
   if (graphql) return graphql.replace(/\/graphql\/?$/, "").replace(/\/+$/, "");
   return "";
 }
+import { readRuntimeEnv } from "@/lib/runtime-config";

@@ -7,14 +7,11 @@ import {
 } from "amazon-cognito-identity-js";
 import type { TokenStorage } from "./token-storage";
 import { LocalStorageTokenStorage } from "./token-storage/local-storage";
+import { readRuntimeEnv } from "./runtime-config";
 
 // ---------------------------------------------------------------------------
 // Config — lazy-init to avoid crashing when env vars aren't set (local dev)
 // ---------------------------------------------------------------------------
-const USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID || "";
-const CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID || "";
-const COGNITO_DOMAIN = import.meta.env.VITE_COGNITO_DOMAIN || "";
-
 let _userPool: CognitoUserPool | null = null;
 let tokenStorage: TokenStorage = new LocalStorageTokenStorage();
 const TOKEN_REFRESH_SKEW_MS = 30_000;
@@ -30,11 +27,13 @@ export function getTokenStorage(): TokenStorage {
 }
 
 function getUserPool(): CognitoUserPool | null {
-  if (!USER_POOL_ID || !CLIENT_ID) return null;
+  const userPoolId = readRuntimeEnv("VITE_COGNITO_USER_POOL_ID");
+  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
+  if (!userPoolId || !clientId) return null;
   if (!_userPool) {
     _userPool = new CognitoUserPool({
-      UserPoolId: USER_POOL_ID,
-      ClientId: CLIENT_ID,
+      UserPoolId: userPoolId,
+      ClientId: clientId,
       Storage: tokenStorage as unknown as Storage,
     });
   }
@@ -190,7 +189,8 @@ export function signOut(): void {
   const pool = getUserPool();
   pool?.getCurrentUser()?.signOut();
 
-  if (!CLIENT_ID) {
+  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
+  if (!clientId) {
     window.location.href = "/sign-in";
     return;
   }
@@ -200,7 +200,7 @@ export function signOut(): void {
   // `/sign-in`), so target the origin here and let the `_authed` route guard
   // bounce the unauthenticated user to `/sign-in`.
   const params = new URLSearchParams({
-    client_id: CLIENT_ID,
+    client_id: clientId,
     logout_uri: window.location.origin,
   });
   window.location.href = `${getCognitoDomainBase()}/logout?${params.toString()}`;
@@ -238,12 +238,12 @@ export function getCurrentSession(): Promise<CognitoUserSession | null> {
 // ---------------------------------------------------------------------------
 
 function getStoredTokenName(): string | null {
-  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  const prefix = `CognitoIdentityServiceProvider.${readRuntimeEnv("VITE_COGNITO_CLIENT_ID")}`;
   return tokenStorage.getItem(`${prefix}.LastAuthUser`);
 }
 
 function getStoredToken(kind: "idToken" | "accessToken" | "refreshToken") {
-  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  const prefix = `CognitoIdentityServiceProvider.${readRuntimeEnv("VITE_COGNITO_CLIENT_ID")}`;
   const lastUser = getStoredTokenName();
   if (!lastUser) return null;
   return tokenStorage.getItem(`${prefix}.${lastUser}.${kind}`);
@@ -279,14 +279,16 @@ async function refreshStoredOAuthSession(): Promise<{
 } | null> {
   const username = getStoredTokenName();
   const refreshToken = getStoredToken("refreshToken");
-  if (!username || !refreshToken || !CLIENT_ID || !COGNITO_DOMAIN) return null;
+  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
+  const cognitoDomain = readRuntimeEnv("VITE_COGNITO_DOMAIN");
+  if (!username || !refreshToken || !clientId || !cognitoDomain) return null;
 
   const response = await fetch(`${getCognitoDomainBase()}/oauth2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      client_id: CLIENT_ID,
+      client_id: clientId,
       refresh_token: refreshToken,
     }),
   });
@@ -301,12 +303,15 @@ async function refreshStoredOAuthSession(): Promise<{
     return null;
   }
 
-  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  const prefix = `CognitoIdentityServiceProvider.${clientId}`;
   tokenStorage.setItem(`${prefix}.${username}.idToken`, raw.id_token);
   tokenStorage.setItem(`${prefix}.${username}.accessToken`, raw.access_token);
   tokenStorage.setItem(`${prefix}.${username}.clockDrift`, "0");
   if (typeof raw.refresh_token === "string") {
-    tokenStorage.setItem(`${prefix}.${username}.refreshToken`, raw.refresh_token);
+    tokenStorage.setItem(
+      `${prefix}.${username}.refreshToken`,
+      raw.refresh_token,
+    );
   }
 
   return { idToken: raw.id_token, accessToken: raw.access_token };
@@ -387,7 +392,7 @@ function parseIdToken(session: CognitoUserSession): AuthUser {
 // ---------------------------------------------------------------------------
 
 function getCognitoDomainBase(): string {
-  const raw = COGNITO_DOMAIN.replace(/\/$/, "");
+  const raw = readRuntimeEnv("VITE_COGNITO_DOMAIN").replace(/\/$/, "");
   // If it's already a full URL, use as-is
   if (raw.startsWith("https://")) return raw;
   // Otherwise treat it as the domain prefix
@@ -402,7 +407,7 @@ export function getGoogleSignInUrl(): string {
   const params = new URLSearchParams({
     identity_provider: "Google",
     response_type: "code",
-    client_id: CLIENT_ID,
+    client_id: readRuntimeEnv("VITE_COGNITO_CLIENT_ID"),
     redirect_uri: redirectUri,
     scope: "openid email profile",
     prompt: "select_account",
@@ -443,7 +448,7 @@ export async function exchangeCodeForSession(
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: CLIENT_ID,
+      client_id: readRuntimeEnv("VITE_COGNITO_CLIENT_ID"),
       redirect_uri: redirectUri,
       code,
     }),
@@ -479,7 +484,7 @@ export function storeTokensInCognitoStorage(tokens: OAuthTokens): void {
   const payload = JSON.parse(atob(tokens.id_token.split(".")[1]));
   const username = payload["cognito:username"] || payload["sub"];
 
-  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  const prefix = `CognitoIdentityServiceProvider.${readRuntimeEnv("VITE_COGNITO_CLIENT_ID")}`;
 
   tokenStorage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
   tokenStorage.setItem(

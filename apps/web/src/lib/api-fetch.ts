@@ -22,8 +22,7 @@
  */
 
 import { getIdToken } from "@/lib/auth";
-
-const API_URL = import.meta.env.VITE_API_URL || "";
+import { readRuntimeEnv } from "@/lib/runtime-config";
 
 export class NotReadyError extends Error {
   readonly kind = "NotReadyError" as const;
@@ -62,10 +61,11 @@ export async function apiFetch<T = unknown>(
   options: ApiFetchOptions = {},
 ): Promise<T> {
   const { extraHeaders, headers: callerHeaders, ...rest } = options;
+  const apiUrl = readRuntimeEnv("VITE_API_URL");
   const token = await getIdToken();
   if (!token) throw new NotReadyError();
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${apiUrl}${path}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",
