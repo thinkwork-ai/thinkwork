@@ -541,9 +541,14 @@ describe("SettingsActivityThreadDetail", () => {
       ...turn,
       usageJson: JSON.stringify({
         model: "us.anthropic.claude-sonnet-4-6",
-        input_tokens: 12,
-        output_tokens: 183,
-        cached_read_tokens: 10000,
+        input_tokens: 100,
+        output_tokens: 207,
+        cached_read_tokens: 15000,
+        parent_usage: {
+          input_tokens: 12,
+          output_tokens: 183,
+          cached_read_tokens: 10000,
+        },
         duration_ms: 23200,
         tool_invocations: [
           {
@@ -576,6 +581,19 @@ describe("SettingsActivityThreadDetail", () => {
             costUsd: 0.0017,
             laneKey: "profile:research",
             handoffSummary: "Research handoff summary",
+            loopEvidence: {
+              loopId: "loop-research-1",
+              ownerType: "profile",
+              ownerSlug: "research",
+              iterations: [
+                {
+                  index: 0,
+                  phase: "self_review",
+                  status: "completed",
+                  verdict: "pass",
+                },
+              ],
+            },
             toolInvocations: [
               {
                 id: "child-web-search",
@@ -639,9 +657,7 @@ describe("SettingsActivityThreadDetail", () => {
     expect(
       screen.getAllByText((_content, node) =>
         Boolean(
-          node?.textContent
-            ?.replace(/\s+/g, " ")
-            .includes("100 in + 207 out"),
+          node?.textContent?.replace(/\s+/g, " ").includes("100 in + 207 out"),
         ),
       ).length,
     ).toBeGreaterThan(0);
@@ -654,6 +670,7 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.getByText(/88.*24.*5\.0K cached/)).toBeTruthy();
     expect(screen.getByText("1.6s")).toBeTruthy();
     expect(screen.getByText("$0.0017")).toBeTruthy();
+    expect(screen.getByText("self review · pass · iteration 0")).toBeTruthy();
     expect(screen.queryByText("completed")).toBeNull();
     expect(screen.getByText("Tool: web_search")).toBeTruthy();
     expect(screen.queryByText(/not routed/i)).toBeNull();
@@ -722,6 +739,19 @@ describe("SettingsActivityThreadDetail", () => {
             outputTokens: 133,
             durationMs: 10500,
             costUsd: 0.0154,
+            loopEvidence: {
+              loopId: "loop-research",
+              ownerType: "profile",
+              ownerSlug: "research",
+              iterations: [
+                {
+                  index: 0,
+                  phase: "handoff",
+                  status: "completed",
+                  verdict: "pass",
+                },
+              ],
+            },
             toolInvocations: [
               {
                 id: "research-web-search",
@@ -741,6 +771,19 @@ describe("SettingsActivityThreadDetail", () => {
             outputTokens: 104,
             durationMs: 934,
             costUsd: 0.001,
+            loopEvidence: {
+              loopId: "loop-reviewer",
+              ownerType: "profile",
+              ownerSlug: "reviewer",
+              iterations: [
+                {
+                  index: 0,
+                  phase: "final_review",
+                  status: "completed",
+                  verdict: "pass",
+                },
+              ],
+            },
             toolInvocations: [],
           },
         ],
@@ -779,5 +822,156 @@ describe("SettingsActivityThreadDetail", () => {
       delegateRows[1].compareDocumentPosition(reviewerRow) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(researchRow.closest("button")?.dataset.branchLane).toBe("0");
+    expect(reviewerRow.closest("button")?.dataset.branchLane).toBe("0");
+    expect(screen.getByText("final review · pass · iteration 0")).toBeTruthy();
+  });
+
+  it("renders retry profile runs as separate sequential segments", () => {
+    const profileTurn = {
+      ...turn,
+      usageJson: JSON.stringify({
+        model: "moonshotai.kimi-k2.5",
+        input_tokens: 4200,
+        output_tokens: 120,
+        parent_usage: {
+          input_tokens: 4200,
+          output_tokens: 120,
+        },
+        duration_ms: 18000,
+        tool_invocations: [
+          {
+            id: "delegate-research-1",
+            tool_name: "delegate_to_agent_profile",
+            type: "tool",
+            args: { profileSlug: "research" },
+            agent_profile_run: {
+              profileRunId: "profile-run-research-1",
+              profileSlug: "research",
+            },
+          },
+          {
+            id: "delegate-reviewer",
+            tool_name: "delegate_to_agent_profile",
+            type: "tool",
+            args: { profileSlug: "reviewer" },
+            agent_profile_run: {
+              profileRunId: "profile-run-reviewer",
+              profileSlug: "reviewer",
+            },
+          },
+          {
+            id: "delegate-research-2",
+            tool_name: "delegate_to_agent_profile",
+            type: "tool",
+            args: { profileSlug: "research" },
+            agent_profile_run: {
+              profileRunId: "profile-run-research-2",
+              profileSlug: "research",
+            },
+          },
+        ],
+        agent_profile_runs: [
+          {
+            profileRunId: "profile-run-research-1",
+            profileSlug: "research",
+            profileName: "Research",
+            model: "moonshotai.kimi-k2.5",
+            inputTokens: 12000,
+            outputTokens: 80,
+            durationMs: 7000,
+            costUsd: 0.008,
+            loopEvidence: {
+              iterations: [
+                {
+                  index: 0,
+                  phase: "self_review",
+                  status: "completed",
+                  verdict: "pass",
+                },
+              ],
+            },
+          },
+          {
+            profileRunId: "profile-run-reviewer",
+            profileSlug: "reviewer",
+            profileName: "Reviewer",
+            model: "moonshotai.kimi-k2.5",
+            inputTokens: 1300,
+            outputTokens: 90,
+            durationMs: 900,
+            costUsd: 0.001,
+            loopEvidence: {
+              iterations: [
+                {
+                  index: 0,
+                  phase: "final_review",
+                  status: "revision_requested",
+                  verdict: "revise",
+                  feedback: "Source must be current.",
+                },
+              ],
+            },
+          },
+          {
+            profileRunId: "profile-run-research-2",
+            profileSlug: "research",
+            profileName: "Research",
+            model: "moonshotai.kimi-k2.5",
+            inputTokens: 8000,
+            outputTokens: 70,
+            durationMs: 5000,
+            costUsd: 0.006,
+            loopEvidence: {
+              iterations: [
+                {
+                  index: 1,
+                  phase: "iteration",
+                  status: "completed",
+                  verdict: "pass",
+                  feedback: "Updated the source.",
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      totalCost: 0.018,
+    };
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({ turn: profileTurn, traces: [] });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    const delegateRows = screen.getAllByText(/Tool: delegate_to_agent_profile/);
+    const researchRows = screen.getAllByText("Research");
+    const reviewerRow = screen.getByText("Reviewer");
+
+    expect(delegateRows).toHaveLength(3);
+    expect(researchRows).toHaveLength(2);
+    expect(
+      delegateRows[0].compareDocumentPosition(researchRows[0]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      reviewerRow.compareDocumentPosition(delegateRows[2]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      delegateRows[2].compareDocumentPosition(researchRows[1]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(researchRows[0].closest("button")?.dataset.branchLane).toBe("0");
+    expect(reviewerRow.closest("button")?.dataset.branchLane).toBe("0");
+    expect(researchRows[1].closest("button")?.dataset.branchLane).toBe("0");
+    expect(
+      screen.getByText("final review · revise · iteration 0"),
+    ).toBeTruthy();
+    expect(screen.getByText("iteration · pass · iteration 1")).toBeTruthy();
   });
 });

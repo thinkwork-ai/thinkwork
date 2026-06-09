@@ -707,6 +707,14 @@ export const SettingsActivityThreadTracesQuery = gql`
       profileName
       laneKey
       profileStatus
+      loopId
+      loopOwnerType
+      loopOwnerSlug
+      loopPhase
+      loopStatus
+      loopVerdict
+      reviewerRole
+      loopEvidence
       modelRoutingStatus
       ruleSource
       match

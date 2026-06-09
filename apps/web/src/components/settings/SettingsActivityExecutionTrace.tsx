@@ -236,6 +236,12 @@ type TimelineEvent = {
   profileDurationMs?: number;
   profileHandoffSummary?: string;
   profileToolInvocations?: Record<string, unknown>[];
+  loopEvidence?: Record<string, unknown> | null;
+  loopPhase?: string;
+  loopStatus?: string;
+  loopVerdict?: string;
+  loopIterationIndex?: number;
+  reviewerRole?: boolean;
   // Response
   responseText?: string;
 };
@@ -268,8 +274,23 @@ export interface ExecutionTraceModelRouteTrace {
   model?: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  durationMs?: number | null;
   costUsd?: number | null;
   modelRoutingStatus?: string | null;
+  profileRunId?: string | null;
+  profileId?: string | null;
+  profileSlug?: string | null;
+  profileName?: string | null;
+  profileStatus?: string | null;
+  laneKey?: string | null;
+  loopId?: string | null;
+  loopOwnerType?: string | null;
+  loopOwnerSlug?: string | null;
+  loopPhase?: string | null;
+  loopStatus?: string | null;
+  loopVerdict?: string | null;
+  reviewerRole?: boolean | null;
+  loopEvidence?: unknown;
   ruleSource?: unknown;
   match?: unknown;
   metadata?: unknown;
@@ -286,12 +307,24 @@ function getSubAgentName(branch: string): string | null {
 }
 
 function getProfileBranchName(branch: string): string | null {
-  if (branch.startsWith("profile:")) return branch.slice("profile:".length);
+  if (branch.startsWith("profile:")) {
+    const raw = branch.slice("profile:".length);
+    return raw.split(":")[0] || raw;
+  }
   return null;
+}
+
+function profileBranchKey(slug: string, runId?: string): string {
+  return `profile:${slug}${runId ? `:${runId}` : ""}`;
 }
 
 function getBranchName(branch: string): string | null {
   return getSubAgentName(branch) ?? getProfileBranchName(branch);
+}
+
+function getBranchIdentity(branch: string): string | null {
+  if (branch.startsWith("profile:")) return branch.slice("profile:".length);
+  return getSubAgentName(branch);
 }
 
 function isBranchLane(branch: string): boolean {
@@ -386,6 +419,12 @@ function profileRunName(run: Record<string, unknown>): string {
   );
 }
 
+function displayNameFromSlug(slug: string | null | undefined): string {
+  return (slug?.trim() || "Agent Profile")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function profileRunSlug(run: Record<string, unknown>): string {
   return (
     stringValue(profileRunField(run, "profileSlug")) ??
@@ -424,6 +463,13 @@ function profileRunTools(
   run: Record<string, unknown>,
 ): Record<string, unknown>[] {
   return arrayOfRecords(profileRunField(run, "toolInvocations"));
+}
+
+function profileRunLoopEvidence(
+  run: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const evidence = modelRoutingRecord(profileRunField(run, "loopEvidence"));
+  return Object.keys(evidence).length > 0 ? evidence : null;
 }
 
 function profileRunId(run: Record<string, unknown>): string | undefined {
@@ -512,18 +558,88 @@ function aggregateTurnTokens(usage: Record<string, unknown> | null): {
   outputTokens: number;
   cachedReadTokens: number;
 } {
+  const directTotals = {
+    inputTokens: numberValue(usage?.input_tokens) ?? 0,
+    outputTokens: numberValue(usage?.output_tokens) ?? 0,
+    cachedReadTokens: numberValue(usage?.cached_read_tokens) ?? 0,
+  };
+  if (usage?.parent_usage || usage?.parentUsage) {
+    return directTotals;
+  }
+
   const agentProfileRuns = Array.isArray(usage?.agent_profile_runs)
     ? (usage.agent_profile_runs as Record<string, unknown>[])
     : [];
   const profileTotals = aggregateProfileRunTokens(agentProfileRuns);
   return {
-    inputTokens: (numberValue(usage?.input_tokens) ?? 0) + profileTotals.inputTokens,
-    outputTokens:
-      (numberValue(usage?.output_tokens) ?? 0) + profileTotals.outputTokens,
+    inputTokens: directTotals.inputTokens + profileTotals.inputTokens,
+    outputTokens: directTotals.outputTokens + profileTotals.outputTokens,
     cachedReadTokens:
-      (numberValue(usage?.cached_read_tokens) ?? 0) +
-      profileTotals.cachedReadTokens,
+      directTotals.cachedReadTokens + profileTotals.cachedReadTokens,
   };
+}
+
+function loopEvidenceRecords(
+  evidence: Record<string, unknown> | null | undefined,
+  key: "iterations" | "phases",
+): Record<string, unknown>[] {
+  return arrayOfRecords(evidence?.[key]);
+}
+
+function latestLoopRecord(
+  evidence: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  const iterations = loopEvidenceRecords(evidence, "iterations");
+  if (iterations.length > 0) return iterations[iterations.length - 1];
+  const phases = loopEvidenceRecords(evidence, "phases");
+  if (phases.length > 0) {
+    return (
+      [...phases].reverse().find((phase) => {
+        const status = stringValue(phase.status)?.toLowerCase();
+        return status !== "skipped";
+      }) ?? phases[phases.length - 1]
+    );
+  }
+  return null;
+}
+
+function loopValueFromEvidence(
+  evidence: Record<string, unknown> | null | undefined,
+  key: "phase" | "status" | "verdict",
+): string | undefined {
+  const latest = latestLoopRecord(evidence);
+  const handoff = modelRoutingRecord(evidence?.handoff);
+  const goalState = modelRoutingRecord(evidence?.goalState);
+  const completion = modelRoutingRecord(goalState.completion);
+  return (
+    stringValue(latest?.[key]) ??
+    (key === "verdict" ? stringValue(handoff.verdict) : undefined) ??
+    (key === "verdict" ? stringValue(completion.verdict) : undefined)
+  );
+}
+
+function loopIterationIndexFromEvidence(
+  evidence: Record<string, unknown> | null | undefined,
+): number | undefined {
+  const latest = latestLoopRecord(evidence);
+  const value = numberValue(latest?.index);
+  return value == null ? undefined : value;
+}
+
+function formatLoopLabel(value?: string | null): string | null {
+  if (!value) return null;
+  return value.replace(/_/g, " ");
+}
+
+function profileLoopSummary(event: TimelineEvent): string | null {
+  const parts = [
+    formatLoopLabel(event.loopPhase),
+    formatLoopLabel(event.loopVerdict),
+    event.loopIterationIndex != null
+      ? `iteration ${event.loopIterationIndex}`
+      : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
 }
 
 function collectTimelineModelNames(
@@ -701,17 +817,76 @@ function traceEvidence(
   };
 }
 
+function loopEvidenceFromTrace(
+  trace: ExecutionTraceModelRouteTrace,
+): Record<string, unknown> | null {
+  const direct = modelRoutingRecord(trace.loopEvidence);
+  if (Object.keys(direct).length > 0) return direct;
+  const metadata = modelRoutingRecord(trace.metadata);
+  const metadataEvidence = modelRoutingRecord(
+    metadata.loop_evidence ?? metadata.loopEvidence,
+  );
+  return Object.keys(metadataEvidence).length > 0 ? metadataEvidence : null;
+}
+
+function profileEventFromLoopTrace(
+  trace: ExecutionTraceModelRouteTrace,
+): TimelineEvent | null {
+  if (!trace.profileRunId && !trace.profileSlug && !trace.profileName) {
+    return null;
+  }
+  const evidence = loopEvidenceFromTrace(trace);
+  const profileSlug =
+    trace.profileSlug?.trim() ||
+    trace.loopOwnerSlug?.trim() ||
+    trace.profileName?.trim().toLowerCase().replace(/\s+/g, "-") ||
+    "profile";
+  const branch = `profile:${profileSlug}`;
+  return {
+    type: "profile_run",
+    timestamp: "",
+    branch,
+    profileRunId: trace.profileRunId ?? undefined,
+    profileId: trace.profileId ?? undefined,
+    profileSlug,
+    profileName:
+      trace.profileName?.trim() ||
+      displayNameFromSlug(trace.loopOwnerSlug ?? profileSlug),
+    profileStatus: trace.profileStatus ?? trace.loopStatus ?? undefined,
+    profileModelId: trace.model ?? undefined,
+    profileInputTokens: numberValue(trace.inputTokens) ?? 0,
+    profileOutputTokens: numberValue(trace.outputTokens) ?? 0,
+    profileCostUsd: numberValue(trace.costUsd) ?? 0,
+    profileDurationMs: numberValue(trace.durationMs) ?? 0,
+    loopEvidence: evidence,
+    loopPhase:
+      trace.loopPhase?.trim() || loopValueFromEvidence(evidence, "phase"),
+    loopStatus:
+      trace.loopStatus?.trim() || loopValueFromEvidence(evidence, "status"),
+    loopVerdict:
+      trace.loopVerdict?.trim() || loopValueFromEvidence(evidence, "verdict"),
+    loopIterationIndex: loopIterationIndexFromEvidence(evidence),
+    reviewerRole: trace.reviewerRole === true,
+  };
+}
+
 function enrichEventsWithRouteTraces(
   events: TimelineEvent[],
   traces: ExecutionTraceModelRouteTrace[] = [],
   turnId?: string,
 ): TimelineEvent[] {
+  const sameTurn = (trace: ExecutionTraceModelRouteTrace) =>
+    !turnId || !trace.parentRequestId || trace.parentRequestId === turnId;
   const scopedTraces = traces.filter(
-    (trace) =>
-      trace.toolName?.trim() &&
-      (!turnId || !trace.parentRequestId || trace.parentRequestId === turnId),
+    (trace) => trace.toolName?.trim() && sameTurn(trace),
   );
-  if (scopedTraces.length === 0) return events;
+  const profileTraceEvents = traces
+    .filter((trace) => sameTurn(trace))
+    .map(profileEventFromLoopTrace)
+    .filter((event): event is TimelineEvent => event !== null);
+  if (scopedTraces.length === 0 && profileTraceEvents.length === 0) {
+    return events;
+  }
 
   const tracesById = new Map<string, ExecutionTraceModelRouteTrace>();
   const tracesByTool = new Map<string, ExecutionTraceModelRouteTrace[]>();
@@ -724,7 +899,7 @@ function enrichEventsWithRouteTraces(
     tracesByTool.set(key, bucket);
   }
 
-  return events.map((event) => {
+  const enriched = events.map((event) => {
     if (event.type !== "tool_call") return event;
     const toolCallId = toolEventCallId(event);
     const matchedById = toolCallId ? tracesById.get(toolCallId) : null;
@@ -739,6 +914,37 @@ function enrichEventsWithRouteTraces(
       routeUnavailableReason: undefined,
     };
   });
+
+  if (profileTraceEvents.length === 0) return enriched;
+
+  const existingProfileKeys = new Set(
+    enriched
+      .filter((event) => event.type === "profile_run")
+      .map(
+        (event) =>
+          event.profileRunId ??
+          `${event.profileSlug ?? "profile"}:${event.profileName ?? ""}`,
+      ),
+  );
+  const missingProfileEvents = profileTraceEvents.filter((event) => {
+    const key =
+      event.profileRunId ??
+      `${event.profileSlug ?? "profile"}:${event.profileName ?? ""}`;
+    if (existingProfileKeys.has(key)) return false;
+    existingProfileKeys.add(key);
+    return true;
+  });
+  if (missingProfileEvents.length === 0) return enriched;
+
+  const responseIndex = enriched.findIndex(
+    (event) => event.type === "response",
+  );
+  if (responseIndex < 0) return [...enriched, ...missingProfileEvents];
+  return [
+    ...enriched.slice(0, responseIndex),
+    ...missingProfileEvents,
+    ...enriched.slice(responseIndex),
+  ];
 }
 
 function appendUnmatchedRouteEvents(
@@ -824,10 +1030,10 @@ function mergeRouteEvidence(
 function hasConcreteRouteEvidence(event: TimelineEvent): boolean {
   return Boolean(
     event.routeModelId ||
-    event.routeStatus ||
-    event.routeInputTokens != null ||
-    event.routeOutputTokens != null ||
-    event.routeCostUsd != null,
+      event.routeStatus ||
+      event.routeInputTokens != null ||
+      event.routeOutputTokens != null ||
+      event.routeCostUsd != null,
   );
 }
 
@@ -977,8 +1183,10 @@ function buildTimelineFromUsage(
   function appendProfileRun(run: Record<string, unknown>) {
     const profileName = profileRunName(run);
     const profileSlug = profileRunSlug(run);
-    const branch = `profile:${profileSlug}`;
+    const runId = profileRunId(run);
+    const branch = profileBranchKey(profileSlug, runId);
     const childTools = profileRunTools(run);
+    const loopEvidence = profileRunLoopEvidence(run);
     const profileInputTokens = profileRunTokens(run, "inputTokens");
     const profileOutputTokens = profileRunTokens(run, "outputTokens");
     const profileCacheReadTokens = profileRunTokens(run, "cachedReadTokens");
@@ -992,7 +1200,7 @@ function buildTimelineFromUsage(
         stringValue(profileRunField(run, "finishedAt")) ??
         "",
       branch,
-      profileRunId: profileRunId(run),
+      profileRunId: runId,
       profileId: stringValue(profileRunField(run, "profileId")),
       profileSlug,
       profileName,
@@ -1005,6 +1213,18 @@ function buildTimelineFromUsage(
       profileDurationMs,
       profileHandoffSummary: profileRunHandoff(run),
       profileToolInvocations: childTools,
+      loopEvidence,
+      loopPhase:
+        loopValueFromEvidence(loopEvidence, "phase") ??
+        stringValue(profileRunField(run, "loopPhase")),
+      loopStatus:
+        loopValueFromEvidence(loopEvidence, "status") ??
+        stringValue(profileRunField(run, "loopStatus")),
+      loopVerdict:
+        loopValueFromEvidence(loopEvidence, "verdict") ??
+        stringValue(profileRunField(run, "loopVerdict")),
+      loopIterationIndex: loopIterationIndexFromEvidence(loopEvidence),
+      reviewerRole: profileSlug.toLowerCase() === "reviewer",
     });
 
     for (const childTool of childTools) {
@@ -1242,11 +1462,15 @@ function buildBranches(events: TimelineEvent[]): BranchSpan[] {
       ev.type === "profile_run"
         ? (ev.profileSlug ?? "profile").toLowerCase()
         : ev.toolName?.toLowerCase() || "unknown";
+    const identity = getBranchIdentity(ev.branch) ?? name;
 
     const eventIndices = [i];
     for (let j = i + 1; j < events.length; j++) {
-      const branchName = getBranchName(events[j].branch);
-      if (branchName && normalizeName(branchName) === normalizeName(name)) {
+      const branchIdentity = getBranchIdentity(events[j].branch);
+      if (
+        branchIdentity &&
+        normalizeName(branchIdentity) === normalizeName(identity)
+      ) {
         eventIndices.push(j);
       }
     }
@@ -1349,32 +1573,33 @@ function ExecutionTimeline({
     );
 
   // Build timeline from CloudWatch invocations if available, otherwise from tool_invocations usage data
-  const events =
-    invocations.length > 0
-      ? buildTimeline(
-          invocations,
-          toolInvocations,
-          modelRoutedToolCalls,
-          "",
-          responseText,
-          turnEvents,
-          modelRouteTraces,
-          turnId,
-        )
-      : buildTimelineFromUsage(
-          toolInvocations,
-          agentProfileRuns,
-          modelRoutedToolCalls,
-          responseText,
-          model,
-          inputTokens,
-          outputTokens,
-          durationMs,
-          totalCostFromTurn,
-          turnEvents,
-          modelRouteTraces,
-          turnId,
-        );
+  const shouldUseUsageTimeline =
+    agentProfileRuns.length > 0 || invocations.length === 0;
+  const events = !shouldUseUsageTimeline
+    ? buildTimeline(
+        invocations,
+        toolInvocations,
+        modelRoutedToolCalls,
+        "",
+        responseText,
+        turnEvents,
+        modelRouteTraces,
+        turnId,
+      )
+    : buildTimelineFromUsage(
+        toolInvocations,
+        agentProfileRuns,
+        modelRoutedToolCalls,
+        responseText,
+        model,
+        inputTokens,
+        outputTokens,
+        durationMs,
+        totalCostFromTurn,
+        turnEvents,
+        modelRouteTraces,
+        turnId,
+      );
 
   if (events.length === 0) return null;
 
@@ -1383,31 +1608,27 @@ function ExecutionTimeline({
     modelDisplayNames,
   );
   const hasMixedModels = timelineModelNames.length > 1;
-  const totalCost =
-    invocations.length > 0
-      ? invocations.reduce(
-          (sum: number, inv: any) => sum + (inv.costUsd || 0),
-          0,
-        )
-      : (totalCostFromTurn ?? 0);
+  const totalCost = !shouldUseUsageTimeline
+    ? invocations.reduce((sum: number, inv: any) => sum + (inv.costUsd || 0), 0)
+    : (totalCostFromTurn ?? 0);
   const totalInputTokens =
     summaryInputTokens != null
       ? summaryInputTokens
-      : invocations.length > 0
-      ? invocations.reduce(
-          (sum: number, inv: any) => sum + (inv.inputTokenCount || 0),
-          0,
-        )
-      : (inputTokens ?? 0);
+      : !shouldUseUsageTimeline
+        ? invocations.reduce(
+            (sum: number, inv: any) => sum + (inv.inputTokenCount || 0),
+            0,
+          )
+        : (inputTokens ?? 0);
   const totalOutputTokens =
     summaryOutputTokens != null
       ? summaryOutputTokens
-      : invocations.length > 0
-      ? invocations.reduce(
-          (sum: number, inv: any) => sum + (inv.outputTokenCount || 0),
-          0,
-        )
-      : (outputTokens ?? 0);
+      : !shouldUseUsageTimeline
+        ? invocations.reduce(
+            (sum: number, inv: any) => sum + (inv.outputTokenCount || 0),
+            0,
+          )
+        : (outputTokens ?? 0);
   const svgHeight = events.length * ROW_H;
 
   const branches = buildBranches(events);
@@ -1496,7 +1717,9 @@ function ExecutionTimeline({
                 );
 
                 return (
-                  <g key={branch.name}>
+                  <g
+                    key={`${branch.name}:${branch.laneIndex}:${branch.departIdx}:${branch.mergeIdx}`}
+                  >
                     <path
                       d={`M ${MAIN_X} ${departY} C ${MAIN_X} ${departY + ROW_H * 0.6} ${bx} ${forkEndY - ROW_H * 0.4} ${bx} ${forkEndY}`}
                       fill="none"
@@ -1572,7 +1795,9 @@ function ExecutionTimeline({
                     {formatDuration(ev.durationMs)}
                   </span>
                 ) : null}
-                <span className="tabular-nums">{formatCost(ev.costUsd || 0)}</span>
+                <span className="tabular-nums">
+                  {formatCost(ev.costUsd || 0)}
+                </span>
                 <ModelNameBadge
                   modelId={ev.modelId}
                   label={hasMixedModels ? "Mixed" : undefined}
@@ -1596,6 +1821,7 @@ function ExecutionTimeline({
             clickTitle = `${label}${isOnBranch ? ` (${branch!.name})` : ""}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "profile_run") {
+            const loopSummary = profileLoopSummary(ev);
             icon = (
               <Brain
                 className="h-3.5 w-3.5"
@@ -1621,6 +1847,15 @@ function ExecutionTimeline({
                   modelId={ev.profileModelId}
                   modelDisplayNames={modelDisplayNames}
                 />
+                {loopSummary ? (
+                  <Badge
+                    variant="outline"
+                    title="Loop phase and verdict"
+                    className="max-w-32 truncate px-1.5 py-0 text-[9px] text-muted-foreground"
+                  >
+                    {loopSummary}
+                  </Badge>
+                ) : null}
               </span>
             );
             const parts: string[] = [];
@@ -1635,8 +1870,16 @@ function ExecutionTimeline({
                 `Duration: ${formatDuration(ev.profileDurationMs)}`,
                 `Cost: ${formatCost(ev.profileCostUsd || 0)}`,
                 `Status: ${routeStatusLabel(ev.profileStatus) || "--"}`,
-              ].join("\n"),
+                loopSummary ? `Loop: ${loopSummary}` : null,
+              ]
+                .filter((line): line is string => line != null)
+                .join("\n"),
             );
+            if (ev.loopEvidence) {
+              parts.push(
+                `── LOOP EVIDENCE ──\n\n${JSON.stringify(ev.loopEvidence, null, 2)}`,
+              );
+            }
             if (ev.profileHandoffSummary) {
               parts.push(`── HANDOFF ──\n\n${ev.profileHandoffSummary}`);
             }
@@ -1744,6 +1987,9 @@ function ExecutionTimeline({
             <button
               key={i}
               type="button"
+              data-timeline-event-type={ev.type}
+              data-branch-lane={branch?.laneIndex ?? ""}
+              data-branch-name={branch?.name ?? ""}
               className="w-full flex items-center gap-2 hover:bg-accent/20 transition-colors rounded text-left"
               style={{ height: ROW_H }}
               onClick={() => onViewDetail(clickTitle, clickContent)}

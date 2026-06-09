@@ -9,10 +9,11 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-001-feat-agent-profile-closed-loops-plan.md`.
 - Target branch: `main`.
-- Current unit: U5 - Persist Loop Evidence And Cost Totals.
-- Current branch: `codex/agent-profile-closed-loops-u5`.
+- Current unit: U6 - Render Closed Loops In Activity, Traces, And Thread
+  Conversation.
+- Current branch: `codex/agent-profile-closed-loops-u6`.
 - Current worktree:
-  `.Codex/worktrees/agent-profile-closed-loops-u5`.
+  `.Codex/worktrees/agent-profile-closed-loops-u6`.
 - Status: local verification passed; preparing PR.
 
 ## Progress
@@ -35,7 +36,14 @@ status: in_progress
   `3167652`.
 - U5 preserves loop evidence in finalization, exposes loop evidence through
   observability trace rows, and aggregates parent plus profile/reviewer/retry
-  token and cost totals into the turn usage summary.
+  token and cost totals into the turn usage summary. It was squash merged in PR
+  [#2247](https://github.com/thinkwork-ai/thinkwork/pull/2247) as
+  `2c3e8e7`.
+- U6 renders closed-loop evidence in Activity, Thread Detail, and the Thread
+  conversation so sequential delegate/profile paths show as
+  parent -> delegate -> specialist lane -> delegate -> reviewer lane -> parent
+  return, while retry runs remain distinct even when they reuse the same
+  profile slug.
 
 ## U5 Verification
 
@@ -56,3 +64,15 @@ status: in_progress
   `pkg-config`/`pixman-1`. This did not affect focused tests or typechecks.
 - U5 intentionally writes a dedicated status document so the active Kestra
   autopilot ledger in `docs/plans/autopilot-status.md` is not clobbered.
+
+## U6 Verification
+
+- `pnpm install` completed sufficiently to link workspace tools. Local Node 25
+  logged the existing optional `canvas@2.11.2` native fallback build failure due
+  to missing `pkg-config`/`pixman-1`; pnpm exited successfully and focused web
+  tests/typecheck were unaffected.
+- `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsActivityThreadDetail.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/workbench/InlineShortcutText.test.tsx`
+  passed: 3 files, 105 tests.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm dlx prettier@3.6.2 --write` was run on U6-touched files.
+- `git diff --check` passed.
