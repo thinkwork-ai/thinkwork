@@ -15,7 +15,8 @@ status: in_progress
 - Current worktree: `.Codex/worktrees/tenant-model-catalog-u1`.
 - Pull request:
   [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271).
-- Status: PR open; CI pending.
+- Status: PR open; CI passed on first implementation head, status update in
+  progress.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
@@ -46,7 +47,17 @@ status: in_progress
   - `pnpm dlx prettier@3.8.2 --check` over touched non-generated
     Prettier-managed files passed.
   - `git diff --check` passed.
-- CI: pending on PR #2271.
+- CI:
+  - PR #2271 initial checks: `cla`, `lint`, `test`, `typecheck`, and `verify`
+    passed.
+  - `Migration Drift Precheck (dev)` initially failed because the newly added
+    hand-written migration objects were not present in the dev database.
+  - Applied `packages/database-pg/drizzle/0155_tenant_model_catalog.sql` to the
+    dev database only; it created the tenant catalog table/indexes/constraints
+    and backfilled 8 tenant model rows.
+  - Local scoped drift reporter passed after the dev apply:
+    `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0155_tenant_model_catalog.sql`.
+  - Reran the failed GitHub workflow; `Migration Drift Precheck (dev)` passed.
 - Merge/cleanup: pending.
 
 ## Kestra Managed Application - 2026-06-08
