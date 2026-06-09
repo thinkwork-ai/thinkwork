@@ -13,8 +13,8 @@ const {
   updateCalls,
   selectQueue,
   returningQueue,
-  approvalCalls,
-  approvalFailures,
+  bootstrapDefaultCalls,
+  bootstrapDefaultFailures,
 } = vi.hoisted(() => {
   const insertCalls: Array<{
     table: string;
@@ -24,11 +24,11 @@ const {
     table: string;
     values: Record<string, unknown>;
   }> = [];
-  const approvalCalls: Array<{
+  const bootstrapDefaultCalls: Array<{
     tenantId: string;
     userId: string;
   }> = [];
-  const approvalFailures: Error[] = [];
+  const bootstrapDefaultFailures: Error[] = [];
   const selectQueue: unknown[][] = [];
   const returningQueue: unknown[][] = [];
 
@@ -72,8 +72,8 @@ const {
     updateCalls,
     selectQueue,
     returningQueue,
-    approvalCalls,
-    approvalFailures,
+    bootstrapDefaultCalls,
+    bootstrapDefaultFailures,
   };
 });
 
@@ -92,13 +92,12 @@ vi.mock("@thinkwork/database-pg/utils/generate-slug", () => ({
   generateSlug: () => "happy-otter",
 }));
 
-vi.mock("../../../lib/model-approvals.js", () => ({
-  ensureDefaultModelApprovalsForUser: vi.fn(
+vi.mock("../../../lib/tenant-bootstrap-defaults.js", () => ({
+  ensureTenantBootstrapDefaults: vi.fn(
     async (input: { tenantId: string; userId: string }) => {
-      approvalCalls.push(input);
-      const failure = approvalFailures.shift();
+      bootstrapDefaultCalls.push(input);
+      const failure = bootstrapDefaultFailures.shift();
       if (failure) throw failure;
-      return ["us.anthropic.claude-sonnet-4-6"];
     },
   ),
 }));
@@ -119,8 +118,8 @@ beforeEach(() => {
   updateCalls.length = 0;
   selectQueue.length = 0;
   returningQueue.length = 0;
-  approvalCalls.length = 0;
-  approvalFailures.length = 0;
+  bootstrapDefaultCalls.length = 0;
+  bootstrapDefaultFailures.length = 0;
 });
 
 describe("bootstrapUser", () => {
@@ -144,8 +143,36 @@ describe("bootstrapUser", () => {
     expect(userInsert).toBeDefined();
     expect(userInsert?.values.cognito_sub).toBe("sub-new");
     expect(userInsert?.values.email).toBe("new@example.com");
-    expect(approvalCalls).toEqual([{ tenantId: "tenant-1", userId: "user-1" }]);
+    expect(bootstrapDefaultCalls).toEqual([
+      { tenantId: "tenant-1", userId: "user-1" },
+    ]);
     expect(result.isNew).toBe(true);
+  });
+
+  it("repairs tenant bootstrap defaults for existing users", async () => {
+    selectQueue.push([
+      {
+        id: "user-existing",
+        email: "existing@example.com",
+        tenant_id: "tenant-existing",
+      },
+    ]);
+    selectQueue.push([{ id: "tenant-existing", slug: "existing" }]);
+
+    const result = await bootstrapUser({}, {}, {
+      auth: {
+        authType: "cognito",
+        principalId: "sub-existing",
+        email: "existing@example.com",
+        name: "Existing User",
+      },
+      headers: {},
+    } as any);
+
+    expect(bootstrapDefaultCalls).toEqual([
+      { tenantId: "tenant-existing", userId: "user-existing" },
+    ]);
+    expect(result.isNew).toBe(false);
   });
 
   it("claims a pending tenant only for a verified matching email", async () => {
@@ -206,7 +233,7 @@ describe("bootstrapUser", () => {
         first_admin_claimed_user_id: "user-claim",
       }),
     );
-    expect(approvalCalls).toEqual([
+    expect(bootstrapDefaultCalls).toEqual([
       { tenantId: "tenant-claim", userId: "user-claim" },
     ]);
     expect(result.tenant.id).toBe("tenant-claim");
@@ -242,9 +269,9 @@ describe("bootstrapUser", () => {
     expect(updateCalls).toEqual([]);
   });
 
-  it("does not fail bootstrap when default model approval seeding is unavailable", async () => {
+  it("does not fail bootstrap when tenant default seeding is unavailable", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    approvalFailures.push(new Error("relation does not exist"));
+    bootstrapDefaultFailures.push(new Error("relation does not exist"));
     selectQueue.push([]); // existing user lookup → none
     selectQueue.push([]); // pending (paid) tenant lookup → none
     returningQueue.push([{ id: "tenant-1", slug: "happy-otter" }]);
@@ -261,9 +288,11 @@ describe("bootstrapUser", () => {
     } as any);
 
     expect(result.isNew).toBe(true);
-    expect(approvalCalls).toEqual([{ tenantId: "tenant-1", userId: "user-1" }]);
+    expect(bootstrapDefaultCalls).toEqual([
+      { tenantId: "tenant-1", userId: "user-1" },
+    ]);
     expect(warn).toHaveBeenCalledWith(
-      "[bootstrapUser] Failed to seed default model approvals:",
+      "[bootstrapUser] Failed to seed tenant bootstrap defaults:",
       expect.any(Error),
     );
     warn.mockRestore();
