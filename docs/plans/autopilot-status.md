@@ -13,8 +13,9 @@ status: in_progress
 - Current implementation unit: U1 - Add tenant catalog persistence.
 - Current branch: `codex/tenant-model-catalog-u1`.
 - Current worktree: `.Codex/worktrees/tenant-model-catalog-u1`.
-- Pull request: not opened yet.
-- Status: local verification passed; preparing PR.
+- Pull request:
+  [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271).
+- Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
@@ -45,7 +46,7 @@ status: in_progress
   - `pnpm dlx prettier@3.8.2 --check` over touched non-generated
     Prettier-managed files passed.
   - `git diff --check` passed.
-- CI: not started.
+- CI: pending on PR #2271.
 - Merge/cleanup: pending.
 
 ## Kestra Managed Application - 2026-06-08
