@@ -26,6 +26,13 @@ const workspaceRouteSource = readFileSync(
   join(process.cwd(), "src/routes/_authed/settings.local-workspace.tsx"),
   "utf8",
 );
+const builtInProfilesSource = readFileSync(
+  join(
+    process.cwd(),
+    "../../packages/api/src/graphql/resolvers/agent-profiles/built-in-agent-profiles.ts",
+  ),
+  "utf8",
+);
 
 describe("SettingsAgents page", () => {
   it("owns the default Agent configuration that used to live in General", () => {
@@ -54,6 +61,13 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain("spaceIds");
     expect(agentsSource).toContain("maxRuntimeMs");
     expect(agentsSource).toContain("maxTokens");
+    expect(agentsSource).toContain('label="Loop / Review"');
+    expect(agentsSource).toContain('label="Closed loop"');
+    expect(agentsSource).toContain('label="Max iterations"');
+    expect(agentsSource).toContain('label="Review gate"');
+    expect(agentsSource).toContain('label="External reviewer"');
+    expect(agentsSource).toContain('label="Max review loops"');
+    expect(agentsSource).toContain('label="Failure behavior"');
     expect(agentsSource).toContain("agentProfileWorkspacePath");
     expect(agentsSource).toContain("Agent/agents/${profile.slug}.md");
     expect(agentsSource).toContain("Open Agent Profile markdown");
@@ -65,6 +79,56 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain("All Spaces");
     expect(agentsSource).not.toContain("{builtIns} built-ins");
     expect(agentsSource).not.toContain("all Spaces");
+  });
+
+  it("saves Agent Profile loop controls into executionControls.loopPolicy", () => {
+    expect(agentsSource).toContain("loopEnabled");
+    expect(agentsSource).toContain("loopMode");
+    expect(agentsSource).toContain("loopMaxIterations");
+    expect(agentsSource).toContain("loopReviewGate");
+    expect(agentsSource).toContain("loopExternalReviewerPolicy");
+    expect(agentsSource).toContain("loopMaxReviewLoops");
+    expect(agentsSource).toContain("loopFailBehavior");
+    expect(agentsSource).toContain("loopPolicy = {");
+    expect(agentsSource).toContain("mode: draft.loopMode");
+    expect(agentsSource).toContain("enabled: draft.loopEnabled");
+    expect(agentsSource).toContain(
+      "maxIterations: positiveIntegerOrDefault(draft.loopMaxIterations, 1)",
+    );
+    expect(agentsSource).toContain(
+      "maxReviewLoops: positiveIntegerOrDefault(draft.loopMaxReviewLoops, 1)",
+    );
+    expect(agentsSource).toContain("reviewGate: draft.loopReviewGate");
+    expect(agentsSource).toContain(
+      "externalReviewerPolicy: draft.loopExternalReviewerPolicy",
+    );
+    expect(agentsSource).toContain("failBehavior: draft.loopFailBehavior");
+    expect(agentsSource).toContain("loopPolicy,");
+  });
+
+  it("blocks invalid loop limits before saving", () => {
+    expect(agentsSource).toContain(
+      "validPositiveInteger(draft.loopMaxIterations)",
+    );
+    expect(agentsSource).toContain(
+      "validPositiveInteger(draft.loopMaxReviewLoops)",
+    );
+    expect(agentsSource).toContain(
+      'toast.error("Loop limits must be positive whole numbers")',
+    );
+    expect(agentsSource).toContain("disabled={saving || !draftValid}");
+    expect(agentsSource).toContain("Number.isSafeInteger(number)");
+  });
+
+  it("keeps the built-in Reviewer wired as a review-gated closed loop", () => {
+    expect(builtInProfilesSource).toContain('built_in_key: "reviewer"');
+    expect(builtInProfilesSource).toContain("reviewGate: true");
+    expect(builtInProfilesSource).toContain("maxReviewLoops: 2");
+    expect(builtInProfilesSource).toContain('externalReviewerPolicy: "never"');
+    expect(builtInProfilesSource).toContain("defaultAgentLoopPolicy({");
+    expect(agentsSource).toContain("function loopDefaultsForProfile");
+    expect(agentsSource).toContain('profile.builtInKey !== "reviewer"');
+    expect(agentsSource).toContain('externalReviewerPolicy: "never"');
   });
 
   it("keeps Agent Profile multi-select chips bounded inside settings rows", () => {
