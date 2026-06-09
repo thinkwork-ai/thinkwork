@@ -594,6 +594,24 @@ export type BedrockModelImportCandidate = {
   supportsVision: Scalars["Boolean"]["output"];
 };
 
+export type BootstrapCredentialLease = {
+  __typename?: "BootstrapCredentialLease";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  expiresAt: Scalars["AWSDateTime"]["output"];
+  externalIdHash?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  inUseAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  leaseType: Scalars["String"]["output"];
+  revokedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  roleArn?: Maybe<Scalars["String"]["output"]>;
+  secretFingerprint: Scalars["String"]["output"];
+  sessionId: Scalars["ID"]["output"];
+  status: Scalars["String"]["output"];
+  transferredAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  validatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+};
+
 export type BootstrapResult = {
   __typename?: "BootstrapResult";
   isNew: Scalars["Boolean"]["output"];

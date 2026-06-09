@@ -152,8 +152,10 @@ locals {
       JOB_TRIGGER_ROLE_ARN = var.job_scheduler_role_arn
     }
     "deployment-sessions" = {
-      THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
-      THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
+      THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN  = var.deployment_state_machine_arn
+      THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET    = var.deployment_evidence_bucket
+      THINKWORK_BOOTSTRAP_LEASE_SECRET_PREFIX = "thinkwork/${var.stage}/deployment-bootstrap-leases"
+      THINKWORK_BOOTSTRAP_LEASE_KMS_KEY_ID    = var.bootstrap_credential_lease_kms_key_id
     }
     # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
     # model works; the planner + section-writer cap themselves at ~500
@@ -971,25 +973,28 @@ locals {
 
       # Stripe billing (unauthenticated — checkout is pre-signup; webhook is
       # server-to-server with Stripe signature verification).
-      "POST /api/stripe/checkout-session"                     = "stripe-checkout"
-      "OPTIONS /api/stripe/checkout-session"                  = "stripe-checkout"
-      "POST /api/stripe/webhook"                              = "stripe-webhook"
-      "POST /api/stripe/portal-session"                       = "stripe-portal"
-      "OPTIONS /api/stripe/portal-session"                    = "stripe-portal"
-      "GET /api/stripe/subscription"                          = "stripe-subscription"
-      "OPTIONS /api/stripe/subscription"                      = "stripe-subscription"
-      "POST /api/deployment-sessions"                         = "deployment-sessions"
-      "OPTIONS /api/deployment-sessions"                      = "deployment-sessions"
-      "GET /api/deployment-sessions/{sessionId}"              = "deployment-sessions"
-      "OPTIONS /api/deployment-sessions/{sessionId}"          = "deployment-sessions"
-      "POST /api/deployment-sessions/{sessionId}/start"       = "deployment-sessions"
-      "OPTIONS /api/deployment-sessions/{sessionId}/start"    = "deployment-sessions"
-      "POST /api/deployment-sessions/{sessionId}/teardown"    = "deployment-sessions"
-      "OPTIONS /api/deployment-sessions/{sessionId}/teardown" = "deployment-sessions"
-      "GET /api/auth/me"                                      = "auth-me"
-      "OPTIONS /api/auth/me"                                  = "auth-me"
-      "ANY /api/extensions/{extensionId}"                     = "extension-proxy"
-      "ANY /api/extensions/{extensionId}/{proxy+}"            = "extension-proxy"
+      "POST /api/stripe/checkout-session"                                       = "stripe-checkout"
+      "OPTIONS /api/stripe/checkout-session"                                    = "stripe-checkout"
+      "POST /api/stripe/webhook"                                                = "stripe-webhook"
+      "POST /api/stripe/portal-session"                                         = "stripe-portal"
+      "OPTIONS /api/stripe/portal-session"                                      = "stripe-portal"
+      "GET /api/stripe/subscription"                                            = "stripe-subscription"
+      "OPTIONS /api/stripe/subscription"                                        = "stripe-subscription"
+      "POST /api/deployment-sessions"                                           = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions"                                        = "deployment-sessions"
+      "GET /api/deployment-sessions/{sessionId}"                                = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}"                            = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/bootstrap-credential-lease"    = "deployment-sessions"
+      "DELETE /api/deployment-sessions/{sessionId}/bootstrap-credential-lease"  = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/bootstrap-credential-lease" = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/start"                         = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/start"                      = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/teardown"                      = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/teardown"                   = "deployment-sessions"
+      "GET /api/auth/me"                                                        = "auth-me"
+      "OPTIONS /api/auth/me"                                                    = "auth-me"
+      "ANY /api/extensions/{extensionId}"                                       = "extension-proxy"
+      "ANY /api/extensions/{extensionId}/{proxy+}"                              = "extension-proxy"
 
       # Routines
       "ANY /api/routines/{proxy+}" = "routines"

@@ -13,7 +13,11 @@ const { selectQueue, returningQueue, insertCalls, updateCalls, mockDb } =
           from: vi.fn(() => chain),
           where: vi.fn(() => chain),
           limit: vi.fn(async () => selectQueue.shift() ?? []),
-          orderBy: vi.fn(async () => selectQueue.shift() ?? []),
+          orderBy: vi.fn(() => ({
+            limit: vi.fn(async () => selectQueue.shift() ?? []),
+            then: (resolve: (value: unknown[]) => void) =>
+              resolve(selectQueue.shift() ?? []),
+          })),
         };
         return chain;
       }),
@@ -51,6 +55,10 @@ const { mockSfnSend } = vi.hoisted(() => ({
   mockSfnSend: vi.fn(),
 }));
 
+const { mockSecretsSend } = vi.hoisted(() => ({
+  mockSecretsSend: vi.fn(),
+}));
+
 vi.mock("../lib/db.js", () => ({
   db: mockDb,
 }));
@@ -60,6 +68,24 @@ vi.mock("@aws-sdk/client-sfn", () => ({
     send = mockSfnSend;
   },
   StartExecutionCommand: class StartExecutionCommand {
+    input: unknown;
+    constructor(input: unknown) {
+      this.input = input;
+    }
+  },
+}));
+
+vi.mock("@aws-sdk/client-secrets-manager", () => ({
+  SecretsManagerClient: class {
+    send = mockSecretsSend;
+  },
+  CreateSecretCommand: class CreateSecretCommand {
+    input: unknown;
+    constructor(input: unknown) {
+      this.input = input;
+    }
+  },
+  DeleteSecretCommand: class DeleteSecretCommand {
     input: unknown;
     constructor(input: unknown) {
       this.input = input;
@@ -78,6 +104,7 @@ beforeEach(async () => {
   insertCalls.length = 0;
   updateCalls.length = 0;
   mockSfnSend.mockReset();
+  mockSecretsSend.mockReset();
   mod = await import("./deployment-sessions.js");
 });
 
@@ -212,6 +239,156 @@ describe("deployment session handler", () => {
     expect(JSON.parse(response.body || "{}").session.status).toBe(
       "teardown_requested",
     );
+  });
+
+  it("validates a bootstrap credential lease without storing AWS secret values in session rows or events", async () => {
+    mockSecretsSend.mockResolvedValue({
+      ARN: "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/deployment-bootstrap-leases/session/lease",
+    });
+    const session = sessionRow({ credentials_status: "not_connected" });
+    selectQueue.push([session]);
+    returningQueue.push([
+      {
+        ...session,
+        status: "ready_to_deploy",
+        current_step_key: "foundation",
+        credentials_status: "validated",
+      },
+    ]);
+    selectQueue.push([
+      { id: "event-1", event_type: "bootstrap_credential_lease_validated" },
+    ]);
+
+    const response = await mod.handler(
+      event(
+        "POST",
+        `/api/deployment-sessions/${SESSION_ID}/bootstrap-credential-lease`,
+        {
+          kind: "temporary_credentials",
+          accessKeyId: "ASIA1234567890123456",
+          secretAccessKey: "super-secret-access-key-value",
+          sessionToken: "temporary-session-token-value",
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        },
+        { "x-thinkwork-deployment-token": "correct-token" },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(mockSecretsSend).toHaveBeenCalledTimes(1);
+    const command = mockSecretsSend.mock.calls[0]?.[0] as {
+      input: Record<string, unknown>;
+    };
+    expect(String(command.input.Name)).toContain(
+      "thinkwork/dev/deployment-bootstrap-leases",
+    );
+    expect(String(command.input.SecretString)).toContain(
+      "super-secret-access-key-value",
+    );
+    const persistedDbAndEvents = JSON.stringify({ insertCalls, updateCalls });
+    expect(persistedDbAndEvents).not.toContain("super-secret-access-key-value");
+    expect(persistedDbAndEvents).not.toContain("temporary-session-token-value");
+    expect(persistedDbAndEvents).toContain("secret_fingerprint");
+    expect(JSON.parse(response.body || "{}").session.credentialsStatus).toBe(
+      "validated",
+    );
+  });
+
+  it("rejects expired bootstrap credentials before writing a vault secret", async () => {
+    const session = sessionRow({ credentials_status: "not_connected" });
+    selectQueue.push([session]);
+
+    const response = await mod.handler(
+      event(
+        "POST",
+        `/api/deployment-sessions/${SESSION_ID}/bootstrap-credential-lease`,
+        {
+          kind: "temporary_credentials",
+          accessKeyId: "ASIA1234567890123456",
+          secretAccessKey: "super-secret-access-key-value",
+          sessionToken: "temporary-session-token-value",
+          expiresAt: new Date(Date.now() - 60 * 1000).toISOString(),
+        },
+        { "x-thinkwork-deployment-token": "correct-token" },
+      ),
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(mockSecretsSend).not.toHaveBeenCalled();
+    expect(JSON.stringify(insertCalls)).not.toContain(
+      "super-secret-access-key-value",
+    );
+  });
+
+  it("revokes a bootstrap credential lease by deleting the vault secret", async () => {
+    mockSecretsSend.mockResolvedValue({});
+    const session = sessionRow({ credentials_status: "validated" });
+    selectQueue.push([session]);
+    selectQueue.push([
+      {
+        id: "lease-1",
+        session_id: SESSION_ID,
+        status: "validated",
+        secret_arn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/deployment-bootstrap-leases/session/lease",
+        secret_fingerprint: "abc123",
+        created_at: "2026-06-09T00:00:00.000Z",
+      },
+    ]);
+    returningQueue.push([
+      {
+        ...session,
+        credentials_status: "revoked",
+        current_step_key: "connect_aws",
+      },
+    ]);
+    selectQueue.push([
+      { id: "event-1", event_type: "bootstrap_credential_lease_revoked" },
+    ]);
+
+    const response = await mod.handler(
+      event(
+        "DELETE",
+        `/api/deployment-sessions/${SESSION_ID}/bootstrap-credential-lease`,
+        undefined,
+        { "x-thinkwork-deployment-token": "correct-token" },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    const command = mockSecretsSend.mock.calls[0]?.[0] as {
+      input: Record<string, unknown>;
+    };
+    expect(command.input).toEqual(
+      expect.objectContaining({
+        SecretId: expect.stringContaining("deployment-bootstrap-leases"),
+        ForceDeleteWithoutRecovery: true,
+      }),
+    );
+    expect(updateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "revoked",
+        }),
+      ]),
+    );
+  });
+
+  it("requires a validated bootstrap credential lease before deployment start", async () => {
+    const session = sessionRow({ credentials_status: "not_connected" });
+    selectQueue.push([session]);
+
+    const response = await mod.handler(
+      event(
+        "POST",
+        `/api/deployment-sessions/${SESSION_ID}/start`,
+        {},
+        { "x-thinkwork-deployment-token": "correct-token" },
+      ),
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(mockSfnSend).not.toHaveBeenCalled();
   });
 
   it("starts teardown through the deployment runner when configured", async () => {
@@ -466,7 +643,7 @@ function hash(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function sessionRow() {
+function sessionRow(overrides: Record<string, unknown> = {}) {
   return {
     id: SESSION_ID,
     client_token_hash: hash("correct-token"),
@@ -481,11 +658,12 @@ function sessionRow() {
     availability_zones: ["us-east-1a", "us-east-1b"],
     admin_name: "Eric Odom",
     admin_email: "eric@example.com",
-    credentials_status: "not_connected",
+    credentials_status: "validated",
     runner_mode: "hosted",
     terraform_backend: {},
     session_config: {},
     created_at: "2026-06-08T00:00:00.000Z",
     updated_at: "2026-06-08T00:00:00.000Z",
+    ...overrides,
   };
 }

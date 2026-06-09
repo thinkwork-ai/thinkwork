@@ -59,6 +59,23 @@ type DeploymentEvidence {
   urls: [String!]!
 }
 
+type BootstrapCredentialLease {
+  id: ID!
+  sessionId: ID!
+  status: String!
+  leaseType: String!
+  secretFingerprint: String!
+  roleArn: String
+  externalIdHash: String
+  expiresAt: AWSDateTime!
+  validatedAt: AWSDateTime
+  inUseAt: AWSDateTime
+  transferredAt: AWSDateTime
+  revokedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
 input StartManagedApplicationPlanInput {
   key: String!
   operation: String!

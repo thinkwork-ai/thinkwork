@@ -52,6 +52,21 @@ export interface CreateDeploymentSessionResult {
   clientToken: string;
 }
 
+export type BootstrapCredentialLeaseInput =
+  | {
+      kind: "temporary_credentials";
+      accessKeyId: string;
+      secretAccessKey: string;
+      sessionToken: string;
+      expiresAt: string;
+    }
+  | {
+      kind: "assumable_role";
+      roleArn: string;
+      externalId?: string;
+      expiresAt?: string;
+    };
+
 export async function createDeploymentSession(
   input: CreateDeploymentSessionInput,
 ): Promise<CreateDeploymentSessionResult> {
@@ -70,6 +85,34 @@ export async function readDeploymentSession(
   const result = await requestJson<{ session: DeploymentSession }>(
     `/api/deployment-sessions/${encodeURIComponent(resume.sessionId)}`,
     {
+      headers: deploymentSessionHeaders(resume.clientToken),
+    },
+  );
+  return result.session;
+}
+
+export async function connectDeploymentSessionCredentialLease(
+  resume: DeploymentSessionResume,
+  input: BootstrapCredentialLeaseInput,
+): Promise<DeploymentSession> {
+  const result = await requestJson<{ session: DeploymentSession }>(
+    `/api/deployment-sessions/${encodeURIComponent(resume.sessionId)}/bootstrap-credential-lease`,
+    {
+      method: "POST",
+      headers: deploymentSessionHeaders(resume.clientToken),
+      body: JSON.stringify(input),
+    },
+  );
+  return result.session;
+}
+
+export async function revokeDeploymentSessionCredentialLease(
+  resume: DeploymentSessionResume,
+): Promise<DeploymentSession> {
+  const result = await requestJson<{ session: DeploymentSession }>(
+    `/api/deployment-sessions/${encodeURIComponent(resume.sessionId)}/bootstrap-credential-lease`,
+    {
+      method: "DELETE",
       headers: deploymentSessionHeaders(resume.clientToken),
     },
   );

@@ -672,6 +672,7 @@ module "api" {
   lambda_zips_dir                               = var.lambda_zips_dir
   api_auth_secret                               = var.api_auth_secret
   db_password                                   = var.db_password
+  bootstrap_credential_lease_kms_key_id         = var.bootstrap_credential_lease_kms_key_id
   agentcore_pi_function_name                    = module.agentcore_pi.agentcore_pi_function_name
   agentcore_pi_function_arn                     = module.agentcore_pi.agentcore_pi_function_arn
   enable_agentcore_pi_invoke_policy             = true
