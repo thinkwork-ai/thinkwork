@@ -208,8 +208,7 @@ def controller_input_summary(payload):
     release = payload.get("release")
     if not isinstance(release, dict):
         release = {
-            "version": payload.get("releaseVersion")
-            or os.environ.get("THINKWORK_RELEASE_VERSION"),
+            "version": payload.get("releaseVersion") or os.environ.get("THINKWORK_RELEASE_VERSION"),
             "manifestUrl": payload.get("releaseManifestUrl")
             or os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
             "manifestSha256": payload.get("releaseManifestSha256")
@@ -230,8 +229,7 @@ def controller_input_summary(payload):
         },
         "evidence": payload.get("evidence")
         or {
-            "bucket": payload.get("evidenceBucket")
-            or os.environ.get("THINKWORK_EVIDENCE_BUCKET"),
+            "bucket": payload.get("evidenceBucket") or os.environ.get("THINKWORK_EVIDENCE_BUCKET"),
             "prefix": os.environ.get("THINKWORK_EVIDENCE_PREFIX"),
         },
         "features": payload.get("features")
@@ -444,6 +442,20 @@ def source_repo_and_ref(module_source, release_version):
     return repo, ref
 
 
+def terraform_module_source_and_version(module_source, module_version, release_version):
+    source = module_source.removeprefix("git::")
+    source_path, _, _query = source.partition("?")
+    if source_path == "thinkwork-ai/thinkwork/aws":
+        ref = release_git_sha() or release_version
+        quoted_ref = urllib.parse.quote(ref, safe="")
+        return (
+            "git::https://github.com/thinkwork-ai/thinkwork.git"
+            f"//terraform/modules/thinkwork?ref={quoted_ref}",
+            "",
+        )
+    return module_source, module_version
+
+
 def checkout_source(module_source, release_version):
     if SOURCE.exists():
         return
@@ -566,11 +578,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS vector;
 """,
     )
-    files = sorted(
-        path
-        for path in migrations.glob("*.sql")
-        if "rollback" not in path.name
-    )
+    files = sorted(path for path in migrations.glob("*.sql") if "rollback" not in path.name)
     for path in files:
         if path.name == "0031_thread_cleanup_drops.sql":
             psql(
@@ -780,10 +788,13 @@ def write_runner_files(payload, runner_secrets):
         "terraformModuleVersion",
         default=os.environ.get("THINKWORK_TERRAFORM_MODULE_VERSION", ""),
     )
+    terraform_module_source, terraform_module_version = terraform_module_source_and_version(
+        module_source,
+        module_version,
+        release_version,
+    )
     module_version_line = (
-        f"  version = {hcl_string(module_version)}\n"
-        if module_version
-        else ""
+        f"  version = {hcl_string(terraform_module_version)}\n" if terraform_module_version else ""
     )
     db_password = safe_get(
         runner_secrets,
@@ -864,7 +875,7 @@ def write_runner_files(payload, runner_secrets):
         encoding="utf-8",
     )
     (TF / "main.tf").write_text(
-        f'''
+        f"""
 terraform {{
   required_version = ">= 1.5"
 
@@ -944,7 +955,7 @@ variable "agentcore_pi_source_image_uri" {{
 }}
 
 module "thinkwork" {{
-  source  = {hcl_string(module_source)}
+  source  = {hcl_string(terraform_module_source)}
 {module_version_line}
 
   stage      = var.stage
@@ -1001,7 +1012,7 @@ output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
   output "cognee_enabled" {{ value = module.thinkwork.cognee_enabled }}
 output "twenty_provisioned" {{ value = module.thinkwork.twenty_provisioned }}
 output "twenty_runtime_enabled" {{ value = module.thinkwork.twenty_runtime_enabled }}
-''',
+""",
         encoding="utf-8",
     )
     return vars_json
@@ -1016,9 +1027,7 @@ def sync_release_artifacts():
     download(manifest_url, MANIFEST)
     actual = sha256_file(MANIFEST)
     if expected and actual != expected:
-        raise RuntimeError(
-            f"Release manifest digest mismatch: expected {expected}, got {actual}"
-        )
+        raise RuntimeError(f"Release manifest digest mismatch: expected {expected}, got {actual}")
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     bundled_paths, bundle_evidence = download_and_extract_artifact_bundles(manifest)
@@ -1204,9 +1213,7 @@ def runtime_profile(outputs, vars_json):
         "VITE_RELEASE_MANIFEST_SHA256": profile["releaseManifestSha256"],
         "VITE_DEPLOYMENT_CONTROLLER_ARN": profile["controller"]["stateMachineArn"],
         "VITE_DEPLOYMENT_CONTROLLER_NAME": profile["controller"]["stateMachineName"],
-        "VITE_DEPLOYMENT_RUNNER_PROJECT_NAME": profile["controller"][
-            "codebuildProjectName"
-        ],
+        "VITE_DEPLOYMENT_RUNNER_PROJECT_NAME": profile["controller"]["codebuildProjectName"],
         "VITE_DEPLOYMENT_RUNNER_PROJECT_ARN": profile["controller"]["codebuildProjectArn"],
         "VITE_DEPLOYMENT_EVIDENCE_BUCKET": profile["controller"]["evidenceBucketName"],
         "VITE_DEPLOYMENT_SSM_PREFIX": profile["controller"]["ssmPrefix"],

@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U13 - desktop release asset staging repair after
-  `.139` exposed electron-builder product-name filenames.
-- Current branch: `codex/u13-release-asset-staging`.
+- Current implementation unit: U14 - TEI `.140` update proof runner source
+  repair.
+- Current branch: `codex/u14-tei-release-140-proof`.
 - Current worktree:
-  `.Codex/worktrees/u13-release-asset-staging`.
+  `.Codex/worktrees/u14-tei-release-140-proof`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -28,7 +28,8 @@ status: in_progress
   merged; U10 PR [#2297](https://github.com/thinkwork-ai/thinkwork/pull/2297)
   merged; U11 PR [#2298](https://github.com/thinkwork-ai/thinkwork/pull/2298)
   merged; U12 PR [#2300](https://github.com/thinkwork-ai/thinkwork/pull/2300)
-  merged; U13 PR pending.
+  merged; U13 PR [#2301](https://github.com/thinkwork-ai/thinkwork/pull/2301)
+  merged; U14 PR pending.
 - Status: U11 merged and deployed to main. TEI's customer deployment controller
   was refreshed to the U11 runner and `.137` selected-release pins, then TEI
   update execution `tei-e2e-update-137-20260609204430` failed closed because
@@ -49,8 +50,16 @@ status: in_progress
   `ThinkWork Spaces (Canary)-0.1.0-canary.139-arm64.dmg`, while updater metadata
   expected GitHub asset names such as
   `@thinkwork.desktop-0.1.0-canary.139.dmg`. U13 maps product-name build outputs
-  to the updater metadata names before upload, then will retry with a fresh
-  canary.
+  to the updater metadata names before upload. U13 merged, main checks passed,
+  and `.140` was cut successfully with desktop assets plus platform bundle.
+  TEI's controller was refreshed to `.140` with manifest SHA-256
+  `99467b5d2165d738ba1f303162f33e422d49c4add01ea880923ad026041c7edd`, then
+  update execution `tw-tei-e2e-update-140-20260609221126` failed in CodeBuild
+  run `thinkwork-tei-e2e-deployment-runner:1448758e-ba8c-4b12-9954-2796ad2871ce`
+  because generated Terraform used registry source `thinkwork-ai/thinkwork/aws`
+  directly and Terraform could not find that module in the public registry.
+  U14 maps the registry-shaped ThinkWork module alias to a pinned GitHub module
+  source before writing `main.tf`.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS

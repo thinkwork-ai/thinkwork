@@ -133,9 +133,7 @@ def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
     ]
     assert runner.RELEASE_EVIDENCE["manifestSha256"] == manifest_sha
     assert runner.RELEASE_EVIDENCE["bundles"][0]["contains"] == ["graphql-http", "web"]
-    assert {artifact["source"] for artifact in runner.RELEASE_EVIDENCE["artifacts"]} == {
-        "bundle"
-    }
+    assert {artifact["source"] for artifact in runner.RELEASE_EVIDENCE["artifacts"]} == {"bundle"}
 
 
 def test_payload_release_selection_overrides_stale_runner_environment(
@@ -223,6 +221,36 @@ def test_registry_module_source_checks_out_release_manifest_sha(
     ) == (
         "https://github.com/thinkwork-ai/thinkwork.git",
         "f9ebf20d2e4d592df44e66252d6c7894746689c9",
+    )
+
+
+def test_registry_module_source_writes_pinned_git_module_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    manifest_path = tmp_path / "thinkwork-release.json"
+    manifest = {
+        "schemaVersion": 1,
+        "release": {
+            "version": "0.1.0-canary.140",
+            "gitSha": "c706fd93b917ee71a01add97ee7dc7c977cc2bb8",
+            "createdAt": "2026-06-09T22:07:19.000Z",
+        },
+        "artifacts": [],
+        "runtimeImages": [],
+    }
+    write_manifest(manifest_path, manifest)
+
+    monkeypatch.setattr(runner, "MANIFEST", manifest_path)
+
+    assert runner.terraform_module_source_and_version(
+        "thinkwork-ai/thinkwork/aws",
+        "0.1.0-canary.140",
+        "v0.1.0-canary.140",
+    ) == (
+        "git::https://github.com/thinkwork-ai/thinkwork.git"
+        "//terraform/modules/thinkwork?ref=c706fd93b917ee71a01add97ee7dc7c977cc2bb8",
+        "",
     )
 
 
@@ -492,9 +520,7 @@ def test_controller_status_action_writes_noop_proof(
     proof = json.loads((tmp_path / "controller-status.json").read_text())
     evidence = json.loads((tmp_path / "deployment-evidence.json").read_text())
     assert proof["status"] == "ready"
-    assert proof["controller"]["stateMachineName"] == (
-        "thinkwork-tei-e2e-deployment-orchestrator"
-    )
+    assert proof["controller"]["stateMachineName"] == ("thinkwork-tei-e2e-deployment-orchestrator")
     assert proof["release"]["version"] == "v0.1.0-canary.134"
     assert evidence["status"] == "succeeded"
     assert evidence["controller"]["status"]["proof"]["action"] == "status"
