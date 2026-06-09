@@ -11,10 +11,10 @@ status: in_progress
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
 - Current implementation unit: U9 - TEI proving run and operator
-  documentation, starting with release-deploy operator proof.
-- Current branch: `codex/u9-release-deploy-proof`.
+  documentation, updating the TEI runbook to the real canary manifest.
+- Current branch: `codex/u9-tei-runbook-137`.
 - Current worktree:
-  `.Codex/worktrees/u9-release-deploy-proof`.
+  `.Codex/worktrees/u9-tei-runbook-137`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -24,11 +24,12 @@ status: in_progress
   merged; U7 PR [#2293](https://github.com/thinkwork-ai/thinkwork/pull/2293)
   merged; U8 PR [#2294](https://github.com/thinkwork-ai/thinkwork/pull/2294)
   merged; U9 PR [#2295](https://github.com/thinkwork-ai/thinkwork/pull/2295)
+  merged; U9 PR [#2296](https://github.com/thinkwork-ai/thinkwork/pull/2296)
   opened.
-- Status: U9 PR #2295 opened and CI pending. `v0.1.0-canary.136`
-  and `desktop-v0.1.0-canary.136` release runs passed, publishing desktop
-  installers, updater metadata, `thinkwork-release.json`, and
-  `platform-artifacts.tar.gz`.
+- Status: U9 PR #2296 opened and CI pending. `v0.1.0-canary.137` release runs
+  passed, publishing desktop installers, updater metadata,
+  `thinkwork-release.json`, and `platform-artifacts.tar.gz` on the shared
+  release page.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -259,6 +260,34 @@ status: in_progress
   controller execution ARN and evidence pointer after an operator selects a
   release and clicks `Confirm Deploy`, instead of dropping those details after a
   toast.
+- U9 PR #2295 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+  `test`) and was squash merged as `f9ebf20d`.
+- Released `v0.1.0-canary.137` and `desktop-v0.1.0-canary.137` from the #2295
+  merge commit. Platform release run
+  [27229827229](https://github.com/thinkwork-ai/thinkwork/actions/runs/27229827229)
+  passed; desktop/web release run
+  [27229829014](https://github.com/thinkwork-ai/thinkwork/actions/runs/27229829014)
+  passed; post-merge deploy run
+  [27229765971](https://github.com/thinkwork-ai/thinkwork/actions/runs/27229765971)
+  passed and skipped Terraform/Lambda mutation because the changes were
+  web/client-side only.
+- Verified `https://app.thinkwork.ai` served the `.137` web bundle with
+  `Last-Modified: Tue, 09 Jun 2026 19:23:00 GMT`.
+- U9 release page
+  [v0.1.0-canary.137](https://github.com/thinkwork-ai/thinkwork/releases/tag/v0.1.0-canary.137)
+  contains desktop installers/updater metadata, `thinkwork-release.json`, and
+  `platform-artifacts.tar.gz`.
+- U9 remote branch was already deleted by GitHub merge handling; local U9
+  release-deploy worktree and branch were removed after syncing `origin/main`.
+- Created isolated U9 TEI runbook worktree from `origin/main` at `f9ebf20d`.
+- U9 TEI preflight resolved the `v0.1.0-canary.137` release manifest SHA-256:
+  `7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f`.
+- U9 TEI safe preflight confirmed AWS profile `tei` resolves to account
+  `637423202447` and principal
+  `arn:aws:iam::637423202447:user/eric@homecareintel.com`.
+- U9 TEI safe dry-runs passed for both top-level
+  `thinkwork deploy --bootstrap` and lower-level `thinkwork enterprise
+bootstrap` using the `.137` manifest URL and digest.
 - U7 local verification:
   - `pnpm schema:build` passed.
   - GraphQL codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
@@ -293,6 +322,18 @@ status: in_progress
   - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsGeneral.test.tsx`
     passed: 1 test.
   - `pnpm --filter @thinkwork/web typecheck` passed.
+  - U9 release-deploy PR #2295 CI passed: `cla`, `lint`, `verify`,
+    `typecheck`, and `test`.
+  - U9 `.137` release verification passed: platform release, desktop/web
+    release, and post-merge deploy workflows all completed successfully.
+  - U9 TEI `aws sts get-caller-identity --profile tei --output json` passed.
+  - U9 TEI `AWS_PROFILE=tei AWS_REGION=us-east-1 pnpm --dir apps/cli dev doctor -s tei-e2e --profile tei`
+    passed.
+  - U9 TEI `thinkwork deploy --bootstrap ... --dry-run --no-wait --no-run-smokes`
+    passed with `v0.1.0-canary.137`.
+  - U9 TEI `thinkwork enterprise bootstrap ... --dry-run` passed with
+    `v0.1.0-canary.137`.
+  - U9 TEI `node scripts/smoke/foundation-bootstrap-smoke.mjs` dry-run passed.
 - CI:
   - U5 PR #2291 initial checks: `cla`, `lint`, `verify`, and `typecheck`
     passed.
