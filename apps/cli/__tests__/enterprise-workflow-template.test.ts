@@ -128,4 +128,14 @@ describe("enterprise deploy workflow template", () => {
     expect(helper).toContain("--protocol-configuration");
     expect(helper).toContain("list-agent-runtime-endpoints");
   });
+
+  it("prepares bundled platform artifacts without requiring loose release zips", () => {
+    const root = render();
+    const helper = read(root, "scripts/apply-release.mjs");
+
+    expect(helper).toContain("manifest.artifactBundles");
+    expect(helper).toContain("prepareArtifactBundle");
+    expect(helper).toContain("Bundled release artifact");
+    expect(helper).toContain("platform-artifacts");
+  });
 });

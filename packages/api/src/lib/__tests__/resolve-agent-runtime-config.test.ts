@@ -18,6 +18,7 @@ const {
   mockLoadTenantBuiltinTools,
   mockLoadTenantWebExtractConfig,
   mockBuildMcpConfigs,
+  mockListTenantModelCatalogByIds,
   mockS3Send,
 } = vi.hoisted(() => ({
   rowsQueue: [] as unknown[][],
@@ -26,6 +27,7 @@ const {
   mockLoadTenantBuiltinTools: vi.fn(),
   mockLoadTenantWebExtractConfig: vi.fn(),
   mockBuildMcpConfigs: vi.fn(),
+  mockListTenantModelCatalogByIds: vi.fn(),
   mockS3Send: vi.fn(),
 }));
 
@@ -207,6 +209,10 @@ vi.mock("../mcp-configs.js", () => ({
   buildMcpConfigs: mockBuildMcpConfigs,
 }));
 
+vi.mock("../model-catalog/tenant-catalog.js", () => ({
+  listTenantModelCatalogByIds: mockListTenantModelCatalogByIds,
+}));
+
 vi.mock("../../handlers/skills.js", () => ({
   loadTenantBuiltinTools: mockLoadTenantBuiltinTools,
 }));
@@ -268,7 +274,9 @@ function stageTenantSlug(slug = "acme") {
 function stageProfileRows(rows: Array<Record<string, unknown>>) {
   rowsQueue.push(rows);
   if (rows.length === 0) return;
-  rowsQueue.push([{ model_id: PROFILE_MODEL_ID }]); // available model catalog
+  mockListTenantModelCatalogByIds.mockResolvedValueOnce([
+    { modelId: PROFILE_MODEL_ID },
+  ]);
 }
 
 beforeEach(() => {
@@ -280,6 +288,7 @@ beforeEach(() => {
   mockLoadTenantBuiltinTools.mockResolvedValue([]);
   mockLoadTenantWebExtractConfig.mockResolvedValue(null);
   mockBuildMcpConfigs.mockResolvedValue([]);
+  mockListTenantModelCatalogByIds.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -1162,7 +1171,6 @@ describe("resolveAgentRuntimeConfig", () => {
         execution_controls: {},
       },
     ]);
-    rowsQueue.push([{ model_id: PROFILE_MODEL_ID }]); // available model catalog
     rowsQueue.push([]); // approved models for user
     rowsQueue.push([]); // space assignments
     rowsQueue.push([]); // MCP server catalog

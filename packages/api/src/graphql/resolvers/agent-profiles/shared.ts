@@ -8,10 +8,13 @@ import {
   db,
   eq,
   inArray,
-  modelCatalog,
   spaces,
   snakeToCamel,
 } from "../../utils.js";
+import {
+  getTenantModelCatalogEntry,
+  listTenantModelCatalog,
+} from "../../../lib/model-catalog/tenant-catalog.js";
 import {
   BUILT_IN_AGENT_PROFILE_KEYS,
   BUILT_IN_PROFILE_SEEDS,
@@ -93,27 +96,26 @@ async function resolveDefaultProfileModelId(tenantId: string): Promise<string> {
     .where(
       and(eq(agents.tenant_id, tenantId), eq(agents.is_platform_default, true)),
     );
-  if (agent?.model) return agent.model;
+  if (agent?.model) {
+    const row = await getTenantModelCatalogEntry({
+      tenantId,
+      modelId: agent.model,
+    });
+    if (row) return agent.model;
+  }
 
-  const [catalogRow] = await db
-    .select({ modelId: modelCatalog.model_id })
-    .from(modelCatalog)
-    .where(eq(modelCatalog.is_available, true))
-    .orderBy(asc(modelCatalog.display_name));
+  const [catalogRow] = await listTenantModelCatalog({ tenantId });
   return catalogRow?.modelId ?? DEFAULT_PROFILE_MODEL_ID;
 }
 
-export async function assertAvailableModel(modelId: string): Promise<void> {
-  const [row] = await db
-    .select({ modelId: modelCatalog.model_id })
-    .from(modelCatalog)
-    .where(
-      and(
-        eq(modelCatalog.model_id, modelId),
-        eq(modelCatalog.is_available, true),
-      ),
-    );
-  if (!row) throw badInput("Model is not available in the model catalog");
+export async function assertAvailableModel(
+  tenantId: string,
+  modelId: string,
+): Promise<void> {
+  const row = await getTenantModelCatalogEntry({ tenantId, modelId });
+  if (!row) {
+    throw badInput("Model is not enabled in the tenant model catalog");
+  }
 }
 
 export async function assertSpacesBelongToTenant(

@@ -10,14 +10,18 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-001-feat-tenant-model-catalog-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U3 - Tenant model catalog GraphQL API.
-- Current branch: `codex/tenant-model-catalog-u3`.
-- Current worktree: `.Codex/worktrees/tenant-model-catalog-u3`.
+- Current implementation unit: U7 - Regenerate schemas, update docs, and verify end to end.
+- Current branch: `codex/tenant-model-catalog-u7`.
+- Current worktree: `.Codex/worktrees/tenant-model-catalog-u7`.
 - Pull request:
-  [#2275](https://github.com/thinkwork-ai/thinkwork/pull/2275). U2 PR
+  [#2282](https://github.com/thinkwork-ai/thinkwork/pull/2282). U6 PR
+  [#2281](https://github.com/thinkwork-ai/thinkwork/pull/2281), U5 PR
+  [#2280](https://github.com/thinkwork-ai/thinkwork/pull/2280), U4 PR
+  [#2279](https://github.com/thinkwork-ai/thinkwork/pull/2279), U3 PR
+  [#2275](https://github.com/thinkwork-ai/thinkwork/pull/2275), U2 PR
   [#2273](https://github.com/thinkwork-ai/thinkwork/pull/2273) and U1 PR
   [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) were merged.
-- Status: U3 PR open; CI pending.
+- Status: U7 PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
@@ -123,6 +127,145 @@ status: in_progress
     typecheck passed.
   - Prettier check over U3 hand-written files passed; generated GraphQL clients
     were regenerated after avoiding generated-file formatting churn.
+  - `git diff --check` passed.
+- U3 CI:
+  - PR #2275 initially passed all checks, then became `BEHIND` after `main`
+    advanced; rebased the branch onto `origin/main`, force-pushed with lease,
+    and waited for fresh checks.
+  - Final required checks passed: `cla`, `lint`, `test`, `typecheck`, and
+    `verify`.
+- U3 merge/cleanup:
+  - PR #2275 was squash merged as `7a6e4f3e`.
+  - The remote branch was deleted by GitHub merge handling; the local U3
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U4 worktree from `origin/main` at `7a6e4f3e`.
+- U4 started Settings UI work:
+  - added the operator-only `/settings/model-catalog` route and Settings nav
+    entry;
+  - added a compact table-first Model Catalog page showing provider, display
+    name, model ID, and token costs;
+  - moved pricing state, capabilities, enabled state, canonical metadata, and
+    display-name editing into a row-click model details dialog;
+  - added a Bedrock import dialog with AWS candidate rows, multi-select,
+    editable display names, duplicate handling, pricing health, and
+    import-time enable controls;
+  - added tenant-model-catalog Settings GraphQL operations and regenerated web
+    GraphQL types;
+  - regenerated TanStack route tree using the router generator package API.
+  - Started the U4 worktree Vite server on
+    `http://127.0.0.1:5175/settings/model-catalog`, replacing a stale process
+    already bound to port 5175, and tightened the table after reviewing
+    localhost screenshots that showed excessive right-side whitespace.
+  - Follow-up localhost review tightened the configured-model table further:
+    the Settings nav now uses the CPU icon, the Provider column displays
+    Bedrock, compact columns size to content, and long model IDs truncate
+    instead of forcing horizontal overflow.
+- U4 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsModelCatalog.test.tsx src/components/settings/settings-nav.test.ts`
+    passed: 2 files, 18 tests.
+  - `pnpm --filter @thinkwork/web codegen` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/web test` passed: 139 files, 971 tests.
+  - `pnpm --filter @thinkwork/web build` passed.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over U4 hand-written
+    files passed.
+  - `git diff --check` passed.
+  - Browser automation could not capture an authenticated protected-route
+    screenshot because Chrome repeatedly returned to profile selection during
+    navigation; the 5175 dev server remains running for live local inspection.
+- U4 CI:
+  - PR #2279 passed required checks: `cla`, `lint`, `test`, `typecheck`, and
+    `verify`.
+- U4 merge/cleanup:
+  - PR #2279 was squash merged as `ec420cbf`.
+  - The remote branch was deleted by GitHub merge handling; the local U4
+    worktree and branch were removed after stopping the U4 dev server on port 5175.
+  - Created isolated U5 worktree from `origin/main` at `ec420cbf`.
+- U5 started downstream consumer work:
+  - switched Agent Profile create/update/default model validation to tenant
+    catalog availability;
+  - switched Agent Profile editor model options and runtime profile filtering
+    to tenant-enabled catalog entries;
+  - switched eval model validation to tenant catalog availability;
+  - switched web model selectors, Analytics, and Activity trace model display
+    names to tenant catalog rows.
+- U5 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/agent-profiles/agentProfiles.resolver.test.ts src/lib/__tests__/resolve-agent-runtime-config.test.ts src/graphql/resolvers/evaluations/index.test.ts`
+    passed: 3 files, 43 tests.
+  - `pnpm --filter @thinkwork/api test` passed: 440 files, 3 skipped; 3,751
+    tests, 9 skipped.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/UserModelsSection.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx src/components/settings/SettingsAnalytics.test.tsx src/components/settings/SettingsAgents.test.tsx`
+    passed: 4 files, 21 tests.
+  - `pnpm --filter @thinkwork/web test` passed before final Prettier cleanup:
+    139 files, 971 tests.
+  - `pnpm --filter @thinkwork/web build` passed.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over U5 touched files
+    passed.
+  - `git diff --check` passed.
+- U5 CI:
+  - PR #2280 passed required checks: `cla`, `lint`, `test`, `typecheck`, and
+    `verify`.
+- U5 merge/cleanup:
+  - PR #2280 was squash merged as `b88c9f8f`.
+  - The remote branch was deleted by GitHub merge handling; the local U5
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U6 worktree from `origin/main` at `b88c9f8f`.
+- U6 started AWS IAM and deployment wiring:
+  - added a managed policy attachment for `graphql-http` Bedrock
+    `ListFoundationModels` and AWS Price List read actions;
+  - added CLI fixture coverage for the Terraform grant and for keeping
+    `@aws-sdk/client-pricing` bundled into the `graphql-http` artifact.
+- U6 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-model-catalog-fixture.test.ts`
+    passed: 2 tests.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `terraform fmt -check terraform/modules/app/lambda-api/main.tf` passed.
+  - `bash scripts/build-lambdas.sh graphql-http` passed and produced the
+    `graphql-http` artifact with the bundled SDK set.
+- U6 CI:
+  - PR #2281 passed required checks: `cla`, `lint`, `test`, `typecheck`, and
+    `verify`.
+- U6 merge/cleanup:
+  - PR #2281 was squash merged as `ea129057`.
+  - The remote branch was deleted by GitHub merge handling; the local U6
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U7 worktree from `origin/main` at `ea129057`.
+- U7 started docs and final verification:
+  - added the admin Model Catalog documentation page and sidebar entry;
+  - added the Model Catalog import end-to-end verification runbook;
+  - cross-linked Agent Templates, Evaluations, Settings, and the Admin overview
+    to the Model Catalog behavior;
+  - reran schema build and CLI/web/mobile GraphQL codegen; no generated-file
+    diff remained.
+- U7 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm schema:build` passed.
+  - GraphQL codegen passed for `thinkwork-cli`, `@thinkwork/web`, and
+    `@thinkwork/mobile`; `@thinkwork/api` has no `codegen` script.
+  - `pnpm --filter @thinkwork/docs build` passed.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsModelCatalog.test.tsx`
+    passed: 4 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `pnpm --filter @thinkwork/mobile exec tsc --noEmit` is not a supported
+    package script and currently fails on existing mobile diagnostics unrelated
+    to this unit.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over U7 touched docs
+    passed.
   - `git diff --check` passed.
 
 ## Kestra Managed Application - 2026-06-08

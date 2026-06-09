@@ -257,7 +257,7 @@ function mockActivityQueries(options?: {
     ])
     .mockReturnValueOnce([
       {
-        data: { modelCatalog: models },
+        data: { tenantModelCatalog: models },
         fetching: false,
         error: undefined,
         stale: false,

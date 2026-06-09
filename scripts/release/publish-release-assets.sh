@@ -39,16 +39,21 @@ if [[ -f "$SIGNATURE" ]]; then
   ASSETS+=("$SIGNATURE")
 fi
 
-if compgen -G "$RELEASE_DIR/lambdas/*.zip" >/dev/null; then
-  while IFS= read -r asset; do
-    ASSETS+=("$asset")
-  done < <(find "$RELEASE_DIR/lambdas" -maxdepth 1 -type f -name '*.zip' | LC_ALL=C sort)
-fi
+PLATFORM_BUNDLE="$RELEASE_DIR/platform-artifacts.tar.gz"
+if [[ -f "$PLATFORM_BUNDLE" ]]; then
+  ASSETS+=("$PLATFORM_BUNDLE")
+else
+  if compgen -G "$RELEASE_DIR/lambdas/*.zip" >/dev/null; then
+    while IFS= read -r asset; do
+      ASSETS+=("$asset")
+    done < <(find "$RELEASE_DIR/lambdas" -maxdepth 1 -type f -name '*.zip' | LC_ALL=C sort)
+  fi
 
-if compgen -G "$RELEASE_DIR/static/*.tar.gz" >/dev/null; then
-  while IFS= read -r asset; do
-    ASSETS+=("$asset")
-  done < <(find "$RELEASE_DIR/static" -maxdepth 1 -type f -name '*.tar.gz' | LC_ALL=C sort)
+  if compgen -G "$RELEASE_DIR/static/*.tar.gz" >/dev/null; then
+    while IFS= read -r asset; do
+      ASSETS+=("$asset")
+    done < <(find "$RELEASE_DIR/static" -maxdepth 1 -type f -name '*.tar.gz' | LC_ALL=C sort)
+  fi
 fi
 
 if [[ ${#ASSETS[@]} -le 1 ]]; then

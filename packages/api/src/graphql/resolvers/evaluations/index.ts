@@ -14,7 +14,6 @@ import {
   evalResults,
   evalTestCases,
   agents,
-  modelCatalog,
 } from "@thinkwork/database-pg/schema";
 import {
   fetchSpansForSession,
@@ -22,6 +21,7 @@ import {
 } from "../../../lib/agentcore-spans.js";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
+import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -613,24 +613,18 @@ interface StartEvalRunInput {
   testCaseIds?: string[] | null;
 }
 
-async function resolveEvalModelId(inputModel: string | null | undefined) {
+async function resolveEvalModelId(
+  tenantId: string,
+  inputModel: string | null | undefined,
+) {
   const requested = inputModel?.trim() || DEFAULT_EVAL_MODEL_ID;
-  if (requested === DEFAULT_EVAL_MODEL_ID) return requested;
-
-  const [availableModel] = await db
-    .select({ modelId: modelCatalog.model_id })
-    .from(modelCatalog)
-    .where(
-      and(
-        eq(modelCatalog.model_id, requested),
-        eq(modelCatalog.is_available, true),
-      ),
-    )
-    .limit(1);
-
-  if (!availableModel) {
+  const catalogRow = await getTenantModelCatalogEntry({
+    tenantId,
+    modelId: requested,
+  });
+  if (!catalogRow) {
     throw new Error(
-      `Eval model ${requested} is not available in the model catalog.`,
+      `Eval model ${requested} is not enabled in the tenant model catalog.`,
     );
   }
 
@@ -655,7 +649,7 @@ const startEvalRun = async (
     );
   }
 
-  const model = await resolveEvalModelId(args.input.model);
+  const model = await resolveEvalModelId(args.tenantId, args.input.model);
 
   // Insert a pending row up front so the failure path (e.g. tenant has no
   // platform agent yet) still surfaces in the runs list with a recoverable

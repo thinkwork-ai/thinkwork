@@ -30,6 +30,16 @@ export interface ReleaseArtifact {
   sizeBytes: number;
 }
 
+export interface ReleaseArtifactBundle {
+  name: string;
+  fileName: string;
+  relativePath: string;
+  url: string | null;
+  sha256: string;
+  sizeBytes: number;
+  contains: string[];
+}
+
 export interface RuntimeImage {
   name: string;
   repository: string;
@@ -85,6 +95,7 @@ export interface ThinkWorkReleaseManifest {
       schemaVersion: typeof CUSTOMER_OVERLAY_SCHEMA_VERSION;
     };
   };
+  artifactBundles?: ReleaseArtifactBundle[];
   artifacts: ReleaseArtifact[];
   runtimeImages: RuntimeImage[];
   managedApps: ManagedAppDescriptor[];
@@ -181,6 +192,7 @@ export function validateReleaseManifest(
     );
   }
   validateArtifacts(manifest.artifacts);
+  validateArtifactBundles(manifest.artifactBundles, manifest.artifacts);
   validateRuntimeImages(manifest.runtimeImages);
   validateManagedApps(manifest.managedApps);
   validateStringArray(
@@ -427,6 +439,59 @@ function validateArtifacts(value: unknown): void {
     }
     requireSha256(artifact.sha256, `artifact ${artifact.name}.sha256`);
     requireNumber(artifact.sizeBytes, `artifact ${artifact.name}.sizeBytes`);
+  }
+}
+
+function validateArtifactBundles(
+  value: unknown,
+  artifacts: unknown,
+): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    throw new ReleaseManifestError("artifactBundles must be an array");
+  }
+  const artifactNames = new Set(
+    Array.isArray(artifacts)
+      ? (artifacts as Partial<ReleaseArtifact>[])
+          .map((artifact) => artifact.name)
+          .filter((name): name is string => typeof name === "string")
+      : [],
+  );
+  const bundleNames = new Set<string>();
+  for (const bundle of value as Partial<ReleaseArtifactBundle>[]) {
+    requireString(bundle.name, "artifactBundle.name");
+    if (bundleNames.has(bundle.name)) {
+      throw new ReleaseManifestError(
+        `Duplicate release artifact bundle name: ${bundle.name}`,
+      );
+    }
+    bundleNames.add(bundle.name);
+    requireString(
+      bundle.fileName,
+      `artifactBundle ${bundle.name}.fileName`,
+    );
+    requireString(
+      bundle.relativePath,
+      `artifactBundle ${bundle.name}.relativePath`,
+    );
+    if (bundle.url !== null && typeof bundle.url !== "string") {
+      throw new ReleaseManifestError(
+        `artifactBundle ${bundle.name}.url must be a string or null`,
+      );
+    }
+    requireSha256(bundle.sha256, `artifactBundle ${bundle.name}.sha256`);
+    requireNumber(bundle.sizeBytes, `artifactBundle ${bundle.name}.sizeBytes`);
+    validateStringArray(
+      bundle.contains,
+      `artifactBundle ${bundle.name}.contains`,
+    );
+    for (const artifactName of bundle.contains ?? []) {
+      if (!artifactNames.has(artifactName)) {
+        throw new ReleaseManifestError(
+          `artifactBundle ${bundle.name} references unknown artifact ${artifactName}`,
+        );
+      }
+    }
   }
 }
 

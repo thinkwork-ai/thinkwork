@@ -4,6 +4,7 @@ import {
   Bot,
   Brain,
   Clock,
+  Cpu,
   FolderTree,
   History,
   Repeat,
@@ -68,6 +69,12 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "MCP Servers",
     to: "/settings/mcp-servers",
     icon: ModelContextProtocol,
+    operatorOnly: true,
+  },
+  {
+    label: "Model Catalog",
+    to: "/settings/model-catalog",
+    icon: Cpu,
     operatorOnly: true,
   },
   {

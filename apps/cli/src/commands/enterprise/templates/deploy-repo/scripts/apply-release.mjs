@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // thinkwork-managed: enterprise-deploy-template
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -52,8 +52,20 @@ async function validateManifest() {
       `Release manifest version ${manifest.release?.version} does not match lock ${expectedRelease}`,
     );
   }
+  const hasBundle = (manifest.artifactBundles ?? []).length > 0;
+  for (const bundle of manifest.artifactBundles ?? []) {
+    if (!bundle.url || !bundle.sha256 || !bundle.fileName) {
+      throw new Error(
+        `Release artifact bundle ${bundle.name} is missing url, sha256, or fileName`,
+      );
+    }
+  }
   for (const artifact of manifest.artifacts ?? []) {
-    if (!artifact.url || !artifact.sha256 || !artifact.fileName) {
+    if (
+      (!hasBundle && !artifact.url) ||
+      !artifact.sha256 ||
+      !artifact.fileName
+    ) {
       throw new Error(
         `Release artifact ${artifact.name} is missing url, sha256, or fileName`,
       );
@@ -69,11 +81,11 @@ async function prepareArtifacts() {
   const lambdaPrefix = required("--lambda-prefix").replace(/^\/+|\/+$/g, "");
   const downloadDir = join(workDir, "downloads");
   await mkdir(downloadDir, { recursive: true });
+  const bundle = await prepareArtifactBundle(manifest, downloadDir);
 
   const prepared = [];
   for (const artifact of manifest.artifacts ?? []) {
-    const localPath = join(downloadDir, artifact.fileName);
-    await downloadAndVerify(artifact, localPath);
+    const localPath = await prepareArtifact(artifact, downloadDir, bundle);
     prepared.push({ ...artifact, localPath });
     if (artifact.type === "lambda") {
       run("aws", [
@@ -89,6 +101,35 @@ async function prepareArtifacts() {
     release: manifest.release,
     artifacts: prepared,
   });
+}
+
+async function prepareArtifactBundle(manifest, downloadDir) {
+  const bundle = (manifest.artifactBundles ?? [])[0];
+  if (!bundle) return null;
+
+  const localPath = join(downloadDir, bundle.fileName);
+  await downloadAndVerify(bundle, localPath);
+
+  const extractDir = join(downloadDir, "platform-artifacts");
+  await rm(extractDir, { recursive: true, force: true });
+  await mkdir(extractDir, { recursive: true });
+  run("tar", ["-xzf", localPath, "-C", extractDir]);
+
+  return { ...bundle, localPath, extractDir };
+}
+
+async function prepareArtifact(artifact, downloadDir, bundle) {
+  if (artifact.url) {
+    const localPath = join(downloadDir, artifact.fileName);
+    await downloadAndVerify(artifact, localPath);
+    return localPath;
+  }
+  if (!bundle) {
+    throw new Error(`Release artifact ${artifact.name} is missing url`);
+  }
+  const localPath = join(bundle.extractDir, artifact.relativePath);
+  await verifyExistingArtifact(artifact, localPath);
+  return localPath;
 }
 
 async function copyRuntimeImages() {
@@ -487,6 +528,23 @@ async function downloadAndVerify(artifact, localPath) {
     throw new Error(`Failed to download ${artifact.name}: ${response.status}`);
   }
   await writeFile(localPath, Buffer.from(await response.arrayBuffer()));
+  const actual = await sha256File(localPath);
+  if (actual !== artifact.sha256) {
+    throw new Error(`Checksum mismatch for ${artifact.name}: got ${actual}`);
+  }
+}
+
+async function verifyExistingArtifact(artifact, localPath) {
+  try {
+    const fileStat = await stat(localPath);
+    if (!fileStat.isFile()) {
+      throw new Error(`not a file`);
+    }
+  } catch {
+    throw new Error(
+      `Bundled release artifact ${artifact.name} is missing at ${artifact.relativePath}`,
+    );
+  }
   const actual = await sha256File(localPath);
   if (actual !== artifact.sha256) {
     throw new Error(`Checksum mismatch for ${artifact.name}: got ${actual}`);
