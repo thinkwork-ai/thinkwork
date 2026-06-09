@@ -939,9 +939,19 @@ function kestraBasicAuthSecretRef(): string | null {
     const ref = raw.split("|")[8]?.trim();
     if (ref) return ref;
   }
-  return (
+  const explicit =
     process.env.KESTRA_BASIC_AUTH_SECRET_ARN ||
     process.env.KESTRA_SERVICE_CREDENTIAL_SECRET_ARN ||
-    null
-  );
+    null;
+  if (explicit) return explicit;
+
+  const provisioned = raw
+    ? raw.split("|")[0]?.trim() === "1" ||
+      raw.split("|")[0]?.trim().toLowerCase() === "true"
+    : process.env.KESTRA_PROVISIONED?.toLowerCase() === "true" ||
+      process.env.KESTRA_PROVISIONED === "1";
+  if (!provisioned) return null;
+
+  const stage = process.env.STAGE || "dev";
+  return `thinkwork/${stage}/kestra/basic-auth`;
 }
