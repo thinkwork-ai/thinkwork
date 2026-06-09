@@ -29,6 +29,8 @@ import {
 
 const SESSION_TOKEN_BYTES = 32;
 const SESSION_TTL_DAYS = 14;
+const CONTROLLER_CONTRACT = "thinkwork.deployment.controller.v1";
+const CONTROLLER_SCHEMA_VERSION = 1;
 const sfn = new SFNClient({});
 
 type CreateSessionBody = {
@@ -40,6 +42,21 @@ type CreateSessionBody = {
   adminName?: unknown;
   adminEmail?: unknown;
   source?: unknown;
+};
+
+type ControllerAction = "deploy" | "update" | "destroy" | "plan";
+
+type ControllerSessionRow = {
+  id: string;
+  requested_action?: string | null;
+  source?: string | null;
+  customer_name?: string | null;
+  environment_name?: string | null;
+  aws_account_id?: string | null;
+  aws_region?: string | null;
+  availability_zones?: unknown;
+  admin_name?: string | null;
+  admin_email?: string | null;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -259,26 +276,16 @@ async function startDeployment(
   });
 
   try {
+    const controllerInput = buildControllerInput(
+      session,
+      "deploy",
+      evidenceBucket,
+    );
     const response = await sfn.send(
       new StartExecutionCommand({
         stateMachineArn,
         name: deploymentExecutionName(session.id),
-        input: JSON.stringify({
-          phase: "deploy",
-          action: "deploy",
-          sessionId: session.id,
-          customerName: session.customer_name,
-          environmentName: session.environment_name,
-          awsAccountId: session.aws_account_id,
-          awsRegion: session.aws_region,
-          availabilityZones: session.availability_zones,
-          firstAdmin: {
-            name: session.admin_name,
-            email: session.admin_email,
-          },
-          source: session.source,
-          evidenceBucket,
-        }),
+        input: JSON.stringify(controllerInput),
       }),
     );
     const executionArn = response.executionArn ?? null;
@@ -295,6 +302,9 @@ async function startDeployment(
             executionArn,
             stateMachineArn,
             evidenceBucket,
+            evidencePrefix: controllerInput.evidence.prefix,
+            contract: CONTROLLER_CONTRACT,
+            release: controllerInput.release,
             startedAt: new Date().toISOString(),
           },
         },
@@ -308,7 +318,11 @@ async function startDeployment(
       eventType: "deployment_execution_started",
       stepKey: "foundation",
       message: "Deployment execution started.",
-      payload: { executionArn, stateMachineArn },
+      payload: controllerRunEventPayload(
+        controllerInput,
+        executionArn,
+        stateMachineArn,
+      ),
       idempotencyKey: "deployment_execution_started",
     });
     const events = await loadSessionEvents(session.id);
@@ -380,21 +394,16 @@ async function requestTeardown(
   const priorTeardown = teardownRunConfig(session.session_config);
   if (!terminal && stateMachineArn && !priorTeardown.executionArn) {
     try {
+      const controllerInput = buildControllerInput(
+        session,
+        "destroy",
+        deploymentEvidenceBucket(),
+      );
       const response = await sfn.send(
         new StartExecutionCommand({
           stateMachineArn,
           name: teardownExecutionName(session.id),
-          input: JSON.stringify({
-            phase: "teardown",
-            action: "destroy",
-            sessionId: session.id,
-            customerName: session.customer_name,
-            environmentName: session.environment_name,
-            awsAccountId: session.aws_account_id,
-            awsRegion: session.aws_region,
-            availabilityZones: session.availability_zones,
-            evidenceBucket: deploymentEvidenceBucket(),
-          }),
+          input: JSON.stringify(controllerInput),
         }),
       );
       const executionArn = response.executionArn ?? null;
@@ -408,6 +417,10 @@ async function requestTeardown(
             teardownRun: {
               executionArn,
               stateMachineArn,
+              evidenceBucket: controllerInput.evidence.bucket,
+              evidencePrefix: controllerInput.evidence.prefix,
+              contract: CONTROLLER_CONTRACT,
+              release: controllerInput.release,
               startedAt: new Date().toISOString(),
             },
           },
@@ -421,7 +434,11 @@ async function requestTeardown(
         eventType: "teardown_execution_started",
         stepKey: "teardown",
         message: "Teardown execution started.",
-        payload: { executionArn, stateMachineArn },
+        payload: controllerRunEventPayload(
+          controllerInput,
+          executionArn,
+          stateMachineArn,
+        ),
         idempotencyKey: "teardown_execution_started",
       });
       const events = await loadSessionEvents(session.id);
@@ -624,6 +641,115 @@ function deploymentEvidenceBucket(): string | null {
     process.env.DEPLOYMENT_EVIDENCE_BUCKET ||
     null
   );
+}
+
+function buildControllerInput(
+  session: ControllerSessionRow,
+  action: ControllerAction,
+  evidenceBucket: string | null,
+) {
+  const release = deploymentReleaseSelection();
+  const evidencePrefix = `sessions/${session.id}/${action}`;
+  const phase = action === "destroy" ? "teardown" : action;
+
+  return {
+    schemaVersion: CONTROLLER_SCHEMA_VERSION,
+    contract: CONTROLLER_CONTRACT,
+    phase,
+    action,
+    sessionId: session.id,
+    customerName: session.customer_name,
+    environmentName: session.environment_name,
+    awsAccountId: session.aws_account_id,
+    awsRegion: session.aws_region,
+    availabilityZones: session.availability_zones,
+    firstAdmin: {
+      name: session.admin_name,
+      email: session.admin_email,
+    },
+    source: session.source,
+    evidenceBucket,
+    evidence: {
+      bucket: evidenceBucket,
+      prefix: evidencePrefix,
+      expectedArtifacts: expectedEvidenceArtifacts(action),
+    },
+    releaseVersion: release.version,
+    releaseManifestUrl: release.manifestUrl,
+    releaseManifestSha256: release.manifestSha256,
+    release,
+    session: {
+      id: session.id,
+      source: session.source,
+      requestedAction: session.requested_action,
+    },
+    operation: {
+      kind: "foundation",
+      action,
+      plan: true,
+      apply: action !== "plan",
+      destroy: action === "destroy",
+    },
+    features: {
+      baseInstall: {
+        cognee: false,
+        slack: false,
+        stripe: false,
+        twenty: false,
+      },
+      optionalApps: [],
+    },
+    terraform: {
+      stateRecovery:
+        action === "destroy"
+          ? {
+              mode: "state-or-tags",
+              recoverByTags: true,
+            }
+          : {
+              mode: "state",
+              recoverByTags: false,
+            },
+    },
+  };
+}
+
+function deploymentReleaseSelection() {
+  return {
+    version: process.env.THINKWORK_RELEASE_VERSION || "unresolved",
+    manifestUrl: process.env.THINKWORK_RELEASE_MANIFEST_URL || "",
+    manifestSha256: process.env.THINKWORK_RELEASE_MANIFEST_SHA256 || "",
+  };
+}
+
+function expectedEvidenceArtifacts(action: ControllerAction): string[] {
+  const base = [
+    "controller-input-summary.json",
+    "redacted-terraform-vars.json",
+    "terraform-plan.json",
+    "deployment-evidence.json",
+  ];
+  if (action !== "plan" && action !== "destroy") {
+    base.splice(3, 0, "terraform-outputs.json");
+  }
+  return base;
+}
+
+function controllerRunEventPayload(
+  controllerInput: ReturnType<typeof buildControllerInput>,
+  executionArn: string | null,
+  stateMachineArn: string,
+) {
+  return {
+    executionArn,
+    stateMachineArn,
+    contract: controllerInput.contract,
+    schemaVersion: controllerInput.schemaVersion,
+    action: controllerInput.action,
+    evidence: controllerInput.evidence,
+    release: controllerInput.release,
+    features: controllerInput.features,
+  };
 }
 
 function deploymentExecutionName(sessionId: string): string {

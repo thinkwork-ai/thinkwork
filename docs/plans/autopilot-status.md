@@ -10,13 +10,15 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U1 - Make Bundled Release Manifests Executable
-  By The Controller.
-- Current branch: `codex/u1-release-bundle-controller`.
+- Current implementation unit: U2 - Finish The Full-Environment Controller Run
+  Contract.
+- Current branch: `codex/u2-controller-run-contract`.
 - Current worktree:
-  `.Codex/worktrees/u1-release-bundle-controller`.
-- Pull request: https://github.com/thinkwork-ai/thinkwork/pull/2285.
-- Status: PR opened; monitoring required CI.
+  `.Codex/worktrees/u2-controller-run-contract`.
+- Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
+  merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
+  opened.
+- Status: U2 PR opened; monitoring required CI.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -35,6 +37,18 @@ status: in_progress
     builder coverage for `bundleArtifactUrls`.
   - Updated release manifest docs to describe the expected GitHub Release asset
     set and explicit version/digest selection.
+  - U1 PR #2285 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+    `test`) and was squash merged as `d964bafb`.
+  - U1 remote branch and local worktree/branch were removed after merge.
+  - Created isolated U2 worktree from `origin/main` at `d964bafb`.
+  - U2 is implementing the versioned controller run envelope, durable
+    controller/Terraform evidence artifacts, deploy/update/destroy action
+    normalization, and runtime-profile smoke validation.
+  - U2 adds the `thinkwork.deployment.controller.v1` session envelope for
+    deploy and teardown, records release/evidence/base-feature fields on
+    session events, writes controller input summaries, redacted Terraform vars,
+    plan summaries, and outputs as deployment evidence, supports `update` in the
+    runner action contract, and keeps Slack/Stripe disabled in base install.
 - Local verification:
   - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
     passed: 7 tests.
@@ -56,6 +70,22 @@ status: in_progress
     element, npm unknown-config warnings from Pagefind, and missing Astro
     `site` for sitemap generation.
   - `git diff --check` passed.
+  - U2 `pnpm --filter @thinkwork/api test -- deployment-sessions.test.ts`
+    passed: 6 tests.
+  - U2 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U2 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 10 tests.
+  - U2 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U2 `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U2 `node scripts/smoke/foundation-bootstrap-smoke.mjs` passed in dry-run
+    mode.
+  - U2 `terraform fmt -check terraform/modules/app/deployment-control-plane`
+    passed.
+  - U2 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - U2 `git diff --check` passed.
 
 ## Tenant Model Catalog - 2026-06-09
 

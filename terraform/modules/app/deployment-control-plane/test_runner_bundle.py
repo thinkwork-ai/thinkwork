@@ -295,3 +295,101 @@ def test_materialized_artifact_path_must_stay_under_release_dir(
             },
             {"graphql-http": bundled_path},
         )
+
+
+def test_controller_input_summary_redacts_to_deployment_contract() -> None:
+    runner = load_runner()
+
+    summary = runner.controller_input_summary(
+        {
+            "schemaVersion": 1,
+            "contract": "thinkwork.deployment.controller.v1",
+            "phase": "deploy",
+            "action": "deploy",
+            "sessionId": "session-1",
+            "customerName": "TEI",
+            "environmentName": "tei-e2e",
+            "awsAccountId": "123456789012",
+            "awsRegion": "us-east-1",
+            "availabilityZones": ["us-east-1a", "us-east-1b"],
+            "firstAdmin": {
+                "name": "Eric Odom",
+                "email": "eric@example.com",
+                "password": "do-not-record",
+            },
+            "release": {
+                "version": "v0.1.0-canary.134",
+                "manifestUrl": "https://example.test/thinkwork-release.json",
+                "manifestSha256": "a" * 64,
+            },
+            "features": {
+                "baseInstall": {
+                    "cognee": False,
+                    "slack": False,
+                    "stripe": False,
+                    "twenty": False,
+                },
+                "optionalApps": [],
+            },
+        }
+    )
+
+    assert summary["contract"] == "thinkwork.deployment.controller.v1"
+    assert summary["customer"]["environmentName"] == "tei-e2e"
+    assert summary["release"]["manifestSha256"] == "a" * 64
+    assert summary["features"]["baseInstall"] == {
+        "cognee": False,
+        "slack": False,
+        "stripe": False,
+        "twenty": False,
+    }
+    assert "firstAdmin" not in summary
+    assert "do-not-record" not in json.dumps(summary)
+
+
+def test_redacted_tfvars_removes_secret_values() -> None:
+    runner = load_runner()
+
+    redacted = runner.redacted_tfvars(
+        {
+            "stage": "tei-e2e",
+            "db_password": "secret-db",
+            "api_auth_secret": "secret-api",
+            "google_oauth_client_secret": "secret-google",
+        }
+    )
+
+    assert redacted == {
+        "stage": "tei-e2e",
+        "db_password": "[redacted]",
+        "api_auth_secret": "[redacted]",
+        "google_oauth_client_secret": "[redacted]",
+    }
+
+
+def test_terraform_plan_summary_counts_resource_actions() -> None:
+    runner = load_runner()
+
+    summary = runner.terraform_plan_summary(
+        {
+            "format_version": "1.2",
+            "terraform_version": "1.8.0",
+            "resource_changes": [
+                {"change": {"actions": ["create"]}},
+                {"change": {"actions": ["update"]}},
+                {"change": {"actions": ["delete", "create"]}},
+                {"change": {"actions": ["create"]}},
+            ],
+        }
+    )
+
+    assert summary == {
+        "formatVersion": "1.2",
+        "terraformVersion": "1.8.0",
+        "resourceChangeCount": 4,
+        "resourceChangesByAction": {
+            "create": 2,
+            "update": 1,
+            "delete,create": 1,
+        },
+    }
