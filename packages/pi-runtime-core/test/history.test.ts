@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeHistory } from "../src/history.js";
+import { normalizeHistory, textFromAssistant } from "../src/history.js";
 
 describe("normalizeHistory", () => {
   it("converts chat wire history into pi-ai messages", () => {
@@ -33,5 +33,37 @@ describe("normalizeHistory", () => {
   it("returns an empty list for invalid history", () => {
     expect(normalizeHistory(null, "model")).toEqual([]);
     expect(normalizeHistory({ role: "user" }, "model")).toEqual([]);
+  });
+});
+
+describe("textFromAssistant", () => {
+  it("reads normal pi-ai text content blocks", () => {
+    expect(
+      textFromAssistant({
+        role: "assistant",
+        content: [
+          { type: "text", text: "hello " },
+          { type: "text", text: "there" },
+        ],
+      } as never),
+    ).toBe("hello there");
+  });
+
+  it("reads string content from durable or test session transcripts", () => {
+    expect(
+      textFromAssistant({
+        role: "assistant",
+        content: "TEI agent smoke succeeded.",
+      } as never),
+    ).toBe("TEI agent smoke succeeded.");
+  });
+
+  it("reads text fields from SDK content blocks without a text discriminator", () => {
+    expect(
+      textFromAssistant({
+        role: "assistant",
+        content: [{ text: "plain " }, { content: [{ text: "blocks" }] }],
+      } as never),
+    ).toBe("plain blocks");
   });
 });

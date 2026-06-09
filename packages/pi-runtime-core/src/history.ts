@@ -29,10 +29,24 @@ export function textFromAssistant(
   message: AssistantMessage | undefined,
 ): string {
   if (!message) return "";
-  return message.content
-    .filter((part): part is TextContent => part.type === "text")
-    .map((part) => part.text)
-    .join("");
+  return textFromContent((message as { content?: unknown }).content);
+}
+
+function textFromContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((part) => textFromContent(part)).join("");
+  }
+  if (!content || typeof content !== "object") return "";
+
+  const record = content as Record<string, unknown>;
+  if (typeof record.text === "string") return record.text;
+  if (typeof record.content === "string") return record.content;
+  if (Array.isArray(record.content)) return textFromContent(record.content);
+  if (record.content && typeof record.content === "object") {
+    return textFromContent(record.content);
+  }
+  return "";
 }
 
 export function normalizeHistory(
