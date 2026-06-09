@@ -28,11 +28,11 @@ worker with its own model, scope, time budget, cost story, and handoff.
 
 ThinkWork now models stacking through **Agent Profiles**. A parent turn keeps
 the composer-selected model. When the parent needs a specialized subtask, it
-delegates to a profile such as Research, Coding, or Analyst. That profile runs
-as a bounded Pi child session inside the same AgentCore turn, with its own
-model, instructions, tool/MCP/skill access, and execution limits. The child
-returns a concise handoff summary to the parent, and ThinkWork persists
-first-class profile evidence.
+delegates to a profile such as Research, Coding, Analyst, or Reviewer. That
+profile runs as a bounded Pi child session inside the same AgentCore turn, with
+its own model, instructions, tool/MCP/skill access, execution limits, and
+closed-loop policy. The child returns a concise handoff summary to the parent,
+and ThinkWork persists first-class profile evidence.
 
 ## Decision
 
@@ -45,6 +45,8 @@ Use Agent Profiles as the supported customer-facing model-stacking primitive:
   execution controls;
 - execution: foreground Pi child session through ThinkWork's constrained
   `delegate_to_agent_profile` adapter;
+- orchestration: the parent Agent owns final answer synthesis, optional
+  Reviewer delegation, retry decisions, and failure behavior;
 - observability: `agent_profile_runs` in turn usage, `pi_agent_profile` cost
   rows, nested Activity steps, and `profile:<slug>` Trace lanes.
 
@@ -69,17 +71,26 @@ A successful delegated profile run should provide these records:
 
 Raw child tools such as `web_search`, `web_extract`, or MCP operations remain
 inspectable under the profile run, but they are not the model-stacking unit.
+Reviewer is also a profile, not a final-answer author: it returns a verdict and
+feedback to the parent Agent, and the parent decides whether to answer, retry a
+specialist, or return a blocker/qualified answer.
 
 ## Demo Path
 
 Use the runbook in `docs/verification/agent-profiles-e2e.md`:
 
 1. Configure Research with a cheaper approved model.
-2. Ask the parent agent a research task or use `/agent research <task>`.
-3. Confirm the parent delegates to Research and summarizes its handoff.
-4. Confirm Settings -> Activity shows a nested Research profile cost.
-5. Confirm Traces show a `profile:research` lane.
-6. Confirm raw `web_search` / `web_extract` child calls remain inspectable
+2. Configure Reviewer with a review-gated profile policy.
+3. Ask the parent agent:
+   `#Research find the current CEO of Stripe today and cite one source. Keep it concise. Please use #Reviewer to verify.`
+4. Confirm the parent delegates to Research, receives the handoff, delegates to
+   Reviewer, receives the verdict, and then sends the final response itself.
+5. Confirm Settings -> Activity shows
+   `delegate -> Research lane/tools -> delegate -> Reviewer lane -> parent`.
+6. Confirm Traces show `profile:research` and `profile:reviewer` lanes, with
+   total turn tokens/cost including parent, specialist, reviewer, and retry
+   work.
+7. Confirm raw `web_search` / `web_extract` child calls remain inspectable
    under Research.
 
 ## Guardrails
@@ -92,3 +103,7 @@ Use the runbook in `docs/verification/agent-profiles-e2e.md`:
 - Do not double-count parent and profile costs; keep parent LLM, profile child
   LLM, and external tool costs as separate rows with clear metadata.
 - Do not persist credentials or bearer tokens in profile tool metadata.
+- Do not let Reviewer answer the user directly; Reviewer output is a handoff to
+  the parent Agent.
+- Do not draw sequential Reviewer work as a parallel branch from turn start; it
+  begins after the specialist handoff that it reviews.
