@@ -1,4 +1,5 @@
 import { apiFetch, ApiError } from "@/lib/api-fetch";
+import { readRuntimeEnv } from "@/lib/runtime-config";
 
 // Minimal MCP-servers client (same REST endpoints admin uses). Spaces Settings
 // exposes list + enable/disable + remove; register/test/discover/OAuth stay
@@ -29,8 +30,6 @@ export type RuntimeMcpTool = {
   description?: string;
   inputSchema?: unknown;
 };
-
-const API_URL = import.meta.env.VITE_API_URL || "";
 
 async function request<T>(
   path: string,
@@ -160,7 +159,7 @@ export function buildMcpOAuthAuthorizeUrl({
   force?: boolean;
 }): string {
   const baseUrl =
-    API_URL ||
+    readRuntimeEnv("VITE_API_URL") ||
     (typeof window !== "undefined"
       ? window.location.origin
       : "http://localhost");

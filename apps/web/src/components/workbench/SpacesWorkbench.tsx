@@ -33,6 +33,7 @@ import {
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
+import { readRuntimeEnv } from "@/lib/runtime-config";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 import { setPendingThreadStart } from "@/lib/pending-thread-starts";
 import {
@@ -398,7 +399,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
 
       let attachmentRefs: { attachmentId: string }[] = [];
       if (files.length > 0) {
-        const apiUrl = import.meta.env.VITE_API_URL || "";
+        const apiUrl = readRuntimeEnv("VITE_API_URL");
         const token = await getIdToken();
         if (!apiUrl || !token) {
           surfaceError("Sign-in required to upload attachments");

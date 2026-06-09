@@ -70,6 +70,12 @@ describe("deployment control plane Terraform fixture", () => {
     expect(runner).toMatch(/"terraform", "init"/);
     expect(runner).toMatch(/"terraform", "apply"/);
     expect(runner).toMatch(/initialize_greenfield_database/);
+    expect(runner).toMatch(/output "appsync_api_key"/);
+    expect(runner).toMatch(/output "auth_domain"/);
+    expect(runner).toMatch(/thinkwork-runtime-config\.json/);
+    expect(runner).toMatch(/profile\/web-env/);
+    expect(runner).toMatch(/VITE_GRAPHQL_HTTP_URL/);
+    expect(runner).toMatch(/VITE_COGNITO_DOMAIN/);
     expect(runner).toMatch(/enable_cognee\s+= false/);
     expect(runner).toMatch(/twenty_provisioned\s+= false/);
     expect(runner).toMatch(/twenty_runtime_enabled\s+= false/);

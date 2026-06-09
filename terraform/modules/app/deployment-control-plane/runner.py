@@ -517,6 +517,11 @@ output "app_distribution_id" {{ value = module.thinkwork.app_distribution_id }}
 output "api_endpoint" {{ value = module.thinkwork.api_endpoint }}
 output "appsync_api_url" {{ value = module.thinkwork.appsync_api_url }}
 output "appsync_realtime_url" {{ value = module.thinkwork.appsync_realtime_url }}
+output "appsync_api_key" {{
+  value     = module.thinkwork.appsync_api_key
+  sensitive = true
+}}
+output "auth_domain" {{ value = module.thinkwork.auth_domain }}
 output "db_cluster_endpoint" {{ value = module.thinkwork.db_cluster_endpoint }}
 output "db_secret_arn" {{ value = module.thinkwork.db_secret_arn }}
 output "database_name" {{ value = module.thinkwork.database_name }}
@@ -577,14 +582,27 @@ def sync_release_artifacts():
 
 def write_outputs_to_ssm(outputs_path, vars_json):
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
+    profile, web_env = runtime_profile(outputs, vars_json)
     mapping = {
         "profile/api-endpoint": "api_endpoint",
         "profile/app-url": "app_url",
+        "profile/graphql-http-url": None,
+        "profile/appsync-url": "appsync_api_url",
+        "profile/appsync-realtime-url": "appsync_realtime_url",
+        "profile/appsync-api-key": "appsync_api_key",
+        "profile/cognito-domain": None,
         "profile/cognito-user-pool-id": "user_pool_id",
         "profile/cognito-client-id": "admin_client_id",
     }
     for suffix, output_name in mapping.items():
-        value = outputs.get(output_name, {}).get("value")
+        if output_name:
+            value = outputs.get(output_name, {}).get("value")
+        elif suffix == "profile/graphql-http-url":
+            value = profile.get("graphqlHttpUrl")
+        elif suffix == "profile/cognito-domain":
+            value = profile.get("cognitoDomain")
+        else:
+            value = None
         if value:
             run(
                 [
@@ -601,16 +619,6 @@ def write_outputs_to_ssm(outputs_path, vars_json):
                 ]
             )
 
-    profile = {
-        "stage": vars_json["stage"],
-        "region": vars_json["region"],
-        "accountId": vars_json["account_id"],
-        "releaseVersion": os.environ.get("THINKWORK_RELEASE_VERSION"),
-        "appUrl": outputs.get("app_url", {}).get("value"),
-        "apiEndpoint": outputs.get("api_endpoint", {}).get("value"),
-        "cognitoUserPoolId": outputs.get("user_pool_id", {}).get("value"),
-        "cognitoClientId": outputs.get("admin_client_id", {}).get("value"),
-    }
     run(
         [
             "aws",
@@ -625,9 +633,78 @@ def write_outputs_to_ssm(outputs_path, vars_json):
             json.dumps(profile, sort_keys=True),
         ]
     )
+    run(
+        [
+            "aws",
+            "ssm",
+            "put-parameter",
+            "--overwrite",
+            "--type",
+            "String",
+            "--name",
+            f"{os.environ['THINKWORK_SSM_PREFIX']}/profile/web-env",
+            "--value",
+            web_env,
+        ]
+    )
 
 
-def sync_static(outputs_path, static_files):
+def runtime_profile(outputs, vars_json):
+    def output_value(name):
+        return outputs.get(name, {}).get("value")
+
+    api_endpoint = output_value("api_endpoint") or ""
+    app_url = output_value("app_url") or ""
+    region = vars_json["region"]
+    auth_domain = output_value("auth_domain") or ""
+    cognito_domain = (
+        auth_domain
+        if auth_domain.startswith("https://")
+        else f"https://{auth_domain}.auth.{region}.amazoncognito.com"
+        if auth_domain
+        else ""
+    )
+    graphql_http_url = f"{api_endpoint.rstrip('/')}/graphql" if api_endpoint else ""
+    profile = {
+        "stage": vars_json["stage"],
+        "region": region,
+        "accountId": vars_json["account_id"],
+        "releaseVersion": os.environ.get("THINKWORK_RELEASE_VERSION"),
+        "deploymentId": f"thinkwork-{vars_json['stage']}",
+        "displayName": "ThinkWork",
+        "appUrl": app_url,
+        "apiEndpoint": api_endpoint,
+        "graphqlHttpUrl": graphql_http_url,
+        "appsyncUrl": output_value("appsync_api_url"),
+        "appsyncRealtimeUrl": output_value("appsync_realtime_url"),
+        "appsyncApiKey": output_value("appsync_api_key"),
+        "cognitoDomain": cognito_domain,
+        "cognitoUserPoolId": output_value("user_pool_id"),
+        "cognitoClientId": output_value("admin_client_id"),
+        "issuedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    vite_env = {
+        "VITE_API_URL": profile["apiEndpoint"],
+        "VITE_GRAPHQL_HTTP_URL": profile["graphqlHttpUrl"],
+        "VITE_GRAPHQL_URL": profile["appsyncUrl"],
+        "VITE_GRAPHQL_WS_URL": profile["appsyncRealtimeUrl"],
+        "VITE_GRAPHQL_API_KEY": profile["appsyncApiKey"],
+        "VITE_COGNITO_DOMAIN": profile["cognitoDomain"],
+        "VITE_COGNITO_USER_POOL_ID": profile["cognitoUserPoolId"],
+        "VITE_COGNITO_CLIENT_ID": profile["cognitoClientId"],
+        "VITE_DEPLOYMENT_ID": profile["deploymentId"],
+        "VITE_DEPLOYMENT_DISPLAY_NAME": profile["displayName"],
+        "VITE_DEPLOYMENT_PROFILE_ISSUED_AT": profile["issuedAt"],
+        "VITE_SPACES_URL": profile["appUrl"],
+        "VITE_STAGE": profile["stage"],
+        "VITE_AWS_REGION": profile["region"],
+    }
+    profile["viteEnv"] = vite_env
+    web_env = "\n".join(f"{key}={value or ''}" for key, value in sorted(vite_env.items()))
+    return profile, web_env + "\n"
+
+
+def sync_static(outputs_path, static_files, vars_json):
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
     syncs = [
         ("web", "app_bucket_name", "app_distribution_id"),
@@ -643,6 +720,26 @@ def sync_static(outputs_path, static_files):
         with tarfile.open(archive, "r:gz") as tar:
             tar.extractall(target)
         run(["aws", "s3", "sync", "--delete", str(target), f"s3://{bucket}/"])
+        if artifact_name == "web":
+            profile, _ = runtime_profile(outputs, vars_json)
+            runtime_config_path = RELEASE / "thinkwork-runtime-config.json"
+            runtime_config_path.write_text(
+                json.dumps(profile, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            run(
+                [
+                    "aws",
+                    "s3",
+                    "cp",
+                    str(runtime_config_path),
+                    f"s3://{bucket}/thinkwork-runtime-config.json",
+                    "--content-type",
+                    "application/json",
+                    "--cache-control",
+                    "no-store",
+                ]
+            )
         distribution_id = outputs.get(distribution_output, {}).get("value")
         if distribution_id:
             run(
@@ -745,7 +842,7 @@ def main():
         outputs_path.write_text(output(["terraform", "output", "-json"], cwd=TF), encoding="utf-8")
         push_database_schema(outputs_path, vars_json)
         write_outputs_to_ssm(outputs_path, vars_json)
-        sync_static(outputs_path, static_files)
+        sync_static(outputs_path, static_files, vars_json)
     write_evidence(
         "succeeded" if result.returncode == 0 else "failed",
         vars_json,

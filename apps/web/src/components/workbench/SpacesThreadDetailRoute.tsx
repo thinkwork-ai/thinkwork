@@ -68,6 +68,7 @@ import {
 } from "@/lib/pending-thread-starts";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
+import { readRuntimeEnv } from "@/lib/runtime-config";
 import { notifyAgentCompletion } from "@/lib/desktop-notifications";
 import { apiFetch } from "@/lib/api-fetch";
 import {
@@ -791,9 +792,9 @@ export function SpacesThreadDetailRoute({
     : false;
   const hasPendingStartRealActivity = Boolean(
     optimisticThreadStart &&
-    (optimisticThreadStart.expectAssistantResponse === false ||
-      threadTurns.length > 0 ||
-      hasDurableAssistantAfterLatestUser(thread)),
+      (optimisticThreadStart.expectAssistantResponse === false ||
+        threadTurns.length > 0 ||
+        hasDurableAssistantAfterLatestUser(thread)),
   );
   const shouldKeepPendingStartSignal = Boolean(
     optimisticThreadStart && !hasPendingStartRealActivity,
@@ -915,9 +916,9 @@ export function SpacesThreadDetailRoute({
     isActiveLifecycleStatus(visibleThread?.lifecycleStatus);
   const shouldPollActiveAgentResult = Boolean(
     latestMessageAwaitsAssistant &&
-    (hasActiveAgentTurn ||
-      (effectiveOptimisticMessage &&
-        effectiveOptimisticMessage.expectAssistantResponse !== false)),
+      (hasActiveAgentTurn ||
+        (effectiveOptimisticMessage &&
+          effectiveOptimisticMessage.expectAssistantResponse !== false)),
   );
 
   useEffect(() => {
@@ -1540,7 +1541,7 @@ export function SpacesThreadDetailRoute({
         // reference finalized thread_attachment rows. All-failed uploads block
         // the send; partial success sends only finalized files and tells the
         // user which part did not make it.
-        const apiUrl = import.meta.env.VITE_API_URL || "";
+        const apiUrl = readRuntimeEnv("VITE_API_URL");
         let attachmentRefs: { attachmentId: string }[] = [];
         if (files && files.length > 0) {
           if (!apiUrl) {
@@ -2017,7 +2018,7 @@ async function downloadThreadAttachment(
   // Optimistic chips carry synthetic ids and aren't downloadable yet; they're
   // replaced by the persisted message (with a real id) within a couple seconds.
   if (attachmentId.startsWith("optimistic-attachment-")) return;
-  const apiUrl = import.meta.env.VITE_API_URL || "";
+  const apiUrl = readRuntimeEnv("VITE_API_URL");
   const token = await getIdToken();
   if (!apiUrl || !token) {
     toast.error("Sign-in required to download attachments.");
@@ -2392,9 +2393,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 

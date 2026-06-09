@@ -6,6 +6,7 @@ import {
   type DeploymentProfileTrustStatus,
   type DeploymentProfileValidationIssue,
 } from "@thinkwork/deployment-profile";
+import { getRuntimeEnvSnapshot } from "@/lib/runtime-config";
 
 type SpacesEnv = ImportMetaEnv & Record<string, string | boolean | undefined>;
 
@@ -24,7 +25,7 @@ export interface SpacesDeploymentProfileSnapshot {
 }
 
 export function getSpacesDeploymentProfileSnapshot(
-  env: SpacesEnv = import.meta.env,
+  env: SpacesEnv = getRuntimeEnvSnapshot(),
   origin = browserOrigin(),
 ): SpacesDeploymentProfileSnapshot {
   const stage = stringEnv(env.VITE_STAGE) || "dev";

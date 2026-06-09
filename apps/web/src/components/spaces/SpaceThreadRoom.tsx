@@ -18,6 +18,7 @@ import {
   ThreadMentionTargetsQuery,
 } from "@/lib/graphql-queries";
 import { getIdToken } from "@/lib/auth";
+import { readRuntimeEnv } from "@/lib/runtime-config";
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import type { ThreadAttachmentSummary } from "@/lib/thread-message-attachments";
 
@@ -138,7 +139,7 @@ export function SpaceThreadRoom({
 }
 
 async function uploadFiles(threadId: string, files: File[]) {
-  const apiUrl = import.meta.env.VITE_API_URL || "";
+  const apiUrl = readRuntimeEnv("VITE_API_URL");
   if (files.length === 0) return [];
   if (!apiUrl) throw new Error("Attachment upload endpoint is not configured");
   const token = await getIdToken();
@@ -164,7 +165,7 @@ async function downloadThreadAttachment(
   threadId: string,
   attachmentId: string,
 ) {
-  const apiUrl = import.meta.env.VITE_API_URL || "";
+  const apiUrl = readRuntimeEnv("VITE_API_URL");
   const token = await getIdToken();
   if (!apiUrl || !token) {
     toast.error("Sign-in required to download attachments.");

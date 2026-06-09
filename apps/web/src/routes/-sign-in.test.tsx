@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setRuntimeConfigForTest } from "@/lib/runtime-config";
 import { SignInPage } from "./sign-in";
 
 const routerMocks = vi.hoisted(() => ({
@@ -86,6 +87,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  setRuntimeConfigForTest({});
   vi.unstubAllEnvs();
   Object.defineProperty(window, "location", {
     configurable: true,
@@ -155,9 +157,7 @@ describe("SignInPage", () => {
 
     render(<SignInPage />);
 
-    expect(screen.getByRole("banner").textContent).toContain(
-      "ThinkWork",
-    );
+    expect(screen.getByRole("banner").textContent).toContain("ThinkWork");
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
   });
 
@@ -263,10 +263,9 @@ describe("SignInPage", () => {
       },
     });
     const deepLink: {
-      listener: ((callback: {
-        type: "deployment-profile";
-        json: string;
-      }) => void) | null;
+      listener:
+        | ((callback: { type: "deployment-profile"; json: string }) => void)
+        | null;
     } = { listener: null };
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
@@ -341,6 +340,44 @@ describe("SignInPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Log in" }));
 
     expect(navigations).toEqual(["https://auth.example/login"]);
+  });
+
+  it("uses Terraform-provided runtime config when build-time env is empty", () => {
+    for (const key of [
+      "VITE_API_URL",
+      "VITE_GRAPHQL_HTTP_URL",
+      "VITE_GRAPHQL_URL",
+      "VITE_GRAPHQL_WS_URL",
+      "VITE_COGNITO_USER_POOL_ID",
+      "VITE_COGNITO_CLIENT_ID",
+      "VITE_COGNITO_DOMAIN",
+    ]) {
+      vi.stubEnv(key, "");
+    }
+    setRuntimeConfigForTest({
+      VITE_API_URL: "https://runtime-api.example.com",
+      VITE_GRAPHQL_HTTP_URL: "https://runtime-api.example.com/graphql",
+      VITE_GRAPHQL_URL: "https://runtime-appsync.example.com/graphql",
+      VITE_GRAPHQL_WS_URL: "wss://runtime-appsync.example.com/graphql",
+      VITE_COGNITO_USER_POOL_ID: "us-east-1_RuntimePool",
+      VITE_COGNITO_CLIENT_ID: "runtime-client-id",
+      VITE_COGNITO_DOMAIN: "https://runtime-auth.example.com",
+      VITE_DEPLOYMENT_DISPLAY_NAME: "Runtime ThinkWork",
+      VITE_STAGE: "tei-e2e",
+      VITE_AWS_REGION: "us-east-1",
+    });
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+
+    expect(
+      screen.getByText("Runtime ThinkWork · tei-e2e · us-east-1"),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
 
   it("blocks browser OAuth when required deployment profile fields are missing", () => {
