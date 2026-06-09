@@ -90,6 +90,45 @@ export const SettingsDeploymentStatusQuery = graphql(`
   }
 `);
 
+export const SettingsDeploymentReleasesQuery = graphql(`
+  query SettingsDeploymentReleases($limit: Int) {
+    deploymentReleases(limit: $limit) {
+      version
+      name
+      prerelease
+      draft
+      publishedAt
+      htmlUrl
+      manifestUrl
+      manifestSha256
+      signatureUrl
+      signed
+      deployable
+    }
+  }
+`);
+
+export const SettingsStartDeploymentReleaseUpdateMutation = graphql(`
+  mutation SettingsStartDeploymentReleaseUpdate(
+    $input: StartDeploymentReleaseUpdateInput!
+  ) {
+    startDeploymentReleaseUpdate(input: $input) {
+      executionArn
+      stateMachineArn
+      evidenceBucket
+      evidencePrefix
+      message
+      release {
+        version
+        manifestUrl
+        manifestSha256
+        signed
+        deployable
+      }
+    }
+  }
+`);
+
 export const SettingsSetKnowledgeGraphDeploymentMutation = graphql(`
   mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {
     setKnowledgeGraphDeployment(input: { enabled: $enabled }) {

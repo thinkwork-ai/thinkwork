@@ -10,18 +10,18 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U5 - Transfer authority into customer AWS.
-- Current branch: `codex/u5-authority-transfer`.
+- Current implementation unit: U6 - Browser Settings release deploy UX.
+- Current branch: `codex/u6-releases-deploy`.
 - Current worktree:
-  `.Codex/worktrees/u5-authority-transfer`.
+  `.Codex/worktrees/u6-releases-deploy`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
   merged; U4 PR [#2290](https://github.com/thinkwork-ai/thinkwork/pull/2290)
   merged; U5 PR [#2291](https://github.com/thinkwork-ai/thinkwork/pull/2291)
+  merged; U6 PR [#2292](https://github.com/thinkwork-ai/thinkwork/pull/2292)
   opened.
-- Status: U5 CI failed once on web sign-in tests; fix pushed and monitoring
-  rerun.
+- Status: U6 PR opened; monitoring required CI.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -163,6 +163,35 @@ status: in_progress
     passed.
   - `terraform fmt -check terraform/modules/app/deployment-control-plane terraform/modules/app/lambda-api terraform/modules/thinkwork`
     passed.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - `git diff --check` passed.
+- U5 PR #2291 rerun passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+  `test`) after the sign-in fix, and was squash merged as `4e148d02`.
+- U5 remote branch was already deleted by GitHub merge handling; local U5
+  worktree and branch were removed after syncing `origin/main`.
+- Created isolated U6 worktree from `origin/main` at `4e148d02`.
+- U6 adds an operator-gated Settings release path:
+  `deploymentReleases(limit:)` lists GitHub Release `thinkwork-release.json`
+  assets with server-computed SHA-256 digests, and
+  `startDeploymentReleaseUpdate(input:)` starts the deployment controller with
+  `action=update`, explicit release version, manifest URL, digest, and
+  base-install optional apps disabled.
+- U6 adds a General Settings `Releases` section where operators can select a
+  release, review manifest URL/digest, and click `Confirm Deploy`.
+- U6 local verification:
+  - `pnpm schema:build` passed.
+  - GraphQL codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
+    `@thinkwork/mobile`.
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/deployments/deployment-releases.test.ts src/__tests__/graphql-contract.test.ts`
+    passed: 124 tests.
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsGeneral.test.tsx`
+    passed: 1 test.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `pnpm --filter @thinkwork/mobile typecheck` was not runnable because the
+    mobile package has no `typecheck` script.
   - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
     Prettier-managed files passed.
   - `git diff --check` passed.

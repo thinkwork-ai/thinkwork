@@ -59,6 +59,36 @@ type DeploymentEvidence {
   urls: [String!]!
 }
 
+type DeploymentRelease {
+  version: String!
+  name: String
+  prerelease: Boolean!
+  draft: Boolean!
+  publishedAt: AWSDateTime
+  htmlUrl: String!
+  manifestUrl: String!
+  manifestSha256: String!
+  signatureUrl: String
+  signed: Boolean!
+  deployable: Boolean!
+}
+
+type DeploymentReleaseUpdate {
+  release: DeploymentRelease!
+  executionArn: String
+  stateMachineArn: String!
+  evidenceBucket: String
+  evidencePrefix: String!
+  message: String!
+}
+
+input StartDeploymentReleaseUpdateInput {
+  version: String!
+  manifestUrl: String!
+  manifestSha256: String!
+  idempotencyKey: String
+}
+
 type BootstrapCredentialLease {
   id: ID!
   sessionId: ID!
@@ -102,9 +132,13 @@ extend type Query {
   managedApplications: [ManagedApplication!]!
   managedApplicationDeployment(jobId: ID!): ManagedApplicationDeploymentJob
   deploymentEvidence(jobId: ID!): DeploymentEvidence!
+  deploymentReleases(limit: Int): [DeploymentRelease!]!
 }
 
 extend type Mutation {
+  startDeploymentReleaseUpdate(
+    input: StartDeploymentReleaseUpdateInput!
+  ): DeploymentReleaseUpdate!
   startManagedApplicationPlan(
     input: StartManagedApplicationPlanInput!
   ): ManagedApplicationDeploymentJob!

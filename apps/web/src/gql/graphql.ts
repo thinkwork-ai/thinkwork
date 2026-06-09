@@ -1184,6 +1184,31 @@ export type DeploymentEvidence = {
   urls: Array<Scalars["String"]["output"]>;
 };
 
+export type DeploymentRelease = {
+  __typename?: "DeploymentRelease";
+  deployable: Scalars["Boolean"]["output"];
+  draft: Scalars["Boolean"]["output"];
+  htmlUrl: Scalars["String"]["output"];
+  manifestSha256: Scalars["String"]["output"];
+  manifestUrl: Scalars["String"]["output"];
+  name?: Maybe<Scalars["String"]["output"]>;
+  prerelease: Scalars["Boolean"]["output"];
+  publishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  signatureUrl?: Maybe<Scalars["String"]["output"]>;
+  signed: Scalars["Boolean"]["output"];
+  version: Scalars["String"]["output"];
+};
+
+export type DeploymentReleaseUpdate = {
+  __typename?: "DeploymentReleaseUpdate";
+  evidenceBucket?: Maybe<Scalars["String"]["output"]>;
+  evidencePrefix: Scalars["String"]["output"];
+  executionArn?: Maybe<Scalars["String"]["output"]>;
+  message: Scalars["String"]["output"];
+  release: DeploymentRelease;
+  stateMachineArn: Scalars["String"]["output"];
+};
+
 export type DeploymentStatus = {
   __typename?: "DeploymentStatus";
   accountId?: Maybe<Scalars["String"]["output"]>;
@@ -2382,6 +2407,7 @@ export type Mutation = {
   setSpaceTools: Space;
   setUserModelApproval: Array<UserModelCatalogEntry>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
+  startDeploymentReleaseUpdate: DeploymentReleaseUpdate;
   startEvalRun: EvalRun;
   startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
   startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
@@ -3091,6 +3117,10 @@ export type MutationStartCustomerOnboardingArgs = {
   input: StartCustomerOnboardingInput;
 };
 
+export type MutationStartDeploymentReleaseUpdateArgs = {
+  input: StartDeploymentReleaseUpdateInput;
+};
+
 export type MutationStartEvalRunArgs = {
   input: StartEvalRunInput;
   tenantId: Scalars["ID"]["input"];
@@ -3703,6 +3733,7 @@ export type Query = {
   customerOnboardingSpace?: Maybe<Space>;
   customizeBindings?: Maybe<CustomizeBindings>;
   deploymentEvidence: DeploymentEvidence;
+  deploymentReleases: Array<DeploymentRelease>;
   deploymentStatus: DeploymentStatus;
   evalResultSpans: Array<EvalSpan>;
   evalRun?: Maybe<EvalRun>;
@@ -4065,6 +4096,10 @@ export type QueryCustomerOnboardingSpaceArgs = {
 
 export type QueryDeploymentEvidenceArgs = {
   jobId: Scalars["ID"]["input"];
+};
+
+export type QueryDeploymentReleasesArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
 export type QueryEvalResultSpansArgs = {
@@ -5451,6 +5486,13 @@ export type StartCustomerOnboardingPayload = {
   missingFields: Array<Scalars["String"]["output"]>;
   thread: Thread;
   threadId: Scalars["ID"]["output"];
+};
+
+export type StartDeploymentReleaseUpdateInput = {
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  manifestSha256: Scalars["String"]["input"];
+  manifestUrl: Scalars["String"]["input"];
+  version: Scalars["String"]["input"];
 };
 
 export type StartEvalRunInput = {
@@ -7927,6 +7969,52 @@ export type SettingsDeploymentStatusQuery = {
       managedMcpInstallAvailable: boolean;
       managedMcpMessage?: string | null;
     }>;
+  };
+};
+
+export type SettingsDeploymentReleasesQueryVariables = Exact<{
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+}>;
+
+export type SettingsDeploymentReleasesQuery = {
+  __typename?: "Query";
+  deploymentReleases: Array<{
+    __typename?: "DeploymentRelease";
+    version: string;
+    name?: string | null;
+    prerelease: boolean;
+    draft: boolean;
+    publishedAt?: any | null;
+    htmlUrl: string;
+    manifestUrl: string;
+    manifestSha256: string;
+    signatureUrl?: string | null;
+    signed: boolean;
+    deployable: boolean;
+  }>;
+};
+
+export type SettingsStartDeploymentReleaseUpdateMutationVariables = Exact<{
+  input: StartDeploymentReleaseUpdateInput;
+}>;
+
+export type SettingsStartDeploymentReleaseUpdateMutation = {
+  __typename?: "Mutation";
+  startDeploymentReleaseUpdate: {
+    __typename?: "DeploymentReleaseUpdate";
+    executionArn?: string | null;
+    stateMachineArn: string;
+    evidenceBucket?: string | null;
+    evidencePrefix: string;
+    message: string;
+    release: {
+      __typename?: "DeploymentRelease";
+      version: string;
+      manifestUrl: string;
+      manifestSha256: string;
+      signed: boolean;
+      deployable: boolean;
+    };
   };
 };
 
@@ -13048,6 +13136,172 @@ export const SettingsDeploymentStatusDocument = {
 } as unknown as DocumentNode<
   SettingsDeploymentStatusQuery,
   SettingsDeploymentStatusQueryVariables
+>;
+export const SettingsDeploymentReleasesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsDeploymentReleases" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "deploymentReleases" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "version" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "prerelease" } },
+                { kind: "Field", name: { kind: "Name", value: "draft" } },
+                { kind: "Field", name: { kind: "Name", value: "publishedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "htmlUrl" } },
+                { kind: "Field", name: { kind: "Name", value: "manifestUrl" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "manifestSha256" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "signatureUrl" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "signed" } },
+                { kind: "Field", name: { kind: "Name", value: "deployable" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsDeploymentReleasesQuery,
+  SettingsDeploymentReleasesQueryVariables
+>;
+export const SettingsStartDeploymentReleaseUpdateDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsStartDeploymentReleaseUpdate" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: {
+                kind: "Name",
+                value: "StartDeploymentReleaseUpdateInput",
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "startDeploymentReleaseUpdate" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "executionArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "stateMachineArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidenceBucket" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evidencePrefix" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "release" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "version" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "manifestUrl" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "manifestSha256" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "signed" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "deployable" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsStartDeploymentReleaseUpdateMutation,
+  SettingsStartDeploymentReleaseUpdateMutationVariables
 >;
 export const SettingsSetKnowledgeGraphDeploymentDocument = {
   kind: "Document",
