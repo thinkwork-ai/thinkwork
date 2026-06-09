@@ -11,11 +11,11 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U7 - Deployment and agent-level smokes.
-- Current branch: `codex/kestra-managed-app-u7`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u7`.
+- Current unit: U8 - Documentation, operator guidance, and app-library positioning.
+- Current branch: `codex/kestra-managed-app-u8`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u8`.
 - Current PR:
-  [#2250](https://github.com/thinkwork-ai/thinkwork/pull/2250).
+  [#2252](https://github.com/thinkwork-ai/thinkwork/pull/2252).
 - Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
@@ -241,8 +241,24 @@ status: in_progress
       concurrently during tests, causing an `EEXIST` symlink error. Running
       `pnpm rebuild electron` repaired the generated dependency state; the
       desktop suite and the subsequent full workspace test rerun passed.
-  - U7 PR [#2250](https://github.com/thinkwork-ai/thinkwork/pull/2250) opened
-    from the current `origin/main`; CI pending.
+  - U7 PR [#2250](https://github.com/thinkwork-ai/thinkwork/pull/2250)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was
+    squash merged as `478dde26`; the remote branch was deleted and local
+    worktree/branch were removed.
+  - Created isolated U8 worktree from `origin/main` at `478dde26`.
+  - Started U8 documentation work:
+    - added Kestra to the shared managed-app deploy and admin operator docs;
+    - created a dedicated Admin -> Kestra operator runbook;
+    - documented the Kestra control MCP model, public catalog MCP distinction,
+      Fargate-safe v1 execution contract, and deploy/park/destroy smoke proof
+      expectations;
+    - added the Managed Applications and Kestra admin pages to the docs
+      sidebar.
+  - U8 local verification passed:
+    - `pnpm --filter @thinkwork/docs build` -> passed and generated the new
+      `/applications/admin/kestra/` route.
+    - Direct Prettier check over U8-touched files -> passed.
+    - `git diff --check` -> passed.
 
 ## Agent Profile Closed Loops - 2026-06-08
 

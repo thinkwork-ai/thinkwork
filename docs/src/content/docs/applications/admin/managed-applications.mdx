@@ -1,6 +1,6 @@
 ---
 title: Managed Applications
-description: Operator controls for optional ThinkWork-managed applications such as Cognee Knowledge Graph and Twenty CRM.
+description: Operator controls for optional ThinkWork-managed applications such as Cognee Knowledge Graph, Twenty CRM, and Kestra.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -18,10 +18,11 @@ stage deployment through the normal GitHub Actions and Terraform pipeline.
 
 The first managed applications are:
 
-| Application | Purpose                                      | Settings page appears when               |
-| ----------- | -------------------------------------------- | ---------------------------------------- |
-| Cognee      | Knowledge Graph substrate for ontology work  | Deployment status reports Cognee running |
-| Twenty CRM  | Self-hosted CRM runtime managed by ThinkWork | Deployment status reports Twenty running |
+| Application | Purpose                                           | Settings page appears when                |
+| ----------- | ------------------------------------------------- | ----------------------------------------- |
+| Cognee      | Knowledge Graph substrate for ontology work       | Deployment status reports Cognee running  |
+| Twenty CRM  | Self-hosted CRM runtime managed by ThinkWork      | Deployment status reports Twenty running  |
+| Kestra      | Self-hosted orchestration runtime for agent flows | Deployment status reports Kestra retained |
 
 The Managed Applications section is visible only to operators. Members do not
 see deployment controls, and app-specific settings pages remain hidden until
@@ -34,30 +35,39 @@ deployment status reports the runtime as enabled.
 
 ## Lifecycle
 
-ThinkWork exposes three Twenty lifecycle actions:
+ThinkWork exposes three lifecycle actions for retained managed applications:
 
-| Action  | Effect                                                                  |
-| ------- | ----------------------------------------------------------------------- |
-| Deploy  | Provisions retained infrastructure and starts the server/worker runtime |
-| Park    | Stops runtime capacity while retaining CRM data and app secrets         |
-| Destroy | Removes runtime infrastructure, retained storage/cache, secrets, and DB |
+| Action  | Effect                                                                                  |
+| ------- | --------------------------------------------------------------------------------------- |
+| Deploy  | Provisions retained infrastructure and starts the app runtime                           |
+| Park    | Stops runtime capacity while retaining app data, endpoint wiring, secrets, and MCP path |
+| Destroy | Removes runtime infrastructure, retained storage/cache, secrets, DB state, and MCP rows |
 
 The deployed status still resolves to the retained/runtime state:
 
-| Provisioned | Runtime enabled | Meaning                                                 |
-| ----------- | --------------- | ------------------------------------------------------- |
-| false       | false           | Never enabled; no Twenty resources exist                |
-| true        | true            | CRM is running and the CRM settings page is visible     |
-| true        | false           | CRM runtime is parked; retained resources stay in place |
+| Provisioned | Runtime enabled | Meaning                                                      |
+| ----------- | --------------- | ------------------------------------------------------------ |
+| false       | false           | Never enabled; no retained app resources exist               |
+| true        | true            | Runtime is running and the app settings page is visible      |
+| true        | false           | Runtime is parked; retained resources and repair path remain |
 
 Parking Twenty stops the server and worker runtime capacity while retaining the
 dedicated database, Secrets Manager values, persistent file storage, cache
 configuration, DNS path, and re-enable path.
 
+Parking Kestra stops the standalone ECS/Fargate service while retaining flow
+definitions, execution history, internal storage, endpoint wiring, Secrets
+Manager credentials, and the managed MCP continuity path.
+
 Destroying Twenty is intentionally separate from parking. It queues a
 destructive deploy that tears down the Twenty infrastructure and then removes
 the dedicated Twenty database, database role, and Twenty Secrets Manager
 entries. Use it only when CRM data is no longer needed.
+
+Destroying Kestra is also intentionally separate from parking. It removes the
+Kestra runtime, S3 internal storage, dedicated database state, service
+credentials, and managed control MCP row/token/configuration. Use it only when
+orchestration data and flow history are no longer needed.
 
 Cognee follows the existing optional Knowledge Graph lifecycle. Its deploy
 control now lives in Managed Applications; the Knowledge Graph settings page is
@@ -122,6 +132,73 @@ When the managed MCP row is installed or repaired, ThinkWork assigns it to the
 tenant platform default agent. That makes the connector available to runtime
 only after the current user has completed their own OAuth connection.
 
+## Kestra V1
+
+Kestra v1 is a managed orchestration runtime for ThinkWork agents. It is not a
+general-purpose host executor. When enabled, Terraform provisions:
+
+- public HTTPS access at the managed orchestration host;
+- a standalone ECS/Fargate Kestra service;
+- a dedicated Kestra database and role on the existing Aurora/Postgres
+  instance;
+- encrypted S3 internal storage for Kestra files;
+- CloudWatch logs and ALB target health checks;
+- Secrets Manager entries for the database password and Kestra UI/API basic
+  auth.
+
+The Kestra settings page shows the public URL, retained/runtime state, storage
+bucket, database name, service names, log group, load balancer/target group
+identifiers, health-check result, and managed MCP registration status.
+
+Kestra v1 supports Fargate-safe orchestration classes: HTTP calls, API
+coordination, validation, and control-plane flows that run inside the managed
+Kestra service. It does not support Docker socket execution, Docker-in-Docker,
+privileged containers, arbitrary host/container execution, or EC2 worker pools.
+Agents should validate flows through the control MCP before upserting them.
+
+## Kestra Control MCP
+
+When Kestra is retained, ThinkWork reconciles a system-managed MCP server named
+**Kestra Control** into Settings -> MCP Servers. Operators should not register a
+second manual control row for the same customer Kestra instance. Use Settings
+-> Applications -> Kestra to install or repair the managed row when an
+already-retained stage is missing it.
+
+The Kestra control MCP is different from Twenty's per-user OAuth connector:
+
+| Surface                                     | Responsibility                                                        |
+| ------------------------------------------- | --------------------------------------------------------------------- |
+| Settings -> General -> Managed Applications | Deploy, park, destroy, and recover managed application infrastructure |
+| Settings -> Applications -> Kestra          | Inspect Kestra runtime state and repair the managed control MCP row   |
+| Settings -> MCP Servers                     | Show the system-managed row and assignment state                      |
+
+ThinkWork stores the Kestra MCP bearer token and Kestra service credential in
+Secrets Manager. The database row contains secret references and runtime
+metadata, not plaintext credentials. The row is assigned to the tenant platform
+default agent so ThinkWork agents can use the curated `/mcp/kestra` tool
+surface.
+
+The curated control tools are intentionally narrow:
+
+- `kestra_namespaces_list`
+- `kestra_flows_get`
+- `kestra_flows_validate`
+- `kestra_flows_upsert`
+- `kestra_executions_start`
+- `kestra_executions_get`
+- `kestra_executions_logs`
+- `kestra_plugins_search`
+
+By default, write operations are limited to the `thinkwork` namespace prefix
+and reject unsupported Docker/host task classes before they reach Kestra.
+
+Do not confuse this control MCP with a public Kestra catalog MCP or docs/plugin
+discovery server. Public catalog tools are useful context for finding plugins
+and examples; they do not authenticate to, mutate, or operate the customer
+Kestra instance. Use catalog context for authoring ideas, then use
+`/mcp/kestra` to validate, upsert, execute, and inspect flows in the managed
+runtime.
+
 ## Deployment Verification
 
 After the deploy workflow finishes, run the managed-app smoke from the repo
@@ -176,9 +253,44 @@ SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
   node scripts/smoke/twenty-mcp-oauth-smoke.mjs
 ```
 
+For Kestra, run the managed-app smoke first:
+
+```sh
+node scripts/smoke/kestra-managed-app-smoke.mjs
+
+SMOKE_ENABLE_KESTRA_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  node scripts/smoke/kestra-managed-app-smoke.mjs
+```
+
+Dry-run mode prints live requirements. Live mode reads Terraform outputs and,
+when GraphQL credentials are available, deployment status and health. If Kestra
+is unprovisioned or parked, the smoke exits with an explicit skip. If Kestra is
+running, it requires an HTTPS URL and verifies the public endpoint returns
+either success or an authentication challenge.
+
+Then run the Kestra control MCP smoke:
+
+```sh
+node scripts/smoke/kestra-control-mcp-smoke.mjs
+
+SMOKE_ENABLE_KESTRA_CONTROL_MCP=1 \
+  SMOKE_API_BASE_URL=<api-url> \
+  SMOKE_KESTRA_MCP_BEARER=<tenant-control-mcp-token-or-service-secret> \
+  SMOKE_TENANT_ID=<tenant-id> \
+  node scripts/smoke/kestra-control-mcp-smoke.mjs
+```
+
+Live mode talks directly to `POST /mcp/kestra`, verifies the managed MCP row
+when GraphQL credentials are available, lists the curated tools, validates a
+safe flow, validates that an unsupported Docker task is rejected, and can
+upsert/start/poll a safe `thinkwork.smoke` flow. Set
+`SMOKE_KESTRA_CONTROL_MUTATE=0` for validation-only live runs.
+
 ## Related Pages
 
 - [Admin — Settings](/applications/admin/settings/) — read-only deployment metadata
+- [Admin — Kestra](/applications/admin/kestra/) — Kestra-specific operator runbook
 - [Desktop App](/applications/desktop/) — installed Spaces app that hosts Settings
 - [Business Ontology Operations](/guides/business-ontology-operations/) — Cognee substrate guidance
 - [Deploy Configuration](/deploy/configuration/) — Terraform configuration reference

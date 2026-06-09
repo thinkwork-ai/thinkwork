@@ -1,13 +1,13 @@
 ---
 title: Managed Applications
-description: Deploy, destroy, and diagnose ThinkWork-managed applications such as Cognee and Twenty CRM without customer GitHub Actions.
+description: Deploy, park, destroy, and diagnose ThinkWork-managed applications such as Cognee, Twenty CRM, and Kestra without customer GitHub Actions.
 ---
 
 import { Aside, Steps } from "@astrojs/starlight/components";
 
 Managed applications are optional applications operated inside the customer
-ThinkWork AWS deployment. V1 proves the lifecycle with Cognee Knowledge Graph
-and Twenty CRM.
+ThinkWork AWS deployment. V1 proves the lifecycle with Cognee Knowledge Graph,
+Twenty CRM, and Kestra orchestration.
 
 Operators use Spaces Settings -> Managed Applications for the normal path:
 plan, review impact, approve, watch progress, and inspect evidence.
@@ -65,6 +65,54 @@ The smoke skips cleanly when Twenty is unprovisioned or parked. When the runtime
 is enabled, it requires an HTTPS Twenty URL and a successful `/healthz`
 response.
 
+## Kestra
+
+Kestra is the optional self-hosted orchestration runtime. Deploying Kestra
+provisions the public HTTPS UI/API endpoint, a standalone ECS/Fargate service,
+a dedicated PostgreSQL database/user, encrypted S3 internal storage, service
+credentials in Secrets Manager, and the ThinkWork control MCP registration
+path.
+
+Parking Kestra stops runtime capacity while retaining flow definitions,
+execution history, internal storage, service credentials, endpoint wiring, and
+managed MCP continuity. Destroying Kestra is destructive in v1: it removes
+runtime infrastructure, app-owned credentials, internal storage, Kestra
+database state, and the managed control MCP row/token/configuration.
+
+Run the managed-app smoke after deploy, park, redeploy, or destroy:
+
+```bash
+node scripts/smoke/kestra-managed-app-smoke.mjs
+
+SMOKE_ENABLE_KESTRA_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/kestra-smoke.json \
+  node scripts/smoke/kestra-managed-app-smoke.mjs
+```
+
+The smoke skips cleanly when Kestra is unprovisioned or parked. When the runtime
+is enabled, it requires an HTTPS Kestra URL and verifies the public endpoint
+returns either success or an authentication challenge.
+
+Run the control MCP smoke after the runtime is healthy and the managed MCP row
+has been installed or repaired:
+
+```bash
+node scripts/smoke/kestra-control-mcp-smoke.mjs
+
+SMOKE_ENABLE_KESTRA_CONTROL_MCP=1 \
+  SMOKE_API_BASE_URL=<api-url> \
+  SMOKE_KESTRA_MCP_BEARER=<tenant-control-mcp-token-or-service-secret> \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/kestra-control-mcp-smoke.json \
+  node scripts/smoke/kestra-control-mcp-smoke.mjs
+```
+
+Live control-MCP mode validates the curated ThinkWork tool surface, rejects
+Fargate-unsafe Docker/host task classes, and can upsert and execute a safe
+`thinkwork.smoke` flow. Set `SMOKE_KESTRA_CONTROL_MUTATE=0` to keep the live
+run to `initialize`, `tools/list`, and validation-only MCP calls.
+
 ## Evidence Fields
 
 Managed-app evidence should include:
@@ -75,6 +123,7 @@ Managed-app evidence should include:
 - CodeBuild build ARN/id
 - Terraform plan/apply/destroy artifact keys
 - app endpoint and runtime status
+- managed MCP state when the app owns a control connector
 - destructive impact summary for destroy
 - smoke result
 - CloudWatch Logs URL when available
@@ -93,6 +142,7 @@ Managed-app evidence should include:
 | Awaiting approval      | Confirm the plan digest, release manifest digest, action, and destructive impact before approving. |
 | Apply failed           | Inspect Step Functions event history first, then CodeBuild logs. Keep the failed job for evidence. |
 | Smoke failed           | Use the app smoke JSON and endpoint status. Do not mark the app healthy until a smoke passes.      |
+| Control MCP missing    | Use the app-specific settings page to install or repair the managed MCP row, then rerun its smoke. |
 | App not enabled        | Treat explicit skip evidence as success for stages where the app is intentionally disabled.        |
 | Destroy impact changed | Re-plan and require a fresh approval before destroy.                                               |
 
