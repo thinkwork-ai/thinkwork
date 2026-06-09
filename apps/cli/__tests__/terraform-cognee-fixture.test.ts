@@ -297,7 +297,6 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     expect(vars).toMatch(/variable "cognee_db_name"/);
     expect(vars).toMatch(/default\s*=\s*"thinkwork_cognee"/);
     expect(vars).toMatch(/lower\(var\.cognee_db_username\)/);
-    expect(vars).toMatch(/distinct from the shared Thinkwork database name/);
     expect(vars).toMatch(
       /cognee_bedrock_model_resource_arns must list explicit/,
     );
@@ -348,6 +347,9 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     );
     expect(guardrails).toMatch(
       /not the shared Thinkwork admin database secret/,
+    );
+    expect(guardrails).toMatch(
+      /cognee_db_name must be distinct from the shared Thinkwork database name/,
     );
     expect(guardrails).toMatch(
       /enable_cognee requires at least one public subnet/,
