@@ -2,12 +2,17 @@ import { getDb, type Database } from "@thinkwork/database-pg";
 import {
   agents,
   agentTemplates,
-  modelCatalog,
   tenantSettings,
   userModelApprovals,
   users,
 } from "@thinkwork/database-pg/schema";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
+import {
+  assertTenantModelAvailable,
+  listTenantModelCatalog,
+  listTenantModelCatalogByIds,
+  type TenantModelCatalogEntry,
+} from "./model-catalog/tenant-catalog.js";
 
 type Db = Database;
 
@@ -45,20 +50,18 @@ export type UserModelCatalogEntry = ModelCatalogEntry & {
   approved: boolean;
 };
 
-type ModelCatalogRow = typeof modelCatalog.$inferSelect;
-
-function toModelCatalogEntry(row: ModelCatalogRow): ModelCatalogEntry {
+function toModelCatalogEntry(row: TenantModelCatalogEntry): ModelCatalogEntry {
   return {
     id: row.id,
-    modelId: row.model_id,
+    modelId: row.modelId,
     provider: row.provider,
-    displayName: row.display_name,
-    inputCostPerMillion: row.input_cost_per_million,
-    outputCostPerMillion: row.output_cost_per_million,
-    contextWindow: row.context_window,
-    maxOutputTokens: row.max_output_tokens,
-    supportsVision: row.supports_vision,
-    supportsTools: row.supports_tools,
+    displayName: row.displayName,
+    inputCostPerMillion: row.inputCostPerMillion,
+    outputCostPerMillion: row.outputCostPerMillion,
+    contextWindow: row.contextWindow,
+    maxOutputTokens: row.maxOutputTokens,
+    supportsVision: row.supportsVision,
+    supportsTools: row.supportsTools,
   };
 }
 
@@ -81,22 +84,13 @@ async function assertUserBelongsToTenant(
   }
 }
 
-async function assertAvailableModel(db: Db, modelId: string) {
-  const [model] = await db
-    .select({ modelId: modelCatalog.model_id })
-    .from(modelCatalog)
-    .where(
-      and(
-        eq(modelCatalog.model_id, modelId),
-        eq(modelCatalog.is_available, true),
-      ),
-    )
-    .limit(1);
-
-  if (!model) {
+async function assertAvailableModel(db: Db, tenantId: string, modelId: string) {
+  try {
+    await assertTenantModelAvailable({ tenantId, modelId }, { db });
+  } catch {
     throw new ModelApprovalError(
       "MODEL_NOT_AVAILABLE",
-      "Model is not available in the catalog.",
+      "Model is not enabled in the tenant model catalog.",
     );
   }
 }
@@ -127,11 +121,7 @@ export async function listUserModelCatalog(
   await assertUserBelongsToTenant(db, input.tenantId, input.userId);
 
   const [catalogRows, approvalRows] = await Promise.all([
-    db
-      .select()
-      .from(modelCatalog)
-      .where(eq(modelCatalog.is_available, true))
-      .orderBy(modelCatalog.display_name),
+    listTenantModelCatalog({ tenantId: input.tenantId }, { db }),
     db
       .select({ modelId: userModelApprovals.model_id })
       .from(userModelApprovals)
@@ -143,10 +133,12 @@ export async function listUserModelCatalog(
       ),
   ]);
 
-  const approved = new Set(approvalRows.map((row) => row.modelId));
+  const approved = new Set(
+    (approvalRows as Array<{ modelId: string }>).map((row) => row.modelId),
+  );
   return catalogRows.map((row) => ({
     ...toModelCatalogEntry(row),
-    approved: approved.has(row.model_id),
+    approved: approved.has(row.modelId),
   }));
 }
 
@@ -167,21 +159,20 @@ export async function listApprovedModelCatalog(
       ),
     );
 
-  const modelIds = approvalRows.map((row) => row.modelId);
+  const modelIds = (approvalRows as Array<{ modelId: string }>).map(
+    (row) => row.modelId,
+  );
   if (modelIds.length === 0) {
     return [];
   }
 
-  const catalogRows = await db
-    .select()
-    .from(modelCatalog)
-    .where(
-      and(
-        eq(modelCatalog.is_available, true),
-        inArray(modelCatalog.model_id, modelIds),
-      ),
-    )
-    .orderBy(modelCatalog.display_name);
+  const catalogRows = await listTenantModelCatalogByIds(
+    {
+      tenantId: input.tenantId,
+      modelIds,
+    },
+    { db },
+  );
 
   return catalogRows.map(toModelCatalogEntry);
 }
@@ -197,7 +188,7 @@ export async function setUserModelApproval(
 ) {
   const db = options.db ?? defaultDb;
   await assertUserBelongsToTenant(db, input.tenantId, input.userId);
-  await assertAvailableModel(db, input.modelId);
+  await assertAvailableModel(db, input.tenantId, input.modelId);
 
   if (input.approved) {
     await db
@@ -234,7 +225,7 @@ export async function assertUserModelApproved(
   options: { db?: Db } = {},
 ) {
   const db = options.db ?? defaultDb;
-  await assertAvailableModel(db, input.modelId);
+  await assertAvailableModel(db, input.tenantId, input.modelId);
 
   const [approval] = await db
     .select({ id: userModelApprovals.id })
@@ -295,15 +286,13 @@ export async function ensureDefaultModelApprovalsForUser(
     return [];
   }
 
-  const availableRows = await db
-    .select({ modelId: modelCatalog.model_id })
-    .from(modelCatalog)
-    .where(
-      and(
-        eq(modelCatalog.is_available, true),
-        inArray(modelCatalog.model_id, candidateIds),
-      ),
-    );
+  const availableRows = await listTenantModelCatalogByIds(
+    {
+      tenantId: input.tenantId,
+      modelIds: candidateIds,
+    },
+    { db },
+  );
 
   const values = availableRows.map((row) => ({
     tenant_id: input.tenantId,

@@ -10,13 +10,12 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-001-feat-tenant-model-catalog-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U1 - Add tenant catalog persistence.
-- Current branch: `codex/tenant-model-catalog-u1`.
-- Current worktree: `.Codex/worktrees/tenant-model-catalog-u1`.
-- Pull request:
-  [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271).
-- Status: PR open; CI passed on first implementation head, status update in
-  progress.
+- Current implementation unit: U2 - Tenant-aware model catalog services.
+- Current branch: `codex/tenant-model-catalog-u2`.
+- Current worktree: `.Codex/worktrees/tenant-model-catalog-u2`.
+- Pull request: not opened yet for U2. U1 PR
+  [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) was merged.
+- Status: U2 implementation in progress; local API tests passed.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
@@ -26,6 +25,20 @@ status: in_progress
     autopilot started.
   - Migration numbering on `origin/main` has advanced past the draft plan's
     `0150`; U1 uses `0155_tenant_model_catalog.sql`, the next free slot.
+  - U1 PR #2271 passed final required CI (`cla`, `Migration Drift Precheck
+(dev)`, `lint`, `test`, `typecheck`, `verify`) and was squash merged as
+    `e72bf0f2`.
+  - U1 remote branch was already deleted by GitHub merge handling; local U1
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U2 worktree from `origin/main` at `e72bf0f2`.
+  - Started U2 services:
+    - tenant catalog DB helpers for effective rows, tenant availability, import
+      upsert, and tenant-first pricing lookup;
+    - Bedrock `ListFoundationModels` mapping helper;
+    - AWS Price List token pricing resolver with explicit `resolved`,
+      `missing`, `ambiguous`, and `error` states;
+    - tenant-scoped user approval gating and tenant-first cost lookup for
+      AgentCore/Hindsight cost attribution.
 - Local verification:
   - `pnpm install` completed; local Node 25 logged the known optional
     `canvas@2.11.2` native fallback build warning because `pkg-config` /
@@ -58,7 +71,20 @@ status: in_progress
   - Local scoped drift reporter passed after the dev apply:
     `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0155_tenant_model_catalog.sql`.
   - Reran the failed GitHub workflow; `Migration Drift Precheck (dev)` passed.
-- Merge/cleanup: pending.
+- U2 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/model-catalog/tenant-catalog.test.ts src/lib/model-catalog/aws-price-list.test.ts src/lib/model-approvals.test.ts src/__tests__/cost-recording.test.ts`
+    passed: 4 files, 33 tests.
+  - `pnpm --filter @thinkwork/api test` passed: 439 files, 3 skipped; 3,741
+    tests, 9 skipped.
+  - `pnpm --filter @thinkwork/api typecheck` is not currently useful locally;
+    it fails with broad existing package-level implicit-any/unknown diagnostics
+    outside U2. A narrowed scrape of the typecheck output for U2-touched files
+    returned no diagnostics after local fixes.
+- U2 CI: not started.
+- U2 merge/cleanup: pending.
 
 ## Kestra Managed Application - 2026-06-08
 

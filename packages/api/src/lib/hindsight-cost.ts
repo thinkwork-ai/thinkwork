@@ -23,6 +23,7 @@ import { getDb } from "@thinkwork/database-pg";
 import { costEvents, modelCatalog } from "@thinkwork/database-pg/schema";
 import { randomUUID } from "node:crypto";
 import { resolveTenantUserCostOwner } from "./user-budget-enforcement.js";
+import { getTenantModelPricing } from "./model-catalog/tenant-catalog.js";
 
 const db = getDb();
 
@@ -39,6 +40,7 @@ const HINDSIGHT_FALLBACK_PRICING: Record<
 const FINAL_FALLBACK = { input: 0.05, output: 0.2 };
 
 async function lookupPricing(
+  tenantId: string,
   modelId: string,
 ): Promise<{ inputPerMillion: number; outputPerMillion: number }> {
   if (!modelId)
@@ -46,6 +48,9 @@ async function lookupPricing(
       inputPerMillion: FINAL_FALLBACK.input,
       outputPerMillion: FINAL_FALLBACK.output,
     };
+
+  const tenantPricing = await getTenantModelPricing({ tenantId, modelId });
+  if (tenantPricing) return tenantPricing;
 
   // Try model_catalog first — same source of truth as recordCostEvents()
   try {
@@ -113,7 +118,7 @@ export async function recordHindsightCost(
   const { inputTokens, outputTokens, model } = params;
   if ((inputTokens || 0) <= 0 && (outputTokens || 0) <= 0) return;
 
-  const pricing = await lookupPricing(model);
+  const pricing = await lookupPricing(params.tenantId, model);
   const usd =
     (inputTokens * pricing.inputPerMillion +
       outputTokens * pricing.outputPerMillion) /

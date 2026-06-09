@@ -273,6 +273,11 @@ describe("recordCostEvents user attribution", () => {
       getDb: () => ({
         select: () => ({
           from: () => ({
+            innerJoin: () => ({
+              where: () => ({
+                limit: () => Promise.resolve(selectRows.shift() ?? []),
+              }),
+            }),
             where: () => ({
               limit: () => Promise.resolve(selectRows.shift() ?? []),
             }),
@@ -403,5 +408,59 @@ describe("recordCostEvents user attribution", () => {
         }),
       }),
     );
+  });
+
+  it("prefers resolved tenant catalog pricing for LLM rows", async () => {
+    const { recordCostEvents, insertedValues } = await importCostRecorder([
+      [{ id: "user-1" }],
+      [
+        {
+          id: "catalog-tenant",
+          tenantId: "tenant-1",
+          modelId: "tenant-only-model",
+          provider: "bedrock",
+          displayName: "Tenant Model",
+          canonicalDisplayName: "Tenant Model",
+          inputCostPerMillion: "2.0000",
+          outputCostPerMillion: "8.0000",
+          contextWindow: null,
+          maxOutputTokens: null,
+          supportsVision: false,
+          supportsTools: true,
+          enabled: true,
+          pricingStatus: "resolved",
+          pricingSource: "aws-price-list",
+          pricingDiagnostics: {},
+          lastPricedAt: new Date("2026-06-09T00:00:00Z"),
+          importSource: "aws-bedrock-catalog",
+          importPayload: {},
+          importedByUserId: null,
+          importedAt: new Date("2026-06-09T00:00:00Z"),
+          createdAt: new Date("2026-06-09T00:00:00Z"),
+          updatedAt: new Date("2026-06-09T00:00:00Z"),
+        },
+      ],
+    ]);
+
+    await recordCostEvents({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      userId: "user-1",
+      requestId: "request-tenant-price",
+      model: "tenant-only-model",
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      cachedReadTokens: 0,
+      durationMs: 0,
+      recordCompute: false,
+    });
+
+    const rows = insertedValues[0] as Array<Record<string, unknown>>;
+    expect(rows).toEqual([
+      expect.objectContaining({
+        event_type: "llm",
+        amount_usd: "10.000000",
+      }),
+    ]);
   });
 });
