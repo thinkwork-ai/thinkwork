@@ -85,12 +85,14 @@ export function buildManagedAppPlan(args: {
   appKey: ManagedAppKey;
   operation: ManagedAppOperation;
   desiredConfig?: Record<string, unknown>;
+  manifestImages?: Record<string, string>;
 }): ManagedAppPlan {
   const adapter = getManagedAppAdapter(args.appKey);
+  const desiredConfig = resolveManagedAppDesiredConfig(args);
   return {
     terraformVariables: adapter.buildTerraformVariables({
       operation: args.operation,
-      desiredConfig: args.desiredConfig,
+      desiredConfig,
     }),
     dataImpact: adapter.dataImpact(args.operation),
     preDestroySteps: adapter.preDestroySteps(args.operation),
@@ -99,9 +101,49 @@ export function buildManagedAppPlan(args: {
   };
 }
 
+export function resolveManagedAppDesiredConfig(args: {
+  appKey: ManagedAppKey;
+  operation: ManagedAppOperation;
+  desiredConfig?: Record<string, unknown>;
+  manifestImages?: Record<string, string>;
+}): Record<string, unknown> | undefined {
+  if (args.operation === "DESTROY") return args.desiredConfig;
+  if (
+    typeof args.desiredConfig?.imageUri === "string" &&
+    args.desiredConfig.imageUri.trim()
+  ) {
+    return args.desiredConfig;
+  }
+
+  const imageUri = manifestImageForApp(args.appKey, args.manifestImages);
+  if (!imageUri) {
+    return args.desiredConfig;
+  }
+  return {
+    ...(args.desiredConfig ?? {}),
+    imageUri,
+  };
+}
+
 export function dataImpactForManagedApp(
   appKey: ManagedAppKey,
   operation: ManagedAppOperation,
 ): ManagedAppDataImpact {
   return getManagedAppAdapter(appKey).dataImpact(operation);
+}
+
+function manifestImageForApp(
+  appKey: ManagedAppKey,
+  manifestImages: Record<string, string> | undefined,
+): string | null {
+  if (!manifestImages) return null;
+  const candidates =
+    appKey === "twenty"
+      ? ["twenty", "twenty-crm", "managed-app-twenty"]
+      : [appKey, `managed-app-${appKey}`, `${appKey}-runtime`];
+  for (const candidate of candidates) {
+    const value = manifestImages[candidate];
+    if (value) return value;
+  }
+  return null;
 }

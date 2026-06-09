@@ -3,6 +3,7 @@ import {
   buildManagedAppPlan,
   getManagedAppAdapter,
 } from "../src/apps/registry";
+import { buildApplySummary } from "../src/apply";
 import { buildPlanSummary } from "../src/plan";
 
 const digest = "a".repeat(64);
@@ -61,6 +62,97 @@ describe("managed app deployment adapters", () => {
         desiredConfig: {},
       }),
     ).toThrow(/bedrockModelResourceArns|imageUri|dbPasswordSecretArn/);
+  });
+
+  it("hydrates managed app images from the verified release manifest contract", () => {
+    const baseInput = {
+      phase: "plan" as const,
+      schemaVersion: 1,
+      contract: "thinkwork.deployment.controller.v1",
+      tenantId: "tenant-1",
+      jobId: "job-1",
+      appKey: "cognee" as const,
+      operation: "ENABLE" as const,
+      release: {
+        version: "1.2.3",
+        manifestUrl:
+          "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
+        manifestSha256: digest,
+      },
+      releaseVersion: "1.2.3",
+      manifestDigest: digest,
+      desiredConfigVersion: "v1",
+      desiredConfig: {
+        dbPasswordSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
+        bedrockModelResourceArns: [
+          "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        ],
+      },
+      evidence: {
+        bucket: "evidence-bucket",
+        prefix: "managed-apps/cognee/job-1/plan",
+      },
+    };
+
+    const first = buildPlanSummary({
+      evidenceBucket: "fallback-bucket",
+      input: {
+        ...baseInput,
+        manifestImages: {
+          cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+        },
+      },
+    });
+    const second = buildPlanSummary({
+      evidenceBucket: "fallback-bucket",
+      input: {
+        ...baseInput,
+        manifestImages: {
+          cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"2".repeat(64)}`,
+        },
+      },
+    });
+
+    expect(first.evidence).toEqual({
+      bucket: "evidence-bucket",
+      prefix: "managed-apps/cognee/job-1/plan",
+    });
+    expect(first.releaseManifestUrl).toBe(baseInput.release.manifestUrl);
+    expect(first.terraformVariables).toEqual(
+      expect.objectContaining({
+        cognee_image_uri: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+      }),
+    );
+    expect(first.planDigest).not.toBe(second.planDigest);
+  });
+
+  it("blocks managed app deploys when the release manifest lacks the app image", () => {
+    expect(() =>
+      buildPlanSummary({
+        evidenceBucket: "evidence-bucket",
+        input: {
+          phase: "plan",
+          tenantId: "tenant-1",
+          jobId: "job-1",
+          appKey: "twenty",
+          operation: "ENABLE",
+          releaseVersion: "1.2.3",
+          manifestDigest: digest,
+          desiredConfigVersion: "v1",
+          desiredConfig: {
+            dbUrlSecretArn:
+              "arn:aws:secretsmanager:us-east-1:123456789012:secret:twenty-db",
+            encryptionKeySecretArn:
+              "arn:aws:secretsmanager:us-east-1:123456789012:secret:twenty-key",
+            publicUrl: "https://crm.example.com",
+            certificateArn:
+              "arn:aws:acm:us-east-1:123456789012:certificate/example",
+          },
+          manifestImages: {},
+        },
+      }),
+    ).toThrow(/Twenty imageUri/);
   });
 
   it("lists destructive Twenty resource and data impact", () => {
@@ -270,6 +362,42 @@ describe("managed app deployment adapters", () => {
       expect.objectContaining({
         twenty_provisioned: true,
         twenty_runtime_enabled: false,
+      }),
+    );
+  });
+
+  it("rebuilds apply summaries from the approved config and manifest image", () => {
+    const summary = buildApplySummary({
+      evidenceBucket: "evidence-bucket",
+      verifiedManifestDigest: digest,
+      input: {
+        phase: "apply",
+        tenantId: "tenant-1",
+        jobId: "job-2",
+        appKey: "twenty",
+        operation: "ENABLE",
+        releaseVersion: "1.2.3",
+        manifestDigest: digest,
+        desiredConfigVersion: "v1",
+        desiredConfig: {
+          dbUrlSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:twenty-db",
+          encryptionKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:twenty-key",
+          publicUrl: "https://crm.example.com",
+          certificateArn:
+            "arn:aws:acm:us-east-1:123456789012:certificate/example",
+        },
+        manifestImages: {
+          "twenty-crm": `public.ecr.aws/thinkwork/twenty@sha256:${imageDigest}`,
+        },
+        planDigest: "b".repeat(64),
+      },
+    });
+
+    expect(summary.terraformVariables).toEqual(
+      expect.objectContaining({
+        twenty_image_uri: `public.ecr.aws/thinkwork/twenty@sha256:${imageDigest}`,
       }),
     );
   });
