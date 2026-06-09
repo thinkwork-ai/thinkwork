@@ -11,6 +11,11 @@ import * as auth from "@/lib/auth";
 import { getDesktopBridge } from "@/lib/desktop-runtime";
 import type { TokenStorage } from "@/lib/token-storage";
 import {
+  AUTH_DEPLOYMENT_PROFILE_SHA_STORAGE_KEY,
+  ensureAuthStorageMatchesDeploymentProfile,
+  markAuthStorageDeploymentProfile,
+} from "@/lib/auth-deployment-binding";
+import {
   setAuthToken,
   setTokenProvider,
   startTokenRefresh,
@@ -71,11 +76,18 @@ export function AuthProvider({
         });
       }
 
+      if (!ensureAuthStorageMatchesDeploymentProfile(tokenStorage)) {
+        auth.clearLocalAuthSession();
+        clearSession();
+        return;
+      }
+
       const token = await auth.getIdToken();
       const currentUser = auth.getCurrentUser();
       if (cancelled) return;
 
       if (token && currentUser) {
+        markAuthStorageDeploymentProfile(tokenStorage);
         setUser(currentUser);
         setAuthToken(token);
         setTokenProvider(() => auth.getIdToken());
@@ -121,6 +133,7 @@ export function AuthProvider({
       const session = await auth.signIn(email, password);
       void session;
       const token = await auth.getIdToken();
+      markAuthStorageDeploymentProfile(tokenStorage);
       setAuthToken(token);
       setTokenProvider(() => auth.getIdToken());
       startTokenRefresh();
@@ -149,6 +162,7 @@ export function AuthProvider({
     setTokenProvider(null);
     setAuthToken(null);
     setUser(null);
+    tokenStorage.removeItem(AUTH_DEPLOYMENT_PROFILE_SHA_STORAGE_KEY);
     if (desktopBridge) {
       void desktopBridge.signOut().catch((error) => {
         console.error("[auth] desktop sign-out failed", error);

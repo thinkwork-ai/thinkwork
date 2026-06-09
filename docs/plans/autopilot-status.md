@@ -10,22 +10,24 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U7 - Managed-app controller contract.
-- Current branch: `codex/u7-managed-app-controller`.
+- Current implementation unit: U8 - Harden deployment profile and client
+  binding.
+- Current branch: `codex/u8-profile-client-binding`.
 - Current worktree:
-  `.Codex/worktrees/u7-managed-app-controller`.
+  `.Codex/worktrees/u8-profile-client-binding`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
   merged; U4 PR [#2290](https://github.com/thinkwork-ai/thinkwork/pull/2290)
   merged; U5 PR [#2291](https://github.com/thinkwork-ai/thinkwork/pull/2291)
   merged; U6 PR [#2292](https://github.com/thinkwork-ai/thinkwork/pull/2292)
-  merged.
-- Status: U7 local implementation in progress; `v0.1.0-canary.135` and
-  `desktop-v0.1.0-canary.135` release tags pushed from U6 merge commit
-  `89908374` after the dev backend deploy passed. Desktop release initially
-  failed on a transient GitHub `502 Bad Gateway` while uploading updater
-  metadata and was rerun.
+  merged; U7 PR [#2293](https://github.com/thinkwork-ai/thinkwork/pull/2293)
+  merged; U8 PR [#2294](https://github.com/thinkwork-ai/thinkwork/pull/2294)
+  opened.
+- Status: U8 PR #2294 opened and CI pending. `v0.1.0-canary.136` and
+  `desktop-v0.1.0-canary.136` release runs passed, publishing desktop
+  installers, updater metadata, `thinkwork-release.json`, and
+  `platform-artifacts.tar.gz`.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -223,6 +225,30 @@ status: in_progress
 - U7 lets the deployment runner hydrate Cognee/Twenty/Kestra `imageUri` from a
   digest-pinned manifest image map and fails before Terraform variables are
   produced when the selected release lacks the app image.
+- U7 PR #2293 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+  `test`) and was squash merged as `08e4571b`.
+- Released `v0.1.0-canary.136` from the U7 merge commit. Platform release run
+  [27226146271](https://github.com/thinkwork-ai/thinkwork/actions/runs/27226146271)
+  passed and verified the human-facing release asset list no longer contains
+  individual Lambda/platform zip files.
+- Released `desktop-v0.1.0-canary.136` from the same commit. Desktop/web
+  release run
+  [27227188829](https://github.com/thinkwork-ai/thinkwork/actions/runs/27227188829)
+  passed and deployed `https://app.thinkwork.ai` with asset
+  `assets/index-Cx0ohs5m.js`.
+- U7 remote branch was already deleted by GitHub merge handling; local U7
+  worktree and branch were removed after syncing `origin/main`.
+- Created isolated U8 worktree from `origin/main` at `08e4571b`.
+- U8 binds cached browser/desktop auth sessions to the active deployment profile
+  SHA so localhost/dev, TEI, and production ThinkWork profiles cannot silently
+  reuse one another's Cognito state.
+- U8 makes the unsigned build-time fallback deployment profile fingerprint
+  deterministic when Terraform/runtime config has not supplied
+  `VITE_DEPLOYMENT_PROFILE_ISSUED_AT`, preventing auth binding churn from
+  simple page reloads.
+- U8 keeps sign-out behavior explicit by exposing local-session clearing for
+  stale-profile recovery while preserving the hosted Cognito logout redirect for
+  normal user sign-out.
 - U7 local verification:
   - `pnpm schema:build` passed.
   - GraphQL codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
@@ -237,6 +263,18 @@ status: in_progress
   - `pnpm --filter thinkwork-cli typecheck` passed.
   - `pnpm --filter @thinkwork/mobile typecheck` was not runnable because the
     mobile package has no `typecheck` script.
+  - `git diff --check` passed.
+- U8 local verification:
+  - `pnpm --filter @thinkwork/web test -- src/lib/deployment-profile.test.ts src/lib/auth-deployment-binding.test.ts src/context/AuthContext.test.tsx src/routes/-sign-in.test.tsx`
+    passed: 20 tests.
+  - `pnpm --filter @thinkwork/deployment-profile test` passed: 14 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/desktop test -- test/main/deployment-profile.test.ts test/main/auth-bridge.test.ts`
+    passed: 14 tests.
+  - `pnpm --filter @thinkwork/mobile test -- lib/deployment-profile.test.ts`
+    passed: 9 tests.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
   - `git diff --check` passed.
 - CI:
   - U5 PR #2291 initial checks: `cla`, `lint`, `verify`, and `typecheck`

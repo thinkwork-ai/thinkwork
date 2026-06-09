@@ -186,8 +186,7 @@ export function confirmForgotPassword(
 // "Continue with Google" silently re-uses the existing Cognito session and
 // never reaches Google's account chooser.
 export function signOut(): void {
-  const pool = getUserPool();
-  pool?.getCurrentUser()?.signOut();
+  clearLocalAuthSession();
 
   const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
   if (!clientId) {
@@ -204,6 +203,11 @@ export function signOut(): void {
     logout_uri: window.location.origin,
   });
   window.location.href = `${getCognitoDomainBase()}/logout?${params.toString()}`;
+}
+
+export function clearLocalAuthSession(): void {
+  const pool = getUserPool();
+  pool?.getCurrentUser()?.signOut();
 }
 
 // ---------------------------------------------------------------------------
