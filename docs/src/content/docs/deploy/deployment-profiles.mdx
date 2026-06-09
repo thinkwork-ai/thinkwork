@@ -20,6 +20,18 @@ A v1 deployment profile is JSON with these required fields:
   "displayName": "Acme ThinkWork",
   "stage": "prod",
   "region": "us-east-1",
+  "accountId": "123456789012",
+  "releaseVersion": "v0.1.0-canary.134",
+  "releaseManifestUrl": "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
+  "releaseManifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "controller": {
+    "stateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-prod-deployment-orchestrator",
+    "stateMachineName": "thinkwork-prod-deployment-orchestrator",
+    "codebuildProjectName": "thinkwork-prod-deployment-runner",
+    "evidenceBucketName": "thinkwork-prod-123456789012-deploy-evidence",
+    "ssmPrefix": "/thinkwork/prod/deployment",
+    "verifiedAt": "2026-06-06T00:00:00.000Z"
+  },
   "issuedAt": "2026-06-06T00:00:00.000Z",
   "spacesUrl": "https://spaces.acme.example.com",
   "apiUrl": "https://api.acme.example.com",
@@ -35,6 +47,11 @@ A v1 deployment profile is JSON with these required fields:
 
 Production profiles should be signed by a trusted ThinkWork deployment profile
 key. Unsigned profiles are for development fallback only.
+
+The `accountId`, release fields, and `controller` object are optional for older
+profiles but expected after customer authority transfer. They tell operators
+which release manifest was installed and which customer-owned Step Functions
+controller owns future update and teardown operations.
 
 ## Import Methods
 

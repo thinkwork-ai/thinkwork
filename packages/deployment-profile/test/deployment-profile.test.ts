@@ -18,6 +18,22 @@ const baseProfile = (): DeploymentProfile =>
     displayName: "Acme ThinkWork",
     stage: "dev",
     region: "us-east-1",
+    accountId: "123456789012",
+    releaseVersion: "v0.1.0-canary.134",
+    releaseManifestUrl:
+      "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
+    releaseManifestSha256: "a".repeat(64),
+    controller: {
+      stateMachineArn:
+        "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment-orchestrator",
+      stateMachineName: "thinkwork-dev-deployment-orchestrator",
+      codebuildProjectName: "thinkwork-dev-deployment-runner",
+      codebuildProjectArn:
+        "arn:aws:codebuild:us-east-1:123456789012:project/thinkwork-dev-deployment-runner",
+      evidenceBucketName: "thinkwork-dev-123456789012-deploy-evidence",
+      ssmPrefix: "/thinkwork/dev/deployment",
+      verifiedAt: "2026-06-06T12:00:00.000Z",
+    },
     issuedAt: "2026-06-06T12:00:00.000Z",
     spacesUrl: "https://spaces.example.com",
     apiUrl: "https://api.example.com",
@@ -228,10 +244,39 @@ describe("deployment profile contract", () => {
     expect(profileToRuntimeConfig(baseProfile())).toMatchObject({
       deploymentId: "tw-customer-dev",
       displayName: "Acme ThinkWork",
+      accountId: "123456789012",
+      releaseVersion: "v0.1.0-canary.134",
+      releaseManifestSha256: "a".repeat(64),
+      controller: expect.objectContaining({
+        stateMachineName: "thinkwork-dev-deployment-orchestrator",
+      }),
       graphqlUrl: "https://appsync.example.com/graphql",
       graphqlWsUrl: "wss://appsync.example.com/graphql",
       cognitoDomain: "https://auth.example.com",
       cognitoClientId: "client-123",
     });
+  });
+
+  it("keeps controller authority metadata optional for existing profiles", () => {
+    const profile = buildDeploymentProfile({
+      deploymentId: "tw-customer-dev",
+      displayName: "Acme ThinkWork",
+      stage: "dev",
+      region: "us-east-1",
+      issuedAt: "2026-06-06T12:00:00.000Z",
+      spacesUrl: "https://spaces.example.com",
+      apiUrl: "https://api.example.com",
+      graphqlHttpUrl: "https://api.example.com/graphql",
+      appsyncHttpUrl: "https://appsync.example.com/graphql",
+      appsyncWsUrl: "wss://appsync.example.com/graphql",
+      cognitoDomain: "auth.example.com",
+      cognitoUserPoolId: "us-east-1_abc123",
+      cognitoClientId: "client-123",
+    });
+
+    expect(assessDeploymentProfile(profile, { allowUnsigned: true }).ok).toBe(
+      true,
+    );
+    expect(profile.controller).toBeUndefined();
   });
 });

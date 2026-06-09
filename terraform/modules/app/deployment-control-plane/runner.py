@@ -250,6 +250,52 @@ def controller_input_summary(payload):
     }
 
 
+def controller_identity(payload):
+    return {
+        "stateMachineArn": os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN")
+        or payload.get("stateMachineArn"),
+        "stateMachineName": os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_NAME"),
+        "codebuildProjectName": os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME"),
+        "codebuildProjectArn": os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_ARN"),
+        "evidenceBucketName": os.environ.get("THINKWORK_EVIDENCE_BUCKET"),
+        "ssmPrefix": os.environ.get("THINKWORK_SSM_PREFIX"),
+    }
+
+
+def release_selection(payload):
+    release = payload.get("release")
+    if isinstance(release, dict):
+        return {
+            "version": release.get("version") or payload.get("releaseVersion"),
+            "manifestUrl": release.get("manifestUrl") or payload.get("releaseManifestUrl"),
+            "manifestSha256": release.get("manifestSha256") or payload.get("releaseManifestSha256"),
+        }
+    return {
+        "version": payload.get("releaseVersion") or os.environ.get("THINKWORK_RELEASE_VERSION"),
+        "manifestUrl": payload.get("releaseManifestUrl")
+        or os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
+        "manifestSha256": payload.get("releaseManifestSha256")
+        or os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
+    }
+
+
+def write_controller_status_evidence(payload):
+    proof = {
+        "schemaVersion": 1,
+        "contract": "thinkwork.deployment.controller.status.v1",
+        "status": "ready",
+        "action": "status",
+        "sessionId": payload.get("sessionId") or os.environ.get("THINKWORK_DEPLOYMENT_SESSION_ID"),
+        "checkedAt": datetime.now(UTC).isoformat(),
+        "controller": controller_identity(payload),
+        "release": release_selection(payload),
+    }
+    return {
+        "proof": proof,
+        "artifact": write_json_evidence_artifact("controller-status.json", proof),
+    }
+
+
 def terraform_plan_summary(plan_json):
     resource_changes = plan_json.get("resource_changes", [])
     by_action = {}
@@ -1063,6 +1109,8 @@ def runtime_profile(outputs, vars_json):
         "region": region,
         "accountId": vars_json["account_id"],
         "releaseVersion": os.environ.get("THINKWORK_RELEASE_VERSION"),
+        "releaseManifestUrl": os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
+        "releaseManifestSha256": os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
         "deploymentId": f"thinkwork-{vars_json['stage']}",
         "displayName": "ThinkWork",
         "appUrl": app_url,
@@ -1074,6 +1122,26 @@ def runtime_profile(outputs, vars_json):
         "cognitoDomain": cognito_domain,
         "cognitoUserPoolId": output_value("user_pool_id"),
         "cognitoClientId": output_value("admin_client_id"),
+        "controller": {
+            "stateMachineArn": output_value("deployment_state_machine_arn")
+            or os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN"),
+            "stateMachineName": output_value("deployment_state_machine_name")
+            or os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_NAME"),
+            "codebuildProjectName": output_value("deployment_runner_project_name")
+            or os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME"),
+            "codebuildProjectArn": output_value("deployment_runner_project_arn")
+            or os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_ARN"),
+            "evidenceBucketName": output_value("deployment_evidence_bucket_name")
+            or os.environ.get("THINKWORK_EVIDENCE_BUCKET"),
+            "ssmPrefix": output_value("deployment_ssm_prefix")
+            or os.environ.get("THINKWORK_SSM_PREFIX"),
+            "appconfigApplicationId": output_value("deployment_appconfig_application_id"),
+            "appconfigEnvironmentId": output_value("deployment_appconfig_environment_id"),
+            "appconfigConfigurationProfileId": output_value(
+                "deployment_appconfig_configuration_profile_id"
+            ),
+            "verifiedAt": datetime.now(UTC).isoformat(),
+        },
         "issuedAt": datetime.now(UTC).isoformat(),
     }
     vite_env = {
@@ -1091,6 +1159,18 @@ def runtime_profile(outputs, vars_json):
         "VITE_SPACES_URL": profile["appUrl"],
         "VITE_STAGE": profile["stage"],
         "VITE_AWS_REGION": profile["region"],
+        "VITE_AWS_ACCOUNT_ID": profile["accountId"],
+        "VITE_RELEASE_VERSION": profile["releaseVersion"],
+        "VITE_RELEASE_MANIFEST_URL": profile["releaseManifestUrl"],
+        "VITE_RELEASE_MANIFEST_SHA256": profile["releaseManifestSha256"],
+        "VITE_DEPLOYMENT_CONTROLLER_ARN": profile["controller"]["stateMachineArn"],
+        "VITE_DEPLOYMENT_CONTROLLER_NAME": profile["controller"]["stateMachineName"],
+        "VITE_DEPLOYMENT_RUNNER_PROJECT_NAME": profile["controller"][
+            "codebuildProjectName"
+        ],
+        "VITE_DEPLOYMENT_RUNNER_PROJECT_ARN": profile["controller"]["codebuildProjectArn"],
+        "VITE_DEPLOYMENT_EVIDENCE_BUCKET": profile["controller"]["evidenceBucketName"],
+        "VITE_DEPLOYMENT_SSM_PREFIX": profile["controller"]["ssmPrefix"],
     }
     profile["viteEnv"] = vite_env
     web_env = "\n".join(f"{key}={value or ''}" for key, value in sorted(vite_env.items()))
@@ -1213,9 +1293,24 @@ def main():
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION") or payload.get("action") or "deploy"
     if action == "teardown":
         action = "destroy"
-    if action not in {"deploy", "update", "destroy", "plan"}:
+    if action not in {"deploy", "update", "destroy", "plan", "status"}:
         raise RuntimeError(f"Unsupported deployment action: {action}")
     os.environ["THINKWORK_DEPLOYMENT_ACTION"] = action
+
+    if action == "status":
+        CONTROLLER_EVIDENCE = {
+            "status": write_controller_status_evidence(payload),
+        }
+        write_evidence(
+            "succeeded",
+            {
+                "stage": safe_get(payload, "stage", "environmentName", default=""),
+                "account_id": safe_get(payload, "awsAccountId", "accountId", default=""),
+                "region": safe_get(payload, "awsRegion", "region", default=""),
+            },
+            0,
+        )
+        return 0
 
     runner_secrets = secret_payload(payload)
     static_files = sync_release_artifacts() if action in {"deploy", "update"} else {}

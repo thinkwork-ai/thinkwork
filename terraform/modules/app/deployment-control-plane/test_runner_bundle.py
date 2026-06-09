@@ -347,6 +347,110 @@ def test_controller_input_summary_redacts_to_deployment_contract() -> None:
     assert "do-not-record" not in json.dumps(summary)
 
 
+def test_controller_status_action_writes_noop_proof(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(runner, "WORK", tmp_path / "work")
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_ACTION", "status")
+    monkeypatch.setenv(
+        "THINKWORK_DEPLOYMENT_INPUT",
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "contract": "thinkwork.deployment.controller.v1",
+                "action": "status",
+                "sessionId": "session-1",
+                "environmentName": "tei-e2e",
+                "awsAccountId": "123456789012",
+                "awsRegion": "us-east-1",
+                "release": {
+                    "version": "v0.1.0-canary.134",
+                    "manifestUrl": "https://example.com/thinkwork-release.json",
+                    "manifestSha256": "a" * 64,
+                },
+            }
+        ),
+    )
+    monkeypatch.setenv(
+        "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN",
+        "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+    )
+    monkeypatch.setenv(
+        "THINKWORK_DEPLOYMENT_STATE_MACHINE_NAME",
+        "thinkwork-tei-e2e-deployment-orchestrator",
+    )
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME", "runner")
+    monkeypatch.setenv(
+        "THINKWORK_DEPLOYMENT_RUNNER_PROJECT_ARN",
+        "arn:aws:codebuild:us-east-1:123456789012:project/runner",
+    )
+    monkeypatch.setenv("THINKWORK_EVIDENCE_BUCKET", "evidence-bucket")
+    monkeypatch.setenv("THINKWORK_SSM_PREFIX", "/thinkwork/tei-e2e/deployment")
+    monkeypatch.setattr(runner, "run", lambda *_args, **_kwargs: None)
+
+    assert runner.main() == 0
+
+    proof = json.loads((tmp_path / "controller-status.json").read_text())
+    evidence = json.loads((tmp_path / "deployment-evidence.json").read_text())
+    assert proof["status"] == "ready"
+    assert proof["controller"]["stateMachineName"] == (
+        "thinkwork-tei-e2e-deployment-orchestrator"
+    )
+    assert proof["release"]["version"] == "v0.1.0-canary.134"
+    assert evidence["status"] == "succeeded"
+    assert evidence["controller"]["status"]["proof"]["action"] == "status"
+
+
+def test_runtime_profile_contains_customer_authority_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.134")
+    monkeypatch.setenv(
+        "THINKWORK_RELEASE_MANIFEST_URL",
+        "https://example.com/thinkwork-release.json",
+    )
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", "a" * 64)
+    outputs = {
+        "api_endpoint": {"value": "https://api.example.com"},
+        "app_url": {"value": "https://app.example.com"},
+        "appsync_api_url": {"value": "https://appsync.example.com/graphql"},
+        "appsync_realtime_url": {"value": "wss://appsync.example.com/graphql"},
+        "appsync_api_key": {"value": "api-key"},
+        "auth_domain": {"value": "thinkwork-tei-e2e"},
+        "user_pool_id": {"value": "us-east-1_abc"},
+        "admin_client_id": {"value": "client-id"},
+        "deployment_state_machine_arn": {
+            "value": "arn:aws:states:us-east-1:123456789012:stateMachine:controller"
+        },
+        "deployment_state_machine_name": {"value": "controller"},
+        "deployment_runner_project_name": {"value": "runner"},
+        "deployment_runner_project_arn": {
+            "value": "arn:aws:codebuild:us-east-1:123456789012:project/runner"
+        },
+        "deployment_evidence_bucket_name": {"value": "evidence-bucket"},
+        "deployment_ssm_prefix": {"value": "/thinkwork/tei-e2e/deployment"},
+    }
+    profile, web_env = runner.runtime_profile(
+        outputs,
+        {
+            "stage": "tei-e2e",
+            "region": "us-east-1",
+            "account_id": "123456789012",
+        },
+    )
+
+    assert profile["accountId"] == "123456789012"
+    assert profile["releaseVersion"] == "v0.1.0-canary.134"
+    assert profile["releaseManifestSha256"] == "a" * 64
+    assert profile["controller"]["stateMachineArn"].endswith(":stateMachine:controller")
+    assert profile["controller"]["codebuildProjectArn"].endswith(":project/runner")
+    assert "VITE_DEPLOYMENT_CONTROLLER_ARN=" in web_env
+    assert "VITE_RELEASE_MANIFEST_SHA256=" in web_env
+
+
 def test_redacted_tfvars_removes_secret_values() -> None:
     runner = load_runner()
 
