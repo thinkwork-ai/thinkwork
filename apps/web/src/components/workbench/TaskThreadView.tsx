@@ -4037,7 +4037,7 @@ function agentProfileActionRow(
   const loopEvidence = parseRecord(
     agentProfileField(run, "loopEvidence", "loop_evidence"),
   );
-  const loopLine = agentProfileLoopDetail(loopEvidence);
+  const loopLines = agentProfileLoopDetailLines(loopEvidence);
   const handoff =
     stringValue(agentProfileField(run, "handoffSummary", "handoff_summary")) ??
     stringValue(agentProfileField(run, "summary", "summary"));
@@ -4059,7 +4059,7 @@ function agentProfileActionRow(
     cost == null ? null : `Cost: ${formatUsd(cost)}`,
     duration == null ? null : `Duration: ${formatDuration(duration)}`,
     status ? `Status: ${status.replace(/_/g, " ")}` : null,
-    loopLine,
+    ...loopLines,
     task ? `Task: ${task}` : null,
     handoff ? `Handoff: ${handoff}` : null,
     eventDetailLine,
@@ -4073,8 +4073,28 @@ function agentProfileActionRow(
   };
 }
 
-function agentProfileLoopDetail(evidence: Record<string, unknown>) {
-  if (Object.keys(evidence).length === 0) return null;
+function agentProfileLoopDetailLines(evidence: Record<string, unknown>) {
+  if (Object.keys(evidence).length === 0) return [];
+  const phases = parseArray(evidence.phases).map((item) => parseRecord(item));
+  if (phases.length > 0) {
+    return [
+      "Loop:",
+      ...phases.map((phase) => {
+        const phaseLabel = loopPhaseLabel(stringValue(phase.phase));
+        const status = stringValue(phase.status)?.replace(/_/g, " ");
+        const verdict = stringValue(phase.verdict);
+        const summary = stringValue(phase.summary);
+        const feedback = stringValue(phase.feedback);
+        return [
+          `- ${phaseLabel}`,
+          status ? `: ${status}` : "",
+          verdict ? ` · verdict ${verdict.replace(/_/g, " ")}` : "",
+          summary ? ` — ${summary}` : "",
+          feedback ? ` Feedback: ${feedback}` : "",
+        ].join("");
+      }),
+    ];
+  }
   const latest =
     latestLoopRecordFromEvidence(evidence, "iterations") ??
     latestLoopRecordFromEvidence(evidence, "phases");
@@ -4089,12 +4109,25 @@ function agentProfileLoopDetail(evidence: Record<string, unknown>) {
     stringValue(completion.verdict);
   const iteration = numberValue(latest?.index);
   const parts = [
-    phase ? phase.replace(/_/g, " ") : null,
+    phase ? loopPhaseLabel(phase) : null,
     status ? status.replace(/_/g, " ") : null,
     verdict ? `verdict ${verdict.replace(/_/g, " ")}` : null,
     iteration != null ? `iteration ${iteration}` : null,
   ].filter(Boolean);
-  return parts.length > 0 ? `Loop: ${parts.join(" · ")}` : null;
+  return parts.length > 0 ? [`Loop: ${parts.join(" · ")}`] : [];
+}
+
+function loopPhaseLabel(value?: string | null) {
+  if (!value) return "Unknown";
+  const normalized = value.toLowerCase();
+  if (normalized === "self_review" || normalized === "final_review") {
+    return "Verification";
+  }
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function latestLoopRecordFromEvidence(

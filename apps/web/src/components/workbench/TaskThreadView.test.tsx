@@ -3256,12 +3256,38 @@ describe("TaskThreadView", () => {
             durationMs: 10500,
             status: "completed",
             loopEvidence: {
-              iterations: [
+              phases: [
+                {
+                  phase: "discovery",
+                  status: "completed",
+                  summary: "Gathered context.",
+                },
+                {
+                  phase: "planning",
+                  status: "completed",
+                  summary: "Selected the web research path.",
+                },
+                {
+                  phase: "execution",
+                  status: "completed",
+                  summary: "Ran research tools.",
+                },
                 {
                   index: 0,
-                  phase: "self_review",
+                  phase: "verification",
                   status: "completed",
                   verdict: "pass",
+                  summary: "Verified source support.",
+                },
+                {
+                  phase: "iteration",
+                  status: "skipped",
+                  summary: "No revision needed.",
+                },
+                {
+                  phase: "handoff",
+                  status: "completed",
+                  summary: "Returned research handoff.",
                 },
               ],
             },
@@ -3284,12 +3310,33 @@ describe("TaskThreadView", () => {
             durationMs: 934,
             status: "completed",
             loopEvidence: {
-              iterations: [
+              phases: [
+                {
+                  phase: "discovery",
+                  status: "completed",
+                },
+                {
+                  phase: "planning",
+                  status: "completed",
+                },
+                {
+                  phase: "execution",
+                  status: "completed",
+                },
                 {
                   index: 0,
-                  phase: "final_review",
+                  phase: "verification",
                   status: "completed",
                   verdict: "pass",
+                  summary: "Reviewer passed the answer.",
+                },
+                {
+                  phase: "iteration",
+                  status: "skipped",
+                },
+                {
+                  phase: "handoff",
+                  status: "completed",
                 },
               ],
             },
@@ -3305,11 +3352,18 @@ describe("TaskThreadView", () => {
       "Agent Profile: Reviewer",
     ]);
     expect(rows[1]?.children?.[0]?.title).toBe("Research: Finding sources");
+    expect(rows[1]?.detail).toContain("Loop:");
     expect(rows[1]?.detail).toContain(
-      "Loop: self review · completed · verdict pass · iteration 0",
+      "- Discovery: completed — Gathered context.",
+    );
+    expect(rows[1]?.detail).toContain(
+      "- Verification: completed · verdict pass — Verified source support.",
+    );
+    expect(rows[1]?.detail).toContain(
+      "- Iteration: skipped — No revision needed.",
     );
     expect(rows[3]?.detail).toContain(
-      "Loop: final review · completed · verdict pass · iteration 0",
+      "- Verification: completed · verdict pass — Reviewer passed the answer.",
     );
   });
 

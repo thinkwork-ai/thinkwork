@@ -152,6 +152,7 @@ export type AgentProfileLoopPhase =
   | "discovery"
   | "planning"
   | "execution"
+  | "verification"
   | "self_review"
   | "iteration"
   | "handoff";
@@ -1046,7 +1047,7 @@ function buildAgentProfileLoopEvidence(input: {
         summary: "Produced delegated work within the profile capability set.",
       },
       {
-        phase: "self_review",
+        phase: "verification",
         status: selfReviewStatus,
         ...(input.handoff?.feedback
           ? { feedback: input.handoff.feedback }

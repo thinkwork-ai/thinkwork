@@ -628,7 +628,15 @@ function loopIterationIndexFromEvidence(
 
 function formatLoopLabel(value?: string | null): string | null {
   if (!value) return null;
-  return value.replace(/_/g, " ");
+  const normalized = value.toLowerCase();
+  if (normalized === "self_review" || normalized === "final_review") {
+    return "Verification";
+  }
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function profileLoopSummary(event: TimelineEvent): string | null {
@@ -640,6 +648,27 @@ function profileLoopSummary(event: TimelineEvent): string | null {
       : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
+}
+
+function profileLoopPhaseLines(
+  evidence: Record<string, unknown> | null | undefined,
+): string[] {
+  const phases = loopEvidenceRecords(evidence, "phases");
+  if (phases.length === 0) return [];
+  return phases.map((phase) => {
+    const phaseLabel = formatLoopLabel(stringValue(phase.phase)) ?? "Unknown";
+    const status = formatLoopLabel(stringValue(phase.status));
+    const verdict = formatLoopLabel(stringValue(phase.verdict));
+    const summary = stringValue(phase.summary);
+    const feedback = stringValue(phase.feedback);
+    return [
+      `- ${phaseLabel}`,
+      status ? `: ${status}` : "",
+      verdict ? ` · verdict ${verdict}` : "",
+      summary ? ` — ${summary}` : "",
+      feedback ? ` Feedback: ${feedback}` : "",
+    ].join("");
+  });
 }
 
 function collectTimelineModelNames(
@@ -1871,6 +1900,9 @@ function ExecutionTimeline({
                 `Cost: ${formatCost(ev.profileCostUsd || 0)}`,
                 `Status: ${routeStatusLabel(ev.profileStatus) || "--"}`,
                 loopSummary ? `Loop: ${loopSummary}` : null,
+                profileLoopPhaseLines(ev.loopEvidence).length
+                  ? `Loop phases:\n${profileLoopPhaseLines(ev.loopEvidence).join("\n")}`
+                  : null,
               ]
                 .filter((line): line is string => line != null)
                 .join("\n"),
