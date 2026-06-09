@@ -15,8 +15,8 @@ status: in_progress
 - Current branch: `codex/u1-release-bundle-controller`.
 - Current worktree:
   `.Codex/worktrees/u1-release-bundle-controller`.
-- Pull request: not opened yet.
-- Status: in progress.
+- Pull request: https://github.com/thinkwork-ai/thinkwork/pull/2285.
+- Status: PR opened; monitoring required CI.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
