@@ -130,7 +130,9 @@ def checkout_source(module_source, release_version):
     repo, ref = source_repo_and_ref(module_source, release_version)
     if not repo.startswith(("https://", "git@")):
         raise RuntimeError(f"Cannot initialize database schema from module source: {module_source}")
-    run(["git", "clone", "--depth", "1", "--branch", ref, repo, str(SOURCE)])
+    run(["git", "clone", "--no-checkout", "--filter=blob:none", repo, str(SOURCE)])
+    run(["git", "-C", str(SOURCE), "fetch", "--depth", "1", "origin", ref])
+    run(["git", "-C", str(SOURCE), "checkout", "--detach", "FETCH_HEAD"])
 
 
 def database_url_from_outputs(outputs):
