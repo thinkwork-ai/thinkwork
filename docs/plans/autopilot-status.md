@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U10 - controller release selection override
-  repair discovered during the TEI `.137` proving run.
-- Current branch: `codex/u10-controller-release-overrides`.
+- Current implementation unit: U11 - registry-source schema checkout repair
+  discovered after refreshing the TEI deployment controller.
+- Current branch: `codex/u11-tei-controller-retry`.
 - Current worktree:
-  `.Codex/worktrees/u10-controller-release-overrides`.
+  `.Codex/worktrees/u11-tei-controller-retry`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -25,13 +25,14 @@ status: in_progress
   merged; U8 PR [#2294](https://github.com/thinkwork-ai/thinkwork/pull/2294)
   merged; U9 PR [#2295](https://github.com/thinkwork-ai/thinkwork/pull/2295)
   merged; U9 PR [#2296](https://github.com/thinkwork-ai/thinkwork/pull/2296)
-  merged; U10 PR pending.
-- Status: U10 local verification passed. `v0.1.0-canary.137` release runs
+  merged; U10 PR [#2297](https://github.com/thinkwork-ai/thinkwork/pull/2297)
+  merged; U11 PR pending.
+- Status: U11 local verification passed. `v0.1.0-canary.137` release runs
   passed, publishing desktop installers, updater metadata,
   `thinkwork-release.json`, and `platform-artifacts.tar.gz` on the shared
-  release page. The live TEI update attempt exposed that the deployed
-  controller could still read stale CodeBuild release env vars instead of the
-  selected release payload; U10 repairs that before retrying TEI.
+  release page. TEI's customer deployment controller has been refreshed to the
+  U10 runner and `.137` selected-release pins; U11 fixes the remaining
+  registry-source checkout issue before retrying the app update.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -308,6 +309,27 @@ bootstrap` using the `.137` manifest URL and digest.
   before status, deploy, update, plan, or destroy paths run. Payload release
   fields now take precedence over stale CodeBuild defaults while preserving the
   existing env fallback for older callers.
+- U10 PR #2297 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+  `test`) and was squash merged as `1a2e4c88`.
+- Post-merge deploy run
+  [27232323766](https://github.com/thinkwork-ai/thinkwork/actions/runs/27232323766)
+  passed. Terraform Apply completed successfully, docs deploy and compliance
+  role bootstrap passed, and Deploy Summary completed.
+- The TEI deployment control plane was refreshed from merged main using direct
+  AWS bootstrap mode, not GitHub dispatch:
+  `AWS_PROFILE=tei AWS_REGION=us-east-1 pnpm --dir apps/cli dev enterprise bootstrap /tmp/thinkwork-tei-e2e-bootstrap --customer tei --stage tei-e2e ... --release-version v0.1.0-canary.137 --manifest-sha256 7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f --identity-provider none --yes`.
+  Terraform reported `1 added, 6 changed, 0 destroyed`, updated
+  `runner/thinkwork-runner.py`, moved selected release SSM pins from `.130` to
+  `.137`, and updated the CodeBuild runner env vars to the `.137` manifest.
+- U11 root cause: after the control-plane refresh, TEI's runner correctly used
+  the Terraform Registry source `thinkwork-ai/thinkwork/aws`, but
+  `push_database_schema` still tried to clone that source as a Git URL. The
+  release manifest contains the exact release `gitSha`, so registry-sourced
+  deployments should clone `https://github.com/thinkwork-ai/thinkwork.git` at
+  the manifest SHA for schema initialization/seed compatibility.
+- U11 implementation maps the registry source to the ThinkWork GitHub repo and
+  release manifest `gitSha`; it also supports `github.com/...//terraform/...`
+  module sources by normalizing them to HTTPS Git URLs.
 - U7 local verification:
   - `pnpm schema:build` passed.
   - GraphQL codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
@@ -365,6 +387,12 @@ bootstrap` using the `.137` manifest URL and digest.
     build warning because `pkg-config` / `pixman-1` are not installed.
   - U10 `pnpm --dir apps/cli exec vitest run __tests__/terraform-deployment-control-plane-fixture.test.ts`
     passed: 3 tests.
+  - U11 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed: 15 tests.
+  - U11 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U11 `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
 - CI:
   - U5 PR #2291 initial checks: `cla`, `lint`, `verify`, and `typecheck`
     passed.
