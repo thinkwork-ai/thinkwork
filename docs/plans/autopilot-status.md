@@ -11,10 +11,10 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U4 - API status, health, and Applications UI.
-- Current branch: `codex/kestra-managed-app-u4`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u4`.
-- Current PR: [#2244](https://github.com/thinkwork-ai/thinkwork/pull/2244).
+- Current unit: U5 - Kestra control MCP server and client.
+- Current branch: `codex/kestra-managed-app-u5`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u5`.
+- Current PR: [#2246](https://github.com/thinkwork-ai/thinkwork/pull/2246).
 - Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
@@ -136,6 +136,38 @@ status: in_progress
       present in pnpm's virtual store; invoking that binary directly over
       U4-touched hand-written files succeeded. A first broad direct Prettier
       invocation touched unrelated files and was restored before verification.
+  - U4 PR [#2244](https://github.com/thinkwork-ai/thinkwork/pull/2244)
+    initially passed required CI but was behind `main`; branch was rebased on
+    `origin/main`, CI passed again, and the PR was squash merged as
+    `45e5d677`.
+  - U4 remote branch was deleted by GitHub; local worktree/branch were removed.
+  - Created isolated U5 worktree from `origin/main` at `45e5d677`.
+  - Started U5 Kestra control MCP work:
+    - added a local Kestra API client that resolves the compact Kestra runtime
+      status and service basic-auth secret reference;
+    - added a flow policy helper for managed namespace prefixes and
+      Fargate-unsafe Docker/host task rejection;
+    - added a stateless `/mcp/kestra` JSON-RPC handler with curated Kestra
+      tools;
+    - matched `admin-ops-mcp` bearer authentication semantics so a live
+      tenant-scoped MCP key hash can authorize calls, with `API_AUTH_SECRET` as
+      the break-glass fallback;
+    - wired the handler into the Lambda build script and API Gateway handler
+      map.
+  - U5 local verification passed:
+    - `pnpm install --ignore-scripts` -> passed.
+    - `pnpm --filter @thinkwork/lambda test -- __tests__/kestra-control-flow-policy.test.ts __tests__/kestra-control-client.test.ts __tests__/kestra-control-mcp.test.ts`
+      -> 3 files passed, 14 tests passed.
+    - `pnpm --filter @thinkwork/lambda typecheck` -> passed.
+    - `terraform fmt -check terraform/modules/app/lambda-api` -> passed.
+    - `git diff --check` -> passed.
+    - `pnpm --filter @thinkwork/lambda test` -> 17 files passed, 1 skipped;
+      171 tests passed, 7 skipped.
+    - `bash scripts/build-lambdas.sh kestra-control-mcp` -> passed.
+  - U5 local verification caveat:
+    - Direct Prettier formatted U5 TypeScript and markdown files. It reported
+      no parser for `scripts/build-lambdas.sh` and Terraform; those files were
+      covered by native checks instead.
 
 ## Agent Profile Closed Loops - 2026-06-08
 
