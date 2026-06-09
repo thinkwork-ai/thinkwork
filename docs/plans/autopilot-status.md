@@ -11,11 +11,11 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U8 - Documentation, operator guidance, and app-library positioning.
-- Current branch: `codex/kestra-managed-app-u8`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u8`.
+- Current unit: U9 - Deploy workflow Kestra wiring and proof readiness.
+- Current branch: `codex/kestra-managed-app-u9-deploy-pipeline`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u9-deploy-pipeline`.
 - Current PR:
-  [#2252](https://github.com/thinkwork-ai/thinkwork/pull/2252).
+  [#2254](https://github.com/thinkwork-ai/thinkwork/pull/2254).
 - Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
@@ -259,6 +259,32 @@ status: in_progress
       `/applications/admin/kestra/` route.
     - Direct Prettier check over U8-touched files -> passed.
     - `git diff --check` -> passed.
+  - U8 PR [#2252](https://github.com/thinkwork-ai/thinkwork/pull/2252)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) after a
+    rebase and was squash merged as `ce700d64`; the remote branch was deleted
+    and local worktree/branch were removed.
+  - Created isolated U9 worktree from `origin/main` at `ce700d64`.
+  - Started U9 after discovering the normal `deploy.yml` pipeline did not
+    resolve or pass any Kestra variables to Terraform, so `main` could not
+    actually deploy Kestra through the approved pipeline yet.
+  - U9 work in progress:
+    - added Kestra GitHub Actions variable resolution and guardrails to
+      `deploy.yml`;
+    - added workflow-managed Kestra database/basic-auth secret preparation and
+      dedicated database/user setup;
+    - added Terraform `kestra_*` variable plumbing, runtime ECS restart, and
+      destructive retained-data cleanup hooks;
+    - added a release test that statically verifies the Kestra deploy workflow
+      contract remains wired.
+  - U9 local verification passed:
+    - Ruby YAML parse of `.github/workflows/deploy.yml` -> passed.
+    - `pnpm test:release` -> 11 tests passed.
+    - Direct Prettier check over U9-touched files -> passed.
+    - `git diff --check` -> passed.
+  - U9 local verification caveat:
+    - `pnpm dlx actionlint .github/workflows/deploy.yml` downloaded a package
+      with no binary and the upstream Go actionlint path could not run because
+      `go` is not installed in the local environment.
 
 ## Agent Profile Closed Loops - 2026-06-08
 
