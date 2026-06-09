@@ -197,6 +197,15 @@ describe("visibleSettingsNavItems", () => {
     expect(memberWeb.some((i) => i.to === ACTIVITY)).toBe(false);
   });
 
+  it("no longer lists a standalone Analytics nav entry", () => {
+    // Analytics is now the default tab of the Activity page, reached by drilling
+    // into Activity rather than its own sidebar section.
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === "/settings/analytics")).toBe(
+      false,
+    );
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Analytics")).toBe(false);
+  });
+
   it("pins General first and alphabetises the rest by label", () => {
     // General is the only fixed entry; every other section sorts by label so the
     // growing operator list stays scannable.

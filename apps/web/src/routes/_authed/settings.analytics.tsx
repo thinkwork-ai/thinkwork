@@ -1,11 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsAnalytics } from "@/components/settings/SettingsAnalytics";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// Analytics folded into the unified Activity page (Analytics tab, the default).
 export const Route = createFileRoute("/_authed/settings/analytics")({
-  component: () => (
-    <OperatorGuard>
-      <SettingsAnalytics />
-    </OperatorGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/activity" });
+  },
 });

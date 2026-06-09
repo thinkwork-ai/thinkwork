@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
 import { RefreshCw } from "lucide-react";
@@ -27,9 +28,20 @@ export function ManagedApplicationsPage() {
     statusResult.data?.deploymentStatus.managedApplications ?? [];
   const loading = appsResult.fetching && apps.length === 0;
   const unavailable = appsResult.error || statusResult.error;
-  const refreshing = appsResult.fetching || statusResult.fetching;
+
+  // Spin only in response to an explicit refresh click — not the ambient
+  // cache-and-network background fetch of the heavy deploymentStatus query,
+  // which otherwise keeps the icon spinning on page load with no user action.
+  const [refreshing, setRefreshing] = useState(false);
+  const anyFetching = appsResult.fetching || statusResult.fetching;
+  const wasFetching = useRef(anyFetching);
+  useEffect(() => {
+    if (wasFetching.current && !anyFetching) setRefreshing(false);
+    wasFetching.current = anyFetching;
+  }, [anyFetching]);
 
   function refreshAll() {
+    setRefreshing(true);
     refreshApps({ requestPolicy: "network-only" });
     refreshStatus({ requestPolicy: "network-only" });
   }

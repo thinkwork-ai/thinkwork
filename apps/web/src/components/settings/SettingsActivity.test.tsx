@@ -270,13 +270,9 @@ describe("SettingsActivity", () => {
     });
 
     reexecuteThreadsMock.mockClear();
-    const headerAction = usePageHeaderActionsMock.mock.calls.at(-1)?.[0]
-      ?.action as React.ReactElement<{
-      onClick: () => void;
-      "aria-label"?: string;
-    }>;
-    expect(headerAction.props["aria-label"]).toBe("Refresh activity");
-    headerAction.props.onClick();
+    // The refresh control lives in the Threads toolbar (the tabbed Activity page
+    // owns the header now, so there's no per-tab header action).
+    fireEvent.click(screen.getByRole("button", { name: "Refresh activity" }));
     expect(reexecuteThreadsMock).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });

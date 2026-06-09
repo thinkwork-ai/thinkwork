@@ -53,11 +53,25 @@ interface ThreadsPagedResult {
 }
 
 interface SettingsActivityProps {
+  /** When true, hosted inside the tabbed Activity page (which owns the page
+   *  header); suppresses this view's own header publisher. */
+  embedded?: boolean;
   selectedDay?: string | null;
   onSelectedDayChange?: (day: string | null) => void;
 }
 
+// Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
+// as a child so the embedded variant can suppress it without a conditional hook.
+function ActivityHeader() {
+  usePageHeaderActions({
+    title: "Activity",
+    breadcrumbs: [{ label: "Activity" }],
+  });
+  return null;
+}
+
 export function SettingsActivity({
+  embedded,
   selectedDay = null,
   onSelectedDayChange,
 }: SettingsActivityProps) {
@@ -203,33 +217,12 @@ export function SettingsActivity({
 
   const loading = fetching && !data;
 
-  usePageHeaderActions({
-    title: "Activity",
-    breadcrumbs: [{ label: "Activity" }],
-    action: (
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={refreshAll}
-        disabled={fetching}
-        aria-label="Refresh activity"
-        title="Refresh activity"
-      >
-        <RefreshCw
-          className={cn("h-4 w-4", fetching && "animate-spin")}
-          aria-hidden="true"
-        />
-      </Button>
-    ),
-    actionKey: `activity-refresh:${fetching ? "fetching" : "idle"}`,
-  });
-
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
+      {embedded ? null : <ActivityHeader />}
       <div className="mb-4 shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Activity
+          Threads
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Recent thread activity across this workspace.
@@ -253,6 +246,8 @@ export function SettingsActivity({
               itemCount={allItems.length}
               selectedDay={selectedDay}
               onClearDay={() => handleSelectDay(null)}
+              onRefresh={refreshAll}
+              fetching={fetching}
             />
             {error ? (
               <p className="shrink-0 text-sm text-destructive">
@@ -290,12 +285,16 @@ function ActivityToolbar({
   itemCount,
   selectedDay,
   onClearDay,
+  onRefresh,
+  fetching,
 }: {
   search: string;
   onSearchChange: (value: string) => void;
   itemCount: number;
   selectedDay: string | null;
   onClearDay: () => void;
+  onRefresh: () => void;
+  fetching: boolean;
 }) {
   return (
     <div
@@ -312,6 +311,20 @@ function ActivityToolbar({
           aria-label="Search activity"
         />
       </label>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={onRefresh}
+        disabled={fetching}
+        aria-label="Refresh activity"
+        title="Refresh activity"
+      >
+        <RefreshCw
+          className={cn("h-4 w-4", fetching && "animate-spin")}
+          aria-hidden="true"
+        />
+      </Button>
       <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
         {itemCount} item{itemCount === 1 ? "" : "s"}
       </span>

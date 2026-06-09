@@ -15,7 +15,7 @@ import {
   Webhook,
   Wrench,
 } from "lucide-react";
-import { IconApps, IconChartBar, IconPlanet } from "@tabler/icons-react";
+import { IconApps, IconPlanet } from "@tabler/icons-react";
 import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
 export interface SettingsNavItem {
@@ -112,12 +112,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Webhooks",
     to: "/settings/webhooks",
     icon: Webhook,
-    operatorOnly: true,
-  },
-  {
-    label: "Analytics",
-    to: "/settings/analytics",
-    icon: IconChartBar,
     operatorOnly: true,
   },
   {

@@ -16,6 +16,7 @@ import {
   type ChartConfig,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsBudgetStatusQuery,
@@ -26,9 +27,20 @@ import {
   SettingsTenantModelCatalogQuery,
 } from "@/lib/settings-queries";
 import {
-  SettingsHeader,
+  SettingsPageTitle,
   SettingsPane,
 } from "@/components/settings/SettingsContent";
+
+// Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
+// as a child so the embedded variant (hosted under the tabbed Activity page,
+// which owns the header) can suppress it without a conditional hook call.
+function AnalyticsHeader() {
+  usePageHeaderActions({
+    title: "Analytics",
+    breadcrumbs: [{ label: "Analytics" }],
+  });
+  return null;
+}
 
 function formatUsd(value: number, fractionDigits = 2): string {
   return `$${value.toFixed(fractionDigits)}`;
@@ -56,7 +68,7 @@ const trendChartConfig = {
   toolsUsd: { label: "Tools", color: "hsl(38, 92%, 50%)" },
 } satisfies ChartConfig;
 
-export function SettingsAnalytics() {
+export function SettingsAnalytics({ embedded }: { embedded?: boolean } = {}) {
   const { tenantId } = useTenant();
   const vars = { variables: { tenantId: tenantId ?? "" }, pause: !tenantId };
 
@@ -93,7 +105,8 @@ export function SettingsAnalytics() {
   if (loading) {
     return (
       <SettingsPane className="max-w-none">
-        <SettingsHeader title="Analytics" />
+        {embedded ? null : <AnalyticsHeader />}
+        <SettingsPageTitle title="Analytics" />
         <div className="flex items-center justify-center py-24">
           <LoadingShimmer />
         </div>
@@ -109,7 +122,8 @@ export function SettingsAnalytics() {
 
   return (
     <SettingsPane className="max-w-none">
-      <SettingsHeader
+      {embedded ? null : <AnalyticsHeader />}
+      <SettingsPageTitle
         title="Analytics"
         description="Usage cost over the last 30 days."
       />
