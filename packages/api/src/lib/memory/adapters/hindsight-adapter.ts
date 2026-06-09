@@ -85,6 +85,7 @@ function parseEnvBool(raw: string | undefined): boolean | undefined {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_INSPECT_LIMIT = 500;
+const BANK_CONFIG_FAILURE_COOLDOWN_MS = 60_000;
 const HINDSIGHT_FACT_TYPES = ["world", "experience", "observation"] as const;
 const QUICK_RECALL_MAX_TOKENS = 500;
 const DEEP_RECALL_MAX_TOKENS = 2_000;
@@ -109,6 +110,10 @@ export class HindsightAdapter implements MemoryAdapter {
   private readonly bankConfig: Record<string, unknown> | null;
   /** Banks confirmed configured this container lifetime — skips the GET. */
   private readonly configuredBanks = new Set<string>();
+  /** Per-bank in-flight ensure, so concurrent writes share one GET/PUT. */
+  private readonly bankConfigInFlight = new Map<string, Promise<void>>();
+  /** Per-bank last-failure timestamp for the ensure cooldown. */
+  private readonly bankConfigFailures = new Map<string, number>();
   private readonly db = getDb();
 
   constructor(opts: HindsightAdapterOptions) {
@@ -119,7 +124,9 @@ export class HindsightAdapter implements MemoryAdapter {
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.inspectLimit = opts.inspectLimit ?? DEFAULT_INSPECT_LIMIT;
     this.bankConfig =
-      opts.bankConfig !== undefined ? opts.bankConfig : resolveBankConfigFromEnv();
+      opts.bankConfig !== undefined
+        ? opts.bankConfig
+        : resolveBankConfigFromEnv();
   }
 
   async capabilities(): Promise<MemoryCapabilities> {
@@ -731,7 +738,17 @@ export class HindsightAdapter implements MemoryAdapter {
    * failures log and the triggering write proceeds unconfigured.
    */
   async ensureBankConfigured(ownerId: string): Promise<void> {
-    const bankId = await this.resolveBankId(ownerId);
+    let bankId: string;
+    try {
+      bankId = await this.resolveBankId(ownerId);
+    } catch (err) {
+      // The interface contract is never-throws — a non-UUID owner logs and
+      // returns rather than failing the caller.
+      console.warn(
+        `[hindsight-adapter] ensureBankConfigured skipped: ${(err as Error)?.message}`,
+      );
+      return;
+    }
     await this.ensureBankConfiguredById(bankId);
   }
 
@@ -739,7 +756,30 @@ export class HindsightAdapter implements MemoryAdapter {
     const desired = this.bankConfig;
     if (!desired || Object.keys(desired).length === 0) return;
     if (this.configuredBanks.has(bankId)) return;
+    // Failure cooldown: while the config endpoint is degraded, don't tax every
+    // write with a fresh GET that can hang up to timeoutMs.
+    const failedAt = this.bankConfigFailures.get(bankId);
+    if (
+      failedAt !== undefined &&
+      Date.now() - failedAt < BANK_CONFIG_FAILURE_COOLDOWN_MS
+    ) {
+      return;
+    }
+    // In-flight dedup: concurrent writes in one container share one ensure.
+    const inFlight = this.bankConfigInFlight.get(bankId);
+    if (inFlight) return inFlight;
 
+    const run = this.applyBankConfig(bankId, desired).finally(() => {
+      this.bankConfigInFlight.delete(bankId);
+    });
+    this.bankConfigInFlight.set(bankId, run);
+    return run;
+  }
+
+  private async applyBankConfig(
+    bankId: string,
+    desired: Record<string, unknown>,
+  ): Promise<void> {
     const configUrl = `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/config`;
     try {
       const getResp = await fetch(configUrl, {
@@ -752,10 +792,13 @@ export class HindsightAdapter implements MemoryAdapter {
       const data: any = await getResp.json().catch(() => ({}));
       const overrides = (data?.overrides ?? {}) as Record<string, unknown>;
       const effective = (data?.config ?? {}) as Record<string, unknown>;
+      // String-coerced comparison: the server may echo booleans/numbers as
+      // strings; strict equality would report perpetual drift and re-PUT on
+      // every cold start.
       const drifted = Object.entries(desired).some(([key, value]) => {
         const current =
           overrides[key] !== undefined ? overrides[key] : effective[key];
-        return current !== value;
+        return current === undefined || String(current) !== String(value);
       });
       if (drifted) {
         const putResp = await fetch(configUrl, {
@@ -766,14 +809,18 @@ export class HindsightAdapter implements MemoryAdapter {
         });
         if (!putResp.ok) {
           const body = await putResp.text().catch(() => "");
-          throw new Error(`config PUT ${putResp.status}: ${body.slice(0, 200)}`);
+          throw new Error(
+            `config PUT ${putResp.status}: ${body.slice(0, 200)}`,
+          );
         }
         console.log(
           `[hindsight-adapter] bank config applied bank=${bankId.slice(0, 18)} keys=${Object.keys(desired).join(",")}`,
         );
       }
       this.configuredBanks.add(bankId);
+      this.bankConfigFailures.delete(bankId);
     } catch (err) {
+      this.bankConfigFailures.set(bankId, Date.now());
       console.warn(
         `[hindsight-adapter] ensureBankConfigured failed (write proceeds) bank=${bankId.slice(0, 18)} message=${(err as Error)?.message}`,
       );
@@ -869,7 +916,11 @@ export class HindsightAdapter implements MemoryAdapter {
         occurredEnd: toISO(unit.occurred_end),
         mentionedAt: toISO(unit.mentioned_at),
         accessCount: unit.access_count ?? null,
-        proofCount: unit.proof_count ?? null,
+        proofCount:
+          coerceCount(unit.proof_count) ??
+          coerceCount(unit.evidence_count) ??
+          coerceCount(unit.metadata?.proof_count) ??
+          null,
         context: unit.context ?? null,
         raw: unit.metadata ?? null,
       },
@@ -931,6 +982,16 @@ function numberField(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+/** Numeric count tolerating pg-driver strings ("5") alongside numbers. */
+function coerceCount(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
 }
 
 function stringField(value: unknown): string | undefined {

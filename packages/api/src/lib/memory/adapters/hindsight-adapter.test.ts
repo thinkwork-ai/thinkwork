@@ -407,7 +407,7 @@ describe("HindsightAdapter bank configuration", () => {
     expect(methods).toEqual(["GET", "PUT", "POST"]);
   });
 
-  it("proceeds with the write and does not cache when config GET fails", async () => {
+  it("proceeds with the write on config failure; cooldown skips immediate re-GET", async () => {
     const fetchMock = vi.fn().mockImplementation((url: string, init: any) => {
       if (String(url).endsWith("/config")) {
         return Promise.resolve(jsonResponse({ error: "boom" }, false, 500));
@@ -429,9 +429,87 @@ describe("HindsightAdapter bank configuration", () => {
     const memoryCalls = fetchMock.mock.calls.filter((c) =>
       String(c[0]).includes("/memories"),
     );
-    // GET retried on the second write (failure not cached); both writes landed.
-    expect(configCalls).toHaveLength(2);
+    // Both writes landed; the failure is not cached as success, but the
+    // 60s cooldown prevents re-GETting on the immediately-following write.
+    expect(configCalls).toHaveLength(1);
     expect(memoryCalls).toHaveLength(2);
+  });
+
+  it("dedupes concurrent ensures into one config GET", async () => {
+    let resolveGet: (value: unknown) => void = () => {};
+    const gate = new Promise((resolve) => {
+      resolveGet = resolve;
+    });
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (String(url).endsWith("/config")) {
+        await gate;
+        return jsonResponse({ config: {}, overrides: DESIRED });
+      }
+      return jsonResponse({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    const writes = Promise.all([
+      adapter.retainConversation(retainConversationArgs()),
+      adapter.retainDailyMemory({
+        tenantId: TENANT_ID,
+        ownerType: "user",
+        ownerId: USER_ID,
+        date: "2026-06-09",
+        content: "daily digest",
+      }),
+    ]);
+    resolveGet(undefined);
+    await writes;
+
+    const configCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).endsWith("/config"),
+    );
+    expect(configCalls).toHaveLength(1);
+  });
+
+  it("treats string-echoed override values as matching (no perpetual PUT)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          config: {},
+          overrides: {
+            observations_mission: DESIRED.observations_mission,
+            enable_observations: "true",
+            enable_auto_consolidation: "true",
+          },
+        }),
+      )
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const methods = fetchMock.mock.calls.map((c) => c[1]?.method);
+    expect(methods).toEqual(["GET", "POST"]);
+  });
+
+  it("public ensureBankConfigured never throws on a non-UUID owner", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await expect(
+      adapter.ensureBankConfigured("not-a-uuid"),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("caches a configured bank for the container lifetime", async () => {
@@ -588,7 +666,11 @@ describe("HindsightAdapter observation consumption", () => {
   it("consolidateBank POSTs the consolidate endpoint and throws on failure", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({}), text: async () => "" })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}),
+        text: async () => "",
+      })
       .mockResolvedValueOnce({
         ok: false,
         status: 422,

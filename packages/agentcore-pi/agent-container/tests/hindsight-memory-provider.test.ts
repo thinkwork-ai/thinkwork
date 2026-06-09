@@ -309,7 +309,10 @@ describe("observation signal parsing", () => {
 
     const result = await provider.recall({ query: "anything" });
 
-    expect(result.memories[0]).toEqual({ id: "plain", content: "no signals at all" });
+    expect(result.memories[0]).toEqual({
+      id: "plain",
+      content: "no signals at all",
+    });
     expect(result.memories[1]).toEqual({
       id: "meta",
       content: "signals in metadata",

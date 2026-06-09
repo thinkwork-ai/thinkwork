@@ -11,11 +11,14 @@
  * Dry-run is the default: lists the banks it would consolidate and exits.
  * Set SMOKE_ENABLE_HINDSIGHT_BACKFILL=1 to run the live sweep.
  *
+ * Required:
+ *   DATABASE_URL         Aurora connection string (bank enumeration via
+ *                        hindsight.banks; needed in dry-run too unless
+ *                        SMOKE_BANK_ID is set)
+ *
  * Required (live mode):
  *   HINDSIGHT_ENDPOINT   Hindsight HTTP endpoint (internal ALB — run from a
  *                        network position that can reach it)
- *   DATABASE_URL         Aurora connection string (bank enumeration via
- *                        hindsight.banks)
  *
  * Optional:
  *   SMOKE_BANK_LIMIT     cap the number of banks swept (default: all)
@@ -32,9 +35,18 @@ import process from "node:process";
 const LIVE = process.env.SMOKE_ENABLE_HINDSIGHT_BACKFILL === "1";
 const ENDPOINT = (process.env.HINDSIGHT_ENDPOINT || "").replace(/\/$/, "");
 const DATABASE_URL = process.env.DATABASE_URL || "";
-const BANK_LIMIT = Number(process.env.SMOKE_BANK_LIMIT || 0);
+const BANK_LIMIT_RAW = process.env.SMOKE_BANK_LIMIT || "0";
+const BANK_LIMIT = Number(BANK_LIMIT_RAW);
 const SINGLE_BANK = process.env.SMOKE_BANK_ID || "";
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 120_000);
+
+if (!Number.isFinite(BANK_LIMIT) || BANK_LIMIT < 0) {
+  // A typo'd limit must not silently widen a capped sweep to the whole fleet.
+  console.error(
+    `hindsight-consolidation-backfill: SMOKE_BANK_LIMIT is not a number: ${BANK_LIMIT_RAW}`,
+  );
+  process.exit(1);
+}
 
 function fail(message) {
   console.error(`hindsight-consolidation-backfill: ${message}`);
@@ -48,7 +60,11 @@ function listBanks() {
   }
   const out = execFileSync(
     "psql",
-    [DATABASE_URL, "-tAc", "SELECT bank_id FROM hindsight.banks ORDER BY bank_id"],
+    [
+      DATABASE_URL,
+      "-tAc",
+      "SELECT bank_id FROM hindsight.banks ORDER BY bank_id",
+    ],
     { encoding: "utf8" },
   );
   const banks = out
@@ -102,4 +118,6 @@ for (const bank of banks) {
 console.log(
   `hindsight-consolidation-backfill: done ok=${ok} failed=${failed} total=${banks.length}`,
 );
-process.exit(failed > 0 && ok === 0 ? 1 : 0);
+// The sweep never aborts mid-run, but any failure is a nonzero exit so
+// automation can detect partial failure. Re-running is safe and incremental.
+process.exit(failed > 0 ? 1 : 0);

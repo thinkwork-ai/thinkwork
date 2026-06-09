@@ -120,9 +120,11 @@ function toMemoryItems(data: unknown): MemoryItem[] {
       const freshness = [u.freshness, u.trend, meta.freshness, meta.trend].find(
         (v): v is string => typeof v === "string" && v.trim().length > 0,
       );
-      const proofCount = [u.proof_count, u.evidence_count, meta.proof_count].find(
-        (v): v is number => typeof v === "number" && Number.isFinite(v),
-      );
+      const proofCount = [
+        u.proof_count,
+        u.evidence_count,
+        meta.proof_count,
+      ].find((v): v is number => typeof v === "number" && Number.isFinite(v));
       return {
         id,
         content: text,
