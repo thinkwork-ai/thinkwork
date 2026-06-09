@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U14 - TEI `.140` update proof runner source
-  repair.
-- Current branch: `codex/u14-tei-release-140-proof`.
+- Current implementation unit: U17 - status ledger reconciliation and TEI
+  invite-email remediation.
+- Current branch: `codex/u15-tei-141-status`.
 - Current worktree:
-  `.Codex/worktrees/u14-tei-release-140-proof`.
+  `.Codex/worktrees/u15-tei-141-status`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -29,7 +29,10 @@ status: in_progress
   merged; U11 PR [#2298](https://github.com/thinkwork-ai/thinkwork/pull/2298)
   merged; U12 PR [#2300](https://github.com/thinkwork-ai/thinkwork/pull/2300)
   merged; U13 PR [#2301](https://github.com/thinkwork-ai/thinkwork/pull/2301)
-  merged; U14 PR pending.
+  merged; U14 PR [#2302](https://github.com/thinkwork-ai/thinkwork/pull/2302)
+  merged; U15/U17 status and invite-email PR
+  [#2304](https://github.com/thinkwork-ai/thinkwork/pull/2304) pending; U16
+  PR [#2305](https://github.com/thinkwork-ai/thinkwork/pull/2305) merged.
 - Status: U11 merged and deployed to main. TEI's customer deployment controller
   was refreshed to the U11 runner and `.137` selected-release pins, then TEI
   update execution `tei-e2e-update-137-20260609204430` failed closed because
@@ -59,7 +62,43 @@ status: in_progress
   because generated Terraform used registry source `thinkwork-ai/thinkwork/aws`
   directly and Terraform could not find that module in the public registry.
   U14 maps the registry-shaped ThinkWork module alias to a pinned GitHub module
-  source before writing `main.tf`.
+  source before writing `main.tf`. U14 merged, main checks passed, `.141` was
+  cut, and all release workflows passed. TEI's controller was refreshed to
+  `.141` with manifest SHA-256
+  `15a6c12f26303d69a21edc8380d0ed0c14d8828f61e261f1e931a7b79f9b7954`.
+  TEI update execution `tw-tei-e2e-update-141-20260609225720` succeeded via
+  CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:5cdf5ecc-1f51-495f-9a0a-04ae00a13116`.
+  Evidence was written under
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/tei-e2e-update-141-20260609225720/update/`,
+  and the deployed runtime config at
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
+  reports release `v0.1.0-canary.141`. Post-deploy TEI UI verification exposed
+  a database migration gap: GraphQL logs for `SettingsTenantModelCatalog`,
+  `SettingsAgentProfiles`, and `MyApprovedModelCatalog` failed with
+  `relation "tenant_model_catalog" does not exist`. The table was manually
+  remediated in TEI with
+  `packages/database-pg/drizzle/0155_tenant_model_catalog.sql`, yielding
+  `tenant_model_catalog_rows=3`, `enabled_rows=3`, `agent_profiles=4`, and
+  `model_catalog_available=3`. After remediation, the integrated browser
+  rendered Model Catalog with Claude Haiku 4.5, Claude Opus 4.6, and Claude
+  Sonnet 4.6, and TEI GraphQL logs showed `SettingsTenantModelCatalog`,
+  `SettingsBedrockModelImportCandidates`, and `SettingsAgentProfiles` returning
+  `errorCode:null`, `ok:true`. U16 then fixed the deployment runner so existing
+  controller-managed databases apply the required idempotent platform
+  migrations during updates and rerun the tenant model catalog backfill after
+  bootstrap defaults are seeded. U16 PR #2305 passed required CI and was squash
+  merged as `0e7825d7`; main deploy/check workflows for that merge were started
+  at `2026-06-09T23:30:05Z` and were still running when this ledger entry was
+  updated. TEI invite verification then exposed a second deployment gap:
+  Settings -> Users creates Cognito users successfully, but TEI Cognito is
+  still using `EmailSendingAccount=COGNITO_DEFAULT`, TEI SES has no configured
+  identities, SES reports `SentLast24Hours=0`, and SES production access is not
+  enabled. This branch adds Terraform inputs for a verified Cognito SES sender
+  (`cognito_email_source_arn`, `cognito_from_email_address`,
+  `cognito_reply_to_email_address`) and a ThinkWork AdminCreateUser invite
+  template so future controller updates can configure invite mail without
+  console drift.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS

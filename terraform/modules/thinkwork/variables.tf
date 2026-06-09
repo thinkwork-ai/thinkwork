@@ -1040,6 +1040,47 @@ variable "ses_manage_active_rule_set" {
   default     = true
 }
 
+variable "cognito_email_source_arn" {
+  description = "Verified SES identity ARN Cognito should use for user-pool emails. Empty keeps Cognito's default sender."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_from_email_address" {
+  description = "Optional Cognito From header, for example 'ThinkWork <noreply@example.com>'. Requires cognito_email_source_arn when set."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_reply_to_email_address" {
+  description = "Optional Cognito Reply-To address for user-pool invitation and recovery emails."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_invite_email_subject" {
+  description = "Subject line for Cognito AdminCreateUser invitation emails."
+  type        = string
+  default     = "You're invited to ThinkWork"
+}
+
+variable "cognito_invite_email_message" {
+  description = "HTML invitation body for Cognito AdminCreateUser emails. Empty derives a stage-aware ThinkWork sign-in message. Custom values must include {username} and {####}."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.cognito_invite_email_message == "" ||
+      (
+        strcontains(var.cognito_invite_email_message, "{username}") &&
+        strcontains(var.cognito_invite_email_message, "{####}")
+      )
+    )
+    error_message = "cognito_invite_email_message must be empty or include Cognito placeholders {username} and {####}."
+  }
+}
+
 variable "wiki_compile_model_id" {
   description = "Bedrock model id used by the wiki-compile Lambda (leaf planner + aggregation planner + section writer). Any Converse-compatible model works; change without a code deploy."
   type        = string

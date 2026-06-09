@@ -414,6 +414,19 @@ module "cognito" {
   oidc_identity_providers    = var.oidc_identity_providers
   saml_identity_providers    = var.saml_identity_providers
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
+  email_source_arn           = var.cognito_email_source_arn
+  from_email_address         = var.cognito_from_email_address
+  reply_to_email_address     = var.cognito_reply_to_email_address
+  invite_email_subject       = var.cognito_invite_email_subject
+  invite_email_message = (
+    var.cognito_invite_email_message != ""
+    ? var.cognito_invite_email_message
+    : format(
+      "<p>You have been invited to ThinkWork.</p><p>Sign in: <a href=\"%s/sign-in\">%s/sign-in</a></p><p>Username: <strong>{username}</strong></p><p>Temporary password: <strong>{####}</strong></p>",
+      local.end_user_app_domain != "" ? "https://${local.end_user_app_domain}" : "https://${module.computer_site.distribution_domain}",
+      local.end_user_app_domain != "" ? "https://${local.end_user_app_domain}" : "https://${module.computer_site.distribution_domain}",
+    )
+  )
 
   # Single ThinkworkAdmin Cognito client serves the unified web app. The
   # historical client name stays for compatibility; the standalone admin
