@@ -94,6 +94,22 @@ jobs:
           chmod 600 "$key_path"
           echo "path=$key_path" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve desktop publish release type
+        id: desktop-publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#desktop-v}"
+          release_type="draft"
+          if gh release view "v${version}" --repo "${GITHUB_REPOSITORY}" --json isDraft --jq '.isDraft' > /tmp/desktop-release-is-draft; then
+            if [ "$(cat /tmp/desktop-release-is-draft)" = "false" ]; then
+              release_type="release"
+            fi
+          fi
+          echo "release_type=${release_type}" >> "$GITHUB_OUTPUT"
+          echo "Desktop installer publisher will use releaseType=${release_type}"
+
       - name: Build and publish desktop release
         env:
           APPLE_API_KEY: ${{ steps.apple-key.outputs.path }}
@@ -105,6 +121,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           DEBUG: electron-builder,electron-notarize*
           DESKTOP_MAC_ARCHES: arm64
+          DESKTOP_RELEASE_TYPE: ${{ steps.desktop-publish.outputs.release_type }}
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/build-desktop.sh "${STAGE}" --publish always
 
@@ -156,13 +173,33 @@ jobs:
             gh release upload "v${version}" "$channel_file" --repo "${GITHUB_REPOSITORY}" --clobber
           fi
 
+      - name: Verify desktop installer assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#desktop-v}"
+          assets="$(gh release view "v${version}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name')"
+
+          require_asset() {
+            local expected="$1"
+            if ! printf '%s\n' "$assets" | grep -Fx "$expected" >/dev/null; then
+              echo "Missing expected desktop release asset: $expected" >&2
+              echo "Current release assets:" >&2
+              printf '%s\n' "$assets" | sed 's/^/  /' >&2
+              exit 1
+            fi
+          }
+
+          require_asset "@thinkwork.desktop-${version}.dmg"
+          require_asset "@thinkwork.desktop-${version}.dmg.blockmap"
+          require_asset "@thinkwork.desktop-${version}-arm64-mac.zip"
+
       - name: Publish desktop release (flip draft -> published)
-        # electron-builder uploads to a DRAFT release (releaseType: draft in
-        # scripts/build-desktop.sh) so the auto-updater can't see a half-uploaded
-        # "latest". Every asset + the *-mac.yml manifests are uploaded by the
-        # steps above, so it is now safe to publish the release. Open apps only
-        # observe a release whose artifacts are fully present, eliminating the
-        # "Retry"/"spins then stops" window on every canary cut.
+        # When desktop creates the release, electron-builder uploads to a draft
+        # first so the auto-updater cannot see a half-uploaded "latest". When a
+        # platform release already exists, this is a harmless no-op after the
+        # installer asset verification above.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
