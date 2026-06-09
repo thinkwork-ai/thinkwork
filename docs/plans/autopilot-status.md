@@ -11,12 +11,11 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U14 - final live proof and status evidence.
-- Current branch: `codex/kestra-managed-app-u14-final-proof`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u14-final-proof`.
-- Current PR:
-  [#2265](https://github.com/thinkwork-ai/thinkwork/pull/2265).
-- Status: final proof PR open; CI pending.
+- Current unit: complete.
+- Current branch: none.
+- Current worktree: none.
+- Current PR: none.
+- Status: complete.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
     Kestra requirements, and the managed-app/MCP lifecycle precedent.
@@ -531,6 +530,20 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
       `thinkwork_kestra` database and `thinkwork_kestra` role absent;
     - destroy evidence was recorded in
       `docs/verification/kestra/destroy-live.json`.
+  - U14 PR [#2265](https://github.com/thinkwork-ai/thinkwork/pull/2265)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was
+    squash merged as `9bce21ed`.
+  - U14 post-merge deploy proof:
+    - main deploy run
+      [27186993708](https://github.com/thinkwork-ai/thinkwork/actions/runs/27186993708)
+      completed successfully;
+    - the docs deploy and deploy summary jobs passed, while unchanged infra
+      jobs were skipped by the workflow change detector;
+    - the final proof commit on `origin/main` contains
+      `docs/verification/kestra/control-mcp-smoke-live.json` and
+      `docs/verification/kestra/destroy-live.json`;
+    - all Kestra-managed-app implementation units are complete, merged, and
+      cleaned up.
 
 ## Agent Profile Closed Loops - 2026-06-08
 
