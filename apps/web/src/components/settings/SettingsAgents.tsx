@@ -108,7 +108,40 @@ type ProfileDraft = {
   maxRuntimeMs: string;
   maxTokens: string;
   thinking: string;
+  loopEnabled: boolean;
+  loopMode: "closed";
+  loopMaxIterations: string;
+  loopReviewGate: boolean;
+  loopExternalReviewerPolicy: ExternalReviewerPolicy;
+  loopMaxReviewLoops: string;
+  loopFailBehavior: LoopFailBehavior;
 };
+
+type ExternalReviewerPolicy =
+  | "never"
+  | "explicit"
+  | "profile_required"
+  | "always";
+
+type LoopFailBehavior = "return_blocker" | "best_effort_with_warning";
+
+const EXTERNAL_REVIEWER_OPTIONS: Array<{
+  value: ExternalReviewerPolicy;
+  label: string;
+}> = [
+  { value: "explicit", label: "Explicit request" },
+  { value: "profile_required", label: "Profile required" },
+  { value: "always", label: "Always" },
+  { value: "never", label: "Never" },
+];
+
+const LOOP_FAIL_BEHAVIOR_OPTIONS: Array<{
+  value: LoopFailBehavior;
+  label: string;
+}> = [
+  { value: "return_blocker", label: "Return blocker" },
+  { value: "best_effort_with_warning", label: "Best effort with warning" },
+];
 
 export function SettingsAgents() {
   const { tenantId } = useTenant();
@@ -566,9 +599,16 @@ function AgentProfileEditor({
 
   const saving = saveState.fetching;
   const custom = !profile.builtInKey;
+  const draftValid =
+    validPositiveInteger(draft.loopMaxIterations) &&
+    validPositiveInteger(draft.loopMaxReviewLoops);
 
   async function onSave() {
     if (!tenantId) return;
+    if (!draftValid) {
+      toast.error("Loop limits must be positive whole numbers");
+      return;
+    }
     const result = await save({
       tenantId,
       id: profile.id,
@@ -741,6 +781,126 @@ function AgentProfileEditor({
         </SettingsRow>
       </SettingsSection>
 
+      <SettingsSection label="Loop / Review">
+        <SettingsRow
+          label="Closed loop"
+          description="Run discovery, planning, execution, verification, and iteration before handoff."
+        >
+          <Switch
+            checked={draft.loopEnabled}
+            onCheckedChange={(value) =>
+              setDraftField(setDraft, "loopEnabled", value)
+            }
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Mode"
+          description="Bounded operator-authored loop policy for this profile."
+        >
+          <Select value={draft.loopMode} disabled>
+            <SelectTrigger className="w-full max-w-80">
+              <SelectValue placeholder="Loop mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+        <SettingsRow
+          label="Max iterations"
+          description="Maximum self-review repair passes before handoff."
+        >
+          <Input
+            className="w-full max-w-80"
+            type="number"
+            min={1}
+            step={1}
+            value={draft.loopMaxIterations}
+            onChange={(e) =>
+              setDraftField(setDraft, "loopMaxIterations", e.target.value)
+            }
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Review gate"
+          description="Require a passing review verdict before this profile can hand off."
+        >
+          <Switch
+            checked={draft.loopReviewGate}
+            onCheckedChange={(value) =>
+              setDraftField(setDraft, "loopReviewGate", value)
+            }
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="External reviewer"
+          description="When the parent Agent should ask the Reviewer profile to verify work."
+        >
+          <Select
+            value={draft.loopExternalReviewerPolicy}
+            onValueChange={(value) =>
+              setDraftField(
+                setDraft,
+                "loopExternalReviewerPolicy",
+                value as ExternalReviewerPolicy,
+              )
+            }
+          >
+            <SelectTrigger className="w-full max-w-80">
+              <SelectValue placeholder="Reviewer policy" />
+            </SelectTrigger>
+            <SelectContent>
+              {EXTERNAL_REVIEWER_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+        <SettingsRow
+          label="Max review loops"
+          description="Maximum Reviewer-driven repair loops before failure handling."
+        >
+          <Input
+            className="w-full max-w-80"
+            type="number"
+            min={1}
+            step={1}
+            value={draft.loopMaxReviewLoops}
+            onChange={(e) =>
+              setDraftField(setDraft, "loopMaxReviewLoops", e.target.value)
+            }
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Failure behavior"
+          description="What the parent Agent should do when the loop cannot pass in budget."
+        >
+          <Select
+            value={draft.loopFailBehavior}
+            onValueChange={(value) =>
+              setDraftField(
+                setDraft,
+                "loopFailBehavior",
+                value as LoopFailBehavior,
+              )
+            }
+          >
+            <SelectTrigger className="w-full max-w-80">
+              <SelectValue placeholder="Failure behavior" />
+            </SelectTrigger>
+            <SelectContent>
+              {LOOP_FAIL_BEHAVIOR_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+      </SettingsSection>
+
       <SettingsSection label="Execution">
         <SettingsRow
           label="Max runtime"
@@ -812,7 +972,11 @@ function AgentProfileEditor({
               <Trash2 className="h-4 w-4" />
             </Button>
           ) : null}
-          <Button type="button" onClick={onSave} disabled={saving}>
+          <Button
+            type="button"
+            onClick={onSave}
+            disabled={saving || !draftValid}
+          >
             {saving ? "Saving…" : "Save"}
           </Button>
         </div>
@@ -880,6 +1044,18 @@ type ExecutionControls = {
   maxExecutionTimeMs?: number | null;
   maxTokens?: number | null;
   thinking?: string | null;
+  reviewGate?: boolean | null;
+  maxReviewLoops?: number | null;
+  loopEnabled?: boolean | null;
+  loopPolicy?: {
+    mode?: string | null;
+    enabled?: boolean | null;
+    maxIterations?: number | null;
+    maxReviewLoops?: number | null;
+    reviewGate?: boolean | null;
+    externalReviewerPolicy?: string | null;
+    failBehavior?: string | null;
+  } | null;
 };
 
 function profileToDraft(profile: AgentProfileRow): ProfileDraft {
@@ -889,11 +1065,23 @@ function profileToDraft(profile: AgentProfileRow): ProfileDraft {
     profile.executionControls,
     {},
   );
+  const builtInLoopDefaults = loopDefaultsForProfile(profile);
   const maxRuntimeMs =
     executionControls.maxRuntimeMs ??
     executionControls.maxRunTimeMs ??
     executionControls.maxExecutionTimeMs ??
     "";
+  const loopPolicy = executionControls.loopPolicy ?? {};
+  const loopMaxReviewLoops =
+    loopPolicy.maxReviewLoops ??
+    executionControls.maxReviewLoops ??
+    builtInLoopDefaults.maxReviewLoops ??
+    1;
+  const loopReviewGate =
+    loopPolicy.reviewGate ??
+    executionControls.reviewGate ??
+    builtInLoopDefaults.reviewGate ??
+    false;
   return {
     name: profile.name,
     description: profile.description ?? "",
@@ -912,10 +1100,48 @@ function profileToDraft(profile: AgentProfileRow): ProfileDraft {
         ? ""
         : String(executionControls.maxTokens),
     thinking: executionControls.thinking ?? "",
+    loopEnabled: loopPolicy.enabled ?? executionControls.loopEnabled ?? true,
+    loopMode: "closed",
+    loopMaxIterations: String(loopPolicy.maxIterations ?? 1),
+    loopReviewGate,
+    loopExternalReviewerPolicy: asExternalReviewerPolicy(
+      loopPolicy.externalReviewerPolicy ??
+        builtInLoopDefaults.externalReviewerPolicy,
+    ),
+    loopMaxReviewLoops: String(loopMaxReviewLoops),
+    loopFailBehavior: asLoopFailBehavior(loopPolicy.failBehavior),
+  };
+}
+
+function loopDefaultsForProfile(profile: AgentProfileRow): {
+  reviewGate?: boolean;
+  maxReviewLoops?: number;
+  externalReviewerPolicy?: ExternalReviewerPolicy;
+} {
+  if (profile.builtInKey !== "reviewer") {
+    return {};
+  }
+  return {
+    reviewGate: true,
+    maxReviewLoops: 2,
+    externalReviewerPolicy: "never",
   };
 }
 
 function draftToInput(draft: ProfileDraft): JsonRecord {
+  const maxRuntimeMs = optionalNumber(draft.maxRuntimeMs);
+  const maxTokens = optionalNumber(draft.maxTokens);
+  const loopPolicy = {
+    mode: draft.loopMode,
+    enabled: draft.loopEnabled,
+    maxIterations: positiveIntegerOrDefault(draft.loopMaxIterations, 1),
+    maxReviewLoops: positiveIntegerOrDefault(draft.loopMaxReviewLoops, 1),
+    reviewGate: draft.loopReviewGate,
+    externalReviewerPolicy: draft.loopExternalReviewerPolicy,
+    failBehavior: draft.loopFailBehavior,
+    ...(maxRuntimeMs != null ? { maxRuntimeMs } : {}),
+    ...(maxTokens != null ? { maxTokens } : {}),
+  };
   return {
     name: draft.name.trim(),
     description: optionalString(draft.description),
@@ -932,9 +1158,12 @@ function draftToInput(draft: ProfileDraft): JsonRecord {
       foreground: true,
       clarify: draft.clarify,
       maxSubagentDepth: 0,
-      maxRuntimeMs: optionalNumber(draft.maxRuntimeMs),
-      maxTokens: optionalNumber(draft.maxTokens),
+      maxRuntimeMs,
+      maxTokens,
       thinking: optionalString(draft.thinking),
+      reviewGate: draft.loopReviewGate,
+      maxReviewLoops: loopPolicy.maxReviewLoops,
+      loopPolicy,
     },
     spaceIds: draft.spaceIds,
   };
@@ -976,4 +1205,26 @@ function optionalNumber(value: string): number | null {
   if (!value.trim()) return null;
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function positiveIntegerOrDefault(value: string, fallback: number): number {
+  if (!validPositiveInteger(value)) return fallback;
+  return Number(value);
+}
+
+function validPositiveInteger(value: string): boolean {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0;
+}
+
+function asExternalReviewerPolicy(value: unknown): ExternalReviewerPolicy {
+  return EXTERNAL_REVIEWER_OPTIONS.some((option) => option.value === value)
+    ? (value as ExternalReviewerPolicy)
+    : "explicit";
+}
+
+function asLoopFailBehavior(value: unknown): LoopFailBehavior {
+  return LOOP_FAIL_BEHAVIOR_OPTIONS.some((option) => option.value === value)
+    ? (value as LoopFailBehavior)
+    : "return_blocker";
 }
