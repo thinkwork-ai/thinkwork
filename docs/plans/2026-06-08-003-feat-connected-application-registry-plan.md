@@ -119,7 +119,8 @@ The core planning decision is to implement a registry and flow projection, not a
 - **DynamoDB is not part of v1:** Add it only if real volume proves Aurora unsuitable for webhook dedupe or flow step writes. Starting with DynamoDB would optimize an unproven hot path and split the control plane too early.
 - **Capability contracts are shared static metadata plus tenant state:** The static contract should live in an encapsulated manifest folder so API, deployment surfaces, and future tooling can read the same identifiers. Tenant readiness is computed from existing source-of-truth rows: managed app status, MCP rows, credentials, policy, and recent health/evidence.
 - **Workers are first-class declarative capability owners in v1:** Borrow iii's core insight that functions and triggers belong to workers, but keep the v1 worker shape small: app key, worker key, stable capability IDs, display labels, and readiness source references. Runtime polymorphism, independent worker health state, version digest enforcement, and generic worker lifecycle management are deferred until multiple independently managed workers need them.
-- **Application definitions are manifest-folder encapsulated:** App-specific registry knowledge lives under one folder per app, for example `packages/connected-apps/src/apps/twenty/`. Each folder can contain app-level metadata plus `workers/<worker-key>/` bundles. Generic loaders, GraphQL resolvers, webhook dispatch, adapter dispatch, and UI panels should consume manifest metadata rather than hard-coding Twenty/Cognee branches throughout the repo. Some generic integration files still need one-time wiring, but adding the next app should mostly mean adding a new app/worker manifest folder plus tests.
+- **Application definitions are manifest-folder encapsulated:** App-specific registry knowledge lives under one folder per app, for example `packages/api/src/connected-apps/apps/twenty/`. Each folder can contain app-level metadata plus `workers/<worker-key>/` bundles. Generic loaders, GraphQL resolvers, webhook dispatch, adapter dispatch, and UI panels should consume manifest metadata rather than hard-coding Twenty/Cognee branches throughout the repo. Some generic integration files still need one-time wiring, but adding the next app should mostly mean adding a new app/worker manifest folder plus tests.
+- **Contract primitives are consumed, not redefined:** The base worker/function/trigger contract types, `domain::name` ID grammar, catalog validation helpers, and safe invocation-record shape come from `packages/worker-contracts` (plan 2026-06-06-002 U1), which must land first. Connected-apps is that package's second consumer — which is what justifies worker-contracts as a standalone package — while the connected-app manifest catalog itself starts api-local under `packages/api/src/connected-apps/` and is extracted to its own package only when a second consumer (e.g., deployment-runner) materializes. The shared core stays small: invocation envelopes are NOT unified across the internal and managed-app domains (the internal envelope stays tenant/user/thread/trace-centric; connected-app events carry their own app-instance/provider-event context), and the shared validator reserves namespace prefixes so platform domains (`agent`, `memory`, `workspace`, `activity`, `audit`) and managed-app keys (`twenty`, `cognee`, ...) can never claim the same capability ID.
 - **Managed-app webhooks get a provider-signed ingress:** Twenty webhook handling should be a managed-app endpoint that validates Twenty's signature and tenant/app association. The existing generic `/webhooks/:token` path remains for agent/routine webhook targets.
 - **Webhook deliveries and capability flows are separate:** Delivery records cover every inbound request, including pre-tenant invalid signatures and malformed bodies. Capability flows begin only after tenant/app/auth resolution and link back to accepted or duplicate delivery rows when available.
 - **Cross-app bindings are deny-by-default:** V1 requires an explicit tenant operator/admin grant before `twenty::opportunity.updated` can invoke `cognee::opportunity.enrich`. The binding stores allowed data classes, destination scope, actor, audit reason, and enable/disable history.
@@ -140,13 +141,19 @@ The core planning decision is to implement a registry and flow projection, not a
 - **Are workers just labels for apps?** No. Workers are first-class capability owners. The app is the product/integration boundary; the worker is the executable or service boundary that owns functions, triggers, health, lifecycle, and availability.
 - **What is the v1 binding policy?** Deny-by-default. Operators must explicitly enable the Twenty -> Cognee route and see the source event, target function, data classes shared, destination scope, idempotency behavior, and audit visibility.
 - **What is the canonical Cognee capability ID?** `cognee::opportunity.enrich`. Other Cognee operations may appear later as aliases or separate functions, but v1 traces and bindings use this ID.
+- **How does this plan relate to the worker-contract layer (2026-06-06-002)?** Consume (decided 2026-06-09). That plan's U1 static catalog (`packages/worker-contracts`) lands first and provides the shared primitives — contract shapes, `domain::name` ID grammar, validation helpers, safe invocation-record shape; this plan's manifests extend them. The two catalogs (platform workers vs managed-app workers) stay separate with reserved namespace prefixes, and invocation envelopes are not unified across domains.
+- **Where does the manifest catalog live?** Api-local at `packages/api/src/connected-apps/` (decided 2026-06-09). Connected-apps becoming the second consumer is what justifies `packages/worker-contracts` as a standalone package; the manifest catalog itself is extracted to a package only when it gains a second consumer of its own.
 
 ### Deferred to Implementation
 
-- **Exact shared package name and export structure:** The plan assumes a shared static contract package. Implementation may choose the final module boundaries if package graph constraints make a lighter module preferable.
 - **Exact low-level Cognee write path:** U5 chooses the architecture at plan level: the canonical target is `cognee::opportunity.enrich`, implemented as a ThinkWork-owned adapter that writes a bounded Brain/wiki opportunity enrichment record and optionally invokes existing Cognee ingest if the current source model supports it. The exact helper names and result table fields remain implementation details.
 - **Webhook secret provisioning UX:** Reuse `tenant_credentials` with kind `webhook_signing_secret`. V1 can require an operator-created credential plus setup/status surfacing, but the webhook handler must treat a missing or disabled credential as an explicit readiness blocker rather than an implementation afterthought.
 - **Raw telemetry links:** Capability flows should work without X-Ray/OTel links. Linking to raw traces can be added where trace IDs are available.
+
+### Deferred from 2026-06-09 review
+
+- **Automated webhook provisioning:** should deployment-runner own Twenty webhook registration and signing-secret provisioning so operator action reduces to the single audited enable decision? Depends on whether the pinned Twenty image supports webhook CRUD/secret configuration via API — verify against the deployed instance during the U4 capture step. (product-lens)
+- **Worker visibility in v1 UI:** with exactly one worker per app and readiness fully derived from app state, should the operator-facing Workers UI layer (cards, status, `WORKER_UNAVAILABLE` reason) ship in v1, or remain internal manifest structure until a second independently-managed worker exists? The contract-level worker model stays either way. (product-lens, scope-guardian)
 
 ---
 
@@ -155,42 +162,40 @@ The core planning decision is to implement a registry and flow projection, not a
 Expected new shape, subject to small implementation-driven adjustments:
 
 ```text
-packages/connected-apps/
-  package.json
-  src/
-    contracts.ts
-    index.ts
-    loader.ts
-    apps/
-      twenty/
-        app.manifest.ts
-        workers/
-          crm-worker/
-            worker.manifest.ts
-            triggers.ts
-            functions.ts
-            webhooks.ts
-            normalizers.ts
-            smoke.ts
-            __tests__/
-              worker.manifest.test.ts
-              webhooks.test.ts
-        __tests__/
-          app.manifest.test.ts
-      cognee/
-        app.manifest.ts
-        workers/
-          knowledge-worker/
-            worker.manifest.ts
-            functions.ts
-            adapter-contract.ts
-            smoke.ts
-            __tests__/
-              worker.manifest.test.ts
-        __tests__/
-          app.manifest.test.ts
-    __tests__/
-      loader.test.ts
+packages/api/src/connected-apps/   # api-local manifest catalog; consumes @thinkwork/worker-contracts base types
+  contracts.ts
+  index.ts
+  loader.ts
+  apps/
+    twenty/
+      app.manifest.ts
+      workers/
+        crm-worker/
+          worker.manifest.ts
+          triggers.ts
+          functions.ts
+          webhooks.ts
+          normalizers.ts
+          smoke.ts
+          __tests__/
+            worker.manifest.test.ts
+            webhooks.test.ts
+      __tests__/
+        app.manifest.test.ts
+    cognee/
+      app.manifest.ts
+      workers/
+        knowledge-worker/
+          worker.manifest.ts
+          functions.ts
+          adapter-contract.ts
+          smoke.ts
+          __tests__/
+            worker.manifest.test.ts
+      __tests__/
+        app.manifest.test.ts
+  __tests__/
+    loader.test.ts
 
 packages/database-pg/src/schema/
   connected-applications.ts
@@ -274,50 +279,51 @@ The main data path is:
 
 ## Implementation Units
 
+> Units are listed in dependency/build order rather than strict numeric order: U8 (capability invocation worker) sits between U4 and U5 because U5 depends on it.
+
 - U1. **Worker Manifest Bundle Catalog**
 
 **Goal:** Introduce a shared app/worker manifest catalog for connected application capabilities, including stable worker, trigger, and function identifiers for Twenty and Cognee v1.
 
 **Requirements:** R1, R4, R5, R6, R19, R20, R21; supports F1 and AE1.
 
-**Dependencies:** None.
+**Dependencies:** `packages/worker-contracts` U1 from plan 2026-06-06-002 (base contract types, ID grammar, validation helpers, safe invocation-record shape) must land first; this unit consumes it.
 
 **Files:**
 
-- Create: `packages/connected-apps/package.json`
-- Create: `packages/connected-apps/src/contracts.ts`
-- Create: `packages/connected-apps/src/index.ts`
-- Create: `packages/connected-apps/src/loader.ts`
-- Create: `packages/connected-apps/src/apps/twenty/app.manifest.ts`
-- Create: `packages/connected-apps/src/apps/twenty/workers/crm-worker/worker.manifest.ts`
-- Create: `packages/connected-apps/src/apps/twenty/workers/crm-worker/triggers.ts`
-- Create: `packages/connected-apps/src/apps/twenty/workers/crm-worker/functions.ts`
-- Create: `packages/connected-apps/src/apps/twenty/workers/crm-worker/webhooks.ts`
-- Create: `packages/connected-apps/src/apps/twenty/workers/crm-worker/normalizers.ts`
-- Create: `packages/connected-apps/src/apps/twenty/workers/crm-worker/smoke.ts`
-- Create: `packages/connected-apps/src/apps/cognee/app.manifest.ts`
-- Create: `packages/connected-apps/src/apps/cognee/workers/knowledge-worker/worker.manifest.ts`
-- Create: `packages/connected-apps/src/apps/cognee/workers/knowledge-worker/functions.ts`
-- Create: `packages/connected-apps/src/apps/cognee/workers/knowledge-worker/adapter-contract.ts`
-- Create: `packages/connected-apps/src/apps/cognee/workers/knowledge-worker/smoke.ts`
-- Test: `packages/connected-apps/src/__tests__/loader.test.ts`
-- Test: `packages/connected-apps/src/apps/twenty/__tests__/app.manifest.test.ts`
-- Test: `packages/connected-apps/src/apps/twenty/workers/crm-worker/__tests__/worker.manifest.test.ts`
-- Test: `packages/connected-apps/src/apps/twenty/workers/crm-worker/__tests__/webhooks.test.ts`
-- Test: `packages/connected-apps/src/apps/cognee/__tests__/app.manifest.test.ts`
-- Test: `packages/connected-apps/src/apps/cognee/workers/knowledge-worker/__tests__/worker.manifest.test.ts`
-- Modify: `pnpm-workspace.yaml` only if the existing `packages/*` workspace pattern is insufficient after implementation
-- Modify: relevant `package.json` dependencies for packages that consume the shared catalog
+- Create: `packages/api/src/connected-apps/contracts.ts`
+- Create: `packages/api/src/connected-apps/index.ts`
+- Create: `packages/api/src/connected-apps/loader.ts`
+- Create: `packages/api/src/connected-apps/apps/twenty/app.manifest.ts`
+- Create: `packages/api/src/connected-apps/apps/twenty/workers/crm-worker/worker.manifest.ts`
+- Create: `packages/api/src/connected-apps/apps/twenty/workers/crm-worker/triggers.ts`
+- Create: `packages/api/src/connected-apps/apps/twenty/workers/crm-worker/functions.ts`
+- Create: `packages/api/src/connected-apps/apps/twenty/workers/crm-worker/webhooks.ts`
+- Create: `packages/api/src/connected-apps/apps/twenty/workers/crm-worker/normalizers.ts`
+- Create: `packages/api/src/connected-apps/apps/twenty/workers/crm-worker/smoke.ts`
+- Create: `packages/api/src/connected-apps/apps/cognee/app.manifest.ts`
+- Create: `packages/api/src/connected-apps/apps/cognee/workers/knowledge-worker/worker.manifest.ts`
+- Create: `packages/api/src/connected-apps/apps/cognee/workers/knowledge-worker/functions.ts`
+- Create: `packages/api/src/connected-apps/apps/cognee/workers/knowledge-worker/adapter-contract.ts`
+- Create: `packages/api/src/connected-apps/apps/cognee/workers/knowledge-worker/smoke.ts`
+- Test: `packages/api/src/connected-apps/__tests__/loader.test.ts`
+- Test: `packages/api/src/connected-apps/apps/twenty/__tests__/app.manifest.test.ts`
+- Test: `packages/api/src/connected-apps/apps/twenty/workers/crm-worker/__tests__/worker.manifest.test.ts`
+- Test: `packages/api/src/connected-apps/apps/twenty/workers/crm-worker/__tests__/webhooks.test.ts`
+- Test: `packages/api/src/connected-apps/apps/cognee/__tests__/app.manifest.test.ts`
+- Test: `packages/api/src/connected-apps/apps/cognee/workers/knowledge-worker/__tests__/worker.manifest.test.ts`
+- Modify: `packages/api/package.json` only if the `@thinkwork/worker-contracts` dependency needs adding
 
 **Approach:**
 
+- Consume base contract primitives from `packages/worker-contracts`: worker/function/trigger contract shapes, the `domain::name` ID grammar, catalog validation helpers, and the safe invocation-record shape. Connected-app manifests extend those base types with app/manifest/binding-specific structure; do not redefine the primitives. Register the managed-app namespace prefixes (`twenty`, `cognee`) through the shared validator's prefix reservation so they cannot collide with platform domains.
 - Define an app manifest model for product/integration metadata and a worker manifest model for declarative capability ownership. A v1 worker manifest describes worker key, display labels, readiness source references, functions, triggers, emitted/consumed events, credential requirements, audit/idempotency expectations, webhook validators, normalizers, default binding templates, data-class allowlists, safe metadata rules, and display labels.
-- Put all app-specific registry definitions under `packages/connected-apps/src/apps/<app-key>/`, with worker-specific definitions under `workers/<worker-key>/`. The top-level loader should discover/import app manifests and their workers, then expose a normalized registry catalog.
+- Put all app-specific registry definitions under `packages/api/src/connected-apps/apps/<app-key>/`, with worker-specific definitions under `workers/<worker-key>/`. The top-level loader should discover/import app manifests and their workers, then expose a normalized registry catalog.
 - Start with two manifest folders:
   - `twenty/crm-worker` owning `twenty::opportunity.updated` as an emitted event/trigger source.
   - `cognee/knowledge-worker` owning canonical v1 function `cognee::opportunity.enrich`. Additional Cognee functions can be aliases or separate capabilities later, but v1 bindings and traces use this ID.
 - Include only the iii-inspired fields needed for v1: stable worker IDs, trigger IDs, function IDs, request/response schema metadata, and display metadata. Reserve broad iii compatibility metadata, destructive-operation policy, entity catalogs, and generic MCP catalog mapping for later.
-- Keep the base manifest package free of database, GraphQL, and deployment-runner side effects. It may contain pure worker-specific helpers such as signature verification, event normalization, safe metadata extraction, and smoke definitions. Runtime dispatch that needs database/AWS clients stays in generic API modules and calls into worker manifest hooks.
+- Keep the manifest catalog free of database, GraphQL, AWS-client, and deployment-runner side effects; since it lives inside `packages/api`, this is folder discipline enforced by the loader/manifest tests rather than a package boundary. It may contain pure worker-specific helpers such as signature verification, event normalization, safe metadata extraction, and smoke definitions. Runtime dispatch that needs database/AWS clients stays in generic API modules and calls into worker manifest hooks.
 
 **Patterns to follow:**
 
@@ -330,8 +336,7 @@ The main data path is:
 - Happy path: every trigger/function belongs to exactly one worker, and every worker belongs to exactly one connected app.
 - Happy path: worker manifests expose stable IDs, display metadata, and readiness source references without requiring runtime clients.
 - Happy path: each capability ID is unique across all app manifests.
-- Happy path: worker-specific webhook/normalizer helpers can be imported from the worker manifest folder without importing API or database modules.
-- Happy path: a fixture second route can be declared through app/worker/capability/binding metadata without adding new DB tables, GraphQL fields, UI branches, webhook handler branches, or route-specific dispatch branches.
+- Happy path: worker-specific webhook/normalizer helpers can be imported from the worker manifest folder without importing database, GraphQL, or AWS-client modules.
 - Edge case: contract validation rejects duplicate function/event IDs within one app.
 - Edge case: contract validation rejects missing auth/readiness metadata for callable functions.
 - Error path: invalid contract shape produces a useful validation error without importing AWS or database modules.
@@ -340,7 +345,7 @@ The main data path is:
 
 - The manifest catalog can be imported by API code and tests without pulling in deployment-runner side effects.
 - The v1 contracts can answer what events Twenty emits and what Cognee function can receive a normalized opportunity payload.
-- Adding another connected app has a clear home: one new `packages/connected-apps/src/apps/<app-key>/` folder with one or more `workers/<worker-key>/` bundles plus any generic tests it exercises.
+- Adding another connected app has a clear home: one new `packages/api/src/connected-apps/apps/<app-key>/` folder with one or more `workers/<worker-key>/` bundles plus any generic tests it exercises.
 
 ---
 
@@ -366,7 +371,7 @@ The main data path is:
 - Add canonical Postgres tables with JSONB for bounded schemas/metadata:
   - Capability bindings keyed by tenant, source app/worker/capability ID, target app/worker/capability ID, status, policy metadata, data-class allowlist, destination scope, actor/audit fields, and idempotency policy.
   - Connected app webhook delivery rows with nullable tenant/app instance fields for pre-tenant failures, safe headers, body hash, signature status, resolution status, status code, and optional flow ID.
-  - Capability event idempotency rows keyed by tenant, source app key, source event name, and provider event ID or body hash.
+  - Capability event idempotency rows keyed by tenant, source app key, source event name, and provider event ID or body hash. Each row carries an explicit claim state (`pending`, `succeeded`, `failed`, `skipped`); only `pending` and `succeeded` claims suppress re-delivery, while `failed`/`skipped` claims permit a bounded re-attempt window.
   - Capability flows keyed by tenant, flow ID, trace/correlation ID, source app/event, status, and result references.
   - Capability flow steps keyed by flow ID and sequence number, with app/worker/capability owner, step type, status, duration, retry/skipped state, and redacted metadata.
 - Do not persist worker/capability readiness state in v1. Compute readiness from static manifests plus `managed_applications`, MCP rows, tenant credentials, explicit binding policy, and recent health/evidence. Add worker state rows only when there is an independent worker lifecycle signal that cannot be derived.
@@ -471,7 +476,7 @@ erDiagram
 - Happy path: flow detail returns ordered steps with redacted metadata and stable capability IDs.
 - Covers AE5. Edge case: deployed app with missing user OAuth returns `USER_OAUTH_MISSING` and is not callable for that user.
 - Edge case: parked app returns `APP_PARKED` even if MCP rows still exist.
-- Edge case: deployed app with unavailable worker returns `WORKER_UNAVAILABLE` even if app deployment state is running.
+- Edge case: deployed app with unavailable worker returns `WORKER_UNAVAILABLE` even if app deployment state is running. (V1 note: with one worker per app and readiness derived from app state, this state is reachable only when a worker's declared readiness source reference fails independently of app deployment; cover via a fixture readiness source.)
 - Edge case: disabled binding hides or marks the route unavailable without changing app deployment state.
 - Error path: unknown capability ID returns a structured not-found error or readiness reason, not a generic server error.
 - Error path: non-admin tenant caller cannot inspect tenant-wide capability flows.
@@ -506,7 +511,8 @@ erDiagram
 
 **Approach:**
 
-- Prefer extending the existing provider-signed webhook pattern under `/webhooks/{integration}/{tenantId}` if Twenty's header/raw-body requirements fit the shared helper. Only create a separate `/managed-app-webhooks/{appKey}/{tenantOrInstanceKey}` route if the existing route/helper cannot support Twenty without weakening existing integrations. If a new route is added, document route precedence, shared helper reuse, tenant credential lookup, delivery logging, and coexistence with `/webhooks/{integration}/{tenantId}`.
+- Add a dedicated managed-app webhook handler/route (for example `POST /webhooks/managed-app/{appKey}/{tenantId}`) wired alongside the existing handler routes in `terraform/modules/app/`. The existing shared helper (`packages/api/src/handlers/webhooks/_shared.ts`) is a pattern reference only — its ThinkWork-issued `x-thinkwork-signature` HMAC scheme, SSM secret path, and `startSkillRun` resolver contract are all incompatible with Twenty provider signatures, `tenant_credentials`-stored secrets, and capability-flow dispatch. Document route precedence and coexistence with the generic `/webhooks/:token` and `/webhooks/{integration}/{tenantId}` endpoints.
+- Before finalizing the validator and fixtures, capture real deliveries from the deployed (digest-pinned) Twenty managed instance: point a webhook at a capture/delivery-log-only endpoint and record actual header names, signing-string composition, payload serialization, and whether the secret is operator-settable or Twenty-generated. Derive the raw-body fixtures from this capture, not from Twenty's public docs.
 - Dispatch by app key and worker key. The generic handler should load the `twenty/crm-worker` manifest and call its webhook signature/event normalizer hooks rather than containing Twenty-specific parsing inline.
 - Resolve the tenant/app instance, load the active `webhook_signing_secret` tenant credential, and validate:
   - required Twenty signature header exists;
@@ -516,12 +522,14 @@ erDiagram
   - event is `opportunity.updated`;
   - body size is within a bounded limit.
 - Use raw request body for signature validation before JSON normalization.
+- Preserve layered tenant isolation on the new route: the URL path carries tenant/app-instance identity, signing-secret lookup is keyed to (app key, tenant/instance) together — never app key alone — and the resolved instance's tenant ID is cross-checked against the URL identity before dispatch, so a leaked secret for one tenant cannot route events into another tenant.
 - Record a safe delivery row for every request outcome: accepted, invalid signature, stale timestamp, malformed body, ignored event, duplicate, missing route, or internal error. Capability flows start only after tenant/app/auth resolution; delivery rows without a resolved tenant do not create flow rows.
 - Add explicit abuse controls: API Gateway/WAF throttles where available, body-size enforcement before secret lookup and DB writes, per-route/per-instance invalid-request limits, bounded or sampled persistence for repeated invalid signatures, and alarms for invalid signature spikes.
-- Apply idempotency from provider event ID when available. Otherwise use a semantic key based on tenant, app instance, event name, source record ID, source update/occurred timestamp when present, and canonical body hash. Do not include delivery/signature timestamp in the fallback key. Claim idempotency atomically before dispatch so concurrent deliveries cannot double-invoke Cognee.
+- Apply idempotency from provider event ID when available. Otherwise use a semantic key based on tenant, app instance, event name, source record ID, source update/occurred timestamp when present, and canonical body hash. Do not include delivery/signature timestamp in the fallback key. Claim idempotency atomically before dispatch so concurrent deliveries cannot double-invoke Cognee. Duplicate handling is claim-state-aware, not claim-presence-aware: a delivery matching an existing claim whose flow is still `accepted` with no dispatch marker (or past the dispatch deadline) re-dispatches the worker for the existing flow instead of suppressing it, so a crash between claim and dispatch cannot permanently lose the event.
 - Produce a normalized ThinkWork event payload that includes source app key, source event name, source record ID, safe summary fields, payload hash, received timestamp, and correlation/flow ID.
 - Make setup explicit: the handler should depend on an active tenant credential and a discoverable endpoint/instance key. If automated Twenty webhook registration is not available in v1, readiness and docs must show that the operator needs to create the Twenty webhook URL in Twenty and store/rotate the signing secret in ThinkWork.
-- Define webhook signing secret rotation semantics: active and previous credential versions, bounded grace window, maximum overlap, audit events for create/rotate/disable, readiness state during rotation, IAM access boundary for secret retrieval, and tests proving old secrets stop validating after the grace window.
+- Keep v1 secret rotation deliberately simple: one active signing secret per tenant/app instance; updating the `tenant_credentials` row takes effect on the next request and the old value is immediately invalid; a missing or disabled credential is an explicit readiness blocker. Emit audit events for credential create/update/disable. Grace-window rotation (active+previous versions, bounded overlap, rotation-in-progress readiness states, and the corresponding U6 rotation UI states) is a named follow-up hardening item, not v1 scope.
+- Scope the webhook Lambda's Secrets Manager IAM policy to the signing-secret path prefix used by connected-app webhook credentials rather than inheriting the existing wildcard `thinkwork/*` resource pattern, so the ingress Lambda cannot retrieve unrelated tenant or integration secrets.
 - Emit compliance/audit events for accepted webhook, duplicate suppression, invalid signature burst, webhook secret lifecycle actions, and route/binding policy decisions. Avoid audit events for every single unauthenticated invalid request when throttling/sampling is active; aggregate burst evidence instead.
 
 **Execution note:** Implement signature validation test-first using a raw-body fixture, because signature bugs tend to look correct while verifying the wrong serialization.
@@ -529,7 +537,7 @@ erDiagram
 **Patterns to follow:**
 
 - `packages/api/src/handlers/webhooks.ts` for delivery logging, safe header redaction, body preview/hash, rate limiting posture, and non-masking logging failures.
-- `packages/connected-apps/src/apps/twenty/workers/crm-worker/` for worker-specific signature/event normalization hooks.
+- `packages/api/src/connected-apps/apps/twenty/workers/crm-worker/` for worker-specific signature/event normalization hooks.
 - `packages/database-pg/src/schema/webhook-deliveries.ts` for safe request snapshot fields.
 - `packages/database-pg/src/schema/webhooks.ts` for idempotency table patterns.
 - `packages/api/src/graphql/resolvers/deployments/shared.ts` for tenant resolution conventions where applicable.
@@ -544,7 +552,7 @@ erDiagram
 - Error path: stale timestamp is rejected and logged as stale/invalid.
 - Error path: malformed JSON is rejected without throwing an unhandled exception.
 - Error path: body over limit is rejected before unbounded preview/persistence.
-- Error path: previous signing secret validates only inside the rotation grace window and fails afterward.
+- Error path: after a signing secret is updated, the old secret immediately fails validation.
 - Integration: handler can create flow and first flow steps using the U3 flow service.
 - Integration: same logical event delivered twice with different signature timestamps produces one downstream invocation and one duplicate delivery outcome.
 - Integration: invalid signature bursts are rate-limited or bounded without creating unbounded tenant flow rows.
@@ -569,7 +577,7 @@ erDiagram
 - Create: `packages/api/src/handlers/capability-invocation-worker.ts`
 - Create: `packages/api/src/lib/connected-apps/invocations.ts`
 - Modify: `packages/api/src/lib/connected-apps/flows.ts`
-- Modify: `packages/api/src/lib/connected-apps/adapter-dispatch.ts`
+- Create: `packages/api/src/lib/connected-apps/adapter-dispatch.ts` (defines the dispatch interface the invocation worker calls, with an inert stub target; U5 registers the real Cognee adapter)
 - Modify: `scripts/build-lambdas.sh`
 - Modify: relevant Terraform module files under `terraform/modules/app/` to add worker Lambda, IAM permissions, retry/DLQ wiring, and environment variables
 - Test: `packages/api/src/lib/connected-apps/invocations.test.ts`
@@ -580,7 +588,8 @@ erDiagram
 - The webhook ingress validates, resolves tenant/app, records delivery, atomically claims idempotency, creates the capability flow, and dispatches the invocation worker asynchronously using Lambda `Event` invocation or Step Functions if existing retry/DLQ conventions make that cleaner.
 - The worker owns flow status transitions: `accepted -> running -> succeeded | failed | retryable | blocked | skipped`.
 - The worker re-checks binding/readiness before invoking the target function so disabled bindings or revoked credentials stop queued work safely.
-- Define retry/DLQ behavior explicitly. Retryable downstream failures should not re-open idempotency claims for the same source event; manual replay should use a distinct replay marker linked to the original delivery/flow.
+- Define retry/DLQ behavior explicitly, following the repo's async-retry lesson (#552): `MaximumRetryAttempts=0` on the Event invoke config plus an SQS DLQ, with a CAS guard on the `accepted -> running` transition so concurrent or retried invocations of the same flow are detected. The U5 adapter write must be an upsert keyed by flow ID / source event identity so a re-run after a crash-before-status-update is a no-op. Retryable downstream failures should not re-open idempotency claims for the same source event; manual replay should use a distinct replay marker linked to the original delivery/flow.
+- Add a stuck-flow sweep/alarm: flows remaining in `accepted` beyond a dispatch deadline are alarmed and re-dispatched (or marked failed), so claim-then-crash events are never silently lost.
 - Keep this as an AWS execution boundary, not a generic worker runtime. It executes registry-dispatched capability invocations for v1; it does not supervise arbitrary worker processes.
 
 **Patterns to follow:**
@@ -592,7 +601,9 @@ erDiagram
 **Test scenarios:**
 
 - Happy path: accepted webhook creates flow with `accepted`, invocation worker marks `running`, invokes Cognee adapter, and marks `succeeded` with result reference.
-- Happy path: duplicate delivery sees existing idempotency claim and does not dispatch a second worker invocation.
+- Happy path: duplicate delivery sees an existing idempotency claim with a progressed flow and does not dispatch a second worker invocation; a duplicate arriving while the flow is stuck at `accepted` past the dispatch deadline re-dispatches the existing flow instead.
+- Error path: handler crashes after claiming idempotency but before dispatching the worker; the sweep or next duplicate re-dispatches and exactly one downstream invocation results.
+- Error path: worker crashes after the adapter write but before marking `succeeded`; a retried invocation produces exactly one Cognee/Brain record.
 - Error path: downstream retryable failure marks flow `retryable` and preserves original idempotency claim.
 - Error path: binding disabled after enqueue but before worker execution marks flow `blocked` without invoking Cognee.
 - Error path: worker receives unknown flow/invocation ID and records a safe failure without throwing unbounded errors.
@@ -615,8 +626,10 @@ erDiagram
 
 **Files:**
 
-- Create: `packages/api/src/lib/connected-apps/adapter-dispatch.ts`
+- Modify: `packages/api/src/lib/connected-apps/adapter-dispatch.ts` (register the real Cognee adapter against the dispatch interface created in U8)
 - Create: `packages/api/src/lib/connected-apps/bindings.ts`
+- Create: `packages/api/src/graphql/resolvers/connected-applications/setConnectedAppBindingStatus.mutation.ts`
+- Test: `packages/api/src/graphql/resolvers/connected-applications/setConnectedAppBindingStatus.mutation.test.ts`
 - Modify: `packages/api/src/lib/connected-apps/flows.ts`
 - Modify: relevant knowledge/Cognee integration files discovered during implementation, likely under `packages/api/src/lib/brain/`, `packages/api/src/graphql/resolvers/knowledge-graph/`, or existing Cognee service modules
 - Test: `packages/api/src/lib/connected-apps/adapter-dispatch.test.ts`
@@ -627,6 +640,7 @@ erDiagram
 
 - Seed or derive a visible but disabled tenant binding for `twenty::opportunity.updated` -> `cognee::opportunity.enrich` when both apps are deployed. The route is deny-by-default and becomes callable only after an operator/admin explicitly enables it.
 - Store the binding grant with source app instance, source event, target function, allowed data classes, destination scope, enable/disable actor, timestamp, and audit reason.
+- Deliver the binding enable/disable GraphQL mutation explicitly (not only as a test scenario): resolve the caller via `resolveCallerTenantId(ctx)`, enforce the tenant admin/operator guard used by the deployments resolvers, wrap the binding status change and the compliance audit emit in a single transaction so the audit record is atomic with the state change, and return a structured error for non-operator callers.
 - Normalize opportunity payloads into a bounded Cognee input:
   - source opportunity ID;
   - account/company relation only if permitted by the binding data-class allowlist;
@@ -634,8 +648,9 @@ erDiagram
   - source timestamp and payload hash;
   - tenant/app/capability IDs.
 - Treat CRM opportunity names, account/company relations, amounts, close dates, and stage metadata as sensitive business data, not automatically safe fields. Flow metadata should store IDs, hashes, statuses, and masked summaries by default; sending business fields to Cognee requires the explicit binding data-class allowlist.
-- Invoke canonical target capability `cognee::opportunity.enrich`. V1 implementation writes a bounded Brain/wiki opportunity enrichment record and returns that reference. It may also invoke existing Cognee ingest if the current Brain/Wiki source path can represent the record without adding an ambiguous new source model; otherwise direct Cognee ingest source-kind expansion is deferred.
-- Use the Cognee worker manifest's adapter contract to resolve the target operation. Worker-specific mapping rules belong in `packages/connected-apps/src/apps/cognee/workers/knowledge-worker/`; generic API dispatch owns database, auth, and AWS client access.
+- Treat all Twenty-sourced text as untrusted input: the adapter applies string-length bounds and control-character stripping before any Brain/wiki write, and never writes CRM text verbatim into instruction-bearing knowledge surfaces (AGENTS.md-adjacent content, capability routing entries). This closes the prompt-injection path from crafted CRM records into agent-consumed knowledge.
+- Invoke canonical target capability `cognee::opportunity.enrich`. When the Cognee managed app is deployed and ready, the adapter's success path must include the existing Cognee ingest invocation and record Cognee-side evidence in the result reference. The bounded Brain/wiki opportunity enrichment record remains part of the success path, but a Brain-record-only outcome is an explicitly classified fallback (for example `cognee_ingest_skipped`) visible on the flow — not a silent default. Direct Cognee ingest source-kind expansion beyond the existing path remains deferred.
+- Use the Cognee worker manifest's adapter contract to resolve the target operation. Worker-specific mapping rules belong in `packages/api/src/connected-apps/apps/cognee/workers/knowledge-worker/`; generic API dispatch owns database, auth, and AWS client access.
 - Return a result reference that can be shown in the flow: entity/page ID, enrichment candidate ID, knowledge graph node ID, or job ID.
 - Classify Cognee failures as unavailable, retryable, policy blocked, invalid input, or enrichment failed. Record the classification on the flow and step.
 - Keep the adapter small and replaceable so future Cognee capabilities can add more functions without changing the webhook ingress.
@@ -656,7 +671,7 @@ erDiagram
 - Error path: invalid opportunity payload records `invalid_input` and does not call Cognee.
 - Error path: Cognee adapter throws a retryable error; flow status and step status reflect retryable failure without losing source idempotency.
 - Integration: a valid webhook from U4 reaches the binding service and produces a Cognee result or classified failure in one flow.
-- Integration: binding create/update/disable, policy decision, duplicate suppression, accepted webhook, invalid signature burst, secret rotation, and downstream Cognee mutation emit compliance audit events.
+- Integration: binding create/update/disable, policy decision, duplicate suppression, accepted webhook, invalid signature burst, secret lifecycle changes (create/update/disable), and downstream Cognee mutation emit compliance audit events.
 
 **Verification:**
 
@@ -692,17 +707,20 @@ erDiagram
   - Managed Applications list shows app deployment state and connected-registry readiness summary.
   - App detail opens with `Overview`, then `Workers`, `Capabilities`, `Routes`, and `Flows` sections or tabs.
   - Worker details are nested under the app; triggers/functions are nested under workers; bindings/routes connect a source trigger to a target function; flows are individual executions.
-  - A global "Recent capability flows" panel is allowed only for cross-app investigation and should link back to app/route context.
-- Define UI vocabulary consistently: App = integration, Worker = runtime/capability owner, Capability = trigger or function, Route/Binding = policy-approved connection, Flow = one execution. Friendly labels come first; stable IDs are secondary metadata.
-- Include an operator setup path for the Twenty -> Cognee route: endpoint discovery/copy, signing secret status and rotation state, webhook verification status, route enable/disable control, data-class allowlist, destination scope, and visible audit implications.
+  - A global "Recent capability flows" panel is allowed only for cross-app investigation and should link back to app/route context. Place it as a `Flows` tab on the Managed Applications page at the same level as the apps list — not a new top-level sidebar item.
+- Define UI vocabulary consistently: App = integration, Worker = runtime/capability owner, Capability = trigger or function, Route/Binding = policy-approved connection, Flow = one execution. Friendly labels come first; stable IDs are secondary metadata. Surface these definitions in the UI itself: each app-detail section header carries a one-sentence muted subtitle (visible without hover) explaining its noun, e.g. under Workers: "A worker is the runtime service that owns this app's capabilities."
+- Include an operator setup path for the Twenty -> Cognee route: endpoint discovery/copy, signing secret status, webhook verification status, route enable/disable control, data-class allowlist, destination scope, and visible audit implications.
+- Define the setup path as an explicit progression, not a status table: (1) `Not started` — show the webhook endpoint URL copy action and prompt the operator to create the signing secret; (2) `Secret created, webhook unverified` — show secret status and a verification state that flips on the first accepted signed delivery; (3) `Verified, route disabled` — show the enable-binding control; (4) `Enabled`. Each state names the operator's next action. If automated webhook registration lands (see Open Questions), states 1-2 collapse into an automated provisioning status.
+- Enabling a binding uses a confirmation dialog that surfaces the data-class allowlist, destination scope, and an optional audit-reason field; the mutation records actor and timestamp server-side. Disabling uses a lighter inline confirmation with no reason required.
+- In v1 the data-class allowlist is read-only in the UI, sourced from the worker manifest's default binding template, and displayed as a tag list with a short explanation of each class; editing is deferred.
 - Show apps and capabilities in a dense operator UI:
   - app capability list with stable IDs, type, status, and readiness reason;
   - worker list/status under each app, including worker label/key, readiness source, owned trigger/function counts, and available/unavailable state;
   - binding row for Twenty -> Cognee with enabled/disabled/blocked state;
   - recent flows list with status, source event, target capability, duration, and timestamp;
-  - detail drawer/page for ordered flow steps.
+  - detail dialog for ordered flow steps, matching the existing `SettingsActivityExecutionTrace` dialog pattern (full-page routing for flow detail is deferred).
 - Reuse existing settings/activity trace visual language where possible. The operator should see a waterfall, not raw JSON as the primary experience.
-- Define waterfall step taxonomy and display rules: each step has label, owner app/worker, trigger/function badge when applicable, status (`success`, `skipped`, `retryable`, `blocked`, `failed`), failure reason, duration, safe metadata, and whether the next step ran or was suppressed.
+- Define waterfall step taxonomy and display rules: each step has label, owner app/worker, trigger/function badge when applicable, status (`success`, `skipped`, `retryable`, `blocked`, `failed`), failure reason, duration, safe metadata, and whether the next step ran or was suppressed. A `retryable` step shows attempt count and the next scheduled retry time (or "awaiting retry"); a step that exhausts retries transitions to `failed` with the final failure reason — `retryable` is never a terminal display state.
 - Redact or summarize metadata in the UI. Provide hashes, record IDs, capability IDs, status, and timing; do not show raw full CRM payloads or secrets.
 - Make unavailable capabilities useful: show "not deployed", "parked", "missing OAuth", "credential missing", or "policy disabled" rather than generic disabled UI.
 
@@ -764,8 +782,9 @@ erDiagram
   - create a signed Twenty-like `opportunity.updated` fixture using the configured secret or a test fixture;
   - assert one capability flow exists;
   - assert flow steps include webhook receipt, signature validation, route decision, Cognee adapter, and final status;
+  - assert which Cognee path ran (Cognee ingest invoked vs the classified `cognee_ingest_skipped` fallback);
   - assert no raw secret/full payload is exposed in GraphQL flow detail.
-- Add a conformance test or smoke fixture proving a second route can be represented by manifest/binding/adapter metadata without new route-specific database, GraphQL, UI, or webhook-dispatch branches.
+- Add an execution-level conformance test (Phase 3, not Phase 1) proving a second route works without new route-specific branches: drive a fixture event end-to-end in-memory through the generic webhook-dispatch, binding-resolution, and adapter-dispatch paths; assert the fixture worker's manifest hooks (validator, normalizer, adapter contract) were actually invoked; and statically assert dispatch modules contain no app-key literals outside manifest folders. Declaration-level representation alone does not satisfy this check.
 - Add operational notes for retention and payload safety. Capability flow rows are audit/observability projections; raw full payload retention should remain intentionally limited.
 
 **Patterns to follow:**
@@ -813,13 +832,13 @@ erDiagram
 
 ## Success Metrics
 
-- A signed Twenty `opportunity.updated` event creates one ThinkWork capability flow and either a Cognee result reference or a classified failure.
+- A signed Twenty `opportunity.updated` event creates one ThinkWork capability flow and either a Cognee-backed result reference (Brain-record-only outcomes are explicitly classified as `cognee_ingest_skipped`) or a classified failure.
 - The Twenty -> Cognee route is disabled until an operator enables it with data-class, destination-scope, and audit metadata.
 - Replaying the same event does not create duplicate Cognee writes.
 - Operator flow detail shows ordered steps, statuses, duration, capability IDs, and redacted metadata without requiring CloudWatch.
 - Worker status is visible as its own layer between app deployment and trigger/function callability.
 - Registry readiness explains at least deployed/running, parked, credential missing, user OAuth missing, policy disabled, and ready states.
-- A second-route conformance fixture proves another source/target capability can be represented without new DB tables, GraphQL fields, UI branches, webhook handler branches, or route-specific dispatch branches.
+- (Phase 3) An execution-level second-route conformance test proves another source/target capability can run through the generic dispatch paths without new DB tables, GraphQL fields, UI branches, webhook handler branches, or route-specific dispatch branches.
 
 ---
 
@@ -834,19 +853,19 @@ erDiagram
 
 ## Risk Analysis & Mitigation
 
-| Risk                                                                | Likelihood | Impact | Mitigation                                                                                                                                                                     |
-| ------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The registry drifts into a custom worker runtime                    | Medium     | High   | Keep contracts declarative, route through existing API/Lambda services, and explicitly exclude process supervision/queue/cron/runtime responsibilities.                        |
-| Worker concept is flattened back into app metadata                  | Medium     | High   | Persist worker keys/status, show workers in UI, and require every trigger/function to declare an owning worker.                                                                |
-| Postgres flow tables become too hot under webhook volume            | Low for v1 | Medium | Use bounded rows and indexes now; add DynamoDB/SQS hot-path only after measuring real volume.                                                                                  |
-| Twenty signature validation uses parsed JSON instead of raw body    | Medium     | High   | Add raw-body validation fixtures and implement U4 test-first.                                                                                                                  |
-| Public webhook route is abused with invalid traffic                 | Medium     | High   | Use API Gateway/WAF throttles, body-size checks before DB writes, invalid-request limits, sampled invalid persistence, and alarms on signature spikes.                         |
-| Replay with changed delivery timestamp bypasses dedupe              | Medium     | High   | Use provider event ID or semantic fallback key based on source record/update identity and canonical body hash; atomically claim before dispatch.                               |
-| Cognee write path is not mature enough for direct enrichment        | Medium     | Medium | Wrap Cognee behind a ThinkWork adapter and allow the adapter to use an existing knowledge/wiki/enrichment path while preserving the stable capability contract.                |
-| Operator UI leaks raw CRM payloads                                  | Medium     | High   | Store and render safe previews, hashes, IDs, and bounded metadata only; test redaction.                                                                                        |
-| Sensitive CRM data is sent to Cognee without tenant approval        | Medium     | High   | Keep binding deny-by-default and require explicit data-class allowlist, destination scope, actor, and audit reason before invocation.                                          |
-| Readiness model becomes confusing by mixing tenant and user state   | Medium     | Medium | Use explicit readiness reason codes and separate tenant-callable from user-callable status.                                                                                    |
-| Existing managed-app/MCP lifecycle gets tangled with registry state | Medium     | High   | Treat registry as a composition layer and follow the managed-app/MCP split documented in `docs/solutions/architecture-patterns/managed-app-mcp-oauth-lifecycle-2026-06-06.md`. |
+| Risk                                                                | Likelihood | Impact | Mitigation                                                                                                                                                                                  |
+| ------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The registry drifts into a custom worker runtime                    | Medium     | High   | Keep contracts declarative, route through existing API/Lambda services, and explicitly exclude process supervision/queue/cron/runtime responsibilities.                                     |
+| Worker concept is flattened back into app metadata                  | Medium     | High   | Derive worker availability from manifests plus app state (per U2's no-persisted-worker-state decision), show workers in UI, and require every trigger/function to declare an owning worker. |
+| Postgres flow tables become too hot under webhook volume            | Low for v1 | Medium | Use bounded rows and indexes now; add DynamoDB/SQS hot-path only after measuring real volume.                                                                                               |
+| Twenty signature validation uses parsed JSON instead of raw body    | Medium     | High   | Add raw-body validation fixtures and implement U4 test-first.                                                                                                                               |
+| Public webhook route is abused with invalid traffic                 | Medium     | High   | Use API Gateway/WAF throttles, body-size checks before DB writes, invalid-request limits, sampled invalid persistence, and alarms on signature spikes.                                      |
+| Replay with changed delivery timestamp bypasses dedupe              | Medium     | High   | Use provider event ID or semantic fallback key based on source record/update identity and canonical body hash; atomically claim before dispatch.                                            |
+| Cognee write path is not mature enough for direct enrichment        | Medium     | Medium | Wrap Cognee behind a ThinkWork adapter and allow the adapter to use an existing knowledge/wiki/enrichment path while preserving the stable capability contract.                             |
+| Operator UI leaks raw CRM payloads                                  | Medium     | High   | Store and render safe previews, hashes, IDs, and bounded metadata only; test redaction.                                                                                                     |
+| Sensitive CRM data is sent to Cognee without tenant approval        | Medium     | High   | Keep binding deny-by-default and require explicit data-class allowlist, destination scope, actor, and audit reason before invocation.                                                       |
+| Readiness model becomes confusing by mixing tenant and user state   | Medium     | Medium | Use explicit readiness reason codes and separate tenant-callable from user-callable status.                                                                                                 |
+| Existing managed-app/MCP lifecycle gets tangled with registry state | Medium     | High   | Treat registry as a composition layer and follow the managed-app/MCP split documented in `docs/solutions/architecture-patterns/managed-app-mcp-oauth-lifecycle-2026-06-06.md`.              |
 
 ---
 
@@ -855,11 +874,11 @@ erDiagram
 ### Phase 1: Proof-First Vertical Slice
 
 - Land the minimum of U1, U2, U3, U4, U8, U5, and the smoke portion of U7 needed to prove one deployed route: signed Twenty ingress, deny-by-default binding grant, idempotent dispatch, asynchronous invocation worker, Cognee result reference, and safe GraphQL/API flow detail.
-- Keep worker manifests declarative and schema minimal in this phase. Do not build broad catalog/readiness expansion before the first real Twenty -> Cognee flow works.
+- Keep worker manifests declarative and schema minimal in this phase. Do not build broad catalog/readiness expansion before the first real Twenty -> Cognee flow works. Phase 1 carries only the minimal U3 subset the route needs — binding resolution plus basic readiness for the Twenty -> Cognee pair; the full readiness reason catalog, structured readiness objects, and the internal runtime contract for automation/Pi callers move to Phase 2.
 
 ### Phase 2: Operator Registry Surface
 
-- Land U6 and the remaining U3 registry/readiness query polish so operators can inspect app, worker, capability, route, setup, and flow state with clear remediation.
+- Land U6 and the remaining U3 registry/readiness work (full readiness reason catalog, structured readiness objects, internal runtime contract for automation/Pi callers) so operators can inspect app, worker, capability, route, setup, and flow state with clear remediation.
 
 ### Phase 3: Expansion Guardrails and Documentation
 
