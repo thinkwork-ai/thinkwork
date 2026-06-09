@@ -81,6 +81,15 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         Resource = "*"
       },
       {
+        # Some Bedrock Marketplace-backed models require the invoking role to
+        # view/accept the model subscription before Converse can stream. Without
+        # these actions Bedrock returns an assistant error with zero token usage.
+        Sid      = "MarketplaceModelAccess"
+        Effect   = "Allow"
+        Action   = ["aws-marketplace:ViewSubscriptions", "aws-marketplace:Subscribe"]
+        Resource = "*"
+      },
+      {
         # Automatic memory retention — every agent turn calls CreateEvent
         # to feed AgentCore's background strategies. Also needs read access
         # so the recall() tool can fetch previously extracted records and

@@ -65,6 +65,23 @@ function assistantMessage(text: string): AgentMessage {
   } as unknown as AgentMessage;
 }
 
+function assistantErrorMessage(errorMessage: string): AgentMessage {
+  return {
+    role: "assistant",
+    content: [],
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "error",
+    errorMessage,
+  } as unknown as AgentMessage;
+}
+
 /**
  * Fake session that captures the subscriber, replays a fixed sequence of tool
  * events when prompted, then exposes a canned transcript. Lets us assert the
@@ -959,6 +976,27 @@ describe("runAgentLoop", () => {
       level: "warn",
       event: "durable_session_persist_conflict",
     });
+  });
+
+  it("fails the turn when the SDK records an assistant error", async () => {
+    const session = makeFakeSession({
+      messages: [assistantErrorMessage("AccessDeniedException: denied")],
+    });
+    let persisted = 0;
+    await expect(
+      runAgentLoop(baseArgs(), {
+        openSession: async () => ({
+          session,
+          modelId: "m",
+          durable: true,
+          persistSession: async () => {
+            persisted += 1;
+          },
+        }),
+      }),
+    ).rejects.toThrow("AccessDeniedException: denied");
+    expect(persisted).toBe(0);
+    expect(session.disposed).toBe(true);
   });
 
   it("does not persist the durable session when the prompt throws", async () => {
