@@ -287,7 +287,14 @@ jobs:
         id: notes
         run: |
           VERSION="${RELEASE_REF_NAME}"
-          PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1 || echo "")
+          PREV_TAG=""
+          if [[ "$VERSION" =~ ^(v[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z]+)\.[0-9]+$ ]]; then
+            SERIES="${BASH_REMATCH[1]}"
+            PREV_TAG=$(git tag --list "${SERIES}.*" --sort=-version:refname | grep -Fxv "$VERSION" | head -1 || true)
+          elif [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            PREV_TAG=$(git tag --list "v[0-9]*.[0-9]*.[0-9]*" --sort=-version:refname | grep -Ev -- '-[A-Za-z]+\.[0-9]+$' | grep -Fxv "$VERSION" | head -1 || true)
+          fi
+
           if [ -n "$PREV_TAG" ]; then
             RANGE="${PREV_TAG}..${VERSION}"
           else
@@ -295,7 +302,22 @@ jobs:
           fi
           echo "## What's Changed" > notes.md
           echo "" >> notes.md
-          git log "$RANGE" --pretty=format:"- %s" --no-merges >> notes.md
+          mapfile -t CHANGES < <(git log "$RANGE" --pretty=format:"- %s" --no-merges)
+          if [ "${#CHANGES[@]}" -eq 0 ]; then
+            echo "- Release artifact refresh for ${VERSION}" >> notes.md
+          else
+            printf '%s\n' "${CHANGES[@]:0:20}" >> notes.md
+            if [ "${#CHANGES[@]}" -gt 20 ]; then
+              echo "- ...and $((${#CHANGES[@]} - 20)) more commits" >> notes.md
+            fi
+          fi
+          echo "" >> notes.md
+          if [[ "$VERSION" == *"-canary."* ]]; then
+            echo "_Canary release for validation before stable promotion._" >> notes.md
+            echo "" >> notes.md
+          fi
+          echo "**Machine-consumed platform artifacts:**" >> notes.md
+          echo "Backend Lambda zips, static bundles, runtime images, and the signed release manifest are attached for deployment automation. Human installers are the desktop assets and updater metadata." >> notes.md
           echo "" >> notes.md
           echo "---" >> notes.md
           echo "" >> notes.md
@@ -324,6 +346,7 @@ jobs:
           tag_name: ${{ env.RELEASE_REF_NAME }}
           body_path: notes.md
           generate_release_notes: false
+          prerelease: ${{ contains(env.RELEASE_REF_NAME, '-canary.') }}
 
       - name: Publish deployable release assets
         run: bash scripts/release/publish-release-assets.sh "$RELEASE_REF_NAME" dist/release
