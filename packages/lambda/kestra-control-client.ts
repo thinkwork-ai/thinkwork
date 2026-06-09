@@ -159,25 +159,30 @@ export function readKestraRuntimeStatus(): {
   const raw = process.env.KESTRA || process.env.KESTRA_STATUS;
   if (raw) {
     const parts = raw.split("|");
+    const provisioned = truthyFlag(parts[0]);
     return {
-      provisioned: truthyFlag(parts[0]),
+      provisioned,
       runtimeEnabled: truthyFlag(parts[1]),
-      url: nonEmpty(parts[2]) ?? process.env.KESTRA_URL ?? null,
+      url:
+        nonEmpty(parts[2]) ??
+        process.env.KESTRA_URL ??
+        deriveKestraUrlFromWwwUrl(),
       basicAuthSecretArn:
         nonEmpty(parts[8]) ??
         process.env.KESTRA_BASIC_AUTH_SECRET_ARN ??
         process.env.KESTRA_SERVICE_CREDENTIAL_SECRET_ARN ??
-        null,
+        deriveKestraBasicAuthSecretRef(provisioned),
     };
   }
+  const provisioned = truthyFlag(process.env.KESTRA_PROVISIONED);
   return {
-    provisioned: truthyFlag(process.env.KESTRA_PROVISIONED),
+    provisioned,
     runtimeEnabled: truthyFlag(process.env.KESTRA_RUNTIME_ENABLED),
-    url: process.env.KESTRA_URL || null,
+    url: process.env.KESTRA_URL || deriveKestraUrlFromWwwUrl(),
     basicAuthSecretArn:
       process.env.KESTRA_BASIC_AUTH_SECRET_ARN ||
       process.env.KESTRA_SERVICE_CREDENTIAL_SECRET_ARN ||
-      null,
+      deriveKestraBasicAuthSecretRef(provisioned),
   };
 }
 
@@ -221,6 +226,28 @@ function truthyFlag(value: unknown): boolean {
   if (typeof value !== "string") return false;
   const normalized = value.trim().toLowerCase();
   return ["1", "true", "yes", "enabled", "on"].includes(normalized);
+}
+
+function deriveKestraUrlFromWwwUrl(): string | null {
+  const raw = process.env.WWW_URL;
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (!url.hostname) return null;
+    return `${url.protocol}//orchestrate.${url.hostname}`;
+  } catch {
+    const host = raw
+      .trim()
+      .replace(/^https?:\/\//, "")
+      .replace(/\/.*$/, "");
+    return host ? `https://orchestrate.${host}` : null;
+  }
+}
+
+function deriveKestraBasicAuthSecretRef(provisioned: boolean): string | null {
+  if (!provisioned) return null;
+  const stage = process.env.STAGE || "dev";
+  return `thinkwork/${stage}/kestra/basic-auth`;
 }
 
 function nonEmpty(value: unknown): string | null {

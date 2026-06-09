@@ -11,11 +11,11 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U11 - Kestra control MCP runtime env fix.
-- Current branch: `codex/kestra-managed-app-u11-proof`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u11-proof`.
+- Current unit: U12 - Kestra control MCP URL/credential derivation.
+- Current branch: `codex/kestra-managed-app-u12-destroy-proof`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u12-destroy-proof`.
 - Current PR:
-  [#2259](https://github.com/thinkwork-ai/thinkwork/pull/2259).
+  [#2261](https://github.com/thinkwork-ai/thinkwork/pull/2261).
 - Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
@@ -384,6 +384,50 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
       `canvas@2.11.2` logged a local Node 25 native fallback build failure due
       to missing `pkg-config`/`pixman-1`; it did not affect this unit's
       Terraform fixture test.
+  - U11 PR [#2259](https://github.com/thinkwork-ai/thinkwork/pull/2259)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) after
+    rebasing onto current `main`, then was squash merged as `58cd9a20`; the
+    remote branch and local worktree/branch were removed.
+  - U11 post-merge deploy proof:
+    - main deploy run
+      [27183135950](https://github.com/thinkwork-ai/thinkwork/actions/runs/27183135950)
+      completed successfully;
+    - `Terraform Apply`, `Restart Kestra runtime after database prep`, and
+      `Deploy Summary` all passed;
+    - read-only Lambda configuration showed
+      `thinkwork-dev-api-kestra-control-mcp` now has `KESTRA=1|1`;
+    - read-only ECS status showed `thinkwork-dev-kestra-service` rolled out to
+      desired `1`, running `1`, pending `0`.
+  - U12 live smoke discovery:
+    - rerunning
+      `SMOKE_ENABLE_KESTRA_CONTROL_MCP=1 node scripts/smoke/kestra-control-mcp-smoke.mjs`
+      after U11 deploy got past the runtime-enabled gate, then failed during
+      flow upsert because the Kestra control client still expected the older
+      long `KESTRA` payload to carry URL and basic-auth secret ARN:
+      `Kestra URL is not configured.`;
+    - deployed Lambda env for `thinkwork-dev-api-kestra-control-mcp` includes
+      `KESTRA=1|1`, `WWW_URL=https://thinkwork.ai`, and no explicit
+      `KESTRA_URL` or `KESTRA_BASIC_AUTH_SECRET_ARN`.
+  - U12 fix in progress:
+    - teach `packages/lambda/kestra-control-client.ts` to derive
+      `https://orchestrate.<www-host>` from `WWW_URL` and the default
+      `thinkwork/<stage>/kestra/basic-auth` secret name when the compact
+      runtime payload says Kestra is provisioned;
+    - add a focused client unit test for the deployed compact `KESTRA=1|1`
+      shape.
+  - U12 local verification passed:
+    - `pnpm --filter @thinkwork/lambda test -- __tests__/kestra-control-client.test.ts __tests__/kestra-control-mcp.test.ts`
+      -> 2 files passed, 11 tests passed.
+    - `pnpm --filter @thinkwork/lambda typecheck` -> passed.
+    - `bash scripts/build-lambdas.sh kestra-control-mcp` -> passed.
+    - `pnpm dlx prettier@3.8.2 --check packages/lambda/kestra-control-client.ts packages/lambda/__tests__/kestra-control-client.test.ts`
+      -> passed.
+    - `git diff --check` -> passed.
+  - U12 local verification caveat:
+    - The first focused test/typecheck attempt in the fresh worktree failed
+      because package links were not present yet (`vitest`/`tsc` not found).
+      `pnpm install --ignore-scripts` linked dependencies and the reruns
+      passed.
 
 ## Agent Profile Closed Loops - 2026-06-08
 

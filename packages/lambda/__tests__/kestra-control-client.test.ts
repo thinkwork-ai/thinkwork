@@ -25,6 +25,19 @@ describe("Kestra control client", () => {
     });
   });
 
+  it("derives URL and basic-auth secret for the compact deployed runtime payload", () => {
+    process.env.STAGE = "dev";
+    process.env.WWW_URL = "https://thinkwork.ai";
+    process.env.KESTRA = "1|1";
+
+    expect(readKestraRuntimeStatus()).toEqual({
+      provisioned: true,
+      runtimeEnabled: true,
+      url: "https://orchestrate.thinkwork.ai",
+      basicAuthSecretArn: "thinkwork/dev/kestra/basic-auth",
+    });
+  });
+
   it("sends flow YAML with basic auth to the documented flow endpoint", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "hello", revision: 2 }), {
