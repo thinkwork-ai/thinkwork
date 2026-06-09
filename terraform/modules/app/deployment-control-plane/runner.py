@@ -266,9 +266,15 @@ def release_selection(payload):
     release = payload.get("release")
     if isinstance(release, dict):
         return {
-            "version": release.get("version") or payload.get("releaseVersion"),
-            "manifestUrl": release.get("manifestUrl") or payload.get("releaseManifestUrl"),
-            "manifestSha256": release.get("manifestSha256") or payload.get("releaseManifestSha256"),
+            "version": release.get("version")
+            or payload.get("releaseVersion")
+            or os.environ.get("THINKWORK_RELEASE_VERSION"),
+            "manifestUrl": release.get("manifestUrl")
+            or payload.get("releaseManifestUrl")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
+            "manifestSha256": release.get("manifestSha256")
+            or payload.get("releaseManifestSha256")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
         }
     return {
         "version": payload.get("releaseVersion") or os.environ.get("THINKWORK_RELEASE_VERSION"),
@@ -277,6 +283,20 @@ def release_selection(payload):
         "manifestSha256": payload.get("releaseManifestSha256")
         or os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
     }
+
+
+def apply_release_selection(payload):
+    selected = release_selection(payload)
+    env_names = {
+        "version": "THINKWORK_RELEASE_VERSION",
+        "manifestUrl": "THINKWORK_RELEASE_MANIFEST_URL",
+        "manifestSha256": "THINKWORK_RELEASE_MANIFEST_SHA256",
+    }
+    for key, env_name in env_names.items():
+        value = selected.get(key)
+        if isinstance(value, str) and value:
+            os.environ[env_name] = value
+    return selected
 
 
 def write_controller_status_evidence(payload):
@@ -1290,6 +1310,7 @@ def main():
     WORK.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("CLOUDFLARE_API_TOKEN", "placeholder-not-configured")
     payload = read_json_env("THINKWORK_DEPLOYMENT_INPUT", {})
+    apply_release_selection(payload)
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION") or payload.get("action") or "deploy"
     if action == "teardown":
         action = "destroy"

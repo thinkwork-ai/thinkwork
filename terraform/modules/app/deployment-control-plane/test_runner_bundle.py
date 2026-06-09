@@ -138,6 +138,66 @@ def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
     }
 
 
+def test_payload_release_selection_overrides_stale_runner_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    release_dir = tmp_path / "release-work"
+    manifest_path = tmp_path / "thinkwork-release.json"
+    bundle_path = tmp_path / "platform-artifacts.tar.gz"
+    lambda_bytes = b"lambda-zip"
+    write_tar(bundle_path, {"lambdas/graphql-http.zip": lambda_bytes})
+    artifacts = [
+        {
+            "name": "graphql-http",
+            "type": "lambda",
+            "fileName": "graphql-http.zip",
+            "relativePath": "lambdas/graphql-http.zip",
+            "url": None,
+            "sha256": digest(lambda_bytes),
+            "sizeBytes": len(lambda_bytes),
+        }
+    ]
+    manifest_sha = write_manifest(
+        manifest_path,
+        release_manifest(bundle_path, runner.sha256_file(bundle_path), artifacts),
+    )
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(runner, "RELEASE", release_dir)
+    monkeypatch.setattr(runner, "MANIFEST", release_dir / "thinkwork-release.json")
+    monkeypatch.setattr(runner, "RELEASE_EVIDENCE", {})
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", "https://example.test/old.json")
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", "0" * 64)
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.130")
+    monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
+
+    runner.apply_release_selection(
+        {
+            "release": {
+                "version": "v0.1.0-canary.137",
+                "manifestUrl": file_url(manifest_path),
+                "manifestSha256": manifest_sha,
+            }
+        }
+    )
+    runner.sync_release_artifacts()
+
+    assert calls == [
+        [
+            "aws",
+            "s3",
+            "cp",
+            str(release_dir / "lambdas/graphql-http.zip"),
+            "s3://thinkwork-artifacts/releases/v0.1.0-canary.137/lambdas/graphql-http.zip",
+        ]
+    ]
+    assert runner.os.environ["THINKWORK_RELEASE_VERSION"] == "v0.1.0-canary.137"
+    assert runner.os.environ["THINKWORK_RELEASE_MANIFEST_URL"] == file_url(manifest_path)
+    assert runner.os.environ["THINKWORK_RELEASE_MANIFEST_SHA256"] == manifest_sha
+
+
 def test_safe_extract_rejects_archive_path_traversal(tmp_path: Path) -> None:
     runner = load_runner()
     archive_path = tmp_path / "evil.tar.gz"
