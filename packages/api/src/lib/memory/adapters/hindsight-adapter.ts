@@ -199,9 +199,49 @@ export class HindsightAdapter implements MemoryAdapter {
         });
       }),
     );
+    // Score descending; at equal score consolidated observations rank ahead
+    // of raw facts (they are deduplicated, evidence-weighted beliefs).
     return dedupeRecordsById(batches.flat(), (r) => r.record.id)
-      .sort((a, b) => b.score - a.score)
+      .sort(
+        (a, b) => b.score - a.score || observationRank(a) - observationRank(b),
+      )
       .slice(0, limit);
+  }
+
+  /**
+   * Trigger Hindsight consolidation for the owner's bank. An empty body
+   * processes all unconsolidated memories — the backfill path for banks whose
+   * corpus predates the observation mission. Throws on failure so callers
+   * (ops scripts) can surface per-bank errors.
+   */
+  async consolidateBank(ownerId: string): Promise<void> {
+    const bankId = await this.resolveBankId(ownerId);
+    await this.consolidateBankById(bankId);
+  }
+
+  /** Raw-bank-id variant for ops scripts sweeping legacy banks. */
+  async consolidateBankById(bankId: string): Promise<void> {
+    try {
+      const resp = await fetch(
+        `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/consolidate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        },
+      );
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        throw new Error(
+          `hindsight consolidate ${resp.status}: ${body.slice(0, 300)}`,
+        );
+      }
+    } catch (err) {
+      throw new Error(
+        `[hindsight-adapter] consolidate failed bank=${bankId.slice(0, 18)}: ${(err as Error)?.message}`,
+      );
+    }
   }
 
   async retain(req: RetainRequest): Promise<RetainResult> {
@@ -813,6 +853,15 @@ export class HindsightAdapter implements MemoryAdapter {
       metadata: {
         bankId,
         factType,
+        // Observation freshness trend (stable/strengthening/weakening/new/
+        // stale). Field name verified empirically against the deployed
+        // Hindsight (wire-format rule); absent fields map to null.
+        freshness:
+          stringField(unit.freshness) ??
+          stringField(unit.trend) ??
+          stringField(unit.metadata?.freshness) ??
+          stringField(unit.metadata?.trend) ??
+          null,
         tags: unit.tags || null,
         confidence: unit.confidence ?? unit.metadata?.confidence ?? null,
         eventDate: toISO(unit.event_date),
@@ -872,6 +921,10 @@ function dedupeRecordsById<T>(records: T[], getId: (record: T) => string): T[] {
     out.push(record);
   }
   return out;
+}
+
+function observationRank(result: RecallResult): number {
+  return result.record.metadata?.factType === "observation" ? 0 : 1;
 }
 
 function numberField(value: unknown): number | undefined {

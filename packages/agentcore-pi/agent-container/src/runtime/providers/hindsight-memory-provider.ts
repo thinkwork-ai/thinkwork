@@ -105,7 +105,32 @@ function toMemoryItems(data: unknown): MemoryItem[] {
             ? u.memory_unit_id
             : `unit-${index}`;
       const score = typeof u.score === "number" ? u.score : undefined;
-      return { id, content: text, ...(score !== undefined ? { score } : {}) };
+      // Observation signals (fact type, freshness trend, proof count) are
+      // parsed defensively — field names are verified empirically against the
+      // deployed Hindsight (wire-format rule); absent fields stay undefined.
+      const meta = (
+        u.metadata && typeof u.metadata === "object" ? u.metadata : {}
+      ) as Record<string, unknown>;
+      const factType =
+        typeof u.fact_type === "string"
+          ? u.fact_type
+          : typeof meta.fact_type === "string"
+            ? meta.fact_type
+            : undefined;
+      const freshness = [u.freshness, u.trend, meta.freshness, meta.trend].find(
+        (v): v is string => typeof v === "string" && v.trim().length > 0,
+      );
+      const proofCount = [u.proof_count, u.evidence_count, meta.proof_count].find(
+        (v): v is number => typeof v === "number" && Number.isFinite(v),
+      );
+      return {
+        id,
+        content: text,
+        ...(score !== undefined ? { score } : {}),
+        ...(factType !== undefined ? { factType } : {}),
+        ...(freshness !== undefined ? { freshness } : {}),
+        ...(proofCount !== undefined ? { proofCount } : {}),
+      };
     })
     .filter((item): item is MemoryItem => item !== null);
 }

@@ -486,3 +486,128 @@ describe("HindsightAdapter bank configuration", () => {
     });
   });
 });
+
+describe("HindsightAdapter observation consumption", () => {
+  beforeEach(() => {
+    executeMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("parses freshness and proof signals into record metadata, null when absent", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "obs-1",
+            text: "consolidated belief",
+            score: 0.9,
+            fact_type: "observation",
+            freshness: "strengthening",
+            proof_count: 4,
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "raw-1",
+            text: "raw fact without signals",
+            score: 0.5,
+            fact_type: "world",
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    const result = await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      query: "beliefs",
+    });
+
+    const obs = result.find((r) => r.record.id === "obs-1");
+    const raw = result.find((r) => r.record.id === "raw-1");
+    expect(obs?.record.metadata?.freshness).toBe("strengthening");
+    expect(obs?.record.metadata?.proofCount).toBe(4);
+    expect(raw?.record.metadata?.freshness).toBeNull();
+  });
+
+  it("ranks observations ahead of raw facts at equal score", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "raw-1",
+            text: "raw fact",
+            score: 0.7,
+            fact_type: "experience",
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "obs-1",
+            text: "observation",
+            score: 0.7,
+            fact_type: "observation",
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "raw-2",
+            text: "higher raw fact",
+            score: 0.9,
+            fact_type: "world",
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    const result = await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      query: "ordering",
+    });
+
+    expect(result.map((r) => r.record.id)).toEqual(["raw-2", "obs-1", "raw-1"]);
+  });
+
+  it("consolidateBank POSTs the consolidate endpoint and throws on failure", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}), text: async () => "" })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        json: async () => ({}),
+        text: async () => "unsupported",
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    await adapter.consolidateBank(USER_ID);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `https://hindsight.example/v1/default/banks/user_${USER_ID}/consolidate`,
+    );
+
+    await expect(adapter.consolidateBankById("legacy-bank")).rejects.toThrow(
+      /consolidate failed bank=legacy-bank/,
+    );
+  });
+});
