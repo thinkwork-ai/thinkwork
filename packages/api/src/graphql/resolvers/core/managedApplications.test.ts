@@ -94,7 +94,7 @@ describe("managed application status helpers", () => {
       url: "https://orchestrate.example.com",
       storageBucketName: "bucket",
       databaseName: "db",
-      managedMcpInstallAvailable: false,
+      managedMcpInstallAvailable: true,
     });
 
     vi.stubEnv("KESTRA", "1|0|https://orchestrate.example.com");

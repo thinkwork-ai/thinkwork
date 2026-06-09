@@ -147,7 +147,7 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
 
   it("approved rows with matching url_hash are returned", async () => {
     const url = "https://mcp.example/a";
-    const authConfig = { secretRef: "arn:xyz", token: "tkn" };
+    const authConfig = { token: "tkn" };
     const hash = computeMcpUrlHash(url, authConfig);
     mockRowsForJoin.mockReturnValue([
       baseRow({
@@ -159,6 +159,33 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
     ]);
     const configs = await buildMcpConfigs("agent-1", null);
     expect(configs).toHaveLength(1);
+  });
+
+  it("tenant_api_key resolves the bearer from auth_config.secretRef", async () => {
+    const url = "https://mcp.example/a";
+    const authConfig = { secretRef: "arn:aws:secretsmanager:tenant-api-key" };
+    mockSecretString.mockReturnValue(
+      JSON.stringify({ type: "mcpApiKey", token: "secret-backed-token" }),
+    );
+    mockRowsForJoin.mockReturnValue([
+      baseRow({
+        url,
+        auth_config: authConfig,
+        auth_type: "tenant_api_key",
+        server_url_hash: computeMcpUrlHash(url, authConfig),
+      }),
+    ]);
+
+    const configs = await buildMcpConfigs("agent-1", null);
+
+    expect(configs).toEqual([
+      {
+        name: "test-server",
+        url,
+        transport: "streamable-http",
+        auth: { type: "bearer", token: "secret-backed-token" },
+      },
+    ]);
   });
 
   it("approved rows with mismatched url_hash are SKIPPED (SI-5 defensive)", async () => {

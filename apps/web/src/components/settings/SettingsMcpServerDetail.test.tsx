@@ -106,7 +106,9 @@ describe("SettingsMcpServerDetail", () => {
     expect(screen.getByRole("button", { name: /reconnect/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /remove server/i })).toBeNull();
     expect(
-      screen.getByText(/Use CRM settings to park or destroy/i),
+      screen.getByText(
+        /Use the managed application settings to park or destroy/i,
+      ),
     ).toBeTruthy();
   });
 

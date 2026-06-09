@@ -108,7 +108,7 @@ export async function buildMcpConfigs(
 
     if (mcp.auth_type === "tenant_api_key") {
       const authCfg = (mcp.auth_config as Record<string, unknown>) || {};
-      token = authCfg.token as string | undefined;
+      token = await resolveTenantApiKeyToken(authCfg, logPrefix, mcp.slug);
     } else if (
       mcp.auth_type === "oauth" ||
       mcp.auth_type === "per_user_oauth"
@@ -330,6 +330,56 @@ export async function buildMcpConfigs(
   }
 
   return mcpConfigs;
+}
+
+async function resolveTenantApiKeyToken(
+  authCfg: Record<string, unknown>,
+  logPrefix: string,
+  slug: string,
+): Promise<string | undefined> {
+  const secretRef =
+    typeof authCfg.secretRef === "string" && authCfg.secretRef.trim()
+      ? authCfg.secretRef.trim()
+      : null;
+
+  if (secretRef) {
+    try {
+      const sm = new SecretsManagerClient({
+        region: process.env.AWS_REGION || "us-east-1",
+      });
+      const secret = await sm.send(
+        new GetSecretValueCommand({ SecretId: secretRef }),
+      );
+      const token = extractTokenFromSecretString(secret.SecretString);
+      if (token) return token;
+      console.warn(
+        `${logPrefix} tenant API key secret for ${slug} did not contain a token`,
+      );
+      return undefined;
+    } catch (err) {
+      console.warn(
+        `${logPrefix} tenant API key secret lookup failed for ${slug}:`,
+        err,
+      );
+      return undefined;
+    }
+  }
+
+  const token = authCfg.token;
+  return typeof token === "string" && token.length > 0 ? token : undefined;
+}
+
+function extractTokenFromSecretString(
+  secretString?: string,
+): string | undefined {
+  if (!secretString) return undefined;
+  try {
+    const parsed = JSON.parse(secretString) as Record<string, unknown>;
+    const token = parsed.token ?? parsed.apiKey ?? parsed.access_token;
+    return typeof token === "string" && token.length > 0 ? token : undefined;
+  } catch {
+    return secretString.length > 0 ? secretString : undefined;
+  }
 }
 
 function extractMcpToolNames(value: unknown): string[] {
