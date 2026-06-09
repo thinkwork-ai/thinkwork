@@ -176,6 +176,17 @@ trigger mapping, AE5 contributor inspection.
 - **Observability is part of the contract:** Contract invocation metadata should
   land in safe diagnostics/activity/audit surfaces so operators can inspect
   which worker functions participated in a turn.
+- **The catalog is a shared foundation (decided 2026-06-09):**
+  `packages/worker-contracts` is consumed by the connected application registry
+  plan (`docs/plans/2026-06-08-003-feat-connected-application-registry-plan.md`),
+  which extends the base worker/function/trigger types, `domain::name` ID
+  grammar, validation helpers, and safe invocation-record shape for managed-app
+  capabilities. Keep the shared core small — contract shapes, ID grammar,
+  validation, record shape — and do not generalize the internal invocation
+  envelope to serve managed-app events; each domain extends its own envelope.
+  Validation reserves namespace prefixes (platform domains `agent` / `memory` /
+  `workspace` / `activity` / `audit` vs managed-app keys like `twenty` /
+  `cognee`) so the two catalogs can never claim the same capability ID.
 
 ---
 
@@ -192,12 +203,14 @@ trigger mapping, AE5 contributor inspection.
 - **Should iii compatibility drive exact metadata shape now?** Keep field names
   iii-inspired but ThinkWork-owned. Compatibility is a design constraint, not a
   production dependency.
+- **Package or API-local module?** Resolved 2026-06-09: the
+  `packages/worker-contracts` package route is required. The connected
+  application registry plan (2026-06-08-003) consumes the base contract types
+  as a second consumer, which justifies the standalone package; the API-local
+  fallback is withdrawn. This plan's U1 must land before that plan's U1.
 
 ### Deferred to Implementation
 
-- Exact package name and folder placement: implementation may choose a new
-  `packages/worker-contracts` package or an API-local module if dependency
-  graph constraints make a package too expensive.
 - Exact event names for contract activity: pick names that fit the existing
   `thread_turn_events` conventions during implementation.
 - Whether audit records need new compliance event types for the tracer bullet:
@@ -226,14 +239,16 @@ packages/worker-contracts/
     invocation-record.test.ts
 ```
 
-The package route is preferred for portability and reuse, but the implementer
-may choose an API-local module if package graph constraints make that safer.
+The package route is required (resolved 2026-06-09): the connected application
+registry plan (2026-06-08-003) consumes the base contract types as a second
+consumer. Keep the package dependency-free — types and validation only — so it
+cannot create dependency cycles.
 
 ---
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ```mermaid
 sequenceDiagram
@@ -301,7 +316,10 @@ metadata.
   AgentCore, SQS, or AppSync.
 - Include validation helpers that catch duplicate function IDs, missing worker
   owners, unsupported modes, and state-changing functions without idempotency or
-  audit metadata.
+  audit metadata. Support namespace-prefix reservation so downstream catalogs
+  (managed-app capabilities from plan 2026-06-08-003 use app keys like `twenty`
+  and `cognee`) register non-colliding ID prefixes alongside the platform
+  domains (`agent`, `memory`, `workspace`, `activity`, `audit`).
 - Avoid runtime discovery, database storage, or network calls in this unit.
 
 **Patterns to follow:**
@@ -631,10 +649,10 @@ guardrails that prevent the contract layer from becoming a homemade engine.
   already has the needed seams: memory adapters, Pi memory provider, direct
   AgentCore dispatch, activity events, finalize/reconcile, and compliance audit
   helpers.
-- **Main implementation uncertainty:** Package placement may need adjustment if
-  a standalone `packages/worker-contracts` package creates dependency graph
-  friction. The API-local fallback is acceptable only if the static catalog
-  shape remains portable and testable.
+- **Main implementation uncertainty:** resolved 2026-06-09 — package placement
+  is fixed to `packages/worker-contracts` because the connected application
+  registry plan consumes the base types. The package must stay dependency-free
+  (types and validation only) so it cannot create dependency-graph friction.
 - **Primary product risk:** Worker vocabulary could make ThinkWork sound like
   it has a new runtime fabric. Docs and persisted metadata must consistently say
   AWS/AgentCore remain the execution substrate.
@@ -646,15 +664,15 @@ guardrails that prevent the contract layer from becoming a homemade engine.
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| The static catalog grows into an engine | Keep U1 declarative only; no network calls, runtime discovery, queue, cron, state store, or DB registry. |
-| Metadata leaks sensitive data | Restrict persisted contract metadata to IDs, modes, implementation names, durations, and status; never persist full payloads, secrets, file contents, or bearer tokens. |
-| Contract layer duplicates existing memory abstractions | Build on `packages/api/src/lib/memory/*` and `packages/pi-runtime-core/src/memory-provider.ts` rather than inventing new memory behavior. |
-| AgentCore-first clarity gets blurred | `agent::run` must explicitly identify `agentcore-pi` as the v1 implementation and must not add local/iii execution targets. |
-| Tests only prove catalog shape, not interconnected flow | U4 requires integration-style assertions across dispatch, workspace, activity, and finalize metadata. |
-| Package dependency graph becomes awkward | Implementation may use an API-local module if a standalone package creates cyclic dependencies, but the plan should preserve the static catalog concept. |
-| Shared helpers become hidden control flow | Limit shared helpers to validation and safe metadata shaping; execution must remain in the existing AWS-backed handlers, providers, and callbacks. |
+| Risk                                                    | Mitigation                                                                                                                                                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The static catalog grows into an engine                 | Keep U1 declarative only; no network calls, runtime discovery, queue, cron, state store, or DB registry.                                                                                                |
+| Metadata leaks sensitive data                           | Restrict persisted contract metadata to IDs, modes, implementation names, durations, and status; never persist full payloads, secrets, file contents, or bearer tokens.                                 |
+| Contract layer duplicates existing memory abstractions  | Build on `packages/api/src/lib/memory/*` and `packages/pi-runtime-core/src/memory-provider.ts` rather than inventing new memory behavior.                                                               |
+| AgentCore-first clarity gets blurred                    | `agent::run` must explicitly identify `agentcore-pi` as the v1 implementation and must not add local/iii execution targets.                                                                             |
+| Tests only prove catalog shape, not interconnected flow | U4 requires integration-style assertions across dispatch, workspace, activity, and finalize metadata.                                                                                                   |
+| Package dependency graph becomes awkward                | Keep `packages/worker-contracts` dependency-free (types and validation only) so it cannot participate in cycles; the API-local fallback is withdrawn now that plan 2026-06-08-003 consumes the package. |
+| Shared helpers become hidden control flow               | Limit shared helpers to validation and safe metadata shaping; execution must remain in the existing AWS-backed handlers, providers, and callbacks.                                                      |
 
 ---
 
