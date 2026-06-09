@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U11 - registry-source schema checkout repair
-  discovered after refreshing the TEI deployment controller.
-- Current branch: `codex/u11-tei-controller-retry`.
+- Current implementation unit: U12 - release contract repair after TEI update
+  proof exposed mutable/incomplete GitHub Release assets.
+- Current branch: `codex/u12-tei-update-proof`.
 - Current worktree:
-  `.Codex/worktrees/u11-tei-controller-retry`.
+  `.Codex/worktrees/u12-tei-update-proof`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -26,13 +26,24 @@ status: in_progress
   merged; U9 PR [#2295](https://github.com/thinkwork-ai/thinkwork/pull/2295)
   merged; U9 PR [#2296](https://github.com/thinkwork-ai/thinkwork/pull/2296)
   merged; U10 PR [#2297](https://github.com/thinkwork-ai/thinkwork/pull/2297)
-  merged; U11 PR pending.
-- Status: U11 local verification passed. `v0.1.0-canary.137` release runs
-  passed, publishing desktop installers, updater metadata,
-  `thinkwork-release.json`, and `platform-artifacts.tar.gz` on the shared
-  release page. TEI's customer deployment controller has been refreshed to the
-  U10 runner and `.137` selected-release pins; U11 fixes the remaining
-  registry-source checkout issue before retrying the app update.
+  merged; U11 PR [#2298](https://github.com/thinkwork-ai/thinkwork/pull/2298)
+  merged; U12 PR pending.
+- Status: U11 merged and deployed to main. TEI's customer deployment controller
+  was refreshed to the U11 runner and `.137` selected-release pins, then TEI
+  update execution `tei-e2e-update-137-20260609204430` failed closed because
+  the fetched `.137` release manifest SHA-256 was
+  `fafac911c2005fcd3367e2f8c81c942059036c72a5e8dd64bae615b4700a2daa` instead
+  of the previously pinned
+  `7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f`.
+  Cutting `.138` from current main exposed the release-pipeline race: Release
+  run [27234846967](https://github.com/thinkwork-ai/thinkwork/actions/runs/27234846967)
+  built deployable artifacts but failed when the desktop workflow had already
+  created the GitHub Release, and Release Desktop run
+  [27234845226](https://github.com/thinkwork-ai/thinkwork/actions/runs/27234845226)
+  deployed web metadata but failed installer verification because only
+  `latest-mac.yml` and `canary-mac.yml` were attached. U12 is repairing the
+  release workflows so a release page becomes a complete, idempotent install
+  contract before retrying TEI with a fresh canary.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
