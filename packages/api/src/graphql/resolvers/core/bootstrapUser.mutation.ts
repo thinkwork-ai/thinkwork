@@ -24,14 +24,14 @@ import {
 } from "../../utils.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
-import { ensureDefaultModelApprovalsForUser } from "../../../lib/model-approvals.js";
+import { ensureTenantBootstrapDefaults } from "../../../lib/tenant-bootstrap-defaults.js";
 
-async function seedDefaultModelApprovals(tenantId: string, userId: string) {
+async function seedTenantBootstrapDefaults(tenantId: string, userId: string) {
   try {
-    await ensureDefaultModelApprovalsForUser({ tenantId, userId });
+    await ensureTenantBootstrapDefaults({ tenantId, userId });
   } catch (err) {
     console.warn(
-      "[bootstrapUser] Failed to seed default model approvals:",
+      "[bootstrapUser] Failed to seed tenant bootstrap defaults:",
       err,
     );
   }
@@ -66,6 +66,10 @@ export const bootstrapUser = async (
           .where(eq(tenants.id, existingUser.tenant_id))
           .limit(1)
       : [];
+
+    if (existingUser.tenant_id) {
+      await seedTenantBootstrapDefaults(existingUser.tenant_id, existingUser.id);
+    }
 
     return {
       user: existingUser,
@@ -167,7 +171,7 @@ export const bootstrapUser = async (
       );
     }
 
-    await seedDefaultModelApprovals(pendingTenant.id, user.id);
+    await seedTenantBootstrapDefaults(pendingTenant.id, user.id);
 
     return {
       user,
@@ -196,6 +200,7 @@ export const bootstrapUser = async (
     .insert(tenantSettings)
     .values({
       tenant_id: tenant.id,
+      default_model: "us.anthropic.claude-sonnet-4-6",
     })
     .onConflictDoNothing();
 
@@ -233,7 +238,7 @@ export const bootstrapUser = async (
     })
     .onConflictDoNothing();
 
-  await seedDefaultModelApprovals(tenant.id, user.id);
+  await seedTenantBootstrapDefaults(tenant.id, user.id);
 
   // Update Cognito user with tenant_id (for future token claims)
   try {

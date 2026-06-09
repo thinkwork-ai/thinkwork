@@ -268,6 +268,152 @@ DROP TABLE IF EXISTS public.thread_comments CASCADE;
         psql(database_url, file=path, variables={"stage": vars_json["stage"]})
 
 
+def seed_platform_bootstrap_defaults(database_url):
+    psql(
+        database_url,
+        sql="""
+BEGIN;
+
+INSERT INTO public.model_catalog (
+  model_id,
+  provider,
+  display_name,
+  input_cost_per_million,
+  output_cost_per_million,
+  context_window,
+  max_output_tokens,
+  supports_vision,
+  supports_tools,
+  is_available
+) VALUES
+  (
+    'us.anthropic.claude-sonnet-4-6',
+    'anthropic',
+    'Claude Sonnet 4.6',
+    3.00,
+    15.00,
+    200000,
+    64000,
+    true,
+    true,
+    true
+  ),
+  (
+    'us.anthropic.claude-opus-4-6-v1',
+    'anthropic',
+    'Claude Opus 4.6',
+    15.00,
+    75.00,
+    200000,
+    32000,
+    true,
+    true,
+    true
+  ),
+  (
+    'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    'anthropic',
+    'Claude Haiku 4.5',
+    0.80,
+    4.00,
+    200000,
+    64000,
+    true,
+    true,
+    true
+  )
+ON CONFLICT (model_id) DO UPDATE SET
+  provider = EXCLUDED.provider,
+  display_name = EXCLUDED.display_name,
+  input_cost_per_million = EXCLUDED.input_cost_per_million,
+  output_cost_per_million = EXCLUDED.output_cost_per_million,
+  context_window = EXCLUDED.context_window,
+  max_output_tokens = EXCLUDED.max_output_tokens,
+  supports_vision = EXCLUDED.supports_vision,
+  supports_tools = EXCLUDED.supports_tools,
+  is_available = EXCLUDED.is_available,
+  updated_at = now();
+
+INSERT INTO public.tenant_settings (tenant_id, default_model)
+SELECT id, 'us.anthropic.claude-sonnet-4-6'
+FROM public.tenants
+ON CONFLICT (tenant_id) DO UPDATE SET
+  default_model = COALESCE(public.tenant_settings.default_model, EXCLUDED.default_model),
+  updated_at = now();
+
+INSERT INTO public.agents (
+  tenant_id,
+  name,
+  slug,
+  workspace_folder_name,
+  source,
+  runtime,
+  status,
+  system_prompt,
+  model,
+  is_platform_default
+)
+SELECT
+  t.id,
+  'ThinkWork Agent',
+  'thinkwork-agent-' || left(md5(t.id::text), 12),
+  'thinkwork-agent',
+  'system',
+  'pi',
+  'idle',
+  'You are ThinkWork Agent, the default assistant for this workspace.',
+  'us.anthropic.claude-sonnet-4-6',
+  true
+FROM public.tenants t
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.agents a
+  WHERE a.tenant_id = t.id
+    AND a.is_platform_default IS TRUE
+);
+
+UPDATE public.agents
+SET model = 'us.anthropic.claude-sonnet-4-6',
+    updated_at = now()
+WHERE is_platform_default IS TRUE
+  AND model IS NULL;
+
+WITH default_models AS (
+  SELECT tenant_id, default_model AS model_id
+  FROM public.tenant_settings
+  WHERE default_model IS NOT NULL
+  UNION
+  SELECT tenant_id, model AS model_id
+  FROM public.agents
+  WHERE model IS NOT NULL
+  UNION
+  SELECT tenant_id, model AS model_id
+  FROM public.agent_templates
+  WHERE model IS NOT NULL
+),
+available_defaults AS (
+  SELECT DISTINCT
+    u.tenant_id,
+    u.id AS user_id,
+    d.model_id
+  FROM public.users u
+  JOIN default_models d
+    ON d.tenant_id = u.tenant_id
+  JOIN public.model_catalog mc
+    ON mc.model_id = d.model_id
+   AND mc.is_available IS TRUE
+  WHERE u.tenant_id IS NOT NULL
+)
+INSERT INTO public.user_model_approvals (tenant_id, user_id, model_id)
+SELECT tenant_id, user_id, model_id
+FROM available_defaults
+ON CONFLICT (tenant_id, user_id, model_id) DO NOTHING;
+
+COMMIT;
+""",
+    )
+
+
 def push_database_schema(outputs_path, vars_json):
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
     checkout_source(
@@ -275,9 +421,9 @@ def push_database_schema(outputs_path, vars_json):
         os.environ.get("THINKWORK_RELEASE_VERSION", "main"),
     )
     database_url = database_url_from_outputs(outputs)
-    if psql_output(database_url, "SELECT to_regclass('public.tenants')").strip():
-        return
-    initialize_greenfield_database(database_url, outputs, vars_json)
+    if not psql_output(database_url, "SELECT to_regclass('public.tenants')").strip():
+        initialize_greenfield_database(database_url, outputs, vars_json)
+    seed_platform_bootstrap_defaults(database_url)
 
 
 def write_runner_files(payload, runner_secrets):
@@ -723,6 +869,21 @@ def sync_static(outputs_path, static_files, vars_json):
             tar.extractall(target)
         run(["aws", "s3", "sync", "--delete", str(target), f"s3://{bucket}/"])
         if artifact_name == "web":
+            index_path = target / "index.html"
+            if index_path.exists():
+                run(
+                    [
+                        "aws",
+                        "s3",
+                        "cp",
+                        str(index_path),
+                        f"s3://{bucket}/index.html",
+                        "--content-type",
+                        "text/html",
+                        "--cache-control",
+                        "no-store",
+                    ]
+                )
             profile, _ = runtime_profile(outputs, vars_json)
             runtime_config_path = RELEASE / "thinkwork-runtime-config.json"
             runtime_config_path.write_text(
