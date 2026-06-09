@@ -19,14 +19,14 @@ function SettingsActivityThreadDetail() {
   const { day } = Route.useSearch();
   const breadcrumbParents = day
     ? [
-        { label: "Activity", href: "/settings/activity" },
+        { label: "Activity", href: "/settings/activity/threads" },
         {
           label: formatActivityDay(day),
-          href: "/settings/activity",
+          href: "/settings/activity/threads",
           search: { day },
         },
       ]
-    : [{ label: "Activity", href: "/settings/activity" }];
+    : [{ label: "Activity", href: "/settings/activity/threads" }];
 
   return (
     <SettingsActivityThreadDetailView
