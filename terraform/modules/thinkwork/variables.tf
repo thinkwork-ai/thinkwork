@@ -281,6 +281,24 @@ variable "hindsight_image_tag" {
   default     = "0.5.0"
 }
 
+variable "hindsight_enable_auto_consolidation" {
+  description = "Run Hindsight's observation consolidation engine automatically after retain (only used when enable_hindsight = true)."
+  type        = bool
+  default     = true
+}
+
+variable "hindsight_consolidation_dedup_threshold" {
+  description = "Cosine-similarity threshold for Hindsight near-duplicate observation reconciliation (0.0-1.0; 1.0 disables)."
+  type        = string
+  default     = "0.97"
+}
+
+variable "hindsight_observations_mission" {
+  description = "Service-level default observations mission for Hindsight consolidation. Empty string falls back to the image default. Per-bank config overrides apply on top."
+  type        = string
+  default     = "Synthesize durable, institutional facts about the business: customers, projects, decisions, processes, tools, relationships, and recurring patterns. Filter out ephemeral state, secrets, and personal small talk."
+}
+
 variable "enable_cognee" {
   description = "Enable Cognee as an optional ontology/knowledge-graph add-on. This does not change memory_engine or replace Hindsight."
   type        = bool

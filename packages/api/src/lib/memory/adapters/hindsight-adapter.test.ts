@@ -303,3 +303,393 @@ function row(overrides: Record<string, unknown>) {
     ...overrides,
   };
 }
+
+describe("HindsightAdapter bank configuration", () => {
+  const DESIRED = {
+    observations_mission: "Durable institutional facts about the business",
+    enable_observations: true,
+    enable_auto_consolidation: true,
+  };
+
+  beforeEach(() => {
+    executeMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  function jsonResponse(body: unknown, ok = true, status = 200) {
+    return {
+      ok,
+      status,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    };
+  }
+
+  function retainConversationArgs() {
+    return {
+      tenantId: TENANT_ID,
+      ownerType: "user" as const,
+      ownerId: USER_ID,
+      threadId: "11111111-2222-3333-4444-555555555555",
+      messages: [
+        {
+          role: "user" as const,
+          content: "hello",
+          timestamp: "2026-06-09T10:00:00.000Z",
+        },
+      ],
+    };
+  }
+
+  it("PUTs desired config when the bank has no overrides", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: {} }))
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const calls = fetchMock.mock.calls;
+    expect(String(calls[0]?.[0])).toBe(
+      `https://hindsight.example/v1/default/banks/user_${USER_ID}/config`,
+    );
+    expect(calls[0]?.[1]?.method).toBe("GET");
+    expect(calls[1]?.[1]?.method).toBe("PUT");
+    expect(JSON.parse(calls[1]?.[1]?.body as string)).toEqual(DESIRED);
+    expect(String(calls[2]?.[0])).toContain("/memories");
+  });
+
+  it("skips the PUT when overrides already match", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: DESIRED }))
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const methods = fetchMock.mock.calls.map((c) => c[1]?.method);
+    expect(methods).toEqual(["GET", "POST"]);
+  });
+
+  it("PUTs when one configured field drifted", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          config: {},
+          overrides: { ...DESIRED, observations_mission: "stale mission" },
+        }),
+      )
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const methods = fetchMock.mock.calls.map((c) => c[1]?.method);
+    expect(methods).toEqual(["GET", "PUT", "POST"]);
+  });
+
+  it("proceeds with the write on config failure; cooldown skips immediate re-GET", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init: any) => {
+      if (String(url).endsWith("/config")) {
+        return Promise.resolve(jsonResponse({ error: "boom" }, false, 500));
+      }
+      return Promise.resolve(jsonResponse({ ok: true }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+    await adapter.retainConversation(retainConversationArgs());
+
+    const configCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).endsWith("/config"),
+    );
+    const memoryCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("/memories"),
+    );
+    // Both writes landed; the failure is not cached as success, but the
+    // 60s cooldown prevents re-GETting on the immediately-following write.
+    expect(configCalls).toHaveLength(1);
+    expect(memoryCalls).toHaveLength(2);
+  });
+
+  it("dedupes concurrent ensures into one config GET", async () => {
+    let resolveGet: (value: unknown) => void = () => {};
+    const gate = new Promise((resolve) => {
+      resolveGet = resolve;
+    });
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (String(url).endsWith("/config")) {
+        await gate;
+        return jsonResponse({ config: {}, overrides: DESIRED });
+      }
+      return jsonResponse({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    const writes = Promise.all([
+      adapter.retainConversation(retainConversationArgs()),
+      adapter.retainDailyMemory({
+        tenantId: TENANT_ID,
+        ownerType: "user",
+        ownerId: USER_ID,
+        date: "2026-06-09",
+        content: "daily digest",
+      }),
+    ]);
+    resolveGet(undefined);
+    await writes;
+
+    const configCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).endsWith("/config"),
+    );
+    expect(configCalls).toHaveLength(1);
+  });
+
+  it("treats string-echoed override values as matching (no perpetual PUT)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          config: {},
+          overrides: {
+            observations_mission: DESIRED.observations_mission,
+            enable_observations: "true",
+            enable_auto_consolidation: "true",
+          },
+        }),
+      )
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const methods = fetchMock.mock.calls.map((c) => c[1]?.method);
+    expect(methods).toEqual(["GET", "POST"]);
+  });
+
+  it("public ensureBankConfigured never throws on a non-UUID owner", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await expect(
+      adapter.ensureBankConfigured("not-a-uuid"),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("caches a configured bank for the container lifetime", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: DESIRED }))
+      .mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+    await adapter.retainConversation(retainConversationArgs());
+
+    const configCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).endsWith("/config"),
+    );
+    expect(configCalls).toHaveLength(1);
+  });
+
+  it("is a no-op when no bank config is set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    await adapter.retainConversation(retainConversationArgs());
+
+    const configCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).endsWith("/config"),
+    );
+    expect(configCalls).toHaveLength(0);
+  });
+
+  it("resolveBankConfigFromEnv reads env lazily and returns null when unset", async () => {
+    const { resolveBankConfigFromEnv } = await import("./hindsight-adapter.js");
+    expect(resolveBankConfigFromEnv({})).toBeNull();
+    expect(
+      resolveBankConfigFromEnv({
+        HINDSIGHT_BANK_OBSERVATIONS_MISSION: "institutional facts",
+        HINDSIGHT_BANK_ENABLE_OBSERVATIONS: "true",
+        HINDSIGHT_BANK_ENABLE_AUTO_CONSOLIDATION: "false",
+      }),
+    ).toEqual({
+      observations_mission: "institutional facts",
+      enable_observations: true,
+      enable_auto_consolidation: false,
+    });
+  });
+});
+
+describe("HindsightAdapter observation consumption", () => {
+  beforeEach(() => {
+    executeMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("parses freshness and proof signals into record metadata, null when absent", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "obs-1",
+            text: "consolidated belief",
+            score: 0.9,
+            fact_type: "observation",
+            freshness: "strengthening",
+            proof_count: 4,
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "raw-1",
+            text: "raw fact without signals",
+            score: 0.5,
+            fact_type: "world",
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    const result = await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      query: "beliefs",
+    });
+
+    const obs = result.find((r) => r.record.id === "obs-1");
+    const raw = result.find((r) => r.record.id === "raw-1");
+    expect(obs?.record.metadata?.freshness).toBe("strengthening");
+    expect(obs?.record.metadata?.proofCount).toBe(4);
+    expect(raw?.record.metadata?.freshness).toBeNull();
+  });
+
+  it("ranks observations ahead of raw facts at equal score", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "raw-1",
+            text: "raw fact",
+            score: 0.7,
+            fact_type: "experience",
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "obs-1",
+            text: "observation",
+            score: 0.7,
+            fact_type: "observation",
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "raw-2",
+            text: "higher raw fact",
+            score: 0.9,
+            fact_type: "world",
+            created_at: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    const result = await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      query: "ordering",
+    });
+
+    expect(result.map((r) => r.record.id)).toEqual(["raw-2", "obs-1", "raw-1"]);
+  });
+
+  it("consolidateBank POSTs the consolidate endpoint and throws on failure", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}),
+        text: async () => "",
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        json: async () => ({}),
+        text: async () => "unsupported",
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    await adapter.consolidateBank(USER_ID);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `https://hindsight.example/v1/default/banks/user_${USER_ID}/consolidate`,
+    );
+
+    await expect(adapter.consolidateBankById("legacy-bank")).rejects.toThrow(
+      /consolidate failed bank=legacy-bank/,
+    );
+  });
+});

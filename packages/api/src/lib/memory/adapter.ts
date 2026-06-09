@@ -54,6 +54,14 @@ export interface MemoryAdapter {
     request: UpsertMarkdownMemoryDocumentRequest,
   ): Promise<void>;
 
+  /**
+   * Idempotently apply per-bank configuration (observation mission,
+   * consolidation settings) for the owner's bank. Implementations must
+   * never throw — a failed config apply logs and continues so the write
+   * that triggered it is not blocked.
+   */
+  ensureBankConfigured?(ownerId: string): Promise<void>;
+
   inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
 
   export(request: ExportRequest): Promise<MemoryExportBundle>;

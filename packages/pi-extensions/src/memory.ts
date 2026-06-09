@@ -56,11 +56,27 @@ const DEFAULT_GROUNDING_LIMIT = 5;
 const DEFAULT_GROUNDING_TIMEOUT_MS = 5_000;
 const MAX_RECALL_LIMIT = 10;
 
-/** Render recalled units as a compact numbered list for a tool/context payload. */
+/**
+ * Render recalled units as a compact numbered list for a tool/context payload.
+ * Consolidated observations are annotated with their freshness trend and proof
+ * count so the model can weigh a strengthening, well-evidenced belief over a
+ * stale or thinly-supported one.
+ */
 function formatMemories(memories: MemoryItem[]): string {
   if (memories.length === 0) return "No relevant memories found.";
   return memories
-    .map((memory, index) => `${index + 1}. ${memory.content}`)
+    .map((memory, index) => {
+      const tags: string[] = [];
+      if (memory.factType === "observation") {
+        tags.push("observation");
+        if (memory.freshness) tags.push(memory.freshness);
+        if (typeof memory.proofCount === "number" && memory.proofCount > 0) {
+          tags.push(`${memory.proofCount} supporting facts`);
+        }
+      }
+      const prefix = tags.length > 0 ? `[${tags.join(", ")}] ` : "";
+      return `${index + 1}. ${prefix}${memory.content}`;
+    })
     .join("\n");
 }
 
@@ -86,7 +102,10 @@ export function createMemoryExtension(
         name: "recall",
         label: "Recall",
         description:
-          "Recall raw memory units relevant to a query from the user's long-term memory. " +
+          "Recall memory units relevant to a query from the user's long-term memory — " +
+          "consolidated observations (synthesized beliefs annotated with freshness and " +
+          "supporting-fact counts) alongside raw facts. Prefer observations when both cover " +
+          "the same ground: they are deduplicated and evidence-weighted. " +
           "Use only when the current prompt and workspace files, especially `User/USER.md`, " +
           "do not already contain the needed fact, or when the user explicitly asks to search memory " +
           "or prior context.\n\n" +
@@ -127,8 +146,9 @@ export function createMemoryExtension(
         label: "Reflect",
         description:
           "Synthesize the memory units recalled for a query into a coherent answer. " +
-          "Call this AFTER `recall` on the same query. Do not call it for facts that are " +
-          "already available in `User/USER.md` or the current workspace.",
+          "The synthesis is hierarchical — consolidated observations are weighed ahead of " +
+          "raw facts. Call this AFTER `recall` on the same query. Do not call it for facts " +
+          "that are already available in `User/USER.md` or the current workspace.",
         parameters: Type.Object({
           query: Type.String({
             description:

@@ -37,6 +37,16 @@ export interface MemoryItem {
   content: string;
   /** Relevance score when the backing store provides one. */
   score?: number;
+  /** Backing-store fact type (e.g. "world", "experience", "observation"). */
+  factType?: string;
+  /**
+   * Freshness trend for consolidated observations (e.g. "stable",
+   * "strengthening", "weakening", "new", "stale"). Only present when the
+   * backing store synthesizes observations and reports the signal.
+   */
+  freshness?: string;
+  /** Number of supporting facts behind a consolidated observation. */
+  proofCount?: number;
 }
 
 export interface MemoryRecallRequest {

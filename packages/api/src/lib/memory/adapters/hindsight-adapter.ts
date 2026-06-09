@@ -39,10 +39,53 @@ export type HindsightAdapterOptions = {
   endpoint: string;
   timeoutMs?: number;
   inspectLimit?: number;
+  /**
+   * Desired per-bank config overrides (observation mission, consolidation
+   * settings) applied lazily before writes. `undefined` resolves from env via
+   * {@link resolveBankConfigFromEnv}; `null` disables bank configuration.
+   */
+  bankConfig?: Record<string, unknown> | null;
 };
+
+/**
+ * Per-bank Hindsight config overrides from the handler environment. Returns
+ * null when no override is set — banks then inherit the service-level
+ * `HINDSIGHT_API_*` defaults set on the Hindsight ECS task, and the ensure
+ * path is a no-op. Read lazily (never at module load) so Lambda env injected
+ * after cold start is observed.
+ */
+export function resolveBankConfigFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, unknown> | null {
+  const config: Record<string, unknown> = {};
+  const mission = env.HINDSIGHT_BANK_OBSERVATIONS_MISSION?.trim();
+  if (mission) config.observations_mission = mission;
+  const enableObservations = parseEnvBool(
+    env.HINDSIGHT_BANK_ENABLE_OBSERVATIONS,
+  );
+  if (enableObservations !== undefined) {
+    config.enable_observations = enableObservations;
+  }
+  const enableAutoConsolidation = parseEnvBool(
+    env.HINDSIGHT_BANK_ENABLE_AUTO_CONSOLIDATION,
+  );
+  if (enableAutoConsolidation !== undefined) {
+    config.enable_auto_consolidation = enableAutoConsolidation;
+  }
+  return Object.keys(config).length > 0 ? config : null;
+}
+
+function parseEnvBool(raw: string | undefined): boolean | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  const v = raw.toLowerCase();
+  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  return undefined;
+}
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_INSPECT_LIMIT = 500;
+const BANK_CONFIG_FAILURE_COOLDOWN_MS = 60_000;
 const HINDSIGHT_FACT_TYPES = ["world", "experience", "observation"] as const;
 const QUICK_RECALL_MAX_TOKENS = 500;
 const DEEP_RECALL_MAX_TOKENS = 2_000;
@@ -64,6 +107,13 @@ export class HindsightAdapter implements MemoryAdapter {
   private readonly endpoint: string;
   private readonly timeoutMs: number;
   private readonly inspectLimit: number;
+  private readonly bankConfig: Record<string, unknown> | null;
+  /** Banks confirmed configured this container lifetime — skips the GET. */
+  private readonly configuredBanks = new Set<string>();
+  /** Per-bank in-flight ensure, so concurrent writes share one GET/PUT. */
+  private readonly bankConfigInFlight = new Map<string, Promise<void>>();
+  /** Per-bank last-failure timestamp for the ensure cooldown. */
+  private readonly bankConfigFailures = new Map<string, number>();
   private readonly db = getDb();
 
   constructor(opts: HindsightAdapterOptions) {
@@ -73,6 +123,10 @@ export class HindsightAdapter implements MemoryAdapter {
     this.endpoint = opts.endpoint.replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.inspectLimit = opts.inspectLimit ?? DEFAULT_INSPECT_LIMIT;
+    this.bankConfig =
+      opts.bankConfig !== undefined
+        ? opts.bankConfig
+        : resolveBankConfigFromEnv();
   }
 
   async capabilities(): Promise<MemoryCapabilities> {
@@ -152,13 +206,54 @@ export class HindsightAdapter implements MemoryAdapter {
         });
       }),
     );
+    // Score descending; at equal score consolidated observations rank ahead
+    // of raw facts (they are deduplicated, evidence-weighted beliefs).
     return dedupeRecordsById(batches.flat(), (r) => r.record.id)
-      .sort((a, b) => b.score - a.score)
+      .sort(
+        (a, b) => b.score - a.score || observationRank(a) - observationRank(b),
+      )
       .slice(0, limit);
+  }
+
+  /**
+   * Trigger Hindsight consolidation for the owner's bank. An empty body
+   * processes all unconsolidated memories — the backfill path for banks whose
+   * corpus predates the observation mission. Throws on failure so callers
+   * (ops scripts) can surface per-bank errors.
+   */
+  async consolidateBank(ownerId: string): Promise<void> {
+    const bankId = await this.resolveBankId(ownerId);
+    await this.consolidateBankById(bankId);
+  }
+
+  /** Raw-bank-id variant for ops scripts sweeping legacy banks. */
+  async consolidateBankById(bankId: string): Promise<void> {
+    try {
+      const resp = await fetch(
+        `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/consolidate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        },
+      );
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        throw new Error(
+          `hindsight consolidate ${resp.status}: ${body.slice(0, 300)}`,
+        );
+      }
+    } catch (err) {
+      throw new Error(
+        `[hindsight-adapter] consolidate failed bank=${bankId.slice(0, 18)}: ${(err as Error)?.message}`,
+      );
+    }
   }
 
   async retain(req: RetainRequest): Promise<RetainResult> {
     const bankId = await this.resolveBankId(req.ownerId);
+    await this.ensureBankConfiguredById(bankId);
     const factType = resolveFactType(req);
 
     const {
@@ -225,6 +320,7 @@ export class HindsightAdapter implements MemoryAdapter {
     // retainConversation so Hindsight receives one replaceable item per
     // conversation rather than one item per message.
     const bankId = await this.resolveBankId(req.ownerId);
+    await this.ensureBankConfiguredById(bankId);
     const items = req.messages
       .filter((m) => m.content && m.content.trim().length > 0)
       .map((m) => ({
@@ -635,12 +731,109 @@ export class HindsightAdapter implements MemoryAdapter {
     return `user_${ownerId}`;
   }
 
+  /**
+   * Idempotently apply the desired per-bank config overrides. No-op when no
+   * overrides are configured (service-level env defaults apply) or the bank
+   * was already confirmed this container lifetime. Never throws — config
+   * failures log and the triggering write proceeds unconfigured.
+   */
+  async ensureBankConfigured(ownerId: string): Promise<void> {
+    let bankId: string;
+    try {
+      bankId = await this.resolveBankId(ownerId);
+    } catch (err) {
+      // The interface contract is never-throws — a non-UUID owner logs and
+      // returns rather than failing the caller.
+      console.warn(
+        `[hindsight-adapter] ensureBankConfigured skipped: ${(err as Error)?.message}`,
+      );
+      return;
+    }
+    await this.ensureBankConfiguredById(bankId);
+  }
+
+  private async ensureBankConfiguredById(bankId: string): Promise<void> {
+    const desired = this.bankConfig;
+    if (!desired || Object.keys(desired).length === 0) return;
+    if (this.configuredBanks.has(bankId)) return;
+    // Failure cooldown: while the config endpoint is degraded, don't tax every
+    // write with a fresh GET that can hang up to timeoutMs.
+    const failedAt = this.bankConfigFailures.get(bankId);
+    if (
+      failedAt !== undefined &&
+      Date.now() - failedAt < BANK_CONFIG_FAILURE_COOLDOWN_MS
+    ) {
+      return;
+    }
+    // In-flight dedup: concurrent writes in one container share one ensure.
+    const inFlight = this.bankConfigInFlight.get(bankId);
+    if (inFlight) return inFlight;
+
+    const run = this.applyBankConfig(bankId, desired).finally(() => {
+      this.bankConfigInFlight.delete(bankId);
+    });
+    this.bankConfigInFlight.set(bankId, run);
+    return run;
+  }
+
+  private async applyBankConfig(
+    bankId: string,
+    desired: Record<string, unknown>,
+  ): Promise<void> {
+    const configUrl = `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/config`;
+    try {
+      const getResp = await fetch(configUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      if (!getResp.ok) {
+        throw new Error(`config GET ${getResp.status}`);
+      }
+      const data: any = await getResp.json().catch(() => ({}));
+      const overrides = (data?.overrides ?? {}) as Record<string, unknown>;
+      const effective = (data?.config ?? {}) as Record<string, unknown>;
+      // String-coerced comparison: the server may echo booleans/numbers as
+      // strings; strict equality would report perpetual drift and re-PUT on
+      // every cold start.
+      const drifted = Object.entries(desired).some(([key, value]) => {
+        const current =
+          overrides[key] !== undefined ? overrides[key] : effective[key];
+        return current === undefined || String(current) !== String(value);
+      });
+      if (drifted) {
+        const putResp = await fetch(configUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(desired),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+        if (!putResp.ok) {
+          const body = await putResp.text().catch(() => "");
+          throw new Error(
+            `config PUT ${putResp.status}: ${body.slice(0, 200)}`,
+          );
+        }
+        console.log(
+          `[hindsight-adapter] bank config applied bank=${bankId.slice(0, 18)} keys=${Object.keys(desired).join(",")}`,
+        );
+      }
+      this.configuredBanks.add(bankId);
+      this.bankConfigFailures.delete(bankId);
+    } catch (err) {
+      this.bankConfigFailures.set(bankId, Date.now());
+      console.warn(
+        `[hindsight-adapter] ensureBankConfigured failed (write proceeds) bank=${bankId.slice(0, 18)} message=${(err as Error)?.message}`,
+      );
+    }
+  }
+
   private async postItems(
     bankId: string,
     items: Array<Record<string, unknown>>,
     action: string,
     opts: { async?: boolean } = {},
   ): Promise<void> {
+    await this.ensureBankConfiguredById(bankId);
     try {
       const resp = await fetch(
         `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/memories`,
@@ -707,6 +900,15 @@ export class HindsightAdapter implements MemoryAdapter {
       metadata: {
         bankId,
         factType,
+        // Observation freshness trend (stable/strengthening/weakening/new/
+        // stale). Field name verified empirically against the deployed
+        // Hindsight (wire-format rule); absent fields map to null.
+        freshness:
+          stringField(unit.freshness) ??
+          stringField(unit.trend) ??
+          stringField(unit.metadata?.freshness) ??
+          stringField(unit.metadata?.trend) ??
+          null,
         tags: unit.tags || null,
         confidence: unit.confidence ?? unit.metadata?.confidence ?? null,
         eventDate: toISO(unit.event_date),
@@ -714,7 +916,11 @@ export class HindsightAdapter implements MemoryAdapter {
         occurredEnd: toISO(unit.occurred_end),
         mentionedAt: toISO(unit.mentioned_at),
         accessCount: unit.access_count ?? null,
-        proofCount: unit.proof_count ?? null,
+        proofCount:
+          coerceCount(unit.proof_count) ??
+          coerceCount(unit.evidence_count) ??
+          coerceCount(unit.metadata?.proof_count) ??
+          null,
         context: unit.context ?? null,
         raw: unit.metadata ?? null,
       },
@@ -768,10 +974,24 @@ function dedupeRecordsById<T>(records: T[], getId: (record: T) => string): T[] {
   return out;
 }
 
+function observationRank(result: RecallResult): number {
+  return result.record.metadata?.factType === "observation" ? 0 : 1;
+}
+
 function numberField(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+/** Numeric count tolerating pg-driver strings ("5") alongside numbers. */
+function coerceCount(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
 }
 
 function stringField(value: unknown): string | undefined {

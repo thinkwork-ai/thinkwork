@@ -108,12 +108,20 @@ export function requesterThreadDigestDocumentId(
   return `requester_thread_digest:${userId}:${threadId}`;
 }
 
+// Memoized per container: the adapter carries the configured-banks cache, so
+// per-call construction would re-pay the bank-config GET on every upsert.
+let defaultAdapter: HindsightAdapter | null | undefined;
+
 function createDefaultHindsightAdapter(): Pick<
   MemoryAdapter,
   "kind" | "upsertMarkdownMemoryDocument"
 > | null {
-  if ((process.env.MEMORY_ENGINE || "hindsight") !== "hindsight") return null;
+  if (defaultAdapter !== undefined) return defaultAdapter;
+  if ((process.env.MEMORY_ENGINE || "hindsight") !== "hindsight") {
+    defaultAdapter = null;
+    return null;
+  }
   const endpoint = process.env.HINDSIGHT_ENDPOINT || "";
-  if (!endpoint) return null;
-  return new HindsightAdapter({ endpoint });
+  defaultAdapter = endpoint ? new HindsightAdapter({ endpoint }) : null;
+  return defaultAdapter;
 }
