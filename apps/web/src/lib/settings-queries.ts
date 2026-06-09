@@ -716,6 +716,127 @@ export const SettingsModelCatalogQuery = graphql(`
   }
 `);
 
+export const SettingsTenantModelCatalogQuery = graphql(`
+  query SettingsTenantModelCatalog(
+    $tenantId: ID!
+    $includeDisabled: Boolean = true
+  ) {
+    tenantModelCatalog(tenantId: $tenantId, includeDisabled: $includeDisabled) {
+      tenantId
+      modelId
+      provider
+      displayName
+      canonicalDisplayName
+      inputCostPerMillion
+      outputCostPerMillion
+      contextWindow
+      maxOutputTokens
+      supportsVision
+      supportsTools
+      enabled
+      pricingStatus
+      pricingSource
+      pricingDiagnostics
+      lastPricedAt
+      importSource
+      importPayload
+      importedByUserId
+      importedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsBedrockModelImportCandidatesQuery = graphql(`
+  query SettingsBedrockModelImportCandidates($tenantId: ID!) {
+    bedrockModelImportCandidates(tenantId: $tenantId) {
+      provider
+      providerName
+      modelName
+      modelId
+      displayName
+      inputModalities
+      outputModalities
+      supportsStreaming
+      supportsVision
+      supportsTools
+      customizationsSupported
+      inferenceTypesSupported
+      lifecycleStatus
+      inputCostPerMillion
+      outputCostPerMillion
+      pricingStatus
+      pricingSource
+      pricingDiagnostics
+      alreadyImported
+      enabled
+    }
+  }
+`);
+
+export const SettingsImportTenantBedrockModelsMutation = graphql(`
+  mutation SettingsImportTenantBedrockModels(
+    $input: ImportTenantBedrockModelsInput!
+  ) {
+    importTenantBedrockModels(input: $input) {
+      tenantId
+      modelId
+      provider
+      displayName
+      canonicalDisplayName
+      inputCostPerMillion
+      outputCostPerMillion
+      contextWindow
+      maxOutputTokens
+      supportsVision
+      supportsTools
+      enabled
+      pricingStatus
+      pricingSource
+      pricingDiagnostics
+      lastPricedAt
+      importSource
+      importPayload
+      importedByUserId
+      importedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsUpdateTenantModelCatalogEntryMutation = graphql(`
+  mutation SettingsUpdateTenantModelCatalogEntry(
+    $input: UpdateTenantModelCatalogEntryInput!
+  ) {
+    updateTenantModelCatalogEntry(input: $input) {
+      tenantId
+      modelId
+      provider
+      displayName
+      canonicalDisplayName
+      inputCostPerMillion
+      outputCostPerMillion
+      contextWindow
+      maxOutputTokens
+      supportsVision
+      supportsTools
+      enabled
+      pricingStatus
+      pricingSource
+      pricingDiagnostics
+      lastPricedAt
+      importSource
+      importPayload
+      importedByUserId
+      importedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
 export const SettingsUpdateTenantAgentMutation = graphql(`
   mutation SettingsUpdateTenantAgent(
     $tenantId: ID!

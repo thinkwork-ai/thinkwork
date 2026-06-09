@@ -10,14 +10,15 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-001-feat-tenant-model-catalog-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U3 - Tenant model catalog GraphQL API.
-- Current branch: `codex/tenant-model-catalog-u3`.
-- Current worktree: `.Codex/worktrees/tenant-model-catalog-u3`.
+- Current implementation unit: U4 - Settings Model Catalog page.
+- Current branch: `codex/tenant-model-catalog-u4`.
+- Current worktree: `.Codex/worktrees/tenant-model-catalog-u4`.
 - Pull request:
-  [#2275](https://github.com/thinkwork-ai/thinkwork/pull/2275). U2 PR
+  [#2279](https://github.com/thinkwork-ai/thinkwork/pull/2279). U3 PR
+  [#2275](https://github.com/thinkwork-ai/thinkwork/pull/2275), U2 PR
   [#2273](https://github.com/thinkwork-ai/thinkwork/pull/2273) and U1 PR
   [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) were merged.
-- Status: U3 PR open; CI pending.
+- Status: U4 PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
@@ -124,6 +125,54 @@ status: in_progress
   - Prettier check over U3 hand-written files passed; generated GraphQL clients
     were regenerated after avoiding generated-file formatting churn.
   - `git diff --check` passed.
+- U3 CI:
+  - PR #2275 initially passed all checks, then became `BEHIND` after `main`
+    advanced; rebased the branch onto `origin/main`, force-pushed with lease,
+    and waited for fresh checks.
+  - Final required checks passed: `cla`, `lint`, `test`, `typecheck`, and
+    `verify`.
+- U3 merge/cleanup:
+  - PR #2275 was squash merged as `7a6e4f3e`.
+  - The remote branch was deleted by GitHub merge handling; the local U3
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U4 worktree from `origin/main` at `7a6e4f3e`.
+- U4 started Settings UI work:
+  - added the operator-only `/settings/model-catalog` route and Settings nav
+    entry;
+  - added a compact table-first Model Catalog page showing provider, display
+    name, model ID, and token costs;
+  - moved pricing state, capabilities, enabled state, canonical metadata, and
+    display-name editing into a row-click model details dialog;
+  - added a Bedrock import dialog with AWS candidate rows, multi-select,
+    editable display names, duplicate handling, pricing health, and
+    import-time enable controls;
+  - added tenant-model-catalog Settings GraphQL operations and regenerated web
+    GraphQL types;
+  - regenerated TanStack route tree using the router generator package API.
+  - Started the U4 worktree Vite server on
+    `http://127.0.0.1:5175/settings/model-catalog`, replacing a stale process
+    already bound to port 5175, and tightened the table after reviewing
+    localhost screenshots that showed excessive right-side whitespace.
+  - Follow-up localhost review tightened the configured-model table further:
+    the Settings nav now uses the CPU icon, the Provider column displays
+    Bedrock, compact columns size to content, and long model IDs truncate
+    instead of forcing horizontal overflow.
+- U4 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsModelCatalog.test.tsx src/components/settings/settings-nav.test.ts`
+    passed: 2 files, 18 tests.
+  - `pnpm --filter @thinkwork/web codegen` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/web test` passed: 139 files, 971 tests.
+  - `pnpm --filter @thinkwork/web build` passed.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over U4 hand-written
+    files passed.
+  - `git diff --check` passed.
+  - Browser automation could not capture an authenticated protected-route
+    screenshot because Chrome repeatedly returned to profile selection during
+    navigation; the 5175 dev server remains running for live local inspection.
 
 ## Kestra Managed Application - 2026-06-08
 
