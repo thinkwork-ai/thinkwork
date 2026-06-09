@@ -79,6 +79,9 @@ jobs:
           pnpm --filter @thinkwork/docs build
           bash scripts/release/package-static-assets.sh dist/release/static
 
+      - name: Bundle platform artifacts
+        run: bash scripts/release/package-platform-artifacts.sh dist/release
+
       - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
@@ -148,6 +151,7 @@ jobs:
             --lambda-dir dist/release/lambdas \
             --artifact "name=web,type=static-site,path=dist/release/static/web.tar.gz" \
             --artifact "name=docs,type=static-site,path=dist/release/static/docs.tar.gz" \
+            --artifact-bundle "name=platform,path=dist/release/platform-artifacts.tar.gz" \
             --image "name=agentcore-pi-amd64,repository=${AGENTCORE_REPOSITORY},tag=${RELEASE_REF_NAME}-pi-amd64,digest=${{ steps.pi-amd64.outputs.digest }},architecture=amd64" \
             --image "name=agentcore-pi-arm64,repository=${AGENTCORE_REPOSITORY},tag=${RELEASE_REF_NAME}-pi-arm64,digest=${{ steps.pi-arm64.outputs.digest }},architecture=arm64" \
             "${SIGN_ARGS[@]}"
@@ -162,8 +166,7 @@ jobs:
           path: |
             dist/release/thinkwork-release.json
             dist/release/thinkwork-release.sig.json
-            dist/release/lambdas/*.zip
-            dist/release/static/*.tar.gz
+            dist/release/platform-artifacts.tar.gz
           retention-days: 7
 
   # ── Publish CLI to npm ──────────────────────────────────────────
