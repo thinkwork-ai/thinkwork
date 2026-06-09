@@ -10,6 +10,7 @@
 #   GITHUB_REF_NAME       Release tag such as desktop-v1.2.3-canary.1
 #   BUILD_CHANNEL         stable, canary, or dev
 #   DESKTOP_MAC_ARCHES    comma-separated macOS arches to package (default: arm64,x64)
+#   DESKTOP_RELEASE_TYPE  GitHub release type for electron-builder (draft|release; default: draft)
 #   DESKTOP_SKIP_TERRAFORM=1 to use existing VITE_* env vars instead of terraform outputs
 
 set -euo pipefail
@@ -165,6 +166,16 @@ else
 fi
 
 DESKTOP_MAC_ARCHES="${DESKTOP_MAC_ARCHES:-arm64,x64}"
+DESKTOP_RELEASE_TYPE="${DESKTOP_RELEASE_TYPE:-draft}"
+case "$DESKTOP_RELEASE_TYPE" in
+  draft | release)
+    ;;
+  *)
+    echo "DESKTOP_RELEASE_TYPE must be draft or release; got '$DESKTOP_RELEASE_TYPE'" >&2
+    exit 2
+    ;;
+esac
+
 DESKTOP_ARCH_LINES=""
 IFS=',' read -r -a DESKTOP_ARCH_ARRAY <<< "$DESKTOP_MAC_ARCHES"
 for raw_arch in "${DESKTOP_ARCH_ARRAY[@]}"; do
@@ -255,14 +266,12 @@ publish:
     owner: thinkwork-ai
     repo: thinkwork
     vPrefixedTagName: true
-    # Publish to a DRAFT release so the auto-updater can't see it until every
-    # asset (the ~140 MB zip/dmg + *-mac.yml manifests) has finished uploading.
-    # release-desktop.yml flips the draft to published once uploads complete.
-    # Without this, electron-builder marks the release the moment it is created
-    # — minutes before the zip lands — so any open app polling in that window
-    # downloads a not-yet-present artifact and drops into the updater error
-    # ("Retry"/"spins then stops") state.
-    releaseType: draft
+    # Default to draft when desktop creates the release so the auto-updater
+    # cannot see it until every installer and manifest is uploaded. Use
+    # DESKTOP_RELEASE_TYPE=release when attaching installers to an already
+    # published platform release; electron-builder skips uploads when this type
+    # does not match the existing GitHub release.
+    releaseType: ${DESKTOP_RELEASE_TYPE}
     publishAutoUpdate: true
 
 generateUpdatesFilesForAllChannels: true
