@@ -219,6 +219,12 @@ describe("deployment session handler", () => {
       "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN",
       "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment-orchestrator",
     );
+    vi.stubEnv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.134");
+    vi.stubEnv(
+      "THINKWORK_RELEASE_MANIFEST_URL",
+      "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
+    );
+    vi.stubEnv("THINKWORK_RELEASE_MANIFEST_SHA256", "a".repeat(64));
     mockSfnSend.mockResolvedValue({
       executionArn:
         "arn:aws:states:us-east-1:123456789012:execution:thinkwork-dev-deployment-orchestrator:tw-teardown",
@@ -266,10 +272,37 @@ describe("deployment session handler", () => {
       expect.objectContaining({
         phase: "teardown",
         action: "destroy",
+        contract: "thinkwork.deployment.controller.v1",
+        schemaVersion: 1,
         sessionId: SESSION_ID,
         awsAccountId: "123456789012",
+        releaseVersion: "v0.1.0-canary.134",
       }),
     );
+    expect(payload.release).toEqual({
+      version: "v0.1.0-canary.134",
+      manifestUrl:
+        "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
+      manifestSha256: "a".repeat(64),
+    });
+    expect(payload.evidence).toEqual(
+      expect.objectContaining({
+        bucket: null,
+        prefix: `sessions/${SESSION_ID}/destroy`,
+        expectedArtifacts: expect.arrayContaining([
+          "controller-input-summary.json",
+          "redacted-terraform-vars.json",
+          "terraform-plan.json",
+          "deployment-evidence.json",
+        ]),
+      }),
+    );
+    expect(payload.features.baseInstall).toEqual({
+      cognee: false,
+      slack: false,
+      stripe: false,
+      twenty: false,
+    });
     expect(JSON.stringify(command.input)).not.toContain("password");
     expect(JSON.parse(response.body || "{}").session.status).toBe("destroying");
   });
@@ -318,6 +351,12 @@ describe("deployment session handler", () => {
       "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment-orchestrator",
     );
     vi.stubEnv("THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET", "thinkwork-evidence");
+    vi.stubEnv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.134");
+    vi.stubEnv(
+      "THINKWORK_RELEASE_MANIFEST_URL",
+      "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
+    );
+    vi.stubEnv("THINKWORK_RELEASE_MANIFEST_SHA256", "b".repeat(64));
     mockSfnSend.mockResolvedValue({
       executionArn:
         "arn:aws:states:us-east-1:123456789012:execution:thinkwork-dev-deployment-orchestrator:tw-session",
@@ -364,12 +403,40 @@ describe("deployment session handler", () => {
       expect.objectContaining({
         phase: "deploy",
         action: "deploy",
+        contract: "thinkwork.deployment.controller.v1",
+        schemaVersion: 1,
         sessionId: SESSION_ID,
         awsAccountId: "123456789012",
         awsRegion: "us-east-1",
         evidenceBucket: "thinkwork-evidence",
+        releaseVersion: "v0.1.0-canary.134",
       }),
     );
+    expect(payload.release).toEqual({
+      version: "v0.1.0-canary.134",
+      manifestUrl:
+        "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
+      manifestSha256: "b".repeat(64),
+    });
+    expect(payload.evidence).toEqual(
+      expect.objectContaining({
+        bucket: "thinkwork-evidence",
+        prefix: `sessions/${SESSION_ID}/deploy`,
+        expectedArtifacts: expect.arrayContaining([
+          "controller-input-summary.json",
+          "redacted-terraform-vars.json",
+          "terraform-plan.json",
+          "terraform-outputs.json",
+          "deployment-evidence.json",
+        ]),
+      }),
+    );
+    expect(payload.features.baseInstall).toEqual({
+      cognee: false,
+      slack: false,
+      stripe: false,
+      twenty: false,
+    });
     expect(payload.firstAdmin).toEqual({
       name: "Eric Odom",
       email: "eric@example.com",

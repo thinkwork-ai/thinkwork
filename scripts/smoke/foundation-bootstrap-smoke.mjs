@@ -271,27 +271,7 @@ function validateDeploymentProfileJson() {
 
   try {
     const profile = JSON.parse(raw);
-    const required = [
-      "schemaVersion",
-      "deploymentId",
-      "displayName",
-      "stage",
-      "region",
-      "spacesUrl",
-      "apiUrl",
-      "graphqlHttpUrl",
-      "appsyncHttpUrl",
-      "appsyncWsUrl",
-      "cognitoDomain",
-      "cognitoUserPoolId",
-      "cognitoClientId",
-    ];
-    const missing = required.filter((field) => {
-      const value = profile[field];
-      return field === "schemaVersion"
-        ? value !== 1
-        : typeof value !== "string" || !value.trim();
-    });
+    const missing = missingDeploymentProfileFields(profile);
     return {
       ok: missing.length === 0,
       missing,
@@ -310,6 +290,34 @@ function validateDeploymentProfileJson() {
           : "Deployment profile JSON is malformed.",
     };
   }
+}
+
+function missingDeploymentProfileFields(profile) {
+  const required = [
+    ["schemaVersion"],
+    ["deploymentId"],
+    ["displayName"],
+    ["stage"],
+    ["region"],
+    ["appUrl", "spacesUrl"],
+    ["apiEndpoint", "apiUrl"],
+    ["graphqlHttpUrl"],
+    ["appsyncUrl", "appsyncHttpUrl"],
+    ["appsyncRealtimeUrl", "appsyncWsUrl"],
+    ["cognitoDomain"],
+    ["cognitoUserPoolId"],
+    ["cognitoClientId"],
+  ];
+
+  return required
+    .filter((fields) => {
+      if (fields.includes("schemaVersion")) return profile.schemaVersion !== 1;
+      return !fields.some((field) => {
+        const value = profile[field];
+        return typeof value === "string" && value.trim();
+      });
+    })
+    .map((fields) => fields.join(" or "));
 }
 
 function validateControlPlane(terraform) {
@@ -400,11 +408,7 @@ function outputValue(entry) {
 function loadEnvFile() {
   const explicit = process.env.COMPUTER_ENV_FILE;
   if (explicit === "none") return {};
-  const candidates = [
-    explicit,
-    "apps/web/.env",
-    ".env",
-  ].filter(Boolean);
+  const candidates = [explicit, "apps/web/.env", ".env"].filter(Boolean);
 
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);

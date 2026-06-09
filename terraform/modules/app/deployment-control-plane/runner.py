@@ -16,6 +16,8 @@ TF = WORK / "terraform"
 MANIFEST = RELEASE / "thinkwork-release.json"
 STARTED_AT = datetime.now(UTC).isoformat()
 RELEASE_EVIDENCE = {}
+CONTROLLER_EVIDENCE = {}
+TERRAFORM_EVIDENCE = {}
 
 
 def run(args, **kwargs):
@@ -159,6 +161,124 @@ def materialize_release_artifact(artifact, bundled_paths):
     if digest != artifact.get("sha256"):
         raise RuntimeError(f"Artifact digest mismatch for {artifact.get('name')}")
     return destination, digest, source
+
+
+def evidence_s3_uri(name):
+    prefix = os.environ.get("THINKWORK_EVIDENCE_PREFIX")
+    bucket = os.environ.get("THINKWORK_EVIDENCE_BUCKET")
+    if not prefix or not bucket:
+        return ""
+    return f"s3://{bucket}/{prefix}/{name}"
+
+
+def upload_evidence_artifact(path, name=None):
+    artifact_name = name or Path(path).name
+    uri = evidence_s3_uri(artifact_name)
+    if uri:
+        run(["aws", "s3", "cp", str(path), uri])
+    return uri
+
+
+def write_json_evidence_artifact(name, payload):
+    path = Path(name)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "fileName": name,
+        "sha256": sha256_file(path),
+        "s3Uri": upload_evidence_artifact(path, name),
+    }
+
+
+def redacted_tfvars(vars_json):
+    redacted = dict(vars_json)
+    for key in [
+        "api_auth_secret",
+        "db_password",
+        "google_oauth_client_secret",
+    ]:
+        if key in redacted:
+            redacted[key] = "[redacted]"
+    return redacted
+
+
+def controller_input_summary(payload):
+    release = payload.get("release")
+    if not isinstance(release, dict):
+        release = {
+            "version": payload.get("releaseVersion")
+            or os.environ.get("THINKWORK_RELEASE_VERSION"),
+            "manifestUrl": payload.get("releaseManifestUrl")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
+            "manifestSha256": payload.get("releaseManifestSha256")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
+        }
+    return {
+        "schemaVersion": payload.get("schemaVersion"),
+        "contract": payload.get("contract"),
+        "phase": payload.get("phase"),
+        "action": payload.get("action"),
+        "sessionId": payload.get("sessionId"),
+        "customer": {
+            "name": payload.get("customerName"),
+            "environmentName": payload.get("environmentName"),
+            "awsAccountId": payload.get("awsAccountId"),
+            "awsRegion": payload.get("awsRegion"),
+            "availabilityZones": payload.get("availabilityZones"),
+        },
+        "evidence": payload.get("evidence")
+        or {
+            "bucket": payload.get("evidenceBucket")
+            or os.environ.get("THINKWORK_EVIDENCE_BUCKET"),
+            "prefix": os.environ.get("THINKWORK_EVIDENCE_PREFIX"),
+        },
+        "features": payload.get("features")
+        or {
+            "baseInstall": {
+                "cognee": False,
+                "slack": False,
+                "stripe": False,
+                "twenty": False,
+            },
+            "optionalApps": [],
+        },
+        "operation": payload.get("operation"),
+        "release": release,
+        "terraform": payload.get("terraform"),
+    }
+
+
+def terraform_plan_summary(plan_json):
+    resource_changes = plan_json.get("resource_changes", [])
+    by_action = {}
+    for change in resource_changes:
+        actions = change.get("change", {}).get("actions", [])
+        action_key = ",".join(actions) if actions else "unknown"
+        by_action[action_key] = by_action.get(action_key, 0) + 1
+    return {
+        "formatVersion": plan_json.get("format_version"),
+        "terraformVersion": plan_json.get("terraform_version"),
+        "resourceChangeCount": len(resource_changes),
+        "resourceChangesByAction": by_action,
+    }
+
+
+def write_terraform_plan_evidence():
+    plan_path = Path("terraform-plan.json")
+    with plan_path.open("w", encoding="utf-8") as handle:
+        run(["terraform", "show", "-json", "tfplan"], cwd=TF, stdout=handle)
+    plan_json = json.loads(plan_path.read_text(encoding="utf-8"))
+    artifact = {
+        "fileName": plan_path.name,
+        "sha256": sha256_file(plan_path),
+        "s3Uri": upload_evidence_artifact(plan_path),
+    }
+    return {
+        "artifact": artifact,
+        "summary": terraform_plan_summary(plan_json),
+    }
 
 
 def secret_payload(payload):
@@ -1063,6 +1183,10 @@ def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None)
         evidence["error"] = str(error)
     if RELEASE_EVIDENCE:
         evidence["releaseArtifacts"] = RELEASE_EVIDENCE
+    if CONTROLLER_EVIDENCE:
+        evidence["controller"] = CONTROLLER_EVIDENCE
+    if TERRAFORM_EVIDENCE:
+        evidence["terraform"] = TERRAFORM_EVIDENCE
     Path("deployment-evidence.json").write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -1082,18 +1206,34 @@ def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None)
 
 
 def main():
+    global CONTROLLER_EVIDENCE, TERRAFORM_EVIDENCE
     WORK.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("CLOUDFLARE_API_TOKEN", "placeholder-not-configured")
     payload = read_json_env("THINKWORK_DEPLOYMENT_INPUT", {})
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION") or payload.get("action") or "deploy"
     if action == "teardown":
         action = "destroy"
-    if action not in {"deploy", "destroy", "plan"}:
+    if action not in {"deploy", "update", "destroy", "plan"}:
         raise RuntimeError(f"Unsupported deployment action: {action}")
+    os.environ["THINKWORK_DEPLOYMENT_ACTION"] = action
 
     runner_secrets = secret_payload(payload)
-    static_files = sync_release_artifacts() if action == "deploy" else {}
+    static_files = sync_release_artifacts() if action in {"deploy", "update"} else {}
     vars_json = write_runner_files(payload, runner_secrets)
+    controller_summary = controller_input_summary(payload)
+    CONTROLLER_EVIDENCE = {
+        "inputSummary": controller_summary,
+        "artifact": write_json_evidence_artifact(
+            "controller-input-summary.json",
+            controller_summary,
+        ),
+    }
+    TERRAFORM_EVIDENCE = {
+        "redactedVariables": write_json_evidence_artifact(
+            "redacted-terraform-vars.json",
+            redacted_tfvars(vars_json),
+        )
+    }
     write_evidence("running", vars_json)
 
     run(["terraform", "init", "-backend-config=backend.hcl", "-no-color"], cwd=TF)
@@ -1106,17 +1246,28 @@ def main():
     if selected.returncode != 0:
         run(["terraform", "workspace", "new", workspace, "-no-color"], cwd=TF)
     if action == "destroy":
-        result = subprocess.run(
-            ["terraform", "destroy", "-auto-approve", "-no-color"],
+        plan = subprocess.run(
+            ["terraform", "plan", "-destroy", "-out=tfplan", "-no-color"],
             cwd=TF,
             text=True,
         )
+        if plan.returncode == 0:
+            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence()
+            result = subprocess.run(
+                ["terraform", "apply", "-auto-approve", "-no-color", "tfplan"],
+                cwd=TF,
+                text=True,
+            )
+        else:
+            result = plan
     else:
         plan = subprocess.run(
             ["terraform", "plan", "-out=tfplan", "-no-color"],
             cwd=TF,
             text=True,
         )
+        if plan.returncode == 0:
+            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence()
         if action == "plan" or plan.returncode != 0:
             result = plan
         else:
@@ -1127,8 +1278,13 @@ def main():
             )
 
     outputs_path = TF / "outputs.json"
-    if result.returncode == 0 and action == "deploy":
+    if result.returncode == 0 and action in {"deploy", "update"}:
         outputs_path.write_text(output(["terraform", "output", "-json"], cwd=TF), encoding="utf-8")
+        TERRAFORM_EVIDENCE["outputs"] = {
+            "fileName": "terraform-outputs.json",
+            "sha256": sha256_file(outputs_path),
+            "s3Uri": upload_evidence_artifact(outputs_path, "terraform-outputs.json"),
+        }
         push_database_schema(outputs_path, vars_json)
         write_outputs_to_ssm(outputs_path, vars_json)
         sync_static(outputs_path, static_files, vars_json)
