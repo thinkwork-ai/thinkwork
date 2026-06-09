@@ -13,9 +13,10 @@ status: in_progress
 - Current implementation unit: U2 - Tenant-aware model catalog services.
 - Current branch: `codex/tenant-model-catalog-u2`.
 - Current worktree: `.Codex/worktrees/tenant-model-catalog-u2`.
-- Pull request: not opened yet for U2. U1 PR
+- Pull request:
+  [#2273](https://github.com/thinkwork-ai/thinkwork/pull/2273). U1 PR
   [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) was merged.
-- Status: U2 implementation in progress; local API tests passed.
+- Status: U2 PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
@@ -83,7 +84,7 @@ status: in_progress
     it fails with broad existing package-level implicit-any/unknown diagnostics
     outside U2. A narrowed scrape of the typecheck output for U2-touched files
     returned no diagnostics after local fixes.
-- U2 CI: not started.
+- U2 CI: pending on PR #2273.
 - U2 merge/cleanup: pending.
 
 ## Kestra Managed Application - 2026-06-08
