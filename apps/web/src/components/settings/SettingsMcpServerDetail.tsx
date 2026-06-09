@@ -483,7 +483,8 @@ export function SettingsMcpServerDetail() {
 
         {managed ? (
           <p className="text-right text-sm text-muted-foreground">
-            Use CRM settings to park or destroy this managed connector.
+            Use the managed application settings to park or destroy this
+            connector.
           </p>
         ) : (
           <div className="flex justify-end">

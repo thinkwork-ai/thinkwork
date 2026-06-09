@@ -227,6 +227,7 @@ describe("deploymentStatus authz", () => {
         "secret-arn",
       ].join("|"),
     );
+    vi.stubEnv("THINKWORK_API_URL", "https://api.thinkwork.test");
 
     const result = await deploymentStatusMod.deploymentStatus(
       null,
@@ -249,7 +250,7 @@ describe("deploymentStatus authz", () => {
           storageBucketName: "kestra-bucket",
           databaseName: "thinkwork_kestra",
           managedMcpStatus: "missing",
-          managedMcpInstallAvailable: false,
+          managedMcpInstallAvailable: true,
         }),
       ]),
     );

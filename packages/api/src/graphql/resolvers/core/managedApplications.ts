@@ -405,10 +405,10 @@ function kestraManagedApplication(): ManagedApplicationStatus {
     managedMcpServerId: null,
     managedMcpStatus: kestra.runtimeEnabled ? "missing" : "not_ready",
     managedMcpInstalled: false,
-    managedMcpInstallAvailable: false,
+    managedMcpInstallAvailable: status === "running" && Boolean(kestra.url),
     managedMcpMessage:
       status === "running" && kestra.url
-        ? "Kestra control MCP registration will be reconciled by the managed control service."
+        ? "Kestra control MCP server has not been registered yet."
         : "Kestra control MCP registration requires the runtime to be running.",
   };
 }

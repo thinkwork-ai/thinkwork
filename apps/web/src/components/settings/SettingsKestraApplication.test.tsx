@@ -1,19 +1,35 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsDeploymentStatusQuery } from "@/gql/graphql";
 
-const { queryDocs, runHealthCheckMock, useQueryMock } = vi.hoisted(() => ({
+const {
+  installMcpMock,
+  queryDocs,
+  runHealthCheckMock,
+  useMutationMock,
+  useQueryMock,
+} = vi.hoisted(() => ({
+  installMcpMock: vi.fn(),
   queryDocs: {
     SettingsDeploymentStatusQuery: Symbol("deploymentStatus"),
     SettingsManagedApplicationHealthCheckQuery: Symbol("healthCheck"),
+    SettingsInstallManagedApplicationMcpServerMutation: Symbol("installMcp"),
   },
   runHealthCheckMock: vi.fn(),
+  useMutationMock: vi.fn(),
   useQueryMock: vi.fn(),
 }));
 
 vi.mock("urql", () => ({
+  useMutation: useMutationMock,
   useQuery: useQueryMock,
 }));
 
@@ -38,8 +54,20 @@ const routeSource = readFileSync(
 import { SettingsKestraApplication } from "./SettingsKestraApplication";
 
 beforeEach(() => {
+  installMcpMock.mockReset();
   runHealthCheckMock.mockReset();
+  useMutationMock.mockReset();
   useQueryMock.mockReset();
+  useMutationMock.mockReturnValue([
+    { fetching: false },
+    installMcpMock.mockResolvedValue({
+      data: {
+        installManagedApplicationMcpServer: {
+          message: "Kestra control MCP server registered.",
+        },
+      },
+    }),
+  ]);
 });
 
 afterEach(cleanup);
@@ -52,7 +80,7 @@ describe("SettingsKestraApplication", () => {
     expect(source).toContain("Namespace policy");
     expect(source).toContain("SettingsManagedApplicationHealthCheckQuery");
     expect(source).toContain('variables: { key: "kestra" }');
-    expect(source).not.toContain(
+    expect(source).toContain(
       "SettingsInstallManagedApplicationMcpServerMutation",
     );
   });
@@ -80,6 +108,20 @@ describe("SettingsKestraApplication", () => {
         .at(-1)
         ?.getAttribute("href"),
     ).toBe("/settings/managed-applications");
+  });
+
+  it("installs or repairs the Kestra control MCP row from the app page", async () => {
+    mockDeployment(deploymentWithKestraRunning);
+
+    render(<SettingsKestraApplication />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /install mcp server/i }),
+    );
+
+    await waitFor(() => {
+      expect(installMcpMock).toHaveBeenCalledWith({ key: "kestra" });
+    });
   });
 });
 
@@ -158,9 +200,9 @@ const deploymentWithKestraRunning = {
       managedMcpServerId: null,
       managedMcpStatus: "missing",
       managedMcpInstalled: false,
-      managedMcpInstallAvailable: false,
+      managedMcpInstallAvailable: true,
       managedMcpMessage:
-        "Kestra control MCP registration will be reconciled by the managed control service.",
+        "Kestra control MCP server has not been registered yet.",
     },
   ],
 } as SettingsDeploymentStatusQuery["deploymentStatus"];

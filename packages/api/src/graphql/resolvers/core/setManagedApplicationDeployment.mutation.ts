@@ -13,7 +13,10 @@ import {
   readManagedApplication,
 } from "./managedApplications.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
-import { reconcileTwentyManagedMcp } from "../../../lib/managed-mcp-applications.js";
+import {
+  reconcileKestraManagedMcp,
+  reconcileTwentyManagedMcp,
+} from "../../../lib/managed-mcp-applications.js";
 
 type DeploymentVariable = {
   name: string;
@@ -106,15 +109,17 @@ async function reconcileManagedMcpAfterDeploymentRequest(
   key: ManagedApplicationKey,
   action: DeploymentAction,
 ) {
-  if (key !== "twenty") return;
+  if (key !== "twenty" && key !== "kestra") return;
 
   const tenantId = await resolveCallerTenantId(ctx);
   if (!tenantId) return;
 
   try {
-    const application = readManagedApplication("twenty");
+    const application = readManagedApplication(key);
+    const reconcile =
+      key === "twenty" ? reconcileTwentyManagedMcp : reconcileKestraManagedMcp;
     if (action === "PARK") {
-      await reconcileTwentyManagedMcp({
+      await reconcile({
         tenantId,
         application,
         mode: "parked",
@@ -122,7 +127,7 @@ async function reconcileManagedMcpAfterDeploymentRequest(
       return;
     }
     if (action === "DESTROY") {
-      await reconcileTwentyManagedMcp({
+      await reconcile({
         tenantId,
         application,
         mode: "destroyed",
@@ -130,7 +135,7 @@ async function reconcileManagedMcpAfterDeploymentRequest(
       return;
     }
     if (application.runtimeEnabled && application.url) {
-      await reconcileTwentyManagedMcp({
+      await reconcile({
         tenantId,
         application,
         mode: "running",
@@ -138,7 +143,7 @@ async function reconcileManagedMcpAfterDeploymentRequest(
     }
   } catch (error) {
     console.warn(
-      "[managed-app-deployment] Twenty MCP reconciliation skipped:",
+      `[managed-app-deployment] ${key} MCP reconciliation skipped:`,
       (error as Error).message,
     );
   }

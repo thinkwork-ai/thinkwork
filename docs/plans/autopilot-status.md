@@ -11,10 +11,12 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-002-feat-kestra-managed-app-plan.md`.
 - Target branch: `main`.
-- Current unit: U5 - Kestra control MCP server and client.
-- Current branch: `codex/kestra-managed-app-u5`.
-- Current worktree: `.Codex/worktrees/kestra-managed-app-u5`.
-- Current PR: [#2246](https://github.com/thinkwork-ai/thinkwork/pull/2246).
+- Current unit: U6 - Managed MCP reconciliation and credential-secret runtime
+  path.
+- Current branch: `codex/kestra-managed-app-u6`.
+- Current worktree: `.Codex/worktrees/kestra-managed-app-u6`.
+- Current PR:
+  [#2249](https://github.com/thinkwork-ai/thinkwork/pull/2249).
 - Status: PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the Kestra plan, the
@@ -168,6 +170,46 @@ status: in_progress
     - Direct Prettier formatted U5 TypeScript and markdown files. It reported
       no parser for `scripts/build-lambdas.sh` and Terraform; those files were
       covered by native checks instead.
+  - U5 PR [#2246](https://github.com/thinkwork-ai/thinkwork/pull/2246)
+    passed required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) after a
+    rebase and conflict fix in the Lambda API handler map.
+  - U5 was squash merged as `950105cd`; remote branch was deleted and local
+    worktree/branch were removed.
+  - Created isolated U6 worktree from `origin/main` at `950105cd`.
+  - Started U6 managed MCP work:
+    - generalizing the managed MCP lifecycle so Kestra can register, repair,
+      park, and destroy its ThinkWork control MCP row;
+    - resolving `auth_config.secretRef` from Secrets Manager for
+      `tenant_api_key` runtime configs so managed rows do not store plaintext
+      bearer tokens;
+    - preserving managed rows as system-owned in MCP settings while wiring
+      Kestra install/repair actions through the existing GraphQL mutation.
+  - U6 local verification passed:
+    - `pnpm install --ignore-scripts` -> passed.
+    - `pnpm --filter @thinkwork/api test -- src/__tests__/managed-mcp-lifecycle.test.ts src/lib/__tests__/mcp-configs-approved-filter.test.ts src/__tests__/mcp-user-servers.test.ts src/graphql/resolvers/core/managedApplications.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts`
+      -> 6 files passed, 52 tests passed.
+    - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsMcpServers.test.tsx src/components/settings/SettingsMcpServerDetail.test.tsx src/components/settings/SettingsKestraApplication.test.tsx`
+      -> 3 files passed, 9 tests passed.
+    - `pnpm --filter @thinkwork/api typecheck` -> passed.
+    - `pnpm --filter @thinkwork/web typecheck` -> passed.
+    - `pnpm --filter @thinkwork/api test` -> 436 files passed, 3 skipped;
+      3,730 tests passed, 9 skipped.
+    - `pnpm --filter @thinkwork/web test` -> 138 files passed, 959 tests
+      passed.
+    - `pnpm --filter @thinkwork/web build` -> passed.
+    - Direct Prettier write over U6 touched TS/TSX/Markdown files -> passed.
+    - `git diff --check` -> passed.
+  - U6 local verification caveat:
+    - The root worktree does not expose `./node_modules/.bin/prettier`; direct
+      invocation through pnpm's virtual store succeeded. Web build emitted
+      existing sourcemap and large-chunk warnings but completed successfully.
+  - U6 PR [#2249](https://github.com/thinkwork-ai/thinkwork/pull/2249) opened
+    after rebasing on the latest `origin/main` and rerunning focused API/web
+    tests plus `git diff --check`.
+  - U6 PR checks initially passed, but GitHub required the branch to be current
+    with `main`; rebased cleanly on the newer `origin/main` and reran the
+    focused API/web suites plus `git diff --check` before pushing the refreshed
+    branch.
 
 ## Agent Profile Closed Loops - 2026-06-08
 

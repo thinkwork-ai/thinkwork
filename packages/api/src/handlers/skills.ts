@@ -7,6 +7,7 @@ import {
   CreateSecretCommand,
   UpdateSecretCommand,
   DeleteSecretCommand,
+  GetSecretValueCommand,
   ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 import { eq, and, sql, inArray, isNull } from "drizzle-orm";
@@ -1195,7 +1196,7 @@ async function mcpRegisterServer(
         throw err;
       }
     }
-    authConfig = { secretRef: secretName, token: apiKey };
+    authConfig = { secretRef: secretName };
   }
 
   // Check for existing
@@ -1461,8 +1462,7 @@ async function mcpKeyStatus(
   if (!row) return notFound("MCP server not found");
 
   const authConfig = (row.auth_config as Record<string, unknown> | null) || {};
-  const token =
-    typeof authConfig.token === "string" ? (authConfig.token as string) : "";
+  const token = (await resolveTenantApiKeyToken(authConfig)) ?? "";
   const hasKey = token.length > 0;
 
   return json({
@@ -1504,6 +1504,7 @@ async function mcpSetApiKey(
     .select({
       id: tenantMcpServers.id,
       slug: tenantMcpServers.slug,
+      url: tenantMcpServers.url,
       auth_type: tenantMcpServers.auth_type,
     })
     .from(tenantMcpServers)
@@ -1590,10 +1591,12 @@ async function mcpSetApiKey(
     }
   }
 
+  const nextAuthConfig = { secretRef: secretName };
   await db
     .update(tenantMcpServers)
     .set({
-      auth_config: { secretRef: secretName, token: rawToken },
+      auth_config: nextAuthConfig,
+      url_hash: computeMcpUrlHash(server.url, nextAuthConfig),
       updated_at: new Date(),
     })
     .where(eq(tenantMcpServers.id, serverId));
@@ -1632,7 +1635,7 @@ async function mcpTestConnection(
   };
   if (row.auth_type === "tenant_api_key") {
     const authCfg = (row.auth_config as Record<string, unknown>) || {};
-    const token = authCfg.token as string;
+    const token = await resolveTenantApiKeyToken(authCfg);
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
@@ -1857,6 +1860,35 @@ async function upsertMcpContextToolEligibility(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function resolveTenantApiKeyToken(
+  authConfig: Record<string, unknown>,
+): Promise<string | null> {
+  const secretRef =
+    typeof authConfig.secretRef === "string" && authConfig.secretRef.trim()
+      ? authConfig.secretRef.trim()
+      : null;
+  if (secretRef) {
+    const secret = await sm.send(
+      new GetSecretValueCommand({ SecretId: secretRef }),
+    );
+    return extractTokenFromSecretString(secret.SecretString);
+  }
+
+  const token = authConfig.token;
+  return typeof token === "string" && token.length > 0 ? token : null;
+}
+
+function extractTokenFromSecretString(secretString?: string): string | null {
+  if (!secretString) return null;
+  try {
+    const parsed = JSON.parse(secretString) as Record<string, unknown>;
+    const token = parsed.token ?? parsed.apiKey ?? parsed.access_token;
+    return typeof token === "string" && token.length > 0 ? token : null;
+  } catch {
+    return secretString.length > 0 ? secretString : null;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,9 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import { reconcileTwentyManagedMcp } from "../../../lib/managed-mcp-applications.js";
+import {
+  reconcileKestraManagedMcp,
+  reconcileTwentyManagedMcp,
+} from "../../../lib/managed-mcp-applications.js";
 import { requirePlatformOperator } from "./setKnowledgeGraphDeployment.mutation.js";
 import {
   normalizeManagedApplicationKey,
@@ -16,10 +19,13 @@ export const installManagedApplicationMcpServer = async (
   await requirePlatformOperator(ctx);
 
   const key = normalizeManagedApplicationKey(args.key);
-  if (key !== "twenty") {
-    throw new GraphQLError("Only Twenty CRM supports managed MCP install", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
+  if (key !== "twenty" && key !== "kestra") {
+    throw new GraphQLError(
+      "This managed application does not support MCP install",
+      {
+        extensions: { code: "BAD_USER_INPUT" },
+      },
+    );
   }
 
   const tenantId = await resolveCallerTenantId(ctx);
@@ -29,18 +35,26 @@ export const installManagedApplicationMcpServer = async (
     });
   }
 
-  const application = readManagedApplication("twenty");
-  const result = await reconcileTwentyManagedMcp({
-    tenantId,
-    application,
-    mode: "running",
-  });
+  const application = readManagedApplication(key);
+  const result =
+    key === "twenty"
+      ? await reconcileTwentyManagedMcp({
+          tenantId,
+          application,
+          mode: "running",
+        })
+      : await reconcileKestraManagedMcp({
+          tenantId,
+          application,
+          mode: "running",
+        });
 
   return {
     key,
     serverId: result.serverId,
     installed: result.installed,
     status: result.status,
-    message: result.message ?? "Twenty CRM MCP server installed.",
+    message:
+      result.message ?? `${application.displayName} MCP server installed.`,
   };
 };

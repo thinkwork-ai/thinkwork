@@ -66,6 +66,17 @@ describe("SettingsMcpServers", () => {
           managedApplicationKey: "twenty-crm",
         },
         {
+          id: "kestra",
+          name: "Kestra",
+          slug: "kestra-control",
+          url: "https://api.thinkwork.test/mcp/kestra",
+          enabled: true,
+          authType: "tenant_api_key",
+          status: "approved",
+          managementSource: "managed_application",
+          managedApplicationKey: "kestra",
+        },
+        {
           id: "manual",
           name: "Manual CRM",
           slug: "manual-crm",
@@ -85,8 +96,9 @@ describe("SettingsMcpServers", () => {
     render(<SettingsMcpServers />);
 
     expect(await screen.findByText("Twenty CRM")).toBeTruthy();
-    expect(screen.getByText("managed")).toBeTruthy();
-    expect(screen.getByText("System")).toBeTruthy();
+    expect(screen.getByText("Kestra")).toBeTruthy();
+    expect(screen.getAllByText("managed")).toHaveLength(2);
+    expect(screen.getAllByText("System")).toHaveLength(2);
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: /remove/i })).toHaveLength(
         1,

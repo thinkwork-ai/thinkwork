@@ -1,10 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Badge, Button } from "@thinkwork/ui";
-import { Copy, ExternalLink, RefreshCw, Settings2 } from "lucide-react";
+import { Copy, ExternalLink, Plug, RefreshCw, Settings2 } from "lucide-react";
 import {
   SettingsDeploymentStatusQuery,
+  SettingsInstallManagedApplicationMcpServerMutation,
   SettingsManagedApplicationHealthCheckQuery,
 } from "@/lib/settings-queries";
 import {
@@ -27,7 +28,7 @@ export function SettingsKestraApplication() {
     actionKey: "kestra-application:lifecycle",
   });
 
-  const [statusResult] = useQuery({
+  const [statusResult, refreshStatus] = useQuery({
     query: SettingsDeploymentStatusQuery,
   });
   const [healthResult, runHealthCheck] = useQuery({
@@ -36,6 +37,9 @@ export function SettingsKestraApplication() {
     pause: true,
     requestPolicy: "network-only",
   });
+  const [installMcpState, installMcpServer] = useMutation(
+    SettingsInstallManagedApplicationMcpServerMutation,
+  );
 
   const deployment = statusResult.data?.deploymentStatus;
   const kestra = deployment?.managedApplications.find(
@@ -44,6 +48,21 @@ export function SettingsKestraApplication() {
   const statusLabel = kestra?.status ?? "...";
   const deploymentDescription =
     kestra?.message ?? "Runtime state from deployment status.";
+
+  async function requestMcpInstall() {
+    const result = await installMcpServer({ key: "kestra" });
+    if (result.error) {
+      toast.error(
+        `Could not install Kestra MCP server: ${result.error.message}`,
+      );
+      return;
+    }
+    toast.success(
+      result.data?.installManagedApplicationMcpServer.message ??
+        "Kestra control MCP server installed.",
+    );
+    refreshStatus({ requestPolicy: "network-only" });
+  }
 
   return (
     <SettingsPane>
@@ -89,6 +108,18 @@ export function SettingsKestraApplication() {
               >
                 {kestra?.managedMcpStatus ?? "not_ready"}
               </Badge>
+              {kestra?.managedMcpInstallAvailable ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={installMcpState.fetching}
+                  onClick={() => void requestMcpInstall()}
+                >
+                  <Plug className="size-4" />
+                  Install MCP Server
+                </Button>
+              ) : null}
             </SettingsRow>
             <SettingsRow
               label="Supported runtime"
@@ -135,7 +166,7 @@ export function SettingsKestraApplication() {
           <SettingsSection label="Health">
             <SettingsRow
               label="Connection test"
-              description="Probe the public Kestra /health endpoint through the ThinkWork API."
+              description="Probe the public Kestra endpoint through the ThinkWork API."
             >
               <Button
                 type="button"
