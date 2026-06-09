@@ -2405,12 +2405,12 @@ function FollowUpComposer({
       mentionQuery === null
         ? []
         : filterMentionTargets(mentionTargets, mentionQuery.query, {
-          includeDefaultAgentShortcut: true,
-          targetTypes:
-            mentionQuery.trigger === "#"
-              ? ["AGENT_PROFILE"]
-              : ["USER", "AGENT"],
-        }),
+            includeDefaultAgentShortcut: true,
+            targetTypes:
+              mentionQuery.trigger === "#"
+                ? ["AGENT_PROFILE"]
+                : ["USER", "AGENT"],
+          }),
     [mentionQuery, mentionTargets],
   );
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
@@ -2755,7 +2755,9 @@ function currentMentionQuery(
   content: string,
 ): { trigger: "@" | "#"; query: string } | null {
   const match = content.match(/(?:^|\s)([@#])([\w.'-]*)$/u);
-  return match ? { trigger: match[1] as "@" | "#", query: match[2] ?? "" } : null;
+  return match
+    ? { trigger: match[1] as "@" | "#", query: match[2] ?? "" }
+    : null;
 }
 
 function hasStructuredDefaultAgentMention(
@@ -3411,6 +3413,14 @@ export function actionRowsForTurn(
     .map((tool) => (typeof tool === "string" ? tool : null))
     .filter(Boolean) as string[];
   const toolInvocations = parseArray(usage.tool_invocations);
+  const agentProfileRuns = parseArray(usage.agent_profile_runs)
+    .map((run) => parseRecord(run))
+    .filter((run) => Object.keys(run).length > 0);
+  const profileRunEntries = agentProfileRuns.map((run, index) => ({
+    run,
+    key: profileKeyFromAgentProfileRun(run) || `profile:${index}`,
+  }));
+  const consumedProfileRunKeys = new Set<string>();
   const seen = new Set<string>();
   const workspaceDiagnosticsRow = actionRowForWorkspaceDiagnostics(usage);
   if (workspaceDiagnosticsRow) rows.push(workspaceDiagnosticsRow);
@@ -3426,14 +3436,21 @@ export function actionRowsForTurn(
 
   for (const invocation of toolInvocations) {
     const record = parseRecord(invocation);
-    const agentProfileRun = agentProfileRunFromRecord(record);
+    const agentProfileRun =
+      matchingProfileRunForToolInvocation(
+        record,
+        profileRunEntries,
+        consumedProfileRunKeys,
+      ) ?? agentProfileRunFromRecord(record);
     const name =
       stringValue(record.tool_name) ||
       stringValue(record.toolName) ||
       stringValue(record.name) ||
       "tool";
     if (agentProfileRun) {
-      const toolKey = name.toLowerCase();
+      const profileKey = profileKeyFromAgentProfileRun(agentProfileRun);
+      consumedProfileRunKeys.add(profileKey);
+      const toolKey = `${name.toLowerCase()}:${profileKey.toLowerCase()}`;
       if (!seen.has(toolKey)) {
         seen.add(toolKey);
         rows.push({
@@ -3442,14 +3459,16 @@ export function actionRowsForTurn(
           kind: toolKind(name),
         });
       }
-      const profileKey = profileKeyFromAgentProfileRun(agentProfileRun);
       const key = `agent_profile:${profileKey.toLowerCase()}`;
       if (seen.has(key)) continue;
       seen.add(key);
       rows.push(
         agentProfileActionRow(
           agentProfileRun,
-          profileChildrenForAgentProfileRun(agentProfileRun, profileEventChildren),
+          profileChildrenForAgentProfileRun(
+            agentProfileRun,
+            profileEventChildren,
+          ),
         ),
       );
       continue;
@@ -3513,7 +3532,10 @@ export function actionRowsForTurn(
     if (stringValue(event.eventType)?.startsWith("agent_profile_run")) {
       const payload = parseRecord(event.payload);
       const profileKey = profileKeyFromAgentProfileRun(payload);
-      row.children = profileChildrenForAgentProfileRun(payload, profileEventChildren);
+      row.children = profileChildrenForAgentProfileRun(
+        payload,
+        profileEventChildren,
+      );
       seen.add(`agent_profile:${profileKey.toLowerCase()}`);
     }
     const key = `${event.eventType ?? row.title}:${row.detail ?? ""}`;
@@ -3522,7 +3544,22 @@ export function actionRowsForTurn(
     rows.push(row);
   }
 
-  const hasProfileRow = [...seen].some((key) => key.startsWith("agent_profile:"));
+  for (const entry of profileRunEntries) {
+    if (consumedProfileRunKeys.has(entry.key)) continue;
+    const key = `agent_profile:${entry.key.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push(
+      agentProfileActionRow(
+        entry.run,
+        profileChildrenForAgentProfileRun(entry.run, profileEventChildren),
+      ),
+    );
+  }
+
+  const hasProfileRow = [...seen].some((key) =>
+    key.startsWith("agent_profile:"),
+  );
   const profileMention = !hasProfileRow
     ? agentProfileMentionForMessage(message)
     : null;
@@ -3535,6 +3572,45 @@ export function actionRowsForTurn(
   }
 
   return rows;
+}
+
+function matchingProfileRunForToolInvocation(
+  record: Record<string, unknown>,
+  entries: Array<{ run: Record<string, unknown>; key: string }>,
+  consumed: Set<string>,
+) {
+  const nestedId =
+    stringValue(record.profileRunId) ??
+    stringValue(record.profile_run_id) ??
+    stringValue(parseRecord(record.agent_profile_run).profileRunId) ??
+    stringValue(parseRecord(record.agent_profile_run).profile_run_id) ??
+    stringValue(parseRecord(record.agentProfileRun).profile_run_id) ??
+    stringValue(parseRecord(record.agentProfileRun).profileRunId);
+  if (nestedId) {
+    const match = entries.find((entry) => {
+      if (consumed.has(entry.key)) return false;
+      return profileKeyFromAgentProfileRun(entry.run) === nestedId;
+    });
+    if (match) return match.run;
+  }
+
+  const args = parseRecord(record.args);
+  const slug =
+    stringValue(record.profileSlug) ??
+    stringValue(record.profile_slug) ??
+    stringValue(args.profileSlug) ??
+    stringValue(args.profile_slug) ??
+    stringValue(args.profile);
+  if (!slug) return null;
+  const match = entries.find((entry) => {
+    if (consumed.has(entry.key)) return false;
+    const profileSlug =
+      stringValue(
+        agentProfileField(entry.run, "profileSlug", "profile_slug"),
+      ) ?? "";
+    return profileSlug.toLowerCase() === slug.toLowerCase();
+  });
+  return match?.run ?? null;
 }
 
 function actionRowForWorkspaceDiagnostics(usage: Record<string, unknown>) {
@@ -3918,7 +3994,11 @@ function agentProfileKeysForChildPayload(payload: Record<string, unknown>) {
 
 function appendUniqueActionRow(rows: ActionRowData[], row: ActionRowData) {
   const key = `${row.title}:${row.detail ?? ""}`;
-  if (rows.some((existing) => `${existing.title}:${existing.detail ?? ""}` === key)) {
+  if (
+    rows.some(
+      (existing) => `${existing.title}:${existing.detail ?? ""}` === key,
+    )
+  ) {
     return;
   }
   rows.push(row);
@@ -3940,7 +4020,9 @@ function agentProfileActionRow(
   const model =
     stringValue(agentProfileField(run, "model", "model")) ??
     stringValue(agentProfileField(run, "modelId", "model_id"));
-  const input = numberValue(agentProfileField(run, "inputTokens", "input_tokens"));
+  const input = numberValue(
+    agentProfileField(run, "inputTokens", "input_tokens"),
+  );
   const output = numberValue(
     agentProfileField(run, "outputTokens", "output_tokens"),
   );
@@ -3952,6 +4034,10 @@ function agentProfileActionRow(
     agentProfileField(run, "durationMs", "duration_ms"),
   );
   const status = stringValue(agentProfileField(run, "status", "status"));
+  const loopEvidence = parseRecord(
+    agentProfileField(run, "loopEvidence", "loop_evidence"),
+  );
+  const loopLine = agentProfileLoopDetail(loopEvidence);
   const handoff =
     stringValue(agentProfileField(run, "handoffSummary", "handoff_summary")) ??
     stringValue(agentProfileField(run, "summary", "summary"));
@@ -3973,6 +4059,7 @@ function agentProfileActionRow(
     cost == null ? null : `Cost: ${formatUsd(cost)}`,
     duration == null ? null : `Duration: ${formatDuration(duration)}`,
     status ? `Status: ${status.replace(/_/g, " ")}` : null,
+    loopLine,
     task ? `Task: ${task}` : null,
     handoff ? `Handoff: ${handoff}` : null,
     eventDetailLine,
@@ -3984,6 +4071,46 @@ function agentProfileActionRow(
     kind: "thinking",
     children,
   };
+}
+
+function agentProfileLoopDetail(evidence: Record<string, unknown>) {
+  if (Object.keys(evidence).length === 0) return null;
+  const latest =
+    latestLoopRecordFromEvidence(evidence, "iterations") ??
+    latestLoopRecordFromEvidence(evidence, "phases");
+  const goalState = parseRecord(evidence.goalState);
+  const completion = parseRecord(goalState.completion);
+  const handoff = parseRecord(evidence.handoff);
+  const phase = stringValue(latest?.phase);
+  const status = stringValue(latest?.status);
+  const verdict =
+    stringValue(latest?.verdict) ||
+    stringValue(handoff.verdict) ||
+    stringValue(completion.verdict);
+  const iteration = numberValue(latest?.index);
+  const parts = [
+    phase ? phase.replace(/_/g, " ") : null,
+    status ? status.replace(/_/g, " ") : null,
+    verdict ? `verdict ${verdict.replace(/_/g, " ")}` : null,
+    iteration != null ? `iteration ${iteration}` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? `Loop: ${parts.join(" · ")}` : null;
+}
+
+function latestLoopRecordFromEvidence(
+  evidence: Record<string, unknown>,
+  key: "iterations" | "phases",
+) {
+  const records = parseArray(evidence[key]).map((item) => parseRecord(item));
+  if (records.length === 0) return null;
+  if (key === "phases") {
+    const active = [...records].reverse().find((record) => {
+      const status = stringValue(record.status)?.toLowerCase();
+      return status !== "skipped";
+    });
+    return active ?? records[records.length - 1];
+  }
+  return records[records.length - 1];
 }
 
 function agentProfileField(

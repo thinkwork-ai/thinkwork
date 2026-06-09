@@ -3216,6 +3216,103 @@ describe("TaskThreadView", () => {
     expect(rows[1]?.detail).toContain("Status: completed");
   });
 
+  it("keeps sequential Research and Reviewer profile rows paired with their delegate tools", () => {
+    const rows = actionRowsForTurn(
+      {
+        id: "turn-agent-profile-chain",
+        status: "succeeded",
+        invocationSource: "chat_message",
+      },
+      {
+        tool_invocations: [
+          {
+            id: "delegate-research",
+            tool_name: "delegate_to_agent_profile",
+            args: { profileSlug: "research" },
+            agent_profile_run: {
+              profileRunId: "profile-run-research",
+              profileSlug: "research",
+            },
+          },
+          {
+            id: "delegate-reviewer",
+            tool_name: "delegate_to_agent_profile",
+            args: { profileSlug: "reviewer" },
+            agent_profile_run: {
+              profileRunId: "profile-run-reviewer",
+              profileSlug: "reviewer",
+            },
+          },
+        ],
+        agent_profile_runs: [
+          {
+            profileRunId: "profile-run-research",
+            profileSlug: "research",
+            profileName: "Research",
+            model: "moonshotai.kimi-k2.5",
+            inputTokens: 25000,
+            outputTokens: 133,
+            costUsd: 0.0154,
+            durationMs: 10500,
+            status: "completed",
+            loopEvidence: {
+              iterations: [
+                {
+                  index: 0,
+                  phase: "self_review",
+                  status: "completed",
+                  verdict: "pass",
+                },
+              ],
+            },
+            toolInvocations: [
+              {
+                tool_name: "web_search",
+                input_preview: '{"query":"Stripe CEO"}',
+                output_preview: "Search results",
+              },
+            ],
+          },
+          {
+            profileRunId: "profile-run-reviewer",
+            profileSlug: "reviewer",
+            profileName: "Reviewer",
+            model: "moonshotai.kimi-k2.5",
+            inputTokens: 1100,
+            outputTokens: 104,
+            costUsd: 0.001,
+            durationMs: 934,
+            status: "completed",
+            loopEvidence: {
+              iterations: [
+                {
+                  index: 0,
+                  phase: "final_review",
+                  status: "completed",
+                  verdict: "pass",
+                },
+              ],
+            },
+          },
+        ],
+      },
+    );
+
+    expect(rows.map((row) => row.title).slice(0, 4)).toEqual([
+      "Using delegate to agent profile",
+      "Agent Profile: Research",
+      "Using delegate to agent profile",
+      "Agent Profile: Reviewer",
+    ]);
+    expect(rows[1]?.children?.[0]?.title).toBe("Research: Finding sources");
+    expect(rows[1]?.detail).toContain(
+      "Loop: self review · completed · verdict pass · iteration 0",
+    );
+    expect(rows[3]?.detail).toContain(
+      "Loop: final review · completed · verdict pass · iteration 0",
+    );
+  });
+
   it("renders one Thinking disclosure per turn, anchored to its user message in chronological order", () => {
     // U3 regression guard: prior behavior attached only the latest turn's
     // activity to the latest user message, leaving earlier turns invisible.
