@@ -193,6 +193,47 @@ type TenantModelCatalogEntry {
   updatedAt: AWSDateTime!
 }
 
+type BedrockModelImportCandidate {
+  provider: String!
+  providerName: String!
+  modelName: String!
+  modelId: String!
+  displayName: String!
+  inputModalities: [String!]!
+  outputModalities: [String!]!
+  supportsStreaming: Boolean!
+  supportsVision: Boolean!
+  supportsTools: Boolean!
+  customizationsSupported: [String!]!
+  inferenceTypesSupported: [String!]!
+  lifecycleStatus: String
+  inputCostPerMillion: Float
+  outputCostPerMillion: Float
+  pricingStatus: String!
+  pricingSource: String
+  pricingDiagnostics: AWSJSON!
+  alreadyImported: Boolean!
+  enabled: Boolean!
+}
+
+input ImportTenantBedrockModelInput {
+  modelId: String!
+  displayName: String
+  enabled: Boolean = false
+}
+
+input ImportTenantBedrockModelsInput {
+  tenantId: ID!
+  models: [ImportTenantBedrockModelInput!]!
+}
+
+input UpdateTenantModelCatalogEntryInput {
+  tenantId: ID!
+  modelId: String!
+  displayName: String
+  enabled: Boolean
+}
+
 type AgentProfile {
   id: ID!
   tenantId: ID!
@@ -290,6 +331,11 @@ type AgentWorkspace {
 extend type Query {
   tenantAgent(tenantId: ID!): Agent!
   modelCatalog: [ModelCatalogEntry!]!
+  tenantModelCatalog(
+    tenantId: ID!
+    includeDisabled: Boolean = true
+  ): [TenantModelCatalogEntry!]!
+  bedrockModelImportCandidates(tenantId: ID!): [BedrockModelImportCandidate!]!
   userModelCatalog(userId: ID!): [UserModelCatalogEntry!]!
   myApprovedModelCatalog: [ModelCatalogEntry!]!
   agentProfiles(
@@ -307,6 +353,12 @@ extend type Mutation {
     modelId: String!
     approved: Boolean!
   ): [UserModelCatalogEntry!]!
+  importTenantBedrockModels(
+    input: ImportTenantBedrockModelsInput!
+  ): [TenantModelCatalogEntry!]!
+  updateTenantModelCatalogEntry(
+    input: UpdateTenantModelCatalogEntryInput!
+  ): TenantModelCatalogEntry!
   createAgentProfile(tenantId: ID!, input: AgentProfileInput!): AgentProfile!
   updateAgentProfile(
     tenantId: ID!

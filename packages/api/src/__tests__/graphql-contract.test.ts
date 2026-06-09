@@ -66,6 +66,8 @@ describe("GraphQL Schema Contract", () => {
       // Agents
       "tenantAgent",
       "modelCatalog",
+      "tenantModelCatalog",
+      "bedrockModelImportCandidates",
       // Threads
       "thread",
       "threads",
@@ -307,6 +309,67 @@ describe("GraphQL Schema Contract", () => {
         "Int",
       );
     });
+
+    it("exposes tenant model catalog management contracts", () => {
+      const query = schema.getQueryType() as any;
+      const mutation = schema.getMutationType() as any;
+      const tenantEntry = schema.getType("TenantModelCatalogEntry") as any;
+      const candidate = schema.getType("BedrockModelImportCandidate") as any;
+      const importInput = schema.getType(
+        "ImportTenantBedrockModelsInput",
+      ) as any;
+      const updateInput = schema.getType(
+        "UpdateTenantModelCatalogEntryInput",
+      ) as any;
+
+      expect(
+        query
+          .getFields()
+          .tenantModelCatalog.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([
+        ["tenantId", "ID!"],
+        ["includeDisabled", "Boolean"],
+      ]);
+      expect(query.getFields().tenantModelCatalog.type.toString()).toBe(
+        "[TenantModelCatalogEntry!]!",
+      );
+      expect(
+        query.getFields().bedrockModelImportCandidates.type.toString(),
+      ).toBe("[BedrockModelImportCandidate!]!");
+
+      expect(tenantEntry.getFields().displayName.type.toString()).toBe(
+        "String!",
+      );
+      expect(tenantEntry.getFields().enabled.type.toString()).toBe("Boolean!");
+      expect(tenantEntry.getFields().pricingStatus.type.toString()).toBe(
+        "String!",
+      );
+      expect(candidate.getFields().provider.type.toString()).toBe("String!");
+      expect(candidate.getFields().pricingDiagnostics.type.toString()).toBe(
+        "AWSJSON!",
+      );
+      expect(candidate.getFields().alreadyImported.type.toString()).toBe(
+        "Boolean!",
+      );
+
+      expect(importInput.getFields().tenantId.type.toString()).toBe("ID!");
+      expect(importInput.getFields().models.type.toString()).toBe(
+        "[ImportTenantBedrockModelInput!]!",
+      );
+      expect(updateInput.getFields().displayName.type.toString()).toBe(
+        "String",
+      );
+      expect(updateInput.getFields().enabled.type.toString()).toBe("Boolean");
+      expect(
+        mutation.getFields().importTenantBedrockModels.type.toString(),
+      ).toBe("[TenantModelCatalogEntry!]!");
+      expect(
+        mutation.getFields().updateTenantModelCatalogEntry.type.toString(),
+      ).toBe("TenantModelCatalogEntry!");
+    });
   });
 
   describe("Computers and evals no longer expose Template wiring", () => {
@@ -373,6 +436,8 @@ describe("GraphQL Schema Contract", () => {
     const expectedMutations = [
       // Tenant agent
       "updateTenantAgent",
+      "importTenantBedrockModels",
+      "updateTenantModelCatalogEntry",
       // Core
       "renameTenantSlug",
       // Threads

@@ -10,13 +10,14 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-001-feat-tenant-model-catalog-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U2 - Tenant-aware model catalog services.
-- Current branch: `codex/tenant-model-catalog-u2`.
-- Current worktree: `.Codex/worktrees/tenant-model-catalog-u2`.
+- Current implementation unit: U3 - Tenant model catalog GraphQL API.
+- Current branch: `codex/tenant-model-catalog-u3`.
+- Current worktree: `.Codex/worktrees/tenant-model-catalog-u3`.
 - Pull request:
-  [#2273](https://github.com/thinkwork-ai/thinkwork/pull/2273). U1 PR
-  [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) was merged.
-- Status: U2 PR open; CI pending.
+  [#2275](https://github.com/thinkwork-ai/thinkwork/pull/2275). U2 PR
+  [#2273](https://github.com/thinkwork-ai/thinkwork/pull/2273) and U1 PR
+  [#2271](https://github.com/thinkwork-ai/thinkwork/pull/2271) were merged.
+- Status: U3 PR open; CI pending.
 - Notes:
   - Started autopilot execution after reading AGENTS.md, the tenant model
     catalog plan, and the referenced requirements.
@@ -84,8 +85,45 @@ status: in_progress
     it fails with broad existing package-level implicit-any/unknown diagnostics
     outside U2. A narrowed scrape of the typecheck output for U2-touched files
     returned no diagnostics after local fixes.
-- U2 CI: pending on PR #2273.
-- U2 merge/cleanup: pending.
+- U2 CI:
+  - PR #2273 initially became `BEHIND` after U1/main advanced; rebased the U2
+    branch onto `origin/main`, force-pushed with lease, and waited for fresh
+    checks.
+  - Final required checks passed: `cla`, `lint`, `test`, `typecheck`, and
+    `verify`.
+- U2 merge/cleanup:
+  - PR #2273 was squash merged as `b912389f`.
+  - The remote branch was deleted by GitHub merge handling; the local U2
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U3 worktree from `origin/main` at `b912389f`.
+- U3 started GraphQL API work:
+  - added admin-gated tenant catalog list, Bedrock import candidate, bulk
+    import, and tenant catalog update resolver surfaces;
+  - added AWS-sourced import-candidate pricing status in GraphQL without
+    putting AWS credentials in the browser;
+  - added a service helper for display-name/enabled updates that refuses to
+    enable rows without resolved token pricing;
+  - regenerated GraphQL client types for CLI, web, and mobile.
+- U3 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/tenant-agent/tenantModelCatalog.resolver.test.ts src/__tests__/graphql-contract.test.ts`
+    passed: 2 files, 126 tests.
+  - `pnpm schema:build` passed and did not leave a `terraform/schema.graphql`
+    diff.
+  - GraphQL codegen passed for `thinkwork-cli`, `@thinkwork/web`, and
+    `@thinkwork/mobile`; `@thinkwork/api` has no `codegen` script.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/api test` passed: 440 files, 3 skipped; 3,751
+    tests, 9 skipped.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - Post-format `pnpm schema:build`, focused resolver/contract tests, and API
+    typecheck passed.
+  - Prettier check over U3 hand-written files passed; generated GraphQL clients
+    were regenerated after avoiding generated-file formatting churn.
+  - `git diff --check` passed.
 
 ## Kestra Managed Application - 2026-06-08
 
