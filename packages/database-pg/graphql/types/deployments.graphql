@@ -111,6 +111,8 @@ input StartManagedApplicationPlanInput {
   operation: String!
   releaseVersion: String
   manifestDigest: String
+  manifestUrl: String
+  manifestImages: AWSJSON
   desiredConfigVersion: String
   desiredConfig: AWSJSON
   idempotencyKey: String!

@@ -5,11 +5,15 @@ import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
 import {
   appendJobEvent,
+  buildManagedAppControllerPayload,
+  defaultManifestUrl,
   defaultStartExecution,
   deploymentStateMachineArn,
   executionName,
   loadDeploymentJobForTenant,
   loadJobEvents,
+  normalizeDeploymentOperation,
+  normalizeManagedAppKey,
   requireDeploymentTenantAdmin,
   toDeploymentPayload,
   type DeploymentDeps,
@@ -94,20 +98,26 @@ export async function approveManagedApplicationDeployment(
   });
 
   try {
+    const planSummary = readPlanSummary(job.plan_summary);
     const started = await (deps.startExecution ?? defaultStartExecution)({
       stateMachineArn,
       name: executionName(job.id, "apply"),
-      payload: {
+      payload: buildManagedAppControllerPayload({
         phase: "apply",
         tenantId,
         jobId: job.id,
-        appKey: job.app_key,
-        operation: job.operation,
+        appKey: normalizeManagedAppKey(job.app_key),
+        operation: normalizeDeploymentOperation(job.operation),
         releaseVersion: job.release_version,
         manifestDigest: job.manifest_digest,
+        releaseManifestUrl:
+          planSummary.releaseManifestUrl ?? defaultManifestUrl(),
         desiredConfigVersion: job.desired_config_version,
+        desiredConfig: planSummary.desiredConfig,
+        manifestImages: planSummary.manifestImages,
         planDigest: job.plan_digest,
-      },
+        evidenceBucket: job.evidence_bucket,
+      }),
     });
     const [updated] = await db
       .update(managedApplicationDeploymentJobs)
@@ -155,4 +165,36 @@ function isDestructive(value: unknown): boolean {
     typeof value === "object" &&
     (value as { destructive?: unknown }).destructive === true
   );
+}
+
+function readPlanSummary(value: unknown): {
+  releaseManifestUrl?: string;
+  desiredConfig?: Record<string, unknown>;
+  manifestImages?: Record<string, string>;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const summary = value as Record<string, unknown>;
+  return {
+    releaseManifestUrl:
+      typeof summary.releaseManifestUrl === "string"
+        ? summary.releaseManifestUrl
+        : undefined,
+    desiredConfig:
+      summary.desiredConfig &&
+      typeof summary.desiredConfig === "object" &&
+      !Array.isArray(summary.desiredConfig)
+        ? (summary.desiredConfig as Record<string, unknown>)
+        : undefined,
+    manifestImages:
+      summary.manifestImages &&
+      typeof summary.manifestImages === "object" &&
+      !Array.isArray(summary.manifestImages)
+        ? Object.fromEntries(
+            Object.entries(summary.manifestImages).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[1] === "string",
+            ),
+          )
+        : undefined,
+  };
 }

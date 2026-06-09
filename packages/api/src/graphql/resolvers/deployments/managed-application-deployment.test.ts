@@ -96,7 +96,16 @@ const destructiveJob = {
   desired_config_version: "v1",
   plan_digest: "b".repeat(64),
   state_machine_arn: "arn:sfn:deployments",
+  evidence_bucket: "evidence-bucket",
   data_impact: { destructive: true },
+  plan_summary: {
+    releaseManifestUrl:
+      "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
+    desiredConfig: { retainedDataSnapshot: "snap-1" },
+    manifestImages: {
+      twenty: `public.ecr.aws/thinkwork/twenty@sha256:${"1".repeat(64)}`,
+    },
+  },
 };
 
 beforeEach(async () => {
@@ -170,10 +179,26 @@ describe("managed application deployment approval", () => {
     expect(mockStartExecution).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
+          schemaVersion: 1,
+          contract: "thinkwork.deployment.controller.v1",
           phase: "apply",
           jobId: "job-1",
           operation: "DESTROY",
           planDigest: "b".repeat(64),
+          release: expect.objectContaining({
+            version: "1.2.3",
+            manifestSha256: "a".repeat(64),
+          }),
+          releaseManifestUrl:
+            "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
+          desiredConfig: { retainedDataSnapshot: "snap-1" },
+          manifestImages: {
+            twenty: `public.ecr.aws/thinkwork/twenty@sha256:${"1".repeat(64)}`,
+          },
+          evidence: expect.objectContaining({
+            bucket: "evidence-bucket",
+            prefix: "tenant-1/twenty/job-1/apply",
+          }),
         }),
       }),
     );

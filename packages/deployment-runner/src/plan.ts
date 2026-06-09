@@ -1,6 +1,6 @@
 import { buildManagedAppPlan, getManagedAppAdapter } from "./apps/registry.js";
 import {
-  evidencePointer,
+  evidencePointerForInput,
   parseRunnerInput,
   stablePlanDigest,
   type DeploymentSummary,
@@ -19,6 +19,7 @@ export function buildPlanSummary(args: {
     appKey: input.appKey,
     operation: input.operation,
     desiredConfig: input.desiredConfig,
+    manifestImages: input.manifestImages,
   });
   const body = {
     jobId: input.jobId,
@@ -27,7 +28,9 @@ export function buildPlanSummary(args: {
     operation: input.operation,
     releaseVersion: input.releaseVersion,
     manifestDigest: input.manifestDigest,
+    releaseManifestUrl: input.releaseManifestUrl,
     desiredConfigVersion: input.desiredConfigVersion,
+    manifestImages: input.manifestImages,
     dataImpact: appPlan.dataImpact,
     terraformVariables: appPlan.terraformVariables,
     preDestroySteps: appPlan.preDestroySteps,
@@ -37,11 +40,9 @@ export function buildPlanSummary(args: {
   return {
     ...body,
     planDigest: stablePlanDigest(body),
-    evidence: evidencePointer({
-      bucket: args.evidenceBucket,
-      tenantId: input.tenantId,
-      appKey: input.appKey,
-      jobId: input.jobId,
+    evidence: evidencePointerForInput({
+      input,
+      fallbackBucket: args.evidenceBucket,
       phase: "plan",
     }),
   };

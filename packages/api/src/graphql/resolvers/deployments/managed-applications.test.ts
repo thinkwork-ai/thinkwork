@@ -157,7 +157,12 @@ describe("managed application plan jobs", () => {
           key: "knowledge-graph",
           operation: "ENABLE",
           releaseVersion: "1.2.3",
+          manifestUrl:
+            "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
           manifestDigest: "a".repeat(64),
+          manifestImages: JSON.stringify({
+            cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+          }),
           desiredConfig: '{"region":"us-east-1"}',
           idempotencyKey: "idem-1",
         },
@@ -173,11 +178,29 @@ describe("managed application plan jobs", () => {
       expect.objectContaining({
         stateMachineArn: "arn:sfn:deployments",
         payload: expect.objectContaining({
+          schemaVersion: 1,
+          contract: "thinkwork.deployment.controller.v1",
           tenantId: "tenant-1",
           jobId: "job-1",
           appKey: "cognee",
           operation: "ENABLE",
           manifestDigest: "a".repeat(64),
+          release: expect.objectContaining({
+            version: "1.2.3",
+            manifestSha256: "a".repeat(64),
+          }),
+          releaseManifestUrl:
+            "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
+          evidence: expect.objectContaining({
+            bucket: "evidence-bucket",
+            prefix: "tenant-1/cognee/job-1/plan",
+          }),
+          features: expect.objectContaining({
+            optionalApps: ["cognee"],
+          }),
+          manifestImages: {
+            cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+          },
         }),
       }),
     );
@@ -189,6 +212,14 @@ describe("managed application plan jobs", () => {
           idempotency_key: "idem-1",
           evidence_bucket: "evidence-bucket",
           evidence_prefix: "tenant-1/cognee/job-1/plan",
+          plan_summary: expect.objectContaining({
+            releaseManifestUrl:
+              "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
+            desiredConfig: { region: "us-east-1" },
+            manifestImages: {
+              cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+            },
+          }),
         }),
       ]),
     );

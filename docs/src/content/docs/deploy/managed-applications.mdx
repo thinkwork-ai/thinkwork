@@ -12,6 +12,13 @@ Twenty CRM, and Kestra orchestration.
 Operators use Spaces Settings -> Managed Applications for the normal path:
 plan, review impact, approve, watch progress, and inspect evidence.
 
+Managed-app jobs use the same deployment controller contract as full
+environment updates. A plan or apply request names the selected release
+manifest URL and SHA-256 digest, records a controller evidence prefix, and
+passes only release-verified image URIs or customer-owned secret ARNs into the
+runner. Base installs keep Cognee, Twenty, Kestra, Slack, and Stripe disabled
+until an operator explicitly plans and approves the optional app.
+
 ## Lifecycle
 
 ```text
@@ -22,6 +29,11 @@ Every mutating action is represented by a deployment job. Jobs preserve the
 selected release manifest digest, requested action, approval decision, plan
 summary, destructive impact, Step Functions execution ARN, CodeBuild build id,
 artifact keys, and smoke evidence.
+
+During approval the apply execution must receive the same desired config and
+release manifest image map that produced the approved plan digest. If the
+release manifest lacks a digest-pinned image for the selected app, the deploy
+fails before Terraform variables are produced.
 
 ## Cognee
 

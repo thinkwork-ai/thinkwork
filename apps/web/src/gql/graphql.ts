@@ -5526,6 +5526,8 @@ export type StartManagedApplicationPlanInput = {
   idempotencyKey: Scalars["String"]["input"];
   key: Scalars["String"]["input"];
   manifestDigest?: InputMaybe<Scalars["String"]["input"]>;
+  manifestImages?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  manifestUrl?: InputMaybe<Scalars["String"]["input"]>;
   operation: Scalars["String"]["input"];
   releaseVersion?: InputMaybe<Scalars["String"]["input"]>;
 };
