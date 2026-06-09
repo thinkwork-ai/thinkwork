@@ -453,6 +453,10 @@ resource "aws_lambda_function" "handler" {
     # Admin-Ops MCP — JSON-RPC endpoint at POST /mcp/admin, exposes the
     # @thinkwork/admin-ops package as MCP tools for managed agents.
     "admin-ops-mcp",
+    # Kestra control MCP — JSON-RPC endpoint at POST /mcp/kestra. Exposes a
+    # narrow, policy-checked tool surface for managed Kestra flows and
+    # executions. Reconciliation of the tenant MCP row lands in the next unit.
+    "kestra-control-mcp",
     # MCP admin key management — per-tenant Bearer tokens for admin-ops.
     # Admin-ops-mcp authenticates incoming tokens by sha256-hash lookup
     # against tenant_mcp_admin_keys, populated by this handler's routes.
@@ -1096,6 +1100,10 @@ locals {
       # the mcp-admin-keys handler below. The shared API_AUTH_SECRET is
       # retained as a break-glass superuser path for bootstrap/debug.
       "POST /mcp/admin" = "admin-ops-mcp"
+
+      # Kestra control MCP server. Managed agents will call this through a
+      # reconciled tenant_mcp_servers row once U6 wires managed registration.
+      "POST /mcp/kestra" = "kestra-control-mcp"
 
       # MCP admin key management — per-tenant Bearer token CRUD. Tokens
       # are shown ONCE at creation (POST returns raw value); server stores
