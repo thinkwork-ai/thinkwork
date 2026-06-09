@@ -9,12 +9,11 @@ status: in_progress
 - Plan:
   `docs/plans/2026-06-08-001-feat-agent-profile-closed-loops-plan.md`.
 - Target branch: `main`.
-- Current unit: U6 - Render Closed Loops In Activity, Traces, And Thread
-  Conversation.
-- Current branch: `codex/agent-profile-closed-loops-u6`.
+- Current unit: U7 - Add Loop Controls To Settings -> Agents.
+- Current branch: `codex/agent-profile-closed-loops-u7`.
 - Current worktree:
-  `.Codex/worktrees/agent-profile-closed-loops-u6`.
-- Status: local verification passed; preparing PR.
+  `.Codex/worktrees/agent-profile-closed-loops-u7`.
+- Status: implementation in progress.
 
 ## Progress
 
@@ -43,7 +42,11 @@ status: in_progress
   conversation so sequential delegate/profile paths show as
   parent -> delegate -> specialist lane -> delegate -> reviewer lane -> parent
   return, while retry runs remain distinct even when they reuse the same
-  profile slug.
+  profile slug. It was squash merged in PR
+  [#2253](https://github.com/thinkwork-ai/thinkwork/pull/2253) as
+  `391b174`.
+- U7 adds operator-facing Loop / Review controls to Settings -> Agents profile
+  detail, writing the authored policy into `executionControls.loopPolicy`.
 
 ## U5 Verification
 
@@ -76,3 +79,21 @@ status: in_progress
 - `pnpm --filter @thinkwork/web typecheck` passed.
 - `pnpm dlx prettier@3.6.2 --write` was run on U6-touched files.
 - `git diff --check` passed.
+
+## U7 Verification
+
+- `pnpm install` completed sufficiently to link workspace tools. Local Node 25
+  logged the existing optional `canvas@2.11.2` native fallback build failure due
+  to missing `pkg-config`/`pixman-1`; pnpm exited successfully and focused web
+  tests/typecheck were unaffected.
+- `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsAgents.test.tsx`
+  passed: 1 file, 7 tests.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm dlx prettier@3.6.2 --write` was run on U7-touched files.
+- `git diff --check` passed.
+- Local browser validation on `http://localhost:5174` passed after copying
+  `apps/web/.env.old` into the U7 worktree `apps/web/.env`: Settings -> Agents
+  rendered Research/Coding/Analyst/Reviewer profile rows; Reviewer detail
+  rendered the Loop / Review section with Closed mode, max iterations 1, review
+  gate defaults, External reviewer `Never`, max review loops 2, and failure
+  behavior `Return blocker`.
