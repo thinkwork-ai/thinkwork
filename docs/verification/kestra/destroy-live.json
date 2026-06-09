@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "kind": "kestra-managed-app-destroy",
+  "generatedAt": "2026-06-09T05:47:00.000Z",
+  "ok": true,
+  "workflow": {
+    "runId": 27185832746,
+    "url": "https://github.com/thinkwork-ai/thinkwork/actions/runs/27185832746",
+    "event": "workflow_dispatch",
+    "headSha": "e96b490db5f830f968ce1cedd42a09b794eec8dd",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-06-09T05:27:05Z",
+    "updatedAt": "2026-06-09T05:46:42Z"
+  },
+  "graphql": {
+    "statusCode": 200,
+    "stage": "dev",
+    "region": "us-east-1",
+    "kestra": {
+      "key": "kestra",
+      "status": "disabled",
+      "provisioned": false,
+      "runtimeEnabled": false,
+      "url": "https://orchestrate.thinkwork.ai",
+      "managedMcpStatus": "not_ready",
+      "managedMcpInstalled": false,
+      "managedMcpServerId": null,
+      "storageBucketName": null,
+      "databaseName": null
+    }
+  },
+  "aws": {
+    "ecsClusterStatus": "INACTIVE",
+    "ecsServiceStatus": "INACTIVE",
+    "s3BucketStatus": "missing",
+    "databaseSecretStatus": "missing",
+    "basicAuthSecretStatus": "missing",
+    "targetGroupStatus": "missing"
+  },
+  "postgres": {
+    "databaseExists": false,
+    "roleExists": false
+  },
+  "notes": [
+    "GraphQL still derives the canonical Kestra URL from the app key and stage domain even when Kestra is disabled; provisioned=false and runtimeEnabled=false are the lifecycle source of truth.",
+    "Postgres verification queried the shared dev cluster catalog using the Terraform db_secret_arn output without recording credentials."
+  ]
+}
