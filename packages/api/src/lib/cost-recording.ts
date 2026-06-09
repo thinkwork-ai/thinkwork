@@ -18,6 +18,7 @@ import {
   checkUserBudgetAndPauseWork,
   resolveTenantUserCostOwner,
 } from "./user-budget-enforcement.js";
+import { getTenantModelPricing } from "./model-catalog/tenant-catalog.js";
 
 const db = getDb();
 
@@ -87,9 +88,13 @@ export function extractUsage(
 // ---------------------------------------------------------------------------
 
 async function lookupModelPricing(
+  tenantId: string,
   modelId: string | null,
 ): Promise<{ inputPerMillion: number; outputPerMillion: number }> {
   if (!modelId) return FALLBACK_PRICING;
+
+  const tenantPricing = await getTenantModelPricing({ tenantId, modelId });
+  if (tenantPricing) return tenantPricing;
 
   // Try model_catalog first
   try {
@@ -202,7 +207,7 @@ export async function recordCostEvents(
     tenantId: params.tenantId,
     userId: params.userId,
   });
-  const pricing = await lookupModelPricing(params.model);
+  const pricing = await lookupModelPricing(params.tenantId, params.model);
 
   // Use real tokens if available, otherwise estimate from text as fallback
   let inputTokens = params.inputTokens;
