@@ -26,6 +26,8 @@ const REQUIRED_PROFILE_FIELDS = [
   "cognitoClientId",
 ] as const;
 
+const DEFAULT_UNSIGNED_PROFILE_ISSUED_AT = "1970-01-01T00:00:00.000Z";
+
 export interface SpacesDeploymentProfileSnapshot {
   profile: DeploymentProfile | null;
   profileJson: string;
@@ -69,7 +71,7 @@ export function getSpacesDeploymentProfileSnapshot(
     }),
     issuedAt:
       stringEnv(env.VITE_DEPLOYMENT_PROFILE_ISSUED_AT) ||
-      new Date().toISOString(),
+      DEFAULT_UNSIGNED_PROFILE_ISSUED_AT,
     spacesUrl: stringEnv(env.VITE_SPACES_URL) || origin,
     apiUrl,
     graphqlHttpUrl:

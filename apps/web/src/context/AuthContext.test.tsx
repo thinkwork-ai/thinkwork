@@ -19,6 +19,13 @@ vi.mock("@/lib/graphql-client", () => ({
 const authMocks = vi.hoisted(() => ({
   storage: null as TokenStorage | null,
   signOut: vi.fn(),
+  clearLocalAuthSession: vi.fn(),
+}));
+
+const bindingMocks = vi.hoisted(() => ({
+  storageKey: "thinkwork.authDeploymentProfileSha256.v1",
+  ensureAuthStorageMatchesDeploymentProfile: vi.fn(() => true),
+  markAuthStorageDeploymentProfile: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -40,18 +47,43 @@ vi.mock("@/lib/auth", () => ({
   signUp: vi.fn(),
   confirmSignUp: vi.fn(),
   signOut: authMocks.signOut,
+  clearLocalAuthSession: authMocks.clearLocalAuthSession,
+}));
+
+vi.mock("@/lib/auth-deployment-binding", () => ({
+  AUTH_DEPLOYMENT_PROFILE_SHA_STORAGE_KEY: bindingMocks.storageKey,
+  ensureAuthStorageMatchesDeploymentProfile:
+    bindingMocks.ensureAuthStorageMatchesDeploymentProfile,
+  markAuthStorageDeploymentProfile:
+    bindingMocks.markAuthStorageDeploymentProfile,
 }));
 
 afterEach(() => {
   cleanup();
   vi.resetModules();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 beforeEach(() => {
   vi.stubGlobal("__DESKTOP_BUILD__", true);
+  vi.stubEnv("VITE_API_URL", "https://api.example.com");
+  vi.stubEnv("VITE_GRAPHQL_HTTP_URL", "https://api.example.com/graphql");
+  vi.stubEnv("VITE_GRAPHQL_URL", "https://appsync.example.com/graphql");
+  vi.stubEnv("VITE_GRAPHQL_WS_URL", "wss://appsync.example.com/graphql");
+  vi.stubEnv("VITE_COGNITO_USER_POOL_ID", "us-east-1_TestPool");
+  vi.stubEnv("VITE_COGNITO_CLIENT_ID", "test-client-id");
+  vi.stubEnv("VITE_COGNITO_DOMAIN", "thinkwork-test");
+  vi.stubEnv("VITE_DEPLOYMENT_ID", "thinkwork-dev");
+  vi.stubEnv("VITE_DEPLOYMENT_DISPLAY_NAME", "ThinkWork Dev");
+  vi.stubEnv("VITE_STAGE", "dev");
+  vi.stubEnv("VITE_AWS_REGION", "us-east-1");
   authMocks.storage = null;
   authMocks.signOut.mockReset();
+  authMocks.clearLocalAuthSession.mockReset();
+  bindingMocks.ensureAuthStorageMatchesDeploymentProfile.mockReset();
+  bindingMocks.ensureAuthStorageMatchesDeploymentProfile.mockReturnValue(true);
+  bindingMocks.markAuthStorageDeploymentProfile.mockReset();
 });
 
 describe("AuthProvider desktop mode", () => {
@@ -135,6 +167,32 @@ describe("AuthProvider desktop mode", () => {
 
     await waitFor(() => expect(button.textContent).toBe("anonymous"));
     expect(bridge.signOutCalls()).toBe(1);
+  });
+
+  it("refuses to restore cached auth for a different deployment profile", async () => {
+    const { AuthProvider, useAuth } = await import("./AuthContext");
+    const storage = new MemoryTokenStorage({
+      ...sessionItems("user@example.com"),
+      [bindingMocks.storageKey]: "0".repeat(64),
+    });
+    const bridge = makeBridge();
+    bindingMocks.ensureAuthStorageMatchesDeploymentProfile.mockReturnValue(
+      false,
+    );
+
+    function Probe() {
+      const { user, isLoading } = useAuth();
+      return <p>{isLoading ? "loading" : (user?.email ?? "anonymous")}</p>;
+    }
+
+    render(
+      <AuthProvider tokenStorage={storage} desktopBridge={bridge}>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await screen.findByText("anonymous");
+    expect(authMocks.clearLocalAuthSession).toHaveBeenCalled();
   });
 });
 
