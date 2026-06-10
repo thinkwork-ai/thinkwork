@@ -20,6 +20,8 @@ const authContextMocks = vi.hoisted(() => ({
 
 const authMocks = vi.hoisted(() => ({
   getHostedSignInUrl: vi.fn(),
+  getGoogleSignInUrl: vi.fn(),
+  isPasswordSignInConfigured: vi.fn(),
 }));
 
 const desktopRuntimeMocks = vi.hoisted(() => ({
@@ -58,6 +60,8 @@ vi.mock("@/context/AuthContext", () => ({
 
 vi.mock("@/lib/auth", () => ({
   getHostedSignInUrl: authMocks.getHostedSignInUrl,
+  getGoogleSignInUrl: authMocks.getGoogleSignInUrl,
+  isPasswordSignInConfigured: authMocks.isPasswordSignInConfigured,
 }));
 
 vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
@@ -81,6 +85,10 @@ beforeEach(() => {
     isLoading: false,
   });
   authMocks.getHostedSignInUrl.mockReturnValue("https://auth.example/login");
+  authMocks.getGoogleSignInUrl.mockReturnValue(
+    "https://auth.example/login?identity_provider=Google",
+  );
+  authMocks.isPasswordSignInConfigured.mockReturnValue(false);
   routerMocks.search = { next: undefined };
   desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
 });
@@ -105,7 +113,9 @@ describe("SignInPage", () => {
     expect(screen.getByRole("heading", { name: "ThinkWork" })).toBeTruthy();
     expect(screen.queryByText("Spaces")).toBeNull();
     expect(screen.getByText("Acme ThinkWork · dev · us-east-1")).toBeTruthy();
-    expect(screen.getByText("Unsigned build-time fallback")).toBeTruthy();
+    // Trust plumbing (e.g. "Unsigned build-time fallback") must not leak
+    // onto the end-user login page.
+    expect(screen.queryByText("Unsigned build-time fallback")).toBeNull();
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
     expect(
       screen
@@ -428,5 +438,59 @@ describe("SignInPage", () => {
     });
 
     await screen.findByText("No in-flight OAuth attempt for callback state");
+  });
+
+  it("renders the email/password form when password sign-in is configured", () => {
+    authMocks.isPasswordSignInConfigured.mockReturnValue(true);
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+
+    expect(screen.getByLabelText("Email")).toBeTruthy();
+    expect(screen.getByLabelText("Password")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+    // OAuth demotes to a secondary action alongside the form.
+    expect(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Log in" })).toBeNull();
+  });
+
+  it("sends the Google button straight to the Google IdP, not the hosted login page", () => {
+    authMocks.isPasswordSignInConfigured.mockReturnValue(true);
+    const navigations: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        set href(target: string) {
+          navigations.push(target);
+        },
+        get href() {
+          return navigations.at(-1) ?? "https://app.example/sign-in";
+        },
+      },
+    });
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    );
+
+    expect(navigations).toEqual([
+      "https://auth.example/login?identity_provider=Google",
+    ]);
+    expect(authMocks.getHostedSignInUrl).not.toHaveBeenCalled();
+  });
+
+  it("hides the email/password form in the desktop shell", () => {
+    authMocks.isPasswordSignInConfigured.mockReturnValue(true);
+    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+
+    expect(screen.queryByLabelText("Email")).toBeNull();
+    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
   });
 });

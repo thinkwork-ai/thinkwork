@@ -30,7 +30,11 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (
+    email: string,
+    password: string,
+    newPassword?: string,
+  ) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
   confirmSignUp: (email: string, code: string) => Promise<void>;
   signOut: () => void;
@@ -146,9 +150,9 @@ export function AuthProvider({
   }, [desktopBridge, sessionRestoreTimeoutMs, tokenStorage]);
 
   const handleSignIn = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string, newPassword?: string) => {
       auth.configureTokenStorage(tokenStorage);
-      const session = await auth.signIn(email, password);
+      const session = await auth.signIn(email, password, newPassword);
       void session;
       const token = await auth.getIdToken();
       markAuthStorageDeploymentProfile(tokenStorage);

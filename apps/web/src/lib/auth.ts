@@ -410,6 +410,19 @@ export function getGoogleSignInUrl(): string {
   });
 }
 
+/**
+ * Native email/password sign-in needs the user pool id + client id from the
+ * runtime config. When either is missing (e.g. a partially configured local
+ * dev shell), the sign-in page hides the password form and falls back to the
+ * hosted-UI OAuth button only.
+ */
+export function isPasswordSignInConfigured(): boolean {
+  return Boolean(
+    readRuntimeEnv("VITE_COGNITO_USER_POOL_ID") &&
+      readRuntimeEnv("VITE_COGNITO_CLIENT_ID"),
+  );
+}
+
 export function getHostedSignInUrl(options?: {
   identityProvider?: string;
   prompt?: string;
