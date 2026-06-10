@@ -171,6 +171,10 @@ import {
   mergeWorkspaceSkills,
   parsePinnedSkillRefs,
 } from "./runtime/pinned-skills.js";
+import {
+  formatUserQuestionAnswerContext,
+  parsePendingUserQuestions,
+} from "./user-question-context.js";
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -2130,6 +2134,32 @@ export async function handleInvocation(
   if (fileReadTool) {
     bundle.tools.push(fileReadTool);
   }
+  // ask_user_question resume context (plan 2026-06-09-005 U4). Parsed with
+  // the same tolerance as message_attachments: absence or a malformed
+  // envelope renders no block and never fails the turn. The block is
+  // PREPENDED to the turn prompt (ahead of the user content) — not the
+  // system prompt — so the echoed Q/A pairs persist in the durable session
+  // transcript alongside the message that carried them.
+  const pendingQuestionContext = parsePendingUserQuestions(
+    args.payload.pending_user_questions,
+  );
+  if (
+    args.payload.pending_user_questions !== undefined &&
+    args.payload.pending_user_questions !== null &&
+    !pendingQuestionContext
+  ) {
+    logStructured({
+      level: "warn",
+      event: "pending_user_questions_invalid",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+    });
+  }
+  const questionAnswerBlock = pendingQuestionContext
+    ? formatUserQuestionAnswerContext(pendingQuestionContext)
+    : "";
+  const withQuestionAnswerContext = (message: string): string =>
+    questionAnswerBlock ? `${questionAnswerBlock}\n\n${message}` : message;
   const agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
   const profileChildExtensionFactories = [...bundle.extensionFactories];
   // The current invocation's model id is what pi-ai's Agent will use
@@ -2326,11 +2356,16 @@ export async function handleInvocation(
         requestedProfiles,
         profileDelegationOptions: profileDelegationOptions(currentModelId),
         parentRunInput: {
-          message: parentProfileChainMessage({
-            originalMessage: userMessage,
-            baseTask,
-            runs: [],
-          }),
+          // Answer context rides ahead of the chain message; mention
+          // detection and baseTask derivation above stay on the raw
+          // userMessage so the block never perturbs profile routing.
+          message: withQuestionAnswerContext(
+            parentProfileChainMessage({
+              originalMessage: userMessage,
+              baseTask,
+              runs: [],
+            }),
+          ),
           history: parentHistory,
           tools: bundle.tools,
           extensionFactories: bundle.extensionFactories,
@@ -2351,7 +2386,7 @@ export async function handleInvocation(
     } else {
       runResult = await runLoop(
         {
-          message: userMessage,
+          message: withQuestionAnswerContext(userMessage),
           history: parentHistory,
           // U6 — no prebuilt system prompt; the system-prompt extension's
           // before_agent_start hook composes and sets it for the turn.
