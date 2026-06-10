@@ -213,10 +213,15 @@ locals {
       COGNEE_BACKEND_MODE             = var.cognee_backend_mode
       COGNEE_INGEST_MODE              = "add_cognify"
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
-      # Per-run candidate cap: bounds classifier cost so one run fits the
-      # Lambda timeout; truncated runs self-invoke (Event) to drain the
-      # backlog across successive runs.
+      # Per-run candidate cap: bounds classifier cost AND keeps each Cognee
+      # cognify small enough to index within budget on the single dogfood
+      # task; truncated runs self-invoke (Event) to drain the backlog across
+      # successive runs. COGNEE_INDEX_TIMEOUT_MS raised well above the default
+      # 240s (dogfood indexing of a fresh dataset is slow) but under the 900s
+      # Lambda ceiling, leaving room for graph fetch + normalize + snapshot.
       KG_OBS_MAX_CANDIDATES_PER_RUN = var.kg_obs_max_candidates_per_run
+      COGNEE_INDEX_TIMEOUT_MS       = "700000"
+      COGNEE_INDEX_POLL_MS          = "7000"
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
