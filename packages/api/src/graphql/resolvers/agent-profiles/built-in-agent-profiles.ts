@@ -70,8 +70,11 @@ export const BUILT_IN_PROFILE_SEEDS: BuiltInProfileSeed[] = [
     routing_guidance:
       "Use for data, spreadsheet, CRM, and quantitative analysis subtasks.",
     instructions:
-      "Analyze the assigned data or tool results, state assumptions, and return decision-ready findings.",
-    tool_policy: { builtInTools: [], mcpServers: [] },
+      "Analyze the assigned data or tool results with code when useful, state assumptions, and return decision-ready findings.",
+    tool_policy: {
+      builtInTools: ["execute_code", "file_read"],
+      mcpServers: [],
+    },
     skill_policy: { skillSlugs: [] },
     execution_controls: {
       foreground: true,

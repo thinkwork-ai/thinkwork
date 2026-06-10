@@ -164,6 +164,16 @@ describe("Agent Profile resolvers", () => {
       expect.arrayContaining([
         expect.objectContaining({
           tenant_id: "tenant-1",
+          slug: "analyst",
+          name: "Analyst",
+          model_id: "model-parent",
+          built_in_key: "analyst",
+          tool_policy: expect.objectContaining({
+            builtInTools: ["execute_code", "file_read"],
+          }),
+        }),
+        expect.objectContaining({
+          tenant_id: "tenant-1",
           slug: "reviewer",
           name: "Reviewer",
           model_id: "model-parent",
@@ -188,6 +198,76 @@ describe("Agent Profile resolvers", () => {
         id: "profile-research",
         tenantId: "tenant-1",
         builtInKey: "research",
+      }),
+    ]);
+  });
+
+  it("merges new required built-in tools into existing built-in profiles", async () => {
+    mockSelect
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-research",
+            builtInKey: "research",
+            toolPolicy: { builtInTools: ["web-search", "web-extract"] },
+          },
+          {
+            id: "profile-coding",
+            builtInKey: "coding",
+            toolPolicy: { builtInTools: ["execute_code", "bash"] },
+          },
+          {
+            id: "profile-analyst",
+            builtInKey: "analyst",
+            toolPolicy: { builtInTools: [] },
+          },
+          {
+            id: "profile-reviewer",
+            builtInKey: "reviewer",
+            toolPolicy: { builtInTools: [] },
+          },
+        ]),
+      )
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-analyst",
+            tenant_id: "tenant-1",
+            slug: "analyst",
+            name: "Analyst",
+            model_id: "moonshotai.kimi-k2.5",
+            enabled: true,
+            built_in_key: "analyst",
+            tool_policy: {
+              builtInTools: ["execute_code", "file_read"],
+            },
+            skill_policy: {},
+            execution_controls: {},
+          },
+        ]),
+      );
+    const updates: Array<Record<string, unknown>> = [];
+    mockUpdate.mockReturnValue(updateRows(updates));
+
+    const result = await listMod.agentProfiles(
+      null,
+      { tenantId: "tenant-1" },
+      ctx(),
+    );
+
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(updates).toEqual([
+      {
+        tool_policy: {
+          builtInTools: ["execute_code", "file_read"],
+        },
+        updated_at: expect.any(Date),
+      },
+    ]);
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: "profile-analyst",
+        modelId: "moonshotai.kimi-k2.5",
       }),
     ]);
   });
@@ -372,6 +452,17 @@ function insertRows(returningRows: unknown[] | undefined, captured: unknown[]) {
 
 function deleteRows() {
   const chain = {
+    where: () => Promise.resolve(undefined),
+  };
+  return chain;
+}
+
+function updateRows(captured: Array<Record<string, unknown>>) {
+  const chain = {
+    set: (values: Record<string, unknown>) => {
+      captured.push(values);
+      return chain;
+    },
     where: () => Promise.resolve(undefined),
   };
   return chain;

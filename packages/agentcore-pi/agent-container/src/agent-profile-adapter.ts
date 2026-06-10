@@ -320,6 +320,7 @@ const PROMPT_OVERRIDE_KEYS = new Set([
 const SECRET_KEY_PATTERN =
   /(?:authorization|bearer|token|secret|password|api[_-]?key|access[_-]?token|refresh[_-]?token)/i;
 const BEARER_PATTERN = /Bearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const OPTIONAL_EPHEMERAL_TOOL_NAMES = new Set(["file_read"]);
 
 function cleanString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -364,11 +365,14 @@ function rejectPromptSuppliedOverrides(
 function assertKnownValues(input: {
   values: readonly string[];
   available: readonly string[];
+  optionalUnavailable?: ReadonlySet<string>;
   code: "TOOL_NOT_AVAILABLE" | "SKILL_NOT_AVAILABLE";
   noun: string;
 }): void {
   const available = new Set(input.available);
-  const missing = input.values.filter((value) => !available.has(value));
+  const missing = input.values.filter(
+    (value) => !available.has(value) && !input.optionalUnavailable?.has(value),
+  );
   if (missing.length > 0) {
     throw new AgentProfileAdapterError(
       input.code,
@@ -402,10 +406,14 @@ function compileToolAllowlist(input: {
   assertKnownValues({
     values: tools,
     available: input.availableToolNames,
+    optionalUnavailable: OPTIONAL_EPHEMERAL_TOOL_NAMES,
     code: "TOOL_NOT_AVAILABLE",
     noun: "tools",
   });
-  return tools;
+  const available = new Set(input.availableToolNames);
+  return tools.filter(
+    (tool) => available.has(tool) || !OPTIONAL_EPHEMERAL_TOOL_NAMES.has(tool),
+  );
 }
 
 function compileSkills(input: {

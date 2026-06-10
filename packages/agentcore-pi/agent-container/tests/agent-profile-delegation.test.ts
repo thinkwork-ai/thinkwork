@@ -334,6 +334,56 @@ describe("agent profile delegation", () => {
     expect(captured?.history).toEqual(parentHistory);
   });
 
+  it("passes inherited attachment context and allowed file tools to profile child loops", async () => {
+    let captured:
+      | Parameters<NonNullable<ProfileDelegationToolOptions["runLoop"]>>[0]
+      | undefined;
+    const runLoop = vi.fn(async (args) => {
+      captured = args;
+      return {
+        content: "Budget handoff",
+        modelId: String(args.modelId),
+        toolsCalled: ["file_read", "execute_code"],
+        toolInvocations: [],
+        toolCosts: [],
+      };
+    });
+
+    await executeAgentProfileDelegation({
+      options: await options({
+        profiles: [
+          researchProfile({
+            slug: "analyst",
+            name: "Analyst",
+            builtInKey: "analyst",
+            toolPolicy: {
+              builtInTools: ["file_read", "execute_code"],
+            },
+          }),
+        ],
+        tools: [tool("file_read"), tool("execute_code")],
+        contextPreamble: [
+          "Files attached to this turn:",
+          "- /tmp/pi-turn-test/attachments/Budget-Forecast.xlsx",
+          "Use the `file_read` tool with one of the absolute paths above.",
+        ].join("\n"),
+        runLoop,
+      }),
+      profileSlug: "analyst",
+      task: "Review the attached budget forecast.",
+    });
+
+    expect(captured?.tools.map((item) => item.name)).toEqual([
+      "file_read",
+      "execute_code",
+    ]);
+    expect(captured?.systemPrompt).toContain("Inherited parent turn context:");
+    expect(captured?.systemPrompt).toContain("Files attached to this turn:");
+    expect(captured?.systemPrompt).toContain(
+      "/tmp/pi-turn-test/attachments/Budget-Forecast.xlsx",
+    );
+  });
+
   it("emits profile start, child tool, and completion activity with lane metadata", async () => {
     let emitChildActivity: unknown;
     const emitted: Array<{

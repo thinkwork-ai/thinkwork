@@ -47,6 +47,7 @@ export interface ProfileDelegationToolOptions {
   gitSha: string;
   identity: unknown;
   parentHistory?: RunAgentLoopArgs["history"];
+  contextPreamble?: string;
   runLoop?: typeof runAgentLoop;
   emitActivity?: (event: ActivityEmitEvent) => void;
   now?: () => Date;
@@ -350,11 +351,23 @@ export function createProfileChildRunner(
         extensionToolNames: options.extensionToolNames,
       });
       try {
+        const systemPrompt = [
+          profileSystemPrompt(request),
+          options.contextPreamble
+            ? [
+                "Inherited parent turn context:",
+                options.contextPreamble,
+                "Use the inherited file paths and tools when the delegated task depends on uploaded files.",
+              ].join("\n")
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
         const result = await runLoop(
           {
             message: request.task,
             history: options.parentHistory ?? [],
-            systemPrompt: profileSystemPrompt(request),
+            systemPrompt,
             tools: childSurface.tools,
             extensionFactories: options.extensionFactories,
             extensionToolNames: childSurface.extensionToolNames,
