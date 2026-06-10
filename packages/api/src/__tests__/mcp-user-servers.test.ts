@@ -103,7 +103,11 @@ vi.mock("@thinkwork/database-pg/schema", () => {
     tenantBuiltinTools: {},
     connections: {},
     connectProviders: {},
-    users: {},
+    users: {
+      id: col("users.id"),
+      tenant_id: col("users.tenant_id"),
+      cognito_sub: col("users.cognito_sub"),
+    },
     agents: {
       id: col("agents.id"),
       name: col("agents.name"),
@@ -125,6 +129,7 @@ vi.mock("@thinkwork/database-pg/schema", () => {
 vi.mock("drizzle-orm", () => ({
   and: (...args: unknown[]) => ({ _and: args }),
   eq: (...args: unknown[]) => ({ _eq: args }),
+  or: (...args: unknown[]) => ({ _or: args }),
   inArray: (...args: unknown[]) => ({ _inArray: args }),
   isNull: (...args: unknown[]) => ({ _isNull: args }),
   sql: (...args: unknown[]) => ({ _sql: args }),
@@ -213,6 +218,55 @@ describe("GET /api/skills/user-mcp-servers", () => {
     expect(response.statusCode).toBe(200);
     expect(body.servers).toEqual([]);
   });
+
+  it("uses the membership-resolved user id instead of a caller-supplied principal header", async () => {
+    dbState.selectQueue.push(
+      [],
+      [managedTwentyRow({ mcp_server_id: "twenty" })],
+      [{ mcp_server_id: "twenty", status: "active" }],
+    );
+
+    const response = await handler(event({ principalId: "cognito-sub-uuid" }));
+    const body = JSON.parse(response.body ?? "{}") as {
+      servers: Array<{ authStatus: string }>;
+    };
+
+    expect(response.statusCode).toBe(200);
+    expect(body.servers[0]?.authStatus).toBe("active");
+    const predicates = JSON.stringify(dbState.predicates);
+    expect(predicates).toContain("user-1");
+    expect(predicates).not.toContain("cognito-sub-uuid");
+  });
+
+  it("resolves raw Cognito sub to users.id before building MCP OAuth state", async () => {
+    dbState.selectQueue.push(
+      [{ id: "db-user-1" }],
+      [
+        {
+          url: "https://dev-mcp.lastmile-tei.com/crm",
+          slug: "lastmile-crm",
+          auth_config: {
+            authorize_endpoint: "https://auth.example/authorize",
+            token_endpoint: "https://auth.example/token",
+            client_id: "client-1",
+            oauth_resource: "https://dev-mcp.lastmile-tei.com/crm",
+          },
+        },
+      ],
+    );
+
+    const response = await handler(
+      oauthAuthorizeEvent({ userId: "cognito-sub-uuid" }),
+    );
+    const location = response.headers?.Location as string;
+    const stateParam = new URL(location).searchParams.get("state");
+    const state = JSON.parse(
+      Buffer.from(stateParam ?? "", "base64url").toString(),
+    ) as { userId: string };
+
+    expect(response.statusCode).toBe(302);
+    expect(state.userId).toBe("db-user-1");
+  });
 });
 
 function managedTwentyRow(overrides: Record<string, unknown> = {}) {
@@ -245,14 +299,32 @@ function managedKestraRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function event(): APIGatewayProxyEventV2 {
+function event(input: { principalId?: string } = {}): APIGatewayProxyEventV2 {
   return {
     rawPath: "/api/skills/user-mcp-servers",
     requestContext: { http: { method: "GET" } },
     headers: {
       authorization: "Bearer token",
       "x-tenant-id": "tenant-1",
-      "x-principal-id": "user-1",
+      "x-principal-id": input.principalId ?? "user-1",
+    },
+  } as unknown as APIGatewayProxyEventV2;
+}
+
+function oauthAuthorizeEvent(input: {
+  userId: string;
+  tenantId?: string;
+  mcpServerId?: string;
+}): APIGatewayProxyEventV2 {
+  return {
+    rawPath: "/api/skills/mcp-oauth/authorize",
+    requestContext: { http: { method: "GET" } },
+    headers: { host: "api.example" },
+    queryStringParameters: {
+      mcpServerId: input.mcpServerId ?? "mcp-1",
+      userId: input.userId,
+      tenantId: input.tenantId ?? "tenant-1",
+      returnTo: "http://localhost:5174/settings/mcp-servers/mcp-1",
     },
   } as unknown as APIGatewayProxyEventV2;
 }
