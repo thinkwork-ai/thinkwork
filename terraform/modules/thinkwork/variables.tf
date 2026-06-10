@@ -104,6 +104,18 @@ variable "enable_deployment_control_plane" {
   default     = true
 }
 
+variable "deployment_state_machine_arn" {
+  description = "Existing deployment orchestration Step Functions ARN for environments whose controller is bootstrapped outside this app stack."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_evidence_bucket" {
+  description = "Existing deployment evidence bucket for environments whose controller is bootstrapped outside this app stack."
+  type        = string
+  default     = ""
+}
+
 variable "deployment_release_version" {
   description = "Selected ThinkWork release version stored in the deployment control plane."
   type        = string
