@@ -1427,6 +1427,10 @@ describe("SpacesThreadDetailRoute", () => {
           status: "succeeded",
           startedAt: "2026-06-10T15:55:05.000Z",
           finishedAt: "2026-06-10T15:56:10.000Z",
+          usageJson: {
+            inputTokens: 1,
+            outputTokens: 2000,
+          },
           totalCost: 0.0343,
         },
       ],
@@ -1463,6 +1467,7 @@ describe("SpacesThreadDetailRoute", () => {
     await waitFor(() => {
       const activity = screen.getByLabelText("Turn activity");
       expect(within(activity).getByText("Worked for 1m 10s")).toBeTruthy();
+      expect(within(activity).getByText("1 in / 2.0K out")).toBeTruthy();
       expect(within(activity).getByText("$0.0343")).toBeTruthy();
       expect(apiFetchMock.apiFetch).toHaveBeenCalledWith(
         "/api/trigger-runs/turn-agent-profile/events?limit=500",

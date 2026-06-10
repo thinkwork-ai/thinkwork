@@ -25,10 +25,13 @@ import { sql } from "drizzle-orm";
 import type { Database } from "../db.js";
 import { invokeClaudeJson } from "../wiki/bedrock.js";
 
-/** Pinned classifier identity — bumping either requires a golden-set pass. */
+/**
+ * Pinned classifier identity — bumping either requires a golden-set pass.
+ * Kimi K2.5 (ON_DEMAND): Haiku is rate-limited on this account and shares
+ * its quota with the agent runtime.
+ */
 export const OBSERVATION_CLASSIFIER_MODEL_ID =
-  process.env.OBSERVATION_CLASSIFIER_MODEL_ID ||
-  "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+  process.env.OBSERVATION_CLASSIFIER_MODEL_ID || "moonshotai.kimi-k2.5";
 export const OBSERVATION_CLASSIFIER_PROMPT_VERSION = "v1";
 
 const CLASSIFIER_BATCH_SIZE = 25;

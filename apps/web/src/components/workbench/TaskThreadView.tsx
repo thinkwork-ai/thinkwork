@@ -1634,6 +1634,7 @@ function ThreadTurnActivity({
     header && !running && turn.totalCost != null && turn.totalCost > 0
       ? formatUsd(turn.totalCost)
       : null;
+  const usageLabel = header && !running ? formatTokenUsage(usage) : null;
   const shouldRender =
     header !== null &&
     (RENDERED_TURN_STATUSES.has(status) ||
@@ -1650,6 +1651,7 @@ function ThreadTurnActivity({
   return (
     <ThinkingRow
       title={header}
+      usageLabel={usageLabel}
       costLabel={costLabel}
       running={running}
       elapsedLabel={elapsedLabel}
@@ -3026,6 +3028,7 @@ function ShimmerText({ text }: { text: string }) {
 
 function ThinkingRow({
   title,
+  usageLabel,
   costLabel,
   running = false,
   elapsedLabel,
@@ -3035,6 +3038,7 @@ function ThinkingRow({
   children,
 }: {
   title: string;
+  usageLabel?: string | null;
   costLabel?: string | null;
   /** Render the header in shimmer style and announce it via a live region. */
   running?: boolean;
@@ -3076,10 +3080,20 @@ function ThinkingRow({
             ) : (
               <span>{title}</span>
             )}
-            {!running && costLabel ? (
+            {!running && (usageLabel || costLabel) ? (
               <span className="relative top-px inline-flex items-center gap-1 text-[13px] leading-none text-muted-foreground transition-colors group-hover:text-foreground">
-                <span aria-hidden="true">·</span>
-                <span>{costLabel}</span>
+                {usageLabel ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{usageLabel}</span>
+                  </>
+                ) : null}
+                {costLabel ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{costLabel}</span>
+                  </>
+                ) : null}
               </span>
             ) : null}
             {running && elapsedLabel ? (

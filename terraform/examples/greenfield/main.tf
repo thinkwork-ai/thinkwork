@@ -147,9 +147,9 @@ variable "cognee_llm_provider" {
 }
 
 variable "cognee_llm_model" {
-  description = "Cognee LLM model. Must handle tool-use structured extraction reliably — nova-lite repeatedly produced invalid ToolUse sequences on observation documents. The `us.` inference-profile prefix is required for Anthropic models on Bedrock."
+  description = "Cognee LLM model. Must handle tool-use structured extraction reliably — nova-lite repeatedly produced invalid ToolUse sequences on observation documents, and Haiku is rate-limited on this account. Kimi K2.5 is ON_DEMAND (no inference profile needed)."
   type        = string
-  default     = "bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+  default     = "bedrock/moonshotai.kimi-k2.5"
 }
 
 variable "cognee_llm_api_key_secret_arn" {
