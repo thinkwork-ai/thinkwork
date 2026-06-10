@@ -7,12 +7,14 @@ const {
   mockResolveCallerUserId,
   mockRandomUUID,
   mockStartExecution,
+  mockSsmSend,
 } = vi.hoisted(() => ({
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerTenantId: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
   mockRandomUUID: vi.fn(),
   mockStartExecution: vi.fn(),
+  mockSsmSend: vi.fn(),
 }));
 
 vi.mock("node:crypto", async (importOriginal) => {
@@ -32,6 +34,11 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerUserId: mockResolveCallerUserId,
 }));
 
+vi.mock("@aws-sdk/client-ssm", () => ({
+  SSMClient: vi.fn(() => ({ send: mockSsmSend })),
+  GetParameterCommand: vi.fn((input) => ({ input })),
+}));
+
 let releasesMod: typeof import("./deploymentReleases.query.js");
 let updateMod: typeof import("./startDeploymentReleaseUpdate.mutation.js");
 
@@ -45,6 +52,7 @@ beforeEach(async () => {
     .mockReset()
     .mockReturnValue("11111111-2222-3333-4444-555555555555");
   mockStartExecution.mockReset();
+  mockSsmSend.mockReset();
   releasesMod = await import("./deploymentReleases.query.js");
   updateMod = await import("./startDeploymentReleaseUpdate.mutation.js");
 });
@@ -231,6 +239,58 @@ describe("deployment releases", () => {
     );
     expect(result.executionArn).toBe("arn:sfn:execution:compact-update");
     expect(result.evidenceBucket).toBe("compact-evidence-bucket");
+  });
+
+  it("starts release updates from the SSM deployment profile when graphql-http env is empty", async () => {
+    vi.stubEnv("STAGE", "tei-e2e");
+    mockSsmSend.mockResolvedValue({
+      Parameter: {
+        Value: JSON.stringify({
+          controller: {
+            stateMachineArn: "arn:sfn:ssm-controller",
+            evidenceBucketName: "ssm-evidence-bucket",
+          },
+        }),
+      },
+    });
+    mockStartExecution.mockResolvedValue({
+      executionArn: "arn:sfn:execution:ssm-update",
+      stateMachineArn: "arn:sfn:ssm-controller",
+    });
+    const digest = "c".repeat(64);
+
+    const result = await updateMod.startDeploymentReleaseUpdate(
+      null,
+      {
+        input: {
+          version: "v0.1.0-canary.160",
+          manifestUrl:
+            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.160/thinkwork-release.json",
+          manifestSha256: digest,
+        },
+      },
+      {} as any,
+      { startExecution: mockStartExecution },
+    );
+
+    expect(mockSsmSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Name: "/thinkwork/tei-e2e/deployment/profile/json",
+        }),
+      }),
+    );
+    expect(mockStartExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stateMachineArn: "arn:sfn:ssm-controller",
+        payload: expect.objectContaining({
+          evidenceBucket: "ssm-evidence-bucket",
+          releaseVersion: "v0.1.0-canary.160",
+        }),
+      }),
+    );
+    expect(result.executionArn).toBe("arn:sfn:execution:ssm-update");
+    expect(result.evidenceBucket).toBe("ssm-evidence-bucket");
   });
 
   it("rejects non-admin callers before loading releases or starting updates", async () => {
