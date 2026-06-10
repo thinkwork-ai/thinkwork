@@ -149,7 +149,7 @@ describe("deployment control plane Terraform fixture", () => {
     );
     expect(outputs).toMatch(/output "deployment_state_machine_arn"/);
     expect(outputs).toMatch(
-      /var\.enable_deployment_control_plane \? module\.deployment_control_plane\[0\]\.state_machine_arn : null/,
+      /var\.enable_deployment_control_plane \? module\.deployment_control_plane\[0\]\.state_machine_arn : \(var\.deployment_state_machine_arn != "" \? var\.deployment_state_machine_arn : null\)/,
     );
     expect(outputs).toMatch(/output "deployment_evidence_bucket_name"/);
     expect(outputs).toMatch(/output "deployment_appconfig_application_id"/);
@@ -171,5 +171,27 @@ describe("deployment control plane Terraform fixture", () => {
       /DEPLOYMENT_EVIDENCE_BUCKET\s*=\s*var\.deployment_evidence_bucket/,
     );
     expect(lambdaVariables).toContain("Settings can start release updates");
+  });
+
+  it("preserves externally bootstrapped deployment controller identity during release updates", () => {
+    const runner = read(
+      resolve(REPO_ROOT, "terraform/modules/app/deployment-control-plane/runner.py"),
+    );
+    const thinkworkMain = read(THINKWORK_MAIN);
+    const thinkworkVariables = read(THINKWORK_VARS);
+
+    expect(thinkworkVariables).toMatch(/variable "deployment_state_machine_arn"/);
+    expect(thinkworkMain).toMatch(
+      /deployment_state_machine_arn\s*=\s*var\.enable_deployment_control_plane \? module\.deployment_control_plane\[0\]\.state_machine_arn : var\.deployment_state_machine_arn/,
+    );
+    expect(runner).toMatch(
+      /"deployment_state_machine_arn": os\.environ\.get\(\s*"THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN"/,
+    );
+    expect(runner).toMatch(
+      /deployment_state_machine_arn\s*=\s*var\.deployment_state_machine_arn/,
+    );
+    expect(runner).toMatch(
+      /deployment_evidence_bucket\s*=\s*var\.deployment_evidence_bucket/,
+    );
   });
 });
