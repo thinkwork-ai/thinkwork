@@ -377,6 +377,42 @@ resource "aws_security_group_rule" "aurora_from_cognee_worker" {
   security_group_id        = module.database.db_security_group_id
 }
 
+# VPC-attached Knowledge Graph workers (attached for Cognee's internal ALB)
+# have no public egress — the VPC has no NAT — so the observation promotion
+# classifier's direct Bedrock calls need an interface endpoint inside the VPC.
+# Private DNS keeps the SDK's default bedrock-runtime hostname resolving to
+# the endpoint ENIs.
+resource "aws_security_group" "bedrock_runtime_endpoint" {
+  count = local.cognee_enabled ? 1 : 0
+
+  name_prefix = "thinkwork-${var.stage}-bedrock-vpce-"
+  description = "HTTPS to the Bedrock runtime interface endpoint"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.cognee_worker[0].id]
+  }
+
+  tags = { Name = "thinkwork-${var.stage}-bedrock-vpce-sg" }
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_vpc_endpoint" "bedrock_runtime" {
+  count = local.cognee_enabled ? 1 : 0
+
+  vpc_id              = module.vpc.vpc_id
+  service_name        = "com.amazonaws.${var.region}.bedrock-runtime"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.cognee_worker_subnet_ids
+  security_group_ids  = [aws_security_group.bedrock_runtime_endpoint[0].id]
+  private_dns_enabled = true
+
+  tags = { Name = "thinkwork-${var.stage}-bedrock-runtime-vpce" }
+}
+
 ################################################################################
 # Foundation Tier
 ################################################################################
