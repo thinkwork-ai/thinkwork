@@ -195,6 +195,7 @@ export function validateReleaseManifest(
   validateArtifactBundles(manifest.artifactBundles, manifest.artifacts);
   validateRuntimeImages(manifest.runtimeImages);
   validateManagedApps(manifest.managedApps);
+  validateManagedAppRuntimeImages(manifest.managedApps, manifest.runtimeImages);
   validateStringArray(
     manifest.signing?.acceptedKeyIds,
     "signing.acceptedKeyIds",
@@ -442,10 +443,7 @@ function validateArtifacts(value: unknown): void {
   }
 }
 
-function validateArtifactBundles(
-  value: unknown,
-  artifacts: unknown,
-): void {
+function validateArtifactBundles(value: unknown, artifacts: unknown): void {
   if (value === undefined) return;
   if (!Array.isArray(value)) {
     throw new ReleaseManifestError("artifactBundles must be an array");
@@ -466,10 +464,7 @@ function validateArtifactBundles(
       );
     }
     bundleNames.add(bundle.name);
-    requireString(
-      bundle.fileName,
-      `artifactBundle ${bundle.name}.fileName`,
-    );
+    requireString(bundle.fileName, `artifactBundle ${bundle.name}.fileName`);
     requireString(
       bundle.relativePath,
       `artifactBundle ${bundle.name}.relativePath`,
@@ -563,6 +558,30 @@ function validateManagedApps(value: unknown): void {
             `managedApp ${app.id}.smokeContract.required must be a boolean`,
           );
         }
+      }
+    }
+  }
+}
+
+function validateManagedAppRuntimeImages(
+  managedApps: unknown,
+  runtimeImages: unknown,
+): void {
+  if (!Array.isArray(managedApps) || !Array.isArray(runtimeImages)) return;
+  if (runtimeImages.length === 0) return;
+
+  const imageNames = new Set(
+    (runtimeImages as Partial<RuntimeImage>[])
+      .map((image) => image.name)
+      .filter((name): name is string => typeof name === "string"),
+  );
+
+  for (const app of managedApps as Partial<ManagedAppDescriptor>[]) {
+    for (const imageName of app.requiredImages ?? []) {
+      if (!imageNames.has(imageName)) {
+        throw new ReleaseManifestError(
+          `managedApp ${app.id}.requiredImages references unknown runtime image ${imageName}`,
+        );
       }
     }
   }

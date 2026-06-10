@@ -64,6 +64,13 @@ Individual artifact URLs in the manifest are a compatibility path; new
 deployment controller runs should consume the bundle and verify every contained
 artifact against the manifest before staging it.
 
+Managed-app descriptors and runtime images are one contract. If a release
+manifest advertises a managed app with `requiredImages`, every required image
+name must appear in `runtimeImages` as an immutable `@sha256:` URI. The release
+publisher builds the ThinkWork-owned Cognee image and reads pinned Twenty/Kestra
+image URIs from repository variables so the controller can fail before
+Terraform when an optional app cannot be deployed from the selected release.
+
 Desktop assets may be published by a separate workflow, but operators should see
 one coordinated release version. The human-facing release should contain
 desktop installers, updater metadata, `thinkwork-release.json`, and
@@ -107,6 +114,7 @@ Release upgrade evidence should record:
 | Artifact hash mismatch             | The artifact does not match the manifest. Stop before Terraform or runtime update.              |
 | Compatibility mismatch             | Upgrade the CLI/runner or choose a compatible release.                                          |
 | Missing managed-app smoke metadata | The release is not usable for managed-app deployment.                                           |
+| Missing managed-app runtime image  | The release advertises an app that cannot be deployed from its manifest.                        |
 
 ## Operator Notes
 
