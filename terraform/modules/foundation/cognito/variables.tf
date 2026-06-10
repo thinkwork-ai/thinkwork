@@ -58,6 +58,46 @@ variable "user_pool_name" {
   default     = ""
 }
 
+variable "email_source_arn" {
+  description = "SES identity ARN Cognito should use for user-pool emails. Leave empty to use Cognito's default sender."
+  type        = string
+  default     = ""
+}
+
+variable "from_email_address" {
+  description = "Optional Cognito From header, for example 'ThinkWork <noreply@example.com>'. Requires email_source_arn when set."
+  type        = string
+  default     = ""
+}
+
+variable "reply_to_email_address" {
+  description = "Optional Cognito Reply-To address for user-pool emails."
+  type        = string
+  default     = ""
+}
+
+variable "invite_email_subject" {
+  description = "Subject line for Cognito AdminCreateUser invitation emails."
+  type        = string
+  default     = "You're invited to ThinkWork"
+}
+
+variable "invite_email_message" {
+  description = "HTML invitation body for Cognito AdminCreateUser emails. Must include {username} and {####} so Cognito can send the temporary password."
+  type        = string
+  default     = <<-EOT
+    <p>You have been invited to ThinkWork.</p>
+    <p>Username: <strong>{username}</strong></p>
+    <p>Temporary password: <strong>{####}</strong></p>
+    <p>Sign in to your ThinkWork environment to finish setup.</p>
+  EOT
+
+  validation {
+    condition     = strcontains(var.invite_email_message, "{username}") && strcontains(var.invite_email_message, "{####}")
+    error_message = "invite_email_message must include Cognito placeholders {username} and {####}."
+  }
+}
+
 variable "identity_pool_name" {
   description = "Override the identity pool name (defaults to thinkwork-<stage>-identity-pool)"
   type        = string

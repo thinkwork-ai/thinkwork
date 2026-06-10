@@ -6,15 +6,19 @@ status: active
 
 # TEI New Environment Deployment End-to-End Verification
 
-This runbook proves a fresh ThinkWork deployment path against the `tei` AWS
-profile using the release manifest/controller contract that backs the browser
-Releases flow. It records each gate so failures are either fixed before moving
-on or captured as product gaps with exact evidence.
+This runbook proves the GitHub-free ThinkWork deployment path against the `tei`
+AWS profile using the release manifest/controller contract that backs the
+browser Releases flow. The current TEI environment is controller-managed: Step
+Functions starts the CodeBuild runner, the runner consumes a pinned
+`thinkwork-release.json` plus `platform-artifacts.tar.gz`, runs Terraform,
+publishes runtime config/static assets, initializes required database defaults,
+and writes deployment evidence to the customer evidence bucket.
 
-Known scope boundary: the lower-level enterprise bootstrap command still labels
-the generated CodeBuild project as an inert deployment runner. Treat any
-control-plane execution that does not run Terraform as a product gap for this
-TEI proof; do not paper over it with AWS console fixes.
+Current scope boundary: TEI has proved release update, runtime config, login,
+model catalog, and Settings/Agents recovery through the controller. Full
+destructive teardown is intentionally deferred while TEI remains live for demo
+validation. Treat teardown evidence as the remaining U9 proof gap, not as a
+reason to destroy the demo environment prematurely.
 
 ## Test Envelope
 
@@ -25,17 +29,85 @@ TEI proof; do not paper over it with AWS console fixes.
 - Region: `us-east-1`
 - Stage: `tei-e2e`
 - Customer slug: `tei`
-- Release under test: `v0.1.0-canary.137`
+- Release under test: `v0.1.0-canary.141`
 - Release manifest URL:
-  `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.137/thinkwork-release.json`
+  `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.141/thinkwork-release.json`
 - Release manifest SHA-256:
-  `7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f`
+  `15a6c12f26303d69a21edc8380d0ed0c14d8828f61e261f1e931a7b79f9b7954`
+- Platform bundle SHA-256:
+  `4c53fd47505888d8b664cf78915317510ab9cf1c72bd36c920dc01ba6f021e93`
+- Deployed app URL:
+  `https://d1eqjv7ijcmtqz.cloudfront.net`
+- Runtime config URL:
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
+- GraphQL HTTP endpoint:
+  `https://8puq24dl63.execute-api.us-east-1.amazonaws.com/graphql`
 - Repo checkout: `/Users/ericodom/Projects/thinkwork`
 - Isolated deploy root: `/tmp/thinkwork-tei-e2e-greenfield`
 - Isolated enterprise bootstrap root: `/tmp/thinkwork-tei-e2e-bootstrap`
 
 The `tei` profile currently has no configured default region, so every command
 in this runbook pins `AWS_REGION=us-east-1`.
+
+## 2026-06-09 Controller Proof
+
+The current accepted controller update is:
+
+- Step Functions execution:
+  `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-tei-e2e-update-141-20260609225720`
+- Step Functions status: `SUCCEEDED`
+- CodeBuild run:
+  `thinkwork-tei-e2e-deployment-runner:5cdf5ecc-1f51-495f-9a0a-04ae00a13116`
+- CodeBuild status: `SUCCEEDED`
+- Evidence prefix:
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/tei-e2e-update-141-20260609225720/update/`
+- Evidence `deployment-evidence.json`: `status=succeeded`,
+  `terraformExitCode=0`, `release=v0.1.0-canary.141`
+- Terraform plan summary in evidence: `resourceChangeCount=692`, `create=2`,
+  `delete,create=1`, `update=100`, `no-op=589`
+
+Runtime smoke evidence:
+
+- `curl -I https://d1eqjv7ijcmtqz.cloudfront.net/sign-in` returned HTTP 200
+  with `last-modified: Tue, 09 Jun 2026 23:05:48 GMT`.
+- `thinkwork-runtime-config.json` reports release
+  `v0.1.0-canary.141`, manifest SHA-256
+  `15a6c12f26303d69a21edc8380d0ed0c14d8828f61e261f1e931a7b79f9b7954`,
+  API endpoint `https://8puq24dl63.execute-api.us-east-1.amazonaws.com/`, and
+  Cognito domain `https://thinkwork-tei-e2e.auth.us-east-1.amazoncognito.com`.
+- First-admin browser login completed against TEI.
+- Settings -> Model Catalog rendered Claude Haiku 4.5, Claude Opus 4.6, and
+  Claude Sonnet 4.6 in the integrated browser.
+- TEI GraphQL logs after remediation showed `SettingsTenantModelCatalog`,
+  `SettingsBedrockModelImportCandidates`, and `SettingsAgentProfiles` returning
+  `errorCode:null`, `ok:true`.
+
+Database remediation finding:
+
+- Initial `.141` UI verification exposed `relation "tenant_model_catalog" does
+not exist` for model-catalog-backed GraphQL queries.
+- `packages/database-pg/drizzle/0155_tenant_model_catalog.sql` was applied
+  manually to TEI as a short-term remediation.
+- Post-remediation database proof:
+  `tenant_model_catalog_rows=3`, `enabled_rows=3`, `agent_profiles=4`,
+  `model_catalog_available=3`.
+- Follow-up PR
+  [#2305](https://github.com/thinkwork-ai/thinkwork/pull/2305) fixes the
+  controller runner so existing DBs apply required idempotent platform
+  migrations during future updates.
+
+Invite email finding:
+
+- Settings -> Users can create Cognito users; TEI invitees appear in Cognito as
+  `FORCE_CHANGE_PASSWORD`, which proves `inviteMember` reached
+  `AdminCreateUser`.
+- TEI Cognito currently reports `EmailSendingAccount=COGNITO_DEFAULT`.
+- TEI SES in `us-east-1` currently has no configured identities,
+  `SentLast24Hours=0`, and `ProductionAccessEnabled=false`.
+- Therefore customer invite mail is not yet deployed as a controlled
+  customer-owned SES sender. The Terraform fix is to configure Cognito with a
+  verified SES identity through `cognito_email_source_arn` plus the ThinkWork
+  invite template, then redeploy TEI through the controller.
 
 ## Preflight Already Verified
 
@@ -46,9 +118,9 @@ export AWS_PROFILE=tei
 export AWS_REGION=us-east-1
 export THINKWORK_STAGE=tei-e2e
 export THINKWORK_CUSTOMER=tei
-export THINKWORK_RELEASE_VERSION=v0.1.0-canary.137
-export THINKWORK_MANIFEST_URL=https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.137/thinkwork-release.json
-export THINKWORK_MANIFEST_SHA256=7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f
+export THINKWORK_RELEASE_VERSION=v0.1.0-canary.141
+export THINKWORK_MANIFEST_URL=https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.141/thinkwork-release.json
+export THINKWORK_MANIFEST_SHA256=15a6c12f26303d69a21edc8380d0ed0c14d8828f61e261f1e931a7b79f9b7954
 export THINKWORK_ACCOUNT_ID=637423202447
 ```
 
@@ -66,8 +138,8 @@ Observed result on 2026-06-09:
 - AWS CLI resolved to `aws-cli/2.34.52`.
 - Bedrock access check for `anthropic.claude-3-haiku` passed.
 - Doctor passed only after `AWS_REGION=us-east-1` was set.
-- `v0.1.0-canary.137` release manifest downloaded successfully and hashed to
-  `7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f`.
+- `v0.1.0-canary.141` release manifest downloaded successfully and hashed to
+  `15a6c12f26303d69a21edc8380d0ed0c14d8828f61e261f1e931a7b79f9b7954`.
 
 Dry-run the top-level bootstrap path:
 
@@ -114,8 +186,8 @@ Expected planned resources:
 - Deployment SSM/AppConfig profile pointers for `tei-e2e`
 - No GitHub repository configured
 
-Observed result on 2026-06-09: both dry-runs passed with
-`v0.1.0-canary.137`, proving the previous missing-manifest blocker is resolved.
+Observed result on 2026-06-09: both dry-runs passed with a real canary manifest
+asset, proving the previous missing-manifest blocker is resolved.
 
 ## Phase 1: Bootstrap GitHub-Free Substrate
 
@@ -160,11 +232,11 @@ Pass criteria:
 - SSM/AppConfig profile pointers exist.
 - No secret values are printed into the terminal or copied into evidence.
 
-Expected limitation:
+Current behavior:
 
-- Starting the state machine currently exercises an inert CodeBuild stub, not a
-  live Terraform deploy runner. Record that as a known product gap, not a test
-  failure for this phase.
+- Starting the state machine exercises the live CodeBuild Terraform runner. The
+  accepted `.141` update proof above demonstrates Step Functions -> CodeBuild
+  -> Terraform -> runtime config/static sync -> evidence.
 
 ## Phase 2: Deploy A Fresh ThinkWork Environment
 
@@ -316,8 +388,8 @@ Pass criteria:
 - Cognee smoke can start or inspect a graph ingest when tenant/thread
   prerequisites exist.
 - Managed-app UI does not depend on GitHub Actions.
-- Any deployment request routed to Step Functions is clearly marked as the
-  current inert-runner behavior until live orchestration ships.
+- Any deployment request routed to Step Functions records the job, plan/apply
+  evidence, and smoke/status result without relying on GitHub Actions.
 
 ## Phase 6: Desktop And Mobile Configuration
 
@@ -388,20 +460,20 @@ cleanup blocker.
 
 Use this table during the run:
 
-| Gate                                 | Result             | Evidence                                                  |
-| ------------------------------------ | ------------------ | --------------------------------------------------------- |
-| AWS profile and Bedrock doctor       | PASS on 2026-06-09 | Doctor output for account `637423202447`                  |
-| Release manifest asset and digest    | PASS on 2026-06-09 | `v0.1.0-canary.137` manifest SHA-256                      |
-| GitHub-free bootstrap dry-run        | PASS on 2026-06-09 | CLI dry-run output for top-level and enterprise bootstrap |
-| GitHub-free substrate live bootstrap | Not run            | Awaiting live AWS mutation step                           |
-| Local new-environment plan           | Not run            | Terraform plan                                            |
-| Local new-environment deploy         | Not run            | Terraform apply + outputs                                 |
-| Foundation bootstrap smoke           | Not run            | `foundation-smoke.json`                                   |
-| First admin login                    | Not run            | `thinkwork me` + browser proof                            |
-| Managed-app UI smoke                 | Not run            | Browser proof + smoke evidence                            |
-| Desktop profile selection            | Not run            | Desktop launch proof                                      |
-| Mobile profile selection             | Not run            | Mobile launch proof                                       |
-| Cleanup                              | Not run            | Empty resource queries                                    |
+| Gate                                 | Result                 | Evidence                                                  |
+| ------------------------------------ | ---------------------- | --------------------------------------------------------- |
+| AWS profile and Bedrock doctor       | PASS on 2026-06-09     | Doctor output for account `637423202447`                  |
+| Release manifest asset and digest    | PASS on 2026-06-09     | `v0.1.0-canary.141` manifest SHA-256                      |
+| GitHub-free bootstrap dry-run        | PASS on 2026-06-09     | CLI dry-run output for top-level and enterprise bootstrap |
+| GitHub-free substrate live bootstrap | PASS on 2026-06-09     | TEI Step Functions + CodeBuild controller exists          |
+| Controller release update            | PASS on 2026-06-09     | `.141` execution and CodeBuild run succeeded              |
+| Foundation runtime smoke             | PASS on 2026-06-09     | `/sign-in` 200 + runtime config release/digest            |
+| First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                            |
+| Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                    |
+| Managed-app UI smoke                 | Not complete           | Browser proof/evidence still needed                       |
+| Desktop profile selection            | Not run                | Desktop launch proof                                      |
+| Mobile profile selection             | Not run                | Mobile launch proof                                       |
+| Cleanup / teardown                   | Deferred               | TEI kept live for demo; run after evidence is saved       |
 
 The deployment is not fully accepted until every non-stub gate passes or is
 explicitly recorded as a product gap with a follow-up issue.
@@ -440,7 +512,7 @@ Next action: publish or identify a real ThinkWork release manifest asset, then
 rerun Step 2 using either the release version or explicit `--manifest-url` and
 `--manifest-sha256`.
 
-Resolution: `v0.1.0-canary.137` now exposes both `thinkwork-release.json` and
-`platform-artifacts.tar.gz` on the shared GitHub Release. The manifest SHA-256
-is recorded in this runbook, and the safe dry-run gates pass with explicit
-manifest URL and digest.
+Resolution: current canary releases expose both `thinkwork-release.json` and
+`platform-artifacts.tar.gz` on the shared GitHub Release. The `.141` manifest
+SHA-256 is recorded in this runbook, and the safe dry-run gates pass with
+explicit manifest URL and digest.

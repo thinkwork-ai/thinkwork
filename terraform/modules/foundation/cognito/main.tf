@@ -101,6 +101,22 @@ resource "aws_cognito_user_pool" "main" {
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
+  email_configuration {
+    email_sending_account  = var.email_source_arn != "" ? "DEVELOPER" : "COGNITO_DEFAULT"
+    source_arn             = var.email_source_arn != "" ? var.email_source_arn : null
+    from_email_address     = var.from_email_address != "" ? var.from_email_address : null
+    reply_to_email_address = var.reply_to_email_address != "" ? var.reply_to_email_address : null
+  }
+
+  admin_create_user_config {
+    allow_admin_create_user_only = false
+
+    invite_message_template {
+      email_subject = var.invite_email_subject
+      email_message = var.invite_email_message
+    }
+  }
+
   schema {
     name                = "email"
     attribute_data_type = "String"
@@ -154,6 +170,11 @@ resource "aws_cognito_user_pool" "main" {
 
   lifecycle {
     ignore_changes = [schema]
+
+    precondition {
+      condition     = var.from_email_address == "" || var.email_source_arn != ""
+      error_message = "from_email_address requires email_source_arn so Cognito can use a verified SES identity."
+    }
   }
 }
 
