@@ -2112,6 +2112,7 @@ export type Message = {
   tokenCount?: Maybe<Scalars["Int"]["output"]>;
   toolCalls?: Maybe<Scalars["AWSJSON"]["output"]>;
   toolResults?: Maybe<Scalars["AWSJSON"]["output"]>;
+  userQuestion?: Maybe<UserQuestion>;
 };
 
 export type MessageArtifact = {
@@ -2277,6 +2278,7 @@ export type Mutation = {
   addTenantMember: TenantMember;
   addThreadDependency: ThreadDependency;
   adminUpdateAppletSource: SaveAppletPayload;
+  answerUserQuestion: UserQuestion;
   approveInboxItem: InboxItem;
   approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   approveOntologyChangeSet: OntologyChangeSet;
@@ -2536,6 +2538,11 @@ export type MutationAddThreadDependencyArgs = {
 
 export type MutationAdminUpdateAppletSourceArgs = {
   input: AdminUpdateAppletSourceInput;
+};
+
+export type MutationAnswerUserQuestionArgs = {
+  answers: Scalars["AWSJSON"]["input"];
+  questionId: Scalars["ID"]["input"];
 };
 
 export type MutationApproveInboxItemArgs = {
@@ -5942,6 +5949,7 @@ export type Thread = {
   metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
   number: Scalars["Int"]["output"];
   participants: Array<ThreadParticipant>;
+  pendingUserQuestion?: Maybe<UserQuestion>;
   reporter?: Maybe<User>;
   reporterId?: Maybe<Scalars["ID"]["output"]>;
   space?: Maybe<Space>;
@@ -6705,6 +6713,30 @@ export type UserProfile = {
   updatedAt: Scalars["AWSDateTime"]["output"];
   userId: Scalars["ID"]["output"];
 };
+
+export type UserQuestion = {
+  __typename?: "UserQuestion";
+  answeredAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  answeredBy?: Maybe<Scalars["String"]["output"]>;
+  answeredVia?: Maybe<UserQuestionAnsweredVia>;
+  answers?: Maybe<Scalars["AWSJSON"]["output"]>;
+  id: Scalars["ID"]["output"];
+  messageId: Scalars["ID"]["output"];
+  questions: Scalars["AWSJSON"]["output"];
+  status: UserQuestionStatus;
+  threadId: Scalars["ID"]["output"];
+};
+
+export enum UserQuestionAnsweredVia {
+  Card = "CARD",
+  Reply = "REPLY",
+}
+
+export enum UserQuestionStatus {
+  Answered = "ANSWERED",
+  Cancelled = "CANCELLED",
+  Pending = "PENDING",
+}
 
 export type UserQuickAction = {
   __typename?: "UserQuickAction";

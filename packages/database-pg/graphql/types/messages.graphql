@@ -45,7 +45,42 @@ type Message {
   mentions: [MessageMention!]!
   artifacts: [MessageArtifact!]!
   durableArtifact: Artifact
+  # Answer-state read path for ask_user_question messages (resolved from
+  # pending_user_questions by message id); null for ordinary messages.
+  userQuestion: UserQuestion
   createdAt: AWSDateTime!
+}
+
+# --- User questions (ask_user_question HITL) ---
+
+# Status of a pending_user_questions row. PENDING parks the thread in
+# AWAITING_USER; answer state derives from this row, never from mutating
+# the question message's parts payload.
+enum UserQuestionStatus {
+  PENDING
+  ANSWERED
+  CANCELLED
+}
+
+enum UserQuestionAnsweredVia {
+  CARD
+  REPLY
+}
+
+type UserQuestion {
+  id: ID!
+  threadId: ID!
+  messageId: ID!
+  status: UserQuestionStatus!
+  # Validated ask_user_question tool payload (questions only; written once
+  # at intake).
+  questions: AWSJSON!
+  # Structured card answers, or a reference to the consuming message when
+  # answered via plain reply.
+  answers: AWSJSON
+  answeredVia: UserQuestionAnsweredVia
+  answeredBy: String
+  answeredAt: AWSDateTime
 }
 
 type MessageSender {
@@ -127,6 +162,12 @@ input SendMessageMentionInput {
 
 # --- Query / Mutation extensions ---
 
+extend type Thread {
+  # The thread's open question batch, if any (at most one pending row per
+  # thread, enforced by a partial unique index).
+  pendingUserQuestion: UserQuestion
+}
+
 extend type Query {
   messages(threadId: ID!, limit: Int, cursor: String): MessageConnection!
 }
@@ -134,4 +175,5 @@ extend type Query {
 extend type Mutation {
   sendMessage(input: SendMessageInput!): Message!
   deleteMessage(id: ID!): Boolean!
+  answerUserQuestion(questionId: ID!, answers: AWSJSON!): UserQuestion!
 }
