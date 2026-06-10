@@ -101,6 +101,26 @@ Runtime smoke evidence:
 - TEI GraphQL logs after remediation showed `SettingsTenantModelCatalog`,
   `SettingsBedrockModelImportCandidates`, and `SettingsAgentProfiles` returning
   `errorCode:null`, `ok:true`.
+- `node scripts/smoke/foundation-bootstrap-smoke.mjs` passed in live
+  runtime-config mode on 2026-06-10 with evidence written to
+  `/tmp/thinkwork-tei-smoke-proof/foundation-smoke-148.json`:
+  - Spaces endpoint returned HTTP 200.
+  - AppSync GraphQL `{ __typename }` returned HTTP 200 with `Query`.
+  - Cognito domain validation passed.
+  - Deployment profile v1 shape validation passed with profile SHA-256
+    `03ec3bf5d805cab2fc4f06a60b84a78e43f0392c60d3f4ec7c118e1358bbc2c1`.
+  - Runtime-config-backed control-plane validation passed for state machine
+    `thinkwork-tei-e2e-deployment-orchestrator`, CodeBuild project
+    `thinkwork-tei-e2e-deployment-runner`, and evidence bucket
+    `thinkwork-tei-e2e-637423202447-deploy-evidence`.
+- `node scripts/smoke/cognee-managed-app-smoke.mjs` passed in live mode as an
+  explicit skip because Cognee is not enabled for this base TEI stage; local
+  evidence:
+  `/tmp/thinkwork-tei-smoke-proof/cognee-smoke-148.json`.
+- `node scripts/smoke/twenty-managed-app-smoke.mjs` passed in live mode as an
+  explicit skip because Twenty CRM is not provisioned for this base TEI stage;
+  local evidence:
+  `/tmp/thinkwork-tei-smoke-proof/twenty-smoke-148.json`.
 
 Manifest digest note:
 
@@ -338,6 +358,31 @@ AWS_REGION="$AWS_REGION" \
 node /Users/ericodom/Projects/thinkwork/scripts/smoke/foundation-bootstrap-smoke.mjs
 ```
 
+For the current TEI controller-managed runtime, the accepted smoke was run from
+published runtime config instead of local Terraform state:
+
+```bash
+SMOKE_ENABLE_FOUNDATION_BOOTSTRAP=1 \
+SMOKE_TERRAFORM_DIR=/tmp/thinkwork-tei-smoke-proof/no-local-terraform-root \
+SMOKE_SPACES_URL=https://d1eqjv7ijcmtqz.cloudfront.net \
+SMOKE_GRAPHQL_URL=https://zp7lxyesvnci7gnhfkqbiye3nm.appsync-api.us-east-1.amazonaws.com/graphql \
+SMOKE_GRAPHQL_WS_URL=wss://zp7lxyesvnci7gnhfkqbiye3nm.appsync-realtime-api.us-east-1.amazonaws.com/graphql \
+SMOKE_COGNITO_DOMAIN=https://thinkwork-tei-e2e.auth.us-east-1.amazoncognito.com \
+SMOKE_REQUIRE_CONTROL_PLANE=1 \
+SMOKE_STEP_FUNCTIONS_STATE_MACHINE_ARN=arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator \
+SMOKE_CODEBUILD_PROJECT=thinkwork-tei-e2e-deployment-runner \
+SMOKE_EVIDENCE_BUCKET=thinkwork-tei-e2e-637423202447-deploy-evidence \
+SMOKE_RELEASE_VERSION=v0.1.0-canary.148 \
+SMOKE_MANIFEST_SHA256=5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93 \
+SMOKE_EVIDENCE_FILE=/tmp/thinkwork-tei-smoke-proof/foundation-smoke-148.json \
+node /Users/ericodom/Projects/thinkwork/scripts/smoke/foundation-bootstrap-smoke.mjs
+```
+
+The accepted local run also passed `SMOKE_DEPLOYMENT_PROFILE_JSON`,
+`SMOKE_DEPLOYMENT_PROFILE_SHA256`, and `APPSYNC_API_KEY` from
+`thinkwork-runtime-config.json`. Do not paste the raw API key into docs or
+evidence; the evidence records only endpoint status and profile SHA-256.
+
 Pass criteria:
 
 - Spaces app endpoint check passes.
@@ -415,6 +460,13 @@ AWS_PROFILE="$AWS_PROFILE" \
 AWS_REGION="$AWS_REGION" \
 node /Users/ericodom/Projects/thinkwork/scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs
 ```
+
+Base TEI optional-app smoke evidence on 2026-06-10:
+
+- `cognee-managed-app-smoke.mjs` returned `ok:true`, `skippedLive:true`,
+  `reason:"Cognee is not enabled for this stage."`
+- `twenty-managed-app-smoke.mjs` returned `ok:true`, `skippedLive:true`,
+  `reason:"Twenty CRM is not provisioned for this stage."`
 
 Pass criteria:
 
@@ -503,10 +555,10 @@ Use this table during the run:
 | GitHub-free substrate live bootstrap | PASS on 2026-06-09     | TEI Step Functions + CodeBuild controller exists                                                 |
 | Controller release update            | PASS on 2026-06-10     | `.148` execution and CodeBuild run succeeded                                                     |
 | Controller selected-release status   | PASS on 2026-06-10     | SSM status params + `controller-release-selection.json`                                          |
-| Foundation runtime smoke             | PASS on 2026-06-10     | `/sign-in` 200 + runtime config release/digest                                                   |
+| Foundation runtime smoke             | PASS on 2026-06-10     | `/sign-in` 200 + runtime config release/digest + live smoke evidence                             |
 | First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                                                                   |
 | Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                                                           |
-| Managed-app UI smoke                 | Partial                | Optional apps disabled in base install; Cognee/Twenty full smoke remains                         |
+| Managed-app UI smoke                 | Partial                | Cognee/Twenty skip evidence captured for base install; full optional-app deploy smoke remains    |
 | Desktop profile selection            | Partial                | Universal runtime profile is published; desktop `.148` assets are available for user launch test |
 | Mobile profile selection             | Not run                | Mobile launch proof                                                                              |
 | Cleanup / teardown                   | Deferred               | TEI kept live for demo; run after evidence is saved                                              |

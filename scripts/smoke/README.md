@@ -188,6 +188,26 @@ verifies generated Spaces, GraphQL/AppSync, Cognito, deployment profile, and
 deployment control-plane outputs. Set `SMOKE_EVIDENCE_S3_URI=s3://bucket/prefix`
 to upload the evidence envelope with `aws s3 cp`.
 
+For controller-managed environments where the runtime config is already
+published, live mode can validate the deployment profile and control plane from
+environment values instead of local Terraform state:
+
+```sh
+SMOKE_ENABLE_FOUNDATION_BOOTSTRAP=1 \
+  SMOKE_TERRAFORM_DIR=/tmp/no-local-terraform-root \
+  SMOKE_SPACES_URL=https://customer.example.com \
+  SMOKE_GRAPHQL_URL=https://example.appsync-api.us-east-1.amazonaws.com/graphql \
+  SMOKE_GRAPHQL_WS_URL=wss://example.appsync-realtime-api.us-east-1.amazonaws.com/graphql \
+  SMOKE_COGNITO_DOMAIN=https://customer.auth.us-east-1.amazoncognito.com \
+  SMOKE_DEPLOYMENT_PROFILE_JSON='{"schemaVersion":1,...}' \
+  SMOKE_REQUIRE_CONTROL_PLANE=1 \
+  SMOKE_STEP_FUNCTIONS_STATE_MACHINE_ARN=arn:aws:states:... \
+  SMOKE_CODEBUILD_PROJECT=thinkwork-customer-deployment-runner \
+  SMOKE_EVIDENCE_BUCKET=thinkwork-customer-deploy-evidence \
+  SMOKE_EVIDENCE_FILE=/tmp/foundation-smoke.json \
+  node scripts/smoke/foundation-bootstrap-smoke.mjs
+```
+
 ## Knowledge Graph thread ingest smoke
 
 The Knowledge Graph smoke covers Phase II Cognee thread ingest and Explorer
