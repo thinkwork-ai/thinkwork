@@ -55,7 +55,6 @@ import {
   spaces,
   agentProfiles,
   agentProfileSpaceAssignments,
-  userModelApprovals,
   tenantMcpServers,
 } from "@thinkwork/database-pg/schema";
 import { buildSkillEnvOverrides } from "./oauth-token.js";
@@ -704,7 +703,6 @@ export async function resolveAgentRuntimeConfig(
   const overriddenConfig = applyRuntimeOverrides(resolvedConfig, overrides);
   overriddenConfig.agentProfilesConfig = await loadAgentProfileRuntimeConfigs({
     tenantId: opts.tenantId,
-    currentUserId: opts.currentUserId,
     spaceId: opts.spaceId ?? null,
     mcpConfigs,
     logPrefix,
@@ -714,7 +712,6 @@ export async function resolveAgentRuntimeConfig(
 
 async function loadAgentProfileRuntimeConfigs(input: {
   tenantId: string;
-  currentUserId?: string;
   spaceId: string | null;
   mcpConfigs: McpConfig[];
   logPrefix: string;
@@ -759,20 +756,6 @@ async function loadAgentProfileRuntimeConfigs(input: {
     availableModelRows.map((row) => row.modelId),
   );
 
-  let approvedModelIds: Set<string> | null = null;
-  if (input.currentUserId) {
-    const approvalRows = await db
-      .select({ model_id: userModelApprovals.model_id })
-      .from(userModelApprovals)
-      .where(
-        and(
-          eq(userModelApprovals.tenant_id, input.tenantId),
-          eq(userModelApprovals.user_id, input.currentUserId),
-        ),
-      );
-    approvedModelIds = new Set(approvalRows.map((row) => row.model_id));
-  }
-
   const assignmentRows = await db
     .select({
       profile_id: agentProfileSpaceAssignments.profile_id,
@@ -816,13 +799,6 @@ async function loadAgentProfileRuntimeConfigs(input: {
       );
       continue;
     }
-    if (approvedModelIds && !approvedModelIds.has(profile.model_id)) {
-      console.warn(
-        `${input.logPrefix} Agent Profile ${profile.slug} skipped: model ${profile.model_id} is not approved for user ${input.currentUserId}`,
-      );
-      continue;
-    }
-
     const assignedSpaceIds = [
       ...new Set(spaceIdsByProfileId.get(profile.id) ?? []),
     ];

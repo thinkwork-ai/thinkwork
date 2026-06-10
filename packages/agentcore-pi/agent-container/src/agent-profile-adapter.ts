@@ -75,7 +75,6 @@ export interface CompileAgentProfileRunRequestArgs {
   task: string;
   parentThreadTurnId: string;
   parentModelId: string;
-  approvedModelIds: readonly string[];
   availableToolNames: readonly string[];
   availableSkillNames: readonly string[];
   mcpRegistry: McpToolRegistry;
@@ -284,8 +283,6 @@ export class AgentProfileAdapterError extends Error {
     public readonly code:
       | "PROFILE_DISABLED"
       | "EMPTY_TASK"
-      | "MODEL_NOT_APPROVED"
-      | "FALLBACK_MODEL_NOT_APPROVED"
       | "TOOL_NOT_AVAILABLE"
       | "SKILL_NOT_AVAILABLE"
       | "MCP_SERVER_NOT_AVAILABLE"
@@ -348,19 +345,6 @@ function normalizeToolNamesForRuntime(
   return unique(values).map((value) =>
     normalizeToolNameForRuntime(value, availableToolNames),
   );
-}
-
-function assertApprovedModel(
-  modelId: string,
-  approvedModelIds: readonly string[],
-  code: "MODEL_NOT_APPROVED" | "FALLBACK_MODEL_NOT_APPROVED",
-): void {
-  if (!approvedModelIds.includes(modelId)) {
-    throw new AgentProfileAdapterError(
-      code,
-      `Agent profile model "${modelId}" is not approved for this invocation.`,
-    );
-  }
 }
 
 function rejectPromptSuppliedOverrides(
@@ -532,15 +516,7 @@ export function compileAgentProfileRunRequest(
   rejectPromptSuppliedOverrides(args.requestedOverrides);
 
   const model = cleanString(args.profile.modelId);
-  assertApprovedModel(model, args.approvedModelIds, "MODEL_NOT_APPROVED");
   const fallbackModels = unique(args.profile.fallbackModelIds ?? []);
-  for (const fallbackModel of fallbackModels) {
-    assertApprovedModel(
-      fallbackModel,
-      args.approvedModelIds,
-      "FALLBACK_MODEL_NOT_APPROVED",
-    );
-  }
 
   const tools = compileToolAllowlist({
     policy: args.profile.toolPolicy,

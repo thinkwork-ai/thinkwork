@@ -343,10 +343,9 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       setError(message);
     };
     try {
-      // Create the thread first, route immediately, then finish message send
-      // and runtime dispatch in the background. The detail route receives an
-      // optimistic user-message scaffold so a new thread feels instant while
-      // the server persists the first message and starts the agent turn.
+      // Create the thread first, then persist the first message before
+      // routing. Upload/send failures after an eager route leave an empty
+      // in-progress thread with no user message or agent turn.
       const title = titleFromPromptWithAttachments(trimmed, files);
       const created = await createThread({
         input: {
@@ -366,37 +365,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         setError("Thread created but no id returned");
         return;
       }
-      if (trimmed) {
-        setPendingThreadStart({
-          threadId,
-          title,
-          content: trimmed,
-          expectAssistantResponse: agentRequested !== false,
-          startedAt: new Date().toISOString(),
-          mentions: mentions.map((mention) => ({
-            targetType: mention.targetType,
-            targetId: mention.targetId,
-            displayName: mention.displayName,
-            rawText: mention.rawText,
-          })),
-          attachments:
-            files.length > 0
-              ? files.map((file) => ({
-                  name: file.name,
-                  sizeBytes: file.size,
-                  mimeType: file.type,
-                }))
-              : undefined,
-        });
-      }
-      navigateToCreatedThread(
-        navigate,
-        threadId,
-        targetSpaceId,
-        defaultSpaceId,
-      );
-      routed = true;
-
       let attachmentRefs: { attachmentId: string }[] = [];
       if (files.length > 0) {
         const apiUrl = readRuntimeEnv("VITE_API_URL");
@@ -461,6 +429,36 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         );
         return;
       }
+      if (trimmed) {
+        setPendingThreadStart({
+          threadId,
+          title,
+          content: trimmed,
+          expectAssistantResponse: agentRequested !== false,
+          startedAt: new Date().toISOString(),
+          mentions: mentions.map((mention) => ({
+            targetType: mention.targetType,
+            targetId: mention.targetId,
+            displayName: mention.displayName,
+            rawText: mention.rawText,
+          })),
+          attachments:
+            files.length > 0
+              ? files.map((file) => ({
+                  name: file.name,
+                  sizeBytes: file.size,
+                  mimeType: file.type,
+                }))
+              : undefined,
+        });
+      }
+      navigateToCreatedThread(
+        navigate,
+        threadId,
+        targetSpaceId,
+        defaultSpaceId,
+      );
+      routed = true;
     } catch (err) {
       surfaceError(err instanceof Error ? err.message : "Failed to start work");
     } finally {
