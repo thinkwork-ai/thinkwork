@@ -162,6 +162,9 @@ function buildControllerPayload(args: {
     releaseVersion: args.release.version,
     releaseManifestUrl: args.release.manifestUrl,
     releaseManifestSha256: args.release.manifestSha256,
+    terraformModuleVersion: releaseVersionToTerraformModuleVersion(
+      args.release.version,
+    ),
     release: {
       version: args.release.version,
       manifestUrl: args.release.manifestUrl,
@@ -194,6 +197,10 @@ function buildControllerPayload(args: {
 
 function releaseRepository(): string {
   return process.env.THINKWORK_RELEASE_REPOSITORY || "thinkwork-ai/thinkwork";
+}
+
+function releaseVersionToTerraformModuleVersion(version: string): string {
+  return version.replace(/^v/, "");
 }
 
 function stringField(record: Record<string, unknown>, field: string): string {

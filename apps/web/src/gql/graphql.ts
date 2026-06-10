@@ -1225,6 +1225,9 @@ export type DeploymentStatus = {
   cogneeLogGroupName?: Maybe<Scalars["String"]["output"]>;
   cogneeServiceName?: Maybe<Scalars["String"]["output"]>;
   databaseEndpoint?: Maybe<Scalars["String"]["output"]>;
+  deploymentControllerArn?: Maybe<Scalars["String"]["output"]>;
+  deploymentEvidenceBucket?: Maybe<Scalars["String"]["output"]>;
+  deploymentRunnerProjectName?: Maybe<Scalars["String"]["output"]>;
   docsUrl?: Maybe<Scalars["String"]["output"]>;
   ecrUrl?: Maybe<Scalars["String"]["output"]>;
   hindsightEnabled: Scalars["Boolean"]["output"];
@@ -1232,6 +1235,9 @@ export type DeploymentStatus = {
   managedApplications: Array<ManagedApplicationDeployment>;
   managedMemoryEnabled: Scalars["Boolean"]["output"];
   region: Scalars["String"]["output"];
+  releaseManifestSha256?: Maybe<Scalars["String"]["output"]>;
+  releaseManifestUrl?: Maybe<Scalars["String"]["output"]>;
+  releaseVersion?: Maybe<Scalars["String"]["output"]>;
   source: Scalars["String"]["output"];
   stage: Scalars["String"]["output"];
   twentyAlbArn?: Maybe<Scalars["String"]["output"]>;
@@ -7929,6 +7935,12 @@ export type SettingsDeploymentStatusQuery = {
     source: string;
     region: string;
     accountId?: string | null;
+    releaseVersion?: string | null;
+    releaseManifestUrl?: string | null;
+    releaseManifestSha256?: string | null;
+    deploymentControllerArn?: string | null;
+    deploymentRunnerProjectName?: string | null;
+    deploymentEvidenceBucket?: string | null;
     bucketName?: string | null;
     databaseEndpoint?: string | null;
     ecrUrl?: string | null;
@@ -12955,6 +12967,30 @@ export const SettingsDeploymentStatusDocument = {
                 { kind: "Field", name: { kind: "Name", value: "source" } },
                 { kind: "Field", name: { kind: "Name", value: "region" } },
                 { kind: "Field", name: { kind: "Name", value: "accountId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releaseVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releaseManifestUrl" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releaseManifestSha256" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "deploymentControllerArn" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "deploymentRunnerProjectName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "deploymentEvidenceBucket" },
+                },
                 { kind: "Field", name: { kind: "Name", value: "bucketName" } },
                 {
                   kind: "Field",

@@ -72,15 +72,6 @@ export function SettingsGeneral() {
         <EditorWrapRow />
       </SettingsSection>
 
-      <SettingsSection label="About">
-        <SettingsRow
-          label="App version"
-          description="The ThinkWork build running on this device."
-        >
-          {APP_VERSION_LABEL}
-        </SettingsRow>
-      </SettingsSection>
-
       {isDesktop() ? (
         <SettingsSection label="Notifications">
           <ThreadNotificationsRow />
@@ -96,6 +87,24 @@ export function SettingsGeneral() {
               </div>
             ) : (
               <>
+                <SettingsRow
+                  label="App build"
+                  description="The web or desktop bundle running on this device."
+                >
+                  <MonoValue value={APP_VERSION_LABEL} />
+                </SettingsRow>
+                <SettingsRow
+                  label="Deployed release"
+                  description="The ThinkWork platform release currently selected for this environment."
+                >
+                  <MonoValue value={deployment?.releaseVersion} />
+                </SettingsRow>
+                <SettingsRow
+                  label="Manifest SHA"
+                  description="Release manifest digest for the deployed platform version."
+                >
+                  <MonoValue value={deployment?.releaseManifestSha256} />
+                </SettingsRow>
                 <SettingsRow
                   label="Stage"
                   description="Deployment stage this console is connected to."
@@ -150,6 +159,21 @@ export function SettingsGeneral() {
                 label="AppSync"
                 description="Realtime subscriptions endpoint."
                 value={deployment?.appsyncUrl}
+              />
+              <ResourceRow
+                label="Controller"
+                description="Deployment controller state machine."
+                value={deployment?.deploymentControllerArn}
+              />
+              <ResourceRow
+                label="Runner"
+                description="CodeBuild project that applies release updates."
+                value={deployment?.deploymentRunnerProjectName}
+              />
+              <ResourceRow
+                label="Evidence bucket"
+                description="Deployment run evidence and status storage."
+                value={deployment?.deploymentEvidenceBucket}
               />
             </SettingsSection>
           ) : null}
@@ -365,6 +389,14 @@ function ConfirmFact({ label, value }: { label: string; value: string }) {
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="break-all font-mono text-xs">{value}</div>
     </div>
+  );
+}
+
+function MonoValue({ value }: { value?: string | null }) {
+  return (
+    <span className="max-w-[22rem] truncate font-mono text-xs">
+      {value ?? "—"}
+    </span>
   );
 }
 

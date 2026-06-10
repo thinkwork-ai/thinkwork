@@ -31,6 +31,12 @@ export const SettingsDeploymentStatusQuery = graphql(`
       source
       region
       accountId
+      releaseVersion
+      releaseManifestUrl
+      releaseManifestSha256
+      deploymentControllerArn
+      deploymentRunnerProjectName
+      deploymentEvidenceBucket
       bucketName
       databaseEndpoint
       ecrUrl
