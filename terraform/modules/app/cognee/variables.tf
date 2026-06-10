@@ -90,13 +90,13 @@ variable "image_uri" {
 variable "cpu" {
   description = "Fargate task CPU units"
   type        = number
-  default     = 1024
+  default     = 2048
 }
 
 variable "memory" {
-  description = "Fargate task memory in MB"
+  description = "Fargate task memory in MB. 2048 OOM-crashed the dogfood task during cognify (Kuzu graph + LanceDB vectors + embedding/LLM client + extraction pipeline in one task); 8192 gives the single-task pipeline real headroom. Valid Fargate combo with cpu=2048 (4096-16384 MB)."
   type        = number
-  default     = 2048
+  default     = 8192
 }
 
 variable "desired_count" {
