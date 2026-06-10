@@ -393,6 +393,30 @@ Pass criteria:
 - Evidence is written to
   `/tmp/thinkwork-tei-e2e-greenfield/deploy-artifacts/foundation-smoke.json`.
 
+## Phase 3A: Deployment Profile Binding Smoke
+
+Run the read-only profile-binding smoke after the runtime config is published:
+
+```bash
+pnpm --filter @thinkwork/deployment-profile build
+
+SMOKE_ENABLE_DEPLOYMENT_PROFILE_BINDING=1 \
+SMOKE_SPACES_URL=https://d1eqjv7ijcmtqz.cloudfront.net \
+SMOKE_EVIDENCE_FILE=/tmp/thinkwork-tei-smoke-proof/deployment-profile-binding-148.json \
+node /Users/ericodom/Projects/thinkwork/scripts/smoke/deployment-profile-binding-smoke.mjs
+```
+
+The accepted `v0.1.0-canary.148` run produced profile SHA-256
+`ef9427364e0d80e4389c62509b119a7be1da3f1a3906c7d5be69eda33ac31ffa` and
+confirmed that the web, desktop, and mobile binding snapshots all target
+`deploymentId=thinkwork-tei-e2e`, `stage=tei-e2e`, `region=us-east-1`, and the
+TEI Cognito/API/AppSync endpoints. The smoke failed closed if the generated
+profile or evidence contained API keys, passwords, AWS keys, tokens, credential
+material, or secret payload fields.
+
+This proves the universal profile contract that web, desktop, and mobile
+consume. It does not replace the human desktop/mobile launch proof in Phase 8.
+
 ## Phase 4: First Admin Bootstrap And Login
 
 This is the highest-risk unknown in the current GitHub-free flow. The test must
@@ -503,6 +527,9 @@ Pass criteria:
   deployment.
 - The profile includes app URL, API URL, Cognito, AppSync, region, stage, and
   customer identity fields required by clients.
+- The profile-binding smoke passes against the published runtime config and
+  records no credential, token, password, API-key, or AWS-key fields in the
+  generated profile/evidence.
 
 ## Cleanup
 
@@ -547,21 +574,22 @@ cleanup blocker.
 
 Use this table during the run:
 
-| Gate                                 | Result                 | Evidence                                                                                         |
-| ------------------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------ |
-| AWS profile and Bedrock doctor       | PASS on 2026-06-09     | Doctor output for account `637423202447`                                                         |
-| Release manifest asset and digest    | PASS on 2026-06-10     | `v0.1.0-canary.148` manifest SHA-256                                                             |
-| GitHub-free bootstrap dry-run        | PASS on 2026-06-09     | CLI dry-run output for top-level and enterprise bootstrap                                        |
-| GitHub-free substrate live bootstrap | PASS on 2026-06-09     | TEI Step Functions + CodeBuild controller exists                                                 |
-| Controller release update            | PASS on 2026-06-10     | `.148` execution and CodeBuild run succeeded                                                     |
-| Controller selected-release status   | PASS on 2026-06-10     | SSM status params + `controller-release-selection.json`                                          |
-| Foundation runtime smoke             | PASS on 2026-06-10     | `/sign-in` 200 + runtime config release/digest + live smoke evidence                             |
-| First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                                                                   |
-| Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                                                           |
-| Managed-app UI smoke                 | Partial                | Cognee/Twenty skip evidence captured for base install; full optional-app deploy smoke remains    |
-| Desktop profile selection            | Partial                | Universal runtime profile is published; desktop `.148` assets are available for user launch test |
-| Mobile profile selection             | Not run                | Mobile launch proof                                                                              |
-| Cleanup / teardown                   | Deferred               | TEI kept live for demo; run after evidence is saved                                              |
+| Gate                                 | Result                 | Evidence                                                                                      |
+| ------------------------------------ | ---------------------- | --------------------------------------------------------------------------------------------- |
+| AWS profile and Bedrock doctor       | PASS on 2026-06-09     | Doctor output for account `637423202447`                                                      |
+| Release manifest asset and digest    | PASS on 2026-06-10     | `v0.1.0-canary.148` manifest SHA-256                                                          |
+| GitHub-free bootstrap dry-run        | PASS on 2026-06-09     | CLI dry-run output for top-level and enterprise bootstrap                                     |
+| GitHub-free substrate live bootstrap | PASS on 2026-06-09     | TEI Step Functions + CodeBuild controller exists                                              |
+| Controller release update            | PASS on 2026-06-10     | `.148` execution and CodeBuild run succeeded                                                  |
+| Controller selected-release status   | PASS on 2026-06-10     | SSM status params + `controller-release-selection.json`                                       |
+| Foundation runtime smoke             | PASS on 2026-06-10     | `/sign-in` 200 + runtime config release/digest + live smoke evidence                          |
+| Deployment profile contract smoke    | PASS on 2026-06-10     | Web/desktop/mobile binding snapshots target TEI from runtime config profile                   |
+| First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                                                                |
+| Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                                                        |
+| Managed-app UI smoke                 | Partial                | Cognee/Twenty skip evidence captured for base install; full optional-app deploy smoke remains |
+| Desktop profile selection            | Partial                | Profile contract passes; desktop `.148` assets are available for user launch test             |
+| Mobile profile selection             | Partial                | Profile contract passes; mobile launch proof remains                                          |
+| Cleanup / teardown                   | Deferred               | TEI kept live for demo; run after evidence is saved                                           |
 
 The deployment is not fully accepted until every non-stub gate passes or is
 explicitly recorded as a product gap with a follow-up issue.

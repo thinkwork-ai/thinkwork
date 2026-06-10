@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U9 follow-up - make foundation smoke validate
-  runtime-config-backed controller outputs and record live TEI smoke evidence.
-- Current branch: `codex/u9-foundation-smoke-proof`.
+- Current implementation unit: U8/U9 follow-up - prove runtime-config-backed
+  deployment profile binding across web, desktop, and mobile contracts.
+- Current branch: `codex/u8-profile-binding-proof`.
 - Current worktree:
-  `.Codex/worktrees/u9-foundation-smoke-proof`.
+  `.Codex/worktrees/u8-profile-binding-proof`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -49,20 +49,32 @@ status: in_progress
   [#2320](https://github.com/thinkwork-ai/thinkwork/pull/2320) merged; U9
   user-facing docs reconciliation PR
   [#2321](https://github.com/thinkwork-ai/thinkwork/pull/2321) merged; U9
-  foundation smoke proof PR not opened yet.
-- Status: U9 user-facing docs reconciliation PR #2321 passed required CI and
-  was squash merged as `64e152e49`. This branch updates
-  `foundation-bootstrap-smoke.mjs` so the live smoke can validate
-  runtime-config/SSM-backed controller fields when local Terraform state is not
-  available. The patched smoke passed against live TEI on 2026-06-10: Spaces
-  returned HTTP 200, AppSync GraphQL returned `{ "__typename": "Query" }`,
-  Cognito HTTPS validation passed, deployment profile v1 shape passed with
-  SHA-256 `03ec3bf5d805cab2fc4f06a60b84a78e43f0392c60d3f4ec7c118e1358bbc2c1`,
-  and control-plane validation passed for the TEI state machine, CodeBuild
+  foundation smoke proof PR
+  [#2322](https://github.com/thinkwork-ai/thinkwork/pull/2322) merged; U8/U9
+  profile-binding proof PR not opened yet.
+- Status: U9 foundation smoke proof PR #2322 passed required CI and was squash
+  merged as `e227cfe4`. This branch adds
+  `deployment-profile-binding-smoke.mjs` so a published runtime config can be
+  normalized into a canonical deployment profile, validated through
+  `@thinkwork/deployment-profile`, and checked against web, desktop, and mobile
+  binding snapshots without recording API keys, passwords, AWS keys, tokens, or
+  credential material in the profile/evidence. The target live TEI run is
+  `v0.1.0-canary.148` at
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`. Full
+  optional-app deploy smoke, human desktop/mobile launch proof, and teardown
+  remain open. Historical notes follow. U9 user-facing docs reconciliation PR
+  #2321 passed required CI and was squash merged as `64e152e49`. U9
+  foundation smoke proof updated `foundation-bootstrap-smoke.mjs` so the live
+  smoke can validate runtime-config/SSM-backed controller fields when local
+  Terraform state is not available. The patched smoke passed against live TEI
+  on 2026-06-10: Spaces returned HTTP 200, AppSync GraphQL returned
+  `{ "__typename": "Query" }`, Cognito HTTPS validation passed, deployment
+  profile v1 shape passed with SHA-256
+  `03ec3bf5d805cab2fc4f06a60b84a78e43f0392c60d3f4ec7c118e1358bbc2c1`, and
+  control-plane validation passed for the TEI state machine, CodeBuild
   project, and evidence bucket. Cognee/Twenty managed-app smoke scripts also
   passed as explicit base-install skips: Cognee is not enabled and Twenty is
-  not provisioned. Full optional-app deploy smoke, mobile profile proof, and
-  teardown remain open. Historical notes follow. U9 proof-doc reconciliation
+  not provisioned. Historical notes follow. U9 proof-doc reconciliation
   PR #2320 passed required CI and was squash merged as `9e412490`. U21 merged
   and was released as `v0.1.0-canary.148`. TEI's customer
   deployment controller was refreshed to the `.148` runner, then TEI update
