@@ -28,6 +28,34 @@ variable "release_manifest_sha256" {
   type        = string
 }
 
+variable "release_manifest_signature_url" {
+  description = "Optional selected ThinkWork release manifest detached signature URL."
+  type        = string
+  default     = ""
+}
+
+variable "release_manifest_trust_policy" {
+  description = "Release manifest trust policy: allow_unsigned_canary for dogfood canaries, or require_signature for customer-safe runs."
+  type        = string
+  default     = "allow_unsigned_canary"
+
+  validation {
+    condition     = contains(["allow_unsigned_canary", "require_signature"], var.release_manifest_trust_policy)
+    error_message = "release_manifest_trust_policy must be allow_unsigned_canary or require_signature."
+  }
+}
+
+variable "release_manifest_trusted_keys_json" {
+  description = "JSON array of trusted release signing keys: [{\"keyId\":\"...\",\"publicKeyPem\":\"...\"}]."
+  type        = string
+  default     = "[]"
+
+  validation {
+    condition     = can(jsondecode(var.release_manifest_trusted_keys_json))
+    error_message = "release_manifest_trusted_keys_json must be valid JSON."
+  }
+}
+
 variable "terraform_state_bucket" {
   description = "Customer-owned S3 bucket that stores the ThinkWork app Terraform state."
   type        = string

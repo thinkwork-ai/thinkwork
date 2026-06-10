@@ -639,9 +639,12 @@ module "deployment_control_plane" {
   account_id = var.account_id
   region     = var.region
 
-  release_version         = var.deployment_release_version
-  release_manifest_url    = var.deployment_release_manifest_url
-  release_manifest_sha256 = var.deployment_release_manifest_sha256
+  release_version                    = var.deployment_release_version
+  release_manifest_url               = var.deployment_release_manifest_url
+  release_manifest_sha256            = var.deployment_release_manifest_sha256
+  release_manifest_signature_url     = var.deployment_release_manifest_signature_url
+  release_manifest_trust_policy      = var.deployment_release_manifest_trust_policy
+  release_manifest_trusted_keys_json = var.deployment_release_manifest_trusted_keys_json
 
   terraform_state_bucket  = local.deployment_terraform_state_bucket
   terraform_lock_table    = local.deployment_terraform_lock_table

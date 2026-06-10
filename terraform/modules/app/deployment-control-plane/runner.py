@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 WORK = Path("/tmp/thinkwork-platform-deploy")
 RELEASE = WORK / "release"
@@ -18,6 +20,10 @@ STARTED_AT = datetime.now(UTC).isoformat()
 RELEASE_EVIDENCE = {}
 CONTROLLER_EVIDENCE = {}
 TERRAFORM_EVIDENCE = {}
+RELEASE_MANIFEST_TRUST_POLICIES = {
+    "allow_unsigned_canary",
+    "require_signature",
+}
 PLATFORM_UPDATE_MIGRATIONS = [
     "0149_user_model_approvals.sql",
     "0152_agent_profiles.sql",
@@ -52,6 +58,181 @@ def download(url, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url, timeout=120) as response:
         destination.write_bytes(response.read())
+
+
+def stable_json_bytes(value):
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def release_manifest_sha256(manifest):
+    return hashlib.sha256(stable_json_bytes(manifest)).hexdigest()
+
+
+def release_manifest_trust_policy():
+    policy = os.environ.get(
+        "THINKWORK_RELEASE_MANIFEST_TRUST_POLICY",
+        "allow_unsigned_canary",
+    ).strip()
+    if not policy:
+        policy = "allow_unsigned_canary"
+    if policy not in RELEASE_MANIFEST_TRUST_POLICIES:
+        raise RuntimeError(
+            "Unsupported release manifest trust policy "
+            f"{policy!r}; expected one of {sorted(RELEASE_MANIFEST_TRUST_POLICIES)}"
+        )
+    return policy
+
+
+def is_canary_release(manifest):
+    version = str(
+        manifest.get("release", {}).get("version")
+        or os.environ.get("THINKWORK_RELEASE_VERSION")
+        or ""
+    )
+    return "-canary" in version
+
+
+def default_signature_url(manifest_url):
+    if manifest_url.endswith("/thinkwork-release.json"):
+        return manifest_url[: -len("thinkwork-release.json")] + "thinkwork-release.sig.json"
+    if manifest_url.endswith("thinkwork-release.json"):
+        return manifest_url[: -len("thinkwork-release.json")] + "thinkwork-release.sig.json"
+    return ""
+
+
+def trusted_release_keys():
+    raw = os.environ.get("THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON", "[]")
+    try:
+        keys = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON must be JSON") from exc
+    if not isinstance(keys, list):
+        raise RuntimeError("THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON must be a JSON array")
+    return keys
+
+
+def require_string(value, path):
+    if not isinstance(value, str) or not value:
+        raise RuntimeError(f"{path} is required")
+    return value
+
+
+def assert_time_window(now, not_before, expires_at, label):
+    start = datetime.fromisoformat(require_string(not_before, f"{label}.notBefore").replace("Z", "+00:00"))
+    end = datetime.fromisoformat(require_string(expires_at, f"{label}.expiresAt").replace("Z", "+00:00"))
+    if now < start:
+        raise RuntimeError(f"{label} is not valid before {not_before}")
+    if now > end:
+        raise RuntimeError(f"{label} expired at {expires_at}")
+
+
+def verify_signature_bytes(public_key_pem, signed_bytes, signature_bytes):
+    with TemporaryDirectory() as temp_dir:
+        temp = Path(temp_dir)
+        key_path = temp / "trusted-release-key.pem"
+        payload_path = temp / "manifest.canonical.json"
+        signature_path = temp / "thinkwork-release.sig"
+        key_path.write_text(public_key_pem, encoding="utf-8")
+        payload_path.write_bytes(signed_bytes)
+        signature_path.write_bytes(signature_bytes)
+        result = subprocess.run(
+            [
+                "openssl",
+                "pkeyutl",
+                "-verify",
+                "-rawin",
+                "-pubin",
+                "-inkey",
+                str(key_path),
+                "-sigfile",
+                str(signature_path),
+                "-in",
+                str(payload_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+    if result.returncode != 0:
+        raise RuntimeError(f"Release manifest signature is invalid: {result.stderr.strip()}")
+
+
+def verify_release_manifest_signature(manifest, manifest_sha256, signature_url):
+    signature_path = RELEASE / "thinkwork-release.sig.json"
+    download(signature_url, signature_path)
+    signature = json.loads(signature_path.read_text(encoding="utf-8"))
+    if signature.get("schemaVersion") != 1:
+        raise RuntimeError("Release manifest signature schemaVersion must be 1")
+    if signature.get("algorithm") != "ed25519":
+        raise RuntimeError("Release manifest signature algorithm must be ed25519")
+    key_id = require_string(signature.get("keyId"), "signature.keyId")
+    if signature.get("manifestSha256") != manifest_sha256:
+        raise RuntimeError(
+            "Release manifest signature digest mismatch: "
+            f"expected {signature.get('manifestSha256')}, got {manifest_sha256}"
+        )
+    signing = manifest.get("signing") or {}
+    accepted_key_ids = signing.get("acceptedKeyIds") or []
+    revoked_key_ids = set(signing.get("revokedKeyIds") or [])
+    if key_id in revoked_key_ids:
+        raise RuntimeError(f"Release manifest signing key is revoked: {key_id}")
+    if key_id not in accepted_key_ids:
+        raise RuntimeError(f"Release manifest does not accept signing key: {key_id}")
+    now = datetime.now(UTC)
+    assert_time_window(now, signature.get("notBefore"), signature.get("expiresAt"), "signature")
+    trusted_key = next((key for key in trusted_release_keys() if key.get("keyId") == key_id), None)
+    if not trusted_key:
+        raise RuntimeError(f"Release manifest signing key is not trusted: {key_id}")
+    if trusted_key.get("notBefore") or trusted_key.get("expiresAt"):
+        assert_time_window(
+            now,
+            trusted_key.get("notBefore", "1970-01-01T00:00:00.000Z"),
+            trusted_key.get("expiresAt", "9999-12-31T23:59:59.999Z"),
+            f"trusted key {key_id}",
+        )
+    verify_signature_bytes(
+        require_string(trusted_key.get("publicKeyPem"), f"trusted key {key_id}.publicKeyPem"),
+        stable_json_bytes(manifest),
+        base64.b64decode(require_string(signature.get("signature"), "signature.signature")),
+    )
+    return {
+        "signatureVerified": True,
+        "keyId": key_id,
+        "signatureUrl": signature_url,
+    }
+
+
+def enforce_release_manifest_trust(manifest, manifest_digest, manifest_url):
+    policy = release_manifest_trust_policy()
+    configured_signature_url = os.environ.get("THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL", "")
+    signature_url = configured_signature_url or default_signature_url(manifest_url)
+    evidence = {
+        "policy": policy,
+        "signatureRequired": policy == "require_signature",
+        "signatureVerified": False,
+        "unsignedCanaryAllowed": False,
+    }
+    if policy == "require_signature":
+        if not signature_url:
+            raise RuntimeError("Release manifest signature URL is required by trust policy")
+        evidence.update(verify_release_manifest_signature(manifest, manifest_digest, signature_url))
+        return evidence
+
+    if configured_signature_url:
+        evidence.update(verify_release_manifest_signature(manifest, manifest_digest, configured_signature_url))
+        return evidence
+
+    if not is_canary_release(manifest):
+        raise RuntimeError(
+            "Unsigned release manifest is only allowed for canary releases; "
+            "set THINKWORK_RELEASE_MANIFEST_TRUST_POLICY=require_signature for customer-safe runs"
+        )
+    evidence["unsignedCanaryAllowed"] = True
+    return evidence
 
 
 def safe_join(base, relative_path):
@@ -278,6 +459,12 @@ def release_selection(payload):
             "manifestSha256": release.get("manifestSha256")
             or payload.get("releaseManifestSha256")
             or os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
+            "manifestSignatureUrl": release.get("manifestSignatureUrl")
+            or payload.get("releaseManifestSignatureUrl")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL"),
+            "manifestTrustPolicy": release.get("manifestTrustPolicy")
+            or payload.get("releaseManifestTrustPolicy")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_TRUST_POLICY"),
         }
     return {
         "version": payload.get("releaseVersion") or os.environ.get("THINKWORK_RELEASE_VERSION"),
@@ -285,6 +472,10 @@ def release_selection(payload):
         or os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
         "manifestSha256": payload.get("releaseManifestSha256")
         or os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
+        "manifestSignatureUrl": payload.get("releaseManifestSignatureUrl")
+        or os.environ.get("THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL"),
+        "manifestTrustPolicy": payload.get("releaseManifestTrustPolicy")
+        or os.environ.get("THINKWORK_RELEASE_MANIFEST_TRUST_POLICY"),
     }
 
 
@@ -294,6 +485,8 @@ def apply_release_selection(payload):
         "version": "THINKWORK_RELEASE_VERSION",
         "manifestUrl": "THINKWORK_RELEASE_MANIFEST_URL",
         "manifestSha256": "THINKWORK_RELEASE_MANIFEST_SHA256",
+        "manifestSignatureUrl": "THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL",
+        "manifestTrustPolicy": "THINKWORK_RELEASE_MANIFEST_TRUST_POLICY",
     }
     for key, env_name in env_names.items():
         value = selected.get(key)
@@ -1050,6 +1243,8 @@ def sync_release_artifacts():
         raise RuntimeError(f"Release manifest digest mismatch: expected {expected}, got {actual}")
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    canonical_digest = release_manifest_sha256(manifest)
+    trust_evidence = enforce_release_manifest_trust(manifest, canonical_digest, manifest_url)
     bundled_paths, bundle_evidence = download_and_extract_artifact_bundles(manifest)
     lambda_prefix = f"releases/{os.environ['THINKWORK_RELEASE_VERSION']}/lambdas"
     static_files = {}
@@ -1081,6 +1276,8 @@ def sync_release_artifacts():
             static_files[artifact.get("name")] = destination
     RELEASE_EVIDENCE = {
         "manifestSha256": actual,
+        "manifestCanonicalSha256": canonical_digest,
+        "trust": trust_evidence,
         "bundles": bundle_evidence,
         "artifacts": artifact_evidence,
     }

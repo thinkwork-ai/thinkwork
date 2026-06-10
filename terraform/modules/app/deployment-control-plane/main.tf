@@ -33,6 +33,8 @@ locals {
       selected_release_version         = var.release_version
       selected_release_manifest_url    = var.release_manifest_url
       selected_release_manifest_sha256 = var.release_manifest_sha256
+      selected_release_signature_url   = var.release_manifest_signature_url
+      selected_release_trust_policy    = var.release_manifest_trust_policy
       terraform_state_bucket           = var.terraform_state_bucket
       terraform_lock_table             = var.terraform_lock_table
       release_artifact_bucket          = var.release_artifact_bucket
@@ -405,6 +407,21 @@ resource "aws_codebuild_project" "runner" {
     environment_variable {
       name  = "THINKWORK_RELEASE_MANIFEST_SHA256"
       value = var.release_manifest_sha256
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL"
+      value = var.release_manifest_signature_url
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RELEASE_MANIFEST_TRUST_POLICY"
+      value = var.release_manifest_trust_policy
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON"
+      value = var.release_manifest_trusted_keys_json
     }
 
     environment_variable {

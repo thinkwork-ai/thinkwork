@@ -320,7 +320,7 @@ jobs:
             echo "" >> notes.md
           fi
           echo "**Machine-consumed platform artifacts:**" >> notes.md
-          echo "Backend Lambda zips, static bundles, runtime images, and the signed release manifest are attached for deployment automation. Human installers are the desktop assets and updater metadata." >> notes.md
+          echo "Backend Lambda zips, static bundles, runtime images, and the release manifest are attached for deployment automation. Signed releases also include thinkwork-release.sig.json; unsigned canaries must be used only with explicit dogfood trust policy. Human installers are the desktop assets and updater metadata." >> notes.md
           echo "" >> notes.md
           echo "---" >> notes.md
           echo "" >> notes.md
