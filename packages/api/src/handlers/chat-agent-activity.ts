@@ -36,6 +36,7 @@ import {
   ThreadTurnEventError,
 } from "../lib/thread-turn-events.js";
 import { notifyThreadTurnStep } from "../graphql/notify.js";
+import { handleQuestionIntake } from "../lib/user-questions/intake.js";
 
 const db = getDb();
 
@@ -80,6 +81,17 @@ function badRequest(reason: string): APIGatewayProxyStructuredResultV2 {
 export async function handler(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+  // ---- Route discrimination --------------------------------------------
+  // This Lambda fronts BOTH POST /api/threads/{threadId}/activity and
+  // POST /api/threads/{threadId}/questions (ask_user_question intake,
+  // plan 2026-06-09-005 U2) — one Lambda, two enumerated API Gateway
+  // routes (terraform/modules/app/lambda-api/handlers.tf). {threadId} is
+  // a UUID, so a trailing "/questions" segment is unambiguous.
+  const path = event.rawPath || event.requestContext.http.path || "";
+  if (path.endsWith("/questions")) {
+    return handleQuestionIntake(event);
+  }
+
   // ---- Auth -----------------------------------------------------------
   const token = extractBearerToken(event);
   if (!token || !validateApiSecret(token)) {

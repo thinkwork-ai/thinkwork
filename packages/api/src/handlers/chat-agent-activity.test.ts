@@ -41,7 +41,19 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tenant_id: { name: "tenant_id" },
     thread_id: { name: "thread_id" },
     agent_id: { name: "agent_id" },
+    status: { name: "status" },
   },
+  // Imported by ../lib/user-questions/intake.js (the /questions route
+  // sibling this handler dispatches to); never queried by the activity
+  // tests in this file.
+  threads: {
+    id: { name: "id" },
+    tenant_id: { name: "tenant_id" },
+    status: { name: "status" },
+    title: { name: "title" },
+  },
+  messages: { id: { name: "id" } },
+  pendingUserQuestions: { id: { name: "id" } },
 }));
 
 vi.mock("../lib/thread-turn-events.js", async () => {
@@ -57,6 +69,9 @@ vi.mock("../lib/thread-turn-events.js", async () => {
 
 vi.mock("../graphql/notify.js", () => ({
   notifyThreadTurnStep: mocks.notifyThreadTurnStep,
+  // Imported by ../lib/user-questions/intake.js; not exercised here.
+  notifyNewMessage: vi.fn(),
+  notifyThreadUpdate: vi.fn(),
 }));
 
 import { handler } from "./chat-agent-activity.js";
@@ -98,6 +113,7 @@ interface Overrides {
   noAuth?: boolean;
   method?: string;
   threadIdPath?: string;
+  path?: string;
   body?: unknown;
 }
 
@@ -126,7 +142,10 @@ function mockEvent(overrides: Overrides = {}): Parameters<typeof handler>[0] {
         });
   return {
     requestContext: {
-      http: { method: overrides.method ?? "POST", path: "/x" },
+      http: {
+        method: overrides.method ?? "POST",
+        path: overrides.path ?? "/x",
+      },
     },
     headers: auth ? { authorization: auth } : {},
     pathParameters: { threadId: overrides.threadIdPath ?? THREAD_ID },
@@ -261,6 +280,21 @@ describe("chat-agent-activity — append + publish", () => {
     expect(JSON.parse(res.body as string).appended).toBe(3);
     const seqs = mocks.notifyThreadTurnStep.mock.calls.map((c) => c[0].seq);
     expect(seqs).toEqual([0, 1, 2]);
+  });
+});
+
+describe("chat-agent-activity — /questions route dispatch", () => {
+  it("dispatches a .../questions path to the question intake, not the activity append", async () => {
+    // The default (activity-shaped) body has no `questions` array, so the
+    // intake rejects it with 400 — proving the request was routed away
+    // from the activity append path.
+    const res = await handler(
+      mockEvent({ path: `/api/threads/${THREAD_ID}/questions` }),
+    );
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body as string).error).toContain("questions");
+    expect(mocks.appendThreadTurnEvent).not.toHaveBeenCalled();
+    expect(mocks.notifyThreadTurnStep).not.toHaveBeenCalled();
   });
 });
 
