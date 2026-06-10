@@ -31,13 +31,13 @@ demo environment prematurely.
 - Region: `us-east-1`
 - Stage: `tei-e2e`
 - Customer slug: `tei`
-- Release under test: `v0.1.0-canary.149`
+- Release under test: `v0.1.0-canary.150`
 - Release manifest URL:
-  `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.149/thinkwork-release.json`
+  `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.150/thinkwork-release.json`
 - Release manifest SHA-256:
-  `f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532`
+  `dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb`
 - Platform bundle SHA-256:
-  `b463b44094d60e94ee068881343deab53bb65d6d081b69757dcc04afb181aad8`
+  `3c2e00aacc5d5b354d6e9a67b19c5a1c4f98225fca8f0ab7551dff315de40e06`
 - Deployed app URL:
   `https://d1eqjv7ijcmtqz.cloudfront.net`
 - Runtime config URL:
@@ -51,9 +51,71 @@ demo environment prematurely.
 The `tei` profile currently has no configured default region, so every command
 in this runbook pins `AWS_REGION=us-east-1`.
 
-## 2026-06-10 Controller Proof - v0.1.0-canary.149
+## 2026-06-10 Controller Proof - v0.1.0-canary.150
 
 The current accepted controller update is:
+
+- Step Functions execution:
+  `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-update-150-20260610095036`
+- Step Functions status: `SUCCEEDED`
+- Step Functions duration: 2026-06-10 04:50:36 CT to 05:00:08 CT
+- CodeBuild run:
+  `thinkwork-tei-e2e-deployment-runner:6e0f4b92-0f23-4f7a-92fa-982453ba1ade`
+- CodeBuild status: `SUCCEEDED`
+- Evidence prefix:
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/5eed2926-cb8c-47f6-bf66-700f04a1b5e5/update/`
+- Evidence objects present:
+  `controller-input-summary.json`, `redacted-terraform-vars.json`,
+  `terraform-plan.json`, `terraform-outputs.json`,
+  `controller-release-selection.json`, and `deployment-evidence.json`
+- Terraform apply result: `1 added, 100 changed, 1 destroyed`
+- App CloudFront invalidation `I4BVXPJJ1KJCO8BQ1ZVUTVIE36`: `Completed`
+- Release workflow rerun
+  `https://github.com/thinkwork-ai/thinkwork/actions/runs/27267228876`:
+  `success` on attempt 2 after the first attempt hit a Docker Hub BuildKit
+  timeout.
+- Controller selected-release SSM status parameters now report:
+  `selected-release-version=v0.1.0-canary.150`,
+  `selected-release-manifest-sha256=dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb`,
+  `selected-release-manifest-url=https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.150/thinkwork-release.json`,
+  and `selected-release-trust-policy=allow_unsigned_canary`.
+
+Runtime smoke evidence:
+
+- `thinkwork-runtime-config.json` reports release
+  `v0.1.0-canary.150`, manifest SHA-256
+  `dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb`,
+  API endpoint `https://8puq24dl63.execute-api.us-east-1.amazonaws.com/`,
+  GraphQL HTTP endpoint
+  `https://8puq24dl63.execute-api.us-east-1.amazonaws.com/graphql`, AppSync
+  endpoint
+  `https://zp7lxyesvnci7gnhfkqbiye3nm.appsync-api.us-east-1.amazonaws.com/graphql`,
+  and Cognito domain
+  `https://thinkwork-tei-e2e.auth.us-east-1.amazoncognito.com`.
+- `curl -fsSI https://d1eqjv7ijcmtqz.cloudfront.net/` returned HTTP 200 with
+  the freshly uploaded `index.html`; `/settings/general` also returned HTTP
+  200 through the SPA fallback.
+- `node scripts/smoke/foundation-bootstrap-smoke.mjs` passed in live
+  runtime-config mode on 2026-06-10 with clean evidence written to
+  `/tmp/thinkwork-tei-smoke-proof-150/foundation-smoke-150-clean.json`:
+  - Spaces endpoint returned HTTP 200.
+  - AppSync `{ __typename }` returned HTTP 200 with
+    `{"data":{"__typename":"Query"}}`.
+  - Cognito domain validation passed.
+  - Runtime-config-derived deployment profile included all required v1 client
+    binding fields.
+- `node scripts/smoke/cognee-managed-app-smoke.mjs` passed with evidence at
+  `/tmp/thinkwork-tei-smoke-proof-150/cognee-smoke-150.json`; it explicitly
+  skipped live Cognee probing because Cognee is not enabled for this base TEI
+  stage.
+- `node scripts/smoke/twenty-managed-app-smoke.mjs` passed with evidence at
+  `/tmp/thinkwork-tei-smoke-proof-150/twenty-smoke-150.json`; it explicitly
+  skipped live Twenty probing because Twenty CRM is not provisioned for this
+  base TEI stage.
+
+## 2026-06-10 Previous Controller Proof - v0.1.0-canary.149
+
+The previous accepted controller update was:
 
 - Step Functions execution:
   `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-update-149-final-manifest-20260610083636`
@@ -733,25 +795,25 @@ cleanup blocker.
 
 Use this table during the run:
 
-| Gate                                 | Result                 | Evidence                                                                                      |
-| ------------------------------------ | ---------------------- | --------------------------------------------------------------------------------------------- |
-| AWS profile and Bedrock doctor       | PASS on 2026-06-09     | Doctor output for account `637423202447`                                                      |
-| Release manifest asset and digest    | PASS on 2026-06-10     | `v0.1.0-canary.149` manifest SHA-256                                                          |
-| GitHub-free bootstrap dry-run        | PASS on 2026-06-09     | CLI dry-run output for top-level and enterprise bootstrap                                     |
-| GitHub-free substrate live bootstrap | PASS on 2026-06-09     | TEI Step Functions + CodeBuild controller exists                                              |
-| Controller release update            | PASS on 2026-06-10     | `.149` execution and CodeBuild run succeeded                                                  |
-| Controller selected-release status   | PASS on 2026-06-10     | SSM status params + `controller-release-selection.json`                                       |
-| Foundation runtime smoke             | PASS on 2026-06-10     | `/sign-in` 200 + runtime config release/digest + live smoke evidence                          |
-| Deployment profile contract smoke    | PASS on 2026-06-10     | Web/desktop/mobile binding snapshots target TEI from runtime config profile                   |
-| First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                                                                |
-| Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                                                        |
-| Managed-app descriptor readiness     | PASS on 2026-06-10     | Cognee/Twenty descriptors and smoke contracts exist in `.149` release manifest                |
-| Managed-app deploy readiness         | PASS on 2026-06-10     | `.149` manifest resolves required `cognee` and `twenty` runtime images                        |
-| Managed-app UI smoke                 | Partial                | Cognee/Twenty skip evidence captured for base install; full optional-app deploy smoke remains |
-| Desktop profile selection            | Partial                | Profile contract passes; desktop `.149` assets are available for user launch test             |
-| Mobile profile selection             | Partial                | Profile contract passes; mobile launch proof remains                                          |
-| Teardown readiness                   | PASS on 2026-06-10     | Read-only controller/backend/evidence smoke passed; no destroy execution was started          |
-| Cleanup / teardown                   | Deferred               | TEI kept live for demo; run final destroy after evidence is saved                             |
+| Gate                                 | Result                 | Evidence                                                                             |
+| ------------------------------------ | ---------------------- | ------------------------------------------------------------------------------------ |
+| AWS profile and Bedrock doctor       | PASS on 2026-06-09     | Doctor output for account `637423202447`                                             |
+| Release manifest asset and digest    | PASS on 2026-06-10     | `v0.1.0-canary.150` manifest SHA-256                                                 |
+| GitHub-free bootstrap dry-run        | PASS on 2026-06-09     | CLI dry-run output for top-level and enterprise bootstrap                            |
+| GitHub-free substrate live bootstrap | PASS on 2026-06-09     | TEI Step Functions + CodeBuild controller exists                                     |
+| Controller release update            | PASS on 2026-06-10     | `.150` execution and CodeBuild run succeeded                                         |
+| Controller selected-release status   | PASS on 2026-06-10     | SSM status params + `controller-release-selection.json`                              |
+| Foundation runtime smoke             | PASS on 2026-06-10     | `/sign-in` 200 + runtime config release/digest + live smoke evidence                 |
+| Deployment profile contract smoke    | PASS on 2026-06-10     | Web/desktop/mobile binding snapshots target TEI from runtime config profile          |
+| First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                                                       |
+| Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                                               |
+| Managed-app descriptor readiness     | PASS on 2026-06-10     | Cognee/Twenty descriptors and smoke contracts exist in `.150` release manifest       |
+| Managed-app deploy readiness         | PASS on 2026-06-10     | `.150` manifest resolves required `cognee` and `twenty` runtime images               |
+| Managed-app UI smoke                 | Partial                | Cognee/Twenty `.150` skip evidence captured; full optional-app deploy smoke remains  |
+| Desktop profile selection            | Partial                | Profile contract passes; desktop `.150` assets are available for user launch test    |
+| Mobile profile selection             | Partial                | Profile contract passes; mobile launch proof remains                                 |
+| Teardown readiness                   | PASS on 2026-06-10     | Read-only controller/backend/evidence smoke passed; no destroy execution was started |
+| Cleanup / teardown                   | Deferred               | TEI kept live for demo; run final destroy after evidence is saved                    |
 
 The deployment is not fully accepted until every non-stub gate passes or is
 explicitly recorded as a product gap with a follow-up issue.
