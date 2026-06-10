@@ -2381,6 +2381,116 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(evalMode.extensionToolNames).not.toContain("knowledge_graph_search");
   });
 
+  it("registers ask_user_question when identity + API wiring + turn id are present (allowlist contract)", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    // Folded into the allowlist (extension tools are silently gated
+    // otherwise) but NOT a plain AgentTool.
+    expect(bundle.extensionToolNames).toContain("ask_user_question");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
+      "ask_user_question",
+    );
+  });
+
+  it("does not register ask_user_question in eval mode (R21) or without the turn id", async () => {
+    const baseArgs = {
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed" as const,
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      mcpJsonConfig: { directTools: [] },
+    };
+
+    // R21 — evals never park: the extension must not register at all.
+    const evalMode = await buildInvocationResources({
+      ...baseArgs,
+      payload: {
+        eval_mode: true,
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
+      },
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpRegistry: new McpToolRegistry(),
+    });
+    expect(evalMode.extensionToolNames).not.toContain("ask_user_question");
+
+    // The intake's ownership join needs the active turn id; without it the
+    // POST can only 400, so the tool stays unregistered.
+    const noTurnId = await buildInvocationResources({
+      ...baseArgs,
+      payload: {
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+      },
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpRegistry: new McpToolRegistry(),
+    });
+    expect(noTurnId.extensionToolNames).not.toContain("ask_user_question");
+  });
+
   it("registers web_extract when Web Extraction config is present", async () => {
     const bundle = await buildInvocationResources({
       payload: {

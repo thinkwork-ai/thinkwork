@@ -46,6 +46,7 @@ import { mkdir, readlink } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
+  createAskUserQuestionExtension,
   createBrowserAutomationExtension,
   createContextEngineExtension,
   createDelegationExtension,
@@ -1008,6 +1009,36 @@ export async function buildInvocationResources(
           apiSecret: asString(args.payload.thinkwork_api_secret),
           tenantId: args.identity.tenantId,
           agentId: args.identity.agentId,
+          threadId: args.identity.threadId,
+          threadTurnId: asString(args.payload.thread_turn_id),
+        },
+      }),
+    );
+  }
+
+  // ask_user_question — structured HITL clarification (plan 2026-06-09-005
+  // U5). Gated exactly like task-status (eval_mode + identity + API wiring):
+  // in eval mode the extension MUST NOT register (R21 — evals never park).
+  // The intake endpoint additionally requires the active thread_turn_id for
+  // its ownership join, so the gate includes it. Parent-only by construction:
+  // `childToolSurface()` in agent-profile-delegation filters extension tool
+  // names against the compiled profile tool list, which never auto-includes
+  // ask_user_question (runtime `defaultTools` is hardcoded empty and no
+  // built-in profile seed lists it).
+  if (
+    args.payload.eval_mode !== true &&
+    args.identity.tenantId &&
+    args.identity.agentId &&
+    args.identity.threadId &&
+    asString(args.payload.thinkwork_api_url) &&
+    asString(args.payload.thinkwork_api_secret) &&
+    asString(args.payload.thread_turn_id)
+  ) {
+    addExtension(
+      createAskUserQuestionExtension({
+        askUserQuestionConfig: {
+          apiUrl: asString(args.payload.thinkwork_api_url),
+          apiSecret: asString(args.payload.thinkwork_api_secret),
           threadId: args.identity.threadId,
           threadTurnId: asString(args.payload.thread_turn_id),
         },

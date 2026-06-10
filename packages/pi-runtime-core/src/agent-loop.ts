@@ -58,6 +58,10 @@ export interface AgentSessionLike {
   prompt(text: string, options?: Record<string, unknown>): Promise<void>;
   readonly messages: AgentMessage[];
   dispose(): void;
+  /** Abort the current run and wait for idle (real `AgentSession.abort`).
+   *  Optional on the seam so existing fakes stay valid; the loop uses it as
+   *  the deterministic ask_user_question turn-end backstop (U5). */
+  abort?(): Promise<void>;
 }
 
 export interface OpenedSession {
@@ -245,6 +249,25 @@ function parseJsonRecord(value: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * ask_user_question sentinel detection (plan 2026-06-09-005 U5).
+ *
+ * The ask-user-question extension returns
+ * `details.thinkworkAskUserQuestion.endTurn === true` ONLY after the platform
+ * intake confirmed the pending-question row persisted (phantom-wait rule), so
+ * observing the flag on a non-error `tool_execution_end` means the thread is
+ * now waiting on the USER and the loop must end the turn deterministically —
+ * never rely on the model choosing to stop.
+ */
+export function askUserQuestionEndTurn(result: unknown): boolean {
+  const record = recordValue(result);
+  if (!record) return false;
+  const sentinel =
+    recordValue(recordValue(record.details)?.thinkworkAskUserQuestion) ??
+    recordValue(record.thinkworkAskUserQuestion);
+  return sentinel?.endTurn === true;
 }
 
 function findModelRoutingRecord(
@@ -624,6 +647,10 @@ export async function runAgentLoop(
   const toolInvocations: RunAgentLoopResult["toolInvocations"] = [];
   const toolStarts = new Map<string, number>();
   const identity = isInvocationIdentity(args.identity) ? args.identity : null;
+  // ask_user_question turn-end (U5): set when a non-error tool result carries
+  // the persisted-question sentinel. The turn must end as a SUCCESS — the
+  // asking turn's finalize runs normally and the thread parks AWAITING_USER.
+  let askEndTurnSeen = false;
 
   const customTools = args.tools.map(toToolDefinition);
   const toolAllowlist = buildToolAllowlist(
@@ -766,6 +793,26 @@ export async function runAgentLoop(
             is_error: event.isError,
           },
         });
+        // ask_user_question turn-end (U5): the tool result is recorded above;
+        // now stop the run deterministically. The sentinel result itself
+        // carries the SDK's `terminate: true` early-termination hint, which
+        // cleanly ends a single-call batch; `session.abort()` is the backstop
+        // for a mixed parallel batch where the hint isn't unanimous (the
+        // abort signal is checked after each recorded result, so this result
+        // survives). The success path below treats the sentinel as
+        // authoritative so an abort-shaped trailing stub can't fail the turn.
+        if (!event.isError && askUserQuestionEndTurn(event.result)) {
+          askEndTurnSeen = true;
+          deps.log?.({
+            level: "info",
+            event: "ask_user_question_turn_end",
+            threadId: args.threadId,
+            toolCallId: event.toolCallId,
+          });
+          if (session.abort) {
+            void session.abort().catch(() => {});
+          }
+        }
       }
     });
 
@@ -783,12 +830,22 @@ export async function runAgentLoop(
       }
     }
 
+    // After an ask_user_question turn-end the backstop abort can leave a
+    // trailing assistant stub with stopReason "aborted" (or, in pathological
+    // stream teardown, "error") AFTER the real tool-call message. The
+    // question persisted, so the turn is a SUCCESS by contract: skip those
+    // stubs when extracting content and don't let them fail the turn.
     const assistant = [...session.messages]
       .reverse()
-      .find(
-        (message): message is AssistantMessage => message.role === "assistant",
-      );
-    const assistantFailure = assistantFailureMessage(assistant);
+      .find((message): message is AssistantMessage => {
+        if (message.role !== "assistant") return false;
+        if (!askEndTurnSeen) return true;
+        const stopReason = (message as { stopReason?: unknown }).stopReason;
+        return stopReason !== "aborted" && stopReason !== "error";
+      });
+    const assistantFailure = askEndTurnSeen
+      ? undefined
+      : assistantFailureMessage(assistant);
     if (assistantFailure) {
       throw new Error(assistantFailure);
     }
