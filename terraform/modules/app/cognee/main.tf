@@ -105,6 +105,12 @@ locals {
     { name = "CORS_ALLOWED_ORIGINS", value = "" },
     { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
     { name = "AWS_REGION", value = data.aws_region.current.name },
+    # litellm's default embedding timeout (30s) is too tight for a batch of
+    # entity embeddings routed sequentially through the Bedrock VPC endpoint —
+    # cognify errored with EmbeddingException (timeout) mid-run. Raise the
+    # per-request embedding + LLM timeouts so a batch completes.
+    { name = "EMBEDDING_REQUEST_TIMEOUT", value = "180" },
+    { name = "LLM_REQUEST_TIMEOUT", value = "180" },
   ]
 
   optional_environment = concat(
