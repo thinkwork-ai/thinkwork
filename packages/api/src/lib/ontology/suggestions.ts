@@ -1,6 +1,7 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import {
+  knowledgeGraphIngestRuns,
   ontologyChangeSetItems,
   ontologyChangeSets,
   ontologyEvidenceExamples,
@@ -12,6 +13,7 @@ import {
   wikiUnresolvedMentions,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
+import { normalizeOntologySlug } from "../knowledge-graph/ontology-export.js";
 import { getMemoryServices } from "../memory/index.js";
 import type { MemoryAdapter } from "../memory/adapter.js";
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
@@ -32,6 +34,13 @@ type DbLike = typeof defaultDb;
 
 const OPEN_CHANGE_SET_STATUSES = ["draft", "pending_review"] as const;
 const ONTOLOGY_SCAN_BUCKET_SECONDS = 300;
+const OBSERVATION_RUN_SCAN_LIMIT = 20;
+const TERMINAL_OBSERVATION_RUN_STATUSES = [
+  "succeeded",
+  "failed",
+  "canceled",
+  "stale_noop",
+] as const;
 const HINDSIGHT_SCAN_USER_LIMIT = 25;
 const HINDSIGHT_SCAN_RECORD_LIMIT = 75;
 const SUPPORT_CASE_SOURCE_RE =
@@ -40,7 +49,12 @@ const COMMITMENT_TEXT_RE =
   /\b(commitment|committed|promise|promised|due|follow[-\s]?up|owner|deliver by|by \d{1,2}\/\d{1,2}|by (mon|tue|wed|thu|fri|sat|sun|january|february|march|april|may|june|july|august|september|october|november|december))/i;
 
 export interface OntologyScanProviderStatus {
-  provider: "brain" | "external_refs" | "hindsight" | "llm";
+  provider:
+    | "observation_runs"
+    | "brain"
+    | "external_refs"
+    | "hindsight"
+    | "llm";
   state: "ok" | "degraded" | "unavailable" | "skipped" | "error";
   detail?: string;
   count?: number;
@@ -402,6 +416,44 @@ export async function collectOntologySuggestionSources(args: {
   const observations: OntologySuggestionObservation[] = [];
   const providerStatuses: OntologyScanProviderStatus[] = [];
 
+  // Primary signal: unapproved-type evidence recorded on observation ingest
+  // runs (plan R7). The Cognee normalizer drops nodes whose type is not in
+  // the approved ontology and records the dropped samples on the run row's
+  // metrics — those samples, not brain sections, are what fresh suggestions
+  // should anchor on.
+  const observationRunRows = await db
+    .select({
+      id: knowledgeGraphIngestRuns.id,
+      status: knowledgeGraphIngestRuns.status,
+      metrics: knowledgeGraphIngestRuns.metrics,
+      finishedAt: knowledgeGraphIngestRuns.finished_at,
+      createdAt: knowledgeGraphIngestRuns.created_at,
+    })
+    .from(knowledgeGraphIngestRuns)
+    .where(
+      and(
+        eq(knowledgeGraphIngestRuns.tenant_id, args.tenantId),
+        eq(knowledgeGraphIngestRuns.source_kind, "observations"),
+        inArray(knowledgeGraphIngestRuns.status, [
+          ...TERMINAL_OBSERVATION_RUN_STATUSES,
+        ]),
+      ),
+    )
+    .orderBy(desc(knowledgeGraphIngestRuns.created_at))
+    .limit(OBSERVATION_RUN_SCAN_LIMIT);
+
+  let observationRunEvidenceCount = 0;
+  for (const run of observationRunRows) {
+    const runObservations = observationsFromObservationRun(run);
+    observationRunEvidenceCount += runObservations.length;
+    observations.push(...runObservations);
+  }
+  providerStatuses.push({
+    provider: "observation_runs",
+    state: "ok",
+    count: observationRunEvidenceCount,
+  });
+
   const sectionRows = await db
     .select({
       pageId: tenantEntityPages.id,
@@ -618,6 +670,57 @@ async function collectHindsightSuggestionObservations(args: {
       },
     };
   }
+}
+
+/**
+ * Map one observation ingest run's dropped-node evidence into suggestion
+ * observations. Samples reuse the `ontology_gate_rejection` source kind so
+ * `extractOntologySuggestionFeatures` consumes them unchanged, while the
+ * source ref cites the run (`observation_run:<runId>`) so approved proposals
+ * trace back to the deferred ingest evidence.
+ */
+function observationsFromObservationRun(run: {
+  id: string;
+  metrics: unknown;
+  finishedAt: Date | string | null;
+  createdAt: Date | string | null;
+}): OntologySuggestionObservation[] {
+  const metrics =
+    run.metrics &&
+    typeof run.metrics === "object" &&
+    !Array.isArray(run.metrics)
+      ? (run.metrics as Record<string, unknown>)
+      : {};
+  const unapprovedNodeCount = numberValue(metrics.unapprovedNodeCount, 0);
+  const samples = arrayValue(metrics.droppedNodeSamples);
+  const observations: OntologySuggestionObservation[] = [];
+  for (const sample of samples) {
+    if (!sample || typeof sample !== "object") continue;
+    const record = sample as Record<string, unknown>;
+    if (stringValue(record.dropReason) !== "unapproved_entity_type") continue;
+    const rawType = stringValue(record.rawType);
+    const entityTypeSlug = normalizeOntologySlug(rawType);
+    if (!entityTypeSlug) continue;
+    const label = stringValue(record.label) || stringValue(record.id);
+    const text = `Observations ingest dropped "${label}" with unapproved entity type "${rawType}" (${unapprovedNodeCount} unapproved node${unapprovedNodeCount === 1 ? "" : "s"} in run ${run.id}).`;
+    const evidence = evidenceFromText({
+      sourceKind: "ontology_gate_rejection",
+      sourceRef: `observation_run:${run.id}`,
+      sourceLabel: label || `observation_run:${run.id}`,
+      text,
+      observedAt: run.finishedAt ?? run.createdAt,
+      metadata: {
+        observationRunId: run.id,
+        entitySubtype: entityTypeSlug,
+        suggestedType: rawType,
+        dropReason: "unapproved_entity_type",
+        cogneeNodeId: stringValue(record.id) || null,
+        unapprovedNodeCount,
+      },
+    });
+    if (evidence) observations.push({ ...evidence, text });
+  }
+  return observations;
 }
 
 function observationFromMemoryRecord(
