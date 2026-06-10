@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { StartExecutionCommand, SFNClient } from "@aws-sdk/client-sfn";
+import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { and, asc, eq } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import {
@@ -46,9 +47,17 @@ export interface DeploymentDeps {
     name: string;
     payload: Record<string, unknown>;
   }) => Promise<DeploymentStartResult>;
+  resolveDeploymentControllerConfig?: () => Promise<DeploymentControllerConfig>;
 }
 
 const sfn = new SFNClient({});
+const ssm = new SSMClient({});
+let cachedDeploymentControllerConfig: DeploymentControllerConfig | null = null;
+
+export interface DeploymentControllerConfig {
+  stateMachineArn: string | null;
+  evidenceBucket: string | null;
+}
 
 export async function requireDeploymentTenantAdmin(
   ctx: GraphQLContext,
@@ -230,6 +239,59 @@ export function deploymentEvidenceBucket(): string | null {
     process.env.THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET ||
     null
   );
+}
+
+export async function resolveDeploymentControllerConfig(): Promise<DeploymentControllerConfig> {
+  const stateMachineArn = deploymentStateMachineArn();
+  const evidenceBucket = deploymentEvidenceBucket();
+  if (stateMachineArn) {
+    return { stateMachineArn, evidenceBucket };
+  }
+  if (cachedDeploymentControllerConfig) {
+    return cachedDeploymentControllerConfig;
+  }
+
+  const stage = process.env.STAGE || process.env.THINKWORK_STAGE || "";
+  if (!stage) {
+    return { stateMachineArn: null, evidenceBucket };
+  }
+
+  try {
+    const response = await ssm.send(
+      new GetParameterCommand({
+        Name: `/thinkwork/${stage}/deployment/profile/json`,
+        WithDecryption: true,
+      }),
+    );
+    const profile = JSON.parse(response.Parameter?.Value || "{}") as Record<
+      string,
+      unknown
+    >;
+    const controller =
+      profile.controller && typeof profile.controller === "object"
+        ? (profile.controller as Record<string, unknown>)
+        : {};
+    cachedDeploymentControllerConfig = {
+      stateMachineArn: stringField(controller, "stateMachineArn"),
+      evidenceBucket: stringField(controller, "evidenceBucketName"),
+    };
+    return cachedDeploymentControllerConfig;
+  } catch (error) {
+    console.warn(
+      `[deployments] deployment profile SSM lookup failed: ${
+        (error as Error)?.name
+      }: ${(error as Error)?.message}`,
+    );
+    return { stateMachineArn: null, evidenceBucket };
+  }
+}
+
+function stringField(
+  record: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = record[key];
+  return typeof value === "string" && value ? value : null;
 }
 
 export function defaultReleaseVersion(): string {
