@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U9 teardown-readiness proof - read-only
-  controller/backend/evidence validation before final destroy.
-- Current branch: `codex/u9-teardown-readiness-smoke`.
+- Current implementation unit: U9 managed-app controller readiness proof -
+  read-only release descriptor/image validation before optional-app deploy.
+- Current branch: `codex/u9-managed-app-readiness-smoke`.
 - Current worktree:
-  `.Codex/worktrees/u9-teardown-readiness-smoke`.
+  `.Codex/worktrees/u9-managed-app-readiness-smoke`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -52,8 +52,24 @@ status: in_progress
   foundation smoke proof PR
   [#2322](https://github.com/thinkwork-ai/thinkwork/pull/2322) merged; U8/U9
   profile-binding proof PR
-  [#2323](https://github.com/thinkwork-ai/thinkwork/pull/2323) merged.
-- Status: U9 teardown-readiness smoke was added and passed live against TEI
+  [#2323](https://github.com/thinkwork-ai/thinkwork/pull/2323) merged; U9
+  teardown-readiness proof PR
+  [#2325](https://github.com/thinkwork-ai/thinkwork/pull/2325) merged.
+- Status: U9 managed-app controller readiness smoke was added and passed live
+  against TEI `v0.1.0-canary.148` on 2026-06-10 in read-only diagnostic mode.
+  It verified the selected release manifest URL/SHA from SSM, confirmed Cognee
+  and Twenty CRM descriptors exist in `managedApps`, confirmed their Terraform
+  module source/version and smoke command paths, and recorded descriptor
+  readiness without creating a managed-app job. The same smoke reported
+  `deployReady=false` because `.148` does not include the required `cognee` or
+  `twenty` runtime image entries; strict deploy-ready mode failed closed with
+  that exact gap. Local evidence:
+  `/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-148.json`.
+  Remaining open deployment-controller gates: publish a release whose manifest
+  includes Cognee/Twenty runtime images, run the full optional-app deploy smoke
+  after those apps are selected, human desktop and mobile launch proof against
+  TEI, and final teardown/destroy proof. Historical notes follow. U9
+  teardown-readiness smoke was added and passed live against TEI
   `v0.1.0-canary.148` on 2026-06-10 in read-only mode. It verified the
   selected release SSM pins, customer Step Functions state machine, CodeBuild
   runner, Terraform state bucket, DynamoDB lock table, release artifact bucket,
