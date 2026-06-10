@@ -35,7 +35,9 @@ interface UseWikiGraphArgs {
  * round-trip. Powers the mobile graph view's default "show everything"
  * mode (admin's `/wiki` route uses the same resolver).
  *
- * Paused until both `tenantId` and `userId` are present.
+ * The server serves tenant-shared pages plus the caller's own; `userId`
+ * is passed through when present but is no longer required. Paused until
+ * `tenantId` is present.
  */
 export function useWikiGraph({ tenantId, userId, ownerId }: UseWikiGraphArgs) {
   const scopeUserId = userId ?? ownerId;
@@ -44,7 +46,7 @@ export function useWikiGraph({ tenantId, userId, ownerId }: UseWikiGraphArgs) {
   }>({
     query: WikiGraphQuery,
     variables: { tenantId, userId: scopeUserId },
-    pause: !tenantId || !scopeUserId,
+    pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
 

@@ -36,6 +36,7 @@ import {
   reapStaleObservationIngestRuns,
 } from "../lib/knowledge-graph/runs.js";
 import { applySourceDeclaredFallback } from "../lib/knowledge-graph/source-fallback.js";
+import { maybeEnqueueGraphWikiCompile } from "../lib/wiki/enqueue.js";
 
 export interface KnowledgeGraphObservationsIngestEvent {
   runId?: string;
@@ -329,6 +330,27 @@ async function processTenantObservationsIngest(
       extraWork: async (tx) =>
         upsertObservationCursors(tx, run.tenant_id, source.nextCursors),
     });
+
+    // The mirror just changed — in graph mode this is the wiki-compile
+    // trigger (plan 2026-06-09-004 U10). Best-effort fire-and-forget: the
+    // helper no-ops unless WIKI_SOURCE='graph' (env read inside the call)
+    // and never throws, so a wiki enqueue failure can't fail the ingest run.
+    const wikiEnqueue = await maybeEnqueueGraphWikiCompile({
+      tenantId: run.tenant_id,
+    });
+    if (
+      wikiEnqueue.status === "error" ||
+      wikiEnqueue.status === "enqueued_invoke_failed"
+    ) {
+      console.warn(
+        "[knowledge-graph-observations-ingest] graph wiki-compile enqueue degraded",
+        {
+          tenantId: run.tenant_id,
+          status: wikiEnqueue.status,
+          error: wikiEnqueue.error,
+        },
+      );
+    }
 
     return {
       ok: true,

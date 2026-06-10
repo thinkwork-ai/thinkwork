@@ -51,14 +51,16 @@ import type {
   DraftCompileCandidate,
   DraftCompileResult,
 } from "../wiki/draft-compile.js";
-import type { WikiCompileJobRow } from "../wiki/repository.js";
+import type { OwnerScopedWikiCompileJobRow } from "../wiki/repository.js";
 
 type DbLike = typeof defaultDb;
 
 export type DraftWritebackTargetTable = "wiki_pages" | "tenant_entity_pages";
 
 export interface DraftWritebackContext {
-  job: WikiCompileJobRow;
+  /** Enrichment drafts are always user-scoped — tenant-keyed (null-owner)
+   * graph-mode jobs never reach the writeback. */
+  job: OwnerScopedWikiCompileJobRow;
   pageTable: DraftWritebackTargetTable;
   pageId: string;
   pageTitle: string;

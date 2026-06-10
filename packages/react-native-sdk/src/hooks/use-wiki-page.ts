@@ -67,8 +67,11 @@ interface UseWikiPageArgs {
 }
 
 /**
- * Fetches a compiled wiki page by (tenant, user, type, slug) with all
- * its sections. Paused until all four args are present.
+ * Fetches a compiled wiki page by (tenant, scope, type, slug) with all
+ * its sections. The server serves tenant-shared pages plus the caller's
+ * own; `userId` is passed through when present (it keys the union scope
+ * server-side) but is no longer required. Paused until tenantId, type,
+ * and slug are present.
  */
 export function useWikiPage({
   tenantId,
@@ -83,7 +86,7 @@ export function useWikiPage({
   }>({
     query: WikiPageQuery,
     variables: { tenantId, userId: scopeUserId, type, slug },
-    pause: !tenantId || !scopeUserId || !type || !slug,
+    pause: !tenantId || !type || !slug,
     requestPolicy: "cache-and-network",
   });
   const refresh = useCallback(

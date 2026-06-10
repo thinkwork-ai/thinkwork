@@ -1,4 +1,4 @@
-import { searchWikiForUser } from "../../wiki/search.js";
+import { searchWikiForReadScope } from "../../wiki/search.js";
 import type {
   ContextHit,
   ContextProviderDescriptor,
@@ -16,19 +16,17 @@ export function createWikiContextProvider(): ContextProviderDescriptor {
     defaultEnabled: true,
     supportedScopes: ["personal", "auto"],
     async query(request): Promise<ContextProviderResult> {
-      if (!request.caller.userId) {
-        return {
-          hits: [],
-          status: {
-            state: "skipped",
-            reason: "user scope is required for wiki search",
-          },
-        };
-      }
-
-      const rows = await searchWikiForUser({
+      // Tenant-union scope (plan 2026-06-09-004 U14): tenant-scoped pages
+      // (graph materializer output, owner NULL) plus the requesting
+      // user's own pages. Without this the provider returns nothing after
+      // the graph cutover — tenant pages have no owner to match. Callers
+      // with no user in scope still get the tenant-shared pages.
+      const rows = await searchWikiForReadScope({
         tenantId: request.caller.tenantId,
-        userId: request.caller.userId,
+        scope: {
+          kind: "tenantUnion",
+          userId: request.caller.userId ?? null,
+        },
         query: request.query,
         limit: Math.min(request.limit, WIKI_LIMIT),
       });

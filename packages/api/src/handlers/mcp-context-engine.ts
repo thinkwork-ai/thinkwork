@@ -188,7 +188,7 @@ const TOOLS = [
   {
     name: "query_wiki_context",
     description:
-      "Search only owner-scoped compiled wiki pages. Use this for fast personal page/entity/topic lookup without waiting on Hindsight Memory.",
+      "Search compiled wiki pages — tenant-shared pages plus your own. Use this for fast page/entity/topic lookup without waiting on Hindsight Memory. These are compiled narrative pages; for traversing raw entities and relationship edges in the knowledge graph, use knowledge_graph_search instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -752,8 +752,9 @@ async function resolveCaller(claims: Record<string, unknown>) {
 
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } =
-    await import("../graphql/resolvers/core/resolve-auth-user.js");
+  const { resolveCallerFromAuth } = await import(
+    "../graphql/resolvers/core/resolve-auth-user.js"
+  );
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,
@@ -962,8 +963,9 @@ async function canManageProviderSettings(
   const principalId = stringClaim(claims.sub);
   if (!principalId) return false;
   try {
-    const { requireTenantAdmin } =
-      await import("../graphql/resolvers/core/authz.js");
+    const { requireTenantAdmin } = await import(
+      "../graphql/resolvers/core/authz.js"
+    );
     await requireTenantAdmin(
       {
         auth: {

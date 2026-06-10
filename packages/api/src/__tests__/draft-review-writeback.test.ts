@@ -75,7 +75,7 @@ import {
   writeDraftReviewFailure,
   type DraftWritebackContext,
 } from "../lib/brain/draft-review-writeback.js";
-import type { WikiCompileJobRow } from "../lib/wiki/repository.js";
+import type { OwnerScopedWikiCompileJobRow } from "../lib/wiki/repository.js";
 import type { DraftCompileResult } from "../lib/wiki/draft-compile.js";
 
 // ---------------------------------------------------------------------------
@@ -187,7 +187,7 @@ function makeFakeS3() {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const baseJob: WikiCompileJobRow = {
+const baseJob: OwnerScopedWikiCompileJobRow = {
   id: "job-1",
   tenant_id: "tenant-1",
   owner_id: "user-1",

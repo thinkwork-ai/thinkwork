@@ -14,6 +14,7 @@ const {
   replaceKnowledgeGraphSnapshotMock,
   createKnowledgeGraphObservationsIngestRunMock,
   reapStaleObservationIngestRunsMock,
+  maybeEnqueueGraphWikiCompileMock,
 } = vi.hoisted(() => ({
   fetchDatasetGraphMock: vi.fn(),
   ingestDocumentMock: vi.fn(),
@@ -28,6 +29,7 @@ const {
   replaceKnowledgeGraphSnapshotMock: vi.fn(),
   createKnowledgeGraphObservationsIngestRunMock: vi.fn(),
   reapStaleObservationIngestRunsMock: vi.fn(),
+  maybeEnqueueGraphWikiCompileMock: vi.fn(),
 }));
 
 vi.mock("../lib/knowledge-graph/cognee-client.js", () => ({
@@ -74,6 +76,10 @@ vi.mock("../lib/knowledge-graph/runs.js", async () => {
     reapStaleObservationIngestRuns: reapStaleObservationIngestRunsMock,
   };
 });
+
+vi.mock("../lib/wiki/enqueue.js", () => ({
+  maybeEnqueueGraphWikiCompile: maybeEnqueueGraphWikiCompileMock,
+}));
 
 import { processKnowledgeGraphObservationsIngest } from "./knowledge-graph-observations-ingest.js";
 
@@ -232,6 +238,9 @@ beforeEach(() => {
     nodes: [{ id: "acme", label: "Acme", type: "Company", properties: {} }],
     edges: [],
   });
+  maybeEnqueueGraphWikiCompileMock
+    .mockReset()
+    .mockResolvedValue({ status: "skipped_source_not_graph" });
 });
 
 describe("knowledge-graph-observations-ingest handler", () => {
@@ -482,5 +491,53 @@ describe("knowledge-graph-observations-ingest handler", () => {
     await expect(
       processKnowledgeGraphObservationsIngest({}, { db }),
     ).rejects.toThrow(/tenantId/);
+  });
+
+  it("fires the graph wiki-compile enqueue after a successful run (plan 2026-06-09-004 U10)", async () => {
+    const { db } = makeDb();
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(maybeEnqueueGraphWikiCompileMock).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+    });
+  });
+
+  it("does not fire the wiki enqueue on a stale_noop run", async () => {
+    const { db } = makeDb();
+    loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce({
+      ...makeSourceResult({ promotedIds: [] }),
+      candidateCount: 0,
+      nextCursors: new Map(),
+    });
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.status).toBe("stale_noop");
+    expect(maybeEnqueueGraphWikiCompileMock).not.toHaveBeenCalled();
+  });
+
+  it("a degraded wiki enqueue never fails the ingest run (best-effort)", async () => {
+    const { db } = makeDb();
+    maybeEnqueueGraphWikiCompileMock.mockResolvedValueOnce({
+      status: "error",
+      error: "lambda unreachable",
+    });
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("succeeded");
+    expect(markKnowledgeGraphRunFailedMock).not.toHaveBeenCalled();
   });
 });

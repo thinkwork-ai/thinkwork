@@ -11,11 +11,24 @@
  * if the invoke fails and a polling worker picks up the job later, it
  * falls back to the env default. Acceptable for v1 — follow-up can
  * persist `model_id` on `wiki_compile_jobs` if the gap bites.
+ *
+ * Graph mode (plan 2026-06-09-004 U14): when `tenantScope` is true — or
+ * this Lambda's `WIKI_SOURCE` env is 'graph' (the U11 cutover state) —
+ * the per-user owner key is ignored and ONE tenant-keyed job (owner_id
+ * NULL, four-part `graph:obs:` dedupe key) is enqueued for the graph→wiki
+ * materializer. The null `ownerId` in the response is the client-visible
+ * signal that the server compiled tenant-level — the CLI uses it to stop
+ * per-agent fan-out. `modelId` is not forwarded on this path (the
+ * materializer is deterministic / LLM-free).
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { enqueueCompileJob } from "../../../lib/wiki/repository.js";
-import { assertCanAdminWikiScope } from "./auth.js";
+import {
+  enqueueCompileJob,
+  enqueueGraphCompileJob,
+} from "../../../lib/wiki/repository.js";
+import { hasServiceSecret } from "../core/authz.js";
+import { assertCanAdminWikiScope, WikiAuthError } from "./auth.js";
 
 interface CompileWikiNowArgs {
   tenantId: string;
@@ -23,6 +36,13 @@ interface CompileWikiNowArgs {
   ownerId?: string | null;
   modelId?: string | null;
   forceNew?: boolean | null;
+  tenantScope?: boolean | null;
+}
+
+/** Read at call time (Lambda env + vitest env-timing rule). Anything other
+ * than the literal 'graph' means planner — same guard as wiki-compile. */
+function resolveWikiSource(): "planner" | "graph" {
+  return process.env.WIKI_SOURCE === "graph" ? "graph" : "planner";
 }
 
 export const compileWikiNow = async (
@@ -30,6 +50,9 @@ export const compileWikiNow = async (
   args: CompileWikiNowArgs,
   ctx: GraphQLContext,
 ) => {
+  if (args.tenantScope === true || resolveWikiSource() === "graph") {
+    return compileTenantWikiNow(args, ctx);
+  }
   const { tenantId, userId } = await assertCanAdminWikiScope(ctx, args);
 
   const { job } = await enqueueCompileJob({
@@ -74,6 +97,55 @@ export const compileWikiNow = async (
   };
 };
 
+/**
+ * Tenant-level enqueue for the graph→wiki materializer. Admin-only via the
+ * same service-credential bar as `assertCanAdminWikiScope`, but without the
+ * per-user scope resolution — there is no owner to validate. Tenant match
+ * mirrors the tenant-wide branch of `wikiCompileJobs`.
+ */
+async function compileTenantWikiNow(
+  args: CompileWikiNowArgs,
+  ctx: GraphQLContext,
+) {
+  if (!hasServiceSecret(ctx)) {
+    throw new WikiAuthError("Admin-only: requires internal API key credential");
+  }
+  if (ctx.auth.tenantId && ctx.auth.tenantId !== args.tenantId) {
+    throw new WikiAuthError("Access denied: tenant mismatch");
+  }
+
+  const { job } = await enqueueGraphCompileJob({
+    tenantId: args.tenantId,
+    trigger: "admin",
+    dedupeDiscriminator:
+      args.forceNew === true ? `rebuild-${Date.now()}` : undefined,
+  });
+
+  // No modelId on this path — the materializer is deterministic.
+  invokeWikiCompile(job.id).catch((invokeErr) => {
+    console.warn(
+      `[compileWikiNow] tenant-scope invoke failed (job will be picked up by worker): ${(invokeErr as Error)?.message}`,
+    );
+  });
+
+  return {
+    id: job.id,
+    tenantId: job.tenant_id,
+    userId: job.owner_id,
+    ownerId: job.owner_id,
+    status: job.status,
+    trigger: job.trigger,
+    dedupeKey: job.dedupe_key,
+    attempt: job.attempt,
+    claimedAt: job.claimed_at?.toISOString() ?? null,
+    startedAt: job.started_at?.toISOString() ?? null,
+    finishedAt: job.finished_at?.toISOString() ?? null,
+    error: job.error,
+    metrics: job.metrics,
+    createdAt: job.created_at.toISOString(),
+  };
+}
+
 async function invokeWikiCompile(
   jobId: string,
   modelId?: string,
@@ -84,8 +156,9 @@ async function invokeWikiCompile(
       ? `thinkwork-${process.env.STAGE}-api-wiki-compile`
       : null);
   if (!fnName) return;
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const payload: { jobId: string; modelId?: string } = { jobId };
   if (modelId) payload.modelId = modelId;

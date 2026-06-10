@@ -109,6 +109,45 @@ export async function requireMemoryUserScope(
   return { tenantId, userId: agent.human_pair_id };
 }
 
+/**
+ * Tenant-scope authorization (plan 2026-06-09-004 U9): grants read access to
+ * tenant-shared resources (e.g. null-owner wiki pages) to ANY member of the
+ * tenant — no owner match, no admin requirement. `requireMemoryUserScope`
+ * mandates a resolvable userId, which tenant-scoped reads don't need; this is
+ * the explicit tenant-membership-only branch.
+ *
+ * Rules:
+ *   - service/apikey credentials pass for any tenant (internal callers);
+ *   - otherwise the caller must resolve to a user whose tenant matches the
+ *     requested tenant (membership). Cross-tenant requests are rejected.
+ *
+ * Returns the resolved tenantId plus the caller's userId when one resolved
+ * (null for pure service credentials) so callers can build union-read scopes.
+ */
+export async function requireMemoryTenantScope(
+  ctx: GraphQLContext,
+  args: { tenantId?: string | null },
+): Promise<{ tenantId: string; userId: string | null }> {
+  const caller = await resolveCaller(ctx);
+  const tenantId =
+    args.tenantId ?? caller.tenantId ?? ctx.auth.tenantId ?? null;
+  if (!tenantId) throw new UserScopeAuthError("Tenant context required");
+
+  const hasServiceSecret =
+    ctx.auth.authType === "apikey" || ctx.auth.authType === "service";
+  if (hasServiceSecret) {
+    return { tenantId, userId: caller.userId ?? null };
+  }
+
+  if (!caller.userId) {
+    throw new UserScopeAuthError("User context required");
+  }
+  if (!caller.tenantId || caller.tenantId !== tenantId) {
+    throw new UserScopeAuthError("Access denied: tenant mismatch");
+  }
+  return { tenantId, userId: caller.userId };
+}
+
 async function isTenantAdmin(
   userId: string,
   tenantId: string,

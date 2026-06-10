@@ -3,7 +3,7 @@
  *
  * The resolver runs two raw `db.execute(sql`...`)` calls — first for
  * pages+degree, second for edges. We mock `db.execute` to return scripted
- * row batches in order, plus stub `assertCanReadWikiScope` so we can
+ * row batches in order, plus stub `resolveWikiUnionReadScope` so we can
  * exercise output shaping without a live Postgres.
  */
 
@@ -26,7 +26,7 @@ vi.mock("../graphql/resolvers/wiki/auth.js", async (importOriginal) => {
     (await importOriginal()) as typeof import("../graphql/resolvers/wiki/auth.js");
   return {
     ...actual,
-    assertCanReadWikiScope: mockAssertReadScope,
+    resolveWikiUnionReadScope: mockAssertReadScope,
   };
 });
 
@@ -55,7 +55,11 @@ function makeCtx(): GraphQLContext {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockAssertReadScope.mockResolvedValue({ tenantId: "t1", userId: "a1" });
+  mockAssertReadScope.mockResolvedValue({
+    tenantId: "t1",
+    scope: { kind: "tenantUnion", userId: "a1" },
+    userId: "a1",
+  });
 });
 
 describe("wikiGraph", () => {
@@ -223,7 +227,7 @@ describe("wikiGraph", () => {
     expect(graph.nodes).toEqual([]);
   });
 
-  it("propagates WikiAuthError from assertCanReadWikiScope", async () => {
+  it("propagates WikiAuthError from resolveWikiUnionReadScope", async () => {
     mockAssertReadScope.mockRejectedValueOnce(
       new WikiAuthError("Access denied: tenant mismatch"),
     );

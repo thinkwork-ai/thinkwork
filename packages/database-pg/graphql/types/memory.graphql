@@ -236,8 +236,9 @@ extend type Query {
   Ranked wiki-page search for mobile. Runs a Postgres full-text query
   (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
   `search_tsv` generated column on `wiki_pages` (title || summary ||
-  body_md), scoped to one (tenant, user) pair. Returns results in
-  `ts_rank` DESC order, tie-broken by `last_compiled_at` DESC.
+  body_md), scoped to tenant-shared pages (null owner) plus the
+  requesting user's own pages. Returns results in `ts_rank` DESC order,
+  tie-broken by `last_compiled_at` DESC.
 
   Previously routed through Hindsight semantic recall; on the compiled
   wiki corpus FTS is near-instant and matches the query shape mobile
@@ -254,10 +255,11 @@ extend type Query {
   ): [MobileWikiSearchResult!]!
 
   """
-  Newest compiled wiki pages for the given user, ordered by
-  last_compiled_at DESC (falling back to updated_at when the page hasn't
-  been recompiled yet). Intended as the default Memories-tab feed so
-  the user sees fresh pages before they type a search query.
+  Newest compiled wiki pages readable by the given user — tenant-shared
+  pages (null owner) plus their own — ordered by last_compiled_at DESC
+  (falling back to updated_at when the page hasn't been recompiled yet).
+  Intended as the default Memories-tab feed so the user sees fresh pages
+  before they type a search query.
   """
   recentWikiPages(
     tenantId: ID

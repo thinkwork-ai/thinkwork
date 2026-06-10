@@ -167,6 +167,10 @@ locals {
       BEDROCK_MODEL_ID                   = var.wiki_compile_model_id
       WIKI_AGGREGATION_PASS_ENABLED      = var.wiki_aggregation_pass_enabled
       WIKI_DETERMINISTIC_LINKING_ENABLED = var.wiki_deterministic_linking_enabled
+      # Wiki pipeline source dispatch (plan 2026-06-09-004 U10):
+      # 'planner' (default, LLM compile) | 'graph' (deterministic
+      # graph→wiki materializer over the knowledge-graph mirror).
+      WIKI_SOURCE = var.wiki_source
       # Name (not value) of the SecureString SSM parameter that holds the
       # Google Places API key. wiki-compile fetches + caches on cold start.
       # The parameter may contain a placeholder value at apply time — the
@@ -224,6 +228,11 @@ locals {
       COGNEE_BACKEND_MODE             = var.cognee_backend_mode
       COGNEE_INGEST_MODE              = "add_cognify"
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
+      # When 'graph', a successful ingest run best-effort enqueues a
+      # tenant-keyed wiki-compile job (the mirror just changed — that's the
+      # graph-mode wiki trigger). Same variable as the wiki-compile handler
+      # so the two flags can't drift (plan 2026-06-09-004 U10).
+      WIKI_SOURCE = var.wiki_source
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
@@ -267,6 +276,14 @@ locals {
       # in main.tf grants secretsmanager:GetSecretValue on the
       # thinkwork/* wildcard, so no new IAM resource is needed.
       COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
+      # Wiki source dispatch (plan 2026-06-09-004 U14): compileWikiNow
+      # routes to ONE tenant-keyed graph compile when this is 'graph',
+      # so the U11 flag flip retargets the CLI/admin compile surface
+      # without a client release. Same variable as wiki-compile and
+      # knowledge-graph-observations-ingest so the flags can't drift.
+      # Tiny value ('planner'|'graph') — measured dev env was ~3.7 KB of
+      # the 4 KB ceiling; keep future additions out of this block.
+      WIKI_SOURCE = var.wiki_source
       # Phase 3 U11.U2 — createComplianceExport mutation dispatches a
       # jobId to a known-name SQS queue. We do NOT pass the queue URL
       # as an env var here: graphql-http's env block is already at the

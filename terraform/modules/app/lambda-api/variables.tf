@@ -506,6 +506,17 @@ variable "wiki_deterministic_linking_enabled" {
   default     = "true"
 }
 
+variable "wiki_source" {
+  description = "Wiki pipeline source dispatch (plan 2026-06-09-004 U10). 'planner' (default) runs the original LLM compile path; 'graph' runs the deterministic graph→wiki materializer over the knowledge-graph mirror and makes successful observation-ingest runs the compile trigger. Variable-ized (not hardcoded) per the wiki-compile env precedent so unrelated deploys don't reset the flag; the Lambda reads it verbatim from env and treats any value other than 'graph' as 'planner'."
+  type        = string
+  default     = "planner"
+
+  validation {
+    condition     = contains(["planner", "graph"], var.wiki_source)
+    error_message = "wiki_source must be 'planner' or 'graph'."
+  }
+}
+
 variable "google_places_api_key" {
   description = "Google Places API (New) key used by wiki-compile for POI → city/state/country hierarchy enrichment. Stored as a SecureString SSM parameter at /thinkwork/<stage>/google-places/api-key. Empty default creates the parameter with a placeholder value; operator populates via `aws ssm put-parameter --overwrite`. The parameter's value has lifecycle.ignore_changes set so CLI rotation sticks across terraform applies. Compile gracefully degrades when the key is absent (metadata-only place rows) — never fails compile."
   type        = string
