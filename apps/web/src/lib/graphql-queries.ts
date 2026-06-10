@@ -638,6 +638,7 @@ export const SettingsActivityThreadTurnsQuery = gql`
       resultJson
       usageJson
       totalCost
+      contextSnapshot
       retryAttempt
       originTurnId
       systemPrompt
