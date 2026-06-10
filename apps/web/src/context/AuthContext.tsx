@@ -37,6 +37,8 @@ interface AuthContextValue {
   getToken: () => Promise<string | null>;
 }
 
+const DEFAULT_SESSION_RESTORE_TIMEOUT_MS = 8_000;
+
 // ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
@@ -49,10 +51,12 @@ export function AuthProvider({
   children,
   tokenStorage = auth.getTokenStorage(),
   desktopBridge = getDesktopBridge(),
+  sessionRestoreTimeoutMs = DEFAULT_SESSION_RESTORE_TIMEOUT_MS,
 }: {
   children: ReactNode;
   tokenStorage?: TokenStorage;
   desktopBridge?: ThinkworkBridge | null;
+  sessionRestoreTimeoutMs?: number;
 }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,32 +74,46 @@ export function AuthProvider({
     }
 
     async function restoreSession(hydrate: boolean): Promise<void> {
-      if (hydrate) {
-        await Promise.resolve(tokenStorage.hydrate?.()).catch((error) => {
-          console.error("[auth] failed to hydrate token storage", error);
-        });
-      }
+      try {
+        if (hydrate) {
+          await withTimeout(
+            Promise.resolve(tokenStorage.hydrate?.()),
+            sessionRestoreTimeoutMs,
+            "Token storage hydration",
+          ).catch((error) => {
+            console.error("[auth] failed to hydrate token storage", error);
+          });
+        }
 
-      if (!ensureAuthStorageMatchesDeploymentProfile(tokenStorage)) {
-        auth.clearLocalAuthSession();
+        if (!ensureAuthStorageMatchesDeploymentProfile(tokenStorage)) {
+          auth.clearLocalAuthSession();
+          clearSession();
+          return;
+        }
+
+        const token = await withTimeout(
+          auth.getIdToken(),
+          sessionRestoreTimeoutMs,
+          "Session restore",
+        );
+        const currentUser = auth.getCurrentUser();
+        if (cancelled) return;
+
+        if (token && currentUser) {
+          markAuthStorageDeploymentProfile(tokenStorage);
+          setUser(currentUser);
+          setAuthToken(token);
+          setTokenProvider(() => auth.getIdToken());
+          startTokenRefresh();
+          return;
+        }
+
         clearSession();
-        return;
+      } catch (error) {
+        if (cancelled) return;
+        console.error("[auth] session restore failed", error);
+        clearSession();
       }
-
-      const token = await auth.getIdToken();
-      const currentUser = auth.getCurrentUser();
-      if (cancelled) return;
-
-      if (token && currentUser) {
-        markAuthStorageDeploymentProfile(tokenStorage);
-        setUser(currentUser);
-        setAuthToken(token);
-        setTokenProvider(() => auth.getIdToken());
-        startTokenRefresh();
-        return;
-      }
-
-      clearSession();
     }
 
     void restoreSession(true).finally(() => {
@@ -125,7 +143,7 @@ export function AuthProvider({
       unsubscribeOAuthError?.();
       stopTokenRefresh();
     };
-  }, [desktopBridge, tokenStorage]);
+  }, [desktopBridge, sessionRestoreTimeoutMs, tokenStorage]);
 
   const handleSignIn = useCallback(
     async (email: string, password: string) => {
@@ -172,7 +190,7 @@ export function AuthProvider({
     // `auth.signOut()` redirects through Cognito's hosted-UI `/logout` so the
     // Cognito session cookie is cleared on its way back to `/sign-in`.
     auth.signOut();
-  }, [desktopBridge]);
+  }, [desktopBridge, tokenStorage]);
 
   const getToken = useCallback(() => auth.getIdToken(), []);
 
@@ -192,6 +210,29 @@ export function AuthProvider({
       {children}
     </AuthContext.Provider>
   );
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  if (timeoutMs <= 0) return promise;
+
+  promise.catch(() => undefined);
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 // ---------------------------------------------------------------------------

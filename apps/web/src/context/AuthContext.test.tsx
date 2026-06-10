@@ -18,6 +18,7 @@ vi.mock("@/lib/graphql-client", () => ({
 
 const authMocks = vi.hoisted(() => ({
   storage: null as TokenStorage | null,
+  getIdToken: vi.fn(async () => authMocks.storage?.getItem("idToken") ?? null),
   signOut: vi.fn(),
   clearLocalAuthSession: vi.fn(),
 }));
@@ -35,9 +36,7 @@ vi.mock("@/lib/auth", () => ({
   getTokenStorage() {
     return authMocks.storage;
   },
-  async getIdToken() {
-    return authMocks.storage?.getItem("idToken") ?? null;
-  },
+  getIdToken: authMocks.getIdToken,
   getCurrentUser() {
     const email = authMocks.storage?.getItem("email");
     if (!email) return null;
@@ -79,6 +78,10 @@ beforeEach(() => {
   vi.stubEnv("VITE_STAGE", "dev");
   vi.stubEnv("VITE_AWS_REGION", "us-east-1");
   authMocks.storage = null;
+  authMocks.getIdToken.mockReset();
+  authMocks.getIdToken.mockImplementation(
+    async () => authMocks.storage?.getItem("idToken") ?? null,
+  );
   authMocks.signOut.mockReset();
   authMocks.clearLocalAuthSession.mockReset();
   bindingMocks.ensureAuthStorageMatchesDeploymentProfile.mockReset();
@@ -193,6 +196,40 @@ describe("AuthProvider desktop mode", () => {
 
     await screen.findByText("anonymous");
     expect(authMocks.clearLocalAuthSession).toHaveBeenCalled();
+  });
+
+  it("times out a stuck desktop session restore instead of leaving the shell loading", async () => {
+    const restoreError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    authMocks.getIdToken.mockReturnValue(new Promise(() => undefined));
+
+    const { AuthProvider, useAuth } = await import("./AuthContext");
+    const storage = new MemoryTokenStorage(sessionItems("user@example.com"));
+    const bridge = makeBridge();
+
+    function Probe() {
+      const { user, isLoading } = useAuth();
+      return <p>{isLoading ? "loading" : (user?.email ?? "anonymous")}</p>;
+    }
+
+    render(
+      <AuthProvider
+        tokenStorage={storage}
+        desktopBridge={bridge}
+        sessionRestoreTimeoutMs={1}
+      >
+        <Probe />
+      </AuthProvider>,
+    );
+
+    expect(screen.getByText("loading")).toBeTruthy();
+
+    await screen.findByText("anonymous");
+    expect(restoreError).toHaveBeenCalledWith(
+      "[auth] session restore failed",
+      expect.any(Error),
+    );
   });
 });
 
