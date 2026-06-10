@@ -7,6 +7,14 @@
  *
  * Progress shows up in CloudWatch logs; final outcome is the compile job the
  * import enqueues on completion (admin polls wiki_compile_jobs for that).
+ *
+ * Graph mode (plan 2026-06-09-004 U14): when WIKI_SOURCE='graph' the
+ * "retain → terminal compile produces pages" contract no longer holds — the
+ * enqueued owner-scoped compile is skipped by the graph dispatcher, and
+ * pages materialize only after the imported memories flow through
+ * consolidation → observations ingest → graph materialization. The result
+ * carries an explicit `note` so the operator isn't left polling for pages
+ * that the import alone will never produce.
  */
 
 import { runJournalImport } from "../lib/wiki/journal-import.js";
@@ -24,8 +32,21 @@ type WikiBootstrapResult = {
   recordsSkipped?: number;
   errors?: number;
   compileJobId?: string | null;
+  /** Operator-facing contract note (set in graph mode). */
+  note?: string;
   error?: string;
 };
+
+const GRAPH_MODE_NOTE =
+  "WIKI_SOURCE=graph: the terminal compile will NOT produce wiki pages " +
+  "from this import. Pages materialize after the imported memories pass " +
+  "through consolidation and the next observations ingest cycle " +
+  "(consolidation → ingest → graph materialization).";
+
+/** Read at call time (Lambda env + vitest env-timing rule). */
+function isGraphWikiSource(): boolean {
+  return process.env.WIKI_SOURCE === "graph";
+}
 
 export async function handler(
   event: WikiBootstrapEvent = {},
@@ -52,12 +73,17 @@ export async function handler(
     console.log(
       `[wiki-bootstrap-import] done in ${seconds}s ingested=${result.recordsIngested} skipped=${result.recordsSkipped} errors=${result.errors} compileJobId=${result.compileJobId ?? "null"}`,
     );
+    const graphMode = isGraphWikiSource();
+    if (graphMode) {
+      console.log(`[wiki-bootstrap-import] ${GRAPH_MODE_NOTE}`);
+    }
     return {
       ok: result.errors === 0,
       recordsIngested: result.recordsIngested,
       recordsSkipped: result.recordsSkipped,
       errors: result.errors,
       compileJobId: result.compileJobId,
+      ...(graphMode ? { note: GRAPH_MODE_NOTE } : {}),
     };
   } catch (err) {
     const msg = (err as Error)?.message || String(err);

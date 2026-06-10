@@ -25,15 +25,17 @@ export const AllTenantAgentsForWikiDoc = graphql(`
 export const CompileWikiNowDoc = graphql(`
   mutation CliCompileWikiNow(
     $tenantId: ID!
-    $ownerId: ID!
+    $ownerId: ID
     $modelId: String
     $forceNew: Boolean
+    $tenantScope: Boolean
   ) {
     compileWikiNow(
       tenantId: $tenantId
       ownerId: $ownerId
       modelId: $modelId
       forceNew: $forceNew
+      tenantScope: $tenantScope
     ) {
       id
       tenantId

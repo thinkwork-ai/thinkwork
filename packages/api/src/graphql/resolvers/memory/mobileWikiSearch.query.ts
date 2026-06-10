@@ -19,13 +19,15 @@
  * field is always [] on this path — pages are matched against their own
  * compiled text, not against source memory units.
  *
- * v1 scope rule: every wiki page is user-scoped. The WHERE clause pins
- * `tenant_id` and `owner_id` so cross-user visibility is impossible.
+ * Scope rule (plan 2026-06-09-004 U14): the transitional union — tenant-
+ * scoped pages (owner NULL, graph materializer; readable by any tenant
+ * member) plus the user's own pages. Cross-USER visibility of user-scoped
+ * pages remains impossible.
  */
 
 import type { GraphQLContext } from "../../context.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
-import { searchWikiForUser } from "../../../lib/wiki/search.js";
+import { searchWikiForReadScope } from "../../../lib/wiki/search.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
@@ -46,12 +48,11 @@ export const mobileWikiSearch = async (
   if (!trimmed) return [];
   const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
 
-  const ownerId = userId as string;
   const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 
-  const rows = await searchWikiForUser({
+  const rows = await searchWikiForReadScope({
     tenantId,
-    userId: ownerId,
+    scope: { kind: "tenantUnion", userId },
     query: trimmed,
     limit: cappedLimit,
   });

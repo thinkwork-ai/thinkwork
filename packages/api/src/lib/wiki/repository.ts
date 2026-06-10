@@ -495,13 +495,21 @@ export async function enqueueGraphCompileJob(
     tenantId: string;
     trigger: WikiCompileTrigger;
     nowEpochSeconds?: number;
+    /** Optional suffix for operator-driven reruns (compileWikiNow
+     * forceNew) that must not dedupe against an earlier job in the same
+     * 5-minute bucket. Appending a fifth part keeps the key un-parseable
+     * by `parseCompileDedupeBucket` (which requires exactly 3 parts). */
+    dedupeDiscriminator?: string;
   },
   db: DbClient = defaultDb,
 ): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
-  const dedupeKey = buildGraphCompileDedupeKey({
+  const baseDedupeKey = buildGraphCompileDedupeKey({
     tenantId: args.tenantId,
     nowEpochSeconds: args.nowEpochSeconds,
   });
+  const dedupeKey = args.dedupeDiscriminator
+    ? `${baseDedupeKey}:${args.dedupeDiscriminator}`
+    : baseDedupeKey;
 
   const [inserted] = await db
     .insert(wikiCompileJobs)
@@ -2116,10 +2124,21 @@ export async function listChildPages(
 export const SOURCE_MEMORY_IDS_MAX_LIMIT = 50;
 
 /**
- * Count distinct `memory_unit` source_refs across every section on `pageId`.
- * Drives the "Based on N memories" badge in the mobile page detail screen.
- * Returns 0 for pages with no section-sources rows (the compile pipeline
- * hasn't cited them yet, or they're pure-aggregation sections).
+ * Source kinds that resolve to Hindsight-backed memory records for the
+ * "Based on N memories" drill-in: `memory_unit` (planner provenance) and
+ * `hindsight_observation` (graph-materializer provenance, plan
+ * 2026-06-09-004 U10/U14). Non-admin readers only ever see the IDs (R17);
+ * dereferencing them to raw memory content stays gated by the existing
+ * memory user-scope rule on the MemoryRecord lookup.
+ */
+const MEMORY_SOURCE_KINDS = ["memory_unit", "hindsight_observation"] as const;
+
+/**
+ * Count distinct memory-backed source_refs (`memory_unit` +
+ * `hindsight_observation`) across every section on `pageId`. Drives the
+ * "Based on N memories" badge in the mobile page detail screen. Returns 0
+ * for pages with no section-sources rows (the compile pipeline hasn't
+ * cited them yet, or they're pure-aggregation sections).
  */
 export async function countSourceMemoriesForPage(
   pageId: string,
@@ -2132,7 +2151,7 @@ export async function countSourceMemoriesForPage(
 		INNER JOIN ${wikiPageSections}
 			ON ${wikiPageSections.id} = ${wikiSectionSources.section_id}
 		WHERE ${wikiPageSections.page_id} = ${pageId}
-			AND ${wikiSectionSources.source_kind} = 'memory_unit'
+			AND ${wikiSectionSources.source_kind} IN (${MEMORY_SOURCE_KINDS[0]}, ${MEMORY_SOURCE_KINDS[1]})
 	`);
   const rows =
     (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
@@ -2140,10 +2159,11 @@ export async function countSourceMemoriesForPage(
 }
 
 /**
- * Up to `limit` distinct `memory_unit` ids sourcing sections on `pageId`,
- * ordered by `created_at` DESC (most recently cited first). Caller's `limit`
- * is clamped to `[1, SOURCE_MEMORY_IDS_MAX_LIMIT]` — protects the API from
- * unbounded scans when a mobile client accidentally asks for 100k.
+ * Up to `limit` distinct memory-backed source ids (`memory_unit` +
+ * `hindsight_observation`) sourcing sections on `pageId`, ordered by
+ * most recently cited first. Caller's `limit` is clamped to
+ * `[1, SOURCE_MEMORY_IDS_MAX_LIMIT]` — protects the API from unbounded
+ * scans when a mobile client accidentally asks for 100k.
  */
 export async function listSourceMemoryIdsForPage(
   pageId: string,
@@ -2160,7 +2180,7 @@ export async function listSourceMemoryIdsForPage(
 		INNER JOIN ${wikiPageSections}
 			ON ${wikiPageSections.id} = ${wikiSectionSources.section_id}
 		WHERE ${wikiPageSections.page_id} = ${pageId}
-			AND ${wikiSectionSources.source_kind} = 'memory_unit'
+			AND ${wikiSectionSources.source_kind} IN (${MEMORY_SOURCE_KINDS[0]}, ${MEMORY_SOURCE_KINDS[1]})
 		ORDER BY ${wikiSectionSources.source_ref}, ${wikiSectionSources.first_seen_at} DESC
 		LIMIT ${bounded}
 	`);

@@ -3,7 +3,12 @@
  *
  * Emits one bundle per `(tenant, owner)` scope that has any compiled pages.
  * Bundles go to:
- *   s3://<WIKI_EXPORT_BUCKET>/<tenant_slug>/<owner_slug>/<yyyy-mm-dd>/vault.zip
+ *   s3://<WIKI_EXPORT_BUCKET>/<tenant_slug>/<owner_slug>/<yyyy-mm-dd>/vault.md.gz
+ *
+ * Tenant-scoped pages (owner_id NULL — graph materializer output, plan
+ * 2026-06-09-004 U14) export as their own bundle under a reserved
+ * tenant-level prefix that cannot collide with an agent slug:
+ *   s3://<WIKI_EXPORT_BUCKET>/<tenant_slug>/_tenant/<yyyy-mm-dd>/vault.md.gz
  *
  * Bundle layout (inside the zip):
  *   <type>/<slug>.md    — frontmatter + section bodies concatenated
@@ -13,7 +18,7 @@
  * old bundles.
  */
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
   agents,
   tenants,
@@ -77,12 +82,12 @@ export async function handler(
       .from(wikiPages)
       .where(eq(wikiPages.status, "active"));
 
-    // Tenant-scoped pages (owner_id NULL, graph materializer) are excluded
-    // from the per-owner export until U14 adds the tenant-level S3 prefix
-    // (plan 2026-06-09-004).
-    const scopes = scopeRows.filter(
-      (s): s is { tenant_id: string; owner_id: string } => s.owner_id !== null,
-    );
+    // Tenant-scoped pages (owner_id NULL, graph materializer) export under
+    // the reserved `_tenant` owner segment (plan 2026-06-09-004 U14).
+    const scopes = scopeRows as Array<{
+      tenant_id: string;
+      owner_id: string | null;
+    }>;
 
     if (scopes.length === 0) {
       console.log("[wiki-export] no scopes with active pages; nothing to do");
@@ -91,7 +96,11 @@ export async function handler(
 
     // Resolve tenant + agent slugs for the S3 keys.
     const tenantIds = [...new Set(scopes.map((s) => s.tenant_id))];
-    const ownerIds = [...new Set(scopes.map((s) => s.owner_id))];
+    const ownerIds = [
+      ...new Set(
+        scopes.map((s) => s.owner_id).filter((id): id is string => id !== null),
+      ),
+    ];
 
     const tenantRows = tenantIds.length
       ? await db
@@ -109,13 +118,20 @@ export async function handler(
     const agentSlug = new Map(agentRows.map((r) => [r.id, r.slug || r.id]));
 
     for (const scope of scopes) {
+      // Drizzle's eq(col, null) emits `= NULL` (never true) — the
+      // tenant-scope (null-owner) bundle MUST route through isNull or it
+      // silently exports zero pages.
+      const ownerPredicate =
+        scope.owner_id === null
+          ? isNull(wikiPages.owner_id)
+          : eq(wikiPages.owner_id, scope.owner_id);
       const pages = await db
         .select()
         .from(wikiPages)
         .where(
           and(
             eq(wikiPages.tenant_id, scope.tenant_id),
-            eq(wikiPages.owner_id, scope.owner_id),
+            ownerPredicate,
             eq(wikiPages.status, "active"),
           ),
         )
@@ -175,7 +191,14 @@ export async function handler(
       });
 
       const tslug = tenantSlug.get(scope.tenant_id) ?? scope.tenant_id;
-      const aslug = agentSlug.get(scope.owner_id) ?? scope.owner_id;
+      // `_tenant` is a reserved owner segment: agent slugs are generated
+      // human-readable identifiers that never start with `_`, so the
+      // tenant bundle can't land under (or be shadowed by) another
+      // owner's prefix.
+      const aslug =
+        scope.owner_id === null
+          ? "_tenant"
+          : (agentSlug.get(scope.owner_id) ?? scope.owner_id);
       // v1 uses a single concatenated markdown payload rather than a real
       // zip — avoids pulling a zip dependency into the Lambda bundle for
       // a nightly export. Consumers treat each `----8<---- <path>` marker

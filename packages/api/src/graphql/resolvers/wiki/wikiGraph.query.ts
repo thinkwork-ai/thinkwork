@@ -1,23 +1,24 @@
 /**
- * wikiGraph — user-scoped graph of compiled wiki pages and their [[...]]
- * links.
+ * wikiGraph — force-graph of compiled wiki pages and their [[...]] links
+ * over the caller's readable scope: tenant-scoped pages (owner NULL) plus
+ * the requesting user's own pages (plan 2026-06-09-004 U14 union read).
+ * `userId` is optional and defaults to the caller.
  *
  * Returns one round-trip payload shaped like the legacy `memoryGraph`
  * resolver so the admin force-graph component can swap data sources with
  * minimal code churn. Nodes are `wiki_pages` rows; edges are
  * `wiki_page_links` rows filtered to active-page endpoints.
  *
- * `(tenantId, userId)` scoping matches the rest of the v1 wiki read
- * surface (see `assertCanReadWikiScope` and
- * `recentWikiPages.query.ts`). Archived pages and links that dangle into
- * archived pages are excluded. Isolated active pages are also excluded:
- * the graph is an ontology-style relationship view, so every rendered node
- * must participate in at least one visible active-to-active relationship.
+ * Archived pages and links that dangle into archived pages are excluded.
+ * Isolated active pages are also excluded: the graph is an ontology-style
+ * relationship view, so every rendered node must participate in at least
+ * one visible active-to-active relationship.
  */
 import { sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
-import { assertCanReadWikiScope } from "./auth.js";
+import { resolveWikiUnionReadScope } from "./auth.js";
 import { displayLabelFromSlug, toGraphQLType } from "./mappers.js";
 
 interface WikiGraphNodeRow {
@@ -61,12 +62,32 @@ export interface GraphQLWikiGraph {
   edges: GraphQLWikiGraphEdge[];
 }
 
+/**
+ * Union-read owner predicate over a raw `owner_id` column reference.
+ * Aliases are enumerated (not interpolated via sql.raw) so the fragment
+ * stays mock-friendly for the resolver unit tests, which replace `sql`
+ * with a bare template function.
+ */
+function ownerPredicate(
+  alias: "pages" | "p1" | "p2",
+  userId: string | null,
+): SQL {
+  const col =
+    alias === "pages"
+      ? sql`pages.owner_id`
+      : alias === "p1"
+        ? sql`p1.owner_id`
+        : sql`p2.owner_id`;
+  if (!userId) return sql`${col} IS NULL`;
+  return sql`(${col} IS NULL OR ${col} = ${userId})`;
+}
+
 export const wikiGraph = async (
   _parent: unknown,
   args: { tenantId: string; userId?: string | null; ownerId?: string | null },
   ctx: GraphQLContext,
 ): Promise<GraphQLWikiGraph> => {
-  const { userId } = await assertCanReadWikiScope(ctx, args);
+  const { userId } = await resolveWikiUnionReadScope(ctx, args);
 
   // Pages + degree in one query. Degree counts distinct connected pages,
   // NOT link rows — wiki.page_links can carry multiple rows per (from,
@@ -78,7 +99,7 @@ export const wikiGraph = async (
 			SELECT id, type, entity_subtype, slug, title
 			FROM wiki.pages
 			WHERE tenant_id = ${args.tenantId}
-			  AND owner_id = ${userId}
+			  AND ${ownerPredicate("pages", userId)}
 			  AND status = 'active'
 		),
 		scope_links AS (
@@ -116,10 +137,10 @@ export const wikiGraph = async (
 		JOIN wiki.pages p1 ON p1.id = l.from_page_id
 		JOIN wiki.pages p2 ON p2.id = l.to_page_id
 		WHERE p1.tenant_id = ${args.tenantId}
-		  AND p1.owner_id = ${userId}
+		  AND ${ownerPredicate("p1", userId)}
 		  AND p1.status = 'active'
 		  AND p2.tenant_id = ${args.tenantId}
-		  AND p2.owner_id = ${userId}
+		  AND ${ownerPredicate("p2", userId)}
 		  AND p2.status = 'active'
 		  AND l.kind NOT IN ('reference', 'parent_of', 'child_of')
 	`);

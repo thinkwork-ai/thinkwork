@@ -272,6 +272,14 @@ locals {
       # in main.tf grants secretsmanager:GetSecretValue on the
       # thinkwork/* wildcard, so no new IAM resource is needed.
       COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
+      # Wiki source dispatch (plan 2026-06-09-004 U14): compileWikiNow
+      # routes to ONE tenant-keyed graph compile when this is 'graph',
+      # so the U11 flag flip retargets the CLI/admin compile surface
+      # without a client release. Same variable as wiki-compile and
+      # knowledge-graph-observations-ingest so the flags can't drift.
+      # Tiny value ('planner'|'graph') — measured dev env was ~3.7 KB of
+      # the 4 KB ceiling; keep future additions out of this block.
+      WIKI_SOURCE = var.wiki_source
       # Phase 3 U11.U2 — createComplianceExport mutation dispatches a
       # jobId to a known-name SQS queue. We do NOT pass the queue URL
       # as an env var here: graphql-http's env block is already at the

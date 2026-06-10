@@ -152,10 +152,23 @@ interface RenderArgs {
   resolveAgentName: () => Promise<Record<string, string>>;
 }
 
+/**
+ * Owner column label for one job row. Tenant-keyed graph-mode jobs carry a
+ * null ownerId (plan 2026-06-09-004 U14) — render them as "tenant" instead
+ * of crashing on `.slice` of null.
+ */
+export function ownerColumnLabel(
+  ownerId: string | null | undefined,
+  names: Record<string, string>,
+): string {
+  if (ownerId == null) return "tenant";
+  return names[ownerId] ?? ownerId.slice(0, 8);
+}
+
 async function renderJobs(
   jobs: Array<{
     id: string;
-    ownerId: string;
+    ownerId?: string | null;
     status: string;
     trigger: string;
     attempt: number;
@@ -193,9 +206,7 @@ async function renderJobs(
   const rows = jobs.map((j) => ({
     id: j.id.slice(0, 8),
     agent:
-      "tenantWide" in args.scope
-        ? (names[j.ownerId] ?? j.ownerId.slice(0, 8))
-        : "—",
+      "tenantWide" in args.scope ? ownerColumnLabel(j.ownerId, names) : "—",
     status: j.status,
     trigger: j.trigger,
     attempt: String(j.attempt),

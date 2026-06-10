@@ -8,7 +8,9 @@ import {
   archivePagesByIds,
   buildCompileDedupeKey,
   buildGraphCompileDedupeKey,
+  countSourceMemoriesForPage,
   enqueueGraphCompileJob,
+  listSourceMemoryIdsForPage,
   findPageBySlug,
   findReadablePageBySlug,
   isOwnerScopedCompileJob,
@@ -314,6 +316,85 @@ describe("enqueueGraphCompileJob", () => {
       trigger: "graph_materialize",
       dedupe_key: `graph:obs:${TENANT}:${Math.floor(1_700_000_000 / 300)}`,
     });
+  });
+});
+
+describe("enqueueGraphCompileJob — forceNew discriminator", () => {
+  it("appends a fifth key part that still never parses as a planner bucket", async () => {
+    let insertedValues: Record<string, unknown> | null = null;
+    const insertChain: any = {
+      values: (vals: Record<string, unknown>) => {
+        insertedValues = vals;
+        return insertChain;
+      },
+      onConflictDoNothing: () => insertChain,
+      returning: async () => [
+        { id: "job-2", tenant_id: TENANT, owner_id: null },
+      ],
+    };
+    const db = { insert: () => insertChain };
+
+    await enqueueGraphCompileJob(
+      {
+        tenantId: TENANT,
+        trigger: "admin",
+        nowEpochSeconds: 1_700_000_000,
+        dedupeDiscriminator: "rebuild-42",
+      },
+      db as never,
+    );
+    const key = (insertedValues as unknown as { dedupe_key: string })
+      .dedupe_key;
+    expect(key).toBe(
+      `graph:obs:${TENANT}:${Math.floor(1_700_000_000 / 300)}:rebuild-42`,
+    );
+    expect(parseCompileDedupeBucket(key)).toBeNull();
+  });
+});
+
+describe("source-memory drill-in kinds (U14)", () => {
+  const PAGE_ID = "44444444-4444-4444-8444-444444444444";
+
+  it("countSourceMemoriesForPage counts memory_unit AND hindsight_observation refs", async () => {
+    let capturedSql = "";
+    let capturedParams: unknown[] = [];
+    const db = {
+      execute: async (chunk: SQL) => {
+        const rendered = renderSql(chunk);
+        capturedSql = rendered.sql;
+        capturedParams = rendered.params;
+        return { rows: [{ n: 3 }] };
+      },
+    };
+    const n = await countSourceMemoriesForPage(PAGE_ID, db as never);
+    expect(n).toBe(3);
+    expect(capturedSql).toMatch(/source_kind.*IN/i);
+    expect(capturedParams).toContain("memory_unit");
+    expect(capturedParams).toContain("hindsight_observation");
+  });
+
+  it("listSourceMemoryIdsForPage returns refs for both kinds, IDs only", async () => {
+    let capturedSql = "";
+    let capturedParams: unknown[] = [];
+    const db = {
+      execute: async (chunk: SQL) => {
+        const rendered = renderSql(chunk);
+        capturedSql = rendered.sql;
+        capturedParams = rendered.params;
+        return {
+          rows: [
+            { sourceRef: "obs-1", firstSeenAt: "2026-06-09T00:00:00Z" },
+            { sourceRef: "mem-1", firstSeenAt: "2026-06-08T00:00:00Z" },
+          ],
+        };
+      },
+    };
+    const ids = await listSourceMemoryIdsForPage(PAGE_ID, 10, db as never);
+    // IDs only — no content fields leak through this surface (R17).
+    expect(ids).toEqual(["obs-1", "mem-1"]);
+    expect(capturedSql).toMatch(/source_kind.*IN/i);
+    expect(capturedParams).toContain("memory_unit");
+    expect(capturedParams).toContain("hindsight_observation");
   });
 });
 

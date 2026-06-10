@@ -125,7 +125,10 @@ export function createKnowledgeGraphExtension(
           'decided X?"). Results carry entity summaries and relationship edges with ' +
           "supporting-observation counts.\n\n" +
           "This is NOT the user's personal memory: for the current user's own episodic " +
-          "memory and prior-conversation facts, use `recall` followed by `reflect` instead.",
+          "memory and prior-conversation facts, use `recall` followed by `reflect` instead. " +
+          "It is also not the wiki: for compiled narrative pages distilled from this same " +
+          "knowledge, use the wiki context tools (`query_wiki_context`); this tool traverses " +
+          "raw entities and relationship edges.",
         parameters: Type.Object({
           query: Type.String({
             description:

@@ -1,6 +1,16 @@
 /**
- * `thinkwork wiki compile` — enqueue a wiki compile for one agent or fan
- * out to every agent in a tenant.
+ * `thinkwork wiki compile` — enqueue a wiki compile for one agent, fan
+ * out to every agent in a tenant, or (graph mode) enqueue ONE tenant-level
+ * compile for the graph→wiki materializer.
+ *
+ * Graph-mode re-semantics (plan 2026-06-09-004 U14): when the server's
+ * wiki source is `graph`, per-agent fan-out is meaningless — the
+ * materializer compiles the whole tenant in one pass. Two paths get there:
+ *   - `--tenant-scope` requests the tenant compile explicitly; or
+ *   - detection from the response: the server auto-routes compileWikiNow
+ *     to a tenant-keyed job when WIKI_SOURCE=graph, and a null `ownerId`
+ *     on the returned job is the signal — the CLI stops fan-out after the
+ *     first enqueue and reports the single tenant job.
  *
  * Exit codes:
  *   0  every enqueue succeeded
@@ -34,6 +44,13 @@ interface JobResult {
 
 export async function runWikiCompile(opts: WikiCliOptions): Promise<void> {
   const ctx = await resolveWikiContext(opts);
+
+  // Explicit tenant-level compile (graph mode) — no agent resolution.
+  if (opts.tenantScope) {
+    await runTenantScopeCompile(ctx, opts);
+    return;
+  }
+
   const scope = await resolveAgentScope(ctx, opts, { allowAll: true });
 
   const targets =
@@ -81,6 +98,28 @@ export async function runWikiCompile(opts: WikiCliOptions): Promise<void> {
         modelId: opts.model ?? null,
       });
       const job = data.compileWikiNow;
+      if (job.ownerId == null) {
+        // Null owner = the server auto-routed to a tenant-keyed graph
+        // compile (WIKI_SOURCE=graph). Per-agent fan-out is meaningless in
+        // that mode — one tenant job covers everything; stop here.
+        if (spinner) {
+          spinner.succeed(
+            `tenant-level compile  →  job=${shortJobId(job.id)} (${job.status})`,
+          );
+        }
+        if (!isJsonMode()) {
+          printWarning(
+            "Server wiki source is graph — compile runs tenant-level. " +
+              "Per-agent fan-out skipped; one tenant job covers every agent.",
+          );
+        }
+        await reportTenantJob(ctx, opts, {
+          id: job.id,
+          status: job.status,
+          autoRouted: true,
+        });
+        return;
+      }
       jobs.push({
         agentId: target.id,
         agentLabel: target.label,
@@ -185,6 +224,158 @@ export async function runWikiCompile(opts: WikiCliOptions): Promise<void> {
         ctx.tenantSlug +
         " --watch` instead.",
     );
+  }
+}
+
+/**
+ * Enqueue ONE tenant-level (graph materializer) compile via
+ * `compileWikiNow(tenantScope: true)` and report/watch it.
+ */
+async function runTenantScopeCompile(
+  ctx: WikiCliContext,
+  opts: WikiCliOptions,
+): Promise<void> {
+  const spinner = isJsonMode()
+    ? null
+    : ora({
+        text: `Enqueuing tenant-level compile for ${ctx.tenantSlug}…`,
+        prefixText: "  ",
+      }).start();
+  try {
+    const data = await gqlMutate(ctx.client, CompileWikiNowDoc, {
+      tenantId: ctx.tenantId,
+      ownerId: null,
+      modelId: null,
+      tenantScope: true,
+    });
+    const job = data.compileWikiNow;
+    if (spinner) {
+      spinner.succeed(
+        `tenant-level compile  →  job=${shortJobId(job.id)} (${job.status})`,
+      );
+    }
+    await reportTenantJob(ctx, opts, {
+      id: job.id,
+      status: job.status,
+      autoRouted: false,
+    });
+  } catch (err) {
+    const classified = classifyMutationError(err);
+    if (spinner) spinner.fail(classified.message);
+    if (isJsonMode()) {
+      printJson({
+        ok: false,
+        scope: {
+          tenantId: ctx.tenantId,
+          tenantSlug: ctx.tenantSlug,
+          mode: "tenant",
+        },
+        jobs: [],
+        errors: [{ agentId: null, message: classified.message }],
+      });
+    }
+    if (classified.forbidden) {
+      printForbiddenHint(ctx.tenantSlug);
+      process.exit(2);
+    }
+    process.exit(1);
+  }
+}
+
+/** Shared tail for tenant-keyed jobs: JSON/pretty output + optional watch. */
+async function reportTenantJob(
+  ctx: WikiCliContext,
+  opts: WikiCliOptions,
+  job: { id: string; status: string | null; autoRouted: boolean },
+): Promise<void> {
+  if (isJsonMode() && !opts.watch) {
+    printJson({
+      ok: true,
+      scope: {
+        tenantId: ctx.tenantId,
+        tenantSlug: ctx.tenantSlug,
+        mode: "tenant",
+        autoRouted: job.autoRouted,
+      },
+      jobs: [
+        {
+          agentId: null,
+          agentLabel: "tenant",
+          jobId: job.id,
+          status: job.status,
+          error: null,
+        },
+      ],
+      errors: [],
+    });
+    return;
+  }
+  if (!isJsonMode()) {
+    printSuccess(`Tenant-level compile enqueued for ${ctx.tenantSlug}.`);
+    console.log(
+      `  Use \`thinkwork wiki status --tenant ${ctx.tenantSlug} --watch\` to follow the job.`,
+    );
+  }
+  if (opts.watch) {
+    await watchTenantJob(ctx, job.id);
+  }
+}
+
+/** Poll the tenant-wide job list until the tenant job settles. */
+async function watchTenantJob(
+  ctx: WikiCliContext,
+  jobId: string,
+): Promise<void> {
+  const spinner = isJsonMode()
+    ? null
+    : ora({
+        text: `Watching tenant job ${shortJobId(jobId)}…`,
+        prefixText: "  ",
+      }).start();
+  const intervalMs = 3000;
+  const deadline = Date.now() + 15 * 60 * 1000;
+  try {
+    while (Date.now() < deadline) {
+      const data = await gqlQuery(ctx.client, WikiCompileJobsDoc, {
+        tenantId: ctx.tenantId,
+        ownerId: null,
+        limit: 10,
+      });
+      const job = data.wikiCompileJobs.find((j) => j.id === jobId);
+      if (!job) {
+        if (spinner) spinner.warn("job not visible yet — polling…");
+      } else {
+        if (spinner)
+          spinner.text = `status=${job.status}  attempt=${job.attempt}`;
+        if (isTerminalCompileStatus(job.status)) {
+          if (spinner) {
+            if (job.status === "succeeded") spinner.succeed("succeeded");
+            else if (job.status === "skipped") spinner.info("skipped");
+            else
+              spinner.fail(
+                `${job.status}${job.error ? ` — ${job.error}` : ""}`,
+              );
+          }
+          if (isJsonMode()) {
+            printJson({
+              ok: job.status === "succeeded",
+              jobId: job.id,
+              status: job.status,
+              error: job.error,
+              metrics: job.metrics,
+            });
+          }
+          process.exit(job.status === "succeeded" ? 0 : 1);
+        }
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    if (spinner) spinner.warn("watch timeout — job still in progress.");
+    process.exit(2);
+  } catch (err) {
+    if (spinner) spinner.fail(err instanceof Error ? err.message : String(err));
+    printError("Watch failed. The compile job itself may still complete.");
+    process.exit(1);
   }
 }
 
