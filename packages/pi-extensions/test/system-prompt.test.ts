@@ -113,6 +113,70 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     expect(prompt).toContain("tenant Code Interpreter sandbox");
   });
 
+  it("renders the ask_user_question trigger policy when the tool is available", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      availableToolNames: ["bash", "ask_user_question"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+
+    expect(prompt).toContain("### Asking the user");
+    expect(prompt).toContain(
+      "`ask_user_question` tool is available for structured clarifying questions",
+    );
+    // Ask-when criteria.
+    expect(prompt).toContain(
+      "two or more valid approaches differ meaningfully in outcome",
+    );
+    expect(prompt).toContain(
+      "a required parameter cannot be inferred from context",
+    );
+    expect(prompt).toContain("a wrong guess would waste significant effort");
+    // Don't-ask criteria.
+    expect(prompt).toContain(
+      "Do not ask when: the task has a single obvious path, the answer is already in the conversation/workspace/memory, or the question is purely cosmetic",
+    );
+    // Batching rule.
+    expect(prompt).toContain(
+      "Batch every question for the current decision point into ONE call (max 4 questions); never ask sequentially what you can ask together",
+    );
+    // " (Recommended)" convention.
+    expect(prompt).toContain(
+      'mark exactly one option per question with a label ending " (Recommended)"',
+    );
+    // Specialist consolidation rule.
+    expect(prompt).toContain(
+      "answer what you can from your own context first; consolidate the rest (plus any questions of your own) into one batch and pass the delegationContext",
+    );
+    // Turn-end contract.
+    expect(prompt).toContain(
+      "After calling `ask_user_question` the turn ends; the user's answer arrives in your next turn",
+    );
+    // Lives inside the runtime tool policy block, before workspace files.
+    expect(prompt.indexOf("## Runtime Tool Policy")).toBeLessThan(
+      prompt.indexOf("### Asking the user"),
+    );
+    expect(prompt.indexOf("### Asking the user")).toBeLessThan(
+      prompt.indexOf("AGENTS BODY"),
+    );
+  });
+
+  it("omits the ask_user_question trigger policy when the tool is unavailable", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      availableToolNames: ["bash", "execute_code"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+
+    expect(prompt).not.toContain("### Asking the user");
+    expect(prompt).not.toContain("ask_user_question");
+    expect(prompt).not.toContain(" (Recommended)");
+  });
+
   it("adds Agent Profile routing guidance when delegation is available", async () => {
     const prompt = await composeSystemPrompt({
       payload: {
