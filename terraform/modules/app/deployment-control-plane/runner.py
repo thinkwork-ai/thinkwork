@@ -1089,6 +1089,16 @@ def write_runner_files(payload, runner_secrets):
             "cognitoReplyToEmailAddress",
             default=safe_get(payload, "cognitoReplyToEmailAddress", default=""),
         ),
+        "app_domain": safe_get(
+            runner_secrets,
+            "appDomain",
+            default=safe_get(payload, "appDomain", default=""),
+        ),
+        "app_certificate_arn": safe_get(
+            runner_secrets,
+            "appCertificateArn",
+            default=safe_get(payload, "appCertificateArn", default=""),
+        ),
         "lambda_artifact_bucket": os.environ["THINKWORK_RELEASE_ARTIFACT_BUCKET"],
         "lambda_artifact_prefix": f"releases/{release_version}/lambdas",
         "deployment_release_version": release_version,

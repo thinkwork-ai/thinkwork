@@ -617,6 +617,10 @@ def test_write_runner_files_threads_cognito_email_vars_from_payload(
             "cognitoEmailSourceArn": identity_arn,
             "cognitoFromEmailAddress": "ThinkWork <noreply@lastmile-tei.com>",
             "cognitoReplyToEmailAddress": "support@lastmile-tei.com",
+            "appDomain": "tw.lastmile-tei.com",
+            "appCertificateArn": (
+                "arn:aws:acm:us-east-1:637423202447:certificate/4c53e8c5-3f62-41db-baf8-7bd030d80499"
+            ),
         },
         {},
     )
@@ -625,9 +629,12 @@ def test_write_runner_files_threads_cognito_email_vars_from_payload(
     assert vars_json["cognito_email_source_arn"] == identity_arn
     assert vars_json["cognito_from_email_address"] == "ThinkWork <noreply@lastmile-tei.com>"
     assert vars_json["cognito_reply_to_email_address"] == "support@lastmile-tei.com"
+    assert vars_json["app_domain"] == "tw.lastmile-tei.com"
+    assert vars_json["app_certificate_arn"].endswith("4c53e8c5-3f62-41db-baf8-7bd030d80499")
     assert tfvars["cognito_email_source_arn"] == identity_arn
     assert tfvars["cognito_from_email_address"] == "ThinkWork <noreply@lastmile-tei.com>"
     assert tfvars["cognito_reply_to_email_address"] == "support@lastmile-tei.com"
+    assert tfvars["app_domain"] == "tw.lastmile-tei.com"
 
 
 def test_write_runner_files_cognito_email_vars_prefer_runner_secrets_and_default_empty(
@@ -663,6 +670,8 @@ def test_write_runner_files_cognito_email_vars_prefer_runner_secrets_and_default
     assert vars_json_default["cognito_email_source_arn"] == ""
     assert vars_json_default["cognito_from_email_address"] == ""
     assert vars_json_default["cognito_reply_to_email_address"] == ""
+    assert vars_json_default["app_domain"] == ""
+    assert vars_json_default["app_certificate_arn"] == ""
 
 
 def test_registry_module_source_checks_out_release_manifest_sha(

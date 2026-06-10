@@ -438,6 +438,29 @@ Invite email remediation status (2026-06-10):
   controller input (or runner secrets), on a release containing this runner
   fix.
 
+Custom app domain (2026-06-10):
+
+- Decision: the TEI app moves from the raw CloudFront URL
+  (`https://d1eqjv7ijcmtqz.cloudfront.net`) to `https://tw.lastmile-tei.com`.
+  Setting `app_domain` also fixes the Cognito callback URLs and the invite
+  email sign-in link, which currently hardcode the CloudFront URL.
+- The controller runner had the same allowlist gap for `app_domain` /
+  `app_certificate_arn`; this change threads `appDomain` /
+  `appCertificateArn` the same way as the Cognito email vars.
+- TEI provisioning executed 2026-06-10:
+  - ACM certificate requested in `us-east-1`:
+    `arn:aws:acm:us-east-1:637423202447:certificate/4c53e8c5-3f62-41db-baf8-7bd030d80499`,
+    DNS validation CNAME upserted in zone `Z00506522C7M1WRQADH0`.
+  - Route53 A/AAAA aliases `tw.lastmile-tei.com` ->
+    `d1eqjv7ijcmtqz.cloudfront.net` created (CloudFront returns 403 for the
+    new Host until the distribution alias lands via redeploy — expected).
+- Next controller redeploy of TEI should therefore carry:
+  `appDomain=tw.lastmile-tei.com`,
+  `appCertificateArn=arn:aws:acm:us-east-1:637423202447:certificate/4c53e8c5-3f62-41db-baf8-7bd030d80499`,
+  plus the `cognitoEmailSourceArn` / `cognitoFromEmailAddress` values above.
+  Note: once `app_domain` is set, the raw CloudFront URL is no longer in the
+  Cognito callback list; use the custom domain for sign-in.
+
 ## Preflight Already Verified
 
 Run from the repository root:
