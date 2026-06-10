@@ -1074,6 +1074,21 @@ def write_runner_files(payload, runner_secrets):
             "googleOauthClientSecret",
             default=safe_get(payload, "googleOauthClientSecret", default=""),
         ),
+        "cognito_email_source_arn": safe_get(
+            runner_secrets,
+            "cognitoEmailSourceArn",
+            default=safe_get(payload, "cognitoEmailSourceArn", default=""),
+        ),
+        "cognito_from_email_address": safe_get(
+            runner_secrets,
+            "cognitoFromEmailAddress",
+            default=safe_get(payload, "cognitoFromEmailAddress", default=""),
+        ),
+        "cognito_reply_to_email_address": safe_get(
+            runner_secrets,
+            "cognitoReplyToEmailAddress",
+            default=safe_get(payload, "cognitoReplyToEmailAddress", default=""),
+        ),
         "lambda_artifact_bucket": os.environ["THINKWORK_RELEASE_ARTIFACT_BUCKET"],
         "lambda_artifact_prefix": f"releases/{release_version}/lambdas",
         "deployment_release_version": release_version,
