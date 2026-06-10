@@ -381,7 +381,14 @@ resource "aws_security_group_rule" "aurora_from_cognee_worker" {
 # have no public egress — the VPC has no NAT — so the observation promotion
 # classifier's direct Bedrock calls need an interface endpoint inside the VPC.
 # Private DNS keeps the SDK's default bedrock-runtime hostname resolving to
-# the endpoint ENIs.
+# the endpoint ENIs — for EVERY resource in the VPC, so the ingress must
+# admit the whole VPC CIDR: the Cognee ECS task (its own SG) and any future
+# in-VPC Bedrock caller resolve to this endpoint the moment it exists.
+data "aws_vpc" "bedrock_endpoint_scope" {
+  count = local.cognee_enabled ? 1 : 0
+  id    = module.vpc.vpc_id
+}
+
 resource "aws_security_group" "bedrock_runtime_endpoint" {
   count = local.cognee_enabled ? 1 : 0
 
@@ -390,10 +397,10 @@ resource "aws_security_group" "bedrock_runtime_endpoint" {
   vpc_id      = module.vpc.vpc_id
 
   ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.cognee_worker[0].id]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.bedrock_endpoint_scope[0].cidr_block]
   }
 
   tags = { Name = "thinkwork-${var.stage}-bedrock-vpce-sg" }
