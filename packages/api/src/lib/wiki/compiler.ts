@@ -45,7 +45,9 @@ import {
   upsertSectionAggregation,
   upsertUnresolvedMention,
   normalizeAlias,
+  isOwnerScopedCompileJob,
   PARENT_TITLE_FUZZY_THRESHOLD,
+  type OwnerScopedWikiCompileJobRow,
   type SectionAggregation,
   type WikiCompileJobRow,
   type WikiPageRow,
@@ -314,11 +316,28 @@ export interface RunCompileJobOpts {
  * handler after it resolves which job to run.
  */
 export async function runCompileJob(
-  job: WikiCompileJobRow,
+  claimedJob: WikiCompileJobRow,
   opts: RunCompileJobOpts = {},
 ): Promise<RunJobResult> {
   const started = Date.now();
   const adapter = opts.adapter ?? getMemoryServices().adapter;
+
+  // The planner pipeline is strictly user-scoped. Tenant-keyed graph-mode
+  // jobs (owner_id NULL) are dispatched by the WIKI_SOURCE='graph' handler
+  // path and must never land here — fail fast instead of compiling into a
+  // null scope (plan 2026-06-09-004 U9/U10).
+  if (!isOwnerScopedCompileJob(claimedJob)) {
+    const msg =
+      "planner compile job is tenant-keyed (owner_id NULL); graph-mode jobs are handled by the graph materializer dispatch";
+    await completeCompileJob({
+      jobId: claimedJob.id,
+      status: "failed",
+      error: msg,
+      metrics: { records_read: 0, pages_upserted: 0, cost_usd: 0 },
+    });
+    return makeResult(claimedJob.id, "failed", started, emptyMetrics(), msg);
+  }
+  const job: OwnerScopedWikiCompileJobRow = claimedJob;
 
   if (!adapter.listRecordsUpdatedSince) {
     const msg = `adapter ${adapter.kind} does not implement listRecordsUpdatedSince`;
@@ -662,7 +681,7 @@ export async function runJobById(
 // ---------------------------------------------------------------------------
 
 interface ApplyPlanArgs {
-  job: WikiCompileJobRow;
+  job: OwnerScopedWikiCompileJobRow;
   records: ThinkWorkMemoryRecord[];
   plan: PlannerResult;
   metrics: RunJobResult["metrics"];
@@ -1269,7 +1288,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 const MAX_AGGREGATION_PAGES = 60;
 
 interface AggregationArgs {
-  job: WikiCompileJobRow;
+  job: OwnerScopedWikiCompileJobRow;
   records: ThinkWorkMemoryRecord[];
   jobStartedAt: Date;
   metrics: RunJobResult["metrics"];
@@ -1423,7 +1442,7 @@ async function computeLinkNeighborhoods(
 }
 
 interface ApplyAggregationArgs {
-  job: WikiCompileJobRow;
+  job: OwnerScopedWikiCompileJobRow;
   records: ThinkWorkMemoryRecord[];
   plan: PlannerResult;
   metrics: RunJobResult["metrics"];
@@ -2052,7 +2071,7 @@ async function maybeMergeIntoExistingPage(args: {
     source_refs?: string[];
   };
   proposedSlug: string;
-  job: WikiCompileJobRow;
+  job: OwnerScopedWikiCompileJobRow;
   recordById: Map<string, ThinkWorkMemoryRecord>;
   knownPageRefs: Array<{ type: WikiPageType; slug: string; title: string }>;
   pageFallbackSources: ThinkWorkMemoryRecord[];

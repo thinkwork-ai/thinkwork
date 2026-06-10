@@ -30,6 +30,8 @@ import {
   claimCompileJobById,
   completeCompileJob,
   getCompileJob,
+  isOwnerScopedCompileJob,
+  type OwnerScopedWikiCompileJobRow,
   type WikiCompileJobRow,
 } from "./repository.js";
 import {
@@ -697,6 +699,13 @@ export async function runDraftCompileJob(
 ): Promise<DraftCompileJobResult> {
   let parsedInput: DraftCompileInput | null = null;
   try {
+    // Enrichment drafts are always user-scoped; a tenant-keyed (null-owner)
+    // graph-mode job here means a dispatch bug — fail it via the catch path.
+    if (!isOwnerScopedCompileJob(job)) {
+      throw new Error(
+        "enrichment-draft compile job is tenant-keyed (owner_id NULL); drafts are user-scoped",
+      );
+    }
     parsedInput = parseDraftCompileInput(job.input);
     const ctx: DraftWritebackContext = {
       job,
@@ -740,7 +749,8 @@ export async function runDraftCompileJob(
     let writeback: DraftWritebackResult | undefined;
     if (parsedInput) {
       const ctx: DraftWritebackContext = {
-        job,
+        // parsedInput is only set after the owner-scope guard passed.
+        job: job as OwnerScopedWikiCompileJobRow,
         pageTable: parsedInput.pageTable,
         pageId: parsedInput.pageId,
         pageTitle: parsedInput.pageTitle,

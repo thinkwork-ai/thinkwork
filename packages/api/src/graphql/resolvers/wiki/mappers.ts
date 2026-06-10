@@ -66,7 +66,11 @@ export function toGraphQLPage(
   row: {
     id: string;
     tenant_id: string;
-    owner_id: string;
+    /** NULL only for tenant-scoped pages (plan 2026-06-09-004 U9). Until
+     * U14 relaxes the GraphQL `WikiPage.userId` nullability, no resolver
+     * feeds null-owner rows through this mapper — the cast below keeps the
+     * current GraphQL contract byte-identical for user-scoped rows. */
+    owner_id: string | null;
     type: string;
     entity_subtype?: string | null;
     slug: string;
@@ -84,8 +88,8 @@ export function toGraphQLPage(
   return {
     id: row.id,
     tenantId: row.tenant_id,
-    userId: row.owner_id,
-    ownerId: row.owner_id,
+    userId: row.owner_id as string,
+    ownerId: row.owner_id ?? undefined,
     type: toGraphQLType(row.type),
     entitySubtype: row.entity_subtype ?? null,
     displayType:

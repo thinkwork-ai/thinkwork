@@ -69,13 +69,20 @@ export async function handler(
     // 1. Discover distinct (tenant, owner) pairs with at least one active
     // page. This is cheap — wiki_pages has a composite index on
     // (tenant_id, owner_id, type, status).
-    const scopes = await db
+    const scopeRows = await db
       .selectDistinct({
         tenant_id: wikiPages.tenant_id,
         owner_id: wikiPages.owner_id,
       })
       .from(wikiPages)
       .where(eq(wikiPages.status, "active"));
+
+    // Tenant-scoped pages (owner_id NULL, graph materializer) are excluded
+    // from the per-owner export until U14 adds the tenant-level S3 prefix
+    // (plan 2026-06-09-004).
+    const scopes = scopeRows.filter(
+      (s): s is { tenant_id: string; owner_id: string } => s.owner_id !== null,
+    );
 
     if (scopes.length === 0) {
       console.log("[wiki-export] no scopes with active pages; nothing to do");
@@ -211,7 +218,7 @@ function renderPageMarkdown(
   page: {
     id: string;
     tenant_id: string;
-    owner_id: string;
+    owner_id: string | null;
     type: string;
     slug: string;
     title: string;
