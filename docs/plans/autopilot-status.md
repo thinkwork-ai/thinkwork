@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U9 remaining-gap audit - optional-app deploy
-  smoke, human desktop/mobile launch proof, and teardown are still open.
-- Current branch: `codex/deployment-controller-status-audit`.
+- Current implementation unit: U9 teardown-readiness proof - read-only
+  controller/backend/evidence validation before final destroy.
+- Current branch: `codex/u9-teardown-readiness-smoke`.
 - Current worktree:
-  `.Codex/worktrees/deployment-controller-status-audit`.
+  `.Codex/worktrees/u9-teardown-readiness-smoke`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -53,7 +53,19 @@ status: in_progress
   [#2322](https://github.com/thinkwork-ai/thinkwork/pull/2322) merged; U8/U9
   profile-binding proof PR
   [#2323](https://github.com/thinkwork-ai/thinkwork/pull/2323) merged.
-- Status: U8/U9 profile-binding proof PR #2323 passed required CI (`cla`,
+- Status: U9 teardown-readiness smoke was added and passed live against TEI
+  `v0.1.0-canary.148` on 2026-06-10 in read-only mode. It verified the
+  selected release SSM pins, customer Step Functions state machine, CodeBuild
+  runner, Terraform state bucket, DynamoDB lock table, release artifact bucket,
+  and evidence bucket, then emitted a redacted `action=destroy` preview with
+  `destroyExecutionStarted=false`. Local evidence:
+  `/tmp/thinkwork-tei-smoke-proof/deployment-teardown-readiness-148.json`.
+  This proves teardown readiness without destroying the live demo environment;
+  final destroy proof remains deferred until TEI can be safely removed.
+  Remaining open deployment-controller gates: full optional-app deploy smoke
+  for Cognee/Twenty after those apps are selected, human desktop and mobile
+  launch proof against TEI, and final teardown/destroy proof. Historical notes
+  follow. U8/U9 profile-binding proof PR #2323 passed required CI (`cla`,
   `lint`, `verify`, `typecheck`, and `test`) and was squash merged as
   `f3ffcc058`. The new `deployment-profile-binding-smoke.mjs` passed against
   live TEI `v0.1.0-canary.148` on 2026-06-10 using
@@ -63,11 +75,9 @@ status: in_progress
   binding snapshots, and recorded profile SHA-256
   `ef9427364e0d80e4389c62509b119a7be1da3f1a3906c7d5be69eda33ac31ffa` without
   API keys, passwords, AWS keys, tokens, or credential material in the
-  profile/evidence. Remaining open deployment-controller gates: full
-  optional-app deploy smoke for Cognee/Twenty after those apps are selected,
-  human desktop and mobile launch proof against TEI, and teardown proof. TEI is
-  intentionally still live for user/demo testing, so teardown remains deferred
-  until explicitly safe to destroy. Historical notes follow. U9 foundation
+  profile/evidence. TEI is intentionally still live for user/demo testing, so
+  final teardown remains deferred until explicitly safe to destroy. Historical
+  notes follow. U9 foundation
   smoke proof PR #2322 passed required CI and was squash merged as
   `e227cfe4`. U9 user-facing docs reconciliation PR
   #2321 passed required CI and was squash merged as `64e152e49`. U9
