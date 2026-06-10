@@ -76,6 +76,20 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
           "sha256:2222222222222222222222222222222222222222222222222222222222222222",
         architecture: "amd64",
       },
+      {
+        name: "cognee",
+        repository: "ghcr.io/thinkwork-ai/thinkwork-cognee",
+        tag: "v1.2.3-cognee-amd64",
+        digest:
+          "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        architecture: "amd64",
+      },
+      parseRuntimeImageSpec(
+        "name=kestra,uri=kestra/kestra@sha256:4444444444444444444444444444444444444444444444444444444444444444,architecture=amd64",
+      ),
+      parseRuntimeImageSpec(
+        "name=twenty,uri=twentycrm/twenty@sha256:5555555555555555555555555555555555555555555555555555555555555555,architecture=amd64",
+      ),
     ],
   });
 
@@ -109,11 +123,16 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   assert.equal(manifest.artifacts[0]?.sha256.length, 64);
   assert.deepEqual(
     manifest.runtimeImages.map((image) => image.name),
-    ["agentcore-pi-amd64", "agentcore-pi-arm64"],
+    ["agentcore-pi-amd64", "agentcore-pi-arm64", "cognee", "kestra", "twenty"],
   );
   assert.equal(
-    manifest.runtimeImages[0]?.uri,
+    manifest.runtimeImages.find((image) => image.name === "agentcore-pi-amd64")
+      ?.uri,
     "ghcr.io/thinkwork-ai/thinkwork-agentcore:v1.2.3-pi-amd64@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  );
+  assert.equal(
+    manifest.runtimeImages.find((image) => image.name === "twenty")?.uri,
+    "twentycrm/twenty@sha256:5555555555555555555555555555555555555555555555555555555555555555",
   );
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
@@ -339,6 +358,33 @@ test("buildReleaseManifest rejects duplicate logical artifact names", async () =
   );
 });
 
+test("buildReleaseManifest rejects missing managed app runtime images", async () => {
+  const root = await makeTempReleaseRoot();
+  const artifactPath = path.join(root, "seed.tar.gz");
+  await writeFile(artifactPath, "seed");
+
+  await assert.rejects(
+    () =>
+      buildReleaseManifest({
+        version: "1.2.3",
+        gitSha: "abc123",
+        artifactRoot: root,
+        artifacts: [{ name: "seed", type: "seed", path: artifactPath }],
+        runtimeImages: [
+          {
+            name: "agentcore-pi-amd64",
+            repository: "ghcr.io/thinkwork-ai/thinkwork-agentcore",
+            tag: "v1.2.3-pi-amd64",
+            digest:
+              "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            architecture: "amd64",
+          },
+        ],
+      }),
+    /requiredImages references unknown runtime image cognee/,
+  );
+});
+
 test("spec parsers reject incomplete artifact and image definitions", () => {
   assert.deepEqual(
     parseArtifactSpec("name=web,type=static-site,path=dist/release/web.tar.gz"),
@@ -388,6 +434,20 @@ test("spec parsers reject incomplete artifact and image definitions", () => {
         },
       ],
       terraformModule: undefined,
+    },
+  );
+  assert.deepEqual(
+    parseRuntimeImageSpec(
+      "name=twenty,uri=twentycrm/twenty@sha256:5555555555555555555555555555555555555555555555555555555555555555,architecture=amd64",
+    ),
+    {
+      name: "twenty",
+      repository: "twentycrm/twenty",
+      tag: "digest",
+      digest:
+        "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      architecture: "amd64",
+      uri: "twentycrm/twenty@sha256:5555555555555555555555555555555555555555555555555555555555555555",
     },
   );
 });

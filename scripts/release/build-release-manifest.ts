@@ -33,6 +33,7 @@ export interface RuntimeImageInput {
   tag: string;
   digest: string;
   architecture: RuntimeImageArchitecture;
+  uri?: string;
 }
 
 export interface ReleaseArtifactBundleInput {
@@ -178,7 +179,7 @@ function assertRuntimeImage(image: RuntimeImageInput): RuntimeImage {
     tag: image.tag,
     digest: image.digest,
     architecture: image.architecture,
-    uri: `${image.repository}:${image.tag}@${image.digest}`,
+    uri: image.uri ?? `${image.repository}:${image.tag}@${image.digest}`,
   };
 }
 
@@ -391,9 +392,20 @@ export function parseRuntimeImageSpec(spec: string): RuntimeImageInput {
       `Runtime image spec must include architecture=amd64 or architecture=arm64`,
     );
   }
+  if (values.uri) {
+    if (!values.name) {
+      throw new Error(`Runtime image URI spec must include name: ${spec}`);
+    }
+    return {
+      name: values.name,
+      ...parsePinnedImageUri(values.name, values.uri),
+      architecture,
+      uri: values.uri,
+    };
+  }
   if (!values.name || !values.repository || !values.tag || !values.digest) {
     throw new Error(
-      `Runtime image spec must include name, repository, tag, and digest: ${spec}`,
+      `Runtime image spec must include either name, uri, and architecture or name, repository, tag, digest, and architecture: ${spec}`,
     );
   }
   return {
@@ -403,6 +415,39 @@ export function parseRuntimeImageSpec(spec: string): RuntimeImageInput {
     digest: values.digest,
     architecture,
   };
+}
+
+function parsePinnedImageUri(
+  imageName: string,
+  uri: string,
+): Pick<RuntimeImageInput, "repository" | "tag" | "digest"> {
+  const separator = uri.lastIndexOf("@");
+  if (separator === -1) {
+    throw new Error(`Runtime image ${imageName} URI must include @sha256:`);
+  }
+  const repositoryAndTag = uri.slice(0, separator);
+  const digest = uri.slice(separator + 1);
+  if (!/^sha256:[0-9a-f]{64}$/i.test(digest)) {
+    throw new Error(
+      `Runtime image ${imageName} URI digest must be a sha256 digest`,
+    );
+  }
+
+  const lastSlash = repositoryAndTag.lastIndexOf("/");
+  const lastColon = repositoryAndTag.lastIndexOf(":");
+  const hasTag = lastColon > lastSlash;
+  const repository = hasTag
+    ? repositoryAndTag.slice(0, lastColon)
+    : repositoryAndTag;
+  const tag = hasTag ? repositoryAndTag.slice(lastColon + 1) : "digest";
+  if (!repository) {
+    throw new Error(`Runtime image ${imageName} URI is missing repository`);
+  }
+  if (!tag) {
+    throw new Error(`Runtime image ${imageName} URI is missing tag`);
+  }
+
+  return { repository, tag, digest: digest.toLowerCase() };
 }
 
 export function parseManagedAppSpec(spec: string): ManagedAppDescriptor {

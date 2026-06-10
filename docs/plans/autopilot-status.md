@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U9 managed-app controller readiness proof -
-  read-only release descriptor/image validation before optional-app deploy.
-- Current branch: `codex/u9-managed-app-readiness-smoke`.
+- Current implementation unit: U7 managed-app release image contract - publish
+  and validate runtime images required by optional app descriptors.
+- Current branch: `codex/u7-managed-app-release-images`.
 - Current worktree:
-  `.Codex/worktrees/u9-managed-app-readiness-smoke`.
+  `.Codex/worktrees/u7-managed-app-release-images`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -54,8 +54,18 @@ status: in_progress
   profile-binding proof PR
   [#2323](https://github.com/thinkwork-ai/thinkwork/pull/2323) merged; U9
   teardown-readiness proof PR
-  [#2325](https://github.com/thinkwork-ai/thinkwork/pull/2325) merged.
-- Status: U9 managed-app controller readiness smoke was added and passed live
+  [#2325](https://github.com/thinkwork-ai/thinkwork/pull/2325) merged; U9
+  managed-app readiness proof PR
+  [#2326](https://github.com/thinkwork-ai/thinkwork/pull/2326) merged.
+- Status: U7 follow-up is closing the release-manifest gap surfaced by the U9
+  managed-app readiness smoke: releases must publish every runtime image named
+  by Cognee/Twenty/Kestra managed-app descriptors before optional-app deploy can
+  be treated as controller-ready. This branch teaches the manifest builder to
+  accept complete pinned image URIs, validates `requiredImages` against
+  `runtimeImages`, builds/publishes the ThinkWork-owned Cognee image, and
+  includes the existing pinned Twenty/Kestra image repository variables in the
+  release manifest. Historical notes follow. U9 managed-app controller
+  readiness smoke was added and passed live
   against TEI `v0.1.0-canary.148` on 2026-06-10 in read-only diagnostic mode.
   It verified the selected release manifest URL/SHA from SSM, confirmed Cognee
   and Twenty CRM descriptors exist in `managedApps`, confirmed their Terraform
