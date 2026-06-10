@@ -10,12 +10,10 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U10 release finalization hardening - prevent
-  stale release manifests from being deployable while platform assets are being
-  refreshed.
-- Current branch: `codex/release-manifest-finalization`.
-- Current worktree:
-  `.Codex/worktrees/release-manifest-finalization`.
+- Current implementation unit: U9 TEI canary 150 deployment proof after release
+  finalization hardening.
+- Current branch: `codex/tei-150-deploy-proof`.
+- Current worktree: `.Codex/worktrees/tei-150-deploy-proof`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -61,43 +59,34 @@ status: in_progress
   runtime-image release contract PR
   [#2327](https://github.com/thinkwork-ai/thinkwork/pull/2327) merged; U9 TEI
   canary 149 proof PR
-  [#2328](https://github.com/thinkwork-ai/thinkwork/pull/2328) merged.
-- Status: U10 is hardening the release-publish path after the TEI `.149`
-  proving run exposed a digest finalization race: a canary release could expose
-  an older `thinkwork-release.json` while platform assets were being refreshed,
-  requiring TEI to rerun against the final manifest digest. The current branch
-  updates `scripts/release/publish-release-assets.sh` so release refreshes
-  delete stale manifest/signature assets first, upload non-manifest assets, and
-  upload the finalized manifest last. It adds a focused script test with a fake
-  `gh` binary and documents the invariant that `thinkwork-release.json` is the
-  deployable finalization marker. Historical notes follow. U7 follow-up closed
-  the release-manifest runtime-image gap surfaced
-  by the U9 managed-app readiness smoke. PR #2327 merged as `1c28585a` and
-  released as `v0.1.0-canary.149`, publishing pinned runtime image entries for
-  Cognee, Twenty, Kestra, and Pi AgentCore. TEI was updated through the
-  customer deployment controller to the final `.149` manifest digest
-  `f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532` via
-  Step Functions execution `tw-update-149-final-manifest-20260610083636` and
-  CodeBuild run
-  `thinkwork-tei-e2e-deployment-runner:2065409f-b2fa-4b07-a418-bc9f36811259`;
-  both succeeded. Fresh live smokes against `.149` passed for foundation
-  runtime-config/control-plane readiness
-  (`/tmp/thinkwork-tei-smoke-proof/foundation-smoke-149.json`), deployment
-  profile binding across web/desktop/mobile
-  (`/tmp/thinkwork-tei-smoke-proof/deployment-profile-binding-149.json`, profile
-  SHA-256
-  `56001f6d02087be21b47a83d17798523065b58b2f0ab6c2ecdec28e0ca0fee0b`), and
-  strict managed-app deploy readiness
-  (`/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-149-final.json`).
-  Cognee now resolves
-  `ghcr.io/thinkwork-ai/thinkwork-cognee:v0.1.0-canary.149-cognee-amd64@sha256:be910a950a31ec6b7e070927f6143b244fbec8b8d66fa3b84f047ee43b996680`
-  and Twenty resolves
-  `twentycrm/twenty@sha256:37380b56aa86c6949f6e9f00e21f6e2a2a19bfa94c9e86f5e3202304367c7510`.
-  Remaining open deployment-controller gates: full optional-app deploy smoke
-  for Cognee/Twenty after those apps are selected, human desktop/mobile launch
-  proof against TEI, final teardown/destroy proof when TEI can be safely
-  removed, and release finalization hardening so a canary cannot be selected
-  before its final manifest digest is stable. Historical notes follow. U9
+  [#2328](https://github.com/thinkwork-ai/thinkwork/pull/2328) merged; U10
+  release finalization hardening PR
+  [#2329](https://github.com/thinkwork-ai/thinkwork/pull/2329) merged.
+- Status: U10 release finalization hardening merged as `b457f866a`, deleting
+  stale release manifest/signature assets before uploading refreshed platform
+  assets and uploading `thinkwork-release.json` last as the deployable
+  finalization marker. Canary releases `v0.1.0-canary.150` and
+  `desktop-v0.1.0-canary.150` were cut from that merge. TEI was updated through
+  the customer deployment controller to `.150` with manifest SHA-256
+  `dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb` and
+  platform bundle SHA-256
+  `3c2e00aacc5d5b354d6e9a67b19c5a1c4f98225fca8f0ab7551dff315de40e06`.
+  Step Functions execution `tw-update-150-20260610095036` and CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:6e0f4b92-0f23-4f7a-92fa-982453ba1ade`
+  both succeeded; evidence was written under
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/5eed2926-cb8c-47f6-bf66-700f04a1b5e5/update/`.
+  TEI runtime config and selected-release SSM status now report
+  `releaseVersion=v0.1.0-canary.150`; the app root and `/settings/general`
+  returned HTTP 200 after CloudFront invalidation `I4BVXPJJ1KJCO8BQ1ZVUTVIE36`
+  completed. Fresh live smokes passed for foundation runtime-config/profile
+  binding (`/tmp/thinkwork-tei-smoke-proof-150/foundation-smoke-150-clean.json`)
+  and base-install Cognee/Twenty skip evidence
+  (`/tmp/thinkwork-tei-smoke-proof-150/cognee-smoke-150.json`,
+  `/tmp/thinkwork-tei-smoke-proof-150/twenty-smoke-150.json`). Remaining open
+  deployment-controller gates: full optional-app deploy smoke for Cognee/Twenty
+  after those apps are selected, human desktop/mobile launch proof against TEI,
+  and final teardown/destroy proof when TEI can be safely removed. Historical
+  notes follow. U9
   managed-app controller
   readiness smoke was added and passed live
   against TEI `v0.1.0-canary.148` on 2026-06-10 in read-only diagnostic mode.
