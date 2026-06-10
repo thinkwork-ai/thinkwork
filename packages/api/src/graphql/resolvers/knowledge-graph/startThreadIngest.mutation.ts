@@ -25,7 +25,7 @@ interface StartKnowledgeGraphThreadIngestArgs {
 interface StartKnowledgeGraphIngestArgs {
   input: {
     tenantId?: string | null;
-    sourceKind: "THREAD" | "WIKI" | "BRAIN";
+    sourceKind: "THREAD" | "WIKI";
     threadId?: string | null;
     sourceRef?: string | null;
     sourceLabel?: string | null;
@@ -109,8 +109,8 @@ export async function startKnowledgeGraphIngest(
   ctx: GraphQLContext,
 ) {
   const input = args.input;
-  const sourceKind = toDbEnum(input?.sourceKind) as "thread" | "wiki" | "brain";
-  if (!["thread", "wiki", "brain"].includes(sourceKind)) {
+  const sourceKind = toDbEnum(input?.sourceKind) as "thread" | "wiki";
+  if (!["thread", "wiki"].includes(sourceKind)) {
     throw new GraphQLError("sourceKind is required", {
       extensions: { code: "BAD_USER_INPUT" },
     });

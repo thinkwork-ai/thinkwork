@@ -50,29 +50,6 @@ export {
   useContextQuery,
   type UseContextQueryArgs,
 } from "./hooks/use-context-query";
-export { useTenantEntityPage } from "./hooks/use-tenant-entity-page";
-export {
-  useTenantEntityFacets,
-  type TenantEntityFacet,
-} from "./hooks/use-tenant-entity-facets";
-export {
-  editTenantEntityFact,
-  rejectTenantEntityFact,
-  acceptBrainEnrichmentReview,
-  cancelBrainEnrichmentReview,
-  listBrainEnrichmentSources,
-  runBrainPageEnrichment,
-  BRAIN_ENRICHMENT_DRAFT_REVIEW_KIND,
-  BRAIN_ENRICHMENT_DRAFT_DECISION_KIND,
-  type BrainEnrichmentProposal,
-  type BrainEnrichmentSourceAvailability,
-  type BrainEnrichmentSourceFamily,
-  type BrainEnrichmentDraftPage,
-  type BrainEnrichmentDraftRegion,
-  type BrainEnrichmentDraftRegionFamily,
-  type BrainEnrichmentDraftDecisionPayload,
-} from "./brain";
-export { useBrainEnrichment } from "./hooks/use-brain-enrichment";
 export { useRecentWikiPages } from "./hooks/use-recent-wiki-pages";
 export {
   useWikiPage,

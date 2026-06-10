@@ -18,7 +18,7 @@ import {
   parseSections,
   type DraftCompileRegion,
 } from "../wiki/draft-compile.js";
-import type { BrainEnrichmentCandidate } from "./enrichment-service.js";
+import type { BrainEnrichmentCandidate } from "./enrichment-types.js";
 
 type DbLike = typeof defaultDb;
 type SectionWriteDb = Pick<DbLike, "delete" | "insert" | "select" | "update">;
