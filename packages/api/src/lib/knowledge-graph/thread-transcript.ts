@@ -15,7 +15,8 @@ export interface ThreadTranscriptMessage {
     | "wiki_page"
     | "wiki_section"
     | "brain_page"
-    | "brain_section";
+    | "brain_section"
+    | "hindsight_observation";
   evidenceSourceRef?: string | null;
   evidenceMetadata?: Record<string, unknown>;
 }

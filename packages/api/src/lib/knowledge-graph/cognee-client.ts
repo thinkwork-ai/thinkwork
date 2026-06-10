@@ -51,7 +51,7 @@ export interface CogneeDatasetWaitResult {
 
 export interface CogneeDocumentIngestArgs {
   tenantId: string;
-  sourceKind: "thread" | "wiki" | "brain";
+  sourceKind: "thread" | "wiki" | "brain" | "observations";
   sourceRef: string;
   datasetName: string;
   document: string;
@@ -202,7 +202,7 @@ export class CogneeClient {
 
   private async remember(args: {
     tenantId: string;
-    sourceKind: "thread" | "wiki" | "brain";
+    sourceKind: "thread" | "wiki" | "brain" | "observations";
     sourceRef: string;
     datasetName: string;
     document: string;
@@ -226,7 +226,7 @@ export class CogneeClient {
 
   private async addAndCognify(args: {
     tenantId: string;
-    sourceKind: "thread" | "wiki" | "brain";
+    sourceKind: "thread" | "wiki" | "brain" | "observations";
     sourceRef: string;
     datasetName: string;
     document: string;
@@ -341,7 +341,7 @@ export class CogneeClient {
 function buildDocumentForm(
   args: {
     tenantId: string;
-    sourceKind: "thread" | "wiki" | "brain";
+    sourceKind: "thread" | "wiki" | "brain" | "observations";
     sourceRef: string;
     datasetName: string;
     document: string;
@@ -375,7 +375,7 @@ function buildDocumentForm(
 
 function buildNodeSets(
   tenantId: string,
-  sourceKind: "thread" | "wiki" | "brain",
+  sourceKind: "thread" | "wiki" | "brain" | "observations",
   sourceRef: string,
 ): string[] {
   return [
@@ -386,7 +386,7 @@ function buildNodeSets(
 }
 
 function buildCustomPrompt(args: {
-  sourceKind: "thread" | "wiki" | "brain";
+  sourceKind: "thread" | "wiki" | "brain" | "observations";
   ontology: KnowledgeGraphOntologyExport;
   customPrompt?: string | null;
 }): string {

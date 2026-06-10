@@ -41,6 +41,7 @@ export const KNOWLEDGE_GRAPH_SOURCE_KINDS = [
   "thread",
   "wiki",
   "brain",
+  "observations",
 ] as const;
 export type KnowledgeGraphSourceKind =
   (typeof KNOWLEDGE_GRAPH_SOURCE_KINDS)[number];
@@ -69,6 +70,7 @@ export const KNOWLEDGE_GRAPH_EVIDENCE_SOURCE_KINDS = [
   "wiki_section",
   "brain_page",
   "brain_section",
+  "hindsight_observation",
   "cognee_payload",
   "normalizer",
 ] as const;
@@ -149,11 +151,11 @@ export const knowledgeGraphIngestRuns = pgTable(
     ),
     check(
       "knowledge_graph_ingest_runs_trigger_allowed",
-      sql`${table.trigger} IN ('manual')`,
+      sql`${table.trigger} IN ('manual','scheduled')`,
     ),
     check(
       "knowledge_graph_ingest_runs_source_kind_allowed",
-      sql`${table.source_kind} IN ('thread','wiki','brain')`,
+      sql`${table.source_kind} IN ('thread','wiki','brain','observations')`,
     ),
     check(
       "knowledge_graph_ingest_runs_thread_scope_required",
@@ -248,7 +250,7 @@ export const knowledgeGraphEntities = pgTable(
     ),
     check(
       "knowledge_graph_entities_source_kind_allowed",
-      sql`${table.source_kind} IN ('thread','wiki','brain')`,
+      sql`${table.source_kind} IN ('thread','wiki','brain','observations')`,
     ),
   ],
 );
@@ -341,7 +343,7 @@ export const knowledgeGraphRelationships = pgTable(
     ),
     check(
       "knowledge_graph_relationships_source_kind_allowed",
-      sql`${table.source_kind} IN ('thread','wiki','brain')`,
+      sql`${table.source_kind} IN ('thread','wiki','brain','observations')`,
     ),
   ],
 );
@@ -407,11 +409,11 @@ export const knowledgeGraphEvidence = pgTable(
     index("idx_kg_evidence_relationship").on(table.relationship_id),
     check(
       "knowledge_graph_evidence_source_kind_allowed",
-      sql`${table.source_kind} IN ('thread','wiki','brain')`,
+      sql`${table.source_kind} IN ('thread','wiki','brain','observations')`,
     ),
     check(
       "knowledge_graph_evidence_evidence_source_kind_allowed",
-      sql`${table.evidence_source_kind} IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','cognee_payload','normalizer')`,
+      sql`${table.evidence_source_kind} IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','hindsight_observation','cognee_payload','normalizer')`,
     ),
     check(
       "knowledge_graph_evidence_subject_required",
@@ -531,4 +533,39 @@ export const knowledgeGraphEvidenceRelations = relations(
       references: [messages.id],
     }),
   }),
+);
+
+/**
+ * Per-(tenant, bank) incremental cursors for the observations ingest source.
+ *
+ * Tenant fan-in reads each user bank's engine-synthesized observations via
+ * the Hindsight adapter's cursor read; the `(last_record_updated_at,
+ * last_record_id)` pair mirrors the wiki compile-cursor tiebreaker so
+ * same-timestamp rows are never missed or double-read. Cursors advance only
+ * inside the same transaction that replaces the mirror snapshot and marks the
+ * run succeeded (crash between Cognee write and snapshot leaves cursors put,
+ * and the idempotent per-observation dataset identity absorbs the re-read).
+ */
+export const knowledgeGraphObservationCursors = pgTable(
+  "knowledge_graph_observation_cursors",
+  {
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    bank_id: text("bank_id").notNull(),
+    last_record_updated_at: timestamp("last_record_updated_at", {
+      withTimezone: true,
+    }),
+    last_record_id: text("last_record_id"),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uq_kg_observation_cursors_tenant_bank").on(
+      table.tenant_id,
+      table.bank_id,
+    ),
+    index("idx_kg_observation_cursors_tenant").on(table.tenant_id),
+  ],
 );

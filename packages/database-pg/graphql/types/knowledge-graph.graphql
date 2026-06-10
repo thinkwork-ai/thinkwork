@@ -11,6 +11,7 @@ enum KnowledgeGraphSourceKind {
   THREAD
   WIKI
   BRAIN
+  OBSERVATIONS
 }
 
 enum KnowledgeGraphGroundingStatus {
@@ -33,6 +34,7 @@ enum KnowledgeGraphEvidenceSourceKind {
   WIKI_SECTION
   BRAIN_PAGE
   BRAIN_SECTION
+  HINDSIGHT_OBSERVATION
   COGNEE_PAYLOAD
   NORMALIZER
 }

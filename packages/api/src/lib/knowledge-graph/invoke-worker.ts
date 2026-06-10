@@ -2,7 +2,7 @@ export interface KnowledgeGraphThreadIngestWorkerPayload {
   runId: string;
   tenantId: string;
   threadId?: string;
-  sourceKind?: "thread" | "wiki" | "brain";
+  sourceKind?: "thread" | "wiki" | "brain" | "observations";
   sourceRef?: string;
   requestedByUserId: string | null;
 }
