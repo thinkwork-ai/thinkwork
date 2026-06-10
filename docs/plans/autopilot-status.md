@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U9 follow-up - reconcile TEI proving-run
-  evidence and operator docs after the `.148` controller-managed update.
-- Current branch: `codex/u9-tei-proof-docs`.
+- Current implementation unit: U9 follow-up - reconcile user-facing deployment
+  docs with the accepted TEI `.148` controller proof.
+- Current branch: `codex/u9-user-docs-tei-proof`.
 - Current worktree:
-  `.Codex/worktrees/u9-tei-proof-docs`.
+  `.Codex/worktrees/u9-user-docs-tei-proof`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -45,8 +45,15 @@ status: in_progress
   [#2318](https://github.com/thinkwork-ai/thinkwork/pull/2318) merged; U21
   controller selected-release status persistence PR
   [#2319](https://github.com/thinkwork-ai/thinkwork/pull/2319) merged; U9
-  proof-doc reconciliation PR not opened yet.
-- Status: U21 merged and was released as `v0.1.0-canary.148`. TEI's customer
+  proof-doc reconciliation PR
+  [#2320](https://github.com/thinkwork-ai/thinkwork/pull/2320) merged; U9
+  user-facing docs reconciliation PR not opened yet.
+- Status: U9 proof-doc reconciliation PR #2320 passed required CI and was
+  squash merged as `9e412490`. This follow-up branch updates the user-facing
+  deployment docs so the public operator guidance names the accepted TEI
+  `.148` proof, shows the live controller-managed deployment profile metadata,
+  and preserves the still-open managed-app, mobile, and teardown gates. U21
+  merged and was released as `v0.1.0-canary.148`. TEI's customer
   deployment controller was refreshed to the `.148` runner, then TEI update
   execution `tw-update-148-current-sha-20260610053146` succeeded through Step
   Functions and CodeBuild run

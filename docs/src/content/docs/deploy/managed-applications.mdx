@@ -19,6 +19,12 @@ passes only release-verified image URIs or customer-owned secret ARNs into the
 runner. Base installs keep Cognee, Twenty, Kestra, Slack, and Stripe disabled
 until an operator explicitly plans and approves the optional app.
 
+The TEI proving environment keeps optional apps disabled in the base install.
+That is expected: foundation login, model catalog, runtime config, and release
+update proof can pass before Cognee or Twenty are selected. The full
+managed-app gate is accepted only after an operator plans, approves, applies,
+and smokes the selected optional app through the customer controller.
+
 ## Lifecycle
 
 ```text
