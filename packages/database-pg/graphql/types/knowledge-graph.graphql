@@ -10,7 +10,6 @@ enum KnowledgeGraphIngestStatus {
 enum KnowledgeGraphSourceKind {
   THREAD
   WIKI
-  BRAIN
   OBSERVATIONS
 }
 

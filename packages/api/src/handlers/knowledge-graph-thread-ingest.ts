@@ -1,7 +1,6 @@
 import type { Database } from "../lib/db.js";
 import { db as defaultDb } from "../lib/db.js";
 import { CogneeClient } from "../lib/knowledge-graph/cognee-client.js";
-import { loadBrainKnowledgeGraphSource } from "../lib/knowledge-graph/brain-source.js";
 import { normalizeCogneeGraph } from "../lib/knowledge-graph/normalizer.js";
 import { loadApprovedOntologyExport } from "../lib/knowledge-graph/ontology-export.js";
 import { applySourceDeclaredFallback } from "../lib/knowledge-graph/source-fallback.js";
@@ -239,16 +238,6 @@ async function loadSourceBundle(args: {
       ownerUserId,
       sourceRef: args.run.source_ref,
       sourceLabel: args.run.source_label ?? "Compounding Memory wiki",
-      pageIds,
-      ontology: args.ontology,
-    });
-  }
-  if (args.run.source_kind === "brain") {
-    return loadBrainKnowledgeGraphSource({
-      db: args.db,
-      tenantId: args.run.tenant_id,
-      sourceRef: args.run.source_ref,
-      sourceLabel: args.run.source_label ?? "Company Brain",
       pageIds,
       ontology: args.ontology,
     });

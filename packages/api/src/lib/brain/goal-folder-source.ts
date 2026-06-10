@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { BrainEnrichmentCandidate } from "./enrichment-service.js";
+import type { BrainEnrichmentCandidate } from "./enrichment-types.js";
 
 export interface CompletedGoalFolderRecord {
   id: string;
