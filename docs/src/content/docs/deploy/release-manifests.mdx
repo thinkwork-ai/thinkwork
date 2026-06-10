@@ -64,6 +64,12 @@ Individual artifact URLs in the manifest are a compatibility path; new
 deployment controller runs should consume the bundle and verify every contained
 artifact against the manifest before staging it.
 
+The manifest asset is also the publish finalization marker. Release automation
+removes any existing `thinkwork-release.json` before refreshing deployable
+assets, uploads the platform bundle and signature first, and uploads the final
+manifest last. If a refresh fails midway, the release should be temporarily
+non-deployable instead of presenting an old manifest digest with newer assets.
+
 Managed-app descriptors and runtime images are one contract. If a release
 manifest advertises a managed app with `requiredImages`, every required image
 name must appear in `runtimeImages` as an immutable `@sha256:` URI. The release
@@ -82,12 +88,12 @@ signing key rollout is in progress. Production and customer-safe controllers
 should set `release_manifest_trust_policy = "require_signature"` and configure
 trusted public keys before accepting a release.
 
-The TEI proving environment accepted `v0.1.0-canary.148` under the explicit
+The TEI proving environment accepted `v0.1.0-canary.149` under the explicit
 `allow_unsigned_canary` trust policy. Evidence records both the raw manifest
 SHA-256
-`5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93` and the
+`f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532` and the
 platform bundle SHA-256
-`1ed207c7aa92801629b2b7e5572220261f97f16fbe6f26c257d4ad523b92f5b9`.
+`b463b44094d60e94ee068881343deab53bb65d6d081b69757dcc04afb181aad8`.
 
 ## Upgrade Evidence
 
