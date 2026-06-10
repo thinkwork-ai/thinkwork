@@ -10,11 +10,12 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U7 managed-app release image contract - publish
-  and validate runtime images required by optional app descriptors.
-- Current branch: `codex/u7-managed-app-release-images`.
+- Current implementation unit: U9 TEI canary 149 proof - record final
+  controller update, runtime profile smoke, and strict managed-app deploy
+  readiness.
+- Current branch: `codex/u9-tei-149-proof`.
 - Current worktree:
-  `.Codex/worktrees/u7-managed-app-release-images`.
+  `.Codex/worktrees/u9-tei-149-proof`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -56,15 +57,37 @@ status: in_progress
   teardown-readiness proof PR
   [#2325](https://github.com/thinkwork-ai/thinkwork/pull/2325) merged; U9
   managed-app readiness proof PR
-  [#2326](https://github.com/thinkwork-ai/thinkwork/pull/2326) merged.
-- Status: U7 follow-up is closing the release-manifest gap surfaced by the U9
-  managed-app readiness smoke: releases must publish every runtime image named
-  by Cognee/Twenty/Kestra managed-app descriptors before optional-app deploy can
-  be treated as controller-ready. This branch teaches the manifest builder to
-  accept complete pinned image URIs, validates `requiredImages` against
-  `runtimeImages`, builds/publishes the ThinkWork-owned Cognee image, and
-  includes the existing pinned Twenty/Kestra image repository variables in the
-  release manifest. Historical notes follow. U9 managed-app controller
+  [#2326](https://github.com/thinkwork-ai/thinkwork/pull/2326) merged; U7
+  runtime-image release contract PR
+  [#2327](https://github.com/thinkwork-ai/thinkwork/pull/2327) merged.
+- Status: U7 follow-up closed the release-manifest runtime-image gap surfaced
+  by the U9 managed-app readiness smoke. PR #2327 merged as `1c28585a` and
+  released as `v0.1.0-canary.149`, publishing pinned runtime image entries for
+  Cognee, Twenty, Kestra, and Pi AgentCore. TEI was updated through the
+  customer deployment controller to the final `.149` manifest digest
+  `f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532` via
+  Step Functions execution `tw-update-149-final-manifest-20260610083636` and
+  CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:2065409f-b2fa-4b07-a418-bc9f36811259`;
+  both succeeded. Fresh live smokes against `.149` passed for foundation
+  runtime-config/control-plane readiness
+  (`/tmp/thinkwork-tei-smoke-proof/foundation-smoke-149.json`), deployment
+  profile binding across web/desktop/mobile
+  (`/tmp/thinkwork-tei-smoke-proof/deployment-profile-binding-149.json`, profile
+  SHA-256
+  `56001f6d02087be21b47a83d17798523065b58b2f0ab6c2ecdec28e0ca0fee0b`), and
+  strict managed-app deploy readiness
+  (`/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-149-final.json`).
+  Cognee now resolves
+  `ghcr.io/thinkwork-ai/thinkwork-cognee:v0.1.0-canary.149-cognee-amd64@sha256:be910a950a31ec6b7e070927f6143b244fbec8b8d66fa3b84f047ee43b996680`
+  and Twenty resolves
+  `twentycrm/twenty@sha256:37380b56aa86c6949f6e9f00e21f6e2a2a19bfa94c9e86f5e3202304367c7510`.
+  Remaining open deployment-controller gates: full optional-app deploy smoke
+  for Cognee/Twenty after those apps are selected, human desktop/mobile launch
+  proof against TEI, final teardown/destroy proof when TEI can be safely
+  removed, and release finalization hardening so a canary cannot be selected
+  before its final manifest digest is stable. Historical notes follow. U9
+  managed-app controller
   readiness smoke was added and passed live
   against TEI `v0.1.0-canary.148` on 2026-06-10 in read-only diagnostic mode.
   It verified the selected release manifest URL/SHA from SSM, confirmed Cognee

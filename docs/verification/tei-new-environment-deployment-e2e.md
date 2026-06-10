@@ -15,11 +15,12 @@ publishes runtime config/static assets, initializes required database defaults,
 and writes deployment evidence to the customer evidence bucket.
 
 Current scope boundary: TEI has proved release update, runtime config, login,
-model catalog, Settings/Agents recovery, and read-only teardown readiness
-through the controller. Full destructive teardown is intentionally deferred
-while TEI remains live for demo validation. Treat final destroy evidence as the
-remaining U9 proof gap, not as a reason to destroy the demo environment
-prematurely.
+model catalog, Settings/Agents recovery, strict managed-app deploy readiness,
+and read-only teardown readiness through the controller. Full optional-app
+creation and destructive teardown are intentionally deferred while TEI remains
+live for demo validation. Treat final Cognee/Twenty deploy smoke and final
+destroy evidence as the remaining U9 proof gaps, not as a reason to mutate the
+demo environment prematurely.
 
 ## Test Envelope
 
@@ -30,13 +31,13 @@ prematurely.
 - Region: `us-east-1`
 - Stage: `tei-e2e`
 - Customer slug: `tei`
-- Release under test: `v0.1.0-canary.148`
+- Release under test: `v0.1.0-canary.149`
 - Release manifest URL:
-  `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.148/thinkwork-release.json`
+  `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.149/thinkwork-release.json`
 - Release manifest SHA-256:
-  `5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93`
+  `f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532`
 - Platform bundle SHA-256:
-  `1ed207c7aa92801629b2b7e5572220261f97f16fbe6f26c257d4ad523b92f5b9`
+  `b463b44094d60e94ee068881343deab53bb65d6d081b69757dcc04afb181aad8`
 - Deployed app URL:
   `https://d1eqjv7ijcmtqz.cloudfront.net`
 - Runtime config URL:
@@ -50,9 +51,90 @@ prematurely.
 The `tei` profile currently has no configured default region, so every command
 in this runbook pins `AWS_REGION=us-east-1`.
 
-## 2026-06-10 Controller Proof
+## 2026-06-10 Controller Proof - v0.1.0-canary.149
 
 The current accepted controller update is:
+
+- Step Functions execution:
+  `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-update-149-final-manifest-20260610083636`
+- Step Functions status: `SUCCEEDED`
+- Step Functions duration: 2026-06-10 03:36:37 CT to 03:45:29 CT
+- CodeBuild run:
+  `thinkwork-tei-e2e-deployment-runner:2065409f-b2fa-4b07-a418-bc9f36811259`
+- CodeBuild status: `SUCCEEDED`
+- Evidence prefix:
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/9b3b550c-2826-4f4a-ac54-bbc0aa718cd8/update/`
+- Evidence `deployment-evidence.json`: `status=succeeded`,
+  `terraformExitCode=0`, manifest SHA-256
+  `f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532`
+- Controller selected-release SSM status parameters now report:
+  `selected-release-version=v0.1.0-canary.149`,
+  `selected-release-manifest-sha256=f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532`,
+  `selected-release-manifest-url=https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.149/thinkwork-release.json`,
+  and `terraform-module-version=0.1.0-canary.149`.
+
+Runtime smoke evidence:
+
+- `thinkwork-runtime-config.json` reports release
+  `v0.1.0-canary.149`, manifest SHA-256
+  `f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532`,
+  API endpoint `https://8puq24dl63.execute-api.us-east-1.amazonaws.com/`, and
+  Cognito domain `https://thinkwork-tei-e2e.auth.us-east-1.amazoncognito.com`.
+- GitHub Release `v0.1.0-canary.149` exposes the human desktop assets
+  (`.dmg`, arm64 zip, updater YAML/blockmaps) plus the machine assets
+  `thinkwork-release.json` and `platform-artifacts.tar.gz`.
+- `platform-artifacts.tar.gz` is recorded in the release manifest with SHA-256
+  `b463b44094d60e94ee068881343deab53bb65d6d081b69757dcc04afb181aad8`.
+- The final release manifest includes pinned runtime images for
+  `agentcore-pi-amd64`, `agentcore-pi-arm64`, `cognee`, `kestra`, and `twenty`.
+- `node scripts/smoke/foundation-bootstrap-smoke.mjs` passed in live
+  runtime-config mode on 2026-06-10 with evidence written to
+  `/tmp/thinkwork-tei-smoke-proof/foundation-smoke-149.json`:
+  - Spaces endpoint returned HTTP 200.
+  - Cognito domain validation passed.
+  - Runtime-config-backed control-plane validation passed for state machine
+    `thinkwork-tei-e2e-deployment-orchestrator`, CodeBuild project
+    `thinkwork-tei-e2e-deployment-runner`, and evidence bucket
+    `thinkwork-tei-e2e-637423202447-deploy-evidence`.
+- `node scripts/smoke/deployment-profile-binding-smoke.mjs` passed against live
+  TEI `v0.1.0-canary.149` on 2026-06-10 with evidence written to
+  `/tmp/thinkwork-tei-smoke-proof/deployment-profile-binding-149.json`.
+  It confirmed the web, desktop, and mobile binding snapshots target
+  `deploymentId=thinkwork-tei-e2e`, `stage=tei-e2e`, `region=us-east-1`, and
+  the TEI Cognito/API/AppSync endpoints. The profile SHA-256 is
+  `56001f6d02087be21b47a83d17798523065b58b2f0ab6c2ecdec28e0ca0fee0b`, and
+  the evidence contained no API keys, passwords, AWS keys, tokens, credential
+  material, or secret payload fields.
+- `node scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed in
+  strict read-only mode on 2026-06-10 with evidence written to
+  `/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-149-final.json`:
+  - the selected TEI release manifest URL/SHA from SSM matched the downloaded
+    `v0.1.0-canary.149` manifest;
+  - Cognee and Twenty CRM descriptors exist in `managedApps`;
+  - both descriptors point at their Terraform module source/version and required
+    smoke command paths;
+  - both smoke command paths exist in this checkout;
+  - `descriptorReady=true`, `deployReady=true`, and
+    `strictDeployReadyRequired=true`;
+  - Cognee resolved
+    `ghcr.io/thinkwork-ai/thinkwork-cognee:v0.1.0-canary.149-cognee-amd64@sha256:be910a950a31ec6b7e070927f6143b244fbec8b8d66fa3b84f047ee43b996680`;
+  - Twenty resolved
+    `twentycrm/twenty@sha256:37380b56aa86c6949f6e9f00e21f6e2a2a19bfa94c9e86f5e3202304367c7510`.
+
+Manifest digest note:
+
+- The first `.149` deploy attempt used an early release manifest digest
+  `b97c013a0ac60cb391c50037dbb536563255bed40a4fac1bc8f7e97ebc0a55ff`.
+  The release asset later finalized to
+  `f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532`.
+  TEI was rerun through the customer deployment controller pinned to the final
+  digest above. A follow-up hardening item should make release finalization
+  atomic so deployable releases cannot be selected before the final manifest is
+  stable.
+
+## 2026-06-10 Previous Controller Proof - v0.1.0-canary.148
+
+The previous accepted controller update was:
 
 - Step Functions execution:
   `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-update-148-current-sha-20260610053146`
@@ -203,9 +285,9 @@ export AWS_PROFILE=tei
 export AWS_REGION=us-east-1
 export THINKWORK_STAGE=tei-e2e
 export THINKWORK_CUSTOMER=tei
-export THINKWORK_RELEASE_VERSION=v0.1.0-canary.148
-export THINKWORK_MANIFEST_URL=https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.148/thinkwork-release.json
-export THINKWORK_MANIFEST_SHA256=5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93
+export THINKWORK_RELEASE_VERSION=v0.1.0-canary.149
+export THINKWORK_MANIFEST_URL=https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.149/thinkwork-release.json
+export THINKWORK_MANIFEST_SHA256=f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532
 export THINKWORK_ACCOUNT_ID=637423202447
 ```
 
@@ -216,15 +298,15 @@ aws sts get-caller-identity --profile "$AWS_PROFILE" --output json
 pnpm --dir apps/cli dev doctor -s "$THINKWORK_STAGE" --profile "$AWS_PROFILE"
 ```
 
-Observed result on 2026-06-09:
+Observed result on 2026-06-09 and 2026-06-10:
 
 - AWS identity resolved to account `637423202447`.
 - Terraform CLI resolved to `v1.9.8`.
 - AWS CLI resolved to `aws-cli/2.34.52`.
 - Bedrock access check for `anthropic.claude-3-haiku` passed.
 - Doctor passed only after `AWS_REGION=us-east-1` was set.
-- `v0.1.0-canary.148` release manifest downloaded successfully and hashed to
-  `5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93`.
+- `v0.1.0-canary.149` release manifest downloaded successfully and hashed to
+  `f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532`.
 
 Dry-run the top-level bootstrap path:
 
@@ -402,9 +484,9 @@ SMOKE_REQUIRE_CONTROL_PLANE=1 \
 SMOKE_STEP_FUNCTIONS_STATE_MACHINE_ARN=arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator \
 SMOKE_CODEBUILD_PROJECT=thinkwork-tei-e2e-deployment-runner \
 SMOKE_EVIDENCE_BUCKET=thinkwork-tei-e2e-637423202447-deploy-evidence \
-SMOKE_RELEASE_VERSION=v0.1.0-canary.148 \
-SMOKE_MANIFEST_SHA256=5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93 \
-SMOKE_EVIDENCE_FILE=/tmp/thinkwork-tei-smoke-proof/foundation-smoke-148.json \
+SMOKE_RELEASE_VERSION=v0.1.0-canary.149 \
+SMOKE_MANIFEST_SHA256=f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532 \
+SMOKE_EVIDENCE_FILE=/tmp/thinkwork-tei-smoke-proof/foundation-smoke-149.json \
 node /Users/ericodom/Projects/thinkwork/scripts/smoke/foundation-bootstrap-smoke.mjs
 ```
 
@@ -432,12 +514,12 @@ pnpm --filter @thinkwork/deployment-profile build
 
 SMOKE_ENABLE_DEPLOYMENT_PROFILE_BINDING=1 \
 SMOKE_SPACES_URL=https://d1eqjv7ijcmtqz.cloudfront.net \
-SMOKE_EVIDENCE_FILE=/tmp/thinkwork-tei-smoke-proof/deployment-profile-binding-148.json \
+SMOKE_EVIDENCE_FILE=/tmp/thinkwork-tei-smoke-proof/deployment-profile-binding-149.json \
 node /Users/ericodom/Projects/thinkwork/scripts/smoke/deployment-profile-binding-smoke.mjs
 ```
 
-The accepted `v0.1.0-canary.148` run produced profile SHA-256
-`ef9427364e0d80e4389c62509b119a7be1da3f1a3906c7d5be69eda33ac31ffa` and
+The accepted `v0.1.0-canary.149` run produced profile SHA-256
+`56001f6d02087be21b47a83d17798523065b58b2f0ab6c2ecdec28e0ca0fee0b` and
 confirmed that the web, desktop, and mobile binding snapshots all target
 `deploymentId=thinkwork-tei-e2e`, `stage=tei-e2e`, `region=us-east-1`, and the
 TEI Cognito/API/AppSync endpoints. The smoke failed closed if the generated
@@ -654,19 +736,19 @@ Use this table during the run:
 | Gate                                 | Result                 | Evidence                                                                                      |
 | ------------------------------------ | ---------------------- | --------------------------------------------------------------------------------------------- |
 | AWS profile and Bedrock doctor       | PASS on 2026-06-09     | Doctor output for account `637423202447`                                                      |
-| Release manifest asset and digest    | PASS on 2026-06-10     | `v0.1.0-canary.148` manifest SHA-256                                                          |
+| Release manifest asset and digest    | PASS on 2026-06-10     | `v0.1.0-canary.149` manifest SHA-256                                                          |
 | GitHub-free bootstrap dry-run        | PASS on 2026-06-09     | CLI dry-run output for top-level and enterprise bootstrap                                     |
 | GitHub-free substrate live bootstrap | PASS on 2026-06-09     | TEI Step Functions + CodeBuild controller exists                                              |
-| Controller release update            | PASS on 2026-06-10     | `.148` execution and CodeBuild run succeeded                                                  |
+| Controller release update            | PASS on 2026-06-10     | `.149` execution and CodeBuild run succeeded                                                  |
 | Controller selected-release status   | PASS on 2026-06-10     | SSM status params + `controller-release-selection.json`                                       |
 | Foundation runtime smoke             | PASS on 2026-06-10     | `/sign-in` 200 + runtime config release/digest + live smoke evidence                          |
 | Deployment profile contract smoke    | PASS on 2026-06-10     | Web/desktop/mobile binding snapshots target TEI from runtime config profile                   |
 | First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                                                                |
 | Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                                                        |
-| Managed-app descriptor readiness     | PASS on 2026-06-10     | Cognee/Twenty descriptors and smoke contracts exist in `.148` release manifest                |
-| Managed-app deploy readiness         | BLOCKED                | `.148` manifest is missing required `cognee` and `twenty` runtime images                      |
+| Managed-app descriptor readiness     | PASS on 2026-06-10     | Cognee/Twenty descriptors and smoke contracts exist in `.149` release manifest                |
+| Managed-app deploy readiness         | PASS on 2026-06-10     | `.149` manifest resolves required `cognee` and `twenty` runtime images                        |
 | Managed-app UI smoke                 | Partial                | Cognee/Twenty skip evidence captured for base install; full optional-app deploy smoke remains |
-| Desktop profile selection            | Partial                | Profile contract passes; desktop `.148` assets are available for user launch test             |
+| Desktop profile selection            | Partial                | Profile contract passes; desktop `.149` assets are available for user launch test             |
 | Mobile profile selection             | Partial                | Profile contract passes; mobile launch proof remains                                          |
 | Teardown readiness                   | PASS on 2026-06-10     | Read-only controller/backend/evidence smoke passed; no destroy execution was started          |
 | Cleanup / teardown                   | Deferred               | TEI kept live for demo; run final destroy after evidence is saved                             |
