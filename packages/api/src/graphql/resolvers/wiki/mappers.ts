@@ -29,8 +29,10 @@ export interface GraphQLWikiSection {
 export interface GraphQLWikiPage {
   id: string;
   tenantId: string;
-  userId: string;
-  ownerId?: string;
+  /** Null for tenant-scoped pages (graph materializer; plan
+   * 2026-06-09-004 U14 relaxed the GraphQL nullability to match). */
+  userId: string | null;
+  ownerId?: string | null;
   type: string;
   entitySubtype?: string | null;
   displayType?: string;
@@ -66,7 +68,10 @@ export function toGraphQLPage(
   row: {
     id: string;
     tenant_id: string;
-    owner_id: string;
+    /** NULL for tenant-scoped pages (plan 2026-06-09-004 U9). U14 relaxed
+     * `WikiPage.userId`/`ownerId` to nullable, so null-owner rows map
+     * straight through — no cast, no null-propagation. */
+    owner_id: string | null;
     type: string;
     entity_subtype?: string | null;
     slug: string;

@@ -11,7 +11,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import { wikiPages, wikiPageLinks } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
-import { assertCanReadWikiScope } from "./auth.js";
+import {
+  assertCanReadWikiScope,
+  assertCanReadWikiTenantScope,
+} from "./auth.js";
 import { toGraphQLPage, type GraphQLWikiPage } from "./mappers.js";
 
 export const wikiBacklinks = async (
@@ -30,10 +33,16 @@ export const wikiBacklinks = async (
     .limit(1);
   if (!target) return [];
 
-  await assertCanReadWikiScope(ctx, {
-    tenantId: target.tenant_id,
-    userId: target.owner_id,
-  });
+  // Tenant-scoped target (owner NULL, graph materializer) → any member of
+  // the tenant may read. User-scoped target keeps the owner-or-admin rule.
+  if (target.owner_id === null) {
+    await assertCanReadWikiTenantScope(ctx, { tenantId: target.tenant_id });
+  } else {
+    await assertCanReadWikiScope(ctx, {
+      tenantId: target.tenant_id,
+      userId: target.owner_id,
+    });
+  }
 
   // Two-step dedup: first pull the set of distinct source page ids
   // pointing at the target (so a parent/child pair with both a

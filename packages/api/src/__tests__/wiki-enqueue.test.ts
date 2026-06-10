@@ -16,13 +16,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Hoisted mock state so vi.mock factories can see the handles ─────────────
 
-const { mockTenantRows, mockEnqueue, mockInvoke } = vi.hoisted(() => {
-  return {
-    mockTenantRows: vi.fn<() => Promise<Array<{ enabled: boolean }>>>(),
-    mockEnqueue: vi.fn(),
-    mockInvoke: vi.fn(),
-  };
-});
+const { mockTenantRows, mockEnqueue, mockGraphEnqueue, mockInvoke } =
+  vi.hoisted(() => {
+    return {
+      mockTenantRows: vi.fn<() => Promise<Array<{ enabled: boolean }>>>(),
+      mockEnqueue: vi.fn(),
+      mockGraphEnqueue: vi.fn(),
+      mockInvoke: vi.fn(),
+    };
+  });
 
 // Minimal drizzle query-builder stub — the chain `db.select({}).from(...).where(...).limit(n)`
 // resolves to whatever mockTenantRows returns.
@@ -53,8 +55,9 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
     (await importOriginal()) as typeof import("../lib/wiki/repository.js");
   return {
     ...actual,
-    // Only swap the DB-touching helper — keep the pure functions real.
+    // Only swap the DB-touching helpers — keep the pure functions real.
     enqueueCompileJob: mockEnqueue,
+    enqueueGraphCompileJob: mockGraphEnqueue,
   };
 });
 
@@ -67,7 +70,10 @@ vi.mock("@aws-sdk/client-lambda", () => ({
   InvokeCommand: vi.fn().mockImplementation((input: unknown) => ({ input })),
 }));
 
-import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
+import {
+  maybeEnqueueGraphWikiCompile,
+  maybeEnqueuePostTurnCompile,
+} from "../lib/wiki/enqueue.js";
 import {
   buildCompileDedupeKey,
   parseCompileDedupeBucket,
@@ -81,6 +87,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.STAGE;
   delete process.env.WIKI_COMPILE_FN;
+  delete process.env.WIKI_SOURCE;
 });
 
 // ─── Pure helpers (no mocks needed) ──────────────────────────────────────────
@@ -343,6 +350,78 @@ describe("maybeEnqueuePostTurnCompile", () => {
       ownerId: "a",
       adapterKind: "hindsight",
     });
+    expect(r.status).toBe("error");
+    expect(r.error).toBe("DB down");
+  });
+});
+
+// ─── maybeEnqueueGraphWikiCompile branches (plan 2026-06-09-004 U10) ─────────
+
+describe("maybeEnqueueGraphWikiCompile", () => {
+  it("no-ops unless WIKI_SOURCE is 'graph' (env read at call time)", async () => {
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+    expect(r.status).toBe("skipped_source_not_graph");
+    expect(mockTenantRows).not.toHaveBeenCalled();
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
+
+    process.env.WIKI_SOURCE = "planner";
+    const r2 = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+    expect(r2.status).toBe("skipped_source_not_graph");
+  });
+
+  it("returns skipped_missing_inputs when tenant absent", async () => {
+    process.env.WIKI_SOURCE = "graph";
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "" });
+    expect(r.status).toBe("skipped_missing_inputs");
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
+  });
+
+  it("honors the tenant wiki_compile_enabled kill switch", async () => {
+    process.env.WIKI_SOURCE = "graph";
+    mockTenantRows.mockResolvedValueOnce([{ enabled: false }]);
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+    expect(r.status).toBe("skipped_flag_off");
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
+  });
+
+  it("enqueues a tenant-keyed graph job and invokes wiki-compile", async () => {
+    process.env.WIKI_SOURCE = "graph";
+    process.env.STAGE = "dev";
+    mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
+    mockGraphEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: { id: "graph-job-1" },
+    });
+    mockInvoke.mockResolvedValueOnce({});
+
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+
+    expect(r).toEqual({ status: "enqueued", jobId: "graph-job-1" });
+    expect(mockGraphEnqueue).toHaveBeenCalledWith({
+      tenantId: "t",
+      trigger: "graph_materialize",
+    });
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("dedupes against an existing job in the bucket", async () => {
+    process.env.WIKI_SOURCE = "graph";
+    mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
+    mockGraphEnqueue.mockResolvedValueOnce({
+      inserted: false,
+      job: { id: "graph-job-existing" },
+    });
+
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+
+    expect(r).toEqual({ status: "deduped", jobId: "graph-job-existing" });
+    expect(mockInvoke).not.toHaveBeenCalled();
+  });
+
+  it("returns error (never throws) when the repository blows up", async () => {
+    process.env.WIKI_SOURCE = "graph";
+    mockTenantRows.mockRejectedValueOnce(new Error("DB down"));
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
     expect(r.status).toBe("error");
     expect(r.error).toBe("DB down");
   });

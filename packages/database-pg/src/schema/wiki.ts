@@ -14,19 +14,33 @@
  * wiki pages into these tables. Pages are rebuildable from canonical memory;
  * these rows are a derived store optimized for read.
  *
- * v1 scope rule (see .prds/compounding-memory-scoping.md):
- *   - Every compiled object is strictly owner-scoped.
- *   - `owner_id` is NOT NULL on every compiled-memory table.
+ * Scope rule (revised 2026-06 — plan 2026-06-09-004 U9, supersedes the
+ * strictly-owner-scoped v1 covenant from .prds/compounding-memory-scoping.md):
+ *   - TENANT-scoped pages exist: `owner_id IS NULL` on `wiki.pages` marks a
+ *     page materialized for the whole tenant (graph→wiki materializer).
+ *     Uniqueness for tenant pages is enforced by the partial unique index
+ *     `uq_pages_tenant_type_slug_tenant_scope` on (tenant_id, type, slug)
+ *     WHERE owner_id IS NULL — the four-column unique index treats NULLs as
+ *     distinct and would silently allow duplicate tenant pages without it.
+ *   - USER-scoped pages (`owner_id` set) remain owner-scoped until they are
+ *     retired by the U11 cutover archive pass. Until then both scopes
+ *     coexist; tenant-scope reads union null-owner pages with the caller's
+ *     own active pages.
+ *   - `wiki.compile_jobs.owner_id` is nullable for the same reason —
+ *     graph-mode compile jobs are tenant-keyed.
+ *   - Every other compiled-memory table (`unresolved_mentions`, `places`,
+ *     `compile_cursors`) stays strictly owner-scoped: the graph materializer
+ *     never writes them. Child tables (`page_sections`, `page_links`,
+ *     `page_aliases`, `section_sources`) key off `page_id` and inherit scope.
  *   - Type (`entity` | `topic` | `decision`) describes page *shape* (sections,
- *     semantics), NOT sharing. All three types belong to exactly one user.
- *   - No tenant-shared pages, no `owner_id IS NULL` escape hatch.
- *   - Team/company scope is deferred to a future explicit `scope_type` model.
+ *     semantics), NOT sharing.
  *
  * See .prds/compiled-memory-layer-engineering-prd.md for the architectural
- * anchor (its tenant-shared entity scope is overridden by the scoping doc).
- * See .prds/compounding-memory-v1-build-plan.md for the settled decisions
- * driving this schema (cursor storage, dedupe window, feature flag, search
- * impl, embedding-column-present-but-null in v1).
+ * anchor. See .prds/compounding-memory-v1-build-plan.md for the settled
+ * decisions driving this schema (cursor storage, dedupe window, feature flag,
+ * search impl, embedding-column-present-but-null in v1), and
+ * docs/plans/2026-06-09-004-feat-cognee-centric-memory-pipeline-plan.md for
+ * the tenant-scope relaxation.
  */
 
 import {
@@ -81,9 +95,9 @@ export const wikiPages = wiki.table(
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id)
       .notNull(),
-    owner_id: uuid("owner_id")
-      .references(() => users.id)
-      .notNull(), // v1: every page is user-scoped
+    // NULL = tenant-scoped page (graph→wiki materializer); non-null =
+    // user-scoped page (legacy planner pipeline, retired at U11 cutover).
+    owner_id: uuid("owner_id").references(() => users.id),
     type: text("type").notNull(), // 'entity' | 'topic' | 'decision' — shape, not scope
     entity_subtype: text("entity_subtype"),
     slug: text("slug").notNull(),
@@ -135,6 +149,12 @@ export const wikiPages = wiki.table(
       table.type,
       table.slug,
     ),
+    // Tenant-scope slug uniqueness. The four-column index above treats NULL
+    // owner_id values as distinct, so without this partial unique index two
+    // materializer runs could silently insert duplicate tenant pages.
+    uniqueIndex("uq_pages_tenant_type_slug_tenant_scope")
+      .on(table.tenant_id, table.type, table.slug)
+      .where(sql`${table.owner_id} IS NULL`),
     // Read-path access is always (tenant, owner) first.
     index("idx_pages_tenant_owner_type_status").on(
       table.tenant_id,
@@ -380,10 +400,13 @@ export const wikiCompileJobs = wiki.table(
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id)
       .notNull(),
-    owner_id: uuid("owner_id")
-      .references(() => users.id)
-      .notNull(), // v1: one compile job per (tenant, user) scope
-    // `${tenant}:${owner}:${floor(created_epoch_s/300)}` — collapses post-turn storms
+    // NULL = tenant-keyed graph-mode compile job; non-null = user-scoped
+    // planner compile job (one per (tenant, user) scope).
+    owner_id: uuid("owner_id").references(() => users.id),
+    // Planner jobs: `${tenant}:${owner}:${floor(created_epoch_s/300)}` —
+    // collapses post-turn storms. Graph-mode jobs use the four-part key
+    // `graph:obs:${tenant}:${bucket}` so `parseCompileDedupeBucket` never
+    // mistakes them for a planner continuation bucket.
     dedupe_key: text("dedupe_key").notNull().unique(),
     status: text("status").notNull().default("pending"), // 'pending'|'running'|'succeeded'|'failed'|'skipped'
     trigger: text("trigger").notNull(), // 'memory_retain' | 'bootstrap_import' | 'admin' | 'lint'

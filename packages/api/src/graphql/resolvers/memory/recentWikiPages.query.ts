@@ -1,10 +1,13 @@
 /**
- * recentWikiPages — newest compiled wiki pages for a given agent.
+ * recentWikiPages — newest compiled wiki pages readable by a given user.
  *
- * Agent-scoped surface for the mobile Memories tab's empty state so
- * users can see what's landing in their memory before they know what
- * to search for. Uses the same auth shape as mobileWikiSearch: caller
- * must own the user's tenant.
+ * Mobile Memories-tab feed (empty state) so users can see what's landing
+ * in their memory before they know what to search for. Uses the same auth
+ * shape as mobileWikiSearch: caller must own the user's tenant.
+ *
+ * Scope (plan 2026-06-09-004 U14): the transitional union — tenant-scoped
+ * pages (owner NULL, graph materializer) plus the user's own pages.
+ * Behavior for user pages is unchanged from the v1 owner-scope read.
  *
  * Ordered by last_compiled_at DESC (fall back to updated_at when the
  * page has never been compiled — new pages from the compile bootstrap
@@ -15,6 +18,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { wikiPages } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
+import { wikiReadScopeWhere } from "../../../lib/wiki/repository.js";
 import { toGraphQLPage } from "../wiki/mappers.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
@@ -39,7 +43,10 @@ export const recentWikiPages = async (
     .where(
       and(
         eq(wikiPages.tenant_id, tenantId),
-        eq(wikiPages.owner_id, userId as string),
+        wikiReadScopeWhere(wikiPages.owner_id, {
+          kind: "tenantUnion",
+          userId,
+        }),
         eq(wikiPages.status, "active"),
       ),
     )

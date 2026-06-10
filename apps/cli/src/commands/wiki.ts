@@ -33,8 +33,12 @@ export function registerWikiCommand(program: Command): void {
     .option("--agent <id>", "Agent ID, slug, or name. Bypasses the picker.")
     .option("--all", "Fan out to every non-system agent in the tenant.")
     .option(
+      "--tenant-scope",
+      "Graph mode: enqueue ONE tenant-level compile for the graph→wiki materializer (no per-agent fan-out). When the server's wiki source is graph this happens automatically.",
+    )
+    .option(
       "--model <id>",
-      "Bedrock model ID override for this run. Defaults to server BEDROCK_MODEL_ID.",
+      "Bedrock model ID override for this run. Defaults to server BEDROCK_MODEL_ID. Ignored for tenant-level graph compiles (deterministic, LLM-free).",
     )
     .option(
       "--watch",
@@ -52,6 +56,9 @@ Examples:
 
   # Fan-out across every agent in the tenant
   $ thinkwork wiki compile --tenant acme --all
+
+  # Graph mode: one tenant-level materializer compile
+  $ thinkwork wiki compile --tenant acme --tenant-scope
 
   # Spike a different Bedrock model for one run
   $ thinkwork wiki compile --tenant acme --agent agt-xyz \\
@@ -101,6 +108,10 @@ Examples:
 
   # Preview impact, including tenant Brain derived rows
   $ thinkwork wiki rebuild --tenant acme --agent agt-xyz --include-brain --dry-run
+
+Note: when the server's wiki source is graph, rebuild semantics change —
+a full rebuild is a Cognee graph full-rebuild + rematerialize (operator
+runbook), not a per-agent cursor reset.
 `,
     )
     .action(async (opts, cmd) => {

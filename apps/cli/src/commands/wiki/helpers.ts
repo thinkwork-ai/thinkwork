@@ -28,6 +28,9 @@ export interface WikiCliOptions {
   tenant?: string;
   agent?: string;
   all?: boolean;
+  /** Graph mode (plan 2026-06-09-004 U14): enqueue ONE tenant-level
+   * compile for the graph→wiki materializer instead of per-agent jobs. */
+  tenantScope?: boolean;
   model?: string;
   json?: boolean;
   watch?: boolean;

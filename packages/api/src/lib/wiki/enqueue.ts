@@ -17,7 +17,7 @@
 import { eq } from "drizzle-orm";
 import { tenants } from "@thinkwork/database-pg/schema";
 import { db } from "../db.js";
-import { enqueueCompileJob } from "./repository.js";
+import { enqueueCompileJob, enqueueGraphCompileJob } from "./repository.js";
 
 export interface PostTurnCompileArgs {
   tenantId: string;
@@ -68,6 +68,79 @@ export async function maybeEnqueuePostTurnCompile(
       tenantId: args.tenantId,
       ownerId: args.ownerId,
       trigger: "memory_retain",
+    });
+
+    if (!inserted) {
+      return { status: "deduped", jobId: job.id };
+    }
+
+    const invokeErr = await invokeWikiCompile(job.id).catch((err) => err);
+    if (invokeErr instanceof Error) {
+      return {
+        status: "enqueued_invoke_failed",
+        jobId: job.id,
+        error: invokeErr.message,
+      };
+    }
+
+    return { status: "enqueued", jobId: job.id };
+  } catch (err) {
+    return { status: "error", error: (err as Error)?.message ?? String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Graph-mode enqueue (plan 2026-06-09-004 U10). In graph mode the post-turn
+// memory-retain enqueue isn't the trigger — the natural trigger is a
+// successful observations ingest run (the mirror just changed). Called
+// best-effort from the END of the observations ingest worker's success path;
+// never throws, never fails the ingest run.
+// ---------------------------------------------------------------------------
+
+export interface GraphCompileEnqueueResult {
+  status:
+    | "skipped_source_not_graph"
+    | "skipped_missing_inputs"
+    | "skipped_tenant_not_found"
+    | "skipped_flag_off"
+    | "deduped"
+    | "enqueued"
+    | "enqueued_invoke_failed"
+    | "error";
+  jobId?: string;
+  error?: string;
+}
+
+/**
+ * Enqueue a tenant-keyed graph compile job (owner_id NULL) when
+ * WIKI_SOURCE='graph'. The env read happens inside the function (Lambda env
+ * + vitest env-timing rule — module-load capture locks in "" before
+ * beforeEach). Honors the same tenant-level `wiki_compile_enabled` kill
+ * switch as the planner enqueue.
+ */
+export async function maybeEnqueueGraphWikiCompile(args: {
+  tenantId: string;
+}): Promise<GraphCompileEnqueueResult> {
+  if (process.env.WIKI_SOURCE !== "graph") {
+    return { status: "skipped_source_not_graph" };
+  }
+  if (!args.tenantId) {
+    return { status: "skipped_missing_inputs" };
+  }
+
+  try {
+    const [tenantRow] = await db
+      .select({ enabled: tenants.wiki_compile_enabled })
+      .from(tenants)
+      .where(eq(tenants.id, args.tenantId))
+      .limit(1);
+
+    if (!tenantRow) return { status: "skipped_tenant_not_found" };
+    if (!tenantRow.enabled) return { status: "skipped_flag_off" };
+
+    const { inserted, job } = await enqueueGraphCompileJob({
+      tenantId: args.tenantId,
+      trigger: "graph_materialize",
     });
 
     if (!inserted) {

@@ -1,20 +1,24 @@
 /**
- * wikiPage — load one compiled page by (tenant, owner, type, slug) with its
+ * wikiPage — load one compiled page by (tenant, scope, type, slug) with its
  * sections and aliases. Sections come ordered by position; aliases are a
  * flat string array.
  *
- * Scope rule: caller must have read access to the (tenant, owner) pair.
+ * Scope rule (plan 2026-06-09-004 U14): serves the transitional union —
+ * tenant-scoped pages (owner_id NULL, readable by any tenant member) plus
+ * the requesting user's own pages. When a user page and a tenant page share
+ * a slug during the transition window, the user's own page wins (see
+ * `findReadablePageBySlug`).
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import {
-  wikiPages,
   wikiPageSections,
   wikiPageAliases,
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
-import { assertCanReadWikiScope } from "./auth.js";
+import { findReadablePageBySlug } from "../../../lib/wiki/repository.js";
+import { resolveWikiUnionReadScope } from "./auth.js";
 import { toGraphQLType, toGraphQLPage } from "./mappers.js";
 
 export const wikiPage = async (
@@ -28,23 +32,19 @@ export const wikiPage = async (
   },
   ctx: GraphQLContext,
 ) => {
-  const { tenantId, userId } = await assertCanReadWikiScope(ctx, args);
+  const { tenantId, scope } = await resolveWikiUnionReadScope(ctx, args);
 
   const lowerType = args.type.toLowerCase() as "entity" | "topic" | "decision";
 
-  const [page] = await db
-    .select()
-    .from(wikiPages)
-    .where(
-      and(
-        eq(wikiPages.tenant_id, args.tenantId),
-        eq(wikiPages.owner_id, userId),
-        eq(wikiPages.type, lowerType),
-        eq(wikiPages.slug, args.slug),
-        eq(wikiPages.status, "active"),
-      ),
-    )
-    .limit(1);
+  const page = await findReadablePageBySlug(
+    {
+      tenantId,
+      scope,
+      type: lowerType,
+      slug: args.slug,
+    },
+    db,
+  );
 
   if (!page) return null;
 

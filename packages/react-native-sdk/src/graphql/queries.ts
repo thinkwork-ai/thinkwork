@@ -286,7 +286,7 @@ export const DeleteMobileMemoryCaptureMutation = gql`
 export const WikiPageQuery = gql`
   query WikiPage(
     $tenantId: ID!
-    $userId: ID!
+    $userId: ID
     $type: WikiPageType!
     $slug: String!
   ) {
@@ -343,7 +343,7 @@ export const WikiPageQuery = gql`
 export const WikiPageSourceMemoryIdsQuery = gql`
   query WikiPageSourceMemoryIds(
     $tenantId: ID!
-    $userId: ID!
+    $userId: ID
     $type: WikiPageType!
     $slug: String!
     $limit: Int
@@ -358,7 +358,7 @@ export const WikiPageSourceMemoryIdsQuery = gql`
 export const WikiPageSectionChildrenQuery = gql`
   query WikiPageSectionChildren(
     $tenantId: ID!
-    $userId: ID!
+    $userId: ID
     $type: WikiPageType!
     $slug: String!
     $sectionSlug: String!
@@ -401,7 +401,7 @@ export const WikiConnectedPagesQuery = gql`
 `;
 
 export const WikiGraphQuery = gql`
-  query WikiGraph($tenantId: ID!, $userId: ID!) {
+  query WikiGraph($tenantId: ID!, $userId: ID) {
     wikiGraph(tenantId: $tenantId, userId: $userId) {
       nodes {
         id
@@ -421,7 +421,7 @@ export const WikiGraphQuery = gql`
 `;
 
 export const MobileMemorySearchQuery = gql`
-  query MobileMemorySearch($userId: ID!, $query: String!, $limit: Int) {
+  query MobileMemorySearch($userId: ID, $query: String!, $limit: Int) {
     mobileWikiSearch(userId: $userId, query: $query, limit: $limit) {
       score
       matchingMemoryIds
@@ -439,7 +439,7 @@ export const MobileMemorySearchQuery = gql`
 `;
 
 export const RecentWikiPagesQuery = gql`
-  query RecentWikiPages($userId: ID!, $limit: Int) {
+  query RecentWikiPages($userId: ID, $limit: Int) {
     recentWikiPages(userId: $userId, limit: $limit) {
       id
       type

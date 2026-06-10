@@ -2306,6 +2306,12 @@ export type Mutation = {
    * redeploy. The override takes effect only on the direct Event-invoke
    * path; if the invoke fails and a polling worker claims the job later, the
    * compile falls back to the env-default model.
+   *
+   * Graph mode (plan 2026-06-09-004 U14): when `tenantScope` is true — or
+   * the server's wiki source is `graph` — the per-user owner key is ignored
+   * and ONE tenant-keyed compile job (null `userId`) is enqueued for the
+   * graph→wiki materializer. `modelId` is meaningless on that path (the
+   * materializer is deterministic/LLM-free) and is not forwarded.
    */
   compileWikiNow: WikiCompileJob;
   createAgentProfile: AgentProfile;
@@ -2605,6 +2611,7 @@ export type MutationCompileWikiNowArgs = {
   modelId?: InputMaybe<Scalars["String"]["input"]>;
   ownerId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+  tenantScope?: InputMaybe<Scalars["Boolean"]["input"]>;
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
@@ -3818,8 +3825,9 @@ export type Query = {
    * Ranked wiki-page search for mobile. Runs a Postgres full-text query
    * (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
    * `search_tsv` generated column on `wiki_pages` (title || summary ||
-   * body_md), scoped to one (tenant, user) pair. Returns results in
-   * `ts_rank` DESC order, tie-broken by `last_compiled_at` DESC.
+   * body_md), scoped to tenant-shared pages (null owner) plus the
+   * requesting user's own pages. Returns results in `ts_rank` DESC order,
+   * tie-broken by `last_compiled_at` DESC.
    *
    * Previously routed through Hindsight semantic recall; on the compiled
    * wiki corpus FTS is near-instant and matches the query shape mobile
@@ -3840,10 +3848,11 @@ export type Query = {
   pinnedThreads: Array<PinnedThread>;
   queuedWakeups: Array<AgentWakeupRequest>;
   /**
-   * Newest compiled wiki pages for the given user, ordered by
-   * last_compiled_at DESC (falling back to updated_at when the page hasn't
-   * been recompiled yet). Intended as the default Memories-tab feed so
-   * the user sees fresh pages before they type a search query.
+   * Newest compiled wiki pages readable by the given user — tenant-shared
+   * pages (null owner) plus their own — ordered by last_compiled_at DESC
+   * (falling back to updated_at when the page hasn't been recompiled yet).
+   * Intended as the default Memories-tab feed so the user sees fresh pages
+   * before they type a search query.
    */
   recentWikiPages: Array<WikiPage>;
   recipe?: Maybe<Recipe>;
@@ -3923,7 +3932,8 @@ export type Query = {
   /**
    * Admin-only: list recent compile jobs for a tenant. When `userId` is
    * provided, restricts to that user's jobs; when null/absent, returns
-   * jobs across every user in the tenant. Ordered newest-first.
+   * jobs across every user in the tenant — including tenant-keyed
+   * graph-mode jobs (null `userId`). Ordered newest-first.
    *
    * Powers the `thinkwork wiki status` CLI command.
    */
@@ -3936,16 +3946,24 @@ export type Query = {
    */
   wikiConnectedPages: Array<WikiPage>;
   /**
-   * User-scoped force-graph: every active wiki page + every page-to-page
-   * link whose endpoints are both active in the same `(tenant, user)`
-   * scope. Links that reference archived pages are excluded. One round-trip.
+   * Force-graph over the readable scope: tenant-scoped pages plus the
+   * requesting user's own pages, with every page-to-page link whose
+   * endpoints are both active and readable. Links that reference archived
+   * pages are excluded. One round-trip. `userId` is optional and defaults
+   * to the caller.
    */
   wikiGraph: WikiGraph;
-  /** Read one compiled page by slug. `userId` is required. */
+  /**
+   * Read one compiled page by slug. Serves tenant-scoped pages (null owner)
+   * plus the requesting user's own pages; `userId` is optional and defaults
+   * to the caller. When a user page and a tenant page share a slug during
+   * the transition window, the user's own page wins.
+   */
   wikiPage?: Maybe<WikiPage>;
   /**
-   * Postgres full-text search over compiled pages in a single (tenant, user)
-   * scope. Also matches exact aliases. Ranked by ts_rank + alias-hit boost.
+   * Postgres full-text search over compiled pages — tenant-scoped pages plus
+   * the requesting user's own pages. Also matches exact aliases. Ranked by
+   * ts_rank + alias-hit boost.
    */
   wikiSearch: Array<WikiSearchResult>;
   workflowCatalog: Array<WorkflowCatalogItem>;
@@ -6799,12 +6817,16 @@ export type WikiCompileJob = {
   id: Scalars["ID"]["output"];
   metrics?: Maybe<Scalars["AWSJSON"]["output"]>;
   /** @deprecated Use userId */
-  ownerId: Scalars["ID"]["output"];
+  ownerId?: Maybe<Scalars["ID"]["output"]>;
   startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   status: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   trigger: Scalars["String"]["output"];
-  userId: Scalars["ID"]["output"];
+  /**
+   * Owning user. Null for tenant-keyed graph-mode compile jobs (the graph
+   * materializer runs one compile per tenant, not per user).
+   */
+  userId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type WikiGraph = {
@@ -6886,7 +6908,7 @@ export type WikiPage = {
   id: Scalars["ID"]["output"];
   lastCompiledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   /** @deprecated Use userId */
-  ownerId: Scalars["ID"]["output"];
+  ownerId?: Maybe<Scalars["ID"]["output"]>;
   /**
    * Parent hub when this page was promoted from a section on another page.
    * Null for top-level pages. Reads `wiki_pages.parent_page_id`.
@@ -6925,7 +6947,11 @@ export type WikiPage = {
   title: Scalars["String"]["output"];
   type: WikiPageType;
   updatedAt: Scalars["AWSDateTime"]["output"];
-  userId: Scalars["ID"]["output"];
+  /**
+   * Owning user. Null for tenant-scoped pages produced by the graph
+   * materializer — those are readable by any member of the tenant.
+   */
+  userId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type WikiPageSectionChildrenArgs = {
@@ -6949,8 +6975,12 @@ export type WikiPageSection = {
 /**
  * Compounding Memory (wiki) read path.
  *
- * v1 is strictly user-scoped: every read requires both `tenantId` and
- * `userId`. See .prds/compounding-memory-scoping.md.
+ * Scope rule (plan 2026-06-09-004 U9/U14): pages are either USER-scoped
+ * (`userId`/`ownerId` set — the v1 planner output) or TENANT-scoped
+ * (`userId`/`ownerId` null — the graph materializer output, readable by any
+ * member of the tenant). Reads serve the transitional union: tenant pages
+ * plus the requesting user's own pages, until the U11 archive pass retires
+ * the user-scoped corpus.
  */
 export enum WikiPageType {
   Decision = "DECISION",
@@ -9359,9 +9389,10 @@ export type CliAllTenantAgentsForWikiQuery = {
 
 export type CliCompileWikiNowMutationVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
-  ownerId: Scalars["ID"]["input"];
+  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
   modelId?: InputMaybe<Scalars["String"]["input"]>;
   forceNew?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantScope?: InputMaybe<Scalars["Boolean"]["input"]>;
 }>;
 
 export type CliCompileWikiNowMutation = {
@@ -9370,7 +9401,7 @@ export type CliCompileWikiNowMutation = {
     __typename?: "WikiCompileJob";
     id: string;
     tenantId: string;
-    ownerId: string;
+    ownerId?: string | null;
     status: string;
     trigger: string;
     dedupeKey: string;
@@ -9413,7 +9444,7 @@ export type CliWikiCompileJobsQuery = {
     __typename?: "WikiCompileJob";
     id: string;
     tenantId: string;
-    ownerId: string;
+    ownerId?: string | null;
     status: string;
     trigger: string;
     dedupeKey: string;
@@ -19130,10 +19161,7 @@ export const CliCompileWikiNowDocument = {
             kind: "Variable",
             name: { kind: "Name", value: "ownerId" },
           },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
         },
         {
           kind: "VariableDefinition",
@@ -19148,6 +19176,14 @@ export const CliCompileWikiNowDocument = {
           variable: {
             kind: "Variable",
             name: { kind: "Name", value: "forceNew" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantScope" },
           },
           type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
         },
@@ -19189,6 +19225,14 @@ export const CliCompileWikiNowDocument = {
                 value: {
                   kind: "Variable",
                   name: { kind: "Name", value: "forceNew" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantScope" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantScope" },
                 },
               },
             ],

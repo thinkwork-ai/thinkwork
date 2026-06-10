@@ -22,6 +22,7 @@ const {
   mockResolveCaller,
   mockResolveCallerUserId,
   mockEnqueue,
+  mockGraphEnqueue,
   mockLambdaSend,
   mockListCompileJobs,
   InvokeCommandMock,
@@ -32,6 +33,7 @@ const {
   const mockResolveCaller = vi.fn();
   const mockResolveCallerUserId = vi.fn();
   const mockEnqueue = vi.fn();
+  const mockGraphEnqueue = vi.fn();
   const mockListCompileJobs = vi.fn();
   const mockLambdaSend = vi.fn().mockResolvedValue({});
   class InvokeCommandMock {
@@ -69,6 +71,7 @@ const {
     mockResolveCaller,
     mockResolveCallerUserId,
     mockEnqueue,
+    mockGraphEnqueue,
     mockLambdaSend,
     mockListCompileJobs,
     InvokeCommandMock,
@@ -110,6 +113,7 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
   return {
     ...actual,
     enqueueCompileJob: mockEnqueue,
+    enqueueGraphCompileJob: mockGraphEnqueue,
     listCompileJobsForScope: mockListCompileJobs,
   };
 });
@@ -155,6 +159,7 @@ beforeEach(() => {
   mockLambdaSend.mockResolvedValue({});
   delete process.env.WIKI_COMPILE_FN;
   delete process.env.STAGE;
+  delete process.env.WIKI_SOURCE;
 });
 
 function decodePayload(cmd: unknown): { jobId: string; modelId?: string } {
@@ -427,6 +432,148 @@ describe("compileWikiNow", () => {
     );
     expect(out.id).toBe("job-6");
     expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+});
+
+// ─── compileWikiNow — tenant scope / graph routing (plan 2026-06-09-004 U14) ─
+
+describe("compileWikiNow tenantScope", () => {
+  function makeTenantJobRow(id: string) {
+    return {
+      id,
+      tenant_id: "t1",
+      owner_id: null,
+      dedupe_key: "graph:obs:t1:1",
+      status: "pending",
+      trigger: "admin",
+      attempt: 0,
+      claimed_at: null,
+      started_at: null,
+      finished_at: null,
+      error: null,
+      metrics: null,
+      created_at: new Date("2026-06-09T00:00:00Z"),
+    };
+  }
+
+  it("enqueues ONE tenant-keyed graph job and returns null userId/ownerId", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
+    mockGraphEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeTenantJobRow("tjob-1"),
+    });
+    const out = await compileWikiNow(
+      {},
+      { tenantId: "t1", tenantScope: true },
+      makeCtx({ authType: "apikey" }),
+    );
+    // Null owner round-trips without null-propagation — this is the
+    // client-visible "server compiled tenant-level" signal.
+    expect(out.id).toBe("tjob-1");
+    expect(out.userId).toBeNull();
+    expect(out.ownerId).toBeNull();
+    expect(mockGraphEnqueue).toHaveBeenCalledWith({
+      tenantId: "t1",
+      trigger: "admin",
+      dedupeDiscriminator: undefined,
+    });
+    expect(mockEnqueue).not.toHaveBeenCalled();
+    await waitForLambdaSend();
+    // modelId never forwards on the graph path (deterministic compile).
+    const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
+    expect(payload).toEqual({ jobId: "tjob-1" });
+  });
+
+  it("ignores modelId and ownerId on the tenant-scope path", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
+    mockGraphEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeTenantJobRow("tjob-2"),
+    });
+    await compileWikiNow(
+      {},
+      {
+        tenantId: "t1",
+        ownerId: "a1",
+        modelId: "anthropic.claude-sonnet-4-6-v1:0",
+        tenantScope: true,
+      },
+      makeCtx({ authType: "apikey" }),
+    );
+    await waitForLambdaSend();
+    const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
+    expect(payload).toEqual({ jobId: "tjob-2" });
+  });
+
+  it("auto-routes EVERY compile tenant-level when WIKI_SOURCE=graph", async () => {
+    process.env.WIKI_SOURCE = "graph";
+    mockGraphEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeTenantJobRow("tjob-3"),
+    });
+    // Old client shape: per-owner args, no tenantScope.
+    const out = await compileWikiNow(
+      {},
+      { tenantId: "t1", ownerId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    expect(out.ownerId).toBeNull();
+    expect(mockGraphEnqueue).toHaveBeenCalledTimes(1);
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it("keeps the per-owner planner path byte-identical when WIKI_SOURCE is unset", async () => {
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: { ...makeTenantJobRow("job-7"), owner_id: "a1" },
+    });
+    const out = await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    expect(out.id).toBe("job-7");
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
+  });
+
+  it("forwards forceNew as a dedupe discriminator", async () => {
+    mockGraphEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeTenantJobRow("tjob-4"),
+    });
+    await compileWikiNow(
+      {},
+      { tenantId: "t1", tenantScope: true, forceNew: true },
+      makeCtx({ authType: "apikey" }),
+    );
+    expect(mockGraphEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dedupeDiscriminator: expect.stringMatching(/^rebuild-\d+$/),
+      }),
+    );
+  });
+
+  it("refuses cognito (end-user) callers", async () => {
+    await expect(
+      compileWikiNow(
+        {},
+        { tenantId: "t1", tenantScope: true },
+        makeCtx({ authType: "cognito" }),
+      ),
+    ).rejects.toThrow(/Admin-only/);
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
+  });
+
+  it("refuses cross-tenant service callers", async () => {
+    await expect(
+      compileWikiNow(
+        {},
+        { tenantId: "t-other", tenantScope: true },
+        makeCtx({ authType: "apikey", tenantId: "t1" }),
+      ),
+    ).rejects.toThrow(/tenant mismatch/);
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
   });
 });
 
