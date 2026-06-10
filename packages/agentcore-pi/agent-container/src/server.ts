@@ -2085,6 +2085,7 @@ export async function handleInvocation(
     gitSha: env.gitSha,
     identity,
     parentHistory,
+    contextPreamble: attachmentPreamble || undefined,
     runLoop,
     emitActivity: activityEmitter.emit,
   });

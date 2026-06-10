@@ -227,6 +227,24 @@ describe("agent profile adapter", () => {
     );
   });
 
+  it("drops optional ephemeral file_read when no turn attachment injected it", () => {
+    const request = compileAgentProfileRunRequest({
+      profile: researchProfile({
+        toolPolicy: {
+          builtInTools: ["execute_code", "file_read"],
+        },
+      }),
+      task: "Analyze this spreadsheet.",
+      parentThreadTurnId: "turn-parent",
+      parentModelId: "anthropic/claude-sonnet-4-5",
+      availableToolNames: ["execute_code"],
+      availableSkillNames: [],
+      mcpRegistry: registryWithTwentyTools(),
+    });
+
+    expect(request.tools).toEqual(["execute_code"]);
+  });
+
   it("compiles MCP server grants into operation allowlists", () => {
     const request = compile();
 

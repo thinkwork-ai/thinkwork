@@ -16,7 +16,7 @@ import { toGraphqlSpace } from "../spaces/shared.js";
 import { ensureBuiltInAgentProfiles } from "./shared.js";
 
 const DEFAULT_AGENT_PROFILE_BUILTIN_TOOLS = Array.from(
-  new Set([...BUILTIN_TOOL_SLUGS, "execute_code", "bash"]),
+  new Set([...BUILTIN_TOOL_SLUGS, "execute_code", "bash", "file_read"]),
 );
 
 export async function agentProfileEditorCatalog(

@@ -56,37 +56,113 @@ export function toProfileAssignmentGraphql(row: Record<string, unknown>) {
 
 export async function ensureBuiltInAgentProfiles(tenantId: string) {
   const rows = await db
-    .select({ builtInKey: agentProfiles.built_in_key })
+    .select({
+      id: agentProfiles.id,
+      builtInKey: agentProfiles.built_in_key,
+      toolPolicy: agentProfiles.tool_policy,
+    })
     .from(agentProfiles)
     .where(eq(agentProfiles.tenant_id, tenantId));
-  const existing = new Set(
-    rows
-      .map((row) => row.builtInKey)
-      .filter((key): key is string => typeof key === "string"),
+  const existingRows = rows.filter((row) => typeof row.builtInKey === "string");
+  const existing = new Map(
+    existingRows.map((row) => [row.builtInKey, row] as const),
   );
   const missing = BUILT_IN_PROFILE_SEEDS.filter(
     (seed) => !existing.has(seed.built_in_key),
   );
-  if (missing.length === 0) return;
+  const now = new Date();
 
-  const modelId = await resolveDefaultProfileModelId(tenantId);
-  await db.insert(agentProfiles).values(
-    missing.map((seed) => ({
-      tenant_id: tenantId,
-      slug: seed.slug,
-      name: seed.name,
-      description: seed.description,
-      routing_guidance: seed.routing_guidance,
-      instructions: seed.instructions,
-      model_id: modelId,
-      enabled: true,
-      built_in_key: seed.built_in_key,
-      tool_policy: seed.tool_policy,
-      skill_policy: seed.skill_policy,
-      execution_controls: seed.execution_controls,
-      updated_at: new Date(),
-    })),
+  if (missing.length > 0) {
+    const modelId = await resolveDefaultProfileModelId(tenantId);
+    await db.insert(agentProfiles).values(
+      missing.map((seed) => ({
+        tenant_id: tenantId,
+        slug: seed.slug,
+        name: seed.name,
+        description: seed.description,
+        routing_guidance: seed.routing_guidance,
+        instructions: seed.instructions,
+        model_id: modelId,
+        enabled: true,
+        built_in_key: seed.built_in_key,
+        tool_policy: seed.tool_policy,
+        skill_policy: seed.skill_policy,
+        execution_controls: seed.execution_controls,
+        updated_at: now,
+      })),
+    );
+  }
+
+  await syncBuiltInAgentProfileTools({
+    tenantId,
+    rows: existingRows,
+    now,
+  });
+}
+
+async function syncBuiltInAgentProfileTools(input: {
+  tenantId: string;
+  rows: Array<{
+    id: string;
+    builtInKey: string | null;
+    toolPolicy: Record<string, unknown>;
+  }>;
+  now: Date;
+}) {
+  const seedByKey = new Map(
+    BUILT_IN_PROFILE_SEEDS.map((seed) => [seed.built_in_key, seed] as const),
   );
+
+  for (const row of input.rows) {
+    if (typeof row.id !== "string") continue;
+    if (typeof row.builtInKey !== "string") continue;
+    const seed = seedByKey.get(row.builtInKey as BuiltInProfileSeedKey);
+    if (!seed) continue;
+    const nextPolicy = mergeBuiltInToolPolicy(row.toolPolicy, seed.tool_policy);
+    if (nextPolicy === row.toolPolicy) continue;
+
+    await db
+      .update(agentProfiles)
+      .set({ tool_policy: nextPolicy, updated_at: input.now })
+      .where(
+        and(
+          eq(agentProfiles.tenant_id, input.tenantId),
+          eq(agentProfiles.id, row.id),
+        ),
+      );
+  }
+}
+
+type BuiltInProfileSeedKey =
+  (typeof BUILT_IN_PROFILE_SEEDS)[number]["built_in_key"];
+
+function mergeBuiltInToolPolicy(
+  currentValue: unknown,
+  seedValue: Record<string, unknown>,
+): Record<string, unknown> {
+  const current =
+    currentValue &&
+    typeof currentValue === "object" &&
+    !Array.isArray(currentValue)
+      ? (currentValue as Record<string, unknown>)
+      : {};
+  const seedTools = stringArray(
+    (seedValue as { builtInTools?: unknown }).builtInTools,
+  );
+  if (seedTools.length === 0) return current;
+
+  const currentTools = stringArray(current.builtInTools);
+  const mergedTools = [...new Set([...currentTools, ...seedTools])];
+  if (mergedTools.length === currentTools.length) return current;
+  return { ...current, builtInTools: mergedTools };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.flatMap((item) =>
+        typeof item === "string" && item.trim() ? [item.trim()] : [],
+      )
+    : [];
 }
 
 async function resolveDefaultProfileModelId(tenantId: string): Promise<string> {
