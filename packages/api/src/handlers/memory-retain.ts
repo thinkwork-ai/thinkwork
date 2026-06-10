@@ -19,7 +19,6 @@ import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, messages } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
-import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
 
 type RetainMessage = {
   role?: string;
@@ -192,22 +191,9 @@ export async function handler(
       );
     }
 
-    const compileOutcome = await maybeEnqueuePostTurnCompile({
-      tenantId,
-      ownerId: userId,
-      adapterKind: adapter.kind,
-    });
-    if (
-      compileOutcome.status === "enqueued" ||
-      compileOutcome.status === "enqueued_invoke_failed" ||
-      compileOutcome.status === "error"
-    ) {
-      console.log(
-        `[memory-retain] wiki-compile ${compileOutcome.status}` +
-          (compileOutcome.jobId ? ` jobId=${compileOutcome.jobId}` : "") +
-          (compileOutcome.error ? ` error=${compileOutcome.error}` : ""),
-      );
-    }
+    // No post-turn wiki-compile enqueue: retired at the U11 cutover (plan
+    // 2026-06-09-004). The wiki compiles from the knowledge-graph mirror
+    // after each observations ingest run, not per turn.
 
     return { ok: true, engine: config.engine };
   } catch (err) {

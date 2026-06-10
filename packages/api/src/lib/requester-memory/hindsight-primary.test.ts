@@ -28,24 +28,19 @@ describe("requester thread digest Hindsight retain", () => {
     );
   });
 
-  it("upserts the processed digest and enqueues wiki compile", async () => {
+  it("upserts the processed digest (no post-digest wiki-compile enqueue — U11)", async () => {
     const upsertMarkdownMemoryDocument = vi.fn().mockResolvedValue(undefined);
-    const enqueueCompile = vi
-      .fn()
-      .mockResolvedValue({ status: "enqueued", jobId: "compile-1" });
 
     const result = await retainRequesterThreadMemoryDigest(baseInput, {
       adapter: {
         kind: "hindsight",
         upsertMarkdownMemoryDocument,
       },
-      enqueueCompile,
     });
 
     expect(result).toEqual({
       status: "upserted",
       documentId: "requester_thread_digest:user-1:thread-1",
-      compileEnqueue: { status: "enqueued", jobId: "compile-1" },
     });
     expect(upsertMarkdownMemoryDocument).toHaveBeenCalledWith({
       tenantId: "tenant-1",
@@ -65,11 +60,6 @@ describe("requester thread digest Hindsight retain", () => {
         sourceContext: REQUESTER_THREAD_DIGEST_CONTEXT,
       },
     });
-    expect(enqueueCompile).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      ownerId: "user-1",
-      adapterKind: "hindsight",
-    });
   });
 
   it("reports adapter failure without throwing", async () => {
@@ -80,7 +70,6 @@ describe("requester thread digest Hindsight retain", () => {
           .fn()
           .mockRejectedValue(new Error("hindsight down")),
       },
-      enqueueCompile: vi.fn(),
     });
 
     expect(result).toEqual({

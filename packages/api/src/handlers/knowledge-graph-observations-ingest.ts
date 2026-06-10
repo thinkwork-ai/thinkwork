@@ -35,6 +35,7 @@ import {
   createKnowledgeGraphObservationsIngestRun,
   reapStaleObservationIngestRuns,
 } from "../lib/knowledge-graph/runs.js";
+import { resolveObservationsWorkerFunctionName } from "../lib/knowledge-graph/invoke-worker.js";
 import { applySourceDeclaredFallback } from "../lib/knowledge-graph/source-fallback.js";
 import { maybeEnqueueGraphWikiCompile } from "../lib/wiki/enqueue.js";
 
@@ -63,6 +64,13 @@ interface KnowledgeGraphObservationsIngestDeps {
     CogneeClient,
     "ingestDocument" | "waitForDatasetIndexing" | "fetchDatasetGraph"
   >;
+  /** Fire-and-forget self re-invoke used to drain a truncated backlog.
+   * Injectable for tests; the default issues an async Event invoke of this
+   * same worker with the tenantId. */
+  selfInvoke?: (args: {
+    tenantId: string;
+    trigger: "manual" | "scheduled";
+  }) => Promise<void>;
 }
 
 const DEFAULT_SHRINK_GUARD_RATIO = 0.5;
@@ -73,6 +81,53 @@ function shrinkGuardRatio(): number {
   return Number.isFinite(parsed) && parsed > 0 && parsed <= 1
     ? parsed
     : DEFAULT_SHRINK_GUARD_RATIO;
+}
+
+/**
+ * Per-run candidate cap. A 500-candidate backlog times out a 480 s Lambda
+ * (classifier batches dominate); 100 keeps one run comfortably inside the
+ * budget and the truncated→self-invoke chain drains the rest. Env read
+ * inside the function (Lambda env + vitest env-timing rule).
+ */
+const DEFAULT_MAX_CANDIDATES_PER_RUN = 100;
+
+function maxCandidatesPerRun(): number {
+  const raw = process.env.KG_OBS_MAX_CANDIDATES_PER_RUN;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_CANDIDATES_PER_RUN;
+}
+
+/**
+ * Default self-invoke: async (Event) re-invoke of this worker for the same
+ * tenant so a truncated backlog drains across successive runs instead of
+ * waiting for the 30-minute sweep. Event (not RequestResponse) is correct
+ * here — this is a worker-to-itself continuation, not a user-initiated
+ * create/update. Errors are the caller's to swallow (best-effort).
+ */
+async function selfInvokeObservationsIngest(args: {
+  tenantId: string;
+  trigger: "manual" | "scheduled";
+}): Promise<void> {
+  const functionName = resolveObservationsWorkerFunctionName();
+  if (!functionName) {
+    throw new Error(
+      "observations ingest worker function name is not configured (STAGE or KNOWLEDGE_GRAPH_OBSERVATIONS_INGEST_FUNCTION_NAME)",
+    );
+  }
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
+  const lambda = new LambdaClient({});
+  await lambda.send(
+    new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: "Event",
+      Payload: new TextEncoder().encode(
+        JSON.stringify({ tenantId: args.tenantId, trigger: args.trigger }),
+      ),
+    }),
+  );
 }
 
 export async function handler(
@@ -202,6 +257,7 @@ async function processTenantObservationsIngest(
       tenantId: run.tenant_id,
       sourceRef: run.source_ref,
       sourceLabel: run.source_label ?? "Hindsight observations",
+      maxCandidates: maxCandidatesPerRun(),
     });
 
     const auditMetrics = {
@@ -331,10 +387,10 @@ async function processTenantObservationsIngest(
         upsertObservationCursors(tx, run.tenant_id, source.nextCursors),
     });
 
-    // The mirror just changed — in graph mode this is the wiki-compile
-    // trigger (plan 2026-06-09-004 U10). Best-effort fire-and-forget: the
-    // helper no-ops unless WIKI_SOURCE='graph' (env read inside the call)
-    // and never throws, so a wiki enqueue failure can't fail the ingest run.
+    // The mirror just changed — this is THE wiki-compile trigger
+    // (plan 2026-06-09-004 U10/U11). Best-effort fire-and-forget: the
+    // helper never throws, so a wiki enqueue failure can't fail the
+    // ingest run.
     const wikiEnqueue = await maybeEnqueueGraphWikiCompile({
       tenantId: run.tenant_id,
     });
@@ -352,6 +408,33 @@ async function processTenantObservationsIngest(
       );
     }
 
+    // Backlog drain: when this run hit the per-run candidate cap, more
+    // observations are already waiting — re-invoke ourselves (fire-and-
+    // forget) so the backlog drains in successive runs instead of waiting
+    // for the 30-minute sweep. Loop guard: only chain when this run made
+    // forward progress (promoted something or advanced cursors); a run
+    // that promoted nothing AND moved no cursor would re-read the same
+    // candidates forever.
+    const madeProgress =
+      source.gate.promoted.length > 0 || source.nextCursors.size > 0;
+    let selfInvoked = false;
+    if (source.truncated && madeProgress) {
+      const selfInvoke = deps.selfInvoke ?? selfInvokeObservationsIngest;
+      try {
+        await selfInvoke({ tenantId: args.tenantId, trigger: args.trigger });
+        selfInvoked = true;
+      } catch (invokeErr) {
+        // Best-effort: the scheduled sweep remains the backstop.
+        console.warn(
+          "[knowledge-graph-observations-ingest] backlog self-invoke failed",
+          {
+            tenantId: args.tenantId,
+            error: (invokeErr as Error)?.message ?? String(invokeErr),
+          },
+        );
+      }
+    }
+
     return {
       ok: true,
       runId: run.id,
@@ -365,6 +448,7 @@ async function processTenantObservationsIngest(
         ingestMode: ingest.mode,
         cogneePipelineRunId: ingest.pipelineRunId,
         cogneeIndexStatus: indexing.status,
+        selfInvoked,
       },
     };
   } catch (err) {

@@ -784,8 +784,6 @@ module "api" {
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   wiki_compile_model_id                         = var.wiki_compile_model_id
   company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
-  wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
-  wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
   enable_workspace_orchestration                = var.enable_workspace_orchestration
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled

@@ -3,14 +3,15 @@
  * out to every agent in a tenant, or (graph mode) enqueue ONE tenant-level
  * compile for the graph→wiki materializer.
  *
- * Graph-mode re-semantics (plan 2026-06-09-004 U14): when the server's
- * wiki source is `graph`, per-agent fan-out is meaningless — the
- * materializer compiles the whole tenant in one pass. Two paths get there:
+ * Graph re-semantics (plan 2026-06-09-004 U14/U11): the server wiki source
+ * is graph-only since the U11 cutover, so per-agent fan-out is meaningless —
+ * the materializer compiles the whole tenant in one pass. Two paths get
+ * there:
  *   - `--tenant-scope` requests the tenant compile explicitly; or
- *   - detection from the response: the server auto-routes compileWikiNow
- *     to a tenant-keyed job when WIKI_SOURCE=graph, and a null `ownerId`
- *     on the returned job is the signal — the CLI stops fan-out after the
- *     first enqueue and reports the single tenant job.
+ *   - detection from the response: the server tenant-routes EVERY
+ *     compileWikiNow unconditionally, and a null `ownerId` on the returned
+ *     job is the signal — the CLI stops fan-out after the first enqueue and
+ *     reports the single tenant job.
  *
  * Exit codes:
  *   0  every enqueue succeeded
@@ -99,9 +100,9 @@ export async function runWikiCompile(opts: WikiCliOptions): Promise<void> {
       });
       const job = data.compileWikiNow;
       if (job.ownerId == null) {
-        // Null owner = the server auto-routed to a tenant-keyed graph
-        // compile (WIKI_SOURCE=graph). Per-agent fan-out is meaningless in
-        // that mode — one tenant job covers everything; stop here.
+        // Null owner = the server tenant-routed to a tenant-keyed graph
+        // compile (unconditional since the U11 cutover). Per-agent fan-out
+        // is meaningless — one tenant job covers everything; stop here.
         if (spinner) {
           spinner.succeed(
             `tenant-level compile  →  job=${shortJobId(job.id)} (${job.status})`,
@@ -109,8 +110,8 @@ export async function runWikiCompile(opts: WikiCliOptions): Promise<void> {
         }
         if (!isJsonMode()) {
           printWarning(
-            "Server wiki source is graph — compile runs tenant-level. " +
-              "Per-agent fan-out skipped; one tenant job covers every agent.",
+            "Compiles run tenant-level (graph wiki). Per-agent fan-out " +
+              "skipped; one tenant job covers every agent.",
           );
         }
         await reportTenantJob(ctx, opts, {
