@@ -186,6 +186,7 @@ export interface TaskThreadTurn {
   model?: string | null;
   usageJson?: unknown;
   resultJson?: unknown;
+  totalCost?: number | null;
   error?: string | null;
   errorCode?: string | null;
   systemPrompt?: string | null;
@@ -1629,6 +1630,10 @@ function ThreadTurnActivity({
   // turn.status, never from "assistant message present". skipped → null.
   const durationMs = running ? elapsedMs : turnDurationMs(turn);
   const header = formatTurnHeader(status, running, durationMs);
+  const costLabel =
+    header && !running && turn.totalCost != null && turn.totalCost > 0
+      ? formatUsd(turn.totalCost)
+      : null;
   const shouldRender =
     header !== null &&
     (RENDERED_TURN_STATUSES.has(status) ||
@@ -1645,6 +1650,7 @@ function ThreadTurnActivity({
   return (
     <ThinkingRow
       title={header}
+      costLabel={costLabel}
       running={running}
       elapsedLabel={elapsedLabel}
       defaultOpen={shouldDefaultExpand(status)}
@@ -3020,6 +3026,7 @@ function ShimmerText({ text }: { text: string }) {
 
 function ThinkingRow({
   title,
+  costLabel,
   running = false,
   elapsedLabel,
   defaultOpen = false,
@@ -3028,6 +3035,7 @@ function ThinkingRow({
   children,
 }: {
   title: string;
+  costLabel?: string | null;
   /** Render the header in shimmer style and announce it via a live region. */
   running?: boolean;
   /** Live elapsed-time string shown next to a running header (aria-hidden). */
@@ -3052,7 +3060,7 @@ function ThinkingRow({
       aria-label={ariaLabel}
     >
       <ReasoningTrigger
-        className="gap-2 text-sm"
+        className="group gap-2 text-sm"
         icon={null}
         getThinkingMessage={() => (
           <span
@@ -3068,6 +3076,12 @@ function ThinkingRow({
             ) : (
               <span>{title}</span>
             )}
+            {!running && costLabel ? (
+              <span className="relative top-px inline-flex items-center gap-1 text-[13px] leading-none text-muted-foreground transition-colors group-hover:text-foreground">
+                <span aria-hidden="true">·</span>
+                <span>{costLabel}</span>
+              </span>
+            ) : null}
             {running && elapsedLabel ? (
               <span
                 aria-hidden="true"

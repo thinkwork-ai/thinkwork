@@ -15,6 +15,7 @@ import {
   MyApprovedModelCatalogQuery,
   RefreshThreadProgressMutation,
   ReviewGoalMutation,
+  SettingsActivityThreadTurnsQuery,
   ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
   ThreadProgressMarkdownQuery,
@@ -109,6 +110,7 @@ const reexecuteLinkedTasksQuery = vi.fn();
 const reexecuteProgressMarkdownQuery = vi.fn();
 const reexecuteGoalFilesQuery = vi.fn();
 const reexecuteTasksQuery = vi.fn();
+const reexecuteThreadTurnsQuery = vi.fn();
 const sendMessage = vi.fn();
 const updateThreadMock = vi.fn();
 const reviewGoalMock = vi.fn();
@@ -123,6 +125,7 @@ let linkedTasksData: unknown;
 let progressMarkdownData: unknown;
 let goalFilesData: unknown;
 let approvedModelsData: unknown;
+let threadTurnsData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
 beforeEach(() => {
@@ -135,6 +138,7 @@ beforeEach(() => {
   reexecuteProgressMarkdownQuery.mockReset();
   reexecuteGoalFilesQuery.mockReset();
   reexecuteTasksQuery.mockReset();
+  reexecuteThreadTurnsQuery.mockReset();
   sendMessage.mockReset();
   updateThreadMock.mockReset();
   reviewGoalMock.mockReset();
@@ -184,6 +188,7 @@ beforeEach(() => {
   progressMarkdownData = { threadProgressMarkdown: null };
   goalFilesData = { threadGoalFiles: null };
   approvedModelsData = undefined;
+  threadTurnsData = { threadTurns: [] };
 
   sendMessage.mockResolvedValue({});
   updateThreadMock.mockResolvedValue({});
@@ -246,6 +251,9 @@ beforeEach(() => {
     }
     if (options.query === MyApprovedModelCatalogQuery) {
       return [queryState(approvedModelsData), vi.fn()];
+    }
+    if (options.query === SettingsActivityThreadTurnsQuery) {
+      return [queryState(threadTurnsData), reexecuteThreadTurnsQuery];
     }
     if (variables?.threadId && variables?.limit) {
       return [queryState(taskData), reexecuteTasksQuery];
@@ -1353,18 +1361,20 @@ describe("SpacesThreadDetailRoute", () => {
         },
       },
     };
-    apiFetchMock.apiFetch.mockResolvedValue([
-      {
-        id: "turn-visible-worker",
-        thread_id: "thread-1",
-        invocation_source: "desktop_managed_delegation",
-        status: "running",
-        started_at: "2026-05-28T12:00:00.000Z",
-        context_snapshot: {
-          desktop_managed_delegation: { visibility: "visible" },
+    threadTurnsData = {
+      threadTurns: [
+        {
+          id: "turn-visible-worker",
+          threadId: "thread-1",
+          invocationSource: "desktop_managed_delegation",
+          status: "running",
+          startedAt: "2026-05-28T12:00:00.000Z",
+          contextSnapshot: {
+            desktop_managed_delegation: { visibility: "visible" },
+          },
         },
-      },
-    ]);
+      ],
+    };
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
@@ -1379,29 +1389,115 @@ describe("SpacesThreadDetailRoute", () => {
     });
   });
 
-  it("does not render hidden managed delegation turns as extra chrome", async () => {
+  it("replays persisted thread turn events after returning to a thread", async () => {
     taskData = { computerTasks: [] };
-    apiFetchMock.apiFetch.mockResolvedValue([
-      {
-        id: "turn-hidden-worker",
-        thread_id: "thread-1",
-        invocation_source: "desktop_managed_delegation",
-        status: "running",
-        started_at: "2026-05-28T12:00:00.000Z",
-        context_snapshot: {
-          desktop_managed_delegation: { visibility: "hidden" },
+    threadData = {
+      thread: {
+        id: "thread-1",
+        title: "Agent profile thread",
+        lifecycleStatus: "COMPLETED",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "USER",
+                content: "Analyst review this budget forecast",
+                createdAt: "2026-06-10T15:55:00.000Z",
+              },
+            },
+            {
+              node: {
+                id: "message-2",
+                role: "ASSISTANT",
+                content: "Here are the key takeaways.",
+                createdAt: "2026-06-10T15:56:10.000Z",
+              },
+            },
+          ],
         },
       },
-    ]);
+    };
+    threadTurnsData = {
+      threadTurns: [
+        {
+          id: "turn-agent-profile",
+          threadId: "thread-1",
+          invocationSource: "chat_message",
+          status: "succeeded",
+          startedAt: "2026-06-10T15:55:05.000Z",
+          finishedAt: "2026-06-10T15:56:10.000Z",
+          totalCost: 0.0343,
+        },
+      ],
+    };
+    apiFetchMock.apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/api/trigger-runs/turn-agent-profile/events?limit=500") {
+        return [
+          {
+            id: "event-agent-profile-completed",
+            run_id: "turn-agent-profile",
+            event_type: "agent_profile_run_completed",
+            level: "info",
+            payload: {
+              profile_slug: "analyst",
+              profile_name: "Analyst",
+              status: "completed",
+              duration_ms: 68500,
+              tool_invocations: [
+                {
+                  tool_name: "spreadsheet_analysis",
+                  output_preview: "Reviewed workbook variance.",
+                },
+              ],
+            },
+            created_at: "2026-06-10T15:56:09.000Z",
+          },
+        ];
+      }
+      return [];
+    });
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     await waitFor(() => {
+      const activity = screen.getByLabelText("Turn activity");
+      expect(within(activity).getByText("Worked for 1m 10s")).toBeTruthy();
+      expect(within(activity).getByText("$0.0343")).toBeTruthy();
       expect(apiFetchMock.apiFetch).toHaveBeenCalledWith(
-        "/api/thread-turns?limit=50&thread_id=thread-1",
+        "/api/trigger-runs/turn-agent-profile/events?limit=500",
         { extraHeaders: { "x-tenant-id": "tenant-1" } },
       );
     });
+
+    const activity = screen.getByLabelText("Turn activity");
+    fireEvent.click(within(activity).getByRole("button"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Agent Profile: Analyst")).toBeTruthy();
+      expect(screen.getByText(/Reviewed workbook variance/)).toBeTruthy();
+    });
+  });
+
+  it("does not render hidden managed delegation turns as extra chrome", async () => {
+    taskData = { computerTasks: [] };
+    threadTurnsData = {
+      threadTurns: [
+        {
+          id: "turn-hidden-worker",
+          threadId: "thread-1",
+          invocationSource: "desktop_managed_delegation",
+          status: "running",
+          startedAt: "2026-05-28T12:00:00.000Z",
+          contextSnapshot: {
+            desktop_managed_delegation: { visibility: "hidden" },
+          },
+        },
+      ],
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
     expect(screen.queryByText(/Managed delegation/)).toBeNull();
   });
 });

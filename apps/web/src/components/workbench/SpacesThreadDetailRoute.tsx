@@ -45,6 +45,7 @@ import {
   NewMessageSubscription,
   RunbookRunsQuery,
   SendMessageMutation,
+  SettingsActivityThreadTurnsQuery,
   ThreadArtifactsQuery,
   ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
@@ -308,8 +309,43 @@ interface ThreadTurnRow {
   system_prompt?: string | null;
   result_json?: unknown;
   usage_json?: unknown;
+  total_cost?: number | null;
   context_snapshot?: unknown;
   created_at?: string | null;
+}
+
+interface ThreadTurnGraphqlRow {
+  id: string;
+  threadId?: string | null;
+  invocationSource?: string | null;
+  runtimeType?: string | null;
+  status?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  error?: string | null;
+  errorCode?: string | null;
+  systemPrompt?: string | null;
+  resultJson?: unknown;
+  usageJson?: unknown;
+  totalCost?: number | null;
+  contextSnapshot?: unknown;
+  createdAt?: string | null;
+}
+
+interface ThreadTurnsResult {
+  threadTurns?: ThreadTurnGraphqlRow[] | null;
+}
+
+interface ThreadTurnEventRow {
+  id: string;
+  run_id?: string | null;
+  runId?: string | null;
+  event_type?: string | null;
+  eventType?: string | null;
+  level?: string | null;
+  payload?: unknown;
+  created_at?: string | null;
+  createdAt?: string | null;
 }
 
 export function SpacesThreadDetailRoute({
@@ -341,7 +377,9 @@ export function SpacesThreadDetailRoute({
   >(null);
   const [manualRefreshObservedFetching, setManualRefreshObservedFetching] =
     useState(false);
-  const [threadTurnRows, setThreadTurnRows] = useState<ThreadTurnRow[]>([]);
+  const [threadTurnEventsByRun, setThreadTurnEventsByRun] = useState<
+    Map<string, TaskThreadEvent[]>
+  >(new Map());
   const [{ data, fetching, error }, reexecuteQuery] = useQuery<ThreadResult>({
     query: ComputerThreadQuery,
     variables: { id: threadId, messageLimit: 100 },
@@ -526,6 +564,13 @@ export function SpacesThreadDetailRoute({
     pause: !tenantId || !threadId,
     requestPolicy: "cache-and-network",
   });
+  const [{ data: threadTurnsData }, reexecuteThreadTurnsQuery] =
+    useQuery<ThreadTurnsResult>({
+      query: SettingsActivityThreadTurnsQuery,
+      variables: { tenantId: tenantId ?? "", threadId, limit: 50 },
+      pause: !tenantId || !threadId,
+      requestPolicy: "cache-and-network",
+    });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
   const [{ fetching: completingThread }, updateThread] =
     useMutation(UpdateThreadMutation);
@@ -649,25 +694,45 @@ export function SpacesThreadDetailRoute({
     });
   }, [stepUpdate]);
 
-  const refreshThreadTurns = useCallback(async () => {
+  const threadTurnRows = useMemo(
+    () => toThreadTurnRows(threadTurnsData?.threadTurns ?? []),
+    [threadTurnsData?.threadTurns],
+  );
+
+  const refreshThreadTurnEvents = useCallback(async () => {
     if (!tenantId || !threadId) {
-      setThreadTurnRows([]);
+      setThreadTurnEventsByRun(new Map());
       return;
     }
-    try {
-      const rows = await apiFetch<ThreadTurnRow[]>(
-        `/api/thread-turns?limit=50&thread_id=${encodeURIComponent(threadId)}`,
-        { extraHeaders: { "x-tenant-id": tenantId } },
-      );
-      setThreadTurnRows(rows);
-    } catch {
-      setThreadTurnRows([]);
+    const visibleRows = threadTurnRows.filter(
+      (row) => !isHiddenDesktopDelegationRow(row),
+    );
+    if (visibleRows.length === 0) {
+      setThreadTurnEventsByRun(new Map());
+      return;
     }
-  }, [tenantId, threadId]);
+    const eventEntries = await Promise.all(
+      visibleRows.map(async (row) => {
+        try {
+          const events = await apiFetch<ThreadTurnEventRow[]>(
+            `/api/trigger-runs/${encodeURIComponent(row.id)}/events?limit=500`,
+            { extraHeaders: { "x-tenant-id": tenantId } },
+          );
+          return [
+            row.id,
+            events.map(taskThreadEventFromRow),
+          ] as const;
+        } catch {
+          return [row.id, [] as TaskThreadEvent[]] as const;
+        }
+      }),
+    );
+    setThreadTurnEventsByRun(new Map(eventEntries));
+  }, [tenantId, threadId, threadTurnRows]);
 
   useEffect(() => {
-    void refreshThreadTurns();
-  }, [refreshThreadTurns]);
+    void refreshThreadTurnEvents();
+  }, [refreshThreadTurnEvents]);
 
   useEffect(() => {
     if (turnUpdate?.onThreadTurnUpdated?.threadId === threadId) {
@@ -676,7 +741,7 @@ export function SpacesThreadDetailRoute({
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
-      void refreshThreadTurns();
+      reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteEventsQuery,
@@ -684,7 +749,7 @@ export function SpacesThreadDetailRoute({
     reexecuteProgressMarkdownQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
-    refreshThreadTurns,
+    reexecuteThreadTurnsQuery,
     threadId,
     turnUpdate?.onThreadTurnUpdated?.threadId,
   ]);
@@ -697,7 +762,7 @@ export function SpacesThreadDetailRoute({
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
-      void refreshThreadTurns();
+      reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
     }
   }, [
     reexecuteEventsQuery,
@@ -706,7 +771,7 @@ export function SpacesThreadDetailRoute({
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
-    refreshThreadTurns,
+    reexecuteThreadTurnsQuery,
     threadId,
     threadUpdate?.onThreadUpdated?.threadId,
   ]);
@@ -720,7 +785,7 @@ export function SpacesThreadDetailRoute({
       reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
-      void refreshThreadTurns();
+      reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
     }
   }, [
     messageUpdate?.onNewMessage?.messageId,
@@ -732,7 +797,7 @@ export function SpacesThreadDetailRoute({
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
-    refreshThreadTurns,
+    reexecuteThreadTurnsQuery,
     threadId,
   ]);
 
@@ -779,7 +844,11 @@ export function SpacesThreadDetailRoute({
       : null;
   const threadTurns = [
     ...toTaskThreadTurns(tasksData?.computerTasks, eventsData?.computerEvents),
-    ...toTaskThreadTurnsFromRows(threadTurnRows, liveStepsByRun),
+    ...toTaskThreadTurnsFromRows(
+      threadTurnRows,
+      liveStepsByRun,
+      threadTurnEventsByRun,
+    ),
   ];
   if (thread) {
     thread.turns = threadTurns;
@@ -936,7 +1005,7 @@ export function SpacesThreadDetailRoute({
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
-      void refreshThreadTurns();
+      reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
     };
 
     const intervalId = window.setInterval(
@@ -951,7 +1020,7 @@ export function SpacesThreadDetailRoute({
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
-    refreshThreadTurns,
+    reexecuteThreadTurnsQuery,
     shouldPollActiveAgentResult,
   ]);
   const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
@@ -1637,7 +1706,7 @@ export function SpacesThreadDetailRoute({
         reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
         reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
         reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
-        void refreshThreadTurns();
+        reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
       }}
       runbookQueues={runbookQueues}
     />
@@ -2285,6 +2354,26 @@ function toTaskThreadTurns(
   });
 }
 
+function toThreadTurnRows(rows: ThreadTurnGraphqlRow[]): ThreadTurnRow[] {
+  return rows.map((row) => ({
+    id: row.id,
+    thread_id: row.threadId ?? null,
+    invocation_source: row.invocationSource ?? null,
+    runtime_type: row.runtimeType ?? null,
+    status: row.status ?? null,
+    started_at: row.startedAt ?? null,
+    finished_at: row.finishedAt ?? null,
+    error: row.error ?? null,
+    error_code: row.errorCode ?? null,
+    system_prompt: row.systemPrompt ?? null,
+    result_json: row.resultJson,
+    usage_json: row.usageJson,
+    total_cost: row.totalCost ?? null,
+    context_snapshot: row.contextSnapshot,
+    created_at: row.createdAt ?? null,
+  }));
+}
+
 function toTaskThreadTurnsFromRows(
   rows: ThreadTurnRow[],
   // Live mid-turn steps keyed by run_id (plan 2026-06-03-001 U6). Injected as
@@ -2292,6 +2381,7 @@ function toTaskThreadTurnsFromRows(
   // name-based dedup in TaskThreadView converges them against
   // usage.tool_invocations without double-rendering.
   liveStepsByRun?: Map<string, TaskThreadEvent[]>,
+  persistedEventsByRun?: Map<string, TaskThreadEvent[]>,
 ): TaskThreadTurn[] {
   return rows
     .filter((row) => !isHiddenDesktopDelegationRow(row))
@@ -2308,11 +2398,63 @@ function toTaskThreadTurnsFromRows(
       ),
       usageJson: row.usage_json,
       resultJson: row.result_json,
+      totalCost: row.total_cost ?? null,
       error: row.error ?? null,
       errorCode: row.error_code ?? null,
       systemPrompt: row.system_prompt ?? null,
-      events: liveStepsByRun?.get(row.id) ?? [],
+      events: mergeTaskThreadEvents(
+        persistedEventsByRun?.get(row.id),
+        liveStepsByRun?.get(row.id),
+      ),
     }));
+}
+
+function taskThreadEventFromRow(row: ThreadTurnEventRow): TaskThreadEvent {
+  return {
+    id: row.id,
+    eventType: row.event_type ?? row.eventType ?? null,
+    level: row.level ?? null,
+    payload: row.payload ?? null,
+    createdAt: row.created_at ?? row.createdAt ?? null,
+  };
+}
+
+function mergeTaskThreadEvents(
+  persisted: TaskThreadEvent[] | undefined,
+  live: TaskThreadEvent[] | undefined,
+): TaskThreadEvent[] {
+  const byKey = new Map<string, TaskThreadEvent>();
+  for (const event of [...(persisted ?? []), ...(live ?? [])]) {
+    byKey.set(taskThreadEventDedupeKey(event), event);
+  }
+  return [...byKey.values()].sort((a, b) => {
+    const ta = eventTimestamp(a.createdAt);
+    const tb = eventTimestamp(b.createdAt);
+    if (ta !== tb) return ta - tb;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function taskThreadEventDedupeKey(event: TaskThreadEvent): string {
+  return [
+    event.eventType ?? "",
+    event.createdAt ?? "",
+    stableJsonKey(event.payload),
+  ].join(":");
+}
+
+function stableJsonKey(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? "";
+  } catch {
+    return String(value ?? "");
+  }
+}
+
+function eventTimestamp(value: string | null | undefined): number {
+  if (!value) return 0;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
 }
 
 function isHiddenDesktopDelegationRow(row: ThreadTurnRow): boolean {
