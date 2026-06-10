@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U8/U9 follow-up - prove runtime-config-backed
-  deployment profile binding across web, desktop, and mobile contracts.
-- Current branch: `codex/u8-profile-binding-proof`.
+- Current implementation unit: U9 remaining-gap audit - optional-app deploy
+  smoke, human desktop/mobile launch proof, and teardown are still open.
+- Current branch: `codex/deployment-controller-status-audit`.
 - Current worktree:
-  `.Codex/worktrees/u8-profile-binding-proof`.
+  `.Codex/worktrees/deployment-controller-status-audit`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -51,18 +51,25 @@ status: in_progress
   [#2321](https://github.com/thinkwork-ai/thinkwork/pull/2321) merged; U9
   foundation smoke proof PR
   [#2322](https://github.com/thinkwork-ai/thinkwork/pull/2322) merged; U8/U9
-  profile-binding proof PR not opened yet.
-- Status: U9 foundation smoke proof PR #2322 passed required CI and was squash
-  merged as `e227cfe4`. This branch adds
-  `deployment-profile-binding-smoke.mjs` so a published runtime config can be
-  normalized into a canonical deployment profile, validated through
-  `@thinkwork/deployment-profile`, and checked against web, desktop, and mobile
-  binding snapshots without recording API keys, passwords, AWS keys, tokens, or
-  credential material in the profile/evidence. The target live TEI run is
-  `v0.1.0-canary.148` at
-  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`. Full
-  optional-app deploy smoke, human desktop/mobile launch proof, and teardown
-  remain open. Historical notes follow. U9 user-facing docs reconciliation PR
+  profile-binding proof PR
+  [#2323](https://github.com/thinkwork-ai/thinkwork/pull/2323) merged.
+- Status: U8/U9 profile-binding proof PR #2323 passed required CI (`cla`,
+  `lint`, `verify`, `typecheck`, and `test`) and was squash merged as
+  `f3ffcc058`. The new `deployment-profile-binding-smoke.mjs` passed against
+  live TEI `v0.1.0-canary.148` on 2026-06-10 using
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`. It
+  normalized the runtime config into a canonical deployment profile, validated
+  it through `@thinkwork/deployment-profile`, checked web, desktop, and mobile
+  binding snapshots, and recorded profile SHA-256
+  `ef9427364e0d80e4389c62509b119a7be1da3f1a3906c7d5be69eda33ac31ffa` without
+  API keys, passwords, AWS keys, tokens, or credential material in the
+  profile/evidence. Remaining open deployment-controller gates: full
+  optional-app deploy smoke for Cognee/Twenty after those apps are selected,
+  human desktop and mobile launch proof against TEI, and teardown proof. TEI is
+  intentionally still live for user/demo testing, so teardown remains deferred
+  until explicitly safe to destroy. Historical notes follow. U9 foundation
+  smoke proof PR #2322 passed required CI and was squash merged as
+  `e227cfe4`. U9 user-facing docs reconciliation PR
   #2321 passed required CI and was squash merged as `64e152e49`. U9
   foundation smoke proof updated `foundation-bootstrap-smoke.mjs` so the live
   smoke can validate runtime-config/SSM-backed controller fields when local
