@@ -35,6 +35,11 @@ export interface DeploymentStartResult {
   stateMachineArn: string | null;
 }
 
+export const DEPLOYMENT_CONTROLLER_CONTRACT =
+  "thinkwork.deployment.controller.v1";
+
+export const DEPLOYMENT_CONTROLLER_SCHEMA_VERSION = 1;
+
 export interface DeploymentDeps {
   startExecution?: (input: {
     stateMachineArn: string;
@@ -233,6 +238,90 @@ export function defaultReleaseVersion(): string {
 
 export function defaultManifestDigest(): string {
   return process.env.THINKWORK_RELEASE_MANIFEST_SHA256 || "unresolved";
+}
+
+export function defaultManifestUrl(): string {
+  return process.env.THINKWORK_RELEASE_MANIFEST_URL || "";
+}
+
+export function buildManagedAppControllerPayload(args: {
+  phase: "plan" | "apply";
+  tenantId: string;
+  jobId: string;
+  appKey: ManagedAppKey;
+  operation: DeploymentOperation;
+  releaseVersion: string;
+  manifestDigest: string;
+  releaseManifestUrl?: string | null;
+  desiredConfigVersion: string;
+  desiredConfig?: Record<string, unknown>;
+  manifestImages?: Record<string, string>;
+  planDigest?: string | null;
+  evidenceBucket?: string | null;
+}): Record<string, unknown> {
+  const evidencePrefix = managedAppEvidencePrefix({
+    tenantId: args.tenantId,
+    appKey: args.appKey,
+    jobId: args.jobId,
+    phase: args.phase,
+  });
+  const manifestUrl = args.releaseManifestUrl || defaultManifestUrl();
+  return {
+    schemaVersion: DEPLOYMENT_CONTROLLER_SCHEMA_VERSION,
+    contract: DEPLOYMENT_CONTROLLER_CONTRACT,
+    phase: args.phase,
+    action: args.phase === "plan" ? "plan" : "update",
+    tenantId: args.tenantId,
+    jobId: args.jobId,
+    sessionId: args.jobId,
+    appKey: args.appKey,
+    operation: args.operation,
+    releaseVersion: args.releaseVersion,
+    manifestDigest: args.manifestDigest,
+    releaseManifestUrl: manifestUrl,
+    release: {
+      version: args.releaseVersion,
+      manifestUrl,
+      manifestSha256: args.manifestDigest,
+    },
+    desiredConfigVersion: args.desiredConfigVersion,
+    desiredConfig: args.desiredConfig,
+    manifestImages: args.manifestImages,
+    planDigest: args.planDigest,
+    evidenceBucket: args.evidenceBucket,
+    evidence: {
+      bucket: args.evidenceBucket,
+      prefix: evidencePrefix,
+      expectedArtifacts:
+        args.phase === "plan"
+          ? ["plan-summary.json", "terraform-variables.json"]
+          : ["apply-summary.json", "smoke-results.json"],
+    },
+    features: {
+      baseInstall: {
+        cognee: false,
+        slack: false,
+        stripe: false,
+        twenty: false,
+      },
+      optionalApps: [args.appKey],
+    },
+    operationContract: {
+      kind: "managed_app",
+      appKey: args.appKey,
+      operation: args.operation,
+      destructive: args.operation === "DESTROY",
+    },
+  };
+}
+
+export function managedAppEvidencePrefix(args: {
+  tenantId: string;
+  appKey: string;
+  jobId: string;
+  phase: "plan" | "apply";
+}): string {
+  return `${args.tenantId}/${args.appKey}/${args.jobId}/${args.phase}`;
 }
 
 export function parseAwsJsonObject(value: unknown): Record<string, unknown> {

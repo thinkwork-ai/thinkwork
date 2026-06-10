@@ -177,6 +177,22 @@ describe("release manifest contract", () => {
     ).toThrow(/unknown artifact missing-artifact/);
   });
 
+  it("rejects managed app required images that are absent from runtimeImages", () => {
+    expect(() =>
+      validateReleaseManifest(
+        manifest({
+          managedApps: [
+            {
+              id: "twenty",
+              displayName: "Twenty CRM",
+              requiredImages: ["twenty"],
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/requiredImages references unknown runtime image twenty/);
+  });
+
   it("rejects malformed component and smoke contract blocks", () => {
     const missingRunner = manifest() as unknown as Record<string, unknown>;
     delete (missingRunner.components as Record<string, unknown>)

@@ -125,6 +125,160 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/build-desktop.sh "${STAGE}" --publish always
 
+      - name: Publish desktop installer assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#desktop-v}"
+          release_tag="v${version}"
+          latest_file="apps/desktop/dist/latest-mac.yml"
+          staged_dir="dist/desktop-release-assets"
+
+          if [ ! -f "$latest_file" ]; then
+            echo "Missing desktop updater metadata: $latest_file" >&2
+            exit 1
+          fi
+
+          if ! gh release view "$release_tag" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create "$release_tag" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "$release_tag" \
+              --notes "Desktop release assets for ${release_tag}" \
+              --draft \
+              --prerelease
+          fi
+
+          mkdir -p "$staged_dir"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const version = process.env.GITHUB_REF_NAME.replace(/^desktop-v/, "");
+          const distDir = path.join("apps", "desktop", "dist");
+          const stagedDir = path.join("dist", "desktop-release-assets");
+          const latestPath = path.join(distDir, "latest-mac.yml");
+          const latest = fs.readFileSync(latestPath, "utf8");
+          const expected = new Set(
+            Array.from(latest.matchAll(/url:\s*['"]?([^'"\n]+)/g), (match) =>
+              match[1].trim().replace("@thinkwork/desktop", "@thinkwork.desktop"),
+            ),
+          );
+          expected.add(`@thinkwork.desktop-${version}.dmg.blockmap`);
+
+          const files = fs
+            .readdirSync(distDir, { withFileTypes: true })
+            .filter((entry) => entry.isFile())
+            .map((entry) => path.join(distDir, entry.name));
+
+          function findOne(assetName, predicate) {
+            const matches = files.filter((file) => predicate(path.basename(file), file));
+            if (matches.length === 1) {
+              return matches[0];
+            }
+            if (matches.length > 1) {
+              console.error(`Multiple desktop artifacts match ${assetName}:`);
+              for (const file of matches) {
+                console.error(`  ${file}`);
+              }
+              process.exit(1);
+            }
+            return null;
+          }
+
+          function findSource(assetName) {
+            const slashName = assetName.replace("@thinkwork.desktop", "@thinkwork/desktop");
+            const exact = findOne(assetName, (basename, file) => {
+              const normalized = file.split(path.sep).join("/");
+              return (
+                basename === assetName ||
+                normalized.endsWith(`/${assetName}`) ||
+                normalized.endsWith(`/${slashName}`)
+              );
+            });
+            if (exact) {
+              return exact;
+            }
+
+            const versionSegment = `-${version}`;
+            const zipArch = assetName.match(/-([^-]+)-mac\.zip$/)?.[1];
+            if (zipArch) {
+              return findOne(
+                assetName,
+                (basename) =>
+                  basename.includes(versionSegment) &&
+                  basename.endsWith(`-${zipArch}.zip`),
+              );
+            }
+
+            if (assetName.endsWith(".dmg.blockmap")) {
+              return findOne(
+                assetName,
+                (basename) =>
+                  basename.includes(versionSegment) && basename.endsWith(".dmg.blockmap"),
+              );
+            }
+
+            if (assetName.endsWith(".dmg")) {
+              return findOne(
+                assetName,
+                (basename) =>
+                  basename.includes(versionSegment) &&
+                  basename.endsWith(".dmg") &&
+                  !basename.endsWith(".dmg.blockmap"),
+              );
+            }
+
+            return null;
+          }
+
+          const missing = [];
+          for (const assetName of expected) {
+            const source = findSource(assetName);
+            if (!source) {
+              missing.push(assetName);
+              continue;
+            }
+            fs.copyFileSync(source, path.join(stagedDir, assetName));
+          }
+
+          if (missing.length > 0) {
+            console.error("Missing expected desktop artifacts:");
+            for (const asset of missing) {
+              console.error(`  ${asset}`);
+            }
+            console.error("Built files:");
+            for (const file of files) {
+              console.error(`  ${file}`);
+            }
+            process.exit(1);
+          }
+          NODE
+
+          gh release upload "$release_tag" "$staged_dir"/* --repo "${GITHUB_REPOSITORY}" --clobber
+
+      - name: Verify desktop installer assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#desktop-v}"
+          assets="$(gh release view "v${version}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name')"
+
+          require_asset() {
+            local expected="$1"
+            if ! printf '%s\n' "$assets" | grep -Fx "$expected" >/dev/null; then
+              echo "Missing expected desktop release asset: $expected" >&2
+              echo "Current release assets:" >&2
+              printf '%s\n' "$assets" | sed 's/^/  /' >&2
+              exit 1
+            fi
+          }
+
+          require_asset "@thinkwork.desktop-${version}.dmg"
+          require_asset "@thinkwork.desktop-${version}.dmg.blockmap"
+          require_asset "@thinkwork.desktop-${version}-arm64-mac.zip"
+
       # Deploy-sync: ship the web app (app.thinkwork.ai) on the same
       # release cut that builds the desktop artifact, so the web app and the
       # desktop app always update together. deploy.yml no longer deploys web
@@ -172,28 +326,6 @@ jobs:
             cp "$latest_file" "$channel_file"
             gh release upload "v${version}" "$channel_file" --repo "${GITHUB_REPOSITORY}" --clobber
           fi
-
-      - name: Verify desktop installer assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#desktop-v}"
-          assets="$(gh release view "v${version}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name')"
-
-          require_asset() {
-            local expected="$1"
-            if ! printf '%s\n' "$assets" | grep -Fx "$expected" >/dev/null; then
-              echo "Missing expected desktop release asset: $expected" >&2
-              echo "Current release assets:" >&2
-              printf '%s\n' "$assets" | sed 's/^/  /' >&2
-              exit 1
-            fi
-          }
-
-          require_asset "@thinkwork.desktop-${version}.dmg"
-          require_asset "@thinkwork.desktop-${version}.dmg.blockmap"
-          require_asset "@thinkwork.desktop-${version}-arm64-mac.zip"
 
       - name: Publish desktop release (flip draft -> published)
         # When desktop creates the release, electron-builder uploads to a draft

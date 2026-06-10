@@ -23,21 +23,27 @@ The manifest includes:
 - managed-app descriptors for Cognee and Twenty
 - smoke contracts
 - deployment profile schema version
-- key id and detached signature metadata
+- key id and detached signature metadata when the release is signed
 
 ## Verification Order
 
-1. Verify the manifest signature with a pinned trusted ThinkWork public key.
-2. Reject expired or revoked signing keys.
-3. Verify compatibility bounds for the CLI and runner.
-4. Resolve releases by explicit version/tag plus manifest digest. Do not use
+1. Resolve the controller trust policy for the selected environment.
+2. For customer-safe runs, require a detached signature and verify it with a
+   pinned trusted ThinkWork public key.
+3. For dogfood canary runs, unsigned manifests are allowed only when the
+   controller policy is explicitly `allow_unsigned_canary`; evidence must mark
+   the manifest as an unsigned canary.
+4. Reject expired or revoked signing keys.
+5. Verify compatibility bounds for the CLI and runner.
+6. Resolve releases by explicit version/tag plus manifest digest. Do not use
    GitHub's `Latest` badge as deployment authority for canary validation.
-5. Download artifact bundles only after the manifest is trusted.
-6. Verify the platform bundle SHA-256, extract it with traversal/link checks,
+7. Download artifact bundles only after the manifest is trusted.
+8. Verify the platform bundle SHA-256, extract it with traversal/link checks,
    and verify every contained artifact SHA-256 before Terraform, static assets,
    or runtime bundles consume it.
-7. Record the manifest digest, bundle digest, and staged artifact digests on
-   deployment jobs and smoke evidence.
+9. Record the raw manifest digest, canonical manifest digest, trust decision,
+   bundle digest, and staged artifact digests on deployment jobs and smoke
+   evidence.
 
 <Aside type="caution">
   Never proceed with a placeholder digest such as `CHANGE_ME`. If the manifest
@@ -58,6 +64,37 @@ Individual artifact URLs in the manifest are a compatibility path; new
 deployment controller runs should consume the bundle and verify every contained
 artifact against the manifest before staging it.
 
+The manifest asset is also the publish finalization marker. Release automation
+removes any existing `thinkwork-release.json` before refreshing deployable
+assets, uploads the platform bundle and signature first, and uploads the final
+manifest last. If a refresh fails midway, the release should be temporarily
+non-deployable instead of presenting an old manifest digest with newer assets.
+
+Managed-app descriptors and runtime images are one contract. If a release
+manifest advertises a managed app with `requiredImages`, every required image
+name must appear in `runtimeImages` as an immutable `@sha256:` URI. The release
+publisher builds the ThinkWork-owned Cognee image and reads pinned Twenty/Kestra
+image URIs from repository variables so the controller can fail before
+Terraform when an optional app cannot be deployed from the selected release.
+
+Desktop assets may be published by a separate workflow, but operators should see
+one coordinated release version. The human-facing release should contain
+desktop installers, updater metadata, `thinkwork-release.json`, and
+`platform-artifacts.tar.gz` before the release is treated as a deployable
+environment update.
+
+Unsigned canaries are for ThinkWork dogfood and TEI proving runs only while the
+signing key rollout is in progress. Production and customer-safe controllers
+should set `release_manifest_trust_policy = "require_signature"` and configure
+trusted public keys before accepting a release.
+
+The TEI proving environment accepted `v0.1.0-canary.149` under the explicit
+`allow_unsigned_canary` trust policy. Evidence records both the raw manifest
+SHA-256
+`f25c6a05d42578acd6f4696d678b19af831c6e19a23e227e07a6db9559f47532` and the
+platform bundle SHA-256
+`b463b44094d60e94ee068881343deab53bb65d6d081b69757dcc04afb181aad8`.
+
 ## Upgrade Evidence
 
 Release upgrade evidence should record:
@@ -75,12 +112,15 @@ Release upgrade evidence should record:
 
 | Failure                            | Meaning                                                                                         |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Missing signature                  | The controller requires a trusted signature and no detached signature was available.            |
+| Unsigned non-canary manifest       | The selected release is not a canary and cannot run under `allow_unsigned_canary`.              |
 | Invalid signature                  | The manifest cannot be trusted. Stop and fetch a known-good manifest.                           |
 | Unknown key                        | The runner does not trust the signing key. Update trusted keys only through a reviewed release. |
 | Revoked or expired key             | Do not deploy. Use a release signed by an active key.                                           |
 | Artifact hash mismatch             | The artifact does not match the manifest. Stop before Terraform or runtime update.              |
 | Compatibility mismatch             | Upgrade the CLI/runner or choose a compatible release.                                          |
 | Missing managed-app smoke metadata | The release is not usable for managed-app deployment.                                           |
+| Missing managed-app runtime image  | The release advertises an app that cannot be deployed from its manifest.                        |
 
 ## Operator Notes
 

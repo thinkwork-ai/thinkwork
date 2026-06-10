@@ -32,6 +32,11 @@ export interface DeploymentProfile {
   displayName: string;
   stage: string;
   region: string;
+  accountId?: string;
+  releaseVersion?: string;
+  releaseManifestUrl?: string;
+  releaseManifestSha256?: string;
+  controller?: DeploymentProfileController;
   issuedAt: string;
   spacesUrl: string;
   apiUrl: string;
@@ -44,11 +49,29 @@ export interface DeploymentProfile {
   signature: DeploymentProfileSignature | null;
 }
 
+export interface DeploymentProfileController {
+  stateMachineArn: string;
+  stateMachineName?: string;
+  codebuildProjectName?: string;
+  codebuildProjectArn?: string;
+  evidenceBucketName?: string;
+  ssmPrefix?: string;
+  appconfigApplicationId?: string;
+  appconfigEnvironmentId?: string;
+  appconfigConfigurationProfileId?: string;
+  verifiedAt?: string;
+}
+
 export interface DeploymentProfileSourceConfig {
   deploymentId?: string | null;
   displayName?: string | null;
   stage?: string | null;
   region?: string | null;
+  accountId?: string | null;
+  releaseVersion?: string | null;
+  releaseManifestUrl?: string | null;
+  releaseManifestSha256?: string | null;
+  controller?: DeploymentProfileController | null;
   issuedAt?: string | null;
   spacesUrl?: string | null;
   apiUrl?: string | null;
@@ -109,7 +132,7 @@ export class DeploymentProfileError extends Error {
 export function buildDeploymentProfile(
   config: DeploymentProfileSourceConfig,
 ): DeploymentProfile {
-  return {
+  const profile: DeploymentProfile = {
     schemaVersion: DEPLOYMENT_PROFILE_SCHEMA_VERSION,
     deploymentId: requireConfigString(config.deploymentId, "deploymentId"),
     displayName: requireConfigString(config.displayName, "displayName"),
@@ -138,6 +161,18 @@ export function buildDeploymentProfile(
     ),
     signature: config.signature ?? null,
   };
+  copyOptionalString(profile, "accountId", config.accountId);
+  copyOptionalString(profile, "releaseVersion", config.releaseVersion);
+  copyOptionalString(profile, "releaseManifestUrl", config.releaseManifestUrl);
+  copyOptionalString(
+    profile,
+    "releaseManifestSha256",
+    config.releaseManifestSha256,
+  );
+  if (config.controller) {
+    profile.controller = compactController(config.controller);
+  }
+  return profile;
 }
 
 export function parseDeploymentProfileJson(
@@ -453,6 +488,11 @@ export function profileToRuntimeConfig(profile: DeploymentProfile) {
     displayName: validated.displayName,
     stage: validated.stage,
     region: validated.region,
+    accountId: validated.accountId,
+    releaseVersion: validated.releaseVersion,
+    releaseManifestUrl: validated.releaseManifestUrl,
+    releaseManifestSha256: validated.releaseManifestSha256,
+    controller: validated.controller,
     apiUrl: validated.apiUrl,
     graphqlHttpUrl: validated.graphqlHttpUrl,
     graphqlUrl: validated.appsyncHttpUrl,
@@ -461,6 +501,26 @@ export function profileToRuntimeConfig(profile: DeploymentProfile) {
     cognitoUserPoolId: validated.cognitoUserPoolId,
     cognitoClientId: validated.cognitoClientId,
   };
+}
+
+function copyOptionalString(
+  target: object,
+  key: string,
+  value: string | null | undefined,
+): void {
+  if (typeof value === "string" && value.trim()) {
+    (target as Record<string, unknown>)[key] = value.trim();
+  }
+}
+
+function compactController(
+  controller: DeploymentProfileController,
+): DeploymentProfileController {
+  return Object.fromEntries(
+    Object.entries(controller).filter(
+      ([, value]) => typeof value === "string" && value.trim(),
+    ),
+  ) as unknown as DeploymentProfileController;
 }
 
 function unsignedProfile(

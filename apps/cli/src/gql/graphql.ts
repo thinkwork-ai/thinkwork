@@ -594,6 +594,24 @@ export type BedrockModelImportCandidate = {
   supportsVision: Scalars["Boolean"]["output"];
 };
 
+export type BootstrapCredentialLease = {
+  __typename?: "BootstrapCredentialLease";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  expiresAt: Scalars["AWSDateTime"]["output"];
+  externalIdHash?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  inUseAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  leaseType: Scalars["String"]["output"];
+  revokedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  roleArn?: Maybe<Scalars["String"]["output"]>;
+  secretFingerprint: Scalars["String"]["output"];
+  sessionId: Scalars["ID"]["output"];
+  status: Scalars["String"]["output"];
+  transferredAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  validatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+};
+
 export type BootstrapResult = {
   __typename?: "BootstrapResult";
   isNew: Scalars["Boolean"]["output"];
@@ -1166,6 +1184,31 @@ export type DeploymentEvidence = {
   urls: Array<Scalars["String"]["output"]>;
 };
 
+export type DeploymentRelease = {
+  __typename?: "DeploymentRelease";
+  deployable: Scalars["Boolean"]["output"];
+  draft: Scalars["Boolean"]["output"];
+  htmlUrl: Scalars["String"]["output"];
+  manifestSha256: Scalars["String"]["output"];
+  manifestUrl: Scalars["String"]["output"];
+  name?: Maybe<Scalars["String"]["output"]>;
+  prerelease: Scalars["Boolean"]["output"];
+  publishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  signatureUrl?: Maybe<Scalars["String"]["output"]>;
+  signed: Scalars["Boolean"]["output"];
+  version: Scalars["String"]["output"];
+};
+
+export type DeploymentReleaseUpdate = {
+  __typename?: "DeploymentReleaseUpdate";
+  evidenceBucket?: Maybe<Scalars["String"]["output"]>;
+  evidencePrefix: Scalars["String"]["output"];
+  executionArn?: Maybe<Scalars["String"]["output"]>;
+  message: Scalars["String"]["output"];
+  release: DeploymentRelease;
+  stateMachineArn: Scalars["String"]["output"];
+};
+
 export type DeploymentStatus = {
   __typename?: "DeploymentStatus";
   accountId?: Maybe<Scalars["String"]["output"]>;
@@ -1543,6 +1586,7 @@ export enum KnowledgeGraphEvidenceSourceKind {
   BrainPage = "BRAIN_PAGE",
   BrainSection = "BRAIN_SECTION",
   CogneePayload = "COGNEE_PAYLOAD",
+  HindsightObservation = "HINDSIGHT_OBSERVATION",
   Normalizer = "NORMALIZER",
   ThreadMessage = "THREAD_MESSAGE",
   WikiPage = "WIKI_PAGE",
@@ -1671,6 +1715,7 @@ export type KnowledgeGraphRelationship = {
 
 export enum KnowledgeGraphSourceKind {
   Brain = "BRAIN",
+  Observations = "OBSERVATIONS",
   Thread = "THREAD",
   Wiki = "WIKI",
 }
@@ -2364,8 +2409,10 @@ export type Mutation = {
   setSpaceTools: Space;
   setUserModelApproval: Array<UserModelCatalogEntry>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
+  startDeploymentReleaseUpdate: DeploymentReleaseUpdate;
   startEvalRun: EvalRun;
   startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
+  startKnowledgeGraphObservationsIngest: KnowledgeGraphIngestRun;
   startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
   startManagedApplicationPlan: ManagedApplicationDeploymentJob;
   startOntologySuggestionScan: OntologySuggestionScanJob;
@@ -3073,6 +3120,10 @@ export type MutationStartCustomerOnboardingArgs = {
   input: StartCustomerOnboardingInput;
 };
 
+export type MutationStartDeploymentReleaseUpdateArgs = {
+  input: StartDeploymentReleaseUpdateInput;
+};
+
 export type MutationStartEvalRunArgs = {
   input: StartEvalRunInput;
   tenantId: Scalars["ID"]["input"];
@@ -3080,6 +3131,10 @@ export type MutationStartEvalRunArgs = {
 
 export type MutationStartKnowledgeGraphIngestArgs = {
   input: StartKnowledgeGraphIngestInput;
+};
+
+export type MutationStartKnowledgeGraphObservationsIngestArgs = {
+  input?: InputMaybe<StartKnowledgeGraphObservationsIngestInput>;
 };
 
 export type MutationStartKnowledgeGraphThreadIngestArgs = {
@@ -3685,6 +3740,7 @@ export type Query = {
   customerOnboardingSpace?: Maybe<Space>;
   customizeBindings?: Maybe<CustomizeBindings>;
   deploymentEvidence: DeploymentEvidence;
+  deploymentReleases: Array<DeploymentRelease>;
   deploymentStatus: DeploymentStatus;
   evalResultSpans: Array<EvalSpan>;
   evalRun?: Maybe<EvalRun>;
@@ -4047,6 +4103,10 @@ export type QueryCustomerOnboardingSpaceArgs = {
 
 export type QueryDeploymentEvidenceArgs = {
   jobId: Scalars["ID"]["input"];
+};
+
+export type QueryDeploymentReleasesArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
 export type QueryEvalResultSpansArgs = {
@@ -5435,6 +5495,13 @@ export type StartCustomerOnboardingPayload = {
   threadId: Scalars["ID"]["output"];
 };
 
+export type StartDeploymentReleaseUpdateInput = {
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  manifestSha256: Scalars["String"]["input"];
+  manifestUrl: Scalars["String"]["input"];
+  version: Scalars["String"]["input"];
+};
+
 export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
   model?: InputMaybe<Scalars["String"]["input"]>;
@@ -5453,6 +5520,12 @@ export type StartKnowledgeGraphIngestInput = {
   threadId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
+export type StartKnowledgeGraphObservationsIngestInput = {
+  fullRebuild?: InputMaybe<Scalars["Boolean"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
 export type StartKnowledgeGraphThreadIngestInput = {
   force?: InputMaybe<Scalars["Boolean"]["input"]>;
   metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
@@ -5466,6 +5539,8 @@ export type StartManagedApplicationPlanInput = {
   idempotencyKey: Scalars["String"]["input"];
   key: Scalars["String"]["input"];
   manifestDigest?: InputMaybe<Scalars["String"]["input"]>;
+  manifestImages?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  manifestUrl?: InputMaybe<Scalars["String"]["input"]>;
   operation: Scalars["String"]["input"];
   releaseVersion?: InputMaybe<Scalars["String"]["input"]>;
 };
@@ -5698,6 +5773,7 @@ export type TenantEntitySection = {
 export type TenantMember = {
   __typename?: "TenantMember";
   agent?: Maybe<Agent>;
+  cognitoStatus?: Maybe<Scalars["String"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   id: Scalars["ID"]["output"];
   principalId: Scalars["ID"]["output"];

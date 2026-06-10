@@ -122,6 +122,34 @@ variable "deployment_release_manifest_sha256" {
   default     = ""
 }
 
+variable "deployment_release_manifest_signature_url" {
+  description = "Optional selected ThinkWork release manifest detached signature URL stored in the deployment control plane."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_release_manifest_trust_policy" {
+  description = "Release manifest trust policy for the deployment control plane: allow_unsigned_canary or require_signature."
+  type        = string
+  default     = "allow_unsigned_canary"
+
+  validation {
+    condition     = contains(["allow_unsigned_canary", "require_signature"], var.deployment_release_manifest_trust_policy)
+    error_message = "deployment_release_manifest_trust_policy must be allow_unsigned_canary or require_signature."
+  }
+}
+
+variable "deployment_release_manifest_trusted_keys_json" {
+  description = "JSON array of trusted release signing keys for the deployment control plane."
+  type        = string
+  default     = "[]"
+
+  validation {
+    condition     = can(jsondecode(var.deployment_release_manifest_trusted_keys_json))
+    error_message = "deployment_release_manifest_trusted_keys_json must be valid JSON."
+  }
+}
+
 variable "deployment_terraform_state_bucket" {
   description = "Customer-owned S3 bucket used by the GitHub-free deployment runner for ThinkWork app Terraform state. Empty uses the legacy thinkwork-terraform-state bucket name."
   type        = string
@@ -162,6 +190,12 @@ variable "deployment_control_plane_create_secret_placeholders" {
   description = "Create placeholder Secrets Manager containers for deployment-control-plane bootstrap secrets."
   type        = bool
   default     = true
+}
+
+variable "bootstrap_credential_lease_kms_key_id" {
+  description = "Optional KMS key ID or ARN used by Secrets Manager for temporary customer bootstrap credential leases. Empty uses the AWS-managed Secrets Manager key."
+  type        = string
+  default     = ""
 }
 
 # ---------------------------------------------------------------------------
@@ -273,6 +307,24 @@ variable "hindsight_image_tag" {
   description = "Hindsight Docker image tag (only used when enable_hindsight = true)"
   type        = string
   default     = "0.5.0"
+}
+
+variable "hindsight_enable_auto_consolidation" {
+  description = "Run Hindsight's observation consolidation engine automatically after retain (only used when enable_hindsight = true)."
+  type        = bool
+  default     = true
+}
+
+variable "hindsight_consolidation_dedup_threshold" {
+  description = "Cosine-similarity threshold for Hindsight near-duplicate observation reconciliation (0.0-1.0; 1.0 disables)."
+  type        = string
+  default     = "0.97"
+}
+
+variable "hindsight_observations_mission" {
+  description = "Service-level default observations mission for Hindsight consolidation. Empty string falls back to the image default. Per-bank config overrides apply on top."
+  type        = string
+  default     = "Synthesize durable, institutional facts about the business: customers, projects, decisions, processes, tools, relationships, and recurring patterns. Filter out ephemeral state, secrets, and personal small talk."
 }
 
 variable "enable_cognee" {
@@ -1014,6 +1066,58 @@ variable "ses_manage_active_rule_set" {
   description = "Activate the SES receipt rule set. Only ONE rule set can be active per region per AWS account; set false on secondary stages that share an account so they don't fight over activation."
   type        = bool
   default     = true
+}
+
+variable "cognito_email_source_arn" {
+  description = "Verified SES identity ARN Cognito should use for user-pool emails. Empty keeps Cognito's default sender."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_from_email_address" {
+  description = "Optional Cognito From header, for example 'ThinkWork <noreply@example.com>'. Requires cognito_email_source_arn when set."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_reply_to_email_address" {
+  description = "Optional Cognito Reply-To address for user-pool invitation and recovery emails."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_invite_email_subject" {
+  description = "Subject line for Cognito AdminCreateUser invitation emails."
+  type        = string
+  default     = "You're invited to ThinkWork"
+}
+
+variable "cognito_invite_email_message" {
+  description = "HTML invitation body for Cognito AdminCreateUser emails. Empty derives a stage-aware ThinkWork sign-in message. Custom values must include {username} and {####}."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = (
+      var.cognito_invite_email_message == "" ||
+      (
+        strcontains(var.cognito_invite_email_message, "{username}") &&
+        strcontains(var.cognito_invite_email_message, "{####}")
+      )
+    )
+    error_message = "cognito_invite_email_message must be empty or include Cognito placeholders {username} and {####}."
+  }
+}
+
+variable "cognito_invite_sms_message" {
+  description = "SMS invitation body for Cognito AdminCreateUser messages. Must include {username} and {####} so Cognito can send the temporary password."
+  type        = string
+  default     = "Your ThinkWork username is {username} and temporary password is {####}."
+
+  validation {
+    condition     = strcontains(var.cognito_invite_sms_message, "{username}") && strcontains(var.cognito_invite_sms_message, "{####}")
+    error_message = "cognito_invite_sms_message must include Cognito placeholders {username} and {####}."
+  }
 }
 
 variable "wiki_compile_model_id" {

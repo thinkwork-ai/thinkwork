@@ -87,7 +87,12 @@ export async function uploadThreadAttachments(input: {
         fetchImpl,
       });
       try {
-        await putToS3(presign.signedPutUrl, file, fetchImpl);
+        await putToS3(
+          presign.signedPutUrl,
+          file,
+          declaredMimeTypeFor(file),
+          fetchImpl,
+        );
       } catch (err) {
         failures.push({
           file,
@@ -145,9 +150,7 @@ async function presignAttachment(input: {
       },
       body: JSON.stringify({
         name: input.file.name,
-        mimeType:
-          input.file.type ||
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        mimeType: declaredMimeTypeFor(input.file),
         sizeBytes: input.file.size,
       }),
     },
@@ -161,18 +164,13 @@ async function presignAttachment(input: {
 async function putToS3(
   signedUrl: string,
   file: File,
+  declaredMimeType: string,
   fetchImpl: typeof fetch,
 ): Promise<void> {
   const res = await fetchImpl(signedUrl, {
     method: "PUT",
+    headers: { "Content-Type": declaredMimeType },
     body: file,
-    // Don't set Content-Type to the file.type here unless the
-    // presigned URL was issued with the same — S3 signature mismatch
-    // is a common pitfall. The presign call sends the declared MIME
-    // to the server which encodes it into the signature; the PUT
-    // body's content-type is set to that value by the SignatureV4
-    // machinery. Passing `file` as Body lets browsers infer; matches
-    // the existing plugin-upload client pattern.
   });
   if (!res.ok) {
     throw new Error(`S3 PUT ${res.status}: ${await res.text()}`);
@@ -198,9 +196,7 @@ async function finalizeAttachment(input: {
         attachmentId: input.presign.attachmentId,
         stagingKey: input.presign.stagingKey,
         name: input.presign.name,
-        declaredMimeType:
-          input.file.type ||
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        declaredMimeType: declaredMimeTypeFor(input.file),
         declaredSizeBytes: input.file.size,
       }),
     },
@@ -213,4 +209,11 @@ async function finalizeAttachment(input: {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function declaredMimeTypeFor(file: File): string {
+  return (
+    file.type ||
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
 }

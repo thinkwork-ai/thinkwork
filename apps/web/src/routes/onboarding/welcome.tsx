@@ -28,10 +28,12 @@ import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
 import { getGoogleSignInUrl, rememberPostAuthRedirect } from "@/lib/auth";
 import {
+  connectDeploymentSessionCredentialLease,
   createDeploymentSession,
   readDeploymentSession,
   requestDeploymentSessionTeardown,
   startDeploymentSession,
+  type BootstrapCredentialLeaseInput,
   type DeploymentSession,
   type DeploymentSessionResume,
 } from "@/lib/deployment-sessions";
@@ -336,6 +338,29 @@ function NewEnvironmentInstaller() {
     }
   }
 
+  async function connectAwsCredentialLease(
+    input: BootstrapCredentialLeaseInput,
+  ) {
+    if (!resume) return;
+    setError(null);
+    setLoadingLabel("Validating AWS credential lease...");
+    try {
+      const nextSession = await connectDeploymentSessionCredentialLease(
+        resume,
+        input,
+      );
+      setSession(nextSession);
+    } catch (connectError) {
+      setError(
+        connectError instanceof Error
+          ? connectError.message
+          : "AWS credential lease could not be validated.",
+      );
+    } finally {
+      setLoadingLabel(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-10">
@@ -383,6 +408,9 @@ function NewEnvironmentInstaller() {
                 session={session}
                 loadingLabel={loadingLabel}
                 error={error}
+                onConnectCredentialLease={(input) =>
+                  void connectAwsCredentialLease(input)
+                }
                 onStart={() => void startDeployment()}
               />
             ) : (
@@ -503,18 +531,21 @@ function SessionStatus({
   session,
   loadingLabel,
   error,
+  onConnectCredentialLease,
   onStart,
 }: {
   session: DeploymentSession;
   loadingLabel: string | null;
   error: string | null;
+  onConnectCredentialLease: (input: BootstrapCredentialLeaseInput) => void;
   onStart: () => void;
 }) {
-  const canStart = [
-    "ready_for_credentials",
-    "runner_not_configured",
-    "failed",
-  ].includes(session.status);
+  const hasCredentialLease = session.credentialsStatus === "validated";
+  const canStart =
+    hasCredentialLease &&
+    ["ready_to_deploy", "runner_not_configured", "failed"].includes(
+      session.status,
+    );
 
   return (
     <div className="space-y-6">
@@ -531,7 +562,12 @@ function SessionStatus({
         </span>
       </div>
 
-      {canStart ? (
+      {!hasCredentialLease ? (
+        <CredentialLeaseForm
+          loading={loadingLabel === "Validating AWS credential lease..."}
+          onSubmit={onConnectCredentialLease}
+        />
+      ) : canStart ? (
         <div className="flex items-center justify-end border-y border-border py-4">
           <Button
             type="button"
@@ -583,6 +619,119 @@ function SessionStatus({
         </div>
       </div>
     </div>
+  );
+}
+
+function CredentialLeaseForm({
+  loading,
+  onSubmit,
+}: {
+  loading: boolean;
+  onSubmit: (input: BootstrapCredentialLeaseInput) => void;
+}) {
+  const [kind, setKind] = useState<BootstrapCredentialLeaseInput["kind"]>(
+    "temporary_credentials",
+  );
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (kind === "assumable_role") {
+      onSubmit({
+        kind,
+        roleArn: String(form.get("roleArn") || ""),
+        externalId: String(form.get("externalId") || "") || undefined,
+        expiresAt: String(form.get("roleExpiresAt") || "") || undefined,
+      });
+      return;
+    }
+    onSubmit({
+      kind,
+      accessKeyId: String(form.get("accessKeyId") || ""),
+      secretAccessKey: String(form.get("secretAccessKey") || ""),
+      sessionToken: String(form.get("sessionToken") || ""),
+      expiresAt: String(form.get("expiresAt") || ""),
+    });
+  }
+
+  return (
+    <form className="space-y-4 border-y border-border py-4" onSubmit={submit}>
+      <div>
+        <h3 className="text-sm font-medium">AWS bootstrap connection</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Credentials are sent once to the server-side lease vault. The browser
+          keeps only the session resume token.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="bootstrap-credential-kind">Connection type</Label>
+          <select
+            id="bootstrap-credential-kind"
+            name="credentialKind"
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={kind}
+            onChange={(event) =>
+              setKind(
+                event.target.value as BootstrapCredentialLeaseInput["kind"],
+              )
+            }
+          >
+            <option value="temporary_credentials">STS credentials</option>
+            <option value="assumable_role">Assumable role</option>
+          </select>
+        </div>
+        {kind === "assumable_role" ? (
+          <>
+            <Field
+              label="Role ARN"
+              name="roleArn"
+              placeholder="arn:aws:iam::123456789012:role/ThinkWorkBootstrap"
+              required
+            />
+            <Field label="External ID" name="externalId" />
+            <Field
+              label="Lease expires at"
+              name="roleExpiresAt"
+              type="datetime-local"
+            />
+          </>
+        ) : (
+          <>
+            <Field
+              label="Access key ID"
+              name="accessKeyId"
+              placeholder="ASIA..."
+              required
+            />
+            <Field
+              label="Secret access key"
+              name="secretAccessKey"
+              type="password"
+              required
+            />
+            <Field
+              label="Session token"
+              name="sessionToken"
+              type="password"
+              required
+            />
+            <Field
+              label="Expires at"
+              name="expiresAt"
+              type="datetime-local"
+              required
+            />
+          </>
+        )}
+      </div>
+      <div className="flex justify-end">
+        <Button type="submit" disabled={loading}>
+          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Validate AWS connection
+        </Button>
+      </div>
+    </form>
   );
 }
 

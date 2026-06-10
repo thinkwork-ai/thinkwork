@@ -10,6 +10,11 @@ import {
   ontologyReprocessJobs,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
+import {
+  createKnowledgeGraphObservationsIngestRun,
+  markKnowledgeGraphRunInvokeFailed,
+} from "../knowledge-graph/runs.js";
+import { invokeKnowledgeGraphObservationsIngestWorker } from "../knowledge-graph/invoke-worker.js";
 import { toOntologyReprocessJob } from "./mappers.js";
 import {
   analyzeOntologyReprocessImpact,
@@ -33,6 +38,21 @@ export interface OntologyReprocessResult {
   status: "succeeded" | "failed" | "no_job" | "already_done";
   impact?: OntologyReprocessImpact;
   metrics?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface OntologyObservationsReingestDeps {
+  createRun?: typeof createKnowledgeGraphObservationsIngestRun;
+  invokeWorker?: typeof invokeKnowledgeGraphObservationsIngestWorker;
+  markRunInvokeFailed?: typeof markKnowledgeGraphRunInvokeFailed;
+}
+
+export interface OntologyObservationsReingestOutcome {
+  state: "invoked" | "active_run_exists" | "error";
+  phase?: "enqueue" | "invoke";
+  runId?: string;
+  fullRebuild?: boolean;
+  reason?: string;
   error?: string;
 }
 
@@ -141,6 +161,145 @@ export async function markOntologyReprocessInvokeFailed(args: {
     .where(eq(ontologyReprocessJobs.id, args.jobId));
 }
 
+/**
+ * Approval → targeted observations re-ingest hook (plan R8).
+ *
+ * Incremental observation cursors have already advanced past observations the
+ * normalizer deferred under the old ontology, so only a full rebuild
+ * re-extracts them under the newly approved types. Dispatch matches the
+ * `startKnowledgeGraphObservationsIngest` resolver shape: claim a run row,
+ * then RequestResponse-invoke the worker, marking the run failed when the
+ * invoke errors. Never throws — an enqueue failure must not roll back the
+ * approval; the outcome is recorded on the reprocess job instead.
+ */
+export async function enqueueObservationsReingestForOntologyApproval(args: {
+  tenantId: string;
+  changeSetId: string;
+  reprocessJobId: string;
+  db?: DbLike;
+  deps?: OntologyObservationsReingestDeps;
+}): Promise<OntologyObservationsReingestOutcome> {
+  const db = args.db ?? defaultDb;
+  const createRun =
+    args.deps?.createRun ?? createKnowledgeGraphObservationsIngestRun;
+  const invokeWorker =
+    args.deps?.invokeWorker ?? invokeKnowledgeGraphObservationsIngestWorker;
+  const markRunInvokeFailed =
+    args.deps?.markRunInvokeFailed ?? markKnowledgeGraphRunInvokeFailed;
+
+  let run: { id: string };
+  let inserted: boolean;
+  try {
+    ({ run, inserted } = await createRun({
+      db,
+      tenantId: args.tenantId,
+      requestedByUserId: null,
+      trigger: "manual",
+      fullRebuild: true,
+      metadata: {
+        reason: "ontology_approval",
+        changeSetId: args.changeSetId,
+        reprocessJobId: args.reprocessJobId,
+      },
+    }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[ontology-reprocess] observations re-ingest enqueue failed",
+      {
+        tenantId: args.tenantId,
+        changeSetId: args.changeSetId,
+        reprocessJobId: args.reprocessJobId,
+        error: message,
+      },
+    );
+    return {
+      state: "error",
+      phase: "enqueue",
+      reason: "ontology_approval",
+      error: message,
+    };
+  }
+
+  if (!inserted) {
+    // An observations run is already queued/running for this tenant — the
+    // stable source ref dedupes starts. The approval's full rebuild rides
+    // the normal run retry/reap path on the next dispatch.
+    return {
+      state: "active_run_exists",
+      runId: run.id,
+      reason: "ontology_approval",
+    };
+  }
+
+  try {
+    await invokeWorker({
+      runId: run.id,
+      tenantId: args.tenantId,
+      fullRebuild: true,
+      trigger: "manual",
+      requestedByUserId: null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await markRunInvokeFailed({ db, runId: run.id, error: message }).catch(
+      () => null,
+    );
+    console.error("[ontology-reprocess] observations re-ingest invoke failed", {
+      tenantId: args.tenantId,
+      changeSetId: args.changeSetId,
+      reprocessJobId: args.reprocessJobId,
+      runId: run.id,
+      error: message,
+    });
+    return {
+      state: "error",
+      phase: "invoke",
+      runId: run.id,
+      reason: "ontology_approval",
+      error: message,
+    };
+  }
+
+  return {
+    state: "invoked",
+    runId: run.id,
+    fullRebuild: true,
+    reason: "ontology_approval",
+  };
+}
+
+/**
+ * Dispatch the post-apply observations re-ingest and record its outcome on
+ * the reprocess job's metrics. The job has already been marked succeeded in
+ * the apply transaction — this only merges the re-ingest outcome in, so a
+ * dispatch failure is visible without failing the (already applied) approval.
+ */
+export async function dispatchObservationsReingestForOntologyApproval(args: {
+  job: { id: string; tenant_id: string; change_set_id: string };
+  baseMetrics?: Record<string, unknown>;
+  db?: DbLike;
+  deps?: OntologyObservationsReingestDeps;
+}): Promise<Record<string, unknown>> {
+  const db = args.db ?? defaultDb;
+  const outcome = await enqueueObservationsReingestForOntologyApproval({
+    tenantId: args.job.tenant_id,
+    changeSetId: args.job.change_set_id,
+    reprocessJobId: args.job.id,
+    db,
+    deps: args.deps,
+  });
+  const metrics = {
+    ...(args.baseMetrics ?? {}),
+    observationsReingest: { ...outcome },
+  };
+  await db
+    .update(ontologyReprocessJobs)
+    .set({ metrics, updated_at: new Date() })
+    .where(eq(ontologyReprocessJobs.id, args.job.id));
+  return metrics;
+}
+
 export async function loadRawOntologyReprocessJob(args: {
   jobId: string;
   db?: DbLike;
@@ -197,6 +356,7 @@ export async function runOntologyReprocess(args: {
   jobId?: string | null;
   db?: DbLike;
   pageCap?: number;
+  reingestDeps?: OntologyObservationsReingestDeps;
 }): Promise<OntologyReprocessResult> {
   const db = args.db ?? defaultDb;
   const claimed = args.jobId
@@ -225,6 +385,7 @@ export async function runOntologyReprocess(args: {
       job: claimed,
       db,
       pageCap: args.pageCap,
+      reingestDeps: args.reingestDeps,
     });
     return {
       ok: true,
@@ -256,6 +417,7 @@ async function processClaimedOntologyReprocessJob(args: {
   job: any;
   db: DbLike;
   pageCap?: number;
+  reingestDeps?: OntologyObservationsReingestDeps;
 }) {
   if (!args.job.tenant_id || !args.job.change_set_id) {
     throw new Error("Ontology reprocess job is missing tenant/change-set ids");
@@ -338,6 +500,28 @@ async function processClaimedOntologyReprocessJob(args: {
       })
       .where(eq(ontologyReprocessJobs.id, args.job.id));
   });
+
+  // Post-apply hook (plan R8): the apply transaction has committed and the
+  // change set is now `applied`, so a re-ingest dispatch failure here must
+  // never fail the reprocess job — it is recorded on the job's metrics and
+  // logged instead.
+  try {
+    metrics = await dispatchObservationsReingestForOntologyApproval({
+      job: args.job,
+      baseMetrics: metrics,
+      db: args.db,
+      deps: args.reingestDeps,
+    });
+  } catch (err) {
+    console.error(
+      "[ontology-reprocess] failed to record observations re-ingest outcome",
+      {
+        jobId: args.job.id,
+        tenantId: args.job.tenant_id,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    );
+  }
 
   return {
     impact: persistedImpact,

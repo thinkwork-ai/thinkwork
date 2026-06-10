@@ -31,6 +31,12 @@ export const SettingsDeploymentStatusQuery = graphql(`
       source
       region
       accountId
+      releaseVersion
+      releaseManifestUrl
+      releaseManifestSha256
+      deploymentControllerArn
+      deploymentRunnerProjectName
+      deploymentEvidenceBucket
       bucketName
       databaseEndpoint
       ecrUrl
@@ -85,6 +91,45 @@ export const SettingsDeploymentStatusQuery = graphql(`
         managedMcpInstalled
         managedMcpInstallAvailable
         managedMcpMessage
+      }
+    }
+  }
+`);
+
+export const SettingsDeploymentReleasesQuery = graphql(`
+  query SettingsDeploymentReleases($limit: Int) {
+    deploymentReleases(limit: $limit) {
+      version
+      name
+      prerelease
+      draft
+      publishedAt
+      htmlUrl
+      manifestUrl
+      manifestSha256
+      signatureUrl
+      signed
+      deployable
+    }
+  }
+`);
+
+export const SettingsStartDeploymentReleaseUpdateMutation = graphql(`
+  mutation SettingsStartDeploymentReleaseUpdate(
+    $input: StartDeploymentReleaseUpdateInput!
+  ) {
+    startDeploymentReleaseUpdate(input: $input) {
+      executionArn
+      stateMachineArn
+      evidenceBucket
+      evidencePrefix
+      message
+      release {
+        version
+        manifestUrl
+        manifestSha256
+        signed
+        deployable
       }
     }
   }
@@ -964,6 +1009,7 @@ export const SettingsTenantMembersQuery = graphql(`
       principalId
       role
       status
+      cognitoStatus
       createdAt
       user {
         id
@@ -1066,6 +1112,12 @@ export const SettingsUpdateTenantMemberMutation = graphql(`
       status
       updatedAt
     }
+  }
+`);
+
+export const SettingsRemoveTenantMemberMutation = graphql(`
+  mutation SettingsRemoveTenantMember($id: ID!) {
+    removeTenantMember(id: $id)
   }
 `);
 

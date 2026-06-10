@@ -152,8 +152,10 @@ locals {
       JOB_TRIGGER_ROLE_ARN = var.job_scheduler_role_arn
     }
     "deployment-sessions" = {
-      THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
-      THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
+      THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN  = var.deployment_state_machine_arn
+      THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET    = var.deployment_evidence_bucket
+      THINKWORK_BOOTSTRAP_LEASE_SECRET_PREFIX = "thinkwork/${var.stage}/deployment-bootstrap-leases"
+      THINKWORK_BOOTSTRAP_LEASE_KMS_KEY_ID    = var.bootstrap_credential_lease_kms_key_id
     }
     # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
     # model works; the planner + section-writer cap themselves at ~500
@@ -206,6 +208,17 @@ locals {
       COGNEE_ENDPOINT     = var.cognee_endpoint
       COGNEE_BACKEND_MODE = var.cognee_backend_mode
       COGNEE_INGEST_MODE  = "remember"
+    }
+    # Observations → Knowledge Graph worker (plan 2026-06-09-004 U5).
+    # add_cognify pins the incremental ingest path into the stable
+    # per-tenant dataset; the promotion-gate classifier reads
+    # OBSERVATION_CLASSIFIER_MODEL_ID (Bedrock IAM via the shared
+    # lambda_bedrock invoke policy).
+    "knowledge-graph-observations-ingest" = {
+      COGNEE_ENDPOINT                 = var.cognee_endpoint
+      COGNEE_BACKEND_MODE             = var.cognee_backend_mode
+      COGNEE_INGEST_MODE              = "add_cognify"
+      OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
@@ -395,6 +408,7 @@ resource "aws_lambda_function" "handler" {
     "memory-retain",
     "wiki-compile",
     "knowledge-graph-thread-ingest",
+    "knowledge-graph-observations-ingest",
     "ontology-scan",
     "ontology-reprocess",
     "wiki-lint",
@@ -557,8 +571,8 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-thread-ingest" ? 300 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-thread-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-thread-ingest" ? 300 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-thread-ingest" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -581,7 +595,7 @@ resource "aws_lambda_function" "handler" {
   }
 
   dynamic "vpc_config" {
-    for_each = each.key == "knowledge-graph-thread-ingest" && length(var.cognee_worker_subnet_ids) > 0 && length(var.cognee_worker_security_group_ids) > 0 ? [1] : []
+    for_each = contains(["knowledge-graph-thread-ingest", "knowledge-graph-observations-ingest"], each.key) && length(var.cognee_worker_subnet_ids) > 0 && length(var.cognee_worker_security_group_ids) > 0 ? [1] : []
 
     content {
       subnet_ids         = var.cognee_worker_subnet_ids
@@ -971,25 +985,30 @@ locals {
 
       # Stripe billing (unauthenticated — checkout is pre-signup; webhook is
       # server-to-server with Stripe signature verification).
-      "POST /api/stripe/checkout-session"                     = "stripe-checkout"
-      "OPTIONS /api/stripe/checkout-session"                  = "stripe-checkout"
-      "POST /api/stripe/webhook"                              = "stripe-webhook"
-      "POST /api/stripe/portal-session"                       = "stripe-portal"
-      "OPTIONS /api/stripe/portal-session"                    = "stripe-portal"
-      "GET /api/stripe/subscription"                          = "stripe-subscription"
-      "OPTIONS /api/stripe/subscription"                      = "stripe-subscription"
-      "POST /api/deployment-sessions"                         = "deployment-sessions"
-      "OPTIONS /api/deployment-sessions"                      = "deployment-sessions"
-      "GET /api/deployment-sessions/{sessionId}"              = "deployment-sessions"
-      "OPTIONS /api/deployment-sessions/{sessionId}"          = "deployment-sessions"
-      "POST /api/deployment-sessions/{sessionId}/start"       = "deployment-sessions"
-      "OPTIONS /api/deployment-sessions/{sessionId}/start"    = "deployment-sessions"
-      "POST /api/deployment-sessions/{sessionId}/teardown"    = "deployment-sessions"
-      "OPTIONS /api/deployment-sessions/{sessionId}/teardown" = "deployment-sessions"
-      "GET /api/auth/me"                                      = "auth-me"
-      "OPTIONS /api/auth/me"                                  = "auth-me"
-      "ANY /api/extensions/{extensionId}"                     = "extension-proxy"
-      "ANY /api/extensions/{extensionId}/{proxy+}"            = "extension-proxy"
+      "POST /api/stripe/checkout-session"                                       = "stripe-checkout"
+      "OPTIONS /api/stripe/checkout-session"                                    = "stripe-checkout"
+      "POST /api/stripe/webhook"                                                = "stripe-webhook"
+      "POST /api/stripe/portal-session"                                         = "stripe-portal"
+      "OPTIONS /api/stripe/portal-session"                                      = "stripe-portal"
+      "GET /api/stripe/subscription"                                            = "stripe-subscription"
+      "OPTIONS /api/stripe/subscription"                                        = "stripe-subscription"
+      "POST /api/deployment-sessions"                                           = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions"                                        = "deployment-sessions"
+      "GET /api/deployment-sessions/{sessionId}"                                = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}"                            = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/bootstrap-credential-lease"    = "deployment-sessions"
+      "DELETE /api/deployment-sessions/{sessionId}/bootstrap-credential-lease"  = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/bootstrap-credential-lease" = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/authority-transfer"            = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/authority-transfer"         = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/start"                         = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/start"                      = "deployment-sessions"
+      "POST /api/deployment-sessions/{sessionId}/teardown"                      = "deployment-sessions"
+      "OPTIONS /api/deployment-sessions/{sessionId}/teardown"                   = "deployment-sessions"
+      "GET /api/auth/me"                                                        = "auth-me"
+      "OPTIONS /api/auth/me"                                                    = "auth-me"
+      "ANY /api/extensions/{extensionId}"                                       = "extension-proxy"
+      "ANY /api/extensions/{extensionId}/{proxy+}"                              = "extension-proxy"
 
       # Routines
       "ANY /api/routines/{proxy+}" = "routines"
@@ -1458,6 +1477,29 @@ resource "aws_scheduler_schedule" "wiki_compile_drainer" {
   target {
     arn      = aws_lambda_function.handler["wiki-compile"].arn
     role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# Observations → Knowledge Graph sweep (plan 2026-06-09-004 U5). Enumerates
+# tenants and runs an incremental observations ingest per tenant; the stable
+# source_ref's active-run dedupe drops overlap with operator-started runs and
+# the in-handler stale-run reaper clears stranded rows past the run ceiling.
+resource "aws_scheduler_schedule" "knowledge_graph_observations_ingest" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-knowledge-graph-observations-ingest"
+  group_name          = "default"
+  schedule_expression = "rate(30 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["knowledge-graph-observations-ingest"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ sweep = true, trigger = "scheduled" })
   }
 }
 

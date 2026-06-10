@@ -61,6 +61,45 @@ export async function markKnowledgeGraphRunRunning(args: {
     );
 }
 
+/** Finish a run that found no new source records — cursors stay untouched. */
+export async function markKnowledgeGraphRunStaleNoop(args: {
+  db: Database;
+  runId: string;
+  startedAt: Date;
+  metrics?: Record<string, unknown>;
+}): Promise<void> {
+  const finishedAt = new Date();
+  await args.db
+    .update(knowledgeGraphIngestRuns)
+    .set({
+      status: "stale_noop",
+      finished_at: finishedAt,
+      duration_ms: finishedAt.getTime() - args.startedAt.getTime(),
+      metrics: args.metrics ?? {},
+      updated_at: finishedAt,
+    })
+    .where(eq(knowledgeGraphIngestRuns.id, args.runId));
+}
+
+export async function countKnowledgeGraphEntitiesForSource(args: {
+  db: Database;
+  tenantId: string;
+  sourceKind: string;
+  sourceRef: string;
+}): Promise<number> {
+  const [row] = await args.db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(knowledgeGraphEntities)
+    .where(
+      and(
+        eq(knowledgeGraphEntities.tenant_id, args.tenantId),
+        eq(knowledgeGraphEntities.source_kind, args.sourceKind),
+        eq(knowledgeGraphEntities.source_ref, args.sourceRef),
+      ),
+    );
+  return Number(row?.count ?? 0);
+}
+
 export async function markKnowledgeGraphRunFailed(args: {
   db: Database;
   runId: string;
@@ -82,6 +121,11 @@ export async function markKnowledgeGraphRunFailed(args: {
     .where(eq(knowledgeGraphIngestRuns.id, args.runId));
 }
 
+/** Drizzle transaction handle as passed to `db.transaction` callbacks. */
+export type DatabaseTransaction = Parameters<
+  Parameters<Database["transaction"]>[0]
+>[0];
+
 export async function replaceKnowledgeGraphSnapshot(args: {
   db: Database;
   run: KnowledgeGraphIngestRunRow;
@@ -91,6 +135,14 @@ export async function replaceKnowledgeGraphSnapshot(args: {
   ingestMode: string;
   ontologyMechanism: string;
   sourceMetrics?: Record<string, unknown>;
+  /** Merged over the run's existing metadata in the completion update. */
+  runMetadata?: Record<string, unknown>;
+  /**
+   * Extra writes that must commit atomically with the snapshot replace +
+   * run completion (e.g. observation cursor advance) — a split commit
+   * makes cursors-ahead silent data loss.
+   */
+  extraWork?: (tx: DatabaseTransaction) => Promise<void>;
 }): Promise<void> {
   const finishedAt = new Date();
   await args.db.transaction(async (tx) => {
@@ -252,10 +304,28 @@ export async function replaceKnowledgeGraphSnapshot(args: {
           ingestMode: args.ingestMode,
           ontologyMechanism: args.ontologyMechanism,
         },
+        ...(args.runMetadata
+          ? {
+              metadata: {
+                ...asRecord(args.run.metadata),
+                ...args.runMetadata,
+              },
+            }
+          : {}),
         updated_at: finishedAt,
       })
       .where(eq(knowledgeGraphIngestRuns.id, args.run.id));
+
+    if (args.extraWork) {
+      await args.extraWork(tx);
+    }
   });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function toEvidenceRow(args: {

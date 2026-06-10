@@ -8,6 +8,7 @@ import {
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { ensureDefaultModelApprovalsForUser } from "./model-approvals.js";
+import { ensureBaselineOntology } from "./ontology/baseline.js";
 
 type Db = Database;
 
@@ -62,6 +63,9 @@ export async function ensureTenantBootstrapDefaults(
   await ensureBootstrapModelCatalog(db);
   await ensureTenantDefaultModel(db, input.tenantId);
   await ensureTenantPlatformAgent(db, input.tenantId);
+  // Baseline ontology (plan R11): a fresh tenant's first observations ingest
+  // must extract something instead of deadlocking behind first approval.
+  await ensureBaselineOntology(db, input.tenantId);
   if (input.userId) {
     await ensureDefaultModelApprovalsForUser(
       { tenantId: input.tenantId, userId: input.userId },

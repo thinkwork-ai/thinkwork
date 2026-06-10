@@ -10,6 +10,24 @@ import { getRuntimeEnvSnapshot } from "@/lib/runtime-config";
 
 type SpacesEnv = ImportMetaEnv & Record<string, string | boolean | undefined>;
 
+const REQUIRED_PROFILE_FIELDS = [
+  "deploymentId",
+  "displayName",
+  "stage",
+  "region",
+  "issuedAt",
+  "spacesUrl",
+  "apiUrl",
+  "graphqlHttpUrl",
+  "appsyncHttpUrl",
+  "appsyncWsUrl",
+  "cognitoDomain",
+  "cognitoUserPoolId",
+  "cognitoClientId",
+] as const;
+
+const DEFAULT_UNSIGNED_PROFILE_ISSUED_AT = "1970-01-01T00:00:00.000Z";
+
 export interface SpacesDeploymentProfileSnapshot {
   profile: DeploymentProfile | null;
   profileJson: string;
@@ -39,9 +57,21 @@ export function getSpacesDeploymentProfileSnapshot(
     displayName,
     stage,
     region,
+    accountId: stringEnv(env.VITE_AWS_ACCOUNT_ID),
+    releaseVersion: stringEnv(env.VITE_RELEASE_VERSION),
+    releaseManifestUrl: stringEnv(env.VITE_RELEASE_MANIFEST_URL),
+    releaseManifestSha256: stringEnv(env.VITE_RELEASE_MANIFEST_SHA256),
+    controller: compactController({
+      stateMachineArn: stringEnv(env.VITE_DEPLOYMENT_CONTROLLER_ARN),
+      stateMachineName: stringEnv(env.VITE_DEPLOYMENT_CONTROLLER_NAME),
+      codebuildProjectName: stringEnv(env.VITE_DEPLOYMENT_RUNNER_PROJECT_NAME),
+      codebuildProjectArn: stringEnv(env.VITE_DEPLOYMENT_RUNNER_PROJECT_ARN),
+      evidenceBucketName: stringEnv(env.VITE_DEPLOYMENT_EVIDENCE_BUCKET),
+      ssmPrefix: stringEnv(env.VITE_DEPLOYMENT_SSM_PREFIX),
+    }),
     issuedAt:
       stringEnv(env.VITE_DEPLOYMENT_PROFILE_ISSUED_AT) ||
-      new Date().toISOString(),
+      DEFAULT_UNSIGNED_PROFILE_ISSUED_AT,
     spacesUrl: stringEnv(env.VITE_SPACES_URL) || origin,
     apiUrl,
     graphqlHttpUrl:
@@ -55,11 +85,10 @@ export function getSpacesDeploymentProfileSnapshot(
     signature: null,
   };
 
-  const missing = Object.entries(values)
-    .filter(
-      ([key, value]) =>
-        key !== "signature" && (typeof value !== "string" || !value.trim()),
-    )
+  const missing = REQUIRED_PROFILE_FIELDS.map(
+    (key) => [key, values[key]] as const,
+  )
+    .filter(([, value]) => typeof value !== "string" || !value.trim())
     .map(([key]) => envNameForProfileField(key));
 
   if (missing.length > 0) {
@@ -135,6 +164,17 @@ function stringEnv(value: string | boolean | undefined): string {
 function appendPath(baseUrl: string, path: string): string {
   if (!baseUrl) return "";
   return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
+function compactController(controller: {
+  stateMachineArn: string;
+  stateMachineName: string;
+  codebuildProjectName: string;
+  codebuildProjectArn: string;
+  evidenceBucketName: string;
+  ssmPrefix: string;
+}) {
+  return controller.stateMachineArn ? controller : null;
 }
 
 function httpUrlToWsUrl(url: string): string {

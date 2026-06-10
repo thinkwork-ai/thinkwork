@@ -147,9 +147,9 @@ variable "cognee_llm_provider" {
 }
 
 variable "cognee_llm_model" {
-  description = "Cognee LLM model."
+  description = "Cognee LLM model. Must handle tool-use structured extraction reliably — nova-lite repeatedly produced invalid ToolUse sequences on observation documents. The `us.` inference-profile prefix is required for Anthropic models on Bedrock."
   type        = string
-  default     = "bedrock/amazon.nova-lite-v1:0"
+  default     = "bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
 variable "cognee_llm_api_key_secret_arn" {

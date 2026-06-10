@@ -243,3 +243,112 @@ describe("createHindsightMemoryProvider", () => {
     expect(result.text).toBe("synth from response key");
   });
 });
+
+describe("observation signal parsing", () => {
+  it("surfaces factType, freshness, and proofCount on observation units", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        memory_units: [
+          {
+            id: "obs-1",
+            text: "Alice is a Python-focused developer",
+            score: 0.8,
+            fact_type: "observation",
+            freshness: "strengthening",
+            proof_count: 5,
+          },
+          {
+            id: "raw-1",
+            text: "Alice mentioned pytest today",
+            score: 0.8,
+            fact_type: "experience",
+          },
+        ],
+      }),
+    );
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.recall({ query: "alice" });
+
+    expect(result.memories[0]).toEqual({
+      id: "obs-1",
+      content: "Alice is a Python-focused developer",
+      score: 0.8,
+      factType: "observation",
+      freshness: "strengthening",
+      proofCount: 5,
+    });
+    expect(result.memories[1]).toEqual({
+      id: "raw-1",
+      content: "Alice mentioned pytest today",
+      score: 0.8,
+      factType: "experience",
+    });
+  });
+
+  it("tolerates units without observation fields and metadata-carried signals", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        memory_units: [
+          { id: "plain", text: "no signals at all" },
+          {
+            id: "meta",
+            text: "signals in metadata",
+            metadata: { fact_type: "observation", trend: "stale" },
+          },
+        ],
+      }),
+    );
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.recall({ query: "anything" });
+
+    expect(result.memories[0]).toEqual({
+      id: "plain",
+      content: "no signals at all",
+    });
+    expect(result.memories[1]).toEqual({
+      id: "meta",
+      content: "signals in metadata",
+      factType: "observation",
+      freshness: "stale",
+    });
+  });
+});
+
+describe("deployed recall wire format (Hindsight 0.5.0)", () => {
+  it("parses `type` and `source_fact_ids` observation signals", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        memory_units: [
+          {
+            id: "obs-wire",
+            text: "consolidated belief",
+            type: "observation",
+            source_fact_ids: ["f1", "f2"],
+            metadata: {},
+          },
+        ],
+      }),
+    );
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.recall({ query: "wire" });
+
+    expect(result.memories[0]).toEqual({
+      id: "obs-wire",
+      content: "consolidated belief",
+      factType: "observation",
+      proofCount: 2,
+    });
+  });
+});

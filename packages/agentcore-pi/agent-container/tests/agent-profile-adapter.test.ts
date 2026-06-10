@@ -75,11 +75,6 @@ function compile(overrides: Partial<AgentProfileConfig> = {}) {
     task: "Find current sources",
     parentThreadTurnId: "turn-parent",
     parentModelId: "anthropic/claude-sonnet-4-5",
-    approvedModelIds: [
-      "anthropic/claude-sonnet-4-5",
-      "anthropic/claude-haiku-4-5",
-      "openai/gpt-5-mini",
-    ],
     availableToolNames: ["web_search", "web_extract", "read"],
     availableSkillNames: ["source-review"],
     mcpRegistry: registryWithTwentyTools(),
@@ -185,7 +180,6 @@ describe("agent profile adapter", () => {
           task: "Find current sources",
           parentThreadTurnId: "turn-parent",
           parentModelId: "anthropic/claude-sonnet-4-5",
-          approvedModelIds: ["anthropic/claude-haiku-4-5", "openai/gpt-5-mini"],
           availableToolNames: ["web_search", "web_extract", "read"],
           availableSkillNames: ["source-review"],
           mcpRegistry: registryWithTwentyTools(),
@@ -199,23 +193,20 @@ describe("agent profile adapter", () => {
     );
   });
 
-  it("validates models, tools, and skills against invocation-approved sets", () => {
-    expectAdapterErrorCode(
-      () =>
-        compileAgentProfileRunRequest({
-          profile: researchProfile({
-            modelId: "anthropic/claude-opus-4-1",
-          }),
-          task: "Find current sources",
-          parentThreadTurnId: "turn-parent",
-          parentModelId: "anthropic/claude-sonnet-4-5",
-          approvedModelIds: ["anthropic/claude-haiku-4-5", "openai/gpt-5-mini"],
-          availableToolNames: ["web_search", "web_extract", "read"],
-          availableSkillNames: ["source-review"],
-          mcpRegistry: registryWithTwentyTools(),
+  it("allows the profile-assigned model while validating tools and skills against profile grants", () => {
+    expect(
+      compileAgentProfileRunRequest({
+        profile: researchProfile({
+          modelId: "anthropic/claude-opus-4-1",
         }),
-      "MODEL_NOT_APPROVED",
-    );
+        task: "Find current sources",
+        parentThreadTurnId: "turn-parent",
+        parentModelId: "anthropic/claude-sonnet-4-5",
+        availableToolNames: ["web_search", "web_extract", "read"],
+        availableSkillNames: ["source-review"],
+        mcpRegistry: registryWithTwentyTools(),
+      }).model,
+    ).toBe("anthropic/claude-opus-4-1");
 
     expectAdapterErrorCode(
       () =>
@@ -228,13 +219,30 @@ describe("agent profile adapter", () => {
           task: "Find current sources",
           parentThreadTurnId: "turn-parent",
           parentModelId: "anthropic/claude-sonnet-4-5",
-          approvedModelIds: ["anthropic/claude-haiku-4-5", "openai/gpt-5-mini"],
           availableToolNames: ["web_search"],
           availableSkillNames: [],
           mcpRegistry: registryWithTwentyTools(),
         }),
       "TOOL_NOT_AVAILABLE",
     );
+  });
+
+  it("drops optional ephemeral file_read when no turn attachment injected it", () => {
+    const request = compileAgentProfileRunRequest({
+      profile: researchProfile({
+        toolPolicy: {
+          builtInTools: ["execute_code", "file_read"],
+        },
+      }),
+      task: "Analyze this spreadsheet.",
+      parentThreadTurnId: "turn-parent",
+      parentModelId: "anthropic/claude-sonnet-4-5",
+      availableToolNames: ["execute_code"],
+      availableSkillNames: [],
+      mcpRegistry: registryWithTwentyTools(),
+    });
+
+    expect(request.tools).toEqual(["execute_code"]);
   });
 
   it("compiles MCP server grants into operation allowlists", () => {

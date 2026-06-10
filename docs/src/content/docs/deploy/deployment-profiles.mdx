@@ -16,25 +16,42 @@ A v1 deployment profile is JSON with these required fields:
 ```json
 {
   "schemaVersion": 1,
-  "deploymentId": "acme-prod",
-  "displayName": "Acme ThinkWork",
-  "stage": "prod",
+  "deploymentId": "thinkwork-tei-e2e",
+  "displayName": "ThinkWork",
+  "stage": "tei-e2e",
   "region": "us-east-1",
-  "issuedAt": "2026-06-06T00:00:00.000Z",
-  "spacesUrl": "https://spaces.acme.example.com",
-  "apiUrl": "https://api.acme.example.com",
-  "graphqlHttpUrl": "https://api.acme.example.com/graphql",
-  "appsyncHttpUrl": "https://abc.appsync-api.us-east-1.amazonaws.com/graphql",
-  "appsyncWsUrl": "wss://abc.appsync-realtime-api.us-east-1.amazonaws.com/graphql",
-  "cognitoDomain": "https://acme.auth.us-east-1.amazoncognito.com",
-  "cognitoUserPoolId": "us-east-1_abc",
-  "cognitoClientId": "client-id",
+  "accountId": "637423202447",
+  "releaseVersion": "v0.1.0-canary.148",
+  "releaseManifestUrl": "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.148/thinkwork-release.json",
+  "releaseManifestSha256": "5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93",
+  "controller": {
+    "stateMachineArn": "arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+    "stateMachineName": "thinkwork-tei-e2e-deployment-orchestrator",
+    "codebuildProjectName": "thinkwork-tei-e2e-deployment-runner",
+    "evidenceBucketName": "thinkwork-tei-e2e-637423202447-deploy-evidence",
+    "ssmPrefix": "/thinkwork/tei-e2e/deployment",
+    "verifiedAt": "2026-06-10T05:39:47.478811+00:00"
+  },
+  "issuedAt": "2026-06-10T05:39:47.478830+00:00",
+  "spacesUrl": "https://d1eqjv7ijcmtqz.cloudfront.net",
+  "apiUrl": "https://8puq24dl63.execute-api.us-east-1.amazonaws.com/",
+  "graphqlHttpUrl": "https://8puq24dl63.execute-api.us-east-1.amazonaws.com/graphql",
+  "appsyncHttpUrl": "https://zp7lxyesvnci7gnhfkqbiye3nm.appsync-api.us-east-1.amazonaws.com/graphql",
+  "appsyncWsUrl": "wss://zp7lxyesvnci7gnhfkqbiye3nm.appsync-realtime-api.us-east-1.amazonaws.com/graphql",
+  "cognitoDomain": "https://thinkwork-tei-e2e.auth.us-east-1.amazoncognito.com",
+  "cognitoUserPoolId": "us-east-1_YlRAfXsE9",
+  "cognitoClientId": "5151h0qb3felu6vf4v3l33mvs3",
   "signature": null
 }
 ```
 
 Production profiles should be signed by a trusted ThinkWork deployment profile
 key. Unsigned profiles are for development fallback only.
+
+The `accountId`, release fields, and `controller` object are optional for older
+profiles but expected after customer authority transfer. They tell operators
+which release manifest was installed and which customer-owned Step Functions
+controller owns future update and teardown operations.
 
 ## Import Methods
 

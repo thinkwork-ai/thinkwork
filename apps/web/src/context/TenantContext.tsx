@@ -241,7 +241,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       value={{
         tenant,
         tenantId: effectiveTenantId || tenant?.id || null,
-        userId: discoveredUserId ?? user?.sub ?? null,
+        userId: discoveredUserId,
         role,
         isOperator: role === "owner" || role === "admin",
         roleResolved,

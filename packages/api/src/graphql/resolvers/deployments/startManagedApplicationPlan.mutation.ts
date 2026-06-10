@@ -9,8 +9,10 @@ import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
 import {
   appendJobEvent,
+  buildManagedAppControllerPayload,
   dataImpactFor,
   defaultManifestDigest,
+  defaultManifestUrl,
   defaultReleaseVersion,
   defaultStartExecution,
   deploymentEvidenceBucket,
@@ -19,6 +21,7 @@ import {
   ensureManagedApplication,
   executionName,
   loadJobEvents,
+  managedAppEvidencePrefix,
   normalizeDeploymentOperation,
   normalizeManagedAppKey,
   parseAwsJsonObject,
@@ -66,12 +69,17 @@ export async function startManagedApplicationPlan(
     typeof args.input.manifestDigest === "string" && args.input.manifestDigest
       ? args.input.manifestDigest
       : defaultManifestDigest();
+  const releaseManifestUrl =
+    typeof args.input.manifestUrl === "string" && args.input.manifestUrl
+      ? args.input.manifestUrl
+      : defaultManifestUrl();
   const desiredConfigVersion =
     typeof args.input.desiredConfigVersion === "string" &&
     args.input.desiredConfigVersion
       ? args.input.desiredConfigVersion
       : "v1";
   const desiredConfig = parseAwsJsonObject(args.input.desiredConfig);
+  const manifestImages = parseManifestImages(args.input.manifestImages);
 
   const application = await ensureManagedApplication({
     tenantId,
@@ -104,11 +112,14 @@ export async function startManagedApplicationPlan(
         operation,
         releaseVersion,
         manifestDigest,
+        releaseManifestUrl,
+        desiredConfig,
+        manifestImages,
       },
       data_impact: dataImpactFor(appKey, operation),
       evidence_bucket: evidenceBucket,
       evidence_prefix: evidenceBucket
-        ? `${tenantId}/${appKey}/${jobId}/plan`
+        ? managedAppEvidencePrefix({ tenantId, appKey, jobId, phase: "plan" })
         : null,
     })
     .returning();
@@ -142,7 +153,7 @@ export async function startManagedApplicationPlan(
     const started = await (deps.startExecution ?? defaultStartExecution)({
       stateMachineArn,
       name: executionName(job.id, "plan"),
-      payload: {
+      payload: buildManagedAppControllerPayload({
         phase: "plan",
         tenantId,
         jobId: job.id,
@@ -150,9 +161,12 @@ export async function startManagedApplicationPlan(
         operation,
         releaseVersion,
         manifestDigest,
+        releaseManifestUrl,
         desiredConfigVersion,
         desiredConfig,
-      },
+        manifestImages,
+        evidenceBucket,
+      }),
     });
     const [updated] = await db
       .update(managedApplicationDeploymentJobs)
@@ -192,4 +206,13 @@ export async function startManagedApplicationPlan(
     const events = await loadJobEvents(tenantId, job.id);
     return toDeploymentPayload(failed ?? job, events);
   }
+}
+
+function parseManifestImages(value: unknown): Record<string, string> {
+  const parsed = parseAwsJsonObject(value);
+  return Object.fromEntries(
+    Object.entries(parsed).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
 }

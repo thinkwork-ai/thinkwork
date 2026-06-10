@@ -2074,9 +2074,6 @@ export async function handleInvocation(
     profiles: agentProfiles,
     parentThreadTurnId: threadTurnId || identity.threadId,
     parentModelId,
-    approvedModelIds: normalizeApprovedModelIds(
-      args.payload.approved_model_ids,
-    ),
     tools: bundle.tools,
     extensionFactories: profileChildExtensionFactories,
     extensionToolNames: bundle.extensionToolNames,
@@ -2088,6 +2085,7 @@ export async function handleInvocation(
     gitSha: env.gitSha,
     identity,
     parentHistory,
+    contextPreamble: attachmentPreamble || undefined,
     runLoop,
     emitActivity: activityEmitter.emit,
   });

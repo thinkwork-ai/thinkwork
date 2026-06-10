@@ -390,7 +390,32 @@ async function listScheduledJobs(
     conditions.push(eq(scheduledJobs.enabled, params.enabled === "true"));
 
   const rows = await db
-    .select()
+    .select({
+      id: scheduledJobs.id,
+      tenant_id: scheduledJobs.tenant_id,
+      trigger_type: scheduledJobs.trigger_type,
+      agent_id: scheduledJobs.agent_id,
+      space_id: scheduledJobs.space_id,
+      computer_id: scheduledJobs.computer_id,
+      routine_id: scheduledJobs.routine_id,
+      name: scheduledJobs.name,
+      description: scheduledJobs.description,
+      prompt: scheduledJobs.prompt,
+      schedule_type: scheduledJobs.schedule_type,
+      schedule_expression: scheduledJobs.schedule_expression,
+      timezone: scheduledJobs.timezone,
+      enabled: scheduledJobs.enabled,
+      budget_paused: scheduledJobs.budget_paused,
+      budget_paused_at: scheduledJobs.budget_paused_at,
+      budget_paused_reason: scheduledJobs.budget_paused_reason,
+      eb_schedule_name: scheduledJobs.eb_schedule_name,
+      last_run_at: scheduledJobs.last_run_at,
+      next_run_at: scheduledJobs.next_run_at,
+      created_by_type: scheduledJobs.created_by_type,
+      created_by_id: scheduledJobs.created_by_id,
+      created_at: scheduledJobs.created_at,
+      updated_at: scheduledJobs.updated_at,
+    })
     .from(scheduledJobs)
     .where(and(...conditions))
     .orderBy(desc(scheduledJobs.created_at))
@@ -798,7 +823,22 @@ async function listRuns(
   const limit = Math.min(Number(params.limit) || 50, 200);
 
   const rows = await db
-    .select()
+    .select({
+      id: threadTurns.id,
+      tenant_id: threadTurns.tenant_id,
+      job_id: sql<null>`NULL`,
+      trigger_id: threadTurns.trigger_id,
+      agent_id: threadTurns.agent_id,
+      routine_id: threadTurns.routine_id,
+      invocation_source: threadTurns.invocation_source,
+      status: threadTurns.status,
+      started_at: threadTurns.started_at,
+      finished_at: threadTurns.finished_at,
+      error: threadTurns.error,
+      result_json: sql<null>`NULL`,
+      usage_json: sql<null>`NULL`,
+      created_at: threadTurns.created_at,
+    })
     .from(threadTurns)
     .where(and(...conditions))
     .orderBy(desc(threadTurns.started_at))

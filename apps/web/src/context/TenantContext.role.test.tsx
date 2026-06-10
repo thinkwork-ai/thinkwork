@@ -44,12 +44,13 @@ afterEach(() => {
 async function renderProbe() {
   const { TenantProvider, useTenant } = await import("./TenantContext");
   function Probe() {
-    const { role, isOperator, roleResolved } = useTenant();
+    const { role, isOperator, roleResolved, userId } = useTenant();
     return (
       <div>
         <span data-testid="role">{role ?? "null"}</span>
         <span data-testid="isOperator">{String(isOperator)}</span>
         <span data-testid="roleResolved">{String(roleResolved)}</span>
+        <span data-testid="userId">{userId ?? "null"}</span>
       </div>
     );
   }
@@ -118,5 +119,6 @@ describe("TenantContext role gating", () => {
     await renderProbe();
     expect(screen.getByTestId("roleResolved").textContent).toBe("false");
     expect(screen.getByTestId("isOperator").textContent).toBe("false");
+    expect(screen.getByTestId("userId").textContent).toBe("null");
   });
 });

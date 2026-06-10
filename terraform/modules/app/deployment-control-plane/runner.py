@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 WORK = Path("/tmp/thinkwork-platform-deploy")
 RELEASE = WORK / "release"
@@ -18,6 +20,15 @@ STARTED_AT = datetime.now(UTC).isoformat()
 RELEASE_EVIDENCE = {}
 CONTROLLER_EVIDENCE = {}
 TERRAFORM_EVIDENCE = {}
+RELEASE_MANIFEST_TRUST_POLICIES = {
+    "allow_unsigned_canary",
+    "require_signature",
+}
+PLATFORM_UPDATE_MIGRATIONS = [
+    "0149_user_model_approvals.sql",
+    "0152_agent_profiles.sql",
+    "0155_tenant_model_catalog.sql",
+]
 
 
 def run(args, **kwargs):
@@ -47,6 +58,181 @@ def download(url, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url, timeout=120) as response:
         destination.write_bytes(response.read())
+
+
+def stable_json_bytes(value):
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def release_manifest_sha256(manifest):
+    return hashlib.sha256(stable_json_bytes(manifest)).hexdigest()
+
+
+def release_manifest_trust_policy():
+    policy = os.environ.get(
+        "THINKWORK_RELEASE_MANIFEST_TRUST_POLICY",
+        "allow_unsigned_canary",
+    ).strip()
+    if not policy:
+        policy = "allow_unsigned_canary"
+    if policy not in RELEASE_MANIFEST_TRUST_POLICIES:
+        raise RuntimeError(
+            "Unsupported release manifest trust policy "
+            f"{policy!r}; expected one of {sorted(RELEASE_MANIFEST_TRUST_POLICIES)}"
+        )
+    return policy
+
+
+def is_canary_release(manifest):
+    version = str(
+        manifest.get("release", {}).get("version")
+        or os.environ.get("THINKWORK_RELEASE_VERSION")
+        or ""
+    )
+    return "-canary" in version
+
+
+def default_signature_url(manifest_url):
+    if manifest_url.endswith("/thinkwork-release.json"):
+        return manifest_url[: -len("thinkwork-release.json")] + "thinkwork-release.sig.json"
+    if manifest_url.endswith("thinkwork-release.json"):
+        return manifest_url[: -len("thinkwork-release.json")] + "thinkwork-release.sig.json"
+    return ""
+
+
+def trusted_release_keys():
+    raw = os.environ.get("THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON", "[]")
+    try:
+        keys = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON must be JSON") from exc
+    if not isinstance(keys, list):
+        raise RuntimeError("THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON must be a JSON array")
+    return keys
+
+
+def require_string(value, path):
+    if not isinstance(value, str) or not value:
+        raise RuntimeError(f"{path} is required")
+    return value
+
+
+def assert_time_window(now, not_before, expires_at, label):
+    start = datetime.fromisoformat(require_string(not_before, f"{label}.notBefore").replace("Z", "+00:00"))
+    end = datetime.fromisoformat(require_string(expires_at, f"{label}.expiresAt").replace("Z", "+00:00"))
+    if now < start:
+        raise RuntimeError(f"{label} is not valid before {not_before}")
+    if now > end:
+        raise RuntimeError(f"{label} expired at {expires_at}")
+
+
+def verify_signature_bytes(public_key_pem, signed_bytes, signature_bytes):
+    with TemporaryDirectory() as temp_dir:
+        temp = Path(temp_dir)
+        key_path = temp / "trusted-release-key.pem"
+        payload_path = temp / "manifest.canonical.json"
+        signature_path = temp / "thinkwork-release.sig"
+        key_path.write_text(public_key_pem, encoding="utf-8")
+        payload_path.write_bytes(signed_bytes)
+        signature_path.write_bytes(signature_bytes)
+        result = subprocess.run(
+            [
+                "openssl",
+                "pkeyutl",
+                "-verify",
+                "-rawin",
+                "-pubin",
+                "-inkey",
+                str(key_path),
+                "-sigfile",
+                str(signature_path),
+                "-in",
+                str(payload_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+    if result.returncode != 0:
+        raise RuntimeError(f"Release manifest signature is invalid: {result.stderr.strip()}")
+
+
+def verify_release_manifest_signature(manifest, manifest_sha256, signature_url):
+    signature_path = RELEASE / "thinkwork-release.sig.json"
+    download(signature_url, signature_path)
+    signature = json.loads(signature_path.read_text(encoding="utf-8"))
+    if signature.get("schemaVersion") != 1:
+        raise RuntimeError("Release manifest signature schemaVersion must be 1")
+    if signature.get("algorithm") != "ed25519":
+        raise RuntimeError("Release manifest signature algorithm must be ed25519")
+    key_id = require_string(signature.get("keyId"), "signature.keyId")
+    if signature.get("manifestSha256") != manifest_sha256:
+        raise RuntimeError(
+            "Release manifest signature digest mismatch: "
+            f"expected {signature.get('manifestSha256')}, got {manifest_sha256}"
+        )
+    signing = manifest.get("signing") or {}
+    accepted_key_ids = signing.get("acceptedKeyIds") or []
+    revoked_key_ids = set(signing.get("revokedKeyIds") or [])
+    if key_id in revoked_key_ids:
+        raise RuntimeError(f"Release manifest signing key is revoked: {key_id}")
+    if key_id not in accepted_key_ids:
+        raise RuntimeError(f"Release manifest does not accept signing key: {key_id}")
+    now = datetime.now(UTC)
+    assert_time_window(now, signature.get("notBefore"), signature.get("expiresAt"), "signature")
+    trusted_key = next((key for key in trusted_release_keys() if key.get("keyId") == key_id), None)
+    if not trusted_key:
+        raise RuntimeError(f"Release manifest signing key is not trusted: {key_id}")
+    if trusted_key.get("notBefore") or trusted_key.get("expiresAt"):
+        assert_time_window(
+            now,
+            trusted_key.get("notBefore", "1970-01-01T00:00:00.000Z"),
+            trusted_key.get("expiresAt", "9999-12-31T23:59:59.999Z"),
+            f"trusted key {key_id}",
+        )
+    verify_signature_bytes(
+        require_string(trusted_key.get("publicKeyPem"), f"trusted key {key_id}.publicKeyPem"),
+        stable_json_bytes(manifest),
+        base64.b64decode(require_string(signature.get("signature"), "signature.signature")),
+    )
+    return {
+        "signatureVerified": True,
+        "keyId": key_id,
+        "signatureUrl": signature_url,
+    }
+
+
+def enforce_release_manifest_trust(manifest, manifest_digest, manifest_url):
+    policy = release_manifest_trust_policy()
+    configured_signature_url = os.environ.get("THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL", "")
+    signature_url = configured_signature_url or default_signature_url(manifest_url)
+    evidence = {
+        "policy": policy,
+        "signatureRequired": policy == "require_signature",
+        "signatureVerified": False,
+        "unsignedCanaryAllowed": False,
+    }
+    if policy == "require_signature":
+        if not signature_url:
+            raise RuntimeError("Release manifest signature URL is required by trust policy")
+        evidence.update(verify_release_manifest_signature(manifest, manifest_digest, signature_url))
+        return evidence
+
+    if configured_signature_url:
+        evidence.update(verify_release_manifest_signature(manifest, manifest_digest, configured_signature_url))
+        return evidence
+
+    if not is_canary_release(manifest):
+        raise RuntimeError(
+            "Unsigned release manifest is only allowed for canary releases; "
+            "set THINKWORK_RELEASE_MANIFEST_TRUST_POLICY=require_signature for customer-safe runs"
+        )
+    evidence["unsignedCanaryAllowed"] = True
+    return evidence
 
 
 def safe_join(base, relative_path):
@@ -208,8 +394,7 @@ def controller_input_summary(payload):
     release = payload.get("release")
     if not isinstance(release, dict):
         release = {
-            "version": payload.get("releaseVersion")
-            or os.environ.get("THINKWORK_RELEASE_VERSION"),
+            "version": payload.get("releaseVersion") or os.environ.get("THINKWORK_RELEASE_VERSION"),
             "manifestUrl": payload.get("releaseManifestUrl")
             or os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
             "manifestSha256": payload.get("releaseManifestSha256")
@@ -230,8 +415,7 @@ def controller_input_summary(payload):
         },
         "evidence": payload.get("evidence")
         or {
-            "bucket": payload.get("evidenceBucket")
-            or os.environ.get("THINKWORK_EVIDENCE_BUCKET"),
+            "bucket": payload.get("evidenceBucket") or os.environ.get("THINKWORK_EVIDENCE_BUCKET"),
             "prefix": os.environ.get("THINKWORK_EVIDENCE_PREFIX"),
         },
         "features": payload.get("features")
@@ -247,6 +431,84 @@ def controller_input_summary(payload):
         "operation": payload.get("operation"),
         "release": release,
         "terraform": payload.get("terraform"),
+    }
+
+
+def controller_identity(payload):
+    return {
+        "stateMachineArn": os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN")
+        or payload.get("stateMachineArn"),
+        "stateMachineName": os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_NAME"),
+        "codebuildProjectName": os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME"),
+        "codebuildProjectArn": os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_ARN"),
+        "evidenceBucketName": os.environ.get("THINKWORK_EVIDENCE_BUCKET"),
+        "ssmPrefix": os.environ.get("THINKWORK_SSM_PREFIX"),
+    }
+
+
+def release_selection(payload):
+    release = payload.get("release")
+    if isinstance(release, dict):
+        return {
+            "version": release.get("version")
+            or payload.get("releaseVersion")
+            or os.environ.get("THINKWORK_RELEASE_VERSION"),
+            "manifestUrl": release.get("manifestUrl")
+            or payload.get("releaseManifestUrl")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
+            "manifestSha256": release.get("manifestSha256")
+            or payload.get("releaseManifestSha256")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
+            "manifestSignatureUrl": release.get("manifestSignatureUrl")
+            or payload.get("releaseManifestSignatureUrl")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL"),
+            "manifestTrustPolicy": release.get("manifestTrustPolicy")
+            or payload.get("releaseManifestTrustPolicy")
+            or os.environ.get("THINKWORK_RELEASE_MANIFEST_TRUST_POLICY"),
+        }
+    return {
+        "version": payload.get("releaseVersion") or os.environ.get("THINKWORK_RELEASE_VERSION"),
+        "manifestUrl": payload.get("releaseManifestUrl")
+        or os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
+        "manifestSha256": payload.get("releaseManifestSha256")
+        or os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
+        "manifestSignatureUrl": payload.get("releaseManifestSignatureUrl")
+        or os.environ.get("THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL"),
+        "manifestTrustPolicy": payload.get("releaseManifestTrustPolicy")
+        or os.environ.get("THINKWORK_RELEASE_MANIFEST_TRUST_POLICY"),
+    }
+
+
+def apply_release_selection(payload):
+    selected = release_selection(payload)
+    env_names = {
+        "version": "THINKWORK_RELEASE_VERSION",
+        "manifestUrl": "THINKWORK_RELEASE_MANIFEST_URL",
+        "manifestSha256": "THINKWORK_RELEASE_MANIFEST_SHA256",
+        "manifestSignatureUrl": "THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL",
+        "manifestTrustPolicy": "THINKWORK_RELEASE_MANIFEST_TRUST_POLICY",
+    }
+    for key, env_name in env_names.items():
+        value = selected.get(key)
+        if isinstance(value, str) and value:
+            os.environ[env_name] = value
+    return selected
+
+
+def write_controller_status_evidence(payload):
+    proof = {
+        "schemaVersion": 1,
+        "contract": "thinkwork.deployment.controller.status.v1",
+        "status": "ready",
+        "action": "status",
+        "sessionId": payload.get("sessionId") or os.environ.get("THINKWORK_DEPLOYMENT_SESSION_ID"),
+        "checkedAt": datetime.now(UTC).isoformat(),
+        "controller": controller_identity(payload),
+        "release": release_selection(payload),
+    }
+    return {
+        "proof": proof,
+        "artifact": write_json_evidence_artifact("controller-status.json", proof),
     }
 
 
@@ -345,18 +607,51 @@ def release_runtime_image(name):
     return ""
 
 
+def release_git_sha():
+    if not MANIFEST.exists():
+        return ""
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    release = manifest.get("release")
+    if isinstance(release, dict):
+        git_sha = release.get("gitSha")
+        return git_sha if isinstance(git_sha, str) else ""
+    return ""
+
+
 def source_repo_and_ref(module_source, release_version):
     source = module_source.removeprefix("git::")
     source_path, _, query = source.partition("?")
     params = urllib.parse.parse_qs(query)
     ref = params.get("ref", [release_version])[0]
-    if ".git//" in source_path:
+    if source_path == "thinkwork-ai/thinkwork/aws":
+        repo = "https://github.com/thinkwork-ai/thinkwork.git"
+        ref = release_git_sha() or release_version
+    elif source_path.startswith("github.com/"):
+        github_source = source_path
+        if "//terraform/" in github_source:
+            github_source = github_source.split("//terraform/", 1)[0]
+        repo = f"https://{github_source.removesuffix('.git')}.git"
+    elif ".git//" in source_path:
         repo = source_path.split(".git//", 1)[0] + ".git"
     elif "//terraform/" in source_path:
         repo = source_path.split("//terraform/", 1)[0]
     else:
         repo = source_path
     return repo, ref
+
+
+def terraform_module_source_and_version(module_source, module_version, release_version):
+    source = module_source.removeprefix("git::")
+    source_path, _, _query = source.partition("?")
+    if source_path == "thinkwork-ai/thinkwork/aws":
+        ref = release_git_sha() or release_version
+        quoted_ref = urllib.parse.quote(ref, safe="")
+        return (
+            "git::https://github.com/thinkwork-ai/thinkwork.git"
+            f"//terraform/modules/thinkwork?ref={quoted_ref}",
+            "",
+        )
+    return module_source, module_version
 
 
 def checkout_source(module_source, release_version):
@@ -481,11 +776,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS vector;
 """,
     )
-    files = sorted(
-        path
-        for path in migrations.glob("*.sql")
-        if "rollback" not in path.name
-    )
+    files = sorted(path for path in migrations.glob("*.sql") if "rollback" not in path.name)
     for path in files:
         if path.name == "0031_thread_cleanup_drops.sql":
             psql(
@@ -500,6 +791,15 @@ DROP TABLE IF EXISTS public.thread_comments CASCADE;
         if path.name == "0070_compliance_aurora_roles.sql":
             ensure_compliance_roles(database_url, outputs, vars_json)
             continue
+        psql(database_url, file=path, variables={"stage": vars_json["stage"]})
+
+
+def apply_platform_update_migrations(database_url, vars_json, migration_names):
+    migrations = SOURCE / "packages/database-pg/drizzle"
+    for name in migration_names:
+        path = migrations / name
+        if not path.is_file():
+            raise RuntimeError(f"Required platform migration is missing: {path}")
         psql(database_url, file=path, variables={"stage": vars_json["stage"]})
 
 
@@ -658,7 +958,13 @@ def push_database_schema(outputs_path, vars_json):
     database_url = database_url_from_outputs(outputs)
     if not psql_output(database_url, "SELECT to_regclass('public.tenants')").strip():
         initialize_greenfield_database(database_url, outputs, vars_json)
+    apply_platform_update_migrations(database_url, vars_json, PLATFORM_UPDATE_MIGRATIONS)
     seed_platform_bootstrap_defaults(database_url)
+    apply_platform_update_migrations(
+        database_url,
+        vars_json,
+        ["0155_tenant_model_catalog.sql"],
+    )
 
 
 def write_runner_files(payload, runner_secrets):
@@ -680,10 +986,24 @@ def write_runner_files(payload, runner_secrets):
             ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"]
         )
 
-    release_version = safe_get(
-        payload,
-        "releaseVersion",
-        default=os.environ.get("THINKWORK_RELEASE_VERSION", "unresolved"),
+    selected_release = release_selection(payload)
+    release_version = selected_release.get("version") or "unresolved"
+    release_manifest_url = selected_release.get("manifestUrl") or ""
+    release_manifest_sha256 = selected_release.get("manifestSha256") or ""
+    release_manifest_signature_url = selected_release.get("manifestSignatureUrl") or ""
+    release_manifest_trust_policy_value = (
+        selected_release.get("manifestTrustPolicy") or "allow_unsigned_canary"
+    )
+    if release_manifest_trust_policy_value not in RELEASE_MANIFEST_TRUST_POLICIES:
+        raise RuntimeError(
+            "Unsupported release manifest trust policy "
+            f"{release_manifest_trust_policy_value!r}; expected one of "
+            f"{sorted(RELEASE_MANIFEST_TRUST_POLICIES)}"
+        )
+    release_manifest_trusted_keys_json = json.dumps(
+        trusted_release_keys(),
+        separators=(",", ":"),
+        sort_keys=True,
     )
     module_source = safe_get(
         payload,
@@ -695,10 +1015,13 @@ def write_runner_files(payload, runner_secrets):
         "terraformModuleVersion",
         default=os.environ.get("THINKWORK_TERRAFORM_MODULE_VERSION", ""),
     )
+    terraform_module_source, terraform_module_version = terraform_module_source_and_version(
+        module_source,
+        module_version,
+        release_version,
+    )
     module_version_line = (
-        f"  version = {hcl_string(module_version)}\n"
-        if module_version
-        else ""
+        f"  version = {hcl_string(terraform_module_version)}\n" if terraform_module_version else ""
     )
     db_password = safe_get(
         runner_secrets,
@@ -753,6 +1076,14 @@ def write_runner_files(payload, runner_secrets):
         ),
         "lambda_artifact_bucket": os.environ["THINKWORK_RELEASE_ARTIFACT_BUCKET"],
         "lambda_artifact_prefix": f"releases/{release_version}/lambdas",
+        "deployment_release_version": release_version,
+        "deployment_release_manifest_url": release_manifest_url,
+        "deployment_release_manifest_sha256": release_manifest_sha256,
+        "deployment_release_manifest_signature_url": release_manifest_signature_url,
+        "deployment_release_manifest_trust_policy": release_manifest_trust_policy_value,
+        "deployment_release_manifest_trusted_keys_json": release_manifest_trusted_keys_json,
+        "deployment_terraform_module_source": module_source,
+        "deployment_terraform_module_version": terraform_module_version,
         "agentcore_pi_source_image_uri": safe_get(
             payload,
             "agentcorePiSourceImageUri",
@@ -779,7 +1110,7 @@ def write_runner_files(payload, runner_secrets):
         encoding="utf-8",
     )
     (TF / "main.tf").write_text(
-        f'''
+        f"""
 terraform {{
   required_version = ">= 1.5"
 
@@ -858,8 +1189,40 @@ variable "agentcore_pi_source_image_uri" {{
   type = string
 }}
 
+variable "deployment_release_version" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_url" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_sha256" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_signature_url" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_trust_policy" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_trusted_keys_json" {{
+  type = string
+}}
+
+variable "deployment_terraform_module_source" {{
+  type = string
+}}
+
+variable "deployment_terraform_module_version" {{
+  type = string
+}}
+
 module "thinkwork" {{
-  source  = {hcl_string(module_source)}
+  source  = {hcl_string(terraform_module_source)}
 {module_version_line}
 
   stage      = var.stage
@@ -889,9 +1252,14 @@ module "thinkwork" {{
   enable_slack_workspace_app = false
 
   enable_deployment_control_plane    = false
-  deployment_release_version         = {hcl_string(release_version)}
-  deployment_release_manifest_url    = {hcl_string(os.environ.get("THINKWORK_RELEASE_MANIFEST_URL", ""))}
-  deployment_release_manifest_sha256 = {hcl_string(os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256", ""))}
+  deployment_release_version         = var.deployment_release_version
+  deployment_release_manifest_url    = var.deployment_release_manifest_url
+  deployment_release_manifest_sha256 = var.deployment_release_manifest_sha256
+  deployment_release_manifest_signature_url     = var.deployment_release_manifest_signature_url
+  deployment_release_manifest_trust_policy      = var.deployment_release_manifest_trust_policy
+  deployment_release_manifest_trusted_keys_json = var.deployment_release_manifest_trusted_keys_json
+  deployment_terraform_module_source            = var.deployment_terraform_module_source
+  deployment_terraform_module_version           = var.deployment_terraform_module_version
 }}
 
 output "app_url" {{ value = module.thinkwork.app_url }}
@@ -916,7 +1284,7 @@ output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
   output "cognee_enabled" {{ value = module.thinkwork.cognee_enabled }}
 output "twenty_provisioned" {{ value = module.thinkwork.twenty_provisioned }}
 output "twenty_runtime_enabled" {{ value = module.thinkwork.twenty_runtime_enabled }}
-''',
+""",
         encoding="utf-8",
     )
     return vars_json
@@ -931,11 +1299,11 @@ def sync_release_artifacts():
     download(manifest_url, MANIFEST)
     actual = sha256_file(MANIFEST)
     if expected and actual != expected:
-        raise RuntimeError(
-            f"Release manifest digest mismatch: expected {expected}, got {actual}"
-        )
+        raise RuntimeError(f"Release manifest digest mismatch: expected {expected}, got {actual}")
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    canonical_digest = release_manifest_sha256(manifest)
+    trust_evidence = enforce_release_manifest_trust(manifest, canonical_digest, manifest_url)
     bundled_paths, bundle_evidence = download_and_extract_artifact_bundles(manifest)
     lambda_prefix = f"releases/{os.environ['THINKWORK_RELEASE_VERSION']}/lambdas"
     static_files = {}
@@ -967,6 +1335,8 @@ def sync_release_artifacts():
             static_files[artifact.get("name")] = destination
     RELEASE_EVIDENCE = {
         "manifestSha256": actual,
+        "manifestCanonicalSha256": canonical_digest,
+        "trust": trust_evidence,
         "bundles": bundle_evidence,
         "artifacts": artifact_evidence,
     }
@@ -1042,6 +1412,55 @@ def write_outputs_to_ssm(outputs_path, vars_json):
     )
 
 
+def controller_terraform_module_version(vars_json):
+    configured = vars_json.get("deployment_terraform_module_version")
+    if configured:
+        return configured
+    source = vars_json.get("deployment_terraform_module_source") or ""
+    if source.startswith("git::") or source.startswith("github.com/"):
+        return ""
+    return str(vars_json.get("deployment_release_version") or "").removeprefix("v")
+
+
+def put_controller_parameter(name, value):
+    if not value:
+        return
+    run(
+        [
+            "aws",
+            "ssm",
+            "put-parameter",
+            "--overwrite",
+            "--type",
+            "String",
+            "--name",
+            f"{os.environ['THINKWORK_SSM_PREFIX']}/{name}",
+            "--value",
+            str(value),
+        ]
+    )
+
+
+def write_controller_release_selection_to_ssm(vars_json):
+    if not os.environ.get("THINKWORK_SSM_PREFIX"):
+        return {}
+    selected = {
+        "selected-release-version": vars_json.get("deployment_release_version"),
+        "selected-release-manifest-url": vars_json.get("deployment_release_manifest_url"),
+        "selected-release-manifest-sha256": vars_json.get("deployment_release_manifest_sha256"),
+        "selected-release-signature-url": vars_json.get("deployment_release_manifest_signature_url"),
+        "selected-release-trust-policy": vars_json.get("deployment_release_manifest_trust_policy"),
+        "selected-release-trusted-keys-json": vars_json.get(
+            "deployment_release_manifest_trusted_keys_json"
+        ),
+        "terraform-module-source": vars_json.get("deployment_terraform_module_source"),
+        "terraform-module-version": controller_terraform_module_version(vars_json),
+    }
+    for name, value in selected.items():
+        put_controller_parameter(name, value)
+    return {name: value for name, value in selected.items() if value}
+
+
 def runtime_profile(outputs, vars_json):
     def output_value(name):
         return outputs.get(name, {}).get("value")
@@ -1063,6 +1482,8 @@ def runtime_profile(outputs, vars_json):
         "region": region,
         "accountId": vars_json["account_id"],
         "releaseVersion": os.environ.get("THINKWORK_RELEASE_VERSION"),
+        "releaseManifestUrl": os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
+        "releaseManifestSha256": os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
         "deploymentId": f"thinkwork-{vars_json['stage']}",
         "displayName": "ThinkWork",
         "appUrl": app_url,
@@ -1074,6 +1495,26 @@ def runtime_profile(outputs, vars_json):
         "cognitoDomain": cognito_domain,
         "cognitoUserPoolId": output_value("user_pool_id"),
         "cognitoClientId": output_value("admin_client_id"),
+        "controller": {
+            "stateMachineArn": output_value("deployment_state_machine_arn")
+            or os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN"),
+            "stateMachineName": output_value("deployment_state_machine_name")
+            or os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_NAME"),
+            "codebuildProjectName": output_value("deployment_runner_project_name")
+            or os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME"),
+            "codebuildProjectArn": output_value("deployment_runner_project_arn")
+            or os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_ARN"),
+            "evidenceBucketName": output_value("deployment_evidence_bucket_name")
+            or os.environ.get("THINKWORK_EVIDENCE_BUCKET"),
+            "ssmPrefix": output_value("deployment_ssm_prefix")
+            or os.environ.get("THINKWORK_SSM_PREFIX"),
+            "appconfigApplicationId": output_value("deployment_appconfig_application_id"),
+            "appconfigEnvironmentId": output_value("deployment_appconfig_environment_id"),
+            "appconfigConfigurationProfileId": output_value(
+                "deployment_appconfig_configuration_profile_id"
+            ),
+            "verifiedAt": datetime.now(UTC).isoformat(),
+        },
         "issuedAt": datetime.now(UTC).isoformat(),
     }
     vite_env = {
@@ -1091,6 +1532,16 @@ def runtime_profile(outputs, vars_json):
         "VITE_SPACES_URL": profile["appUrl"],
         "VITE_STAGE": profile["stage"],
         "VITE_AWS_REGION": profile["region"],
+        "VITE_AWS_ACCOUNT_ID": profile["accountId"],
+        "VITE_RELEASE_VERSION": profile["releaseVersion"],
+        "VITE_RELEASE_MANIFEST_URL": profile["releaseManifestUrl"],
+        "VITE_RELEASE_MANIFEST_SHA256": profile["releaseManifestSha256"],
+        "VITE_DEPLOYMENT_CONTROLLER_ARN": profile["controller"]["stateMachineArn"],
+        "VITE_DEPLOYMENT_CONTROLLER_NAME": profile["controller"]["stateMachineName"],
+        "VITE_DEPLOYMENT_RUNNER_PROJECT_NAME": profile["controller"]["codebuildProjectName"],
+        "VITE_DEPLOYMENT_RUNNER_PROJECT_ARN": profile["controller"]["codebuildProjectArn"],
+        "VITE_DEPLOYMENT_EVIDENCE_BUCKET": profile["controller"]["evidenceBucketName"],
+        "VITE_DEPLOYMENT_SSM_PREFIX": profile["controller"]["ssmPrefix"],
     }
     profile["viteEnv"] = vite_env
     web_env = "\n".join(f"{key}={value or ''}" for key, value in sorted(vite_env.items()))
@@ -1210,12 +1661,28 @@ def main():
     WORK.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("CLOUDFLARE_API_TOKEN", "placeholder-not-configured")
     payload = read_json_env("THINKWORK_DEPLOYMENT_INPUT", {})
+    apply_release_selection(payload)
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION") or payload.get("action") or "deploy"
     if action == "teardown":
         action = "destroy"
-    if action not in {"deploy", "update", "destroy", "plan"}:
+    if action not in {"deploy", "update", "destroy", "plan", "status"}:
         raise RuntimeError(f"Unsupported deployment action: {action}")
     os.environ["THINKWORK_DEPLOYMENT_ACTION"] = action
+
+    if action == "status":
+        CONTROLLER_EVIDENCE = {
+            "status": write_controller_status_evidence(payload),
+        }
+        write_evidence(
+            "succeeded",
+            {
+                "stage": safe_get(payload, "stage", "environmentName", default=""),
+                "account_id": safe_get(payload, "awsAccountId", "accountId", default=""),
+                "region": safe_get(payload, "awsRegion", "region", default=""),
+            },
+            0,
+        )
+        return 0
 
     runner_secrets = secret_payload(payload)
     static_files = sync_release_artifacts() if action in {"deploy", "update"} else {}
@@ -1287,6 +1754,12 @@ def main():
         }
         push_database_schema(outputs_path, vars_json)
         write_outputs_to_ssm(outputs_path, vars_json)
+        selected_controller_release = write_controller_release_selection_to_ssm(vars_json)
+        if selected_controller_release:
+            CONTROLLER_EVIDENCE["releaseSelection"] = write_json_evidence_artifact(
+                "controller-release-selection.json",
+                selected_controller_release,
+            )
         sync_static(outputs_path, static_files, vars_json)
     write_evidence(
         "succeeded" if result.returncode == 0 else "failed",

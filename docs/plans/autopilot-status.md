@@ -10,15 +10,329 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U2 - Finish The Full-Environment Controller Run
-  Contract.
-- Current branch: `codex/u2-controller-run-contract`.
-- Current worktree:
-  `.Codex/worktrees/u2-controller-run-contract`.
+- Current implementation unit: U9 remaining proof gates after TEI canary 150:
+  optional-app deploy smoke, human desktop/mobile launch proof, and final
+  teardown proof.
+- Current branch: `codex/deployment-controller-next`.
+- Current worktree: `.Codex/worktrees/deployment-controller-next`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
-  opened.
-- Status: U2 PR opened; monitoring required CI.
+  merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
+  merged; U4 PR [#2290](https://github.com/thinkwork-ai/thinkwork/pull/2290)
+  merged; U5 PR [#2291](https://github.com/thinkwork-ai/thinkwork/pull/2291)
+  merged; U6 PR [#2292](https://github.com/thinkwork-ai/thinkwork/pull/2292)
+  merged; U7 PR [#2293](https://github.com/thinkwork-ai/thinkwork/pull/2293)
+  merged; U8 PR [#2294](https://github.com/thinkwork-ai/thinkwork/pull/2294)
+  merged; U9 PR [#2295](https://github.com/thinkwork-ai/thinkwork/pull/2295)
+  merged; U9 PR [#2296](https://github.com/thinkwork-ai/thinkwork/pull/2296)
+  merged; U10 PR [#2297](https://github.com/thinkwork-ai/thinkwork/pull/2297)
+  merged; U11 PR [#2298](https://github.com/thinkwork-ai/thinkwork/pull/2298)
+  merged; U12 PR [#2300](https://github.com/thinkwork-ai/thinkwork/pull/2300)
+  merged; U13 PR [#2301](https://github.com/thinkwork-ai/thinkwork/pull/2301)
+  merged; U14 PR [#2302](https://github.com/thinkwork-ai/thinkwork/pull/2302)
+  merged; U15/U17 status and invite-email PR
+  [#2304](https://github.com/thinkwork-ai/thinkwork/pull/2304) merged; U16
+  PR [#2305](https://github.com/thinkwork-ai/thinkwork/pull/2305) merged; U17
+  resend/delete user PR [#2308](https://github.com/thinkwork-ai/thinkwork/pull/2308)
+  merged; U17 release-list PR [#2309](https://github.com/thinkwork-ai/thinkwork/pull/2309)
+  merged; U18 desktop restore PR [#2313](https://github.com/thinkwork-ai/thinkwork/pull/2313)
+  merged; U18 Bedrock runtime endpoint PR [#2314](https://github.com/thinkwork-ai/thinkwork/pull/2314)
+  merged; U18 Cognito invite SMS template PR [#2315](https://github.com/thinkwork-ai/thinkwork/pull/2315)
+  merged; U18 VPC endpoint ingress PR [#2316](https://github.com/thinkwork-ai/thinkwork/pull/2316)
+  merged; U19 release trust-policy PR
+  [#2317](https://github.com/thinkwork-ai/thinkwork/pull/2317) merged; U20
+  controller release-pin persistence PR
+  [#2318](https://github.com/thinkwork-ai/thinkwork/pull/2318) merged; U21
+  controller selected-release status persistence PR
+  [#2319](https://github.com/thinkwork-ai/thinkwork/pull/2319) merged; U9
+  proof-doc reconciliation PR
+  [#2320](https://github.com/thinkwork-ai/thinkwork/pull/2320) merged; U9
+  user-facing docs reconciliation PR
+  [#2321](https://github.com/thinkwork-ai/thinkwork/pull/2321) merged; U9
+  foundation smoke proof PR
+  [#2322](https://github.com/thinkwork-ai/thinkwork/pull/2322) merged; U8/U9
+  profile-binding proof PR
+  [#2323](https://github.com/thinkwork-ai/thinkwork/pull/2323) merged; U9
+  teardown-readiness proof PR
+  [#2325](https://github.com/thinkwork-ai/thinkwork/pull/2325) merged; U9
+  managed-app readiness proof PR
+  [#2326](https://github.com/thinkwork-ai/thinkwork/pull/2326) merged; U7
+  runtime-image release contract PR
+  [#2327](https://github.com/thinkwork-ai/thinkwork/pull/2327) merged; U9 TEI
+  canary 149 proof PR
+  [#2328](https://github.com/thinkwork-ai/thinkwork/pull/2328) merged; U10
+  release finalization hardening PR
+  [#2329](https://github.com/thinkwork-ai/thinkwork/pull/2329) merged; U9 TEI
+  canary 150 proof PR
+  [#2330](https://github.com/thinkwork-ai/thinkwork/pull/2330) merged; U9
+  deployment-controller status refresh PR
+  [#2331](https://github.com/thinkwork-ai/thinkwork/pull/2331) merged.
+- Status: TEI was reconciled through the customer deployment controller after
+  the `v0.1.0-canary.150` release manifest finalized to SHA-256
+  `8645040c1645fddecc5e34649c1bda91124777fb3368776a2ddefd04c8259bfe`.
+  Step Functions execution
+  `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-tei-e2e-update-v150-final-20260610103343`
+  and CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:1067b856-2661-482b-b49d-2e282e08ec33`
+  both succeeded on 2026-06-10. Evidence was written under
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/tei-e2e-update-v150-final-20260610103343/update/`
+  and includes `controller-input-summary.json`,
+  `redacted-terraform-vars.json`, `terraform-plan.json`,
+  `terraform-outputs.json`, `controller-release-selection.json`, and
+  `deployment-evidence.json`. TEI selected-release SSM and
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json` now
+  both report `releaseVersion=v0.1.0-canary.150` with manifest SHA-256
+  `8645040c1645fddecc5e34649c1bda91124777fb3368776a2ddefd04c8259bfe`;
+  the deployed app root, `/sign-in`, and runtime config returned HTTP 200.
+  Strict managed-app controller readiness passed in read-only mode with local
+  evidence
+  `/tmp/thinkwork-tei-smoke-proof-150/managed-app-controller-readiness-final.json`,
+  confirming Cognee and Twenty are descriptor-ready and deploy-ready for the
+  selected release. Remaining deployment-controller proof gates: run a full
+  optional Cognee/Twenty deploy smoke after those apps are selected, capture
+  human desktop/mobile launch proof against the TEI profile, and run final
+  teardown/destroy proof when TEI no longer needs to stay live for demo
+  testing. Historical notes follow. U9 TEI canary 150 proof PR #2330 passed
+  required CI (`cla`, `lint`,
+  `verify`, `typecheck`, and `test`) and was squash merged as `0b18c3987`.
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
+  currently reports `releaseVersion=v0.1.0-canary.150` and manifest SHA-256
+  `dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb`.
+  The remaining deployment-controller proof gates are intentionally explicit:
+  run a full optional Cognee/Twenty deploy smoke after those apps are selected,
+  capture human desktop/mobile launch proof against the TEI profile, and run
+  final teardown/destroy proof when TEI no longer needs to stay live for demo
+  testing. Historical notes follow. U10 release finalization hardening merged
+  as `b457f866a`, deleting
+  stale release manifest/signature assets before uploading refreshed platform
+  assets and uploading `thinkwork-release.json` last as the deployable
+  finalization marker. Canary releases `v0.1.0-canary.150` and
+  `desktop-v0.1.0-canary.150` were cut from that merge. TEI was updated through
+  the customer deployment controller to `.150` with manifest SHA-256
+  `dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb` and
+  platform bundle SHA-256
+  `3c2e00aacc5d5b354d6e9a67b19c5a1c4f98225fca8f0ab7551dff315de40e06`.
+  Step Functions execution `tw-update-150-20260610095036` and CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:6e0f4b92-0f23-4f7a-92fa-982453ba1ade`
+  both succeeded; evidence was written under
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/5eed2926-cb8c-47f6-bf66-700f04a1b5e5/update/`.
+  TEI runtime config and selected-release SSM status now report
+  `releaseVersion=v0.1.0-canary.150`; the app root and `/settings/general`
+  returned HTTP 200 after CloudFront invalidation `I4BVXPJJ1KJCO8BQ1ZVUTVIE36`
+  completed. Fresh live smokes passed for foundation runtime-config/profile
+  binding (`/tmp/thinkwork-tei-smoke-proof-150/foundation-smoke-150-clean.json`)
+  and base-install Cognee/Twenty skip evidence
+  (`/tmp/thinkwork-tei-smoke-proof-150/cognee-smoke-150.json`,
+  `/tmp/thinkwork-tei-smoke-proof-150/twenty-smoke-150.json`). Remaining open
+  deployment-controller gates: full optional-app deploy smoke for Cognee/Twenty
+  after those apps are selected, human desktop/mobile launch proof against TEI,
+  and final teardown/destroy proof when TEI can be safely removed. Historical
+  notes follow. U9
+  managed-app controller
+  readiness smoke was added and passed live
+  against TEI `v0.1.0-canary.148` on 2026-06-10 in read-only diagnostic mode.
+  It verified the selected release manifest URL/SHA from SSM, confirmed Cognee
+  and Twenty CRM descriptors exist in `managedApps`, confirmed their Terraform
+  module source/version and smoke command paths, and recorded descriptor
+  readiness without creating a managed-app job. The same smoke reported
+  `deployReady=false` because `.148` does not include the required `cognee` or
+  `twenty` runtime image entries; strict deploy-ready mode failed closed with
+  that exact gap. Local evidence:
+  `/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-148.json`.
+  Remaining open deployment-controller gates: publish a release whose manifest
+  includes Cognee/Twenty runtime images, run the full optional-app deploy smoke
+  after those apps are selected, human desktop and mobile launch proof against
+  TEI, and final teardown/destroy proof. Historical notes follow. U9
+  teardown-readiness smoke was added and passed live against TEI
+  `v0.1.0-canary.148` on 2026-06-10 in read-only mode. It verified the
+  selected release SSM pins, customer Step Functions state machine, CodeBuild
+  runner, Terraform state bucket, DynamoDB lock table, release artifact bucket,
+  and evidence bucket, then emitted a redacted `action=destroy` preview with
+  `destroyExecutionStarted=false`. Local evidence:
+  `/tmp/thinkwork-tei-smoke-proof/deployment-teardown-readiness-148.json`.
+  This proves teardown readiness without destroying the live demo environment;
+  final destroy proof remains deferred until TEI can be safely removed.
+  Remaining open deployment-controller gates: full optional-app deploy smoke
+  for Cognee/Twenty after those apps are selected, human desktop and mobile
+  launch proof against TEI, and final teardown/destroy proof. Historical notes
+  follow. U8/U9 profile-binding proof PR #2323 passed required CI (`cla`,
+  `lint`, `verify`, `typecheck`, and `test`) and was squash merged as
+  `f3ffcc058`. The new `deployment-profile-binding-smoke.mjs` passed against
+  live TEI `v0.1.0-canary.148` on 2026-06-10 using
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`. It
+  normalized the runtime config into a canonical deployment profile, validated
+  it through `@thinkwork/deployment-profile`, checked web, desktop, and mobile
+  binding snapshots, and recorded profile SHA-256
+  `ef9427364e0d80e4389c62509b119a7be1da3f1a3906c7d5be69eda33ac31ffa` without
+  API keys, passwords, AWS keys, tokens, or credential material in the
+  profile/evidence. TEI is intentionally still live for user/demo testing, so
+  final teardown remains deferred until explicitly safe to destroy. Historical
+  notes follow. U9 foundation
+  smoke proof PR #2322 passed required CI and was squash merged as
+  `e227cfe4`. U9 user-facing docs reconciliation PR
+  #2321 passed required CI and was squash merged as `64e152e49`. U9
+  foundation smoke proof updated `foundation-bootstrap-smoke.mjs` so the live
+  smoke can validate runtime-config/SSM-backed controller fields when local
+  Terraform state is not available. The patched smoke passed against live TEI
+  on 2026-06-10: Spaces returned HTTP 200, AppSync GraphQL returned
+  `{ "__typename": "Query" }`, Cognito HTTPS validation passed, deployment
+  profile v1 shape passed with SHA-256
+  `03ec3bf5d805cab2fc4f06a60b84a78e43f0392c60d3f4ec7c118e1358bbc2c1`, and
+  control-plane validation passed for the TEI state machine, CodeBuild
+  project, and evidence bucket. Cognee/Twenty managed-app smoke scripts also
+  passed as explicit base-install skips: Cognee is not enabled and Twenty is
+  not provisioned. Historical notes follow. U9 proof-doc reconciliation
+  PR #2320 passed required CI and was squash merged as `9e412490`. U21 merged
+  and was released as `v0.1.0-canary.148`. TEI's customer
+  deployment controller was refreshed to the `.148` runner, then TEI update
+  execution `tw-update-148-current-sha-20260610053146` succeeded through Step
+  Functions and CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:8e1857eb-0b8e-4b08-a69f-fff5d3d76788`.
+  The deployed runtime config at
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
+  reports `releaseVersion=v0.1.0-canary.148`, manifest SHA-256
+  `5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93`, TEI
+  Cognito/API/AppSync endpoints, and the customer-owned controller ARNs. TEI
+  SSM selected-release status parameters now also point at `.148`, including
+  release version, manifest URL/SHA, trust policy `allow_unsigned_canary`,
+  trusted keys JSON `[]`, module source `thinkwork-ai/thinkwork/aws`, and
+  module version `0.1.0-canary.148`. Evidence for the accepted run is stored at
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/a015f5fb-60a3-457c-8c31-e73caf93f37a/update/`
+  and includes `controller-input-summary.json`,
+  `controller-release-selection.json`, `redacted-terraform-vars.json`,
+  `terraform-plan.json`, `terraform-outputs.json`, and
+  `deployment-evidence.json`. The current U9 follow-up branch updates
+  `docs/verification/tei-new-environment-deployment-e2e.md` to make `.148` the
+  current accepted proof while preserving the `.141` remediation history and
+  explicit teardown/mobile proof gaps. Historical notes follow. U11 merged and
+  deployed to main. TEI's customer deployment controller
+  was refreshed to the U11 runner and `.137` selected-release pins, then TEI
+  update execution `tei-e2e-update-137-20260609204430` failed closed because
+  the fetched `.137` release manifest SHA-256 was
+  `fafac911c2005fcd3367e2f8c81c942059036c72a5e8dd64bae615b4700a2daa` instead
+  of the previously pinned
+  `7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f`.
+  Cutting `.138` from current main exposed the release-pipeline race: Release
+  run [27234846967](https://github.com/thinkwork-ai/thinkwork/actions/runs/27234846967)
+  built deployable artifacts but failed when the desktop workflow had already
+  created the GitHub Release, and Release Desktop run
+  [27234845226](https://github.com/thinkwork-ai/thinkwork/actions/runs/27234845226)
+  deployed web metadata but failed installer verification because only
+  `latest-mac.yml` and `canary-mac.yml` were attached. U12 repaired the release
+  workflows so desktop and platform publishing are idempotent when either
+  workflow creates the release first. Cutting `.139` then exposed the remaining
+  desktop staging gap: electron-builder emitted product-name artifacts such as
+  `ThinkWork Spaces (Canary)-0.1.0-canary.139-arm64.dmg`, while updater metadata
+  expected GitHub asset names such as
+  `@thinkwork.desktop-0.1.0-canary.139.dmg`. U13 maps product-name build outputs
+  to the updater metadata names before upload. U13 merged, main checks passed,
+  and `.140` was cut successfully with desktop assets plus platform bundle.
+  TEI's controller was refreshed to `.140` with manifest SHA-256
+  `99467b5d2165d738ba1f303162f33e422d49c4add01ea880923ad026041c7edd`, then
+  update execution `tw-tei-e2e-update-140-20260609221126` failed in CodeBuild
+  run `thinkwork-tei-e2e-deployment-runner:1448758e-ba8c-4b12-9954-2796ad2871ce`
+  because generated Terraform used registry source `thinkwork-ai/thinkwork/aws`
+  directly and Terraform could not find that module in the public registry.
+  U14 maps the registry-shaped ThinkWork module alias to a pinned GitHub module
+  source before writing `main.tf`. U14 merged, main checks passed, `.141` was
+  cut, and all release workflows passed. TEI's controller was refreshed to
+  `.141` with manifest SHA-256
+  `15a6c12f26303d69a21edc8380d0ed0c14d8828f61e261f1e931a7b79f9b7954`.
+  TEI update execution `tw-tei-e2e-update-141-20260609225720` succeeded via
+  CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:5cdf5ecc-1f51-495f-9a0a-04ae00a13116`.
+  Evidence was written under
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/tei-e2e-update-141-20260609225720/update/`,
+  and the deployed runtime config at
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
+  reports release `v0.1.0-canary.141`. Post-deploy TEI UI verification exposed
+  a database migration gap: GraphQL logs for `SettingsTenantModelCatalog`,
+  `SettingsAgentProfiles`, and `MyApprovedModelCatalog` failed with
+  `relation "tenant_model_catalog" does not exist`. The table was manually
+  remediated in TEI with
+  `packages/database-pg/drizzle/0155_tenant_model_catalog.sql`, yielding
+  `tenant_model_catalog_rows=3`, `enabled_rows=3`, `agent_profiles=4`, and
+  `model_catalog_available=3`. After remediation, the integrated browser
+  rendered Model Catalog with Claude Haiku 4.5, Claude Opus 4.6, and Claude
+  Sonnet 4.6, and TEI GraphQL logs showed `SettingsTenantModelCatalog`,
+  `SettingsBedrockModelImportCandidates`, and `SettingsAgentProfiles` returning
+  `errorCode:null`, `ok:true`. U16 then fixed the deployment runner so existing
+  controller-managed databases apply the required idempotent platform
+  migrations during updates and rerun the tenant model catalog backfill after
+  bootstrap defaults are seeded. U16 PR #2305 passed required CI and was squash
+  merged as `0e7825d7`; main deploy/check workflows for that merge were started
+  at `2026-06-09T23:30:05Z` and were still running when this ledger entry was
+  updated. TEI invite verification then exposed a second deployment gap:
+  Settings -> Users creates Cognito users successfully, but TEI Cognito is
+  still using `EmailSendingAccount=COGNITO_DEFAULT`, TEI SES has no configured
+  identities, SES reports `SentLast24Hours=0`, and SES production access is not
+  enabled. This branch adds Terraform inputs for a verified Cognito SES sender
+  (`cognito_email_source_arn`, `cognito_from_email_address`,
+  `cognito_reply_to_email_address`) and a ThinkWork AdminCreateUser invite
+  template so future controller updates can configure invite mail without
+  console drift. U15/U17 PR #2304 passed required CI and was squash merged as
+  `cde7bed2`. A follow-up invite-path gap remained: retrying an invite for an
+  existing pending Cognito user returned success without resending the invite
+  email. The current U17 branch changes both GraphQL and CLI-facing tenant
+  invite paths to call `AdminCreateUser` with `MessageAction=RESEND` for
+  `FORCE_CHANGE_PASSWORD` or `UNCONFIRMED` users, and adds Settings -> Users
+  detail actions so operators can resend an invite from the top-right action
+  area or delete a user's tenant membership from the bottom danger zone.
+  Deploying `.144` to TEI then exposed a Terraform provider validation gap in
+  the Cognito user-pool invite template: the module configured
+  `email_message`/`email_subject` but omitted `sms_message`, causing AWS to
+  reject updates with
+  `adminCreateUserConfig.inviteMessageTemplate.sMSMessage` length validation.
+  U18 adds a validated SMS invite message to the foundation module and wires a
+  top-level `cognito_invite_sms_message` override through the ThinkWork module.
+  U18 PR #2315 passed required CI and was squash merged as `f5832dc7`. Canary
+  releases `v0.1.0-canary.145` and `desktop-v0.1.0-canary.145` were cut from
+  that merge; both platform and desktop release workflows succeeded. TEI's
+  deployment controller was updated to release `v0.1.0-canary.145` with
+  manifest SHA-256
+  `f0a149db34d59e290fc4a43bc098a57539dcae508445e0fb626b8ce45f9eaf1c`.
+  Step Functions execution
+  `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-update-145-20260610030853`
+  succeeded, CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:a3370ede-cd73-407f-9673-87f7d1af3290`
+  succeeded, and
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
+  reports `releaseVersion: v0.1.0-canary.145`. Auditing that release exposed
+  the next trust gap: the release contains `thinkwork-release.json` and
+  `platform-artifacts.tar.gz` but no `thinkwork-release.sig.json`, while docs
+  and release notes implied a signed manifest. U19 makes the controller trust
+  policy explicit: unsigned canaries are allowed only under
+  `allow_unsigned_canary`, non-canary unsigned manifests fail closed, and
+  customer-safe controllers can require a detached signature with
+  `require_signature`. U19 PR #2317 passed required CI and was squash merged as
+  `1ccaa834a`. Canary releases `v0.1.0-canary.146` and
+  `desktop-v0.1.0-canary.146` were cut from that merge; both release workflows
+  succeeded. TEI update execution
+  `tw-update-146-20260610035600` succeeded via CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:da94ece4-65b5-44fc-beb7-82988236dd87`,
+  and the runtime config reports release `v0.1.0-canary.146`. A follow-up
+  trust-proof run using the newly deployed
+  runner failed closed as intended when given the stale pre-finalization
+  manifest SHA-256, but that run exposed a real controller persistence gap: TEI
+  runtime was on `.146` while the controller SSM/CodeBuild selected-release
+  pins still pointed at `.145`. U20 updates the deployment runner so the
+  payload-selected release contract is written into the generated Terraform
+  controller inputs and evidence, including manifest URL, SHA-256, signature
+  URL, trust policy, trusted-key JSON, and module source/version. U20 PR #2318
+  passed required CI and was squash merged as `37d72462`. Canary releases
+  `v0.1.0-canary.147` and `desktop-v0.1.0-canary.147` were cut from that merge;
+  both release workflows succeeded. TEI update execution
+  `tw-update-147-20260610043912` succeeded via CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:b651b3fa-9ba5-4016-8a49-0e4e02620968`,
+  and the runtime config reports release `v0.1.0-canary.147` with manifest
+  SHA-256 `f89c5903c06830474d0471907173e33640257e7f5e05996721b2951fa2c93da3`.
+  Post-deploy proof showed the app/runtime was updated, but the controller SSM
+  selected-release status parameters still pointed at `.145` because the app
+  Terraform root deliberately disables ownership of the deployment control-plane
+  module during customer updates. U21 persists the selected release contract
+  directly to the controller SSM status parameters after a successful deploy or
+  update, including release version, manifest URL/SHA, trust policy, trusted
+  keys JSON, module source, and the derived registry module version.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -49,9 +363,56 @@ status: in_progress
     session events, writes controller input summaries, redacted Terraform vars,
     plan summaries, and outputs as deployment evidence, supports `update` in the
     runner action contract, and keeps Slack/Stripe disabled in base install.
+  - U2 PR #2287 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+    `test`) and was squash merged as `c30f825`.
+  - U2 remote branch was already deleted by GitHub merge handling; local U2
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U3 worktree from `origin/main` at `c30f825`.
+  - U3 adds a dev dogfood path where `thinkwork deploy --controller` or manual
+    `deploy.yml` with `use_controller=true` starts the dev deployment
+    controller with an explicit release manifest URL/digest and skips the
+    legacy direct Terraform apply for that workflow run.
+  - U3 PR #2289 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+    `test`) and was squash merged as `0bd3d871`.
+  - U3 remote branch was already deleted by GitHub merge handling; local U3
+    worktree and branch were removed after syncing `origin/main`.
+  - Created isolated U4 worktree from `origin/main` at `0bd3d871`.
+  - U4 adds `bootstrap_credential_leases` DB metadata, a Secrets
+    Manager-backed `BootstrapCredentialLease` helper, possession-gated REST
+    endpoints to connect/revoke the lease, and minimal browser wiring so
+    temporary STS credentials or an assumable role are posted to the server
+    lease vault without entering local storage.
+  - Created isolated U19 worktree from `origin/main` at `0560bd0b7`.
+  - U19 adds `release_manifest_trust_policy`,
+    `release_manifest_signature_url`, and trusted-key JSON inputs to the
+    deployment control plane and top-level ThinkWork module.
+  - U19 runner behavior records raw manifest digest, canonical manifest digest,
+    trust policy, signature status, and unsigned-canary allowance in deployment
+    evidence before artifact bundle extraction or Terraform runs.
+  - U19 updates release notes/docs so unsigned canaries are documented as
+    dogfood/TEI-only while customer-safe controllers require signatures.
 - Local verification:
   - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
     passed: 7 tests.
+  - U19 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 21 tests.
+  - U19 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U19 `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U19 `terraform fmt -check terraform/modules/app/deployment-control-plane terraform/modules/thinkwork`
+    passed.
+  - U19 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Terraform, docs, and release workflow files passed.
+  - U19 `git diff --check` passed.
+  - U20 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 22 tests.
+  - U20 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U21 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 24 tests.
+  - U21 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
   - `pnpm install` completed; local Node 25 logged the known optional
     `canvas@2.11.2` native fallback build warning because `pkg-config` /
     `pixman-1` are not installed.
@@ -86,6 +447,300 @@ status: in_progress
   - U2 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
     Prettier-managed files passed.
   - U2 `git diff --check` passed.
+  - U3 `pnpm --filter thinkwork-cli test -- deploy.test.ts` passed: 3 tests.
+  - U3 `pnpm --filter thinkwork-cli typecheck` passed.
+  - U3 `pnpm --filter thinkwork-cli build` passed.
+  - U3 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - U3 `git diff --check` passed.
+  - U4 `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - U4 `pnpm --filter @thinkwork/api test -- deployment-sessions.test.ts`
+    passed: 10 tests.
+  - U4 `pnpm --filter @thinkwork/web exec vitest run src/routes/onboarding/-welcome.test.ts`
+    passed: 4 tests.
+  - U4 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U4 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U4 `pnpm --filter @thinkwork/database-pg typecheck` passed.
+  - U4 `pnpm schema:build` passed; GraphQL codegen passed for
+    `thinkwork-cli`, `@thinkwork/web`, and `@thinkwork/mobile`.
+  - U4 `terraform fmt -check terraform/modules/app/lambda-api terraform/modules/thinkwork`
+    passed.
+  - U4 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - U4 `git diff --check` passed.
+- U4 PR #2290 passed required CI (`cla`, `lint`, `Migration Drift Precheck
+(dev)`, `verify`, `test`, `typecheck`) after the scoped dev migration apply
+  noted below, and was squash merged as `aa48e0ed`.
+- U4 remote branch was already deleted by GitHub merge handling; local U4
+  worktree and branch were removed after syncing `origin/main`.
+- Created isolated U5 worktree from `origin/main` at `aa48e0ed`.
+- U5 extends deployment profiles with customer account, selected release, and
+  controller identity metadata; projects those fields into web runtime config;
+  writes controller identity into customer runtime profile outputs; adds a
+  no-op/status controller proof action; and adds a possession-token gated
+  `/authority-transfer` endpoint that records transfer proof, revokes the
+  bootstrap credential lease, marks the deployment session as
+  `authority_transferred`, and routes future deployment/teardown starts through
+  the customer controller ARN.
+- U5 keeps authority transfer recoverable: cleanup failures mark the session
+  `authority_transfer_failed` and leave the lease metadata for remediation
+  instead of falsely declaring transfer complete.
+  - U5 local verification:
+  - `pnpm --filter @thinkwork/deployment-profile test` passed: 14 tests.
+  - `pnpm --filter @thinkwork/deployment-profile typecheck` passed.
+  - `pnpm --filter @thinkwork/api test -- deployment-sessions.test.ts` passed:
+    13 tests.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 12 tests.
+  - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - `terraform fmt -check terraform/modules/app/deployment-control-plane terraform/modules/app/lambda-api terraform/modules/thinkwork`
+    passed.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - `git diff --check` passed.
+- U5 PR #2291 rerun passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+  `test`) after the sign-in fix, and was squash merged as `4e148d02`.
+- U5 remote branch was already deleted by GitHub merge handling; local U5
+  worktree and branch were removed after syncing `origin/main`.
+- Created isolated U6 worktree from `origin/main` at `4e148d02`.
+- U6 adds an operator-gated Settings release path:
+  `deploymentReleases(limit:)` lists GitHub Release `thinkwork-release.json`
+  assets with server-computed SHA-256 digests, and
+  `startDeploymentReleaseUpdate(input:)` starts the deployment controller with
+  `action=update`, explicit release version, manifest URL, digest, and
+  base-install optional apps disabled.
+- U6 adds a General Settings `Releases` section where operators can select a
+  release, review manifest URL/digest, and click `Confirm Deploy`.
+  - U6 local verification:
+  - `pnpm schema:build` passed.
+  - GraphQL codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
+    `@thinkwork/mobile`.
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/deployments/deployment-releases.test.ts src/__tests__/graphql-contract.test.ts`
+    passed: 124 tests.
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsGeneral.test.tsx`
+    passed: 1 test.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `pnpm --filter @thinkwork/mobile typecheck` was not runnable because the
+    mobile package has no `typecheck` script.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - `git diff --check` passed.
+- U6 PR #2292 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+  `test`) and was squash merged as `89908374`.
+- The main dev backend deploy for `89908374` passed, including Lambda build,
+  Terraform apply, docs deploy, workspace layout migration, and deploy summary.
+- Pushed `v0.1.0-canary.135` and `desktop-v0.1.0-canary.135` tags at
+  `89908374` to release the Settings release-deploy path. Platform release run
+  [27224415528](https://github.com/thinkwork-ai/thinkwork/actions/runs/27224415528)
+  and desktop/web release run
+  [27224416667](https://github.com/thinkwork-ai/thinkwork/actions/runs/27224416667)
+  started.
+- Desktop/web release run 27224416667 initially failed after build/web deploy
+  on a transient GitHub `502 Bad Gateway` during `gh release upload` of updater
+  metadata; rerun requested with `gh run rerun 27224416667 --failed`.
+- Created isolated U7 worktree from `origin/main` at `89908374`.
+- U7 wires managed-application plan/apply starts through the versioned
+  `thinkwork.deployment.controller.v1` envelope, including release manifest URL
+  and digest, evidence prefix, base optional-app state, and selected optional
+  app metadata.
+- U7 stores the approved desired config and manifest image hints in managed-app
+  plan summaries so apply executions can rebuild the approved Terraform
+  variables instead of losing config at approval time.
+- U7 lets the deployment runner hydrate Cognee/Twenty/Kestra `imageUri` from a
+  digest-pinned manifest image map and fails before Terraform variables are
+  produced when the selected release lacks the app image.
+- U7 PR #2293 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+  `test`) and was squash merged as `08e4571b`.
+- Released `v0.1.0-canary.136` from the U7 merge commit. Platform release run
+  [27226146271](https://github.com/thinkwork-ai/thinkwork/actions/runs/27226146271)
+  passed and verified the human-facing release asset list no longer contains
+  individual Lambda/platform zip files.
+- Released `desktop-v0.1.0-canary.136` from the same commit. Desktop/web
+  release run
+  [27227188829](https://github.com/thinkwork-ai/thinkwork/actions/runs/27227188829)
+  passed and deployed `https://app.thinkwork.ai` with asset
+  `assets/index-Cx0ohs5m.js`.
+- U7 remote branch was already deleted by GitHub merge handling; local U7
+  worktree and branch were removed after syncing `origin/main`.
+- Created isolated U8 worktree from `origin/main` at `08e4571b`.
+- U8 binds cached browser/desktop auth sessions to the active deployment profile
+  SHA so localhost/dev, TEI, and production ThinkWork profiles cannot silently
+  reuse one another's Cognito state.
+- U8 makes the unsigned build-time fallback deployment profile fingerprint
+  deterministic when Terraform/runtime config has not supplied
+  `VITE_DEPLOYMENT_PROFILE_ISSUED_AT`, preventing auth binding churn from
+  simple page reloads.
+- U8 keeps sign-out behavior explicit by exposing local-session clearing for
+  stale-profile recovery while preserving the hosted Cognito logout redirect for
+  normal user sign-out.
+- U8 PR #2294 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+  `test`) and was squash merged as `f406268b`.
+- U8 remote branch was already deleted by GitHub merge handling; local U8
+  worktree and branch were removed after syncing `origin/main`.
+- Created isolated U9 worktree from `origin/main` at `f406268b`.
+- U9 release-deploy operator proof makes General Settings retain the deployment
+  controller execution ARN and evidence pointer after an operator selects a
+  release and clicks `Confirm Deploy`, instead of dropping those details after a
+  toast.
+- U9 PR #2295 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+  `test`) and was squash merged as `f9ebf20d`.
+- Released `v0.1.0-canary.137` and `desktop-v0.1.0-canary.137` from the #2295
+  merge commit. Platform release run
+  [27229827229](https://github.com/thinkwork-ai/thinkwork/actions/runs/27229827229)
+  passed; desktop/web release run
+  [27229829014](https://github.com/thinkwork-ai/thinkwork/actions/runs/27229829014)
+  passed; post-merge deploy run
+  [27229765971](https://github.com/thinkwork-ai/thinkwork/actions/runs/27229765971)
+  passed and skipped Terraform/Lambda mutation because the changes were
+  web/client-side only.
+- Verified `https://app.thinkwork.ai` served the `.137` web bundle with
+  `Last-Modified: Tue, 09 Jun 2026 19:23:00 GMT`.
+- U9 release page
+  [v0.1.0-canary.137](https://github.com/thinkwork-ai/thinkwork/releases/tag/v0.1.0-canary.137)
+  contains desktop installers/updater metadata, `thinkwork-release.json`, and
+  `platform-artifacts.tar.gz`.
+- U9 remote branch was already deleted by GitHub merge handling; local U9
+  release-deploy worktree and branch were removed after syncing `origin/main`.
+- Created isolated U9 TEI runbook worktree from `origin/main` at `f9ebf20d`.
+- U9 TEI preflight resolved the `v0.1.0-canary.137` release manifest SHA-256:
+  `7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f`.
+- U9 TEI safe preflight confirmed AWS profile `tei` resolves to account
+  `637423202447` and principal
+  `arn:aws:iam::637423202447:user/eric@homecareintel.com`.
+- U9 TEI safe dry-runs passed for both top-level
+  `thinkwork deploy --bootstrap` and lower-level `thinkwork enterprise
+bootstrap` using the `.137` manifest URL and digest.
+- U9 TEI runbook PR #2296 passed required CI (`cla`, `lint`, `verify`,
+  `typecheck`, and `test`) and was squash merged as `a1794575`.
+- U9 TEI remote branch was already deleted by GitHub merge handling; local U9
+  TEI worktree and branch were removed after syncing `origin/main`.
+- U10 was started from `origin/main` at `a1794575` after live TEI controller
+  execution `tei-e2e-update-137-20260609194532` failed in CodeBuild with
+  `RuntimeError: Unsupported deployment action: update`.
+- U10 root cause: the deployed TEI runner accepted only the older
+  `deploy|destroy|plan` action set, and the controller runner paths that stage
+  release artifacts, write Terraform release metadata, checkout source, emit
+  runtime config, and write evidence still relied on `THINKWORK_RELEASE_*`
+  environment defaults. Those defaults were pinned to `.130` in the TEI
+  CodeBuild project even when the controller input requested `.137`.
+- U10 implementation normalizes the selected release from the controller input
+  payload once at runner startup and writes it back to `THINKWORK_RELEASE_*`
+  before status, deploy, update, plan, or destroy paths run. Payload release
+  fields now take precedence over stale CodeBuild defaults while preserving the
+  existing env fallback for older callers.
+- U10 PR #2297 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+  `test`) and was squash merged as `1a2e4c88`.
+- Post-merge deploy run
+  [27232323766](https://github.com/thinkwork-ai/thinkwork/actions/runs/27232323766)
+  passed. Terraform Apply completed successfully, docs deploy and compliance
+  role bootstrap passed, and Deploy Summary completed.
+- The TEI deployment control plane was refreshed from merged main using direct
+  AWS bootstrap mode, not GitHub dispatch:
+  `AWS_PROFILE=tei AWS_REGION=us-east-1 pnpm --dir apps/cli dev enterprise bootstrap /tmp/thinkwork-tei-e2e-bootstrap --customer tei --stage tei-e2e ... --release-version v0.1.0-canary.137 --manifest-sha256 7d94e58847fc2cc830b07d06f747c6727c007c9bd1f5b31a63981daf314efe3f --identity-provider none --yes`.
+  Terraform reported `1 added, 6 changed, 0 destroyed`, updated
+  `runner/thinkwork-runner.py`, moved selected release SSM pins from `.130` to
+  `.137`, and updated the CodeBuild runner env vars to the `.137` manifest.
+- U11 root cause: after the control-plane refresh, TEI's runner correctly used
+  the Terraform Registry source `thinkwork-ai/thinkwork/aws`, but
+  `push_database_schema` still tried to clone that source as a Git URL. The
+  release manifest contains the exact release `gitSha`, so registry-sourced
+  deployments should clone `https://github.com/thinkwork-ai/thinkwork.git` at
+  the manifest SHA for schema initialization/seed compatibility.
+- U11 implementation maps the registry source to the ThinkWork GitHub repo and
+  release manifest `gitSha`; it also supports `github.com/...//terraform/...`
+  module sources by normalizing them to HTTPS Git URLs.
+- U7 local verification:
+  - `pnpm schema:build` passed.
+  - GraphQL codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
+    `@thinkwork/mobile`.
+  - `pnpm --filter @thinkwork/deployment-runner test -- deployment-runner-managed-apps.test.ts`
+    passed: 11 tests.
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/deployments/managed-applications.test.ts src/graphql/resolvers/deployments/managed-application-deployment.test.ts`
+    passed: 6 tests.
+  - `pnpm --filter @thinkwork/deployment-runner typecheck` passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `pnpm --filter @thinkwork/mobile typecheck` was not runnable because the
+    mobile package has no `typecheck` script.
+  - `git diff --check` passed.
+- U8 local verification:
+  - `pnpm --filter @thinkwork/web test -- src/lib/deployment-profile.test.ts src/lib/auth-deployment-binding.test.ts src/context/AuthContext.test.tsx src/routes/-sign-in.test.tsx`
+    passed: 20 tests.
+  - `pnpm --filter @thinkwork/deployment-profile test` passed: 14 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/desktop test -- test/main/deployment-profile.test.ts test/main/auth-bridge.test.ts`
+    passed: 14 tests.
+  - `pnpm --filter @thinkwork/mobile test -- lib/deployment-profile.test.ts`
+    passed: 9 tests.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Prettier-managed files passed.
+  - `git diff --check` passed.
+- U9 local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsGeneral.test.tsx`
+    passed: 1 test.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - U9 release-deploy PR #2295 CI passed: `cla`, `lint`, `verify`,
+    `typecheck`, and `test`.
+  - U9 `.137` release verification passed: platform release, desktop/web
+    release, and post-merge deploy workflows all completed successfully.
+  - U9 TEI `aws sts get-caller-identity --profile tei --output json` passed.
+  - U9 TEI `AWS_PROFILE=tei AWS_REGION=us-east-1 pnpm --dir apps/cli dev doctor -s tei-e2e --profile tei`
+    passed.
+  - U9 TEI `thinkwork deploy --bootstrap ... --dry-run --no-wait --no-run-smokes`
+    passed with `v0.1.0-canary.137`.
+  - U9 TEI `thinkwork enterprise bootstrap ... --dry-run` passed with
+    `v0.1.0-canary.137`.
+  - U9 TEI `node scripts/smoke/foundation-bootstrap-smoke.mjs` dry-run passed.
+  - U10 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed: 13 tests.
+  - U10 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U10 `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U10 `pnpm install --frozen-lockfile` completed in the isolated worktree;
+    local Node 25 logged the known optional `canvas@2.11.2` native fallback
+    build warning because `pkg-config` / `pixman-1` are not installed.
+  - U10 `pnpm --dir apps/cli exec vitest run __tests__/terraform-deployment-control-plane-fixture.test.ts`
+    passed: 3 tests.
+  - U11 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed: 15 tests.
+  - U11 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U11 `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+- CI:
+  - U5 PR #2291 initial checks: `cla`, `lint`, `verify`, and `typecheck`
+    passed.
+  - U5 PR #2291 `test` failed because the web sign-in snapshot treated new
+    optional account/release/controller deployment-profile metadata as required
+    OAuth fields, blocking login in existing web and desktop flows.
+  - Fixed `apps/web/src/lib/deployment-profile.ts` to validate only the actual
+    required OAuth/runtime fields for login readiness while preserving optional
+    authority metadata when present.
+  - U5 post-fix local verification:
+    `pnpm --filter @thinkwork/web exec vitest run src/routes/-sign-in.test.tsx`
+    passed: 11 tests; `pnpm --filter @thinkwork/web typecheck` passed.
+  - U4 PR #2290 initial checks: `cla`, `lint`, and `verify` passed.
+  - `Migration Drift Precheck (dev)` failed because the new hand-written
+    migration objects from `0156_bootstrap_credential_leases.sql` were not yet
+    present in the dev database.
+  - Applied `packages/database-pg/drizzle/0156_bootstrap_credential_leases.sql`
+    to the dev database only.
+  - Local scoped drift reporter passed after the dev apply:
+    `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0156_bootstrap_credential_leases.sql`.
 
 ## Tenant Model Catalog - 2026-06-09
 
@@ -10376,6 +11031,29 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `enabled=false`, `provisioned=false`, and `runtimeEnabled=false`.
   `managedApplications` planning rows exist for both with desired status
   `disabled`. Optional Slack and Stripe remain excluded from the base install.
+- U17 pending-invite resend local verification:
+  `npx vitest run src/__tests__/inviteMember-computer-claim.test.ts` from
+  `packages/api` passed with 2 tests, `pnpm --filter @thinkwork/api typecheck`
+  passed, `pnpm dlx prettier@3.8.2 --check` passed for the touched API/docs
+  files, `terraform fmt -check -recursive terraform/modules/foundation/cognito terraform/modules/thinkwork`
+  passed, and `git diff --check` passed. User-detail UI follow-up
+  verification passed:
+  `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsUserDetail.test.tsx`
+  with 9 tests and `pnpm --filter @thinkwork/web typecheck`.
+- U17 follow-up for TEI demo readiness: user-detail resend invite now appears
+  only for Cognito users that have not completed first sign-in
+  (`FORCE_CHANGE_PASSWORD`/`UNCONFIRMED`), the user detail page includes a
+  bottom delete-membership action, and release discovery now fetches a broad
+  GitHub release page then sorts by `published_at` so `v0.1.0-canary.141`
+  surfaces ahead of older releases even when the GitHub Releases API returns
+  canaries out of order. The Releases metadata row uses a dedicated layout so
+  date and time stay on one line. Local verification passed:
+  `npx vitest run src/graphql/resolvers/deployments/deployment-releases.test.ts src/__tests__/inviteMember-computer-claim.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts`
+  from `packages/api` (16 tests),
+  `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsUserDetail.test.tsx src/components/settings/SettingsGeneral.test.tsx`
+  (11 tests), `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/web typecheck`,
+  `pnpm dlx prettier@3.8.2 --check ...`, and `git diff --check`.
 
 ## Agent Profile Closed Loops - 2026-06-08
 

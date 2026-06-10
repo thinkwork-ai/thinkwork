@@ -1,6 +1,15 @@
-import { useQuery } from "urql";
+import type { ReactNode } from "react";
+import { useState } from "react";
+import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Select,
   SelectContent,
   SelectItem,
@@ -24,7 +33,11 @@ import {
   useEditorFontSize,
   useEditorWrap,
 } from "@/lib/editor-prefs";
-import { SettingsDeploymentStatusQuery } from "@/lib/settings-queries";
+import {
+  SettingsDeploymentReleasesQuery,
+  SettingsDeploymentStatusQuery,
+  SettingsStartDeploymentReleaseUpdateMutation,
+} from "@/lib/settings-queries";
 import {
   SettingsHeader,
   SettingsPane,
@@ -59,15 +72,6 @@ export function SettingsGeneral() {
         <EditorWrapRow />
       </SettingsSection>
 
-      <SettingsSection label="About">
-        <SettingsRow
-          label="App version"
-          description="The ThinkWork build running on this device."
-        >
-          {APP_VERSION_LABEL}
-        </SettingsRow>
-      </SettingsSection>
-
       {isDesktop() ? (
         <SettingsSection label="Notifications">
           <ThreadNotificationsRow />
@@ -83,6 +87,24 @@ export function SettingsGeneral() {
               </div>
             ) : (
               <>
+                <SettingsRow
+                  label="App build"
+                  description="The web or desktop bundle running on this device."
+                >
+                  <MonoValue value={APP_VERSION_LABEL} />
+                </SettingsRow>
+                <SettingsRow
+                  label="Deployed release"
+                  description="The ThinkWork platform release currently selected for this environment."
+                >
+                  <MonoValue value={deployment?.releaseVersion} />
+                </SettingsRow>
+                <SettingsRow
+                  label="Manifest SHA"
+                  description="Release manifest digest for the deployed platform version."
+                >
+                  <MonoValue value={deployment?.releaseManifestSha256} />
+                </SettingsRow>
                 <SettingsRow
                   label="Stage"
                   description="Deployment stage this console is connected to."
@@ -138,11 +160,243 @@ export function SettingsGeneral() {
                 description="Realtime subscriptions endpoint."
                 value={deployment?.appsyncUrl}
               />
+              <ResourceRow
+                label="Controller"
+                description="Deployment controller state machine."
+                value={deployment?.deploymentControllerArn}
+              />
+              <ResourceRow
+                label="Runner"
+                description="CodeBuild project that applies release updates."
+                value={deployment?.deploymentRunnerProjectName}
+              />
+              <ResourceRow
+                label="Evidence bucket"
+                description="Deployment run evidence and status storage."
+                value={deployment?.deploymentEvidenceBucket}
+              />
             </SettingsSection>
           ) : null}
+
+          <DeploymentReleasesSection enabled={showOperator} />
         </>
       ) : null}
     </SettingsPane>
+  );
+}
+
+interface DeploymentReleaseRow {
+  version: string;
+  name?: string | null;
+  prerelease: boolean;
+  draft: boolean;
+  publishedAt?: string | null;
+  htmlUrl: string;
+  manifestUrl: string;
+  manifestSha256: string;
+  signed: boolean;
+  deployable: boolean;
+}
+
+interface DeploymentReleaseUpdateResult {
+  executionArn: string;
+  stateMachineArn: string;
+  evidenceBucket?: string | null;
+  evidencePrefix: string;
+  message: string;
+  release: Pick<
+    DeploymentReleaseRow,
+    "version" | "manifestUrl" | "manifestSha256" | "signed" | "deployable"
+  >;
+}
+
+function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
+  const [selectedRelease, setSelectedRelease] =
+    useState<DeploymentReleaseRow | null>(null);
+  const [lastDeployment, setLastDeployment] =
+    useState<DeploymentReleaseUpdateResult | null>(null);
+  const [result] = useQuery({
+    query: SettingsDeploymentReleasesQuery,
+    variables: { limit: 5 },
+    pause: !enabled,
+  });
+  const [updateState, startReleaseUpdate] = useMutation(
+    SettingsStartDeploymentReleaseUpdateMutation,
+  );
+  const releases = (result.data?.deploymentReleases ??
+    []) as DeploymentReleaseRow[];
+
+  async function confirmDeploy() {
+    if (!selectedRelease) return;
+    const response = await startReleaseUpdate({
+      input: {
+        version: selectedRelease.version,
+        manifestUrl: selectedRelease.manifestUrl,
+        manifestSha256: selectedRelease.manifestSha256,
+        idempotencyKey: `settings-release-${selectedRelease.version}`,
+      },
+    });
+    if (response.error) {
+      toast.error("Release deploy failed", {
+        description: response.error.message,
+      });
+      return;
+    }
+    const deployResult = response.data
+      ?.startDeploymentReleaseUpdate as DeploymentReleaseUpdateResult | null;
+    if (deployResult) setLastDeployment(deployResult);
+    toast.success("Release deploy started", {
+      description: deployResult?.message ?? selectedRelease.version,
+    });
+    setSelectedRelease(null);
+  }
+
+  return (
+    <SettingsSection label="Releases">
+      {result.fetching ? (
+        <div className="p-4 text-sm text-muted-foreground">
+          Loading releases…
+        </div>
+      ) : result.error ? (
+        <div className="p-4 text-sm text-muted-foreground">
+          Releases unavailable.
+        </div>
+      ) : releases.length === 0 ? (
+        <div className="p-4 text-sm text-muted-foreground">
+          No deployable release manifests found.
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {releases.map((release) => (
+            <ReleaseRow key={release.version} release={release}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSelectedRelease(release)}
+                disabled={!release.deployable || updateState.fetching}
+              >
+                Deploy
+              </Button>
+            </ReleaseRow>
+          ))}
+        </div>
+      )}
+
+      {lastDeployment ? (
+        <div className="border-t border-border p-4 text-sm">
+          <div className="mb-3">
+            <div className="font-medium">Deployment controller started</div>
+            <div className="text-muted-foreground">
+              {lastDeployment.message}
+            </div>
+          </div>
+          <div className="grid gap-3">
+            <ConfirmFact
+              label="Release"
+              value={lastDeployment.release.version}
+            />
+            <ConfirmFact
+              label="Execution"
+              value={lastDeployment.executionArn}
+            />
+            <ConfirmFact
+              label="Evidence"
+              value={
+                lastDeployment.evidenceBucket
+                  ? `${lastDeployment.evidenceBucket}/${lastDeployment.evidencePrefix}`
+                  : lastDeployment.evidencePrefix
+              }
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <Dialog
+        open={Boolean(selectedRelease)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedRelease(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Deploy release?</DialogTitle>
+            <DialogDescription>
+              Start the deployment controller for this ThinkWork environment.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRelease ? (
+            <div className="space-y-3 text-sm">
+              <ConfirmFact label="Release" value={selectedRelease.version} />
+              <ConfirmFact
+                label="Manifest"
+                value={selectedRelease.manifestUrl}
+              />
+              <ConfirmFact
+                label="SHA-256"
+                value={selectedRelease.manifestSha256}
+              />
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setSelectedRelease(null)}
+              disabled={updateState.fetching}
+            >
+              Cancel
+            </Button>
+            <Button onClick={confirmDeploy} disabled={updateState.fetching}>
+              {updateState.fetching ? "Deploying…" : "Confirm Deploy"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </SettingsSection>
+  );
+}
+
+function ReleaseRow({
+  release,
+  children,
+}: {
+  release: DeploymentReleaseRow;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-4 py-3.5">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{release.version}</p>
+        <p className="mt-0.5 whitespace-nowrap text-sm text-muted-foreground">
+          {releaseDescription(release)}
+        </p>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+function releaseDescription(release: DeploymentReleaseRow): string {
+  const parts = [
+    release.signed ? "signed manifest" : "unsigned canary",
+    release.publishedAt ? new Date(release.publishedAt).toLocaleString() : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function ConfirmFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="break-all font-mono text-xs">{value}</div>
+    </div>
+  );
+}
+
+function MonoValue({ value }: { value?: string | null }) {
+  return (
+    <span className="max-w-[22rem] truncate font-mono text-xs">
+      {value ?? "—"}
+    </span>
   );
 }
 

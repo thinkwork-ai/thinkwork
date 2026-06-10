@@ -33,7 +33,12 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 66
 fi
 
-ASSETS=("$MANIFEST")
+delete_release_asset_if_present() {
+  local asset_name="$1"
+  gh release delete-asset "$TAG" "$asset_name" --yes >/dev/null 2>&1 || true
+}
+
+ASSETS=()
 SIGNATURE="$RELEASE_DIR/thinkwork-release.sig.json"
 if [[ -f "$SIGNATURE" ]]; then
   ASSETS+=("$SIGNATURE")
@@ -56,10 +61,18 @@ else
   fi
 fi
 
-if [[ ${#ASSETS[@]} -le 1 ]]; then
+if [[ ${#ASSETS[@]} -eq 0 ]]; then
   echo "No deployable assets found under $RELEASE_DIR" >&2
   exit 66
 fi
 
-echo "Uploading ${#ASSETS[@]} release assets to ${TAG}"
+echo "Removing stale release manifest assets from ${TAG}"
+delete_release_asset_if_present "thinkwork-release.json"
+delete_release_asset_if_present "thinkwork-release.sig.json"
+delete_release_asset_if_present "thinkwork-release.json.sig"
+
+echo "Uploading ${#ASSETS[@]} non-manifest release assets to ${TAG}"
 gh release upload "$TAG" "${ASSETS[@]}" --clobber
+
+echo "Uploading finalized release manifest to ${TAG}"
+gh release upload "$TAG" "$MANIFEST" --clobber

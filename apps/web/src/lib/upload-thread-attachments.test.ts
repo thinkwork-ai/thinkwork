@@ -82,6 +82,55 @@ describe("uploadThreadAttachments", () => {
       mimeType: "text/csv",
       sizeBytes: 1,
     });
+    const [, putInit] = fetchImpl.mock.calls[1]!;
+    expect((putInit as RequestInit).headers).toMatchObject({
+      "Content-Type": "text/csv",
+    });
+  });
+
+  it("uses the fallback spreadsheet MIME for both presign and signed PUT when the browser file type is empty", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(presignBody("att-1", "ledger.xlsx")), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify(
+            finalizeBody(
+              "att-1",
+              "ledger.xlsx",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              1,
+            ),
+          ),
+          { status: 200 },
+        ),
+      );
+
+    const result = await uploadThreadAttachments({
+      endpoints: { apiUrl: API_URL, token: "tok" },
+      threadId: THREAD_ID,
+      files: [file("ledger.xlsx", "x", "")],
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.failures).toEqual([]);
+    const [, presignInit] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse((presignInit as RequestInit).body as string)).toMatchObject(
+      {
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+    );
+    const [, putInit] = fetchImpl.mock.calls[1]!;
+    expect((putInit as RequestInit).headers).toMatchObject({
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
   });
 
   it("binds the default global fetch so browser uploads do not hit illegal invocation", async () => {

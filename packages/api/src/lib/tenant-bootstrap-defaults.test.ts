@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { approvalCalls } = vi.hoisted(() => ({
+const { approvalCalls, baselineOntologyCalls } = vi.hoisted(() => ({
   approvalCalls: [] as Array<{ tenantId: string; userId: string }>,
+  baselineOntologyCalls: [] as string[],
 }));
 
 vi.mock("./model-approvals.js", () => ({
@@ -11,6 +12,13 @@ vi.mock("./model-approvals.js", () => ({
       return ["us.anthropic.claude-sonnet-4-6"];
     },
   ),
+}));
+
+vi.mock("./ontology/baseline.js", () => ({
+  ensureBaselineOntology: vi.fn(async (_db: unknown, tenantId: string) => {
+    baselineOntologyCalls.push(tenantId);
+    return { seeded: true, versionId: "version-1", entityTypeSlugs: [] };
+  }),
 }));
 
 import { ensureTenantBootstrapDefaults } from "./tenant-bootstrap-defaults.js";
@@ -54,6 +62,7 @@ function createMockDb(selectResults: unknown[][]) {
 
 beforeEach(() => {
   approvalCalls.length = 0;
+  baselineOntologyCalls.length = 0;
 });
 
 describe("ensureTenantBootstrapDefaults", () => {
@@ -93,6 +102,7 @@ describe("ensureTenantBootstrapDefaults", () => {
     );
     expect(updates).toEqual([]);
     expect(approvalCalls).toEqual([{ tenantId: "tenant-1", userId: "user-1" }]);
+    expect(baselineOntologyCalls).toEqual(["tenant-1"]);
   });
 
   it("repairs an existing platform agent that has no model", async () => {
@@ -114,5 +124,6 @@ describe("ensureTenantBootstrapDefaults", () => {
       }),
     ]);
     expect(approvalCalls).toEqual([{ tenantId: "tenant-1", userId: "user-1" }]);
+    expect(baselineOntologyCalls).toEqual(["tenant-1"]);
   });
 });

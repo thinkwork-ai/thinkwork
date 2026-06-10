@@ -75,7 +75,6 @@ export interface CompileAgentProfileRunRequestArgs {
   task: string;
   parentThreadTurnId: string;
   parentModelId: string;
-  approvedModelIds: readonly string[];
   availableToolNames: readonly string[];
   availableSkillNames: readonly string[];
   mcpRegistry: McpToolRegistry;
@@ -284,8 +283,6 @@ export class AgentProfileAdapterError extends Error {
     public readonly code:
       | "PROFILE_DISABLED"
       | "EMPTY_TASK"
-      | "MODEL_NOT_APPROVED"
-      | "FALLBACK_MODEL_NOT_APPROVED"
       | "TOOL_NOT_AVAILABLE"
       | "SKILL_NOT_AVAILABLE"
       | "MCP_SERVER_NOT_AVAILABLE"
@@ -323,6 +320,7 @@ const PROMPT_OVERRIDE_KEYS = new Set([
 const SECRET_KEY_PATTERN =
   /(?:authorization|bearer|token|secret|password|api[_-]?key|access[_-]?token|refresh[_-]?token)/i;
 const BEARER_PATTERN = /Bearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const OPTIONAL_EPHEMERAL_TOOL_NAMES = new Set(["file_read"]);
 
 function cleanString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -350,19 +348,6 @@ function normalizeToolNamesForRuntime(
   );
 }
 
-function assertApprovedModel(
-  modelId: string,
-  approvedModelIds: readonly string[],
-  code: "MODEL_NOT_APPROVED" | "FALLBACK_MODEL_NOT_APPROVED",
-): void {
-  if (!approvedModelIds.includes(modelId)) {
-    throw new AgentProfileAdapterError(
-      code,
-      `Agent profile model "${modelId}" is not approved for this invocation.`,
-    );
-  }
-}
-
 function rejectPromptSuppliedOverrides(
   overrides: Record<string, unknown> | undefined,
 ): void {
@@ -380,11 +365,14 @@ function rejectPromptSuppliedOverrides(
 function assertKnownValues(input: {
   values: readonly string[];
   available: readonly string[];
+  optionalUnavailable?: ReadonlySet<string>;
   code: "TOOL_NOT_AVAILABLE" | "SKILL_NOT_AVAILABLE";
   noun: string;
 }): void {
   const available = new Set(input.available);
-  const missing = input.values.filter((value) => !available.has(value));
+  const missing = input.values.filter(
+    (value) => !available.has(value) && !input.optionalUnavailable?.has(value),
+  );
   if (missing.length > 0) {
     throw new AgentProfileAdapterError(
       input.code,
@@ -418,10 +406,14 @@ function compileToolAllowlist(input: {
   assertKnownValues({
     values: tools,
     available: input.availableToolNames,
+    optionalUnavailable: OPTIONAL_EPHEMERAL_TOOL_NAMES,
     code: "TOOL_NOT_AVAILABLE",
     noun: "tools",
   });
-  return tools;
+  const available = new Set(input.availableToolNames);
+  return tools.filter(
+    (tool) => available.has(tool) || !OPTIONAL_EPHEMERAL_TOOL_NAMES.has(tool),
+  );
 }
 
 function compileSkills(input: {
@@ -532,15 +524,7 @@ export function compileAgentProfileRunRequest(
   rejectPromptSuppliedOverrides(args.requestedOverrides);
 
   const model = cleanString(args.profile.modelId);
-  assertApprovedModel(model, args.approvedModelIds, "MODEL_NOT_APPROVED");
   const fallbackModels = unique(args.profile.fallbackModelIds ?? []);
-  for (const fallbackModel of fallbackModels) {
-    assertApprovedModel(
-      fallbackModel,
-      args.approvedModelIds,
-      "FALLBACK_MODEL_NOT_APPROVED",
-    );
-  }
 
   const tools = compileToolAllowlist({
     policy: args.profile.toolPolicy,

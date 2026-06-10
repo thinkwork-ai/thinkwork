@@ -377,6 +377,49 @@ resource "aws_security_group_rule" "aurora_from_cognee_worker" {
   security_group_id        = module.database.db_security_group_id
 }
 
+# VPC-attached Knowledge Graph workers (attached for Cognee's internal ALB)
+# have no public egress — the VPC has no NAT — so the observation promotion
+# classifier's direct Bedrock calls need an interface endpoint inside the VPC.
+# Private DNS keeps the SDK's default bedrock-runtime hostname resolving to
+# the endpoint ENIs — for EVERY resource in the VPC, so the ingress must
+# admit the whole VPC CIDR: the Cognee ECS task (its own SG) and any future
+# in-VPC Bedrock caller resolve to this endpoint the moment it exists.
+data "aws_vpc" "bedrock_endpoint_scope" {
+  count = local.cognee_enabled ? 1 : 0
+  id    = module.vpc.vpc_id
+}
+
+resource "aws_security_group" "bedrock_runtime_endpoint" {
+  count = local.cognee_enabled ? 1 : 0
+
+  name_prefix = "thinkwork-${var.stage}-bedrock-vpce-"
+  description = "HTTPS to the Bedrock runtime interface endpoint"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.bedrock_endpoint_scope[0].cidr_block]
+  }
+
+  tags = { Name = "thinkwork-${var.stage}-bedrock-vpce-sg" }
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_vpc_endpoint" "bedrock_runtime" {
+  count = local.cognee_enabled ? 1 : 0
+
+  vpc_id              = module.vpc.vpc_id
+  service_name        = "com.amazonaws.${var.region}.bedrock-runtime"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.cognee_worker_subnet_ids
+  security_group_ids  = [aws_security_group.bedrock_runtime_endpoint[0].id]
+  private_dns_enabled = true
+
+  tags = { Name = "thinkwork-${var.stage}-bedrock-runtime-vpce" }
+}
+
 ################################################################################
 # Foundation Tier
 ################################################################################
@@ -414,6 +457,20 @@ module "cognito" {
   oidc_identity_providers    = var.oidc_identity_providers
   saml_identity_providers    = var.saml_identity_providers
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
+  email_source_arn           = var.cognito_email_source_arn
+  from_email_address         = var.cognito_from_email_address
+  reply_to_email_address     = var.cognito_reply_to_email_address
+  invite_email_subject       = var.cognito_invite_email_subject
+  invite_email_message = (
+    var.cognito_invite_email_message != ""
+    ? var.cognito_invite_email_message
+    : format(
+      "<p>You have been invited to ThinkWork.</p><p>Sign in: <a href=\"%s/sign-in\">%s/sign-in</a></p><p>Username: <strong>{username}</strong></p><p>Temporary password: <strong>{####}</strong></p>",
+      local.end_user_app_domain != "" ? "https://${local.end_user_app_domain}" : "https://${module.computer_site.distribution_domain}",
+      local.end_user_app_domain != "" ? "https://${local.end_user_app_domain}" : "https://${module.computer_site.distribution_domain}",
+    )
+  )
+  invite_sms_message = var.cognito_invite_sms_message
 
   # Single ThinkworkAdmin Cognito client serves the unified web app. The
   # historical client name stays for compatibility; the standalone admin
@@ -582,9 +639,12 @@ module "deployment_control_plane" {
   account_id = var.account_id
   region     = var.region
 
-  release_version         = var.deployment_release_version
-  release_manifest_url    = var.deployment_release_manifest_url
-  release_manifest_sha256 = var.deployment_release_manifest_sha256
+  release_version                    = var.deployment_release_version
+  release_manifest_url               = var.deployment_release_manifest_url
+  release_manifest_sha256            = var.deployment_release_manifest_sha256
+  release_manifest_signature_url     = var.deployment_release_manifest_signature_url
+  release_manifest_trust_policy      = var.deployment_release_manifest_trust_policy
+  release_manifest_trusted_keys_json = var.deployment_release_manifest_trusted_keys_json
 
   terraform_state_bucket  = local.deployment_terraform_state_bucket
   terraform_lock_table    = local.deployment_terraform_lock_table
@@ -672,6 +732,7 @@ module "api" {
   lambda_zips_dir                               = var.lambda_zips_dir
   api_auth_secret                               = var.api_auth_secret
   db_password                                   = var.db_password
+  bootstrap_credential_lease_kms_key_id         = var.bootstrap_credential_lease_kms_key_id
   agentcore_pi_function_name                    = module.agentcore_pi.agentcore_pi_function_name
   agentcore_pi_function_arn                     = module.agentcore_pi.agentcore_pi_function_arn
   enable_agentcore_pi_invoke_policy             = true
@@ -906,6 +967,10 @@ module "hindsight" {
   db_security_group_id = module.database.db_security_group_id
   database_url         = module.database.database_url
   image_tag            = var.hindsight_image_tag
+
+  enable_auto_consolidation     = var.hindsight_enable_auto_consolidation
+  consolidation_dedup_threshold = var.hindsight_consolidation_dedup_threshold
+  observations_mission          = var.hindsight_observations_mission
 }
 
 module "cognee" {

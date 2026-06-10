@@ -191,8 +191,8 @@ export function SettingsRow({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-border px-4 py-3.5 last:border-b-0 md:flex-row md:items-start md:justify-between md:gap-4">
-      <div className="min-w-0 md:w-56 md:min-w-56 md:shrink-0">
+    <div className="flex flex-col gap-3 border-b border-border px-4 py-3.5 last:border-b-0 md:grid md:grid-cols-[minmax(0,1fr)_minmax(10rem,max-content)] md:items-start md:gap-6">
+      <div className="min-w-0">
         <p className="text-sm font-medium text-foreground">{label}</p>
         {description ? (
           <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>

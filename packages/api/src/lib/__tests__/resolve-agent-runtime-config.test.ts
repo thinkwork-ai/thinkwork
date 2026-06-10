@@ -283,6 +283,7 @@ beforeEach(() => {
   rowsQueue.length = 0;
   whereCalls.length = 0;
   vi.clearAllMocks();
+  mockListTenantModelCatalogByIds.mockReset();
   vi.stubEnv("WORKSPACE_BUCKET", "");
   mockBuildSkillEnvOverrides.mockResolvedValue(null);
   mockLoadTenantBuiltinTools.mockResolvedValue([]);
@@ -1089,6 +1090,9 @@ describe("resolveAgentRuntimeConfig", () => {
         execution_controls: {},
       },
     ]);
+    mockListTenantModelCatalogByIds.mockImplementation(async () => [
+      { modelId: PROFILE_MODEL_ID },
+    ]);
     rowsQueue.push([]); // space assignments
     rowsQueue.push([
       {
@@ -1121,7 +1125,7 @@ describe("resolveAgentRuntimeConfig", () => {
     });
   });
 
-  it("excludes disabled profiles and profiles with unavailable or unapproved models", async () => {
+  it("excludes disabled profiles and profiles with unavailable models only", async () => {
     stageAgentRow();
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
@@ -1157,12 +1161,12 @@ describe("resolveAgentRuntimeConfig", () => {
         execution_controls: {},
       },
       {
-        id: "profile-unapproved",
-        slug: "unapproved",
-        name: "Unapproved",
+        id: "profile-specialized",
+        slug: "specialized",
+        name: "Specialized",
         description: null,
         routing_guidance: null,
-        instructions: "Not approved.",
+        instructions: "Use the tenant-configured profile model.",
         model_id: PROFILE_MODEL_ID,
         enabled: true,
         built_in_key: null,
@@ -1171,7 +1175,9 @@ describe("resolveAgentRuntimeConfig", () => {
         execution_controls: {},
       },
     ]);
-    rowsQueue.push([]); // approved models for user
+    mockListTenantModelCatalogByIds.mockResolvedValueOnce([
+      { modelId: PROFILE_MODEL_ID },
+    ]);
     rowsQueue.push([]); // space assignments
     rowsQueue.push([]); // MCP server catalog
 
@@ -1182,7 +1188,12 @@ describe("resolveAgentRuntimeConfig", () => {
       currentUserEmail: "rep@acme.test",
     });
 
-    expect(cfg.agentProfilesConfig).toEqual([]);
+    expect(cfg.agentProfilesConfig).toEqual([
+      expect.objectContaining({
+        slug: "specialized",
+        modelId: PROFILE_MODEL_ID,
+      }),
+    ]);
   });
 
   it("overlays Space runtime overrides when spaceId is provided", async () => {

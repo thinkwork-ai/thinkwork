@@ -12,28 +12,31 @@ This kit fills the gap.
 
 ## Files
 
-| File                                      | Role                                                                                                                                                                                                                                        |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `_env.sh`                                 | Sourced helper: resolves `API_URL`, `API_AUTH_SECRET`, `DATABASE_URL`; provides `preflight_skill_runs_schema` + `wait_for_terminal_status`.                                                                                                 |
-| `chat-smoke.sh`                           | POST `/api/skills/start` with `invocationSource=chat`; asserts `skill_runs` row transitions out of `running`.                                                                                                                               |
-| `catalog-smoke.sh`                        | POST `/api/skills/start` with `invocationSource=catalog`; same assertion.                                                                                                                                                                   |
-| `scheduled-smoke.sh`                      | Insert `scheduled_jobs` + invoke `job-trigger` Lambda; asserts a scheduled `skill_runs` row. `--force` required (mutates DB).                                                                                                               |
-| `run-all.sh`                              | Aggregator — runs chat + catalog + scheduled (or `--ci` subset) and prints a PASS/FAIL line per path.                                                                                                                                       |
-| `webhook-secret-put.sh`                   | Create or rotate a per-(tenant, integration) signing secret in Secrets Manager.                                                                                                                                                             |
-| `webhook-smoke.sh`                        | HMAC-sign + POST a payload to the deployed webhook Lambda.                                                                                                                                                                                  |
-| `CHECKS.md`                               | Definition-of-passing + the full runbook per path. Read this first if a smoke fails.                                                                                                                                                        |
-| `fixtures/sales-prep-chat.json`           | Inputs for `chat-smoke.sh` (distinct customer so dedup hash differs from catalog).                                                                                                                                                          |
-| `fixtures/sales-prep-catalog.json`        | Inputs for `catalog-smoke.sh`.                                                                                                                                                                                                              |
-| `fixtures/crm-opportunity-won.json`       | Valid CRM close-won event. Starts or returns a Customer Onboarding Space Thread and mirrors checklist tasks.                                                                                                                                |
-| `fixtures/task-completed.json`            | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                                                                                                    |
-| `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                               |
-| `spaces-runbook-smoke.mjs`                | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
-| `foundation-bootstrap-smoke.mjs`          | GitHub-free foundation bootstrap smoke. Dry-run reports required endpoint/evidence inputs; live mode verifies generated Spaces/API/Auth/profile/control-plane outputs and emits a support evidence envelope.                                |
-| `deployment-evidence.mjs`                 | Shared JSON evidence envelope writer/uploader for foundation and managed-app smokes. Writes locally or uploads to S3 only when explicitly configured.                                                                                       |
-| `knowledge-graph-thread-ingest-smoke.mjs` | Cognee Knowledge Graph smoke. Dry-run reports required live-mode configuration; live mode starts a manual thread ingest, polls the run, and verifies table/graph/detail GraphQL reads from the normalized snapshot.                         |
-| `twenty-managed-app-smoke.mjs`            | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                    |
-| `kestra-managed-app-smoke.mjs`            | Kestra managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public authenticated endpoint when Kestra is running.                  |
-| `kestra-control-mcp-smoke.mjs`            | Kestra control MCP smoke. Dry-run reports live-mode requirements; live mode verifies managed MCP registration, lists curated tools, validates safe/unsafe flows, and can upsert/start/poll a safe smoke flow.                               |
+| File                                         | Role                                                                                                                                                                                                                                        |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `_env.sh`                                    | Sourced helper: resolves `API_URL`, `API_AUTH_SECRET`, `DATABASE_URL`; provides `preflight_skill_runs_schema` + `wait_for_terminal_status`.                                                                                                 |
+| `chat-smoke.sh`                              | POST `/api/skills/start` with `invocationSource=chat`; asserts `skill_runs` row transitions out of `running`.                                                                                                                               |
+| `catalog-smoke.sh`                           | POST `/api/skills/start` with `invocationSource=catalog`; same assertion.                                                                                                                                                                   |
+| `scheduled-smoke.sh`                         | Insert `scheduled_jobs` + invoke `job-trigger` Lambda; asserts a scheduled `skill_runs` row. `--force` required (mutates DB).                                                                                                               |
+| `run-all.sh`                                 | Aggregator — runs chat + catalog + scheduled (or `--ci` subset) and prints a PASS/FAIL line per path.                                                                                                                                       |
+| `webhook-secret-put.sh`                      | Create or rotate a per-(tenant, integration) signing secret in Secrets Manager.                                                                                                                                                             |
+| `webhook-smoke.sh`                           | HMAC-sign + POST a payload to the deployed webhook Lambda.                                                                                                                                                                                  |
+| `CHECKS.md`                                  | Definition-of-passing + the full runbook per path. Read this first if a smoke fails.                                                                                                                                                        |
+| `fixtures/sales-prep-chat.json`              | Inputs for `chat-smoke.sh` (distinct customer so dedup hash differs from catalog).                                                                                                                                                          |
+| `fixtures/sales-prep-catalog.json`           | Inputs for `catalog-smoke.sh`.                                                                                                                                                                                                              |
+| `fixtures/crm-opportunity-won.json`          | Valid CRM close-won event. Starts or returns a Customer Onboarding Space Thread and mirrors checklist tasks.                                                                                                                                |
+| `fixtures/task-completed.json`               | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                                                                                                    |
+| `fixtures/task-completed-no-trigger.json`    | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                               |
+| `spaces-runbook-smoke.mjs`                   | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
+| `foundation-bootstrap-smoke.mjs`             | GitHub-free foundation bootstrap smoke. Dry-run reports required endpoint/evidence inputs; live mode verifies generated Spaces/API/Auth/profile/control-plane outputs and emits a support evidence envelope.                                |
+| `deployment-profile-binding-smoke.mjs`       | Deployment profile binding smoke. Dry-run reports profile requirements; live mode validates runtime-config-backed web, desktop, and mobile profile binding without recording credential material.                                           |
+| `deployment-evidence.mjs`                    | Shared JSON evidence envelope writer/uploader for foundation and managed-app smokes. Writes locally or uploads to S3 only when explicitly configured.                                                                                       |
+| `knowledge-graph-thread-ingest-smoke.mjs`    | Cognee Knowledge Graph smoke. Dry-run reports required live-mode configuration; live mode starts a manual thread ingest, polls the run, and verifies table/graph/detail GraphQL reads from the normalized snapshot.                         |
+| `twenty-managed-app-smoke.mjs`               | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                    |
+| `managed-app-controller-readiness-smoke.mjs` | Read-only managed-app controller readiness smoke. Verifies selected release manifest descriptors, smoke contracts, and required runtime images for Cognee/Twenty without starting any managed-app job.                                      |
+| `deployment-teardown-readiness-smoke.mjs`    | Read-only teardown readiness smoke. Verifies the selected release pins, customer controller, Terraform backend, lock table, and evidence bucket needed for a later destroy run without starting destroy.                                    |
+| `kestra-managed-app-smoke.mjs`               | Kestra managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public authenticated endpoint when Kestra is running.                  |
+| `kestra-control-mcp-smoke.mjs`               | Kestra control MCP smoke. Dry-run reports live-mode requirements; live mode verifies managed MCP registration, lists curated tools, validates safe/unsafe flows, and can upsert/start/poll a safe smoke flow.                               |
 
 ## Quick start — run the full smoke suite
 
@@ -187,6 +190,105 @@ Live mode reads Terraform outputs unless endpoint overrides are provided. It
 verifies generated Spaces, GraphQL/AppSync, Cognito, deployment profile, and
 deployment control-plane outputs. Set `SMOKE_EVIDENCE_S3_URI=s3://bucket/prefix`
 to upload the evidence envelope with `aws s3 cp`.
+
+For controller-managed environments where the runtime config is already
+published, live mode can validate the deployment profile and control plane from
+environment values instead of local Terraform state:
+
+```sh
+SMOKE_ENABLE_FOUNDATION_BOOTSTRAP=1 \
+  SMOKE_TERRAFORM_DIR=/tmp/no-local-terraform-root \
+  SMOKE_SPACES_URL=https://customer.example.com \
+  SMOKE_GRAPHQL_URL=https://example.appsync-api.us-east-1.amazonaws.com/graphql \
+  SMOKE_GRAPHQL_WS_URL=wss://example.appsync-realtime-api.us-east-1.amazonaws.com/graphql \
+  SMOKE_COGNITO_DOMAIN=https://customer.auth.us-east-1.amazoncognito.com \
+  SMOKE_DEPLOYMENT_PROFILE_JSON='{"schemaVersion":1,...}' \
+  SMOKE_REQUIRE_CONTROL_PLANE=1 \
+  SMOKE_STEP_FUNCTIONS_STATE_MACHINE_ARN=arn:aws:states:... \
+  SMOKE_CODEBUILD_PROJECT=thinkwork-customer-deployment-runner \
+  SMOKE_EVIDENCE_BUCKET=thinkwork-customer-deploy-evidence \
+  SMOKE_EVIDENCE_FILE=/tmp/foundation-smoke.json \
+  node scripts/smoke/foundation-bootstrap-smoke.mjs
+```
+
+## Deployment profile binding smoke
+
+The deployment profile binding smoke is read-only and dry-run by default:
+
+```sh
+node scripts/smoke/deployment-profile-binding-smoke.mjs
+
+pnpm --filter @thinkwork/deployment-profile build
+SMOKE_ENABLE_DEPLOYMENT_PROFILE_BINDING=1 \
+  SMOKE_SPACES_URL=https://customer.example.com \
+  SMOKE_EVIDENCE_FILE=/tmp/deployment-profile-binding-smoke.json \
+  node scripts/smoke/deployment-profile-binding-smoke.mjs
+```
+
+Live mode reads `thinkwork-runtime-config.json`, builds the canonical v1
+deployment profile through `@thinkwork/deployment-profile`, validates it, and
+checks that web, desktop, and mobile binding snapshots all target the same
+deployment id, stage, region, Auth, API, and AppSync endpoints. The smoke fails
+if the generated profile or evidence contains API keys, passwords, AWS keys,
+tokens, credential material, or secret payload fields.
+
+Use this smoke after authority transfer or release update to prove that a
+universal client can bind to the selected environment by profile. It does not
+replace a human desktop/mobile launch test; it proves the profile contract that
+those clients consume.
+
+## Deployment teardown readiness smoke
+
+The deployment teardown readiness smoke is read-only and dry-run by default:
+
+```sh
+node scripts/smoke/deployment-teardown-readiness-smoke.mjs
+
+SMOKE_ENABLE_DEPLOYMENT_TEARDOWN_READINESS=1 \
+  AWS_PROFILE=tei \
+  AWS_REGION=us-east-1 \
+  SMOKE_STAGE=tei-e2e \
+  SMOKE_EVIDENCE_FILE=/tmp/deployment-teardown-readiness.json \
+  node scripts/smoke/deployment-teardown-readiness-smoke.mjs
+```
+
+Live mode reads the customer deployment SSM prefix, selected release pins,
+runtime profile, Step Functions state machine, CodeBuild project, Terraform
+state bucket, DynamoDB lock table, release artifact bucket, and evidence bucket.
+It then emits a redacted `action=destroy` input preview with
+`destroyExecutionStarted:false`.
+
+Passing live mode means a later explicit teardown has the customer-owned
+controller, backend, lock, and evidence pointers it needs. It is not a teardown
+completion proof: the script never starts Step Functions, CodeBuild, Terraform,
+or any destructive API.
+
+## Managed-app controller readiness smoke
+
+The managed-app controller readiness smoke is read-only and dry-run by default:
+
+```sh
+node scripts/smoke/managed-app-controller-readiness-smoke.mjs
+
+SMOKE_ENABLE_MANAGED_APP_CONTROLLER_READINESS=1 \
+  AWS_PROFILE=tei \
+  AWS_REGION=us-east-1 \
+  SMOKE_STAGE=tei-e2e \
+  SMOKE_EVIDENCE_FILE=/tmp/managed-app-controller-readiness.json \
+  node scripts/smoke/managed-app-controller-readiness-smoke.mjs
+```
+
+Live mode reads the selected release manifest URL/digest from the customer
+deployment SSM prefix, downloads the manifest, verifies its SHA-256, and checks
+the Cognee/Twenty managed-app descriptors. It verifies module source/version,
+smoke command paths, and required runtime images without starting a plan or
+approval job.
+
+By default the smoke exits successfully with `deployReady:false` when
+descriptors are present but runtime images are missing; this makes it useful for
+diagnosing the next gap without breaking read-only demo validation. Set
+`SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1` for the final optional-app gate. In
+strict mode, missing managed-app images or smoke contracts fail closed.
 
 ## Knowledge Graph thread ingest smoke
 

@@ -37,37 +37,42 @@ export class DesktopBridgeTokenStorage implements TokenStorage {
   }
 
   setItem(key: string, value: string): void {
+    const current = this.cache.get(key);
     this.cache.set(key, value);
+    if (current === value) return;
+
     void this.bridge.setTokenStorageItem({ key, value }).catch((error) => {
       console.error(
         "[desktop:token-storage] failed to persist token item",
         error,
       );
     });
-    this.emitChange();
   }
 
   removeItem(key: string): void {
-    this.cache.delete(key);
+    const hadKey = this.cache.delete(key);
+    if (!hadKey) return;
+
     void this.bridge.removeTokenStorageItem({ key }).catch((error) => {
       console.error(
         "[desktop:token-storage] failed to remove token item",
         error,
       );
     });
-    this.emitChange();
   }
 
   clear(): void {
+    const hadItems = this.cache.size > 0 || this.version !== 0;
     this.cache.clear();
     this.version = 0;
+    if (!hadItems) return;
+
     void this.bridge.clearTokenStorage().catch((error) => {
       console.error(
         "[desktop:token-storage] failed to clear token storage",
         error,
       );
     });
-    this.emitChange();
   }
 
   subscribe(listener: () => void): () => void {
@@ -81,12 +86,22 @@ export class DesktopBridgeTokenStorage implements TokenStorage {
   }
 
   private applySnapshot(snapshot: TokenStorageSnapshot): void {
+    if (this.matchesSnapshot(snapshot)) return;
+
     this.cache.clear();
     for (const [key, value] of Object.entries(snapshot.items)) {
       this.cache.set(key, value);
     }
     this.version = snapshot.version;
     this.emitChange();
+  }
+
+  private matchesSnapshot(snapshot: TokenStorageSnapshot): boolean {
+    if (snapshot.version !== this.version) return false;
+    const entries = Object.entries(snapshot.items);
+    if (entries.length !== this.cache.size) return false;
+
+    return entries.every(([key, value]) => this.cache.get(key) === value);
   }
 
   private emitChange(): void {

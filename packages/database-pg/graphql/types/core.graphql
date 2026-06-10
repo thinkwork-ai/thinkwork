@@ -70,6 +70,7 @@ type TenantMember {
   principalId: ID!
   role: String!
   status: String!
+  cognitoStatus: String
   user: User
   agent: Agent
   createdAt: AWSDateTime!
@@ -119,6 +120,12 @@ type DeploymentStatus {
   source: String!
   region: String!
   accountId: String
+  releaseVersion: String
+  releaseManifestUrl: String
+  releaseManifestSha256: String
+  deploymentControllerArn: String
+  deploymentRunnerProjectName: String
+  deploymentEvidenceBucket: String
   bucketName: String
   databaseEndpoint: String
   ecrUrl: String

@@ -80,12 +80,31 @@ describe("deploymentStatus authz", () => {
 
   it("returns the payload for an operator/service caller", async () => {
     mockRequireAdminOrServiceCaller.mockResolvedValueOnce(undefined);
+    vi.stubEnv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.152");
+    vi.stubEnv("THINKWORK_RELEASE_MANIFEST_SHA256", "a".repeat(64));
+    vi.stubEnv(
+      "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN",
+      "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment",
+    );
+    vi.stubEnv(
+      "THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME",
+      "thinkwork-dev-deployment-runner",
+    );
+    vi.stubEnv("THINKWORK_EVIDENCE_BUCKET", "thinkwork-dev-evidence");
     const result = await deploymentStatusMod.deploymentStatus(
       null,
       {},
       service,
     );
-    expect(result).toMatchObject({ source: "AWS" });
+    expect(result).toMatchObject({
+      source: "AWS",
+      releaseVersion: "v0.1.0-canary.152",
+      releaseManifestSha256: "a".repeat(64),
+      deploymentControllerArn:
+        "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment",
+      deploymentRunnerProjectName: "thinkwork-dev-deployment-runner",
+      deploymentEvidenceBucket: "thinkwork-dev-evidence",
+    });
     expect(result).toHaveProperty("accountId");
     expect(result.managedApplications).toEqual(
       expect.arrayContaining([

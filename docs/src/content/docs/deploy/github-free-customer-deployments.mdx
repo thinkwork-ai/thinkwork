@@ -20,6 +20,46 @@ workflow is required.
   operating model.
 </Aside>
 
+## ThinkWork Dev Dogfood
+
+ThinkWork dev is the first controller-managed environment. GitHub Actions still
+builds, tests, and publishes release artifacts, but dev release updates should
+be run by selecting an explicit release manifest and starting the dev deployment
+controller. In controller mode, GitHub Actions starts Step Functions and skips
+the legacy direct Terraform apply job.
+
+From a local operator shell:
+
+```bash
+thinkwork deploy \
+  --controller \
+  --stage dev \
+  --controller-action update \
+  --release-version v0.1.0-canary.148 \
+  --manifest-url https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.148/thinkwork-release.json \
+  --manifest-sha256 <sha256>
+```
+
+From GitHub Actions, run `Deploy` manually with:
+
+- `use_controller=true`
+- `controller_action=update`
+- `release_version=<tag>`
+- `release_manifest_url=<thinkwork-release.json URL>`
+- `release_manifest_sha256=<manifest SHA-256>`
+
+The controller execution writes evidence under
+`sessions/<session-id>/<action>/` in the deployment evidence bucket. A dev update
+is not considered proven until the controller execution, runtime profile, and
+foundation smoke evidence are all recorded.
+
+Use a release where the shared GitHub Release contains the coordinated operator
+surface: desktop installers/updater metadata for clients plus
+`thinkwork-release.json` and `platform-artifacts.tar.gz` for the deployment
+controller. The current accepted TEI proof is `v0.1.0-canary.148`, deployed by
+the customer-owned controller with manifest SHA-256
+`5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93`.
+
 ## Deployment Model
 
 ```text
@@ -113,6 +153,30 @@ Evidence includes:
 
 Evidence must not include plaintext secrets, bearer tokens, API keys, database
 passwords, or raw Terraform variable files.
+
+## TEI Proof Status
+
+TEI (`tei-e2e`) is the first customer-environment proving run. The accepted
+controller update ran release `v0.1.0-canary.148` through Step Functions and
+CodeBuild, wrote deployment evidence to the TEI evidence bucket, updated the
+runtime config, and persisted selected-release status under the customer
+controller SSM prefix.
+
+Recorded as passing:
+
+- explicit canary release manifest and digest selection
+- customer-owned Step Functions and CodeBuild controller update
+- runtime config publication for web, desktop, and mobile clients
+- first-admin login
+- model catalog and agent settings smoke after the platform migration
+  remediation
+- selected-release status parameters for future update decisions
+
+Still intentionally open before calling the TEI run fully accepted:
+
+- full Cognee and Twenty optional-app deploy/smoke
+- mobile profile-selection proof
+- teardown proof, deferred while the TEI demo environment stays live
 
 ## Failure Triage
 

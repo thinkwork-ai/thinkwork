@@ -153,6 +153,12 @@ variable "api_auth_secret" {
   default     = ""
 }
 
+variable "bootstrap_credential_lease_kms_key_id" {
+  description = "Optional KMS key ID or ARN used by Secrets Manager for temporary bootstrap credential leases. Empty uses the AWS-managed Secrets Manager key."
+  type        = string
+  default     = ""
+}
+
 variable "extension_proxy_backends_json" {
   description = "JSON map of enabled Admin extension ids to allowlisted backend base URLs. Example: {\"customer-module\":{\"baseUrl\":\"https://extension.example.com\"}}"
   type        = string
@@ -258,6 +264,12 @@ variable "cognee_worker_security_group_ids" {
   description = "Security group IDs for the Knowledge Graph ingest worker Lambda VPC attachment. Leave empty to deploy the worker without VPC access."
   type        = list(string)
   default     = []
+}
+
+variable "observation_classifier_model_id" {
+  description = "Bedrock model id for the observations promotion-gate classifier. Empty uses the API default (pinned Haiku)."
+  type        = string
+  default     = ""
 }
 
 variable "twenty_provisioned" {

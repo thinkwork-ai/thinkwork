@@ -9,6 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   deleteBudgetMock,
+  inviteMemberMock,
+  navigateMock,
+  removeMemberMock,
   updateMemberMock,
   updateProfileMock,
   updateUserMock,
@@ -19,6 +22,9 @@ const {
   userBudgetStatus,
 } = vi.hoisted(() => ({
   deleteBudgetMock: vi.fn(),
+  inviteMemberMock: vi.fn(),
+  navigateMock: vi.fn(),
+  removeMemberMock: vi.fn(),
   updateMemberMock: vi.fn(),
   updateProfileMock: vi.fn(),
   updateUserMock: vi.fn(),
@@ -30,6 +36,8 @@ const {
   },
   queryDocs: {
     SettingsDeleteBudgetPolicyMutation: Symbol("deleteBudget"),
+    SettingsInviteMemberMutation: Symbol("inviteMember"),
+    SettingsRemoveTenantMemberMutation: Symbol("removeMember"),
     SettingsTenantMembersQuery: Symbol("members"),
     SettingsUserBudgetStatusQuery: Symbol("userBudgetStatus"),
     SettingsUpsertBudgetPolicyMutation: Symbol("upsertBudget"),
@@ -42,6 +50,7 @@ const {
 }));
 
 vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => navigateMock,
   useParams: () => ({ userId: "member-1" }),
 }));
 
@@ -69,6 +78,10 @@ vi.mock("urql", () => ({
       return [{ fetching: false }, upsertBudgetMock];
     if (doc === queryDocs.SettingsDeleteBudgetPolicyMutation)
       return [{ fetching: false }, deleteBudgetMock];
+    if (doc === queryDocs.SettingsInviteMemberMutation)
+      return [{ fetching: false }, inviteMemberMock];
+    if (doc === queryDocs.SettingsRemoveTenantMemberMutation)
+      return [{ fetching: false }, removeMemberMock];
     return [{ fetching: false }, vi.fn()];
   },
 }));
@@ -93,6 +106,7 @@ function seedMember(overrides: Record<string, unknown> = {}) {
     principalType: "USER",
     role: "member",
     status: "active",
+    cognitoStatus: null,
     user: {
       id: "user-9",
       name: "Dana Member",
@@ -105,11 +119,16 @@ function seedMember(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   deleteBudgetMock.mockReset();
+  inviteMemberMock.mockReset();
+  navigateMock.mockReset();
+  removeMemberMock.mockReset();
   updateMemberMock.mockReset();
   updateProfileMock.mockReset();
   updateUserMock.mockReset();
   upsertBudgetMock.mockReset();
   deleteBudgetMock.mockResolvedValue({ error: null });
+  inviteMemberMock.mockResolvedValue({ error: null });
+  removeMemberMock.mockResolvedValue({ error: null });
   updateMemberMock.mockResolvedValue({ error: null });
   updateProfileMock.mockResolvedValue({ error: null });
   updateUserMock.mockResolvedValue({ error: null });
@@ -214,5 +233,53 @@ describe("SettingsUserDetail role merge", () => {
     await waitFor(() => expect(deleteBudgetMock).toHaveBeenCalled());
     expect(deleteBudgetMock).toHaveBeenCalledWith({ id: "budget-1" });
     expect(upsertBudgetMock).not.toHaveBeenCalled();
+  });
+
+  it("resends the invite for the current user", async () => {
+    seedMember({
+      role: "admin",
+      cognitoStatus: "FORCE_CHANGE_PASSWORD",
+      user: {
+        id: "user-9",
+        name: "Dana Member",
+        email: "dana@example.com",
+        profile: null,
+      },
+    });
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /resend invite/i }));
+
+    await waitFor(() => expect(inviteMemberMock).toHaveBeenCalled());
+    expect(inviteMemberMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      input: {
+        email: "dana@example.com",
+        name: "Dana Member",
+        role: "admin",
+      },
+    });
+    expect(screen.getByText("Invite resent")).toBeTruthy();
+  });
+
+  it("hides resend invite after the Cognito user is confirmed", () => {
+    seedMember({ cognitoStatus: "CONFIRMED" });
+    render(<SettingsUserDetail />);
+
+    expect(screen.queryByRole("button", { name: /resend invite/i })).toBeNull();
+  });
+
+  it("deletes the tenant member and returns to the users list", async () => {
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^delete user$/i }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^delete user$/i }).at(-1)!,
+    );
+
+    await waitFor(() => expect(removeMemberMock).toHaveBeenCalled());
+    expect(removeMemberMock).toHaveBeenCalledWith({ id: "member-1" });
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/settings/users" });
   });
 });

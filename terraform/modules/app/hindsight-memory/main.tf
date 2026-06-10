@@ -39,6 +39,24 @@ variable "image_tag" {
   default     = "0.5.0"
 }
 
+variable "enable_auto_consolidation" {
+  description = "Run Hindsight's observation consolidation engine automatically after retain. Service-level default; per-bank config overrides apply on top."
+  type        = bool
+  default     = true
+}
+
+variable "consolidation_dedup_threshold" {
+  description = "Cosine-similarity threshold for near-duplicate observation reconciliation (0.0-1.0; 1.0 disables). Hindsight default is 0.97 — set explicitly so deploys don't drift with image defaults."
+  type        = string
+  default     = "0.97"
+}
+
+variable "observations_mission" {
+  description = "Service-level default observations mission steering what consolidation synthesizes. Empty string omits the env var so the image default applies. Per-bank overrides apply on top."
+  type        = string
+  default     = "Synthesize durable, institutional facts about the business: customers, projects, decisions, processes, tools, relationships, and recurring patterns. Filter out ephemeral state, secrets, and personal small talk."
+}
+
 data "aws_region" "current" {}
 
 ################################################################################
@@ -250,7 +268,7 @@ resource "aws_ecs_task_definition" "hindsight" {
       protocol      = "tcp"
     }]
 
-    environment = [
+    environment = concat([
       { name = "HINDSIGHT_API_DATABASE_URL", value = var.database_url },
       { name = "HINDSIGHT_API_DATABASE_SCHEMA", value = "hindsight" },
       { name = "HINDSIGHT_API_VECTOR_EXTENSION", value = "pgvector" },
@@ -273,7 +291,13 @@ resource "aws_ecs_task_definition" "hindsight" {
       { name = "HINDSIGHT_API_RECALL_BUDGET_FUNCTION", value = "adaptive" },
       { name = "HINDSIGHT_API_RECALL_BUDGET_MIN", value = "5" },
       { name = "HINDSIGHT_API_RECALL_BUDGET_MAX", value = "300" },
-    ]
+      { name = "HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION", value = tostring(var.enable_auto_consolidation) },
+      { name = "HINDSIGHT_API_CONSOLIDATION_DEDUP_THRESHOLD", value = var.consolidation_dedup_threshold },
+      ],
+      var.observations_mission != "" ? [
+        { name = "HINDSIGHT_API_OBSERVATIONS_MISSION", value = var.observations_mission },
+      ] : [],
+    )
 
     logConfiguration = {
       logDriver = "awslogs"

@@ -55,12 +55,11 @@ export function installDesktopMenu(
     );
   }
 
-  const unsubscribe = options.onAuthenticationChanged?.(refresh);
   refresh();
 
   return {
     refresh,
-    dispose: () => unsubscribe?.(),
+    dispose: () => undefined,
   };
 }
 
@@ -191,7 +190,7 @@ function createSignOutItem(
 ): MenuItemConstructorOptions {
   return {
     label: "Sign Out",
-    enabled: options.isAuthenticated(),
+    enabled: true,
     click: () => {
       if (!options.isAuthenticated()) return;
 

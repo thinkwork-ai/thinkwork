@@ -127,6 +127,11 @@ output "deployment_runner_project_name" {
   value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].codebuild_project_name : null
 }
 
+output "deployment_runner_project_arn" {
+  description = "CodeBuild project ARN for the deployment runner."
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].codebuild_project_arn : null
+}
+
 output "deployment_evidence_bucket_name" {
   description = "S3 bucket for deployment evidence artifacts."
   value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].evidence_bucket_name : null

@@ -318,3 +318,52 @@ describe("createMemoryExtension", () => {
     expect(result).toBeUndefined();
   });
 });
+
+describe("observation annotation in recall output", () => {
+  it("annotates observation units with freshness and proof count", async () => {
+    const provider: MemoryProvider = {
+      recall: async () => ({
+        memories: [
+          {
+            id: "obs-1",
+            content: "Alice is a Python-focused developer",
+            factType: "observation",
+            freshness: "strengthening",
+            proofCount: 5,
+          },
+          { id: "raw-1", content: "Alice mentioned pytest today" },
+        ],
+      }),
+      reflect: async () => ({ ok: true, text: "n/a" }),
+    };
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(createMemoryExtension(), { memory: provider })(
+      api,
+    );
+
+    const result = await getTool(tools, "recall").execute(
+      "call-obs",
+      { query: "alice" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+    const text = (result.content?.[0] as { text: string }).text;
+    expect(text).toContain(
+      "1. [observation, strengthening, 5 supporting facts] Alice is a Python-focused developer",
+    );
+    expect(text).toContain("2. Alice mentioned pytest today");
+  });
+
+  it("recall/reflect docstring pair both mention observations (edited together)", async () => {
+    const { provider } = makeFakeMemory();
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(createMemoryExtension(), { memory: provider })(
+      api,
+    );
+    expect(getTool(tools, "recall").description).toMatch(/observations/i);
+    expect(getTool(tools, "reflect").description).toMatch(/observations/i);
+    // The chain contract survives the edit.
+    expect(getTool(tools, "recall").description).toMatch(/REQUIRED FOLLOW-UP/);
+  });
+});

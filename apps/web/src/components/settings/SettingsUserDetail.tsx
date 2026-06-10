@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, MailIcon, Trash2Icon } from "lucide-react";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
   Badge,
   Button,
   Input,
@@ -19,6 +28,8 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsDeleteBudgetPolicyMutation,
+  SettingsInviteMemberMutation,
+  SettingsRemoveTenantMemberMutation,
   SettingsUserBudgetStatusQuery,
   SettingsTenantMembersQuery,
   SettingsUpsertBudgetPolicyMutation,
@@ -38,6 +49,7 @@ export function SettingsUserDetail() {
   const { userId: memberId } = useParams({
     from: "/_authed/settings/users/$userId",
   });
+  const navigate = useNavigate();
   const { tenantId, userId: callerUserId, role: callerRole } = useTenant();
 
   const [result, refetch] = useQuery({
@@ -94,12 +106,25 @@ export function SettingsUserDetail() {
 
   const isSelf = !!callerUserId && callerUserId === user.id;
   const callerIsOwner = callerRole === "owner";
+  const canResendInvite =
+    member.cognitoStatus != null &&
+    RESENDABLE_INVITE_STATUSES.has(member.cognitoStatus);
 
   return (
     <SettingsPane>
       <SettingsPageTitle
         title={displayName}
         badge={<Badge variant="secondary">{titleCase(member.status)}</Badge>}
+        actions={
+          canResendInvite ? (
+            <ResendInviteButton
+              tenantId={tenantId ?? ""}
+              email={user.email ?? ""}
+              name={user.name ?? ""}
+              role={member.role}
+            />
+          ) : null
+        }
       />
       <ProfileSection
         userId={user.id}
@@ -113,14 +138,86 @@ export function SettingsUserDetail() {
         onSaved={() => refetch({ requestPolicy: "network-only" })}
       />
       <UserModelsSection userId={user.id} />
+      <DangerSection
+        displayName={displayName}
+        memberId={member.id}
+        isSelf={isSelf}
+        onDeleted={() => {
+          void navigate({ to: "/settings/users" });
+        }}
+      />
     </SettingsPane>
   );
 }
 
 const ROLE_OPTIONS = ["member", "admin", "owner"];
+const RESENDABLE_INVITE_STATUSES = new Set([
+  "FORCE_CHANGE_PASSWORD",
+  "UNCONFIRMED",
+]);
 
 function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+function ResendInviteButton({
+  tenantId,
+  email,
+  name,
+  role,
+}: {
+  tenantId: string;
+  email: string;
+  name: string;
+  role: string;
+}) {
+  const [{ fetching }, inviteMember] = useMutation(
+    SettingsInviteMemberMutation,
+  );
+  const [message, setMessage] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  async function onResendInvite() {
+    if (!tenantId || !email) return;
+    setMessage(null);
+    setErrorMsg(null);
+    const result = await inviteMember({
+      tenantId,
+      input: {
+        email,
+        name: name || undefined,
+        role,
+      },
+    });
+    if (result.error) {
+      setErrorMsg(result.error.message);
+      return;
+    }
+    setMessage("Invite resent");
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        disabled={fetching || !tenantId || !email}
+        onClick={() => void onResendInvite()}
+      >
+        <MailIcon className="size-3.5" />
+        {fetching ? "Sending..." : "Resend invite"}
+      </Button>
+      {message ? (
+        <span className="text-xs text-muted-foreground">{message}</span>
+      ) : errorMsg ? (
+        <span className="max-w-72 text-right text-xs text-destructive">
+          {errorMsg}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 type Profile = {
@@ -402,6 +499,79 @@ function ProfileSection({
         <Button onClick={onSave} disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </Button>
+      </div>
+    </SettingsSection>
+  );
+}
+
+function DangerSection({
+  displayName,
+  memberId,
+  isSelf,
+  onDeleted,
+}: {
+  displayName: string;
+  memberId: string;
+  isSelf: boolean;
+  onDeleted: () => void;
+}) {
+  const [{ fetching }, removeMember] = useMutation(
+    SettingsRemoveTenantMemberMutation,
+  );
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  async function onDelete() {
+    setErrorMsg(null);
+    const result = await removeMember({ id: memberId });
+    if (result.error) {
+      setErrorMsg(result.error.message);
+      return;
+    }
+    onDeleted();
+  }
+
+  return (
+    <SettingsSection label="Danger zone">
+      <div className="flex flex-col gap-3 px-4 py-3.5 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">Delete user</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Remove this user&apos;s access to the tenant.
+          </p>
+          {errorMsg ? (
+            <p className="mt-2 text-sm text-destructive">{errorMsg}</p>
+          ) : null}
+        </div>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isSelf || fetching}
+            >
+              <Trash2Icon className="size-3.5" />
+              Delete user
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {displayName}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This removes the user from this tenant. They will lose access to
+                tenant workspaces immediately.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={fetching}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={fetching}
+                onClick={() => void onDelete()}
+              >
+                {fetching ? "Deleting..." : "Delete user"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </SettingsSection>
   );

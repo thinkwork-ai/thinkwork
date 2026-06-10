@@ -182,6 +182,49 @@ export const customerDeploymentSessions = pgTable(
   ],
 );
 
+export const bootstrapCredentialLeases = pgTable(
+  "bootstrap_credential_leases",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => customerDeploymentSessions.id, {
+        onDelete: "cascade",
+      }),
+    status: text("status").notNull().default("pending"),
+    lease_type: text("lease_type").notNull(),
+    secret_arn: text("secret_arn").notNull(),
+    secret_fingerprint: text("secret_fingerprint").notNull(),
+    external_id_hash: text("external_id_hash"),
+    role_arn: text("role_arn"),
+    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+    validated_at: timestamp("validated_at", { withTimezone: true }),
+    in_use_at: timestamp("in_use_at", { withTimezone: true }),
+    transferred_at: timestamp("transferred_at", { withTimezone: true }),
+    revoked_at: timestamp("revoked_at", { withTimezone: true }),
+    failed_cleanup_reason: text("failed_cleanup_reason"),
+    audit_metadata: jsonb("audit_metadata").notNull().default({}),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("bootstrap_credential_leases_session_idx").on(table.session_id),
+    index("bootstrap_credential_leases_status_expires_idx").on(
+      table.status,
+      table.expires_at,
+    ),
+    uniqueIndex("bootstrap_credential_leases_secret_arn_uidx").on(
+      table.secret_arn,
+    ),
+  ],
+);
+
 export const customerDeploymentSessionEvents = pgTable(
   "customer_deployment_session_events",
   {

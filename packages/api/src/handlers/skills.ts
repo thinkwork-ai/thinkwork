@@ -10,7 +10,7 @@ import {
   GetSecretValueCommand,
   ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
-import { eq, and, sql, inArray, isNull } from "drizzle-orm";
+import { eq, and, or, sql, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agentSkills,
@@ -606,14 +606,13 @@ export async function handler(
     // GET /api/skills/user-mcp-servers — list MCP servers for the current user (for mobile app)
     if (path === "/api/skills/user-mcp-servers" && method === "GET") {
       const tenantIdHeader = event.headers["x-tenant-id"];
-      const userId = event.headers["x-principal-id"];
-      if (!tenantIdHeader || !userId)
-        return error("x-tenant-id and x-principal-id headers required", 400);
+      if (!tenantIdHeader) return error("x-tenant-id header required", 400);
       const _v = await requireTenantMembership(event, tenantIdHeader, {
         requiredRoles: ["owner", "admin", "member"],
       });
       if (!_v.ok) return error(_v.reason, _v.status);
-      return mcpListUserServers(_v.tenantId, userId);
+      if (!_v.userId) return error("Caller has no user record", 403);
+      return mcpListUserServers(_v.tenantId, _v.userId);
     }
 
     // DELETE /api/skills/user-mcp-tokens/:mcpServerId — clear user's OAuth tokens for an MCP server
@@ -622,10 +621,8 @@ export async function handler(
     );
     if (clearTokenMatch && method === "DELETE") {
       const mcpServerId = clearTokenMatch[1];
-      const userId = event.headers["x-principal-id"];
       const tenantIdHeader = event.headers["x-tenant-id"];
-      if (!userId || !tenantIdHeader)
-        return error("x-principal-id and x-tenant-id headers required", 400);
+      if (!tenantIdHeader) return error("x-tenant-id header required", 400);
       // User-self-service: a member clearing their own OAuth tokens.
       // Requires tenant membership but no admin/owner role — the row
       // is scoped to (user_id, tenant_id, mcp_server_id).
@@ -633,7 +630,8 @@ export async function handler(
         requiredRoles: ["owner", "admin", "member"],
       });
       if (!_v.ok) return error(_v.reason, _v.status);
-      return mcpClearUserToken(userId, _v.tenantId, mcpServerId);
+      if (!_v.userId) return error("Caller has no user record", 403);
+      return mcpClearUserToken(_v.userId, _v.tenantId, mcpServerId);
     }
 
     // POST /api/skills/start — service-to-service wrapper around startSkillRun.
@@ -679,6 +677,11 @@ async function mcpOAuthAuthorize(
   const { mcpServerId, userId, tenantId } = qs;
   if (!mcpServerId || !userId || !tenantId) {
     return error("mcpServerId, userId, tenantId are required", 400);
+  }
+
+  const resolvedUserId = await resolveMcpOAuthUserId(tenantId, userId);
+  if (!resolvedUserId) {
+    return error("MCP OAuth userId must match a user in the tenant", 403);
   }
 
   // Look up MCP server + auth config
@@ -826,7 +829,7 @@ async function mcpOAuthAuthorize(
   const state = Buffer.from(
     JSON.stringify({
       mcpServerId,
-      userId,
+      userId: resolvedUserId,
       tenantId,
       tokenEndpoint,
       clientId,
@@ -890,6 +893,22 @@ function mcpOAuthRedirect(
     headers: { Location: mcpOAuthCompletionUrl(returnTo, status, extras) },
     body: "",
   };
+}
+
+async function resolveMcpOAuthUserId(
+  tenantId: string,
+  userIdOrSub: string,
+): Promise<string | null> {
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        eq(users.tenant_id, tenantId),
+        or(eq(users.id, userIdOrSub), eq(users.cognito_sub, userIdOrSub)),
+      ),
+    );
+  return user?.id ?? null;
 }
 
 /**

@@ -33,6 +33,8 @@ locals {
       selected_release_version         = var.release_version
       selected_release_manifest_url    = var.release_manifest_url
       selected_release_manifest_sha256 = var.release_manifest_sha256
+      selected_release_signature_url   = var.release_manifest_signature_url
+      selected_release_trust_policy    = var.release_manifest_trust_policy
       terraform_state_bucket           = var.terraform_state_bucket
       terraform_lock_table             = var.terraform_lock_table
       release_artifact_bucket          = var.release_artifact_bucket
@@ -358,6 +360,26 @@ resource "aws_codebuild_project" "runner" {
     }
 
     environment_variable {
+      name  = "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN"
+      value = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:${local.state_machine_name}"
+    }
+
+    environment_variable {
+      name  = "THINKWORK_DEPLOYMENT_STATE_MACHINE_NAME"
+      value = local.state_machine_name
+    }
+
+    environment_variable {
+      name  = "THINKWORK_DEPLOYMENT_RUNNER_PROJECT_ARN"
+      value = "arn:aws:codebuild:${var.region}:${var.account_id}:project/${local.codebuild_project_name}"
+    }
+
+    environment_variable {
+      name  = "THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME"
+      value = local.codebuild_project_name
+    }
+
+    environment_variable {
       name  = "THINKWORK_TERRAFORM_STATE_BUCKET"
       value = var.terraform_state_bucket
     }
@@ -385,6 +407,21 @@ resource "aws_codebuild_project" "runner" {
     environment_variable {
       name  = "THINKWORK_RELEASE_MANIFEST_SHA256"
       value = var.release_manifest_sha256
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL"
+      value = var.release_manifest_signature_url
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RELEASE_MANIFEST_TRUST_POLICY"
+      value = var.release_manifest_trust_policy
+    }
+
+    environment_variable {
+      name  = "THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON"
+      value = var.release_manifest_trusted_keys_json
     }
 
     environment_variable {
@@ -523,6 +560,26 @@ resource "aws_sfn_state_machine" "deployment" {
               Name      = "THINKWORK_DEPLOYMENT_INPUT"
               Type      = "PLAINTEXT"
               "Value.$" = "States.JsonToString($)"
+            },
+            {
+              Name      = "THINKWORK_RELEASE_VERSION"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.releaseVersion"
+            },
+            {
+              Name      = "THINKWORK_RELEASE_MANIFEST_URL"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.releaseManifestUrl"
+            },
+            {
+              Name      = "THINKWORK_RELEASE_MANIFEST_SHA256"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.releaseManifestSha256"
+            },
+            {
+              Name      = "THINKWORK_TERRAFORM_MODULE_VERSION"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.terraformModuleVersion"
             },
             {
               Name      = "THINKWORK_EVIDENCE_PREFIX"
