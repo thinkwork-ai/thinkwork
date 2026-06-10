@@ -15,10 +15,11 @@ publishes runtime config/static assets, initializes required database defaults,
 and writes deployment evidence to the customer evidence bucket.
 
 Current scope boundary: TEI has proved release update, runtime config, login,
-model catalog, and Settings/Agents recovery through the controller. Full
-destructive teardown is intentionally deferred while TEI remains live for demo
-validation. Treat teardown evidence as the remaining U9 proof gap, not as a
-reason to destroy the demo environment prematurely.
+model catalog, Settings/Agents recovery, and read-only teardown readiness
+through the controller. Full destructive teardown is intentionally deferred
+while TEI remains live for demo validation. Treat final destroy evidence as the
+remaining U9 proof gap, not as a reason to destroy the demo environment
+prematurely.
 
 ## Test Envelope
 
@@ -121,6 +122,19 @@ Runtime smoke evidence:
   explicit skip because Twenty CRM is not provisioned for this base TEI stage;
   local evidence:
   `/tmp/thinkwork-tei-smoke-proof/twenty-smoke-148.json`.
+- `node scripts/smoke/deployment-teardown-readiness-smoke.mjs` passed in live
+  read-only mode on 2026-06-10 with evidence written to
+  `/tmp/thinkwork-tei-smoke-proof/deployment-teardown-readiness-148.json`:
+  - selected release pins in SSM match `v0.1.0-canary.148` and manifest
+    SHA-256 `5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93`;
+  - the customer Step Functions state machine is `ACTIVE`;
+  - the customer CodeBuild runner project is readable;
+  - the Terraform state bucket `tei-thinkwork-terraform-state` is readable;
+  - the DynamoDB lock table `tei-thinkwork-terraform-locks` is `ACTIVE`;
+  - the evidence bucket contains prior controller session evidence;
+  - the generated destroy input preview has `action=destroy`,
+    `destroyExecutionStarted=false`, and no credential, token, password,
+    API-key, or AWS-key fields.
 
 Manifest digest note:
 
@@ -535,6 +549,23 @@ Pass criteria:
 
 Cleanup destroys cloud resources and should be run only after saving evidence.
 
+Before running destructive cleanup, prove that the customer-owned controller has
+the state/evidence pointers it needs for destroy:
+
+```bash
+SMOKE_ENABLE_DEPLOYMENT_TEARDOWN_READINESS=1 \
+AWS_PROFILE="$AWS_PROFILE" \
+AWS_REGION="$AWS_REGION" \
+SMOKE_STAGE="$THINKWORK_STAGE" \
+SMOKE_RELEASE_VERSION="$THINKWORK_RELEASE_VERSION" \
+SMOKE_MANIFEST_SHA256="$THINKWORK_MANIFEST_SHA256" \
+SMOKE_EVIDENCE_FILE=/tmp/thinkwork-tei-smoke-proof/deployment-teardown-readiness-148.json \
+node /Users/ericodom/Projects/thinkwork/scripts/smoke/deployment-teardown-readiness-smoke.mjs
+```
+
+This smoke is intentionally read-only. It must pass before final teardown, but
+it is not a substitute for the final destroy proof.
+
 Destroy the local Terraform deployment:
 
 ```bash
@@ -589,7 +620,8 @@ Use this table during the run:
 | Managed-app UI smoke                 | Partial                | Cognee/Twenty skip evidence captured for base install; full optional-app deploy smoke remains |
 | Desktop profile selection            | Partial                | Profile contract passes; desktop `.148` assets are available for user launch test             |
 | Mobile profile selection             | Partial                | Profile contract passes; mobile launch proof remains                                          |
-| Cleanup / teardown                   | Deferred               | TEI kept live for demo; run after evidence is saved                                           |
+| Teardown readiness                   | PASS on 2026-06-10     | Read-only controller/backend/evidence smoke passed; no destroy execution was started          |
+| Cleanup / teardown                   | Deferred               | TEI kept live for demo; run final destroy after evidence is saved                             |
 
 The deployment is not fully accepted until every non-stub gate passes or is
 explicitly recorded as a product gap with a follow-up issue.

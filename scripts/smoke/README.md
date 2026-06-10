@@ -33,6 +33,7 @@ This kit fills the gap.
 | `deployment-evidence.mjs`                 | Shared JSON evidence envelope writer/uploader for foundation and managed-app smokes. Writes locally or uploads to S3 only when explicitly configured.                                                                                       |
 | `knowledge-graph-thread-ingest-smoke.mjs` | Cognee Knowledge Graph smoke. Dry-run reports required live-mode configuration; live mode starts a manual thread ingest, polls the run, and verifies table/graph/detail GraphQL reads from the normalized snapshot.                         |
 | `twenty-managed-app-smoke.mjs`            | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                    |
+| `deployment-teardown-readiness-smoke.mjs` | Read-only teardown readiness smoke. Verifies the selected release pins, customer controller, Terraform backend, lock table, and evidence bucket needed for a later destroy run without starting destroy.                                    |
 | `kestra-managed-app-smoke.mjs`            | Kestra managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public authenticated endpoint when Kestra is running.                  |
 | `kestra-control-mcp-smoke.mjs`            | Kestra control MCP smoke. Dry-run reports live-mode requirements; live mode verifies managed MCP registration, lists curated tools, validates safe/unsafe flows, and can upsert/start/poll a safe smoke flow.                               |
 
@@ -234,6 +235,32 @@ Use this smoke after authority transfer or release update to prove that a
 universal client can bind to the selected environment by profile. It does not
 replace a human desktop/mobile launch test; it proves the profile contract that
 those clients consume.
+
+## Deployment teardown readiness smoke
+
+The deployment teardown readiness smoke is read-only and dry-run by default:
+
+```sh
+node scripts/smoke/deployment-teardown-readiness-smoke.mjs
+
+SMOKE_ENABLE_DEPLOYMENT_TEARDOWN_READINESS=1 \
+  AWS_PROFILE=tei \
+  AWS_REGION=us-east-1 \
+  SMOKE_STAGE=tei-e2e \
+  SMOKE_EVIDENCE_FILE=/tmp/deployment-teardown-readiness.json \
+  node scripts/smoke/deployment-teardown-readiness-smoke.mjs
+```
+
+Live mode reads the customer deployment SSM prefix, selected release pins,
+runtime profile, Step Functions state machine, CodeBuild project, Terraform
+state bucket, DynamoDB lock table, release artifact bucket, and evidence bucket.
+It then emits a redacted `action=destroy` input preview with
+`destroyExecutionStarted:false`.
+
+Passing live mode means a later explicit teardown has the customer-owned
+controller, backend, lock, and evidence pointers it needs. It is not a teardown
+completion proof: the script never starts Step Functions, CodeBuild, Terraform,
+or any destructive API.
 
 ## Knowledge Graph thread ingest smoke
 
