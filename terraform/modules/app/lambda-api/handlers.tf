@@ -1120,6 +1120,15 @@ locals {
       "POST /api/threads/{threadId}/activity"    = "chat-agent-activity"
       "OPTIONS /api/threads/{threadId}/activity" = "chat-agent-activity"
 
+      # ask_user_question intake — the Pi runtime POSTs a question batch
+      # here (awaited) before returning its sentinel tool result. Served by
+      # the SAME chat-agent-activity Lambda (route discrimination in the
+      # handler — no new Lambda). Bearer API_AUTH_SECRET + thread-turn
+      # ownership join; 409 on the one-pending-per-thread partial unique
+      # index. Plan 2026-06-09-005 U2.
+      "POST /api/threads/{threadId}/questions"    = "chat-agent-activity"
+      "OPTIONS /api/threads/{threadId}/questions" = "chat-agent-activity"
+
       # Skill-run dispatcher runtime-config fetch. Service-auth GET.
       "GET /api/agents/runtime-config" = "agents-runtime-config"
 

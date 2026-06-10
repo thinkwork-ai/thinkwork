@@ -7,6 +7,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  askUserQuestionEndTurn,
   BUILTIN_TOOL_NAMES,
   buildToolAllowlist,
   buildTurnPrompt,
@@ -1019,5 +1020,237 @@ describe("runAgentLoop", () => {
     ).rejects.toThrow("turn failed");
     expect(persisted).toBe(0);
     expect(session.disposed).toBe(true);
+  });
+});
+
+describe("ask_user_question turn-end (U5)", () => {
+  const sentinelResult = {
+    content: [{ type: "text", text: "Question posted to the user." }],
+    details: { thinkworkAskUserQuestion: { questionId: "q-1", endTurn: true } },
+    terminate: true,
+  };
+
+  function askEvents(result: unknown, isError = false): AgentSessionEvent[] {
+    return [
+      {
+        type: "tool_execution_start",
+        toolCallId: "ask-1",
+        toolName: "ask_user_question",
+        args: { questions: [] },
+      } as AgentSessionEvent,
+      {
+        type: "tool_execution_end",
+        toolCallId: "ask-1",
+        toolName: "ask_user_question",
+        result,
+        isError,
+      } as AgentSessionEvent,
+    ];
+  }
+
+  describe("askUserQuestionEndTurn", () => {
+    it("detects the sentinel detail flag under details", () => {
+      expect(askUserQuestionEndTurn(sentinelResult)).toBe(true);
+    });
+
+    it("rejects the flattened (non-canonical) result-record shape", () => {
+      expect(
+        askUserQuestionEndTurn({
+          thinkworkAskUserQuestion: { endTurn: true },
+        }),
+      ).toBe(false);
+    });
+
+    it("ignores error results, foreign details, and non-record results", () => {
+      expect(
+        askUserQuestionEndTurn({
+          details: { thinkworkAskUserQuestion: { error: "409" } },
+        }),
+      ).toBe(false);
+      expect(
+        askUserQuestionEndTurn({
+          details: { thinkworkAskUserQuestion: { endTurn: "yes" } },
+        }),
+      ).toBe(false);
+      expect(askUserQuestionEndTurn({ details: { other: true } })).toBe(false);
+      expect(askUserQuestionEndTurn("text result")).toBe(false);
+      expect(askUserQuestionEndTurn(undefined)).toBe(false);
+    });
+  });
+
+  it("ignores the sentinel when carried on another tool's result (no abort)", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_start",
+          toolCallId: "mcp-1",
+          toolName: "some_mcp_tool",
+          args: {},
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "mcp-1",
+          toolName: "some_mcp_tool",
+          result: sentinelResult,
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+    const abort = vi.fn(async () => {});
+    (session as AgentSessionLike).abort = abort;
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+    expect(abort).not.toHaveBeenCalled();
+    expect(result.content).toBe("done");
+  });
+
+  it("calls session.abort after the sentinel tool result is recorded", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("asking…")],
+      events: askEvents(sentinelResult),
+    });
+    const abort = vi.fn(async () => {});
+    (session as AgentSessionLike).abort = abort;
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+
+    expect(abort).toHaveBeenCalledTimes(1);
+    // The tool result was recorded BEFORE the turn ended.
+    expect(result.toolInvocations).toHaveLength(1);
+    expect(result.toolInvocations[0].status).toBe("ok");
+    expect(result.toolsCalled).toEqual(["ask_user_question"]);
+  });
+
+  it("ends the turn on the 409 already-pending sentinel (same terminate path, success preserved)", async () => {
+    const alreadyPendingResult = {
+      content: [{ type: "text", text: "Error: a question is already pending" }],
+      details: {
+        thinkworkAskUserQuestion: { endTurn: true, alreadyPending: true },
+      },
+      terminate: true,
+    };
+    const session = makeFakeSession({
+      messages: [assistantMessage("asking…")],
+      events: askEvents(alreadyPendingResult),
+    });
+    const abort = vi.fn(async () => {});
+    (session as AgentSessionLike).abort = abort;
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect(result.content).toBe("asking…");
+    expect(result.toolInvocations[0].status).toBe("ok");
+  });
+
+  it("finalizes the turn as a SUCCESS, skipping a trailing abort stub when extracting content", async () => {
+    const abortedStub = {
+      role: "assistant",
+      content: [],
+      stopReason: "aborted",
+    } as unknown as AgentMessage;
+    const session = makeFakeSession({
+      messages: [assistantMessage("I need to check one thing."), abortedStub],
+      events: askEvents(sentinelResult),
+    });
+    (session as AgentSessionLike).abort = vi.fn(async () => {});
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+
+    // No throw (success), and content comes from the real assistant
+    // message, not the empty aborted stub appended by the abort backstop.
+    expect(result.content).toBe("I need to check one thing.");
+  });
+
+  it("does not fail the turn when the abort backstop leaves an error-shaped trailing stub", async () => {
+    const session = makeFakeSession({
+      messages: [
+        assistantMessage("asking…"),
+        assistantErrorMessage("Operation aborted"),
+      ],
+      events: askEvents(sentinelResult),
+    });
+    (session as AgentSessionLike).abort = vi.fn(async () => {});
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+    expect(result.content).toBe("asking…");
+  });
+
+  it("still persists the durable session on an asking turn", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("asking…")],
+      events: askEvents(sentinelResult),
+    });
+    (session as AgentSessionLike).abort = vi.fn(async () => {});
+    let persisted = 0;
+    await runAgentLoop(baseArgs(), {
+      openSession: async () => ({
+        session,
+        modelId: "m",
+        durable: true,
+        persistSession: async () => {
+          persisted += 1;
+        },
+      }),
+    });
+    expect(persisted).toBe(1);
+  });
+
+  it("survives a session without an abort seam (optional on AgentSessionLike)", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("asking…")],
+      events: askEvents(sentinelResult),
+    });
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+    expect(result.content).toBe("asking…");
+    expect(result.toolInvocations[0].status).toBe("ok");
+  });
+
+  it("ignores the sentinel on an errored tool execution (no abort, failure handling intact)", async () => {
+    const session = makeFakeSession({
+      messages: [assistantErrorMessage("real model error")],
+      events: askEvents(sentinelResult, true),
+    });
+    const abort = vi.fn(async () => {});
+    (session as AgentSessionLike).abort = abort;
+
+    await expect(
+      runAgentLoop(baseArgs(), {
+        openSession: async () => ({ session, modelId: "m" }),
+      }),
+    ).rejects.toThrow("real model error");
+    expect(abort).not.toHaveBeenCalled();
+  });
+
+  it("ignores non-sentinel tool results (no abort)", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: askEvents({
+        content: [
+          { type: "text", text: "Error: a question is already pending" },
+        ],
+        details: { thinkworkAskUserQuestion: { error: "already pending" } },
+      }),
+    });
+    const abort = vi.fn(async () => {});
+    (session as AgentSessionLike).abort = abort;
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+    expect(abort).not.toHaveBeenCalled();
+    expect(result.content).toBe("done");
   });
 });

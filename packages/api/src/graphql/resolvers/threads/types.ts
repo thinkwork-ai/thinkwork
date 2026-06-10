@@ -297,6 +297,13 @@ export const threadTypeResolvers = {
   lifecycleStatus: (thread: any, _args: any, ctx: GraphQLContext) => {
     return ctx.loaders.threadLifecycleStatus.load(thread.id);
   },
+  // The thread's open ask_user_question batch, if any (plan 2026-06-09-005
+  // U3). At most one pending row per thread (partial unique index).
+  pendingUserQuestion: (thread: any, _args: any, ctx: GraphQLContext) => {
+    return thread.id
+      ? ctx.loaders.threadPendingUserQuestion.load(thread.id)
+      : null;
+  },
 };
 
 export const threadParticipantTypeResolvers = {

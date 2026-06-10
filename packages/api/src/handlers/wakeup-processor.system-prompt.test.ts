@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extractComposedSystemPrompt,
   invokeAgentCore,
+  SOURCES_WITH_MESSAGES,
 } from "./wakeup-processor.js";
 
 const mocks = vi.hoisted(() => ({
@@ -72,6 +73,30 @@ describe("wakeup processor system prompt capture", () => {
     expect(source).toContain("userId: costOwnerUserId ?? null");
     expect(source).toContain("user_id: costOwnerUserId || undefined");
     expect(source.indexOf("turn_context: runSpaceId")).toBeGreaterThan(-1);
+  });
+
+  it("excludes every source-specific message branch from the catch-all assistant insert", () => {
+    const source = readFileSync(
+      new URL("./wakeup-processor.ts", import.meta.url),
+      "utf8",
+    );
+
+    // Membership pin: question_answer replies through the chat branch
+    // (same condition as chat_message/automation), so it MUST be excluded
+    // from the catch-all or the assistant message is inserted twice.
+    expect(SOURCES_WITH_MESSAGES).toEqual([
+      "chat_message",
+      "automation",
+      "question_answer",
+      "email_triage",
+      "email_received",
+      "webhook",
+    ]);
+
+    // The catch-all is gated on the exclusion list…
+    expect(source).toContain("!SOURCES_WITH_MESSAGES.includes(wakeup.source)");
+    // …and the chat branch really does handle question_answer.
+    expect(source).toContain('wakeup.source === "question_answer"');
   });
 
   it("routes legacy Strands wakeups to the Pi AgentCore runtime", async () => {

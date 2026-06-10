@@ -12,7 +12,25 @@ export type AgentProfileRunStatus =
   | "interrupted"
   | "resource_limit_exceeded";
 
-export type AgentProfileLoopCompletionVerdict = "pass" | "revise" | "fail";
+export type AgentProfileLoopCompletionVerdict =
+  | "pass"
+  | "revise"
+  | "fail"
+  | "needs_clarification";
+
+/** Mirrors the ask_user_question tool's option contract (plan 2026-06-09-005 U6). */
+export interface AgentProfileHandoffQuestionOption {
+  label: string;
+  description?: string;
+}
+
+/** Mirrors the ask_user_question tool's question contract (plan 2026-06-09-005 U6). */
+export interface AgentProfileHandoffQuestion {
+  question: string;
+  header?: string;
+  options?: AgentProfileHandoffQuestionOption[];
+  multiSelect?: boolean;
+}
 
 export interface AgentProfileHandoffEvidence {
   verdict: AgentProfileLoopCompletionVerdict;
@@ -20,6 +38,8 @@ export interface AgentProfileHandoffEvidence {
   confidence?: "low" | "medium" | "high";
   evidence?: string[];
   feedback?: string;
+  /** Present only with verdict needs_clarification (max 4 questions). */
+  questions?: AgentProfileHandoffQuestion[];
 }
 
 export interface AgentProfileLoopEvidence {

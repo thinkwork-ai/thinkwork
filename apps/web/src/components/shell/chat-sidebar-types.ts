@@ -1,9 +1,15 @@
+import { ThreadLifecycleStatus } from "@/gql/graphql";
+
+export { formatTinyRelativeDate } from "@/lib/relative-time";
+
 export interface ChatThreadSummary {
   id: string;
   number?: number | null;
   identifier?: string | null;
   title?: string | null;
   status?: string | null;
+  /** Derived lifecycle (RUNNING | AWAITING_USER | ...); drives the waiting badge. */
+  lifecycleStatus?: string | null;
   channel?: string | null;
   spaceId?: string | null;
   space?: {
@@ -18,6 +24,18 @@ export interface ChatThreadSummary {
   archivedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+}
+
+/**
+ * True when the agent parked the thread on a pending ask_user_question
+ * batch — drives the amber "Waiting for you" badge. Clears automatically
+ * when a thread-update event refreshes lifecycleStatus.
+ */
+export function isThreadAwaitingUser(thread: ChatThreadSummary): boolean {
+  return (
+    (thread.lifecycleStatus ?? "").toUpperCase() ===
+    ThreadLifecycleStatus.AwaitingUser
+  );
 }
 
 export function formatCompactCount(value: number): string {
@@ -155,25 +173,6 @@ export function formatRelativeDate(value?: string | null): string {
     month: "short",
     day: "numeric",
   }).format(date);
-}
-
-export function formatTinyRelativeDate(value?: string | null): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const elapsedMs = Math.max(Date.now() - date.getTime(), 0);
-  const elapsedMinutes = Math.floor(elapsedMs / 60_000);
-  if (elapsedMinutes < 1) return "now";
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h`;
-  const elapsedDays = Math.floor(elapsedHours / 24);
-  if (elapsedDays < 7) return `${elapsedDays}d`;
-  const elapsedWeeks = Math.floor(elapsedDays / 7);
-  if (elapsedWeeks < 5) return `${elapsedWeeks}w`;
-  const elapsedMonths = Math.floor(elapsedDays / 30);
-  if (elapsedMonths < 12) return `${Math.max(elapsedMonths, 1)}mo`;
-  return `${Math.floor(elapsedDays / 365)}y`;
 }
 
 export function recencyGroupLabel(value?: string | null): string {

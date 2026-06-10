@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildAgentProfileDelegationTool,
+  clarificationEscalationInstruction,
   executeAgentProfileDelegation,
   normalizeAgentProfiles,
+  runAgentProfileDelegationWithClarification,
   type ProfileDelegationToolOptions,
 } from "../src/agent-profile-delegation.js";
+import { runParentOwnedProfileOrchestration } from "../src/server.js";
 import type { AgentProfileConfig } from "../src/agent-profile-adapter.js";
 import { buildMcpTools, HandleStore } from "../src/mcp.js";
 import { McpToolRegistry } from "../src/mcp-registry.js";
@@ -561,5 +564,331 @@ describe("agent profile delegation", () => {
     expect(
       buildAgentProfileDelegationTool(await options({ profiles: [] })),
     ).toBeNull();
+  });
+
+  it("dictates the needs_clarification handoff contract in the specialist prompt", async () => {
+    let captured:
+      | Parameters<NonNullable<ProfileDelegationToolOptions["runLoop"]>>[0]
+      | undefined;
+    const runLoop = vi.fn(async (args) => {
+      captured = args;
+      return {
+        content: "Verdict: pass\nSummary: Done.",
+        modelId: String(args.modelId),
+        toolsCalled: [],
+        toolInvocations: [],
+        toolCosts: [],
+      };
+    });
+
+    await executeAgentProfileDelegation({
+      options: await options({ runLoop }),
+      profileSlug: "research",
+      task: "Find current sources",
+    });
+
+    expect(captured?.systemPrompt).toContain(
+      "Verdict: pass | revise | fail | needs_clarification",
+    );
+    expect(captured?.systemPrompt).toContain(
+      "hand off with Verdict: needs_clarification instead of assuming",
+    );
+    expect(captured?.systemPrompt).toContain(
+      "surface ALL clarification needs in that one handoff (max 4 questions)",
+    );
+    expect(captured?.systemPrompt).toContain(
+      "you get one escalation per delegation",
+    );
+    expect(captured?.systemPrompt).toContain(
+      "Questions: required only for needs_clarification - a single-line JSON array",
+    );
+    expect(captured?.systemPrompt).toContain(
+      'Questions: [{"question":"Which environment should this target?"',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// needs_clarification escalation (plan 2026-06-09-005 U6).
+// ---------------------------------------------------------------------------
+
+const CLARIFY_CONTENT = [
+  "Verdict: needs_clarification",
+  "Summary: The market scope changes the outcome.",
+  'Questions: [{"question":"Which market?","header":"Market","options":[{"label":"US (Recommended)","description":"Fastest."},{"label":"Global","description":"Slower."}]}]',
+].join("\n");
+const PASS_CONTENT = "Verdict: pass\nSummary: Work is done.";
+const REVISE_CONTENT =
+  "Verdict: revise\nSummary: Needs work.\nFeedback: Add a primary source.";
+
+function scriptedRunLoop(contents: string[]) {
+  let call = 0;
+  const messages: string[] = [];
+  const runLoop = vi.fn(async (args: { message: string; modelId: unknown }) => {
+    messages.push(String(args.message));
+    const content = contents[Math.min(call, contents.length - 1)];
+    call += 1;
+    return {
+      content,
+      modelId: String(args.modelId),
+      toolsCalled: [],
+      toolInvocations: [],
+      toolCosts: [],
+    };
+  });
+  return { runLoop, messages };
+}
+
+describe("needs_clarification escalation", () => {
+  it("surfaces a first escalation with questions, delegation context, and the ask instruction", async () => {
+    const { runLoop } = scriptedRunLoop([CLARIFY_CONTENT]);
+    const outcome = await runAgentProfileDelegationWithClarification({
+      options: await options({ runLoop }),
+      profileSlug: "research",
+      task: "Research the market",
+    });
+
+    expect(runLoop).toHaveBeenCalledTimes(1);
+    expect(outcome.runs).toHaveLength(1);
+    expect(outcome.clarificationConversion).toBeUndefined();
+    expect(outcome.clarification).toMatchObject({
+      profileSlug: "research",
+      profileName: "Research",
+      task: "Research the market",
+      escalationCount: 1,
+    });
+    expect(outcome.clarification?.questions).toEqual([
+      {
+        question: "Which market?",
+        header: "Market",
+        options: [
+          { label: "US (Recommended)", description: "Fastest." },
+          { label: "Global", description: "Slower." },
+        ],
+      },
+    ]);
+    // Status maps to the clarification analog, never failed.
+    expect(outcome.evidence.loopEvidence?.goalState).toMatchObject({
+      status: "clarification_requested",
+    });
+    expect(outcome.evidence.status).toBe("completed");
+
+    const instruction = clarificationEscalationInstruction(
+      outcome.clarification!,
+    );
+    expect(instruction).toContain("ask_user_question");
+    expect(instruction).toContain("re-delegate");
+    expect(instruction).toContain('"profileSlug":"research"');
+    expect(instruction).toContain('"originalTask":"Research the market"');
+    expect(instruction).toContain('"escalationCount":1');
+  });
+
+  it("converts a re-escalation (escalationCount >= 1) to a best-judgment re-invoke with no ask", async () => {
+    const { runLoop, messages } = scriptedRunLoop([
+      CLARIFY_CONTENT,
+      PASS_CONTENT,
+    ]);
+    const outcome = await runAgentProfileDelegationWithClarification({
+      options: await options({
+        runLoop,
+        resumeDelegationContext: {
+          profileSlug: "research",
+          originalTask: "Research the market",
+          escalationCount: 1,
+        },
+      }),
+      profileSlug: "research",
+      task: "Research the market\n\nUser answers: US only.",
+    });
+
+    expect(runLoop).toHaveBeenCalledTimes(2);
+    expect(messages[1]).toContain("proceed on your best judgment");
+    expect(messages[1]).toContain("Which market?");
+    expect(messages[1]).toContain("Do not hand off needs_clarification again");
+    expect(outcome.clarification).toBeUndefined();
+    expect(outcome.clarificationConversion).toBe("escalation_budget");
+    expect(outcome.clarificationBestEffort).toBeUndefined();
+    expect(outcome.runs).toHaveLength(2);
+    expect(outcome.evidence.handoff?.verdict).toBe("pass");
+  });
+
+  it("keeps a separate escalation for a different task delegated to the same profile", async () => {
+    const { runLoop } = scriptedRunLoop([CLARIFY_CONTENT]);
+    const outcome = await runAgentProfileDelegationWithClarification({
+      options: await options({
+        runLoop,
+        resumeDelegationContext: {
+          profileSlug: "research",
+          originalTask: "Plan the product launch",
+          escalationCount: 1,
+        },
+      }),
+      profileSlug: "research",
+      task: "Research the market",
+    });
+
+    expect(runLoop).toHaveBeenCalledTimes(1);
+    expect(outcome.clarification).toMatchObject({ escalationCount: 1 });
+    expect(outcome.clarificationConversion).toBeUndefined();
+  });
+
+  it("eval mode converts immediately; a second needs_clarification is best-effort, not a third invoke", async () => {
+    const { runLoop, messages } = scriptedRunLoop([
+      CLARIFY_CONTENT,
+      CLARIFY_CONTENT,
+    ]);
+    const outcome = await runAgentProfileDelegationWithClarification({
+      options: await options({ runLoop, evalMode: true }),
+      profileSlug: "research",
+      task: "Research the market",
+    });
+
+    expect(runLoop).toHaveBeenCalledTimes(2);
+    expect(messages[1]).toContain("proceed on your best judgment");
+    expect(outcome.clarification).toBeUndefined();
+    expect(outcome.clarificationConversion).toBe("eval_mode");
+    expect(outcome.clarificationBestEffort).toBe(true);
+    expect(outcome.runs).toHaveLength(2);
+  });
+
+  it("surfaces the escalation through the delegation tool result", async () => {
+    const { runLoop } = scriptedRunLoop([CLARIFY_CONTENT]);
+    const delegationTool = buildAgentProfileDelegationTool(
+      await options({ runLoop }),
+    );
+
+    const result = await delegationTool!.execute(
+      "tool-call-1",
+      { profileSlug: "research", task: "Find sources" },
+      undefined,
+      undefined,
+    );
+
+    const body = JSON.parse(
+      (result.content as Array<{ text: string }>)[0].text,
+    );
+    expect(body.needs_clarification).toMatchObject({
+      delegation_context: {
+        profileSlug: "research",
+        originalTask: "Find sources",
+        escalationCount: 1,
+      },
+    });
+    expect(body.needs_clarification.questions).toHaveLength(1);
+    expect(body.needs_clarification.instruction).toContain("ask_user_question");
+    expect(body.needs_clarification.instruction).toContain("delegationContext");
+  });
+
+  it("notes best-effort output in the tool result after a converted re-escalation clarifies again", async () => {
+    const { runLoop } = scriptedRunLoop([CLARIFY_CONTENT, CLARIFY_CONTENT]);
+    const delegationTool = buildAgentProfileDelegationTool(
+      await options({ runLoop, evalMode: true }),
+    );
+
+    const result = await delegationTool!.execute(
+      "tool-call-1",
+      { profileSlug: "research", task: "Find sources" },
+      undefined,
+      undefined,
+    );
+
+    const body = JSON.parse(
+      (result.content as Array<{ text: string }>)[0].text,
+    );
+    expect(body.needs_clarification).toBeUndefined();
+    expect(body.clarification_conversion).toBe("eval_mode");
+    expect(body.clarification_note).toContain("best-effort");
+  });
+});
+
+describe("parent-owned orchestration clarification unwind", () => {
+  function reviewerProfile(): AgentProfileConfig {
+    return researchProfile({
+      id: "profile-reviewer",
+      slug: "reviewer",
+      name: "Reviewer",
+      builtInKey: "reviewer",
+    });
+  }
+
+  async function orchestrate(input: {
+    contents: string[];
+    optionsOverrides?: Partial<ProfileDelegationToolOptions>;
+    profiles?: AgentProfileConfig[];
+  }) {
+    const { runLoop, messages } = scriptedRunLoop(input.contents);
+    const profiles = input.profiles ?? [researchProfile(), reviewerProfile()];
+    const delegationOptions = await options({
+      runLoop,
+      profiles,
+      now: undefined,
+      ...input.optionsOverrides,
+    });
+    const result = await runParentOwnedProfileOrchestration({
+      originalMessage: "@Research @Reviewer research the market",
+      baseTask: "research the market",
+      requestedProfiles: profiles,
+      profileDelegationOptions: delegationOptions,
+      parentRunInput: {
+        message: "(caller message; orchestration owns the parent prompt)",
+        history: [],
+        tools: [],
+        modelId: "anthropic/claude-sonnet-4-5",
+        threadId: "thread-1",
+        gitSha: "test",
+      },
+      runLoop: runLoop as never,
+      log: () => {},
+      emitActivity: () => {},
+      wrapParentMessage: (message) => `WRAPPED\n\n${message}`,
+    });
+    return { result, runLoop, messages };
+  }
+
+  it("unwinds the chain on needs_clarification and instructs the parent", async () => {
+    const { result, runLoop, messages } = await orchestrate({
+      contents: [CLARIFY_CONTENT, "parent final response"],
+    });
+
+    // Research clarified -> reviewer never ran; only the parent loop follows.
+    expect(runLoop).toHaveBeenCalledTimes(2);
+    const parentMessage = messages[1];
+    expect(parentMessage.startsWith("WRAPPED")).toBe(true);
+    expect(parentMessage).toContain("needs clarification");
+    expect(parentMessage).toContain("Which market?");
+    expect(parentMessage).toContain("ask_user_question");
+    expect(parentMessage).toContain('"profileSlug":"research"');
+    expect(parentMessage).toContain('"originalTask":"research the market"');
+    expect(parentMessage).toContain('"escalationCount":1');
+    expect(result.agentProfileRuns).toHaveLength(1);
+    expect(result.agentProfileRuns?.[0]?.handoff?.verdict).toBe(
+      "needs_clarification",
+    );
+  });
+
+  it("does not consume the reviewLoops budget on a clarification conversion", async () => {
+    const { runLoop, messages, result } = await (async () => {
+      // Call order: research(clarify->converted), research(best-judgment),
+      // reviewer(revise), research(retry), reviewer(pass), parent.
+      return orchestrate({
+        contents: [
+          CLARIFY_CONTENT,
+          PASS_CONTENT,
+          REVISE_CONTENT,
+          PASS_CONTENT,
+          "Verdict: pass\nSummary: Approved.",
+          "parent final response",
+        ],
+        optionsOverrides: { evalMode: true },
+      });
+    })();
+
+    // The clarification conversion (calls 1-2) must leave the full
+    // maxReviewLoops=1 budget intact: the revise cycle (calls 4-5) still runs.
+    expect(runLoop).toHaveBeenCalledTimes(6);
+    expect(messages[1]).toContain("proceed on your best judgment");
+    expect(messages[3]).toContain("Reviewer feedback");
+    expect(messages[5]).not.toContain("ask_user_question");
+    expect(result.agentProfileRuns).toHaveLength(5);
   });
 });

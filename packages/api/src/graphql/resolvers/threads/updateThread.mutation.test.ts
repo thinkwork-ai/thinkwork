@@ -146,6 +146,11 @@ vi.mock("../../../lib/spaces/customer-onboarding-goal-md.js", () => ({
   refreshCustomerOnboardingGoalFolderSafely: mockRefreshGoalFolder,
 }));
 
+const mockCancelPendingQuestions = vi.hoisted(() => vi.fn(async () => []));
+vi.mock("../../../lib/user-questions/consume.js", () => ({
+  cancelPendingQuestions: mockCancelPendingQuestions,
+}));
+
 import { updateThread } from "./updateThread.mutation.js";
 
 beforeEach(() => {
@@ -169,6 +174,7 @@ beforeEach(() => {
   mockNotifyThreadUpdate.mockClear();
   mockRefreshGoalFolder.mockReset();
   mockRefreshGoalFolder.mockResolvedValue(null);
+  mockCancelPendingQuestions.mockClear();
 });
 
 describe("updateThread participant-scoped read state", () => {
@@ -280,5 +286,33 @@ describe("updateThread participant-scoped read state", () => {
       tenantId: "tenant-1",
       threadId: "thread-1",
     });
+  });
+});
+
+describe("updateThread pending-question cancel hygiene (plan 2026-06-09-005 U3)", () => {
+  it("cancels pending questions when the thread is archived", async () => {
+    await updateThread(
+      {},
+      {
+        id: "thread-1",
+        input: { archivedAt: "2026-06-10T12:00:00.000Z" },
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(mockCancelPendingQuestions).toHaveBeenCalledTimes(1);
+    expect(mockCancelPendingQuestions).toHaveBeenCalledWith(expect.anything(), {
+      threadId: "thread-1",
+    });
+  });
+
+  it("does not cancel pending questions on unarchive (archivedAt: null) or unrelated updates", async () => {
+    await updateThread({}, { id: "thread-1", input: { archivedAt: null } }, {
+      auth: { authType: "cognito" },
+    } as any);
+    await updateThread({}, { id: "thread-1", input: { title: "Renamed" } }, {
+      auth: { authType: "cognito" },
+    } as any);
+    expect(mockCancelPendingQuestions).not.toHaveBeenCalled();
   });
 });

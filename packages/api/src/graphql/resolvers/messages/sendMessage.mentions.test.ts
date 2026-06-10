@@ -88,6 +88,63 @@ describe("sendMessage mention collaboration path", () => {
   });
 });
 
+describe("sendMessage pending-question reply consumption (plan 2026-06-09-005 U3)", () => {
+  it("CAS-consumes the pending batch with answeredVia 'reply' and the new message as the reference", () => {
+    expect(source).toContain("consumePendingQuestions(db, {");
+    expect(source).toContain('answeredVia: "reply"');
+    expect(source).toContain("replyMessageId: row.id");
+    expect(source).toContain("answers: null");
+  });
+
+  it("consumes BEFORE the dispatch-mode branch so BOTH dispatch paths see it", () => {
+    // ANY user message consumes (origin R7) — including @agent-mention
+    // replies, which dispatch via dispatchAgentMentions, not the default
+    // path.
+    expect(source.indexOf("await consumePendingQuestions")).toBeLessThan(
+      source.indexOf("await dispatchAgentMentions"),
+    );
+    expect(source.indexOf("await consumePendingQuestions")).toBeLessThan(
+      source.indexOf("await dispatchDefaultAgentChatTurn"),
+    );
+    // …and the answer context is attached to whichever dispatch fires.
+    const attachments =
+      source.split(
+        "...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {})",
+      ).length - 1;
+    expect(attachments).toBe(2); // mention dispatch + default dispatch
+  });
+
+  it("logs consume failures at error level with thread context (message still sends)", () => {
+    expect(source).toContain(
+      "pending-question consume failed for thread=${i.threadId}",
+    );
+    expect(source).toMatch(
+      /console\.error\(\s*`\[sendMessage\] pending-question consume failed/,
+    );
+    expect(source).not.toMatch(
+      /console\.warn\([^)]*pending-question consume failed/,
+    );
+  });
+
+  it("does NOT enqueue a second wakeup from the reply path — the dispatched turn carries the answers", () => {
+    // The card route (answerUserQuestion.mutation.ts) owns the resume
+    // wakeup; sendMessage must never insert agent_wakeup_requests for a
+    // consumed question.
+    expect(source).not.toContain("agentWakeupRequests");
+    expect(source).not.toContain("question-answer:");
+  });
+
+  it("keeps the #2013 attachment-resolution dispatch intact (consume must not bypass it)", () => {
+    // The answer context rides the SAME dispatchDefaultAgentChatTurn call
+    // that resolves message attachments inside default-agent-routing.ts —
+    // there is exactly one dispatch call on this path.
+    const dispatchCalls =
+      source.split("dispatchDefaultAgentChatTurn(").length - 1;
+    expect(dispatchCalls).toBe(1); // exactly one call site
+    expect(source).toContain("canonicalizeMessageAttachmentMetadata");
+  });
+});
+
 describe("sendMessage agent handling", () => {
   it("normalizes legacy mobile human senders into user dispatch", () => {
     expect(normalizeMessageSenderType(undefined)).toBe("user");

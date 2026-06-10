@@ -22,6 +22,8 @@ import {
 } from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
 import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agent-routing.js";
+import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
+import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/runtime-payload.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { applyCustomerOnboardingChatUpdate } from "../../../lib/spaces/customer-onboarding-chat-updates.js";
@@ -341,6 +343,49 @@ export const sendMessage = async (
       );
     }
   }
+  // ask_user_question plain-reply route (plan 2026-06-09-005 U3, R7): ANY
+  // user message on the thread CAS-consumes the pending question batch
+  // (answeredVia 'reply', answers = a reference to this message — never
+  // its text) BEFORE the dispatch-mode branch, so @agent-mention replies
+  // consume too. The answer context then rides whichever dispatch this
+  // mutation ALREADY fires (mention dispatch or default dispatch) — NO
+  // second wakeup is enqueued from this path; the card mutation
+  // (answerUserQuestion) owns the wakeup route; exactly one turn carries
+  // the answer context regardless of route. A lost race (card got there
+  // first) consumes zero rows and this lands as a normal message whose
+  // turn is serialized by wakeup-defer.
+  let pendingQuestionAnswers: PendingQuestionAnswersPayload | undefined;
+  if (isUserMessage) {
+    try {
+      const consumed = await consumePendingQuestions(db, {
+        threadId: i.threadId,
+        answeredVia: "reply",
+        answers: null,
+        replyMessageId: row.id,
+        answeredBy: senderType === "user" ? (senderId ?? null) : null,
+      });
+      if (consumed.length > 0) {
+        const primary = consumed[0];
+        pendingQuestionAnswers = {
+          questionId: primary.id,
+          questions: primary.questions,
+          answers: null,
+          answeredVia: "reply",
+          answeredBy: senderType === "user" ? (senderId ?? null) : null,
+          replyMessageId: row.id,
+          replyText: i.content ?? "",
+          delegationContext: primary.delegation_context ?? null,
+        };
+      }
+    } catch (err) {
+      // The message still sends — but a swallowed consume failure means an
+      // answered question stays pending, so it must be loud in logs.
+      console.error(
+        `[sendMessage] pending-question consume failed for thread=${i.threadId}:`,
+        err,
+      );
+    }
+  }
   if (hasAgentMentions) {
     try {
       await dispatchAgentMentions({
@@ -351,6 +396,7 @@ export const sendMessage = async (
         content: i.content,
         mentions: parsedMentions,
         requestedModelId,
+        ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
         sender: { type: senderType, id: senderId },
       });
     } catch (err) {
@@ -377,6 +423,7 @@ export const sendMessage = async (
         content: i.content,
         requestedModelId,
         requestedProfileSlug,
+        ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
         sender: { type: senderType, id: senderId },
       });
     } catch (err) {

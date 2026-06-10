@@ -96,8 +96,23 @@ function buildRuntimeToolPolicy(
   const bashAvailable = tools.has("bash");
   const executeCodeAvailable = tools.has("execute_code");
   const sendEmailAvailable = tools.has("send_email");
+  const askUserQuestionAvailable = tools.has("ask_user_question");
   const mcpAvailable =
     tools.has("mcp") || [...tools].some((name) => name.startsWith("mcp."));
+
+  const askUserQuestionPolicy = askUserQuestionAvailable
+    ? [
+        "",
+        "### Asking the user",
+        "- The `ask_user_question` tool is available for structured clarifying questions.",
+        "- Ask only when: (a) two or more valid approaches differ meaningfully in outcome, (b) a required parameter cannot be inferred from context, or (c) a wrong guess would waste significant effort.",
+        "- Do not ask when: the task has a single obvious path, the answer is already in the conversation/workspace/memory, or the question is purely cosmetic.",
+        "- Batch every question for the current decision point into ONE call (max 4 questions); never ask sequentially what you can ask together.",
+        '- When you have a preferred default, mark exactly one option per question with a label ending " (Recommended)".',
+        "- When a delegated specialist's handoff carries clarification questions: answer what you can from your own context first; consolidate the rest (plus any questions of your own) into one batch and pass the delegationContext.",
+        "- After calling `ask_user_question` the turn ends; the user's answer arrives in your next turn.",
+      ]
+    : [];
 
   return [
     "## Runtime Tool Policy",
@@ -120,6 +135,7 @@ function buildRuntimeToolPolicy(
       ? "- The `send_email` tool is available. Use it only when the user explicitly asks to email something or the active task is already an email reply."
       : "- The `send_email` tool is not available for this turn.",
     '- Do not treat vague phrases like "send me", "share with me", or "give me" as email permission by themselves; answer in chat unless the user specifically requests email.',
+    ...askUserQuestionPolicy,
     "",
     "### Connected services",
     mcpAvailable

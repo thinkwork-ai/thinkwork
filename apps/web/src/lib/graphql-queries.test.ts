@@ -141,6 +141,8 @@ describe("computer GraphQL queries", () => {
     expect(inbox).toContain("unreadOnly: true");
     expect(inbox).toContain("space");
     expect(inbox).toContain("lastReadAt");
+    // Drives the "Waiting for you" badge (isThreadAwaitingUser).
+    expect(inbox).toContain("lifecycleStatus");
     expect(print(ThreadsPagedQuery)).toContain("unreadOnly: $unreadOnly");
     expect(print(ThreadsPagedQuery)).not.toContain("spaceId: $spaceId");
   });

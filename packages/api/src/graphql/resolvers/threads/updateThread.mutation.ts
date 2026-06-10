@@ -15,6 +15,7 @@ import {
   checkAndFireUnblockWakeups,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
+import { cancelPendingQuestions } from "../../../lib/user-questions/consume.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "../../../lib/spaces/customer-onboarding-goal-md.js";
 import {
   resolveCallerTenantId,
@@ -154,6 +155,21 @@ export const updateThread = async (
           })
           .catch(() => {}); // fire-and-forget
       }
+    }
+  }
+
+  // ask_user_question cancel hygiene (plan 2026-06-09-005 U3): archiving a
+  // thread cancels its pending question batch so AWAITING_USER can't park
+  // an archived thread forever. (Thread DELETE is covered by the FK
+  // cascades on pending_user_questions.thread_id/message_id.)
+  if (i.archivedAt !== undefined && i.archivedAt) {
+    try {
+      await cancelPendingQuestions(db, { threadId: args.id });
+    } catch (err) {
+      console.warn(
+        "[updateThread] failed to cancel pending questions on archive:",
+        err,
+      );
     }
   }
 

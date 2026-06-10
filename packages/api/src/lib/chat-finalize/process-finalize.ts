@@ -28,9 +28,14 @@
  * insertion, etc. The behavior must match chat-agent-invoke today.
  */
 
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { artifacts, threadTurns, threads } from "@thinkwork/database-pg/schema";
+import {
+  artifacts,
+  pendingUserQuestions,
+  threadTurns,
+  threads,
+} from "@thinkwork/database-pg/schema";
 import {
   checkBudgetAndPause,
   extractUsage,
@@ -45,6 +50,7 @@ import {
   appendThreadTurnEvent,
   drizzleThreadTurnEventStore,
 } from "../thread-turn-events.js";
+import { promoteNextDeferredWakeup } from "../wakeup-defer.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
   GENERIC_AGENT_ERROR_MESSAGE,
@@ -210,6 +216,7 @@ export async function processFinalize(
       suppressAssistantMessage: hiddenDesktopDelegation,
     });
     await markTurnFinalized(turnId);
+    await promoteDeferredWakeupSafely(tenantId, threadId);
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -474,6 +481,7 @@ export async function processFinalize(
   if (!responseText || responseText === "{}") {
     console.warn(`[chat-finalize] Empty response from AgentCore`);
     await markTurnFinalized(turnId);
+    await promoteDeferredWakeupSafely(tenantId, threadId);
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -482,12 +490,31 @@ export async function processFinalize(
       `[chat-finalize] Hidden desktop delegation ${turnId} finalized without inserting an assistant message`,
     );
     await markTurnFinalized(turnId);
+    await promoteDeferredWakeupSafely(tenantId, threadId);
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
   // 6. Compute downstream signals
   const displayResponse = responseText;
   const computerThreadResponse = invokeResult.computer_thread_response;
+
+  // ask_user_question asking-turn finalize (plan 2026-06-09-005 U3): when
+  // this turn called the ask tool AND a pending question row actually
+  // exists, the thread is waiting on the USER, not done — the list
+  // preview shows the question (not the trailing prose) and the
+  // turn-completed push is suppressed. The row probe is the gate (not
+  // the tool name alone): tools_called records at execution START, so a
+  // FAILED/409'd ask leaves no pending row and must finalize normally —
+  // including the completion push. Trailing assistant text still
+  // persists as a normal message below.
+  const askedUserQuestion = turnAskedUserQuestion(invokeResult);
+  let hasPendingQuestion = false;
+  let askingQuestionPreview: string | null = null;
+  if (askedUserQuestion) {
+    const pendingState = await loadPendingQuestionState(threadId);
+    hasPendingQuestion = pendingState.pending;
+    askingQuestionPreview = pendingState.preview;
+  }
 
   // 7. Insert assistant message (or reuse the one the runtime already
   //    created when invoked via the Computer thread surface)
@@ -533,10 +560,14 @@ export async function processFinalize(
           updated_at: new Date(),
           last_turn_completed_at: new Date(),
           last_response_preview:
-            displayResponse
+            // Asking turn: preview the question the thread is waiting on,
+            // not the trailing prose.
+            askingQuestionPreview ??
+            (displayResponse
               .replace(/[#*_`]/g, "")
               .trim()
-              .slice(0, 200) || null,
+              .slice(0, 200) ||
+              null),
         })
         .where(eq(threads.id, threadId));
     } catch (err) {
@@ -569,8 +600,10 @@ export async function processFinalize(
     } catch {}
   }
 
-  // 7e. Send push notification to user devices
-  if (!computerThreadResponse?.responseMessageId) {
+  // 7e. Send push notification to user devices — suppressed only when a
+  // pending question row exists: the thread is waiting on the user, not
+  // done. (Tool name alone is NOT enough — a failed ask must still push.)
+  if (!computerThreadResponse?.responseMessageId && !hasPendingQuestion) {
     try {
       await sendTurnCompletedPush({
         threadId,
@@ -608,11 +641,119 @@ export async function processFinalize(
   }
 
   await markTurnFinalized(turnId);
+
+  // Promote the next deferred wakeup for this thread, mirroring the
+  // wakeup-processor's end-of-turn promotion. Without this, a deferred
+  // question_answer wakeup (a card answered while this turn was running)
+  // is stranded when the turn completes via the finalize path. Promotion
+  // only flips status 'deferred'→'queued' — the wakeup-processor's
+  // 1-minute poll picks the queued row up and runs it.
+  await promoteDeferredWakeupSafely(tenantId, threadId);
+
   return {
     finalized: true,
     messageId: assistantMsg?.id ?? null,
     reconcile: reconcileReport,
   };
+}
+
+/**
+ * Best-effort end-of-turn deferred-wakeup promotion (PRD-09 Batch 4
+ * contract, same as the wakeup-processor's call sites). Never throws —
+ * a promotion failure must not fail an otherwise-finalized turn.
+ */
+async function promoteDeferredWakeupSafely(
+  tenantId: string,
+  threadId: string,
+): Promise<void> {
+  if (!threadId) return;
+  try {
+    await promoteNextDeferredWakeup(tenantId, threadId);
+  } catch {}
+}
+
+/** Tool name the ask-user-question Pi extension registers (U5). */
+const ASK_USER_QUESTION_TOOL = "ask_user_question";
+
+/**
+ * Detect whether the finalizing turn called ask_user_question (the "ask
+ * sentinel" for finalize purposes, plan 2026-06-09-005 U3).
+ *
+ * Detection is deliberately belt-and-suspenders across the two places the
+ * runtime reports tool activity — `tools_called` (flat string list) and
+ * `tool_invocations` (rich records whose name key has varied across
+ * runtime versions: toolName | tool_name | name). Matching by TOOL NAME
+ * (not a payload marker) is robust to U5's sentinel-result shape evolving:
+ * the tool only ever returns successfully after the intake persisted the
+ * pending row, so name presence ⇒ a question was asked this turn. The
+ * preview lookup below re-checks the pending row, so a 409'd or failed
+ * ask call degrades to normal-finalize behavior, not a wrong preview.
+ */
+export function turnAskedUserQuestion(invokeResult: {
+  tools_called?: string[];
+  tool_invocations?: Array<Record<string, unknown>>;
+}): boolean {
+  if (
+    Array.isArray(invokeResult.tools_called) &&
+    invokeResult.tools_called.includes(ASK_USER_QUESTION_TOOL)
+  ) {
+    return true;
+  }
+  for (const invocation of invokeResult.tool_invocations ?? []) {
+    if (!invocation || typeof invocation !== "object") continue;
+    const name = invocation.toolName ?? invocation.tool_name ?? invocation.name;
+    if (name === ASK_USER_QUESTION_TOOL) return true;
+  }
+  return false;
+}
+
+/**
+ * Pending-question state for the thread's open batch: whether a pending
+ * row EXISTS (gates push suppression — the tool name alone can't, since
+ * tools_called records at execution start even for failed asks) and the
+ * first question text for threads.last_response_preview. Best-effort:
+ * `{ pending: false }` (→ normal finalize behavior) when no pending row
+ * exists — e.g. the ask 409'd or failed, or the user already answered in
+ * the finalize window — or when the probe itself fails.
+ */
+async function loadPendingQuestionState(
+  threadId: string,
+): Promise<{ pending: boolean; preview: string | null }> {
+  try {
+    const [row] = await db
+      .select({ questions: pendingUserQuestions.questions })
+      .from(pendingUserQuestions)
+      .where(
+        and(
+          eq(pendingUserQuestions.thread_id, threadId),
+          eq(pendingUserQuestions.status, "pending"),
+        ),
+      )
+      .orderBy(desc(pendingUserQuestions.created_at))
+      .limit(1);
+    if (!row) return { pending: false, preview: null };
+    const questions = row.questions;
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return { pending: true, preview: null };
+    }
+    const first = questions[0] as Record<string, unknown> | null;
+    const text =
+      first && typeof first.question === "string"
+        ? first.question
+        : first && typeof first.header === "string"
+          ? first.header
+          : null;
+    return {
+      pending: true,
+      preview: text ? text.trim().slice(0, 200) || null : null,
+    };
+  } catch (err) {
+    console.error(
+      "[chat-finalize] Failed to load pending question state:",
+      err,
+    );
+    return { pending: false, preview: null };
+  }
 }
 
 export function diagnosticsWithWorkspaceReconcile(

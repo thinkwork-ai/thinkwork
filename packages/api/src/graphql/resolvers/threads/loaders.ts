@@ -1,11 +1,16 @@
 import DataLoader from "dataloader";
 import { inArray, sql, and, eq, gt } from "drizzle-orm";
+import { pendingUserQuestions } from "@thinkwork/database-pg/schema";
 import { db, messages, threadTurns } from "../../utils.js";
 import {
   deriveLifecycleStatus,
   QUEUED_FRESHNESS_MS,
   type ThreadLifecycleStatus,
 } from "./lifecycle-status.js";
+import {
+  userQuestionToGraphql,
+  type UserQuestionGraphql,
+} from "../messages/user-question.shared.js";
 
 export const createThreadLoaders = () => ({
   threadLastActivityAt: new DataLoader<string, string | null>(
@@ -113,13 +118,69 @@ export const createThreadLoaders = () => ({
         });
       }
 
+      // Probe 3 (plan 2026-06-09-005 U3): pending ask_user_question rows.
+      // A pending question parks the thread in AWAITING_USER — including
+      // when the latest turn failed, so an unattended thread never loses
+      // its needs-attention signal. Best-effort (mirrors the
+      // loadPendingQuestionState guard in process-finalize.ts): a probe
+      // failure — e.g. the pending_user_questions table not yet applied
+      // on this stage — degrades to hasPendingQuestion=false instead of
+      // breaking every thread list.
+      const pendingSet = new Set<string>();
+      try {
+        const pendingRows = await db
+          .select({ threadId: pendingUserQuestions.thread_id })
+          .from(pendingUserQuestions)
+          .where(
+            and(
+              inArray(pendingUserQuestions.thread_id, ids),
+              eq(pendingUserQuestions.status, "pending"),
+            ),
+          );
+        for (const row of pendingRows) {
+          if (row.threadId) pendingSet.add(row.threadId);
+        }
+      } catch (err) {
+        console.error(
+          "[threadLifecycleStatus] pending-question probe failed:",
+          err,
+        );
+      }
+
       return ids.map((id) =>
         deriveLifecycleStatus({
           hasActiveTurn: activeSet.has(id),
           latestTurn: latestMap.get(id) ?? null,
+          hasPendingQuestion: pendingSet.has(id),
           now,
         }),
       );
+    },
+  ),
+
+  /**
+   * Thread.pendingUserQuestion — the thread's open question batch, if any
+   * (at most one pending row per thread, enforced by the partial unique
+   * index). Same tenant-safety contract as the loaders above: only invoke
+   * via a field resolver on an already-authorized Thread object.
+   */
+  threadPendingUserQuestion: new DataLoader<string, UserQuestionGraphql | null>(
+    async (threadIds) => {
+      const ids = [...threadIds];
+      if (ids.length === 0) return [];
+      const rows = await db
+        .select()
+        .from(pendingUserQuestions)
+        .where(
+          and(
+            inArray(pendingUserQuestions.thread_id, ids),
+            eq(pendingUserQuestions.status, "pending"),
+          ),
+        );
+      const map = new Map(
+        rows.map((row) => [row.thread_id, userQuestionToGraphql(row)]),
+      );
+      return ids.map((id) => map.get(id) ?? null);
     },
   ),
 });

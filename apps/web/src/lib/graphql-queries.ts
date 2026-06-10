@@ -36,6 +36,7 @@ export const ThreadsPagedQuery = gql`
         spaceId
         title
         status
+        lifecycleStatus
         assigneeType
         assigneeId
         agentId
@@ -78,6 +79,7 @@ export const PinnedThreadsQuery = gql`
         spaceId
         title
         status
+        lifecycleStatus
         assigneeType
         assigneeId
         agentId
@@ -238,6 +240,7 @@ export const ChatGlobalInboxQuery = gql`
         identifier
         title
         status
+        lifecycleStatus
         channel
         spaceId
         space {
@@ -319,6 +322,7 @@ export const SpaceThreadsQuery = gql`
         identifier
         title
         status
+        lifecycleStatus
         channel
         spaceId
         metadata
@@ -597,6 +601,14 @@ export const ComputerThreadQuery = gql`
               targetId
               displayName
             }
+            userQuestion {
+              id
+              status
+              answers
+              answeredVia
+              answeredBy
+              answeredAt
+            }
             durableArtifact {
               id
               title
@@ -781,6 +793,14 @@ export const SpaceThreadCollaborationQuery = gql`
               targetType
               targetId
               displayName
+            }
+            userQuestion {
+              id
+              status
+              answers
+              answeredVia
+              answeredBy
+              answeredAt
             }
             durableArtifact {
               id

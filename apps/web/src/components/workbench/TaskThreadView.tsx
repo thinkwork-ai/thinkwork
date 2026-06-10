@@ -80,6 +80,8 @@ import {
 } from "@/components/workbench/turnHeader";
 import { useTurnElapsed } from "@/components/workbench/useTurnElapsed";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
+import type { UserQuestionRecord } from "@/lib/ui-message-types";
+import { resolveUserQuestionRecord } from "@/lib/user-question-record";
 import {
   TaskQueue,
   taskQueueFromRunbookQueue,
@@ -141,6 +143,13 @@ export interface TaskThreadMessage {
   toolCalls?: unknown;
   toolResults?: unknown;
   parts?: AccumulatedPart[];
+  /**
+   * Answer-state record for ask_user_question messages (resolved from
+   * pending_user_questions via Message.userQuestion); null for ordinary
+   * messages. Parts carry questions only — answered state derives from
+   * this row, never from parts mutation.
+   */
+  userQuestion?: UserQuestionRecord | null;
   durableArtifact?: GeneratedArtifact | null;
   /**
    * Display-ready chips for a not-yet-persisted optimistic user message, so the
@@ -2021,9 +2030,16 @@ function TranscriptMessage({
       }))
     : [];
   const typedParts = !isUser ? (message.parts ?? []) : [];
+  const userQuestion = resolveUserQuestionRecord(message.userQuestion, {
+    currentUser,
+    mentionTargets,
+  });
   const renderedTypedParts =
     typedParts.length > 0
-      ? renderTypedParts(typedParts, { keyPrefix: message.id }).filter(Boolean)
+      ? renderTypedParts(typedParts, {
+          keyPrefix: message.id,
+          userQuestion,
+        }).filter(Boolean)
       : [];
   const transcriptContentClassName =
     "grid w-full grid-cols-[minmax(0,1fr)] gap-0.5 overflow-visible py-1";
@@ -3929,11 +3945,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-      stringValue(payload.profileSlug) ||
-      stringValue(payload.profile_name) ||
-      stringValue(payload.profileName) ||
-      stringValue(payload.profile_run_id) ||
-      stringValue(payload.profileRunId),
+    stringValue(payload.profileSlug) ||
+    stringValue(payload.profile_name) ||
+    stringValue(payload.profileName) ||
+    stringValue(payload.profile_run_id) ||
+    stringValue(payload.profileRunId),
   );
 }
 

@@ -14,6 +14,7 @@ import {
   resolveDispatchMessageAttachments,
 } from "../thread-attachments/message-attachment-refs.js";
 import { resolveDispatchPinnedSkills } from "../skills/message-pinned-skills.js";
+import type { PendingQuestionAnswersPayload } from "../user-questions/runtime-payload.js";
 
 export interface DefaultAgentTurnWakeup {
   tenantId: string;
@@ -53,6 +54,13 @@ export interface DispatchDefaultAgentTurnInput {
   content?: string | null;
   requestedModelId?: string | null;
   requestedProfileSlug?: string | null;
+  /**
+   * ask_user_question (plan 2026-06-09-005 U3): when the dispatching
+   * message CAS-consumed the thread's pending question batch (plain-reply
+   * route), this carries the answer context so the turn this dispatch
+   * already fires resumes the agent — NO second wakeup is enqueued.
+   */
+  pendingQuestionAnswers?: PendingQuestionAnswersPayload | null;
   sender?: {
     type?: string | null;
     id?: string | null;
@@ -79,6 +87,12 @@ export interface DefaultAgentChatInvoke {
    * payload branch for the Pi runtime (U3/U4). Raw (unfiltered) here.
    */
   pinnedSkills?: string[];
+  /**
+   * Answer context for a reply-consumed ask_user_question batch (plan
+   * 2026-06-09-005 U3). chat-agent-invoke forwards this to the runtime as
+   * the snake_case `pending_user_questions` payload field.
+   */
+  pendingQuestionAnswers?: PendingQuestionAnswersPayload;
   requestedModelId?: string;
   requestedProfileSlug?: string;
 }
@@ -165,6 +179,9 @@ export async function dispatchDefaultAgentChatTurn(
     userMessage: input.content ?? "",
     ...(messageAttachments.length > 0 ? { messageAttachments } : {}),
     ...(pinnedSkills.length > 0 ? { pinnedSkills } : {}),
+    ...(input.pendingQuestionAnswers
+      ? { pendingQuestionAnswers: input.pendingQuestionAnswers }
+      : {}),
     ...(input.requestedModelId
       ? { requestedModelId: input.requestedModelId }
       : {}),
@@ -272,6 +289,12 @@ export function buildDefaultAgentTurnWakeup(
         : {}),
       ...(input.requestedProfileSlug
         ? { requestedProfileSlug: input.requestedProfileSlug }
+        : {}),
+      // Reply-consumed answer context must survive the wakeup fallback
+      // path too — the consume already committed, so dropping it here
+      // would orphan the answers (plan 2026-06-09-005 U3).
+      ...(input.pendingQuestionAnswers
+        ? { pendingQuestionAnswers: input.pendingQuestionAnswers }
         : {}),
     },
     idempotencyKey: `agent-default:${input.tenantId}:${input.messageId}:${input.agentId}`,

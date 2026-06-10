@@ -8,6 +8,7 @@
 import { createAgentLoaders } from "./resolvers/tenant-agent/loaders.js";
 import { createCoreLoaders } from "./resolvers/core/loaders.js";
 import { createThreadLoaders } from "./resolvers/threads/loaders.js";
+import { createMessageLoaders } from "./resolvers/messages/loaders.js";
 import { createCostLoaders } from "./resolvers/costs/loaders.js";
 import { createKnowledgeLoaders } from "./resolvers/knowledge/loaders.js";
 import { createMemoryLoaders } from "./resolvers/memory/loaders.js";
@@ -19,6 +20,7 @@ export function createLoaders() {
     ...createAgentLoaders(),
     ...createCoreLoaders(),
     ...createThreadLoaders(),
+    ...createMessageLoaders(),
     ...createCostLoaders(),
     ...createKnowledgeLoaders(),
     ...createMemoryLoaders(),

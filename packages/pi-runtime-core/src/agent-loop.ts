@@ -58,6 +58,10 @@ export interface AgentSessionLike {
   prompt(text: string, options?: Record<string, unknown>): Promise<void>;
   readonly messages: AgentMessage[];
   dispose(): void;
+  /** Abort the current run and wait for idle (real `AgentSession.abort`).
+   *  Optional on the seam so existing fakes stay valid; the loop uses it as
+   *  the deterministic ask_user_question turn-end backstop (U5). */
+  abort?(): Promise<void>;
 }
 
 export interface OpenedSession {
@@ -245,6 +249,34 @@ function parseJsonRecord(value: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/** Tool name the ask_user_question sentinel is honored for. Keep in sync
+ *  with ASK_USER_QUESTION_TOOL_NAME in @thinkwork/pi-extensions
+ *  ask-user-question (pi-runtime-core does not depend on pi-extensions). */
+export const ASK_USER_QUESTION_TOOL_NAME = "ask_user_question";
+
+/**
+ * ask_user_question sentinel detection (plan 2026-06-09-005 U5).
+ *
+ * The ask-user-question extension returns
+ * `details.thinkworkAskUserQuestion.endTurn === true` ONLY when the thread is
+ * waiting on the USER (intake-confirmed persistence, or a 409 confirming a
+ * batch already pending), so observing the flag on a non-error
+ * `tool_execution_end` for the ask_user_question tool means the loop must end
+ * the turn deterministically — never rely on the model choosing to stop.
+ *
+ * Only the canonical `details.thinkworkAskUserQuestion` shape is accepted,
+ * and callers must also gate on the event's toolName — a third-party/MCP
+ * tool result echoing the sentinel must never terminate the turn.
+ */
+export function askUserQuestionEndTurn(result: unknown): boolean {
+  const record = recordValue(result);
+  if (!record) return false;
+  const sentinel = recordValue(
+    recordValue(record.details)?.thinkworkAskUserQuestion,
+  );
+  return sentinel?.endTurn === true;
 }
 
 function findModelRoutingRecord(
@@ -624,6 +656,10 @@ export async function runAgentLoop(
   const toolInvocations: RunAgentLoopResult["toolInvocations"] = [];
   const toolStarts = new Map<string, number>();
   const identity = isInvocationIdentity(args.identity) ? args.identity : null;
+  // ask_user_question turn-end (U5): set when a non-error tool result carries
+  // the persisted-question sentinel. The turn must end as a SUCCESS — the
+  // asking turn's finalize runs normally and the thread parks AWAITING_USER.
+  let askEndTurnSeen = false;
 
   const customTools = args.tools.map(toToolDefinition);
   const toolAllowlist = buildToolAllowlist(
@@ -766,6 +802,30 @@ export async function runAgentLoop(
             is_error: event.isError,
           },
         });
+        // ask_user_question turn-end (U5): the tool result is recorded above;
+        // now stop the run deterministically. The sentinel result itself
+        // carries the SDK's `terminate: true` early-termination hint, which
+        // cleanly ends a single-call batch; `session.abort()` is the backstop
+        // for a mixed parallel batch where the hint isn't unanimous (the
+        // abort signal is checked after each recorded result, so this result
+        // survives). The success path below treats the sentinel as
+        // authoritative so an abort-shaped trailing stub can't fail the turn.
+        if (
+          !event.isError &&
+          event.toolName === ASK_USER_QUESTION_TOOL_NAME &&
+          askUserQuestionEndTurn(event.result)
+        ) {
+          askEndTurnSeen = true;
+          deps.log?.({
+            level: "info",
+            event: "ask_user_question_turn_end",
+            threadId: args.threadId,
+            toolCallId: event.toolCallId,
+          });
+          if (session.abort) {
+            void session.abort().catch(() => {});
+          }
+        }
       }
     });
 
@@ -783,12 +843,22 @@ export async function runAgentLoop(
       }
     }
 
+    // After an ask_user_question turn-end the backstop abort can leave a
+    // trailing assistant stub with stopReason "aborted" (or, in pathological
+    // stream teardown, "error") AFTER the real tool-call message. The
+    // question persisted, so the turn is a SUCCESS by contract: skip those
+    // stubs when extracting content and don't let them fail the turn.
     const assistant = [...session.messages]
       .reverse()
-      .find(
-        (message): message is AssistantMessage => message.role === "assistant",
-      );
-    const assistantFailure = assistantFailureMessage(assistant);
+      .find((message): message is AssistantMessage => {
+        if (message.role !== "assistant") return false;
+        if (!askEndTurnSeen) return true;
+        const stopReason = (message as { stopReason?: unknown }).stopReason;
+        return stopReason !== "aborted" && stopReason !== "error";
+      });
+    const assistantFailure = askEndTurnSeen
+      ? undefined
+      : assistantFailureMessage(assistant);
     if (assistantFailure) {
       throw new Error(assistantFailure);
     }

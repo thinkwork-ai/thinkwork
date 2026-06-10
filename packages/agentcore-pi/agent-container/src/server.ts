@@ -46,6 +46,7 @@ import { mkdir, readlink } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
+  createAskUserQuestionExtension,
   createBrowserAutomationExtension,
   createContextEngineExtension,
   createDelegationExtension,
@@ -123,8 +124,10 @@ import {
 import {
   AGENT_PROFILE_TOOL_NAME,
   buildAgentProfileDelegationTool,
-  executeAgentProfileDelegation,
+  clarificationEscalationInstruction,
   normalizeAgentProfiles,
+  runAgentProfileDelegationWithClarification,
+  type PendingClarificationEscalation,
   type ProfileDelegationToolOptions,
 } from "./agent-profile-delegation.js";
 import type { AgentProfileConfig } from "./agent-profile-adapter.js";
@@ -170,6 +173,11 @@ import {
   mergeWorkspaceSkills,
   parsePinnedSkillRefs,
 } from "./runtime/pinned-skills.js";
+import {
+  formatUserQuestionAnswerContext,
+  parsePendingUserQuestions,
+  resumeDelegationContextDetails,
+} from "./user-question-context.js";
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -409,7 +417,31 @@ function combineProfileChainRunResult(input: {
   };
 }
 
-async function runParentOwnedProfileOrchestration(input: {
+/** Parent message for a chain that unwound on needs_clarification (plan 005
+ *  U6). Replaces the produce-the-final-response framing with the escalation
+ *  instruction: answer from context and re-delegate, or ask_user_question. */
+function parentClarificationChainMessage(input: {
+  originalMessage: string;
+  baseTask: string;
+  runs: readonly AgentProfileRunRecord[];
+  clarification: PendingClarificationEscalation;
+}): string {
+  const handoffs = input.runs
+    .map((run, index) => {
+      const handoff = run.handoffSummary?.trim() || "(no handoff summary)";
+      return `${index + 1}. ${run.profileName} (${run.status}): ${handoff}`;
+    })
+    .join("\n\n");
+  return [
+    `Original user request:\n${input.baseTask}`,
+    `Agent Profile handoffs so far in this turn:\n${handoffs}`,
+    "You are the parent Agent. The delegation chain stopped because a specialist needs clarification; no further profiles ran.",
+    clarificationEscalationInstruction(input.clarification),
+    `Raw user message for reference:\n${input.originalMessage}`,
+  ].join("\n\n");
+}
+
+export async function runParentOwnedProfileOrchestration(input: {
   originalMessage: string;
   baseTask: string;
   requestedProfiles: readonly AgentProfileConfig[];
@@ -418,31 +450,47 @@ async function runParentOwnedProfileOrchestration(input: {
   runLoop: typeof runAgentLoop;
   log: (entry: LogFields) => void;
   emitActivity: (event: ActivityEmitEvent) => void;
+  /** Wraps the parent prompt (e.g. with the U4 answer-context block) right
+   *  before the parent loop runs — the orchestration owns the chain message,
+   *  so the caller cannot pre-compose it. */
+  wrapParentMessage?: (message: string) => string;
 }): Promise<RunAgentLoopResult> {
   const profileRuns: AgentProfileRunRecord[] = [];
   const profileToolInvocations: ToolInvocationRecord[] = [];
+  // Set when a specialist hands off needs_clarification and the budget/eval
+  // conversion did NOT apply: the chain unwinds (no further profiles run)
+  // and the parent gets the escalation instruction (plan 005 U6).
+  let pendingClarification: PendingClarificationEscalation | undefined;
 
   const executeProfile = async (
     profile: AgentProfileConfig,
     task: string,
   ): Promise<AgentProfileRunRecord> => {
-    const evidence = await executeAgentProfileDelegation({
+    const outcome = await runAgentProfileDelegationWithClarification({
       options: input.profileDelegationOptions,
       profileSlug: profile.slug,
       task,
+      // Record the unwrapped base task in the surfaced delegation context so
+      // the R20 budget can re-match it on the resume turn.
+      delegationTaskForContext: input.baseTask,
     });
-    profileRuns.push(evidence);
-    profileToolInvocations.push(
-      syntheticProfileToolInvocation({
-        evidence,
-        profileSlug: profile.slug,
-        task,
-      }),
-    );
-    return evidence;
+    for (const run of outcome.runs) {
+      profileRuns.push(run);
+      profileToolInvocations.push(
+        syntheticProfileToolInvocation({
+          evidence: run,
+          profileSlug: profile.slug,
+          task,
+        }),
+      );
+    }
+    if (outcome.clarification) {
+      pendingClarification = outcome.clarification;
+    }
+    return outcome.evidence;
   };
 
-  for (const profile of input.requestedProfiles) {
+  chain: for (const profile of input.requestedProfiles) {
     const evidence = await executeProfile(
       profile,
       profileChainTask({
@@ -451,6 +499,7 @@ async function runParentOwnedProfileOrchestration(input: {
         previousRuns: profileRuns,
       }),
     );
+    if (pendingClarification) break;
     if (!isReviewerProfile(profile) || evidence.handoff?.verdict !== "revise") {
       continue;
     }
@@ -465,6 +514,9 @@ async function runParentOwnedProfileOrchestration(input: {
       maxReviewLoopsForProfile(specialist),
       maxReviewLoopsForProfile(profile),
     );
+    // reviewLoops counts ONLY revise cycles; clarification cycles are
+    // handled inside runAgentProfileDelegationWithClarification (conversion
+    // re-invoke) or unwind the chain — they never consume this budget (R20).
     let reviewLoops = 0;
     let reviewerEvidence = evidence;
     while (
@@ -479,6 +531,7 @@ async function runParentOwnedProfileOrchestration(input: {
           reviewerRun: reviewerEvidence,
         }),
       );
+      if (pendingClarification) break chain;
       reviewLoops += 1;
       reviewerEvidence = await executeProfile(
         profile,
@@ -488,17 +541,27 @@ async function runParentOwnedProfileOrchestration(input: {
           previousRuns: profileRuns,
         }),
       );
+      if (pendingClarification) break chain;
     }
   }
 
-  const parentResult = await input.runLoop(
-    {
-      ...input.parentRunInput,
-      message: parentProfileChainMessage({
+  const wrap = input.wrapParentMessage ?? ((message: string) => message);
+  const parentMessage = pendingClarification
+    ? parentClarificationChainMessage({
         originalMessage: input.originalMessage,
         baseTask: input.baseTask,
         runs: profileRuns,
-      }),
+        clarification: pendingClarification,
+      })
+    : parentProfileChainMessage({
+        originalMessage: input.originalMessage,
+        baseTask: input.baseTask,
+        runs: profileRuns,
+      });
+  const parentResult = await input.runLoop(
+    {
+      ...input.parentRunInput,
+      message: wrap(parentMessage),
     },
     {
       log: input.log,
@@ -1008,6 +1071,36 @@ export async function buildInvocationResources(
           apiSecret: asString(args.payload.thinkwork_api_secret),
           tenantId: args.identity.tenantId,
           agentId: args.identity.agentId,
+          threadId: args.identity.threadId,
+          threadTurnId: asString(args.payload.thread_turn_id),
+        },
+      }),
+    );
+  }
+
+  // ask_user_question — structured HITL clarification (plan 2026-06-09-005
+  // U5). Gated exactly like task-status (eval_mode + identity + API wiring):
+  // in eval mode the extension MUST NOT register (R21 — evals never park).
+  // The intake endpoint additionally requires the active thread_turn_id for
+  // its ownership join, so the gate includes it. Parent-only by construction:
+  // `childToolSurface()` in agent-profile-delegation filters extension tool
+  // names against the compiled profile tool list, which never auto-includes
+  // ask_user_question (runtime `defaultTools` is hardcoded empty and no
+  // built-in profile seed lists it).
+  if (
+    args.payload.eval_mode !== true &&
+    args.identity.tenantId &&
+    args.identity.agentId &&
+    args.identity.threadId &&
+    asString(args.payload.thinkwork_api_url) &&
+    asString(args.payload.thinkwork_api_secret) &&
+    asString(args.payload.thread_turn_id)
+  ) {
+    addExtension(
+      createAskUserQuestionExtension({
+        askUserQuestionConfig: {
+          apiUrl: asString(args.payload.thinkwork_api_url),
+          apiSecret: asString(args.payload.thinkwork_api_secret),
           threadId: args.identity.threadId,
           threadTurnId: asString(args.payload.thread_turn_id),
         },
@@ -2099,6 +2192,32 @@ export async function handleInvocation(
   if (fileReadTool) {
     bundle.tools.push(fileReadTool);
   }
+  // ask_user_question resume context (plan 2026-06-09-005 U4). Parsed with
+  // the same tolerance as message_attachments: absence or a malformed
+  // envelope renders no block and never fails the turn. The block is
+  // PREPENDED to the turn prompt (ahead of the user content) — not the
+  // system prompt — so the echoed Q/A pairs persist in the durable session
+  // transcript alongside the message that carried them.
+  const pendingQuestionContext = parsePendingUserQuestions(
+    args.payload.pending_user_questions,
+  );
+  if (
+    args.payload.pending_user_questions !== undefined &&
+    args.payload.pending_user_questions !== null &&
+    !pendingQuestionContext
+  ) {
+    logStructured({
+      level: "warn",
+      event: "pending_user_questions_invalid",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+    });
+  }
+  const questionAnswerBlock = pendingQuestionContext
+    ? formatUserQuestionAnswerContext(pendingQuestionContext)
+    : "";
+  const withQuestionAnswerContext = (message: string): string =>
+    questionAnswerBlock ? `${questionAnswerBlock}\n\n${message}` : message;
   const agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
   const profileChildExtensionFactories = [...bundle.extensionFactories];
   // The current invocation's model id is what pi-ai's Agent will use
@@ -2141,6 +2260,13 @@ export async function handleInvocation(
     contextPreamble: attachmentPreamble || undefined,
     runLoop,
     emitActivity: activityEmitter.emit,
+    // Plan 005 U6 — needs_clarification handling: eval mode converts the
+    // escalation to a best-judgment re-invoke (R21); the resume turn's
+    // delegation_context enforces the one-cycle-per-delegation budget (R20).
+    evalMode: args.payload.eval_mode === true,
+    resumeDelegationContext: pendingQuestionContext?.delegationContext
+      ? resumeDelegationContextDetails(pendingQuestionContext.delegationContext)
+      : null,
   });
   const profileTool = buildAgentProfileDelegationTool(
     profileDelegationOptions(currentModelId),
@@ -2294,6 +2420,11 @@ export async function handleInvocation(
         baseTask,
         requestedProfiles,
         profileDelegationOptions: profileDelegationOptions(currentModelId),
+        // Answer context rides ahead of whichever chain message the
+        // orchestration composes (it owns the final parent prompt); mention
+        // detection and baseTask derivation above stay on the raw
+        // userMessage so the block never perturbs profile routing.
+        wrapParentMessage: withQuestionAnswerContext,
         parentRunInput: {
           message: parentProfileChainMessage({
             originalMessage: userMessage,
@@ -2320,7 +2451,7 @@ export async function handleInvocation(
     } else {
       runResult = await runLoop(
         {
-          message: userMessage,
+          message: withQuestionAnswerContext(userMessage),
           history: parentHistory,
           // U6 — no prebuilt system prompt; the system-prompt extension's
           // before_agent_start hook composes and sets it for the turn.

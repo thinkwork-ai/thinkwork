@@ -106,6 +106,7 @@ export function SpaceThreadRoom({
       <ThreadConversation
         messages={messages}
         attachments={thread?.attachments ?? []}
+        mentionTargets={mentionTargets}
         onDownloadAttachment={(attachmentId) =>
           downloadThreadAttachment(threadId, attachmentId)
         }

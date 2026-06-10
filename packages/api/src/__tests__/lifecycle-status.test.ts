@@ -165,9 +165,84 @@ describe("deriveLifecycleStatus", () => {
     ).toBe("FAILED");
   });
 
+  // ── Pending ask_user_question → AWAITING_USER (plan 2026-06-09-005 U3) ──
+
+  it("emits AWAITING_USER when a pending question exists, after a succeeded latest turn", () => {
+    expect(
+      deriveLifecycleStatus({
+        hasActiveTurn: false,
+        latestTurn: { status: "succeeded", created_at: FRESH_QUEUED_AT },
+        hasPendingQuestion: true,
+        now: NOW,
+      }),
+    ).toBe("AWAITING_USER");
+  });
+
+  it("emits AWAITING_USER even when the latest turn FAILED — the needs-attention signal never drops", () => {
+    expect(
+      deriveLifecycleStatus({
+        hasActiveTurn: false,
+        latestTurn: { status: "failed", created_at: FRESH_QUEUED_AT },
+        hasPendingQuestion: true,
+        now: NOW,
+      }),
+    ).toBe("AWAITING_USER");
+  });
+
+  it("pending question wins for every turn state (including active turns — the asking-turn tail window)", () => {
+    const latestStatuses = [
+      "queued",
+      "running",
+      "succeeded",
+      "failed",
+      "timed_out",
+      "cancelled",
+      "skipped",
+    ];
+    for (const status of latestStatuses) {
+      for (const hasActiveTurn of [true, false]) {
+        expect(
+          deriveLifecycleStatus({
+            hasActiveTurn,
+            latestTurn: { status, created_at: FRESH_QUEUED_AT },
+            hasPendingQuestion: true,
+            now: NOW,
+          }),
+        ).toBe("AWAITING_USER");
+      }
+    }
+    expect(
+      deriveLifecycleStatus({
+        hasActiveTurn: false,
+        latestTurn: null,
+        hasPendingQuestion: true,
+        now: NOW,
+      }),
+    ).toBe("AWAITING_USER");
+  });
+
+  it("clears back to the turn-derived state once the question is consumed (hasPendingQuestion=false)", () => {
+    expect(
+      deriveLifecycleStatus({
+        hasActiveTurn: false,
+        latestTurn: { status: "succeeded", created_at: FRESH_QUEUED_AT },
+        hasPendingQuestion: false,
+        now: NOW,
+      }),
+    ).toBe("COMPLETED");
+    expect(
+      deriveLifecycleStatus({
+        hasActiveTurn: true,
+        latestTurn: { status: "running", created_at: FRESH_QUEUED_AT },
+        hasPendingQuestion: false,
+        now: NOW,
+      }),
+    ).toBe("RUNNING");
+  });
+
   // ── Contracts ─────────────────────────────────────────────────────
 
-  it("never returns AWAITING_USER — reserved for future user-input-awaiting signal", () => {
+  it("returns AWAITING_USER ONLY when a pending question exists (flipped from the reserved-enum guard)", () => {
     const latestStatuses = [
       "queued",
       "running",
@@ -212,9 +287,19 @@ describe("deriveLifecycleStatus", () => {
     );
     const emittable = ["RUNNING", "COMPLETED", "CANCELLED", "FAILED", "IDLE"];
     for (const output of outputs) {
+      // Without a pending question the function NEVER emits AWAITING_USER…
       expect(output).not.toBe("AWAITING_USER");
       expect(emittable).toContain(output);
     }
+    // …and with one it ALWAYS does (the new invariant).
+    expect(
+      deriveLifecycleStatus({
+        hasActiveTurn: false,
+        latestTurn: { status: "succeeded", created_at: FRESH_QUEUED_AT },
+        hasPendingQuestion: true,
+        now: NOW,
+      }),
+    ).toBe("AWAITING_USER");
   });
 
   it("QUEUED_FRESHNESS_MS is 5 minutes", () => {

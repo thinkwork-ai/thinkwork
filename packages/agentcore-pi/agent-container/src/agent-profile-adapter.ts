@@ -159,8 +159,23 @@ export type AgentProfileLoopPhase =
 export type AgentProfileLoopPhaseStatus =
   | "completed"
   | "revision_requested"
+  | "clarification_requested"
   | "failed"
   | "skipped";
+
+/** Mirrors the ask_user_question tool's option contract (plan 2026-06-09-005 U6). */
+export interface AgentProfileHandoffQuestionOption {
+  label: string;
+  description?: string;
+}
+
+/** Mirrors the ask_user_question tool's question contract (plan 2026-06-09-005 U6). */
+export interface AgentProfileHandoffQuestion {
+  question: string;
+  header?: string;
+  options?: AgentProfileHandoffQuestionOption[];
+  multiSelect?: boolean;
+}
 
 export interface AgentProfileHandoffEvidence {
   verdict: AgentProfileLoopCompletionVerdict;
@@ -168,6 +183,8 @@ export interface AgentProfileHandoffEvidence {
   confidence?: "low" | "medium" | "high";
   evidence?: string[];
   feedback?: string;
+  /** Present only with verdict needs_clarification (max 4 questions). */
+  questions?: AgentProfileHandoffQuestion[];
 }
 
 export interface AgentProfileLoopPhaseEvidence {
@@ -222,10 +239,15 @@ export type AgentProfileLoopGoalStatus =
   | "active"
   | "passed"
   | "revision_requested"
+  | "clarification_requested"
   | "failed"
   | "budget_limited";
 
-export type AgentProfileLoopCompletionVerdict = "pass" | "revise" | "fail";
+export type AgentProfileLoopCompletionVerdict =
+  | "pass"
+  | "revise"
+  | "fail"
+  | "needs_clarification";
 
 export interface AgentProfileLoopGoalUsage {
   inputTokens: number;
@@ -662,6 +684,9 @@ function normalizedVerdict(
 ): AgentProfileLoopCompletionVerdict | undefined {
   const text = trimmedText(value, 32)?.toLowerCase();
   if (text === "pass" || text === "revise" || text === "fail") return text;
+  if (text && text.replace(/[\s-]+/g, "_") === "needs_clarification") {
+    return "needs_clarification";
+  }
   return undefined;
 }
 
@@ -697,6 +722,113 @@ function labeledContentField(
   return trimmedText(match?.[1], 2_000);
 }
 
+function handoffQuestionOption(
+  value: unknown,
+): AgentProfileHandoffQuestionOption | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const label = trimmedText(record.label, 200);
+  if (!label) return undefined;
+  const description = trimmedText(record.description, 600);
+  return { label, ...(description ? { description } : {}) };
+}
+
+function handoffQuestion(
+  value: unknown,
+): AgentProfileHandoffQuestion | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const question = trimmedText(record.question, 600);
+  if (!question) return undefined;
+  const header = trimmedText(record.header, 40);
+  const options = Array.isArray(record.options)
+    ? record.options
+        .flatMap((option) => {
+          const parsed = handoffQuestionOption(option);
+          return parsed ? [parsed] : [];
+        })
+        .slice(0, 4)
+    : [];
+  return {
+    question,
+    ...(header ? { header } : {}),
+    ...(options.length > 0 ? { options } : {}),
+    ...(record.multiSelect === true ? { multiSelect: true } : {}),
+  };
+}
+
+/** Parse a needs_clarification questions payload (same shape as the
+ *  ask_user_question tool contract). Tolerant of partial records; caps at
+ *  4 questions (R18). */
+function handoffQuestions(
+  value: unknown,
+): AgentProfileHandoffQuestion[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const questions = value
+    .flatMap((item) => {
+      const parsed = handoffQuestion(item);
+      return parsed ? [parsed] : [];
+    })
+    .slice(0, 4);
+  return questions.length > 0 ? questions : undefined;
+}
+
+/** Extract the balanced JSON array that starts at `startIndex` (must point
+ *  at a `[`), string-aware so brackets inside quoted text don't unbalance. */
+function balancedJsonArraySlice(
+  text: string,
+  startIndex: number,
+): string | undefined {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = startIndex; i < text.length; i += 1) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "[") depth += 1;
+    else if (char === "]") {
+      depth -= 1;
+      if (depth === 0) return text.slice(startIndex, i + 1);
+    }
+  }
+  return undefined;
+}
+
+/** Parse the labeled-text `Questions:` block. The dictated contract is a
+ *  single-line JSON array after `Questions:`; the parser additionally
+ *  tolerates the array spanning lines. */
+function questionsFromContent(
+  content: string,
+): AgentProfileHandoffQuestion[] | undefined {
+  const labelMatch = /^\s*Questions\s*:\s*/im.exec(content);
+  if (!labelMatch) return undefined;
+  const afterLabel = labelMatch.index + labelMatch[0].length;
+  const arrayStart = content.indexOf("[", afterLabel);
+  if (arrayStart === -1) return undefined;
+  // Only whitespace may sit between the label and the array.
+  if (content.slice(afterLabel, arrayStart).trim() !== "") return undefined;
+  const slice = balancedJsonArraySlice(content, arrayStart);
+  if (!slice) return undefined;
+  try {
+    return handoffQuestions(JSON.parse(slice));
+  } catch {
+    return undefined;
+  }
+}
+
+const DEFAULT_CLARIFICATION_SUMMARY =
+  "Specialist requested clarification before proceeding.";
+
 function handoffFromRecord(
   value: unknown,
 ): AgentProfileHandoffEvidence | undefined {
@@ -705,8 +837,17 @@ function handoffFromRecord(
   }
   const record = value as Record<string, unknown>;
   const verdict = normalizedVerdict(record.verdict);
-  const summary = trimmedText(record.summary);
-  if (!verdict || !summary) return undefined;
+  if (!verdict) return undefined;
+  const questions =
+    verdict === "needs_clarification"
+      ? handoffQuestions(record.questions)
+      : undefined;
+  const summary =
+    trimmedText(record.summary) ??
+    (verdict === "needs_clarification" && questions
+      ? DEFAULT_CLARIFICATION_SUMMARY
+      : undefined);
+  if (!summary) return undefined;
   return {
     verdict,
     summary,
@@ -719,6 +860,7 @@ function handoffFromRecord(
     ...(trimmedText(record.feedback)
       ? { feedback: trimmedText(record.feedback) }
       : {}),
+    ...(questions ? { questions } : {}),
   };
 }
 
@@ -728,11 +870,16 @@ function handoffFromContent(
   const text = trimmedText(content);
   if (!text) return undefined;
   const verdict = normalizedVerdict(labeledContentField(text, "Verdict"));
+  if (!verdict) return undefined;
+  const questions =
+    verdict === "needs_clarification" ? questionsFromContent(text) : undefined;
   const summary =
     labeledContentField(text, "Summary") ??
     labeledContentField(text, "Handoff") ??
-    undefined;
-  if (!verdict || !summary) return undefined;
+    (verdict === "needs_clarification" && questions
+      ? DEFAULT_CLARIFICATION_SUMMARY
+      : undefined);
+  if (!summary) return undefined;
   return {
     verdict,
     summary,
@@ -749,6 +896,7 @@ function handoffFromContent(
     ...(trimmedText(labeledContentField(text, "Feedback"))
       ? { feedback: trimmedText(labeledContentField(text, "Feedback")) }
       : {}),
+    ...(questions ? { questions } : {}),
   };
 }
 
@@ -886,6 +1034,9 @@ function loopGoalStatus(input: {
   }
   if (input.evidence.status !== "completed") return "failed";
   if (input.verdict === "revise") return "revision_requested";
+  // needs_clarification is an escalation, NOT a failure — the parent
+  // either re-delegates with answers or asks the user (plan 005 U6).
+  if (input.verdict === "needs_clarification") return "clarification_requested";
   if (input.verdict === "fail") return "failed";
   return "passed";
 }
@@ -981,6 +1132,9 @@ function phaseStatusForHandoff(
 ): AgentProfileLoopPhaseStatus {
   if (!handoff) return "completed";
   if (handoff.verdict === "revise") return "revision_requested";
+  if (handoff.verdict === "needs_clarification") {
+    return "clarification_requested";
+  }
   if (handoff.verdict === "fail") return "failed";
   return "completed";
 }

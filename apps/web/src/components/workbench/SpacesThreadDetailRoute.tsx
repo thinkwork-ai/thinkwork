@@ -27,6 +27,8 @@ import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions"
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
 import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
+import type { UserQuestionRecord } from "@/lib/ui-message-types";
+import { toUserQuestionStatus } from "@/lib/user-question-record";
 import {
   InlineShortcutText,
   shortcutDisplayText,
@@ -172,6 +174,12 @@ interface ThreadResult {
             displayName?: string | null;
             rawText?: string | null;
           }> | null;
+          userQuestion?:
+            | (Omit<UserQuestionRecord, "status"> & {
+                /** Raw GraphQL enum string — narrowed in toTaskThread. */
+                status?: string | null;
+              })
+            | null;
           durableArtifact?: {
             id: string;
             title: string;
@@ -718,10 +726,7 @@ export function SpacesThreadDetailRoute({
             `/api/trigger-runs/${encodeURIComponent(row.id)}/events?limit=500`,
             { extraHeaders: { "x-tenant-id": tenantId } },
           );
-          return [
-            row.id,
-            events.map(taskThreadEventFromRow),
-          ] as const;
+          return [row.id, events.map(taskThreadEventFromRow)] as const;
         } catch {
           return [row.id, [] as TaskThreadEvent[]] as const;
         }
@@ -861,9 +866,9 @@ export function SpacesThreadDetailRoute({
     : false;
   const hasPendingStartRealActivity = Boolean(
     optimisticThreadStart &&
-      (optimisticThreadStart.expectAssistantResponse === false ||
-        threadTurns.length > 0 ||
-        hasDurableAssistantAfterLatestUser(thread)),
+    (optimisticThreadStart.expectAssistantResponse === false ||
+      threadTurns.length > 0 ||
+      hasDurableAssistantAfterLatestUser(thread)),
   );
   const shouldKeepPendingStartSignal = Boolean(
     optimisticThreadStart && !hasPendingStartRealActivity,
@@ -985,9 +990,9 @@ export function SpacesThreadDetailRoute({
     isActiveLifecycleStatus(visibleThread?.lifecycleStatus);
   const shouldPollActiveAgentResult = Boolean(
     latestMessageAwaitsAssistant &&
-      (hasActiveAgentTurn ||
-        (effectiveOptimisticMessage &&
-          effectiveOptimisticMessage.expectAssistantResponse !== false)),
+    (hasActiveAgentTurn ||
+      (effectiveOptimisticMessage &&
+        effectiveOptimisticMessage.expectAssistantResponse !== false)),
   );
 
   useEffect(() => {
@@ -2272,6 +2277,16 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
       mentions: node.mentions,
       toolCalls: node.toolCalls,
       toolResults: node.toolResults,
+      userQuestion: node.userQuestion
+        ? {
+            id: node.userQuestion.id,
+            status: toUserQuestionStatus(node.userQuestion.status),
+            answers: node.userQuestion.answers ?? null,
+            answeredVia: node.userQuestion.answeredVia ?? null,
+            answeredBy: node.userQuestion.answeredBy ?? null,
+            answeredAt: node.userQuestion.answeredAt ?? null,
+          }
+        : null,
       durableArtifact: node.durableArtifact
         ? {
             id: node.durableArtifact.id,
@@ -2535,9 +2550,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-      !["completed", "failed", "error", "cancelled", "rejected"].includes(
-        normalized,
-      ),
+    !["completed", "failed", "error", "cancelled", "rejected"].includes(
+      normalized,
+    ),
   );
 }
 
