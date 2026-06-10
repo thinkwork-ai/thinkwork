@@ -975,6 +975,72 @@ def test_redacted_tfvars_removes_secret_values() -> None:
     }
 
 
+def test_write_controller_release_selection_to_ssm_persists_selected_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    calls: list[list[str]] = []
+
+    monkeypatch.setenv("THINKWORK_SSM_PREFIX", "/thinkwork/tei-e2e/deployment")
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
+
+    selected = runner.write_controller_release_selection_to_ssm(
+        {
+            "deployment_release_version": "v0.1.0-canary.147",
+            "deployment_release_manifest_url": "https://example.test/thinkwork-release.json",
+            "deployment_release_manifest_sha256": "f" * 64,
+            "deployment_release_manifest_signature_url": "",
+            "deployment_release_manifest_trust_policy": "allow_unsigned_canary",
+            "deployment_release_manifest_trusted_keys_json": "[]",
+            "deployment_terraform_module_source": "thinkwork-ai/thinkwork/aws",
+            "deployment_terraform_module_version": "",
+        }
+    )
+
+    written = {call[7]: call[9] for call in calls}
+    assert selected["terraform-module-version"] == "0.1.0-canary.147"
+    assert written == {
+        "/thinkwork/tei-e2e/deployment/selected-release-version": "v0.1.0-canary.147",
+        "/thinkwork/tei-e2e/deployment/selected-release-manifest-url": (
+            "https://example.test/thinkwork-release.json"
+        ),
+        "/thinkwork/tei-e2e/deployment/selected-release-manifest-sha256": "f" * 64,
+        "/thinkwork/tei-e2e/deployment/selected-release-trust-policy": "allow_unsigned_canary",
+        "/thinkwork/tei-e2e/deployment/selected-release-trusted-keys-json": "[]",
+        "/thinkwork/tei-e2e/deployment/terraform-module-source": "thinkwork-ai/thinkwork/aws",
+        "/thinkwork/tei-e2e/deployment/terraform-module-version": "0.1.0-canary.147",
+    }
+
+
+def test_write_controller_release_selection_to_ssm_skips_empty_git_module_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    calls: list[list[str]] = []
+
+    monkeypatch.setenv("THINKWORK_SSM_PREFIX", "/thinkwork/dev/deployment")
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
+
+    selected = runner.write_controller_release_selection_to_ssm(
+        {
+            "deployment_release_version": "v0.1.0-canary.147",
+            "deployment_release_manifest_url": "https://example.test/thinkwork-release.json",
+            "deployment_release_manifest_sha256": "f" * 64,
+            "deployment_release_manifest_trust_policy": "allow_unsigned_canary",
+            "deployment_release_manifest_trusted_keys_json": "[]",
+            "deployment_terraform_module_source": (
+                "git::https://github.com/thinkwork-ai/thinkwork.git"
+                "//terraform/modules/thinkwork?ref=37d7246"
+            ),
+            "deployment_terraform_module_version": "",
+        }
+    )
+
+    written_names = [call[7] for call in calls]
+    assert "terraform-module-version" not in selected
+    assert "/thinkwork/dev/deployment/terraform-module-version" not in written_names
+
+
 def test_terraform_plan_summary_counts_resource_actions() -> None:
     runner = load_runner()
 
