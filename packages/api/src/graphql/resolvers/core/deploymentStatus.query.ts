@@ -67,6 +67,7 @@ export const deploymentStatus = async (
     ),
     deploymentControllerArn: stringEnv(
       process.env.THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN ||
+        process.env.DEPLOYMENT_STATE_MACHINE_ARN ||
         process.env.VITE_DEPLOYMENT_CONTROLLER_ARN,
     ),
     deploymentRunnerProjectName: stringEnv(
@@ -76,6 +77,7 @@ export const deploymentStatus = async (
     deploymentEvidenceBucket: stringEnv(
       process.env.THINKWORK_EVIDENCE_BUCKET ||
         process.env.THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET ||
+        process.env.DEPLOYMENT_EVIDENCE_BUCKET ||
         process.env.VITE_DEPLOYMENT_EVIDENCE_BUCKET,
     ),
     bucketName: process.env.BUCKET_NAME || null,

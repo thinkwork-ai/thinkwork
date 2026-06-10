@@ -197,6 +197,42 @@ describe("deployment releases", () => {
     );
   });
 
+  it("starts release updates from compact graphql-http deployment env", async () => {
+    vi.stubEnv("DEPLOYMENT_STATE_MACHINE_ARN", "arn:sfn:compact-controller");
+    vi.stubEnv("DEPLOYMENT_EVIDENCE_BUCKET", "compact-evidence-bucket");
+    mockStartExecution.mockResolvedValue({
+      executionArn: "arn:sfn:execution:compact-update",
+      stateMachineArn: "arn:sfn:compact-controller",
+    });
+    const digest = "b".repeat(64);
+
+    const result = await updateMod.startDeploymentReleaseUpdate(
+      null,
+      {
+        input: {
+          version: "v0.1.0-canary.156",
+          manifestUrl:
+            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.156/thinkwork-release.json",
+          manifestSha256: digest,
+        },
+      },
+      {} as any,
+      { startExecution: mockStartExecution },
+    );
+
+    expect(mockStartExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stateMachineArn: "arn:sfn:compact-controller",
+        payload: expect.objectContaining({
+          evidenceBucket: "compact-evidence-bucket",
+          releaseVersion: "v0.1.0-canary.156",
+        }),
+      }),
+    );
+    expect(result.executionArn).toBe("arn:sfn:execution:compact-update");
+    expect(result.evidenceBucket).toBe("compact-evidence-bucket");
+  });
+
   it("rejects non-admin callers before loading releases or starting updates", async () => {
     mockRequireTenantAdmin.mockRejectedValueOnce(
       new Error("Tenant admin role required"),

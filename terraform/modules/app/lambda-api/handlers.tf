@@ -243,6 +243,10 @@ locals {
       ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
       ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
       AWS_ACCOUNT_ID              = var.account_id
+      # Settings > General starts release updates from the GraphQL API. Keep
+      # these compact because graphql-http runs close to Lambda's 4 KB env cap.
+      DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
+      DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
       # routine-approval-bridge (Phase B U8) calls this function name
       # via the AWS SDK Lambda Invoke after a HITL decideInboxItem.
       # The bridge throws if unset — terraform wiring is mandatory.
