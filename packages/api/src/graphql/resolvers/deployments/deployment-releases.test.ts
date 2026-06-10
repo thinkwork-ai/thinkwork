@@ -51,7 +51,8 @@ beforeEach(async () => {
 
 describe("deployment releases", () => {
   it("lists deployable release manifests with server-computed digests", async () => {
-    const manifest = JSON.stringify({ schemaVersion: 1, version: "v1" });
+    const manifest134 = JSON.stringify({ schemaVersion: 1, version: "v134" });
+    const manifest141 = JSON.stringify({ schemaVersion: 1, version: "v141" });
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -78,6 +79,22 @@ describe("deployment releases", () => {
             ],
           },
           {
+            tag_name: "v0.1.0-canary.141",
+            name: "canary.141",
+            prerelease: true,
+            draft: false,
+            published_at: "2026-06-09T22:44:23Z",
+            html_url:
+              "https://github.com/thinkwork-ai/thinkwork/releases/tag/v0.1.0-canary.141",
+            assets: [
+              {
+                name: "thinkwork-release.json",
+                browser_download_url:
+                  "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.141/thinkwork-release.json",
+              },
+            ],
+          },
+          {
             tag_name: "desktop-v0.1.0-canary.134",
             html_url:
               "https://github.com/thinkwork-ai/thinkwork/releases/tag/desktop-v0.1.0-canary.134",
@@ -85,7 +102,8 @@ describe("deployment releases", () => {
           },
         ]),
       )
-      .mockResolvedValueOnce(bytesResponse(manifest));
+      .mockResolvedValueOnce(bytesResponse(manifest141))
+      .mockResolvedValueOnce(bytesResponse(manifest134));
 
     const result = await releasesMod.deploymentReleases(
       null,
@@ -94,16 +112,23 @@ describe("deployment releases", () => {
       { fetch: fetchMock as unknown as typeof fetch },
     );
 
-    expect(result).toHaveLength(1);
+    expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
+      version: "v0.1.0-canary.141",
+      name: "canary.141",
+      signed: false,
+      deployable: true,
+      manifestSha256: createHash("sha256").update(manifest141).digest("hex"),
+    });
+    expect(result[1]).toMatchObject({
       version: "v0.1.0-canary.134",
       name: "canary.134",
       signed: true,
       deployable: true,
-      manifestSha256: createHash("sha256").update(manifest).digest("hex"),
+      manifestSha256: createHash("sha256").update(manifest134).digest("hex"),
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.github.com/repos/thinkwork-ai/thinkwork/releases?per_page=5",
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/releases?per_page=100",
       expect.any(Object),
     );
   });

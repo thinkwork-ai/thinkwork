@@ -1,6 +1,13 @@
+import {
+  AdminGetUserCommand,
+  CognitoIdentityProviderClient,
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, tenantMembers, snakeToCamel } from "../../utils.js";
 import { requireTenantMember } from "./authz.js";
+
+const cognito = new CognitoIdentityProviderClient({});
+const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
 
 export const tenantMembers_ = async (
   _parent: any,
@@ -29,9 +36,27 @@ export const tenantMembers_ = async (
       ]);
       return {
         ...snakeToCamel(r),
+        cognitoStatus: isUser
+          ? await resolveCognitoStatus(r.principal_id)
+          : null,
         user: user ?? null,
         agent: agent ?? null,
       };
     }),
   );
 };
+
+async function resolveCognitoStatus(userId: string) {
+  if (!USER_POOL_ID) return null;
+  try {
+    const result = await cognito.send(
+      new AdminGetUserCommand({
+        UserPoolId: USER_POOL_ID,
+        Username: userId,
+      }),
+    );
+    return result.UserStatus ?? null;
+  } catch {
+    return null;
+  }
+}

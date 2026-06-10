@@ -10785,6 +10785,20 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   verification passed:
   `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsUserDetail.test.tsx`
   with 9 tests and `pnpm --filter @thinkwork/web typecheck`.
+- U17 follow-up for TEI demo readiness: user-detail resend invite now appears
+  only for Cognito users that have not completed first sign-in
+  (`FORCE_CHANGE_PASSWORD`/`UNCONFIRMED`), the user detail page includes a
+  bottom delete-membership action, and release discovery now fetches a broad
+  GitHub release page then sorts by `published_at` so `v0.1.0-canary.141`
+  surfaces ahead of older releases even when the GitHub Releases API returns
+  canaries out of order. The Releases metadata row uses a dedicated layout so
+  date and time stay on one line. Local verification passed:
+  `npx vitest run src/graphql/resolvers/deployments/deployment-releases.test.ts src/__tests__/inviteMember-computer-claim.test.ts src/graphql/resolvers/core/general-reads-authz.test.ts`
+  from `packages/api` (16 tests),
+  `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsUserDetail.test.tsx src/components/settings/SettingsGeneral.test.tsx`
+  (11 tests), `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/web typecheck`,
+  `pnpm dlx prettier@3.8.2 --check ...`, and `git diff --check`.
 
 ## Agent Profile Closed Loops - 2026-06-08
 

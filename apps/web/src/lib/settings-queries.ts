@@ -1003,6 +1003,7 @@ export const SettingsTenantMembersQuery = graphql(`
       principalId
       role
       status
+      cognitoStatus
       createdAt
       user {
         id

@@ -5,6 +5,7 @@ import { requireDeploymentTenantAdmin } from "./shared.js";
 
 const DEFAULT_RELEASE_LIMIT = 12;
 const MAX_RELEASE_LIMIT = 25;
+const GITHUB_RELEASE_PAGE_SIZE = 100;
 
 interface GitHubReleaseAsset {
   name?: unknown;
@@ -46,30 +47,28 @@ export async function deploymentReleases(
   deps: DeploymentReleaseDeps = {},
 ): Promise<DeploymentRelease[]> {
   await requireDeploymentTenantAdmin(ctx);
-  const releases = await fetchGitHubReleases(args.limit, deps.fetch ?? fetch);
-  const deploymentReleases = await Promise.all(
-    releases.map((release) =>
-      toDeploymentRelease(release, deps.fetch ?? fetch),
-    ),
-  );
-  return deploymentReleases
-    .filter((release): release is DeploymentRelease => release !== null)
-    .filter((release) => release.deployable);
+  const limit = releaseLimit(args.limit);
+  const releases = await fetchGitHubReleases(deps.fetch ?? fetch);
+  const deploymentReleases: DeploymentRelease[] = [];
+
+  for (const release of sortGitHubReleases(releases)) {
+    const deploymentRelease = await toDeploymentRelease(
+      release,
+      deps.fetch ?? fetch,
+    );
+    if (!deploymentRelease?.deployable) continue;
+    deploymentReleases.push(deploymentRelease);
+    if (deploymentReleases.length >= limit) break;
+  }
+
+  return deploymentReleases;
 }
 
 async function fetchGitHubReleases(
-  limit: number | null | undefined,
   fetchImpl: typeof fetch,
 ): Promise<GitHubRelease[]> {
-  const perPage = Math.min(
-    Math.max(
-      Number.isFinite(limit ?? NaN) ? Number(limit) : DEFAULT_RELEASE_LIMIT,
-      1,
-    ),
-    MAX_RELEASE_LIMIT,
-  );
   const response = await fetchImpl(
-    `https://api.github.com/repos/${releaseRepository()}/releases?per_page=${perPage}`,
+    `https://api.github.com/repos/${releaseRepository()}/releases?per_page=${GITHUB_RELEASE_PAGE_SIZE}`,
     {
       headers: {
         Accept: "application/vnd.github+json",
@@ -88,6 +87,25 @@ async function fetchGitHubReleases(
   const body = (await response.json()) as unknown;
   if (!Array.isArray(body)) return [];
   return body as GitHubRelease[];
+}
+
+function releaseLimit(limit: number | null | undefined): number {
+  return Math.min(
+    Math.max(
+      Number.isFinite(limit ?? NaN) ? Number(limit) : DEFAULT_RELEASE_LIMIT,
+      1,
+    ),
+    MAX_RELEASE_LIMIT,
+  );
+}
+
+function sortGitHubReleases(releases: GitHubRelease[]): GitHubRelease[] {
+  return [...releases].sort((a, b) => {
+    const publishedAtDelta =
+      timestampValue(b.published_at) - timestampValue(a.published_at);
+    if (publishedAtDelta !== 0) return publishedAtDelta;
+    return canaryNumber(b.tag_name) - canaryNumber(a.tag_name);
+  });
 }
 
 async function toDeploymentRelease(
@@ -153,4 +171,14 @@ function assetUrl(assets: GitHubReleaseAsset[], name: string): string {
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function timestampValue(value: unknown): number {
+  const timestamp = Date.parse(stringValue(value));
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function canaryNumber(value: unknown): number {
+  const match = stringValue(value).match(/canary\.(\d+)$/);
+  return match ? Number(match[1]) : 0;
 }

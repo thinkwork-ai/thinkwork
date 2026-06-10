@@ -5760,6 +5760,7 @@ export type TenantEntitySection = {
 export type TenantMember = {
   __typename?: "TenantMember";
   agent?: Maybe<Agent>;
+  cognitoStatus?: Maybe<Scalars["String"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   id: Scalars["ID"]["output"];
   principalId: Scalars["ID"]["output"];

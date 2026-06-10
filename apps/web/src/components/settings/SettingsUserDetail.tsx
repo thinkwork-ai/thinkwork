@@ -106,6 +106,9 @@ export function SettingsUserDetail() {
 
   const isSelf = !!callerUserId && callerUserId === user.id;
   const callerIsOwner = callerRole === "owner";
+  const canResendInvite =
+    member.cognitoStatus != null &&
+    RESENDABLE_INVITE_STATUSES.has(member.cognitoStatus);
 
   return (
     <SettingsPane>
@@ -113,12 +116,14 @@ export function SettingsUserDetail() {
         title={displayName}
         badge={<Badge variant="secondary">{titleCase(member.status)}</Badge>}
         actions={
-          <ResendInviteButton
-            tenantId={tenantId ?? ""}
-            email={user.email ?? ""}
-            name={user.name ?? ""}
-            role={member.role}
-          />
+          canResendInvite ? (
+            <ResendInviteButton
+              tenantId={tenantId ?? ""}
+              email={user.email ?? ""}
+              name={user.name ?? ""}
+              role={member.role}
+            />
+          ) : null
         }
       />
       <ProfileSection
@@ -146,6 +151,10 @@ export function SettingsUserDetail() {
 }
 
 const ROLE_OPTIONS = ["member", "admin", "owner"];
+const RESENDABLE_INVITE_STATUSES = new Set([
+  "FORCE_CHANGE_PASSWORD",
+  "UNCONFIRMED",
+]);
 
 function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
