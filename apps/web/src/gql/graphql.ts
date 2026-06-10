@@ -9137,6 +9137,15 @@ export type SettingsUpdateTenantMemberMutation = {
   };
 };
 
+export type SettingsRemoveTenantMemberMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SettingsRemoveTenantMemberMutation = {
+  __typename?: "Mutation";
+  removeTenantMember: boolean;
+};
+
 export type SettingsInviteMemberMutationVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
   input: InviteMemberInput;
@@ -17466,6 +17475,48 @@ export const SettingsUpdateTenantMemberDocument = {
 } as unknown as DocumentNode<
   SettingsUpdateTenantMemberMutation,
   SettingsUpdateTenantMemberMutationVariables
+>;
+export const SettingsRemoveTenantMemberDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsRemoveTenantMember" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "removeTenantMember" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsRemoveTenantMemberMutation,
+  SettingsRemoveTenantMemberMutationVariables
 >;
 export const SettingsInviteMemberDocument = {
   kind: "Document",

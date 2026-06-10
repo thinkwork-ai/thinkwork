@@ -158,4 +158,63 @@ describe("inviteMember onboarding claim", () => {
       role: "member",
     });
   });
+
+  it("resends the Cognito invitation when the existing user is still pending", async () => {
+    cognitoSendMock
+      .mockRejectedValueOnce({ name: "UsernameExistsException" })
+      .mockResolvedValueOnce({
+        UserStatus: "FORCE_CHANGE_PASSWORD",
+        UserAttributes: [{ Name: "sub", Value: "cognito-user-1" }],
+      })
+      .mockResolvedValueOnce({
+        User: {
+          Attributes: [{ Name: "sub", Value: "cognito-user-1" }],
+        },
+      });
+    selectRowsQueue.push([], []);
+    insertReturningQueue.push([
+      {
+        id: "member-1",
+        tenant_id: "tenant-A",
+        principal_type: "USER",
+        principal_id: "cognito-user-1",
+        role: "member",
+        status: "active",
+      },
+    ]);
+
+    await inviteMember(
+      null,
+      {
+        tenantId: "tenant-A",
+        input: {
+          email: "alex@acme.example",
+          name: "Alex Acme",
+          role: "member",
+        },
+      },
+      {
+        auth: {
+          authType: "cognito",
+          principalId: "operator-user",
+          tenantId: "tenant-A",
+          email: "operator@acme.example",
+        },
+      } as any,
+    );
+
+    const resendCommand = cognitoSendMock.mock.calls[2]?.[0] as {
+      input?: {
+        DesiredDeliveryMediums?: string[];
+        MessageAction?: string;
+        Username?: string;
+      };
+    };
+
+    expect(resendCommand.input).toMatchObject({
+      Username: "alex@acme.example",
+      DesiredDeliveryMediums: ["EMAIL"],
+      MessageAction: "RESEND",
+    });
+  });
 });

@@ -19,6 +19,10 @@ import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-fold
 
 const cognito = new CognitoIdentityProviderClient({});
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
+const RESENDABLE_INVITE_STATUSES = new Set([
+  "FORCE_CHANGE_PASSWORD",
+  "UNCONFIRMED",
+]);
 
 export const inviteMember = async (
   _parent: any,
@@ -98,6 +102,23 @@ async function inviteMemberCore(
         existing.UserAttributes?.find((a) => a.Name === "sub")?.Value || "";
       if (!cognitoSub) {
         throw new Error("Could not resolve existing Cognito user sub");
+      }
+
+      if (
+        existing.UserStatus &&
+        RESENDABLE_INVITE_STATUSES.has(existing.UserStatus)
+      ) {
+        const resent = await cognito.send(
+          new AdminCreateUserCommand({
+            UserPoolId: USER_POOL_ID,
+            Username: email,
+            DesiredDeliveryMediums: ["EMAIL"],
+            MessageAction: "RESEND",
+          }),
+        );
+        cognitoSub =
+          resent.User?.Attributes?.find((a) => a.Name === "sub")?.Value ||
+          cognitoSub;
       }
     } else {
       throw err;

@@ -1108,6 +1108,12 @@ export const SettingsUpdateTenantMemberMutation = graphql(`
   }
 `);
 
+export const SettingsRemoveTenantMemberMutation = graphql(`
+  mutation SettingsRemoveTenantMember($id: ID!) {
+    removeTenantMember(id: $id)
+  }
+`);
+
 export const SettingsInviteMemberMutation = graphql(`
   mutation SettingsInviteMember($tenantId: ID!, $input: InviteMemberInput!) {
     inviteMember(tenantId: $tenantId, input: $input) {

@@ -103,6 +103,7 @@ type Documents = {
   "\n  mutation SettingsUpsertBudgetPolicy(\n    $tenantId: ID!\n    $input: UpsertBudgetPolicyInput!\n  ) {\n    upsertBudgetPolicy(tenantId: $tenantId, input: $input) {\n      id\n      tenantId\n      userId\n      scope\n      period\n      limitUsd\n      actionOnExceed\n      enabled\n      updatedAt\n    }\n  }\n": typeof types.SettingsUpsertBudgetPolicyDocument;
   "\n  mutation SettingsDeleteBudgetPolicy($id: ID!) {\n    deleteBudgetPolicy(id: $id)\n  }\n": typeof types.SettingsDeleteBudgetPolicyDocument;
   "\n  mutation SettingsUpdateTenantMember(\n    $id: ID!\n    $input: UpdateTenantMemberInput!\n  ) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n      updatedAt\n    }\n  }\n": typeof types.SettingsUpdateTenantMemberDocument;
+  "\n  mutation SettingsRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n": typeof types.SettingsRemoveTenantMemberDocument;
   "\n  mutation SettingsInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalType\n      principalId\n      role\n      status\n      createdAt\n      user {\n        id\n        name\n        email\n      }\n    }\n  }\n": typeof types.SettingsInviteMemberDocument;
   "\n  query SettingsCostSummary($tenantId: ID!) {\n    costSummary(tenantId: $tenantId) {\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      totalInputTokens\n      totalOutputTokens\n      eventCount\n    }\n  }\n": typeof types.SettingsCostSummaryDocument;
   "\n  query SettingsCostByUser($tenantId: ID!) {\n    costByUser(tenantId: $tenantId) {\n      userId\n      userName\n      userEmail\n      totalUsd\n      eventCount\n      isSystem\n    }\n  }\n": typeof types.SettingsCostByUserDocument;
@@ -298,6 +299,8 @@ const documents: Documents = {
     types.SettingsDeleteBudgetPolicyDocument,
   "\n  mutation SettingsUpdateTenantMember(\n    $id: ID!\n    $input: UpdateTenantMemberInput!\n  ) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n      updatedAt\n    }\n  }\n":
     types.SettingsUpdateTenantMemberDocument,
+  "\n  mutation SettingsRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n":
+    types.SettingsRemoveTenantMemberDocument,
   "\n  mutation SettingsInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalType\n      principalId\n      role\n      status\n      createdAt\n      user {\n        id\n        name\n        email\n      }\n    }\n  }\n":
     types.SettingsInviteMemberDocument,
   "\n  query SettingsCostSummary($tenantId: ID!) {\n    costSummary(tenantId: $tenantId) {\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      totalInputTokens\n      totalOutputTokens\n      eventCount\n    }\n  }\n":
@@ -878,6 +881,12 @@ export function graphql(
 export function graphql(
   source: "\n  mutation SettingsUpdateTenantMember(\n    $id: ID!\n    $input: UpdateTenantMemberInput!\n  ) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n      updatedAt\n    }\n  }\n",
 ): (typeof documents)["\n  mutation SettingsUpdateTenantMember(\n    $id: ID!\n    $input: UpdateTenantMemberInput!\n  ) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation SettingsRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n",
+): (typeof documents)["\n  mutation SettingsRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

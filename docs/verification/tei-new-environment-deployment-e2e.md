@@ -108,6 +108,10 @@ Invite email finding:
   customer-owned SES sender. The Terraform fix is to configure Cognito with a
   verified SES identity through `cognito_email_source_arn` plus the ThinkWork
   invite template, then redeploy TEI through the controller.
+- A follow-up API retry gap was also found: retrying an invite for an existing
+  pending Cognito user returned success without sending another invitation.
+  The follow-up fix is to call `AdminCreateUser` with `MessageAction=RESEND`
+  for `FORCE_CHANGE_PASSWORD` or `UNCONFIRMED` users.
 
 ## Preflight Already Verified
 
