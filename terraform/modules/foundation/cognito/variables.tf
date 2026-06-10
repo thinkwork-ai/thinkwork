@@ -98,6 +98,17 @@ variable "invite_email_message" {
   }
 }
 
+variable "invite_sms_message" {
+  description = "SMS invitation body for Cognito AdminCreateUser messages. Must include {username} and {####} so Cognito can send the temporary password."
+  type        = string
+  default     = "Your ThinkWork username is {username} and temporary password is {####}."
+
+  validation {
+    condition     = strcontains(var.invite_sms_message, "{username}") && strcontains(var.invite_sms_message, "{####}")
+    error_message = "invite_sms_message must include Cognito placeholders {username} and {####}."
+  }
+}
+
 variable "identity_pool_name" {
   description = "Override the identity pool name (defaults to thinkwork-<stage>-identity-pool)"
   type        = string

@@ -463,6 +463,7 @@ module "cognito" {
       local.end_user_app_domain != "" ? "https://${local.end_user_app_domain}" : "https://${module.computer_site.distribution_domain}",
     )
   )
+  invite_sms_message = var.cognito_invite_sms_message
 
   # Single ThinkworkAdmin Cognito client serves the unified web app. The
   # historical client name stays for compatibility; the standalone admin
