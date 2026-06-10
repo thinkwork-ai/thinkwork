@@ -125,6 +125,27 @@ describe("deploymentStatus authz", () => {
     );
   });
 
+  it("reports compact deployment controller env used by graphql-http release updates", async () => {
+    mockRequireAdminOrServiceCaller.mockResolvedValueOnce(undefined);
+    vi.stubEnv(
+      "DEPLOYMENT_STATE_MACHINE_ARN",
+      "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment",
+    );
+    vi.stubEnv("DEPLOYMENT_EVIDENCE_BUCKET", "thinkwork-dev-evidence");
+
+    const result = await deploymentStatusMod.deploymentStatus(
+      null,
+      {},
+      service,
+    );
+
+    expect(result).toMatchObject({
+      deploymentControllerArn:
+        "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment",
+      deploymentEvidenceBucket: "thinkwork-dev-evidence",
+    });
+  });
+
   it("derives Cognee enabled state from deployed Cognee details", async () => {
     mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
 

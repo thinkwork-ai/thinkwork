@@ -592,13 +592,13 @@ variable "routines_log_group_arn" {
 }
 
 variable "deployment_state_machine_arn" {
-  description = "ARN of the GitHub-free deployment orchestration state machine. Passed only to the deployment-sessions handler."
+  description = "ARN of the GitHub-free deployment orchestration state machine. Passed to deployment-sessions and graphql-http so Settings can start release updates."
   type        = string
   default     = ""
 }
 
 variable "deployment_evidence_bucket" {
-  description = "S3 bucket name that stores deployment runner evidence. Passed only to the deployment-sessions handler."
+  description = "S3 bucket name that stores deployment runner evidence. Passed to deployment-sessions and graphql-http so Settings can report release update evidence."
   type        = string
   default     = ""
 }

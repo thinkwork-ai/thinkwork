@@ -154,4 +154,22 @@ describe("deployment control plane Terraform fixture", () => {
     expect(outputs).toMatch(/output "deployment_evidence_bucket_name"/);
     expect(outputs).toMatch(/output "deployment_appconfig_application_id"/);
   });
+
+  it("wires deployment controller config into graphql-http for Settings release updates", () => {
+    const lambdaHandlers = read(
+      resolve(REPO_ROOT, "terraform/modules/app/lambda-api/handlers.tf"),
+    );
+    const lambdaVariables = read(
+      resolve(REPO_ROOT, "terraform/modules/app/lambda-api/variables.tf"),
+    );
+
+    expect(lambdaHandlers).toMatch(/"graphql-http"\s*=\s*merge/);
+    expect(lambdaHandlers).toMatch(
+      /DEPLOYMENT_STATE_MACHINE_ARN\s*=\s*var\.deployment_state_machine_arn/,
+    );
+    expect(lambdaHandlers).toMatch(
+      /DEPLOYMENT_EVIDENCE_BUCKET\s*=\s*var\.deployment_evidence_bucket/,
+    );
+    expect(lambdaVariables).toContain("Settings can start release updates");
+  });
 });
