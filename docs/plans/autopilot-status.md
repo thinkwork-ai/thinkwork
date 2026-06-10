@@ -10,10 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U9 TEI canary 150 deployment proof after release
-  finalization hardening.
-- Current branch: `codex/tei-150-deploy-proof`.
-- Current worktree: `.Codex/worktrees/tei-150-deploy-proof`.
+- Current implementation unit: U9 remaining proof gates after TEI canary 150:
+  optional-app deploy smoke, human desktop/mobile launch proof, and final
+  teardown proof.
+- Current branch: `codex/deployment-controller-status-v150`.
+- Current worktree: `.Codex/worktrees/deployment-controller-status-v150`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -61,8 +62,20 @@ status: in_progress
   canary 149 proof PR
   [#2328](https://github.com/thinkwork-ai/thinkwork/pull/2328) merged; U10
   release finalization hardening PR
-  [#2329](https://github.com/thinkwork-ai/thinkwork/pull/2329) merged.
-- Status: U10 release finalization hardening merged as `b457f866a`, deleting
+  [#2329](https://github.com/thinkwork-ai/thinkwork/pull/2329) merged; U9 TEI
+  canary 150 proof PR
+  [#2330](https://github.com/thinkwork-ai/thinkwork/pull/2330) merged.
+- Status: U9 TEI canary 150 proof PR #2330 passed required CI (`cla`, `lint`,
+  `verify`, `typecheck`, and `test`) and was squash merged as `0b18c3987`.
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
+  currently reports `releaseVersion=v0.1.0-canary.150` and manifest SHA-256
+  `dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb`.
+  The remaining deployment-controller proof gates are intentionally explicit:
+  run a full optional Cognee/Twenty deploy smoke after those apps are selected,
+  capture human desktop/mobile launch proof against the TEI profile, and run
+  final teardown/destroy proof when TEI no longer needs to stay live for demo
+  testing. Historical notes follow. U10 release finalization hardening merged
+  as `b457f866a`, deleting
   stale release manifest/signature assets before uploading refreshed platform
   assets and uploading `thinkwork-release.json` last as the deployable
   finalization marker. Canary releases `v0.1.0-canary.150` and
