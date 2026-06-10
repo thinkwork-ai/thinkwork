@@ -515,6 +515,68 @@ def test_payload_release_selection_overrides_stale_runner_environment(
     assert runner.os.environ["THINKWORK_RELEASE_MANIFEST_SHA256"] == manifest_sha
 
 
+def test_write_runner_files_persists_selected_release_to_controller_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = tmp_path / "terraform"
+    old_manifest_url = "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.145/thinkwork-release.json"
+    new_manifest_url = "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.146/thinkwork-release.json"
+    new_manifest_sha = "c3189ff697f9e407ffea197b5298cbe87679ff207aa29b15f8d74f74569b8440"
+
+    monkeypatch.setattr(runner, "TF", tf_dir)
+    monkeypatch.setattr(runner, "MANIFEST", tmp_path / "missing-manifest.json")
+    monkeypatch.setenv("THINKWORK_STAGE", "tei-e2e")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("THINKWORK_TERRAFORM_MODULE_SOURCE", "thinkwork-ai/thinkwork/aws")
+    monkeypatch.setenv("THINKWORK_TERRAFORM_MODULE_VERSION", "0.1.0-canary.145")
+    monkeypatch.setenv("THINKWORK_TERRAFORM_STATE_BUCKET", "thinkwork-state")
+    monkeypatch.setenv("THINKWORK_TERRAFORM_LOCK_TABLE", "thinkwork-locks")
+    monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.145")
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", old_manifest_url)
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", "f0a149db34d59e290fc4a43bc098a57539dcae508445e0fb626b8ce45f9eaf1c")
+    monkeypatch.setenv(
+        "THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON",
+        '[{"keyId":"test-key","publicKeyPem":"-----BEGIN PUBLIC KEY-----\\nabc\\n-----END PUBLIC KEY-----"}]',
+    )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "release": {
+                "version": "v0.1.0-canary.146",
+                "manifestUrl": new_manifest_url,
+                "manifestSha256": new_manifest_sha,
+                "manifestTrustPolicy": "allow_unsigned_canary",
+            },
+        },
+        {},
+    )
+
+    tfvars = json.loads((tf_dir / "terraform.auto.tfvars.json").read_text(encoding="utf-8"))
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+
+    assert vars_json["deployment_release_version"] == "v0.1.0-canary.146"
+    assert vars_json["deployment_release_manifest_url"] == new_manifest_url
+    assert vars_json["deployment_release_manifest_sha256"] == new_manifest_sha
+    assert vars_json["deployment_release_manifest_trust_policy"] == "allow_unsigned_canary"
+    assert vars_json["deployment_release_manifest_trusted_keys_json"] == (
+        '[{"keyId":"test-key","publicKeyPem":"-----BEGIN PUBLIC KEY-----\\nabc\\n-----END PUBLIC KEY-----"}]'
+    )
+    assert tfvars["deployment_release_version"] == "v0.1.0-canary.146"
+    assert tfvars["deployment_release_manifest_url"] == new_manifest_url
+    assert old_manifest_url not in main_tf
+    assert 'ref=v0.1.0-canary.146' in main_tf
+    assert "deployment_release_manifest_signature_url" in main_tf
+    assert "deployment_release_manifest_trusted_keys_json" in main_tf
+    assert "deployment_terraform_module_source" in main_tf
+
+
 def test_registry_module_source_checks_out_release_manifest_sha(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
