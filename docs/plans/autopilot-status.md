@@ -10,12 +10,12 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U9 TEI canary 149 proof - record final
-  controller update, runtime profile smoke, and strict managed-app deploy
-  readiness.
-- Current branch: `codex/u9-tei-149-proof`.
+- Current implementation unit: U10 release finalization hardening - prevent
+  stale release manifests from being deployable while platform assets are being
+  refreshed.
+- Current branch: `codex/release-manifest-finalization`.
 - Current worktree:
-  `.Codex/worktrees/u9-tei-149-proof`.
+  `.Codex/worktrees/release-manifest-finalization`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -59,8 +59,19 @@ status: in_progress
   managed-app readiness proof PR
   [#2326](https://github.com/thinkwork-ai/thinkwork/pull/2326) merged; U7
   runtime-image release contract PR
-  [#2327](https://github.com/thinkwork-ai/thinkwork/pull/2327) merged.
-- Status: U7 follow-up closed the release-manifest runtime-image gap surfaced
+  [#2327](https://github.com/thinkwork-ai/thinkwork/pull/2327) merged; U9 TEI
+  canary 149 proof PR
+  [#2328](https://github.com/thinkwork-ai/thinkwork/pull/2328) merged.
+- Status: U10 is hardening the release-publish path after the TEI `.149`
+  proving run exposed a digest finalization race: a canary release could expose
+  an older `thinkwork-release.json` while platform assets were being refreshed,
+  requiring TEI to rerun against the final manifest digest. The current branch
+  updates `scripts/release/publish-release-assets.sh` so release refreshes
+  delete stale manifest/signature assets first, upload non-manifest assets, and
+  upload the finalized manifest last. It adds a focused script test with a fake
+  `gh` binary and documents the invariant that `thinkwork-release.json` is the
+  deployable finalization marker. Historical notes follow. U7 follow-up closed
+  the release-manifest runtime-image gap surfaced
   by the U9 managed-app readiness smoke. PR #2327 merged as `1c28585a` and
   released as `v0.1.0-canary.149`, publishing pinned runtime image entries for
   Cognee, Twenty, Kestra, and Pi AgentCore. TEI was updated through the
