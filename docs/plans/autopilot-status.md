@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U19 - release manifest trust policy and unsigned
-  canary guardrail.
-- Current branch: `codex/u19-release-signature-contract`.
+- Current implementation unit: U20 - persist selected release pins back into the
+  deployment controller.
+- Current branch: `codex/fix-controller-release-pins`.
 - Current worktree:
-  `.Codex/worktrees/u19-release-signature-contract`.
+  `.Codex/worktrees/fix-controller-release-pins`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -39,7 +39,9 @@ status: in_progress
   merged; U18 Bedrock runtime endpoint PR [#2314](https://github.com/thinkwork-ai/thinkwork/pull/2314)
   merged; U18 Cognito invite SMS template PR [#2315](https://github.com/thinkwork-ai/thinkwork/pull/2315)
   merged; U18 VPC endpoint ingress PR [#2316](https://github.com/thinkwork-ai/thinkwork/pull/2316)
-  merged; U19 release trust-policy PR not opened yet.
+  merged; U19 release trust-policy PR
+  [#2317](https://github.com/thinkwork-ai/thinkwork/pull/2317) merged; U20
+  controller release-pin persistence PR not opened yet.
 - Status: U11 merged and deployed to main. TEI's customer deployment controller
   was refreshed to the U11 runner and `.137` selected-release pins, then TEI
   update execution `tei-e2e-update-137-20260609204430` failed closed because
@@ -139,7 +141,21 @@ status: in_progress
   policy explicit: unsigned canaries are allowed only under
   `allow_unsigned_canary`, non-canary unsigned manifests fail closed, and
   customer-safe controllers can require a detached signature with
-  `require_signature`.
+  `require_signature`. U19 PR #2317 passed required CI and was squash merged as
+  `1ccaa834a`. Canary releases `v0.1.0-canary.146` and
+  `desktop-v0.1.0-canary.146` were cut from that merge; both release workflows
+  succeeded. TEI update execution
+  `tw-update-146-20260610035600` succeeded via CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:da94ece4-65b5-44fc-beb7-82988236dd87`,
+  and the runtime config reports release `v0.1.0-canary.146`. A follow-up
+  trust-proof run using the newly deployed
+  runner failed closed as intended when given the stale pre-finalization
+  manifest SHA-256, but that run exposed a real controller persistence gap: TEI
+  runtime was on `.146` while the controller SSM/CodeBuild selected-release
+  pins still pointed at `.145`. U20 updates the deployment runner so the
+  payload-selected release contract is written into the generated Terraform
+  controller inputs and evidence, including manifest URL, SHA-256, signature
+  URL, trust policy, trusted-key JSON, and module source/version.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -212,6 +228,10 @@ status: in_progress
   - U19 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
     Terraform, docs, and release workflow files passed.
   - U19 `git diff --check` passed.
+  - U20 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 22 tests.
+  - U20 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
   - `pnpm install` completed; local Node 25 logged the known optional
     `canvas@2.11.2` native fallback build warning because `pkg-config` /
     `pixman-1` are not installed.

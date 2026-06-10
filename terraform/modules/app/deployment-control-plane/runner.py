@@ -986,10 +986,24 @@ def write_runner_files(payload, runner_secrets):
             ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"]
         )
 
-    release_version = safe_get(
-        payload,
-        "releaseVersion",
-        default=os.environ.get("THINKWORK_RELEASE_VERSION", "unresolved"),
+    selected_release = release_selection(payload)
+    release_version = selected_release.get("version") or "unresolved"
+    release_manifest_url = selected_release.get("manifestUrl") or ""
+    release_manifest_sha256 = selected_release.get("manifestSha256") or ""
+    release_manifest_signature_url = selected_release.get("manifestSignatureUrl") or ""
+    release_manifest_trust_policy_value = (
+        selected_release.get("manifestTrustPolicy") or "allow_unsigned_canary"
+    )
+    if release_manifest_trust_policy_value not in RELEASE_MANIFEST_TRUST_POLICIES:
+        raise RuntimeError(
+            "Unsupported release manifest trust policy "
+            f"{release_manifest_trust_policy_value!r}; expected one of "
+            f"{sorted(RELEASE_MANIFEST_TRUST_POLICIES)}"
+        )
+    release_manifest_trusted_keys_json = json.dumps(
+        trusted_release_keys(),
+        separators=(",", ":"),
+        sort_keys=True,
     )
     module_source = safe_get(
         payload,
@@ -1062,6 +1076,14 @@ def write_runner_files(payload, runner_secrets):
         ),
         "lambda_artifact_bucket": os.environ["THINKWORK_RELEASE_ARTIFACT_BUCKET"],
         "lambda_artifact_prefix": f"releases/{release_version}/lambdas",
+        "deployment_release_version": release_version,
+        "deployment_release_manifest_url": release_manifest_url,
+        "deployment_release_manifest_sha256": release_manifest_sha256,
+        "deployment_release_manifest_signature_url": release_manifest_signature_url,
+        "deployment_release_manifest_trust_policy": release_manifest_trust_policy_value,
+        "deployment_release_manifest_trusted_keys_json": release_manifest_trusted_keys_json,
+        "deployment_terraform_module_source": module_source,
+        "deployment_terraform_module_version": terraform_module_version,
         "agentcore_pi_source_image_uri": safe_get(
             payload,
             "agentcorePiSourceImageUri",
@@ -1167,6 +1189,38 @@ variable "agentcore_pi_source_image_uri" {{
   type = string
 }}
 
+variable "deployment_release_version" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_url" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_sha256" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_signature_url" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_trust_policy" {{
+  type = string
+}}
+
+variable "deployment_release_manifest_trusted_keys_json" {{
+  type = string
+}}
+
+variable "deployment_terraform_module_source" {{
+  type = string
+}}
+
+variable "deployment_terraform_module_version" {{
+  type = string
+}}
+
 module "thinkwork" {{
   source  = {hcl_string(terraform_module_source)}
 {module_version_line}
@@ -1198,9 +1252,14 @@ module "thinkwork" {{
   enable_slack_workspace_app = false
 
   enable_deployment_control_plane    = false
-  deployment_release_version         = {hcl_string(release_version)}
-  deployment_release_manifest_url    = {hcl_string(os.environ.get("THINKWORK_RELEASE_MANIFEST_URL", ""))}
-  deployment_release_manifest_sha256 = {hcl_string(os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256", ""))}
+  deployment_release_version         = var.deployment_release_version
+  deployment_release_manifest_url    = var.deployment_release_manifest_url
+  deployment_release_manifest_sha256 = var.deployment_release_manifest_sha256
+  deployment_release_manifest_signature_url     = var.deployment_release_manifest_signature_url
+  deployment_release_manifest_trust_policy      = var.deployment_release_manifest_trust_policy
+  deployment_release_manifest_trusted_keys_json = var.deployment_release_manifest_trusted_keys_json
+  deployment_terraform_module_source            = var.deployment_terraform_module_source
+  deployment_terraform_module_version           = var.deployment_terraform_module_version
 }}
 
 output "app_url" {{ value = module.thinkwork.app_url }}
