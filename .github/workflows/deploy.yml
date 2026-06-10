@@ -748,7 +748,6 @@ jobs:
           COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT: ${{ vars.COGNEE_BEDROCK_MODEL_RESOURCE_ARNS || '' }}
           COGNEE_BUILT_IMAGE_DIGEST: ${{ steps.cognee_image.outputs.digest || '' }}
           COGNEE_BUILT_IMAGE_REPOSITORY: ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
           set -euo pipefail
 
@@ -771,13 +770,11 @@ jobs:
           cognee_desired_count="${COGNEE_DESIRED_COUNT_INPUT:-1}"
           cognee_llm_provider="${COGNEE_LLM_PROVIDER_INPUT:-bedrock}"
           cognee_embedding_provider="${COGNEE_EMBEDDING_PROVIDER_INPUT:-bedrock}"
-          # Extraction LLM is the Haiku 4.5 `us.` inference profile (nova-lite
-          # persistently failed tool-use extraction — "Model produced invalid
-          # sequence as part of ToolUse"). The profile fans out across
-          # us-east-1/us-east-2/us-west-2, so IAM needs the profile ARN plus
-          # each region's foundation-model ARN. nova-lite stays listed for
-          # rollback; titan is the embeddings model.
-          cognee_bedrock_model_resource_arns="${COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT:-[\"arn:aws:bedrock:${AWS_REGION}:${AWS_ACCOUNT_ID}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0\",\"arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0\",\"arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0\",\"arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.nova-lite-v1:0\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.titan-embed-text-v2:0\"]}"
+          # Extraction LLM is Kimi K2.5 (ON_DEMAND foundation model — no
+          # inference profile). nova-lite persistently failed tool-use
+          # extraction and Haiku is rate-limited on this account. nova-lite
+          # stays listed for rollback; titan is the embeddings model.
+          cognee_bedrock_model_resource_arns="${COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT:-[\"arn:aws:bedrock:${AWS_REGION}::foundation-model/moonshotai.kimi-k2.5\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.nova-lite-v1:0\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.titan-embed-text-v2:0\"]}"
           cognee_db_password_secret_id="${COGNEE_DB_PASSWORD_SECRET_ID_INPUT:-thinkwork/${STAGE}/cognee/db-credentials}"
 
           if [[ ! "$cognee_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
