@@ -1,6 +1,7 @@
 /**
- * wikiSearch — Postgres FTS + exact-alias lookup over compiled pages in one
- * (tenant, owner) scope.
+ * wikiSearch — Postgres FTS + exact-alias lookup over compiled pages in the
+ * caller's readable scope: tenant-scoped pages (owner NULL) plus the
+ * requesting user's own pages (plan 2026-06-09-004 U14 union read).
  *
  * Uses the `search_tsv` generated column on wiki_pages (GIN indexed). Alias
  * hits are OR'd in so users can search by a known alternate name and get
@@ -12,8 +13,8 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { searchWikiForUser } from "../../../lib/wiki/search.js";
-import { assertCanReadWikiScope } from "./auth.js";
+import { searchWikiForReadScope } from "../../../lib/wiki/search.js";
+import { resolveWikiUnionReadScope } from "./auth.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
@@ -29,15 +30,15 @@ export const wikiSearch = async (
   },
   ctx: GraphQLContext,
 ) => {
-  const { tenantId, userId } = await assertCanReadWikiScope(ctx, args);
+  const { tenantId, scope } = await resolveWikiUnionReadScope(ctx, args);
 
   const query = args.query.trim();
   if (query.length === 0) return [];
   const limit = Math.max(1, Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT));
 
-  return searchWikiForUser({
-    tenantId: args.tenantId,
-    userId,
+  return searchWikiForReadScope({
+    tenantId,
+    scope,
     query,
     limit,
   });

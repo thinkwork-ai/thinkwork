@@ -157,22 +157,11 @@ locals {
       THINKWORK_BOOTSTRAP_LEASE_SECRET_PREFIX = "thinkwork/${var.stage}/deployment-bootstrap-leases"
       THINKWORK_BOOTSTRAP_LEASE_KMS_KEY_ID    = var.bootstrap_credential_lease_kms_key_id
     }
-    # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
-    # model works; the planner + section-writer cap themselves at ~500
-    # records / 25 new pages per invocation so a 480 s timeout covers
-    # the worst case comfortably. Env vars come from variables so
-    # unrelated deploys don't wipe them back to defaults (the aggregation
-    # flag got reset on every terraform apply before this was pinned).
-    "wiki-compile" = {
-      BEDROCK_MODEL_ID                   = var.wiki_compile_model_id
-      WIKI_AGGREGATION_PASS_ENABLED      = var.wiki_aggregation_pass_enabled
-      WIKI_DETERMINISTIC_LINKING_ENABLED = var.wiki_deterministic_linking_enabled
-      # Name (not value) of the SecureString SSM parameter that holds the
-      # Google Places API key. wiki-compile fetches + caches on cold start.
-      # The parameter may contain a placeholder value at apply time — the
-      # Lambda logs and degrades gracefully if decryption returns empty.
-      GOOGLE_PLACES_SSM_PARAM_NAME = "/thinkwork/${var.stage}/google-places/api-key"
-    }
+    # NOTE: wiki-compile needs no extra env since the U11 cutover (plan
+    # 2026-06-09-004) — it is the deterministic, LLM-free graph→wiki
+    # materializer; the planner-era env (BEDROCK_MODEL_ID, aggregation /
+    # linking flags, WIKI_SOURCE, Google Places SSM name) went with the
+    # planner extraction path.
     "ontology-scan" = {
       BEDROCK_MODEL_ID = var.wiki_compile_model_id
     }
@@ -224,6 +213,15 @@ locals {
       COGNEE_BACKEND_MODE             = var.cognee_backend_mode
       COGNEE_INGEST_MODE              = "add_cognify"
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
+      # Per-run candidate cap: bounds classifier cost AND keeps each Cognee
+      # cognify small enough to index within budget on the single dogfood
+      # task; truncated runs self-invoke (Event) to drain the backlog across
+      # successive runs. COGNEE_INDEX_TIMEOUT_MS raised well above the default
+      # 240s (dogfood indexing of a fresh dataset is slow) but under the 900s
+      # Lambda ceiling, leaving room for graph fetch + normalize + snapshot.
+      KG_OBS_MAX_CANDIDATES_PER_RUN = var.kg_obs_max_candidates_per_run
+      COGNEE_INDEX_TIMEOUT_MS       = "700000"
+      COGNEE_INDEX_POLL_MS          = "7000"
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
@@ -243,6 +241,10 @@ locals {
       ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
       ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
       AWS_ACCOUNT_ID              = var.account_id
+      # Settings > General starts release updates from the GraphQL API. Keep
+      # these compact because graphql-http runs close to Lambda's 4 KB env cap.
+      DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
+      DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
       # routine-approval-bridge (Phase B U8) calls this function name
       # via the AWS SDK Lambda Invoke after a HITL decideInboxItem.
       # The bridge throws if unset — terraform wiring is mandatory.
@@ -576,7 +578,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-thread-ingest" ? 300 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-thread-ingest" ? 300 : each.key == "knowledge-graph-observations-ingest" ? 900 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-thread-ingest" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null

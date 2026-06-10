@@ -4,8 +4,8 @@ import type { GraphQLContext } from "../../context.js";
 import {
   defaultStartExecution,
   deploymentEvidenceBucket,
-  deploymentStateMachineArn,
   requireDeploymentTenantAdmin,
+  resolveDeploymentControllerConfig,
   type DeploymentDeps,
 } from "./shared.js";
 import type { DeploymentRelease } from "./deploymentReleases.query.js";
@@ -29,7 +29,10 @@ export async function startDeploymentReleaseUpdate(
 ) {
   await requireDeploymentTenantAdmin(ctx);
   const input = normalizeInput(args.input);
-  const stateMachineArn = deploymentStateMachineArn();
+  const controllerConfig = await (
+    deps.resolveDeploymentControllerConfig ?? resolveDeploymentControllerConfig
+  )();
+  const stateMachineArn = controllerConfig.stateMachineArn;
   if (!stateMachineArn) {
     throw new GraphQLError("Deployment controller is not configured", {
       extensions: { code: "FAILED_PRECONDITION" },
@@ -37,7 +40,8 @@ export async function startDeploymentReleaseUpdate(
   }
 
   const runId = randomUUID();
-  const evidenceBucket = deploymentEvidenceBucket();
+  const evidenceBucket =
+    controllerConfig.evidenceBucket ?? deploymentEvidenceBucket();
   const evidencePrefix = `settings/releases/${input.version}/${runId}`;
   const release = toRelease(input);
   const startExecution = deps.startExecution ?? defaultStartExecution;

@@ -9,7 +9,7 @@ import type {
   ThinkWorkMemoryRecord,
 } from "../lib/memory/types.js";
 import {
-  searchWikiForUser,
+  searchWikiForReadScope,
   type UserWikiSearchResult,
 } from "../lib/wiki/search.js";
 
@@ -292,9 +292,11 @@ async function handleToolCall(
         ...(limit ? { limit } : {}),
       });
       const wikiResults = hasScope(claims, "wiki:read")
-        ? await searchWikiForUser({
+        ? await searchWikiForReadScope({
             tenantId: owner.tenantId,
-            userId: owner.ownerId,
+            // Tenant-union read (plan 2026-06-09-004 U14): tenant-shared
+            // pages plus the user's own.
+            scope: { kind: "tenantUnion", userId: owner.ownerId },
             query,
             limit: Math.min(limit ?? DEFAULT_WIKI_LIMIT, MAX_WIKI_LIMIT),
           })
@@ -327,9 +329,10 @@ async function handleToolCall(
         limitArg(args.limit) ?? DEFAULT_WIKI_LIMIT,
         MAX_WIKI_LIMIT,
       );
-      const wikiResults = await searchWikiForUser({
+      const wikiResults = await searchWikiForReadScope({
         tenantId: owner.tenantId,
-        userId: owner.ownerId,
+        // Tenant-union read (plan 2026-06-09-004 U14).
+        scope: { kind: "tenantUnion", userId: owner.ownerId },
         query,
         limit,
       });
@@ -386,8 +389,9 @@ async function resolveUserMemoryOwner(
 
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } =
-    await import("../graphql/resolvers/core/resolve-auth-user.js");
+  const { resolveCallerFromAuth } = await import(
+    "../graphql/resolvers/core/resolve-auth-user.js"
+  );
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,

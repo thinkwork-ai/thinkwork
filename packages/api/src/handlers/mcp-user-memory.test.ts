@@ -3,7 +3,7 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { handler } from "./mcp-user-memory.js";
 import { encodeJwt } from "../lib/mcp-oauth/state.js";
 import { getMemoryServices } from "../lib/memory/index.js";
-import { searchWikiForUser } from "../lib/wiki/search.js";
+import { searchWikiForReadScope } from "../lib/wiki/search.js";
 import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 
 vi.mock("../lib/memory/index.js", () => ({
@@ -15,14 +15,14 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 }));
 
 vi.mock("../lib/wiki/search.js", () => ({
-  searchWikiForUser: vi.fn(),
+  searchWikiForReadScope: vi.fn(),
 }));
 
 const host = "api.test";
 const resource = `https://${host}/mcp/user-memory`;
 const getMemoryServicesMock = vi.mocked(getMemoryServices);
 const resolveCallerFromAuthMock = vi.mocked(resolveCallerFromAuth);
-const searchWikiForUserMock = vi.mocked(searchWikiForUser);
+const searchWikiForReadScopeMock = vi.mocked(searchWikiForReadScope);
 
 describe("mcp-user-memory handler", () => {
   const recallMock = vi.fn();
@@ -34,8 +34,8 @@ describe("mcp-user-memory handler", () => {
     recallMock.mockReset();
     inspectMock.mockReset();
     retainMock.mockReset();
-    searchWikiForUserMock.mockReset();
-    searchWikiForUserMock.mockResolvedValue([]);
+    searchWikiForReadScopeMock.mockReset();
+    searchWikiForReadScopeMock.mockResolvedValue([]);
     getMemoryServicesMock.mockReturnValue({
       adapter: { retain: retainMock },
       recall: { recall: recallMock },
@@ -289,7 +289,7 @@ describe("mcp-user-memory handler", () => {
         backend: "hindsight",
       },
     ]);
-    searchWikiForUserMock.mockResolvedValue([
+    searchWikiForReadScopeMock.mockResolvedValue([
       wikiResult({
         page: {
           id: "wiki-1",
@@ -319,9 +319,9 @@ describe("mcp-user-memory handler", () => {
     );
 
     const body = JSON.parse(response.body || "{}");
-    expect(searchWikiForUserMock).toHaveBeenCalledWith({
+    expect(searchWikiForReadScopeMock).toHaveBeenCalledWith({
       tenantId: "tenant-a",
-      userId: "user-a",
+      scope: { kind: "tenantUnion", userId: "user-a" },
       query: "favorite restaurant in Paris",
       limit: 10,
     });
@@ -344,7 +344,7 @@ describe("mcp-user-memory handler", () => {
   });
 
   it("searches user-scoped wiki pages directly", async () => {
-    searchWikiForUserMock.mockResolvedValue([
+    searchWikiForReadScopeMock.mockResolvedValue([
       wikiResult({
         page: {
           id: "wiki-direct",
@@ -373,9 +373,9 @@ describe("mcp-user-memory handler", () => {
     );
 
     expect(response.statusCode).toBe(200);
-    expect(searchWikiForUserMock).toHaveBeenCalledWith({
+    expect(searchWikiForReadScopeMock).toHaveBeenCalledWith({
       tenantId: "tenant-a",
-      userId: "user-a",
+      scope: { kind: "tenantUnion", userId: "user-a" },
       query: "launch notes",
       limit: 4,
     });
@@ -415,7 +415,7 @@ describe("mcp-user-memory handler", () => {
     );
 
     const body = JSON.parse(response.body || "{}");
-    expect(searchWikiForUserMock).not.toHaveBeenCalled();
+    expect(searchWikiForReadScopeMock).not.toHaveBeenCalled();
     expect(body.result.structuredContent.wikiResults).toBeUndefined();
     expect(body.result.structuredContent.results).toEqual([
       expect.objectContaining({

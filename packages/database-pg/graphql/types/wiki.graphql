@@ -1,8 +1,12 @@
 """
 Compounding Memory (wiki) read path.
 
-v1 is strictly user-scoped: every read requires both `tenantId` and
-`userId`. See .prds/compounding-memory-scoping.md.
+Scope rule (plan 2026-06-09-004 U9/U14): pages are either USER-scoped
+(`userId`/`ownerId` set — the v1 planner output) or TENANT-scoped
+(`userId`/`ownerId` null — the graph materializer output, readable by any
+member of the tenant). Reads serve the transitional union: tenant pages
+plus the requesting user's own pages, until the U11 archive pass retires
+the user-scoped corpus.
 """
 enum WikiPageType {
   ENTITY
@@ -22,8 +26,12 @@ type WikiPageSection {
 type WikiPage {
   id: ID!
   tenantId: ID!
-  userId: ID!
-  ownerId: ID! @deprecated(reason: "Use userId")
+  """
+  Owning user. Null for tenant-scoped pages produced by the graph
+  materializer — those are readable by any member of the tenant.
+  """
+  userId: ID
+  ownerId: ID @deprecated(reason: "Use userId")
   type: WikiPageType!
   """
   Approved ontology entity type slug materialized for this page, for example
@@ -104,8 +112,12 @@ type WikiSearchResult {
 type WikiCompileJob {
   id: ID!
   tenantId: ID!
-  userId: ID!
-  ownerId: ID! @deprecated(reason: "Use userId")
+  """
+  Owning user. Null for tenant-keyed graph-mode compile jobs (the graph
+  materializer runs one compile per tenant, not per user).
+  """
+  userId: ID
+  ownerId: ID @deprecated(reason: "Use userId")
   status: String!
   trigger: String!
   dedupeKey: String!
@@ -153,7 +165,10 @@ type WikiGraph {
 
 extend type Query {
   """
-  Read one compiled page by slug. `userId` is required.
+  Read one compiled page by slug. Serves tenant-scoped pages (null owner)
+  plus the requesting user's own pages; `userId` is optional and defaults
+  to the caller. When a user page and a tenant page share a slug during
+  the transition window, the user's own page wins.
   """
   wikiPage(
     tenantId: ID!
@@ -164,8 +179,9 @@ extend type Query {
   ): WikiPage
 
   """
-  Postgres full-text search over compiled pages in a single (tenant, user)
-  scope. Also matches exact aliases. Ranked by ts_rank + alias-hit boost.
+  Postgres full-text search over compiled pages — tenant-scoped pages plus
+  the requesting user's own pages. Also matches exact aliases. Ranked by
+  ts_rank + alias-hit boost.
   """
   wikiSearch(
     tenantId: ID!
@@ -192,7 +208,8 @@ extend type Query {
   """
   Admin-only: list recent compile jobs for a tenant. When `userId` is
   provided, restricts to that user's jobs; when null/absent, returns
-  jobs across every user in the tenant. Ordered newest-first.
+  jobs across every user in the tenant — including tenant-keyed
+  graph-mode jobs (null `userId`). Ordered newest-first.
 
   Powers the `thinkwork wiki status` CLI command.
   """
@@ -204,9 +221,11 @@ extend type Query {
   ): [WikiCompileJob!]!
 
   """
-  User-scoped force-graph: every active wiki page + every page-to-page
-  link whose endpoints are both active in the same `(tenant, user)`
-  scope. Links that reference archived pages are excluded. One round-trip.
+  Force-graph over the readable scope: tenant-scoped pages plus the
+  requesting user's own pages, with every page-to-page link whose
+  endpoints are both active and readable. Links that reference archived
+  pages are excluded. One round-trip. `userId` is optional and defaults
+  to the caller.
   """
   wikiGraph(tenantId: ID!, userId: ID, ownerId: ID): WikiGraph!
 }
@@ -241,14 +260,15 @@ type WikiResetCursorResult {
 
 extend type Mutation {
   """
-  Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
-  Returns the job row (newly inserted or the in-flight dedupe hit).
+  Admin-only: enqueue an ad-hoc tenant-level compile job for the graph→wiki
+  materializer. Returns the job row (newly inserted or the in-flight dedupe
+  hit).
 
-  When `modelId` is supplied, it is forwarded to the compile Lambda event
-  payload so a single run can override `BEDROCK_MODEL_ID` without a
-  redeploy. The override takes effect only on the direct Event-invoke
-  path; if the invoke fails and a polling worker claims the job later, the
-  compile falls back to the env-default model.
+  Tenant-routed unconditionally since the U11 cutover (plan
+  2026-06-09-004): the per-user owner key is ignored and ONE tenant-keyed
+  compile job (null `userId`) is enqueued. `tenantScope`, `userId`,
+  `ownerId`, and `modelId` are accepted for contract compatibility but no
+  longer change behavior (the materializer is deterministic/LLM-free).
   """
   compileWikiNow(
     tenantId: ID!
@@ -256,6 +276,7 @@ extend type Mutation {
     ownerId: ID
     modelId: String
     forceNew: Boolean = false
+    tenantScope: Boolean = false
   ): WikiCompileJob!
 
   """

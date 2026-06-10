@@ -14,6 +14,7 @@ const {
   replaceKnowledgeGraphSnapshotMock,
   createKnowledgeGraphObservationsIngestRunMock,
   reapStaleObservationIngestRunsMock,
+  maybeEnqueueGraphWikiCompileMock,
 } = vi.hoisted(() => ({
   fetchDatasetGraphMock: vi.fn(),
   ingestDocumentMock: vi.fn(),
@@ -28,6 +29,7 @@ const {
   replaceKnowledgeGraphSnapshotMock: vi.fn(),
   createKnowledgeGraphObservationsIngestRunMock: vi.fn(),
   reapStaleObservationIngestRunsMock: vi.fn(),
+  maybeEnqueueGraphWikiCompileMock: vi.fn(),
 }));
 
 vi.mock("../lib/knowledge-graph/cognee-client.js", () => ({
@@ -74,6 +76,10 @@ vi.mock("../lib/knowledge-graph/runs.js", async () => {
     reapStaleObservationIngestRuns: reapStaleObservationIngestRunsMock,
   };
 });
+
+vi.mock("../lib/wiki/enqueue.js", () => ({
+  maybeEnqueueGraphWikiCompile: maybeEnqueueGraphWikiCompileMock,
+}));
 
 import { processKnowledgeGraphObservationsIngest } from "./knowledge-graph-observations-ingest.js";
 
@@ -232,6 +238,10 @@ beforeEach(() => {
     nodes: [{ id: "acme", label: "Acme", type: "Company", properties: {} }],
     edges: [],
   });
+  maybeEnqueueGraphWikiCompileMock
+    .mockReset()
+    .mockResolvedValue({ status: "enqueued", jobId: "wjob-1" });
+  delete process.env.KG_OBS_MAX_CANDIDATES_PER_RUN;
 });
 
 describe("knowledge-graph-observations-ingest handler", () => {
@@ -482,5 +492,195 @@ describe("knowledge-graph-observations-ingest handler", () => {
     await expect(
       processKnowledgeGraphObservationsIngest({}, { db }),
     ).rejects.toThrow(/tenantId/);
+  });
+
+  it("fires the graph wiki-compile enqueue after a successful run (plan 2026-06-09-004 U10)", async () => {
+    const { db } = makeDb();
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(maybeEnqueueGraphWikiCompileMock).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+    });
+  });
+
+  it("does not fire the wiki enqueue on a stale_noop run", async () => {
+    const { db } = makeDb();
+    loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce({
+      ...makeSourceResult({ promotedIds: [] }),
+      candidateCount: 0,
+      nextCursors: new Map(),
+    });
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.status).toBe("stale_noop");
+    expect(maybeEnqueueGraphWikiCompileMock).not.toHaveBeenCalled();
+  });
+
+  it("a degraded wiki enqueue never fails the ingest run (best-effort)", async () => {
+    const { db } = makeDb();
+    maybeEnqueueGraphWikiCompileMock.mockResolvedValueOnce({
+      status: "error",
+      error: "lambda unreachable",
+    });
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("succeeded");
+    expect(markKnowledgeGraphRunFailedMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Backlog throughput: per-run candidate cap + self-invoke drain ───────────
+
+describe("knowledge-graph-observations-ingest backlog throughput", () => {
+  it("passes the default per-run candidate cap (100) to the source loader", async () => {
+    const { db } = makeDb();
+
+    await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledWith(
+      expect.objectContaining({ maxCandidates: 100 }),
+    );
+  });
+
+  it("honors KG_OBS_MAX_CANDIDATES_PER_RUN (env read at call time)", async () => {
+    process.env.KG_OBS_MAX_CANDIDATES_PER_RUN = "25";
+    const { db } = makeDb();
+
+    await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledWith(
+      expect.objectContaining({ maxCandidates: 25 }),
+    );
+  });
+
+  it("falls back to the default cap on a malformed env value", async () => {
+    process.env.KG_OBS_MAX_CANDIDATES_PER_RUN = "not-a-number";
+    const { db } = makeDb();
+
+    await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledWith(
+      expect.objectContaining({ maxCandidates: 100 }),
+    );
+  });
+
+  it("self-invokes (fire-and-forget) after a truncated run that made progress", async () => {
+    const { db } = makeDb();
+    const selfInvoke = vi.fn().mockResolvedValue(undefined);
+    loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce(
+      makeSourceResult({ truncated: true }),
+    );
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID, trigger: "scheduled" },
+      { db, selfInvoke },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(selfInvoke).toHaveBeenCalledTimes(1);
+    expect(selfInvoke).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      trigger: "scheduled",
+    });
+    expect(result.metrics).toEqual(
+      expect.objectContaining({ selfInvoked: true }),
+    );
+  });
+
+  it("does not self-invoke when the run was not truncated", async () => {
+    const { db } = makeDb();
+    const selfInvoke = vi.fn();
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db, selfInvoke },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(selfInvoke).not.toHaveBeenCalled();
+    expect(result.metrics).toEqual(
+      expect.objectContaining({ selfInvoked: false }),
+    );
+  });
+
+  it("loop guard: does not self-invoke on a truncated run with zero progress", async () => {
+    const { db } = makeDb();
+    const selfInvoke = vi.fn();
+    // Truncated but nothing promoted AND no cursor advanced — re-invoking
+    // would re-read the same candidates forever.
+    loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce({
+      ...makeSourceResult({ truncated: true }),
+      nextCursors: new Map(),
+    });
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db, selfInvoke },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(selfInvoke).not.toHaveBeenCalled();
+  });
+
+  it("a failed self-invoke never fails the run (sweep remains the backstop)", async () => {
+    const { db } = makeDb();
+    const selfInvoke = vi.fn().mockRejectedValue(new Error("denied"));
+    loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce(
+      makeSourceResult({ truncated: true }),
+    );
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db, selfInvoke },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("succeeded");
+    expect(result.metrics).toEqual(
+      expect.objectContaining({ selfInvoked: false }),
+    );
+    expect(markKnowledgeGraphRunFailedMock).not.toHaveBeenCalled();
+  });
+
+  it("does not self-invoke when the run fails", async () => {
+    const { db } = makeDb();
+    const selfInvoke = vi.fn();
+    loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce(
+      makeSourceResult({ truncated: true }),
+    );
+    replaceKnowledgeGraphSnapshotMock.mockRejectedValueOnce(
+      new Error("tx failed"),
+    );
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db, selfInvoke },
+    );
+
+    expect(result.status).toBe("failed");
+    expect(selfInvoke).not.toHaveBeenCalled();
   });
 });

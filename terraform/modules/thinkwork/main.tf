@@ -777,15 +777,13 @@ module "api" {
   job_scheduler_role_arn                        = module.job_triggers.job_scheduler_role_arn
   routines_execution_role_arn                   = module.routines_stepfunctions.execution_role_arn
   routines_log_group_arn                        = module.routines_stepfunctions.log_group_arn
-  deployment_state_machine_arn                  = var.enable_deployment_control_plane ? module.deployment_control_plane[0].state_machine_arn : ""
-  deployment_evidence_bucket                    = var.enable_deployment_control_plane ? module.deployment_control_plane[0].evidence_bucket_name : ""
+  deployment_state_machine_arn                  = var.enable_deployment_control_plane ? module.deployment_control_plane[0].state_machine_arn : var.deployment_state_machine_arn
+  deployment_evidence_bucket                    = var.enable_deployment_control_plane ? module.deployment_control_plane[0].evidence_bucket_name : var.deployment_evidence_bucket
   enable_stripe_billing                         = var.enable_stripe_billing
   enable_slack_workspace_app                    = var.enable_slack_workspace_app
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   wiki_compile_model_id                         = var.wiki_compile_model_id
   company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
-  wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
-  wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
   enable_workspace_orchestration                = var.enable_workspace_orchestration
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled

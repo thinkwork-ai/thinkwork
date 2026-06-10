@@ -619,114 +619,6 @@ export type BootstrapResult = {
   user: User;
 };
 
-export type BrainEnrichmentCandidate = {
-  __typename?: "BrainEnrichmentCandidate";
-  citation?: Maybe<BrainEnrichmentCitation>;
-  id: Scalars["ID"]["output"];
-  providerId: Scalars["String"]["output"];
-  score?: Maybe<Scalars["Float"]["output"]>;
-  sourceFamily: BrainEnrichmentSourceFamily;
-  summary: Scalars["String"]["output"];
-  title: Scalars["String"]["output"];
-};
-
-export type BrainEnrichmentCitation = {
-  __typename?: "BrainEnrichmentCitation";
-  label?: Maybe<Scalars["String"]["output"]>;
-  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
-  sourceId?: Maybe<Scalars["String"]["output"]>;
-  uri?: Maybe<Scalars["String"]["output"]>;
-};
-
-/**
- * The structured payload behind a `brain_enrichment_draft_review` workspace
- * review. `proposedBodyMd` renders as the in-place review surface; `snapshotMd`
- * is the pinned current body at draft-creation time so per-region rejection
- * reverts deterministically.
- */
-export type BrainEnrichmentDraftPage = {
-  __typename?: "BrainEnrichmentDraftPage";
-  pageTitle: Scalars["String"]["output"];
-  proposedBodyMd: Scalars["String"]["output"];
-  regions: Array<BrainEnrichmentDraftRegion>;
-  snapshotMd: Scalars["String"]["output"];
-  targetPageId: Scalars["ID"]["output"];
-  targetPageTable: Scalars["String"]["output"];
-};
-
-/**
- * One section-grain change region in a draft-page review. The mobile review
- * surface tap-targets the section in the in-place render, and the "show changes"
- * toggle uses beforeMd/afterMd to render a stacked diff.
- */
-export type BrainEnrichmentDraftRegion = {
-  __typename?: "BrainEnrichmentDraftRegion";
-  afterMd: Scalars["String"]["output"];
-  beforeMd: Scalars["String"]["output"];
-  citation?: Maybe<BrainEnrichmentCitation>;
-  contributingCandidateIds: Array<Scalars["ID"]["output"]>;
-  id: Scalars["ID"]["output"];
-  sectionHeading: Scalars["String"]["output"];
-  sectionSlug: Scalars["String"]["output"];
-  sourceFamily: BrainEnrichmentDraftRegionFamily;
-};
-
-/**
- * Source family aggregation for a single proposed-body region. MIXED is set when
- * multiple candidates from different families contributed to the same section.
- */
-export enum BrainEnrichmentDraftRegionFamily {
-  Brain = "BRAIN",
-  KnowledgeBase = "KNOWLEDGE_BASE",
-  Mixed = "MIXED",
-  Web = "WEB",
-}
-
-export type BrainEnrichmentProposal = {
-  __typename?: "BrainEnrichmentProposal";
-  candidates: Array<BrainEnrichmentCandidate>;
-  createdAt: Scalars["AWSDateTime"]["output"];
-  id: Scalars["ID"]["output"];
-  providerStatuses: Array<BrainEnrichmentProviderStatus>;
-  reviewObjectKey?: Maybe<Scalars["String"]["output"]>;
-  reviewRunId?: Maybe<Scalars["ID"]["output"]>;
-  status: Scalars["String"]["output"];
-  targetPageId: Scalars["ID"]["output"];
-  targetPageTable: Scalars["String"]["output"];
-  tenantId: Scalars["ID"]["output"];
-  threadId?: Maybe<Scalars["ID"]["output"]>;
-  title: Scalars["String"]["output"];
-  updatedAt: Scalars["AWSDateTime"]["output"];
-};
-
-export type BrainEnrichmentProviderStatus = {
-  __typename?: "BrainEnrichmentProviderStatus";
-  displayName: Scalars["String"]["output"];
-  durationMs?: Maybe<Scalars["Int"]["output"]>;
-  error?: Maybe<Scalars["String"]["output"]>;
-  family: Scalars["String"]["output"];
-  hitCount?: Maybe<Scalars["Int"]["output"]>;
-  providerId: Scalars["String"]["output"];
-  reason?: Maybe<Scalars["String"]["output"]>;
-  sourceFamily?: Maybe<Scalars["String"]["output"]>;
-  state: Scalars["String"]["output"];
-};
-
-export type BrainEnrichmentSourceAvailability = {
-  __typename?: "BrainEnrichmentSourceAvailability";
-  available: Scalars["Boolean"]["output"];
-  family: BrainEnrichmentSourceFamily;
-  label: Scalars["String"]["output"];
-  reason?: Maybe<Scalars["String"]["output"]>;
-  selectedByDefault: Scalars["Boolean"]["output"];
-};
-
-export enum BrainEnrichmentSourceFamily {
-  Brain = "BRAIN",
-  KnowledgeBase = "KNOWLEDGE_BASE",
-  Web = "WEB",
-}
-
 export type BudgetPolicy = {
   __typename?: "BudgetPolicy";
   actionOnExceed: Scalars["String"]["output"];
@@ -1747,7 +1639,6 @@ export type KnowledgeGraphSearchResult = {
 };
 
 export enum KnowledgeGraphSourceKind {
-  Brain = "BRAIN",
   Observations = "OBSERVATIONS",
   Thread = "THREAD",
   Wiki = "WIKI",
@@ -2300,14 +2191,15 @@ export type Mutation = {
   captureMobileMemory: MobileMemoryCapture;
   checkoutThread: Thread;
   /**
-   * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
-   * Returns the job row (newly inserted or the in-flight dedupe hit).
+   * Admin-only: enqueue an ad-hoc tenant-level compile job for the graph→wiki
+   * materializer. Returns the job row (newly inserted or the in-flight dedupe
+   * hit).
    *
-   * When `modelId` is supplied, it is forwarded to the compile Lambda event
-   * payload so a single run can override `BEDROCK_MODEL_ID` without a
-   * redeploy. The override takes effect only on the direct Event-invoke
-   * path; if the invoke fails and a polling worker claims the job later, the
-   * compile falls back to the env-default model.
+   * Tenant-routed unconditionally since the U11 cutover (plan
+   * 2026-06-09-004): the per-user owner key is ignored and ONE tenant-keyed
+   * compile job (null `userId`) is enqueued. `tenantScope`, `userId`,
+   * `ownerId`, and `modelId` are accepted for contract compatibility but no
+   * longer change behavior (the materializer is deterministic/LLM-free).
    */
   compileWikiNow: WikiCompileJob;
   createAgentProfile: AgentProfile;
@@ -2364,7 +2256,6 @@ export type Mutation = {
   deleteWebhook: Scalars["Boolean"]["output"];
   disableSkill: Scalars["Boolean"]["output"];
   disableWorkflow: Scalars["Boolean"]["output"];
-  editTenantEntityFact: TenantEntitySection;
   enableWorkflow: WorkflowBinding;
   escalateThread: Thread;
   importN8nRoutine: Routine;
@@ -2404,7 +2295,6 @@ export type Mutation = {
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
-  rejectTenantEntityFact: TenantEntitySection;
   releaseThread: Thread;
   removeInboxItemLink: Scalars["Boolean"]["output"];
   removeSpaceMember: Scalars["Boolean"]["output"];
@@ -2428,7 +2318,6 @@ export type Mutation = {
   reviewGoal: ReviewGoalPayload;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
-  runBrainPageEnrichment: BrainEnrichmentProposal;
   runScheduledJob: RunScheduledJobResult;
   saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
@@ -2612,6 +2501,7 @@ export type MutationCompileWikiNowArgs = {
   modelId?: InputMaybe<Scalars["String"]["input"]>;
   ownerId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+  tenantScope?: InputMaybe<Scalars["Boolean"]["input"]>;
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
@@ -2788,11 +2678,6 @@ export type MutationDisableSkillArgs = {
 
 export type MutationDisableWorkflowArgs = {
   input: DisableWorkflowInput;
-};
-
-export type MutationEditTenantEntityFactArgs = {
-  content: Scalars["String"]["input"];
-  factId: Scalars["ID"]["input"];
 };
 
 export type MutationEnableWorkflowArgs = {
@@ -2999,11 +2884,6 @@ export type MutationRejectOntologyChangeSetArgs = {
   input: RejectOntologyChangeSetInput;
 };
 
-export type MutationRejectTenantEntityFactArgs = {
-  factId: Scalars["ID"]["input"];
-  reason?: InputMaybe<Scalars["String"]["input"]>;
-};
-
 export type MutationReleaseThreadArgs = {
   id: Scalars["ID"]["input"];
   input: ReleaseThreadInput;
@@ -3087,10 +2967,6 @@ export type MutationRollbackThreadIdleLearningRunArgs = {
 
 export type MutationRotateTenantCredentialArgs = {
   input: RotateTenantCredentialInput;
-};
-
-export type MutationRunBrainPageEnrichmentArgs = {
-  input: RunBrainPageEnrichmentInput;
 };
 
 export type MutationRunScheduledJobArgs = {
@@ -3724,7 +3600,6 @@ export type Query = {
   artifact?: Maybe<Artifact>;
   artifacts: Array<Artifact>;
   bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
-  brainEnrichmentSources: Array<BrainEnrichmentSourceAvailability>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
   /**
@@ -3825,8 +3700,9 @@ export type Query = {
    * Ranked wiki-page search for mobile. Runs a Postgres full-text query
    * (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
    * `search_tsv` generated column on `wiki_pages` (title || summary ||
-   * body_md), scoped to one (tenant, user) pair. Returns results in
-   * `ts_rank` DESC order, tie-broken by `last_compiled_at` DESC.
+   * body_md), scoped to tenant-shared pages (null owner) plus the
+   * requesting user's own pages. Returns results in `ts_rank` DESC order,
+   * tie-broken by `last_compiled_at` DESC.
    *
    * Previously routed through Hindsight semantic recall; on the compiled
    * wiki corpus FTS is near-instant and matches the query shape mobile
@@ -3847,10 +3723,11 @@ export type Query = {
   pinnedThreads: Array<PinnedThread>;
   queuedWakeups: Array<AgentWakeupRequest>;
   /**
-   * Newest compiled wiki pages for the given user, ordered by
-   * last_compiled_at DESC (falling back to updated_at when the page hasn't
-   * been recompiled yet). Intended as the default Memories-tab feed so
-   * the user sees fresh pages before they type a search query.
+   * Newest compiled wiki pages readable by the given user — tenant-shared
+   * pages (null owner) plus their own — ordered by last_compiled_at DESC
+   * (falling back to updated_at when the page hasn't been recompiled yet).
+   * Intended as the default Memories-tab feed so the user sees fresh pages
+   * before they type a search query.
    */
   recentWikiPages: Array<WikiPage>;
   recipe?: Maybe<Recipe>;
@@ -3876,8 +3753,6 @@ export type Query = {
   tenantAgent: Agent;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
-  tenantEntityFacets: TenantEntityFacetConnection;
-  tenantEntityPage?: Maybe<TenantEntityPage>;
   tenantMembers: Array<TenantMember>;
   tenantMentionTargets: Array<ThreadMentionTarget>;
   tenantModelCatalog: Array<TenantModelCatalogEntry>;
@@ -3930,7 +3805,8 @@ export type Query = {
   /**
    * Admin-only: list recent compile jobs for a tenant. When `userId` is
    * provided, restricts to that user's jobs; when null/absent, returns
-   * jobs across every user in the tenant. Ordered newest-first.
+   * jobs across every user in the tenant — including tenant-keyed
+   * graph-mode jobs (null `userId`). Ordered newest-first.
    *
    * Powers the `thinkwork wiki status` CLI command.
    */
@@ -3943,16 +3819,24 @@ export type Query = {
    */
   wikiConnectedPages: Array<WikiPage>;
   /**
-   * User-scoped force-graph: every active wiki page + every page-to-page
-   * link whose endpoints are both active in the same `(tenant, user)`
-   * scope. Links that reference archived pages are excluded. One round-trip.
+   * Force-graph over the readable scope: tenant-scoped pages plus the
+   * requesting user's own pages, with every page-to-page link whose
+   * endpoints are both active and readable. Links that reference archived
+   * pages are excluded. One round-trip. `userId` is optional and defaults
+   * to the caller.
    */
   wikiGraph: WikiGraph;
-  /** Read one compiled page by slug. `userId` is required. */
+  /**
+   * Read one compiled page by slug. Serves tenant-scoped pages (null owner)
+   * plus the requesting user's own pages; `userId` is optional and defaults
+   * to the caller. When a user page and a tenant page share a slug during
+   * the transition window, the user's own page wins.
+   */
   wikiPage?: Maybe<WikiPage>;
   /**
-   * Postgres full-text search over compiled pages in a single (tenant, user)
-   * scope. Also matches exact aliases. Ranked by ts_rank + alias-hit boost.
+   * Postgres full-text search over compiled pages — tenant-scoped pages plus
+   * the requesting user's own pages. Also matches exact aliases. Ranked by
+   * ts_rank + alias-hit boost.
    */
   wikiSearch: Array<WikiSearchResult>;
   workflowCatalog: Array<WorkflowCatalogItem>;
@@ -4069,12 +3953,6 @@ export type QueryArtifactsArgs = {
 };
 
 export type QueryBedrockModelImportCandidatesArgs = {
-  tenantId: Scalars["ID"]["input"];
-};
-
-export type QueryBrainEnrichmentSourcesArgs = {
-  pageId: Scalars["ID"]["input"];
-  pageTable: Scalars["String"]["input"];
   tenantId: Scalars["ID"]["input"];
 };
 
@@ -4488,17 +4366,6 @@ export type QueryTenantBySlugArgs = {
 
 export type QueryTenantCredentialsArgs = {
   status?: InputMaybe<TenantCredentialStatus>;
-  tenantId: Scalars["ID"]["input"];
-};
-
-export type QueryTenantEntityFacetsArgs = {
-  cursor?: InputMaybe<Scalars["String"]["input"]>;
-  limit?: InputMaybe<Scalars["Int"]["input"]>;
-  pageId: Scalars["ID"]["input"];
-};
-
-export type QueryTenantEntityPageArgs = {
-  pageId: Scalars["ID"]["input"];
   tenantId: Scalars["ID"]["input"];
 };
 
@@ -5071,15 +4938,6 @@ export enum RoutineVisibility {
   AgentPrivate = "agent_private",
   TenantShared = "tenant_shared",
 }
-
-export type RunBrainPageEnrichmentInput = {
-  limit?: InputMaybe<Scalars["Int"]["input"]>;
-  pageId: Scalars["ID"]["input"];
-  pageTable: Scalars["String"]["input"];
-  query?: InputMaybe<Scalars["String"]["input"]>;
-  sourceFamilies?: InputMaybe<Array<BrainEnrichmentSourceFamily>>;
-  tenantId: Scalars["ID"]["input"];
-};
 
 /**
  * Result of `runScheduledJob`. Synchronously invokes the job-trigger
@@ -5776,46 +5634,6 @@ export enum TenantCredentialStatus {
   Deleted = "deleted",
   Disabled = "disabled",
 }
-
-export type TenantEntityFacetConnection = {
-  __typename?: "TenantEntityFacetConnection";
-  edges: Array<TenantEntityFacetEdge>;
-  pageInfo: PageInfo;
-};
-
-export type TenantEntityFacetEdge = {
-  __typename?: "TenantEntityFacetEdge";
-  cursor: Scalars["String"]["output"];
-  node: TenantEntitySection;
-};
-
-export type TenantEntityPage = {
-  __typename?: "TenantEntityPage";
-  bodyMd?: Maybe<Scalars["String"]["output"]>;
-  entitySubtype: Scalars["String"]["output"];
-  id: Scalars["ID"]["output"];
-  sections: Array<TenantEntitySection>;
-  slug: Scalars["String"]["output"];
-  status: Scalars["String"]["output"];
-  summary?: Maybe<Scalars["String"]["output"]>;
-  tenantId: Scalars["ID"]["output"];
-  title: Scalars["String"]["output"];
-  type: Scalars["String"]["output"];
-  updatedAt: Scalars["AWSDateTime"]["output"];
-};
-
-export type TenantEntitySection = {
-  __typename?: "TenantEntitySection";
-  bodyMd: Scalars["String"]["output"];
-  facetType?: Maybe<Scalars["String"]["output"]>;
-  heading: Scalars["String"]["output"];
-  id: Scalars["ID"]["output"];
-  lastSourceAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  position: Scalars["Int"]["output"];
-  sectionSlug: Scalars["String"]["output"];
-  status: Scalars["String"]["output"];
-  updatedAt: Scalars["AWSDateTime"]["output"];
-};
 
 export type TenantMember = {
   __typename?: "TenantMember";
@@ -6831,12 +6649,16 @@ export type WikiCompileJob = {
   id: Scalars["ID"]["output"];
   metrics?: Maybe<Scalars["AWSJSON"]["output"]>;
   /** @deprecated Use userId */
-  ownerId: Scalars["ID"]["output"];
+  ownerId?: Maybe<Scalars["ID"]["output"]>;
   startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   status: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   trigger: Scalars["String"]["output"];
-  userId: Scalars["ID"]["output"];
+  /**
+   * Owning user. Null for tenant-keyed graph-mode compile jobs (the graph
+   * materializer runs one compile per tenant, not per user).
+   */
+  userId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type WikiGraph = {
@@ -6918,7 +6740,7 @@ export type WikiPage = {
   id: Scalars["ID"]["output"];
   lastCompiledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   /** @deprecated Use userId */
-  ownerId: Scalars["ID"]["output"];
+  ownerId?: Maybe<Scalars["ID"]["output"]>;
   /**
    * Parent hub when this page was promoted from a section on another page.
    * Null for top-level pages. Reads `wiki_pages.parent_page_id`.
@@ -6957,7 +6779,11 @@ export type WikiPage = {
   title: Scalars["String"]["output"];
   type: WikiPageType;
   updatedAt: Scalars["AWSDateTime"]["output"];
-  userId: Scalars["ID"]["output"];
+  /**
+   * Owning user. Null for tenant-scoped pages produced by the graph
+   * materializer — those are readable by any member of the tenant.
+   */
+  userId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type WikiPageSectionChildrenArgs = {
@@ -6981,8 +6807,12 @@ export type WikiPageSection = {
 /**
  * Compounding Memory (wiki) read path.
  *
- * v1 is strictly user-scoped: every read requires both `tenantId` and
- * `userId`. See .prds/compounding-memory-scoping.md.
+ * Scope rule (plan 2026-06-09-004 U9/U14): pages are either USER-scoped
+ * (`userId`/`ownerId` set — the v1 planner output) or TENANT-scoped
+ * (`userId`/`ownerId` null — the graph materializer output, readable by any
+ * member of the tenant). Reads serve the transitional union: tenant pages
+ * plus the requesting user's own pages, until the U11 archive pass retires
+ * the user-scoped corpus.
  */
 export enum WikiPageType {
   Decision = "DECISION",
@@ -9391,9 +9221,10 @@ export type CliAllTenantAgentsForWikiQuery = {
 
 export type CliCompileWikiNowMutationVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
-  ownerId: Scalars["ID"]["input"];
+  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
   modelId?: InputMaybe<Scalars["String"]["input"]>;
   forceNew?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantScope?: InputMaybe<Scalars["Boolean"]["input"]>;
 }>;
 
 export type CliCompileWikiNowMutation = {
@@ -9402,7 +9233,7 @@ export type CliCompileWikiNowMutation = {
     __typename?: "WikiCompileJob";
     id: string;
     tenantId: string;
-    ownerId: string;
+    ownerId?: string | null;
     status: string;
     trigger: string;
     dedupeKey: string;
@@ -9445,7 +9276,7 @@ export type CliWikiCompileJobsQuery = {
     __typename?: "WikiCompileJob";
     id: string;
     tenantId: string;
-    ownerId: string;
+    ownerId?: string | null;
     status: string;
     trigger: string;
     dedupeKey: string;
@@ -19162,10 +18993,7 @@ export const CliCompileWikiNowDocument = {
             kind: "Variable",
             name: { kind: "Name", value: "ownerId" },
           },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
         },
         {
           kind: "VariableDefinition",
@@ -19180,6 +19008,14 @@ export const CliCompileWikiNowDocument = {
           variable: {
             kind: "Variable",
             name: { kind: "Name", value: "forceNew" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantScope" },
           },
           type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
         },
@@ -19221,6 +19057,14 @@ export const CliCompileWikiNowDocument = {
                 value: {
                   kind: "Variable",
                   name: { kind: "Name", value: "forceNew" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantScope" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantScope" },
                 },
               },
             ],

@@ -3,7 +3,6 @@ import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   type KnowledgeGraphSourceKind,
   knowledgeGraphIngestRuns,
-  tenantEntityPages,
   messages,
   wikiPages,
 } from "@thinkwork/database-pg/schema";
@@ -383,16 +382,9 @@ async function resolveSourceScope(
     };
   }
 
-  return {
-    sourceKind: "brain",
-    threadId: null,
-    sourceRef:
-      args.sourceRef ??
-      (pageIds.length ? `pages:${pageIds.join(",")}` : "tenant:recent"),
-    sourceLabel: args.sourceLabel ?? "Company Brain",
-    ownerUserId: null,
-    pageIds,
-  };
+  throw new KnowledgeGraphRunError(
+    `Unsupported Knowledge Graph source kind: ${args.sourceKind}`,
+  );
 }
 
 async function countSourceItems(args: {
@@ -423,19 +415,9 @@ async function countSourceItems(args: {
       );
     return Number(row?.count ?? 0);
   }
-  const [row] = await args.db
-    .select({ count: sql<number>`COUNT(*)::int` })
-    .from(tenantEntityPages)
-    .where(
-      and(
-        eq(tenantEntityPages.tenant_id, args.tenantId),
-        eq(tenantEntityPages.status, "active"),
-        args.source.pageIds.length
-          ? inArray(tenantEntityPages.id, args.source.pageIds)
-          : sql`true`,
-      ),
-    );
-  return Number(row?.count ?? 0);
+  throw new KnowledgeGraphRunError(
+    `Unsupported Knowledge Graph source kind: ${args.source.sourceKind}`,
+  );
 }
 
 function normalizeMetadata(

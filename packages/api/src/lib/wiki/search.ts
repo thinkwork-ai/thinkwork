@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import { db } from "../../graphql/utils.js";
 import {
   toGraphQLPage,
   type GraphQLWikiPage,
 } from "../../graphql/resolvers/wiki/mappers.js";
+import type { WikiReadScope } from "./repository.js";
 
 export interface UserWikiSearchResult {
   page: GraphQLWikiPage;
@@ -37,7 +39,7 @@ const WIKI_SEARCH_STOPWORDS = new Set([
 interface WikiSearchRow {
   id: string;
   tenant_id: string;
-  owner_id: string;
+  owner_id: string | null;
   type: string;
   slug: string;
   title: string;
@@ -68,9 +70,47 @@ export function buildPrefixTsQuery(query: string): string | null {
   return terms.map((term) => `${term}:*`).join(" & ");
 }
 
+/**
+ * Raw-SQL owner predicate for a {@link WikiReadScope} over `p.owner_id`
+ * (the search query's fixed `wiki.pages p` alias). Mirrors
+ * `wikiReadScopeWhere` for the string-SQL world:
+ *   - owner scope, non-null  → `p.owner_id = $1` (v1 behavior, unchanged)
+ *   - owner scope, null      → `p.owner_id IS NULL` (tenant pages only)
+ *   - tenantUnion w/ userId  → `(p.owner_id IS NULL OR p.owner_id = $1)`
+ *   - tenantUnion w/o userId → `p.owner_id IS NULL`
+ */
+function ownerPredicateSql(scope: WikiReadScope): SQL {
+  if (scope.kind === "owner") {
+    return scope.ownerId === null
+      ? sql`p.owner_id IS NULL`
+      : sql`p.owner_id = ${scope.ownerId}`;
+  }
+  if (!scope.userId) return sql`p.owner_id IS NULL`;
+  return sql`(p.owner_id IS NULL OR p.owner_id = ${scope.userId})`;
+}
+
+/**
+ * Back-compat wrapper: strict v1 owner-scope search. Prefer
+ * {@link searchWikiForReadScope} — every GraphQL/MCP read surface now uses
+ * the transitional tenant-union scope (plan 2026-06-09-004 U14).
+ */
 export async function searchWikiForUser(args: {
   tenantId: string;
   userId: string;
+  query: string;
+  limit: number;
+}): Promise<UserWikiSearchResult[]> {
+  return searchWikiForReadScope({
+    tenantId: args.tenantId,
+    scope: { kind: "owner", ownerId: args.userId },
+    query: args.query,
+    limit: args.limit,
+  });
+}
+
+export async function searchWikiForReadScope(args: {
+  tenantId: string;
+  scope: WikiReadScope;
   query: string;
   limit: number;
 }): Promise<UserWikiSearchResult[]> {
@@ -95,7 +135,7 @@ export async function searchWikiForUser(args: {
 			FROM wiki.page_aliases a
 			INNER JOIN wiki.pages p ON p.id = a.page_id
 			WHERE p.tenant_id = ${args.tenantId}
-			  AND p.owner_id = ${args.userId}
+			  AND ${ownerPredicateSql(args.scope)}
 			  AND p.status = 'active'
 			  AND (a.alias = ${aliasNeedle} OR a.alias ILIKE ${`%${aliasNeedle}%`})
 		)
@@ -137,7 +177,7 @@ export async function searchWikiForUser(args: {
 			)
 		) fuzzy
 		WHERE p.tenant_id = ${args.tenantId}
-		  AND p.owner_id = ${args.userId}
+		  AND ${ownerPredicateSql(args.scope)}
 		  AND p.status = 'active'
 		  AND (
 		    p.search_tsv @@ plainto_tsquery('english', ${query})

@@ -26,7 +26,6 @@ import {
   useThreadTurnUpdatedSubscription,
   useThreadUpdatedSubscription,
   useUpdateThread,
-  type ContextProviderStatus,
 } from "@thinkwork/react-native-sdk";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { useMe } from "@/lib/hooks/use-users";
@@ -94,12 +93,6 @@ import {
   type SelectedWorkspace,
   type SelectedSpace,
 } from "@/components/input/MessageInputFooter";
-import { CaptureFooter } from "@/components/wiki/CaptureFooter";
-import { BrainSearchSurface } from "@/components/brain/BrainSearchSurface";
-import { BrainProviderStatusSheet } from "@/components/brain/BrainProviderStatusSheet";
-import type { BrainMode } from "@/components/brain/types";
-import { Inter_500Medium, useFonts } from "@expo-google-fonts/inter";
-import { ToastHost } from "@/components/ui/toast";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   QuickActionsSheet,
@@ -576,9 +569,6 @@ export default function ThreadsScreen() {
     [router, markRead],
   );
 
-  // ── Tabs: Threads | Brain ────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"threads" | "brain">("threads");
-
   // ── New thread / memory input ────────────────────────────────────────
   // Each tab keeps its own draft text so switching tabs doesn't leak a
   // half-typed thread into a memory submit (or vice versa).
@@ -687,41 +677,6 @@ export default function ThreadsScreen() {
   // sync_pending entries so they stop hanging around on the device.
   useEffect(() => {
     void AsyncStorage.removeItem("thinkwork:capture-queue:v1").catch(() => {});
-  }, []);
-
-  // Brain-tab search: the footer only emits on explicit submit
-  // (Enter or send tap), so no debounce layer is needed here.
-  const [brainQuery, setBrainQuery] = useState("");
-  const [brainSearchQuery, setBrainSearchQuery] = useState("");
-  const [brainMode, setBrainMode] = useState<BrainMode>("pages");
-  const [brainProviders, setBrainProviders] = useState<ContextProviderStatus[]>(
-    [],
-  );
-  const [brainProvidersVisible, setBrainProvidersVisible] = useState(false);
-  // Brain graph view: when on, render node titles + use a label-friendly
-  // force layout (longer links, more repulsion) so titles don't overlap.
-  // In-session only; cold app launches start with labels off.
-  const [brainShowLabels, setBrainShowLabels] = useState(false);
-  // Skia text rendering needs an Inter SkFont — load once for the lifetime of the tab.
-  const [brainFontsLoaded] = useFonts({ Inter: Inter_500Medium });
-
-  const handleBrainQueryChange = useCallback(
-    (next: string) => {
-      setBrainQuery(next);
-      if (brainMode === "search") {
-        setBrainSearchQuery(next);
-      } else if (!next.trim()) {
-        setBrainSearchQuery("");
-      }
-    },
-    [brainMode],
-  );
-
-  const handleBrainModeChange = useCallback((nextMode: BrainMode) => {
-    setBrainMode(nextMode);
-    if (nextMode !== "search") {
-      setBrainSearchQuery("");
-    }
   }, []);
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
@@ -933,7 +888,10 @@ export default function ThreadsScreen() {
           });
           reexecute({ requestPolicy: "network-only" });
         } catch (err) {
-          console.error("[mobile-agentcore] new-thread first turn failed:", err);
+          console.error(
+            "[mobile-agentcore] new-thread first turn failed:",
+            err,
+          );
           clearPendingThreadStart(newThread.id);
           clearThreadActive(newThread.id);
         }
@@ -969,9 +927,6 @@ export default function ThreadsScreen() {
   // ── Render ─────────────────────────────────────────────────────────────
   const computerDisplayName =
     selectedComputer?.name || (computersFetching ? "" : "Computer");
-  const brainProviderErrors = brainProviders.filter((provider) =>
-    ["error", "timeout"].includes(provider.state),
-  ).length;
   const noAssignedComputer = !computersFetching && computers.length === 0;
 
   return (
@@ -1000,70 +955,27 @@ export default function ThreadsScreen() {
               </Text>
             </View>
 
-            {/* Right: Brain graph labels + Filter + Menu */}
+            {/* Right: Filter + Menu */}
             <View className="flex-row items-center gap-3">
-              {activeTab === "brain" && brainMode === "graph" ? (
-                <Pressable
-                  onPress={() => setBrainShowLabels((s) => !s)}
-                  className="p-2"
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    brainShowLabels ? "Hide labels" : "Show labels"
+              <Pressable
+                onPress={() => setFiltersOpen((o) => !o)}
+                className="p-2 relative"
+              >
+                <Filter
+                  size={22}
+                  color={
+                    filtersOpen && hasActiveFilters
+                      ? colors.primary
+                      : colors.foreground
                   }
-                >
-                  <IconLetterCase
-                    size={22}
-                    color={brainShowLabels ? colors.primary : colors.foreground}
-                    strokeWidth={2}
+                />
+                {filtersOpen && hasActiveFilters && (
+                  <View
+                    className="absolute top-1 right-1 w-2 h-2 rounded-full"
+                    style={{ backgroundColor: colors.primary }}
                   />
-                </Pressable>
-              ) : null}
-              {activeTab === "brain" &&
-              brainMode === "search" &&
-              brainProviders.length > 0 ? (
-                <Pressable
-                  onPress={() => setBrainProvidersVisible(true)}
-                  className="p-2 relative"
-                  accessibilityRole="button"
-                  accessibilityLabel="Brain providers"
-                >
-                  <DatabaseZap
-                    size={22}
-                    color={
-                      brainProviderErrors > 0
-                        ? colors.destructive
-                        : colors.foreground
-                    }
-                  />
-                  {brainProviderErrors > 0 ? (
-                    <View
-                      className="absolute top-1 right-1 w-2 h-2 rounded-full"
-                      style={{ backgroundColor: colors.destructive }}
-                    />
-                  ) : null}
-                </Pressable>
-              ) : null}
-              {activeTab === "threads" ? (
-                <Pressable
-                  onPress={() => setFiltersOpen((o) => !o)}
-                  className="p-2 relative"
-                >
-                  <Filter
-                    size={22}
-                    color={
-                      filtersOpen && hasActiveFilters
-                        ? colors.primary
-                        : colors.foreground
-                    }
-                  />
-                  {filtersOpen && hasActiveFilters && (
-                    <View
-                      className="absolute top-1 right-1 w-2 h-2 rounded-full"
-                      style={{ backgroundColor: colors.primary }}
-                    />
-                  )}
-                </Pressable>
-              ) : null}
+                )}
+              </Pressable>
               <HeaderContextMenu
                 items={[
                   {
@@ -1186,107 +1098,9 @@ export default function ThreadsScreen() {
         </View>
       ) : null}
 
-      {/* Threads / Brain segmented control */}
-      <View
-        className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 items-center justify-center"
-        style={{ height: 52, paddingBottom: 8 }}
-      >
-        <View
-          className="flex-row rounded-full bg-neutral-200 dark:bg-neutral-800"
-          style={{ padding: 2 }}
-        >
-          <Pressable
-            onPress={() => setActiveTab("threads")}
-            className="flex-row items-center justify-center gap-1.5 rounded-full"
-            style={{
-              minWidth: 96,
-              paddingHorizontal: 16,
-              paddingVertical: 5,
-              backgroundColor:
-                activeTab === "threads"
-                  ? isDark
-                    ? "#525252"
-                    : "#ffffff"
-                  : "transparent",
-            }}
-          >
-            <Text
-              className="text-sm font-semibold"
-              style={{
-                color:
-                  activeTab === "threads"
-                    ? colors.foreground
-                    : colors.mutedForeground,
-              }}
-            >
-              Threads
-            </Text>
-            {threadBadge ? (
-              <View
-                className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1"
-                style={{
-                  backgroundColor:
-                    threadBadge.kind === "hitl"
-                      ? "#f59e0b"
-                      : activeTab === "threads"
-                        ? colors.primary
-                        : isDark
-                          ? "#404040"
-                          : "#d4d4d4",
-                }}
-              >
-                <Text
-                  style={{
-                    color:
-                      threadBadge.kind === "hitl"
-                        ? "#111827"
-                        : activeTab === "threads"
-                          ? isDark
-                            ? "#000"
-                            : "#fff"
-                          : colors.mutedForeground,
-                    fontSize: 10,
-                    fontWeight: "700",
-                  }}
-                >
-                  {threadBadge.count > 99 ? "99+" : threadBadge.count}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
-          <Pressable
-            onPress={() => setActiveTab("brain")}
-            className="flex-row items-center justify-center gap-1.5 rounded-full"
-            style={{
-              minWidth: 96,
-              paddingHorizontal: 16,
-              paddingVertical: 5,
-              backgroundColor:
-                activeTab === "brain"
-                  ? isDark
-                    ? "#525252"
-                    : "#ffffff"
-                  : "transparent",
-            }}
-          >
-            <Text
-              className="text-sm font-semibold"
-              style={{
-                color:
-                  activeTab === "brain"
-                    ? colors.foreground
-                    : colors.mutedForeground,
-              }}
-            >
-              Memories
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
         <WebContent>
-          {activeTab === "threads" && filtersOpen && (
+          {filtersOpen && (
             <ThreadFilterBar
               filters={filters}
               spaces={spaces}
@@ -1294,137 +1108,99 @@ export default function ThreadsScreen() {
             />
           )}
 
-          {activeTab === "threads" ? (
-            <FlatList
-              style={{ flex: 1 }}
-              data={filteredThreads}
-              keyExtractor={(item: any) => item.id}
-              renderItem={({ item }) => (
-                <ThreadRow
-                  thread={item}
-                  isUnread={isUnread(
-                    item.id,
-                    item.lastTurnCompletedAt || item.createdAt,
-                    item.lastReadAt,
-                  )}
-                  needsHitl={pendingReviewsByThreadId.has(item.id)}
-                  hitlPreview={
-                    subAgentReviewPreview(
-                      pendingReviewsByThreadId.get(item.id),
-                      { pairedAgentIds, agentNames },
-                    ) ??
-                    hitlThreadPreview(pendingReviewsByThreadId.get(item.id))
-                  }
-                  isActive={isThreadActive(item.id)}
-                  onArchive={handleArchive}
-                  onPress={() => handleThreadPress(item)}
-                />
-              )}
-              ItemSeparatorComponent={() => (
-                <View
-                  className="h-px bg-neutral-200 dark:bg-neutral-800"
-                  style={{ marginLeft: 68 }}
-                />
-              )}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={handleRefresh}
-                  tintColor={colors.primary}
-                />
-              }
-              scrollEnabled={filteredThreads.length > 0}
-              ListEmptyComponent={
-                <View className="items-center gap-2">
-                  <ListTodo size={32} color={colors.mutedForeground} />
-                  <Muted>
-                    {noAssignedComputer
-                      ? "Ask an operator to assign a Computer"
-                      : "No threads found"}
-                  </Muted>
-                </View>
-              }
-              contentContainerStyle={
-                filteredThreads.length === 0
-                  ? { flexGrow: 1, justifyContent: "center" }
-                  : { paddingTop: 8 }
-              }
-            />
-          ) : (
-            <BrainSearchSurface
-              apiBaseUrl={resolveApiUrl()}
-              mode={brainMode}
-              query={brainMode === "search" ? brainSearchQuery : brainQuery}
-              tenantId={tenantId}
-              userId={currentUser?.id}
-              agentId={activeAgent?.id}
-              getToken={getToken}
-              colors={colors}
-              graphFontsLoaded={brainFontsLoaded}
-              graphShowLabels={brainShowLabels}
-              onProviderStatusesChange={setBrainProviders}
-            />
-          )}
+          <FlatList
+            style={{ flex: 1 }}
+            data={filteredThreads}
+            keyExtractor={(item: any) => item.id}
+            renderItem={({ item }) => (
+              <ThreadRow
+                thread={item}
+                isUnread={isUnread(
+                  item.id,
+                  item.lastTurnCompletedAt || item.createdAt,
+                  item.lastReadAt,
+                )}
+                needsHitl={pendingReviewsByThreadId.has(item.id)}
+                hitlPreview={
+                  subAgentReviewPreview(pendingReviewsByThreadId.get(item.id), {
+                    pairedAgentIds,
+                    agentNames,
+                  }) ?? hitlThreadPreview(pendingReviewsByThreadId.get(item.id))
+                }
+                isActive={isThreadActive(item.id)}
+                onArchive={handleArchive}
+                onPress={() => handleThreadPress(item)}
+              />
+            )}
+            ItemSeparatorComponent={() => (
+              <View
+                className="h-px bg-neutral-200 dark:bg-neutral-800"
+                style={{ marginLeft: 68 }}
+              />
+            )}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={colors.primary}
+              />
+            }
+            scrollEnabled={filteredThreads.length > 0}
+            ListEmptyComponent={
+              <View className="items-center gap-2">
+                <ListTodo size={32} color={colors.mutedForeground} />
+                <Muted>
+                  {noAssignedComputer
+                    ? "Ask an operator to assign a Computer"
+                    : "No threads found"}
+                </Muted>
+              </View>
+            }
+            contentContainerStyle={
+              filteredThreads.length === 0
+                ? { flexGrow: 1, justifyContent: "center" }
+                : { paddingTop: 8 }
+            }
+          />
         </WebContent>
       </View>
 
       <View>
-        {activeTab === "threads" ? (
-          <MessageInputFooter
-            ref={messageInputRef}
-            value={newThreadText}
-            onChangeText={setNewThreadText}
-            onSubmit={() => handleCreateThread()}
-            placeholder={
-              noAssignedComputer
-                ? "Ask an operator to assign a Computer"
-                : "Start a new thread..."
-            }
-            disabled={noAssignedComputer}
-            colors={colors}
-            isDark={isDark}
-            onAttach={handleNewThreadAttach}
-            attachedImageUri={newThreadImageUri}
-            onRemoveAttachment={() => {
-              setNewThreadImage(null);
-              setNewThreadImageUri(null);
-            }}
-            agentEnabled={effectiveNewThreadAgentEnabled}
-            onToggleAgent={() => {
-              newThreadAgentOverriddenRef.current = true;
-              setNewThreadAgentEnabled((v) => !v);
-            }}
-            mentionCandidates={newThreadMentionCandidates}
-            selectedMentions={newThreadMentions}
-            onMentionsChange={setNewThreadMentions}
-            selectedSpace={selectedSpace}
-            spaceOptions={newThreadSpaceOptions}
-            onSpaceSelect={(space) => setSelectedSpaceId(space.id)}
-            selectedWorkspaces={selectedWorkspaces}
-            onRemoveWorkspace={(id) =>
-              setSelectedWorkspaces((prev) => prev.filter((w) => w.id !== id))
-            }
-          />
-        ) : activeTab === "brain" ? (
-          <CaptureFooter
-            agentId={activeAgent?.id}
-            userId={currentUser?.id}
-            agentName={activeAgent?.name}
-            tenantId={tenantId}
-            colors={colors}
-            isDark={isDark}
-            searchPlaceholder={
-              brainMode === "pages"
-                ? "Search Pages..."
-                : brainMode === "graph"
-                  ? "Search Graph..."
-                  : "Search Brain..."
-            }
-            onSearchQueryChange={handleBrainQueryChange}
-            brainMode={brainMode}
-            onBrainModeChange={handleBrainModeChange}
-          />
-        ) : null}
+        <MessageInputFooter
+          ref={messageInputRef}
+          value={newThreadText}
+          onChangeText={setNewThreadText}
+          onSubmit={() => handleCreateThread()}
+          placeholder={
+            noAssignedComputer
+              ? "Ask an operator to assign a Computer"
+              : "Start a new thread..."
+          }
+          disabled={noAssignedComputer}
+          colors={colors}
+          isDark={isDark}
+          onAttach={handleNewThreadAttach}
+          attachedImageUri={newThreadImageUri}
+          onRemoveAttachment={() => {
+            setNewThreadImage(null);
+            setNewThreadImageUri(null);
+          }}
+          agentEnabled={effectiveNewThreadAgentEnabled}
+          onToggleAgent={() => {
+            newThreadAgentOverriddenRef.current = true;
+            setNewThreadAgentEnabled((v) => !v);
+          }}
+          mentionCandidates={newThreadMentionCandidates}
+          selectedMentions={newThreadMentions}
+          onMentionsChange={setNewThreadMentions}
+          selectedSpace={selectedSpace}
+          spaceOptions={newThreadSpaceOptions}
+          onSpaceSelect={(space) => setSelectedSpaceId(space.id)}
+          selectedWorkspaces={selectedWorkspaces}
+          onRemoveWorkspace={(id) =>
+            setSelectedWorkspaces((prev) => prev.filter((w) => w.id !== id))
+          }
+        />
       </View>
 
       <QuickActionsSheet
@@ -1524,15 +1300,6 @@ export default function ThreadsScreen() {
           });
         }}
       />
-
-      <BrainProviderStatusSheet
-        visible={brainProvidersVisible}
-        providers={brainProviders}
-        colors={colors}
-        onClose={() => setBrainProvidersVisible(false)}
-      />
-
-      {activeTab === "brain" ? <ToastHost bottomOffset={96} /> : null}
     </KeyboardAvoidingView>
   );
 }

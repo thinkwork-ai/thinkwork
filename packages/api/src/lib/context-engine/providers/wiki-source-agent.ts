@@ -1,6 +1,6 @@
 import {
   normalizeWikiSearchTerms,
-  searchWikiForUser,
+  searchWikiForReadScope,
   type UserWikiSearchResult,
 } from "../../wiki/search.js";
 import type { ContextEngineProviderRequest, ContextHit } from "../types.js";
@@ -52,7 +52,19 @@ export function createWikiSourceAgentContextProvider(
     model?: SourceAgentModel;
   } = {},
 ) {
-  const search = options.search ?? searchWikiForUser;
+  // Default search reads the tenant-union scope (plan 2026-06-09-004 U14):
+  // tenant-shared pages plus the requesting user's own. The injectable seam
+  // keeps the (tenantId, userId) signature so tests and callers are
+  // untouched.
+  const search: WikiSourceAgentSearch =
+    options.search ??
+    ((args) =>
+      searchWikiForReadScope({
+        tenantId: args.tenantId,
+        scope: { kind: "tenantUnion", userId: args.userId },
+        query: args.query,
+        limit: args.limit,
+      }));
   const runtimeMode = options.runtimeMode ?? "model";
   return createSubAgentContextProvider({
     id: "wiki-source-agent",

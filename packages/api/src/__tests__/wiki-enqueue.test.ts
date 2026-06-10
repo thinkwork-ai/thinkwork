@@ -1,9 +1,10 @@
 /**
- * Unit tests for the post-turn wiki-compile enqueue helper.
+ * Unit tests for the graph wiki-compile enqueue helper (U11 cutover state:
+ * the planner-era post-turn enqueue is gone; the graph enqueue is
+ * unconditional apart from the tenant kill switch).
  *
  * Covers the decision matrix in lib/wiki/enqueue.ts:
- * - skipped when flag off
- * - skipped when adapter isn't Hindsight
+ * - skipped when tenant missing / flag off / tenant not found
  * - deduped when a bucket already has a job
  * - successful enqueue path (invoke success + invoke failure)
  * - error swallowed when repository blows up
@@ -16,10 +17,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Hoisted mock state so vi.mock factories can see the handles ─────────────
 
-const { mockTenantRows, mockEnqueue, mockInvoke } = vi.hoisted(() => {
+const { mockTenantRows, mockGraphEnqueue, mockInvoke } = vi.hoisted(() => {
   return {
     mockTenantRows: vi.fn<() => Promise<Array<{ enabled: boolean }>>>(),
-    mockEnqueue: vi.fn(),
+    mockGraphEnqueue: vi.fn(),
     mockInvoke: vi.fn(),
   };
 });
@@ -54,7 +55,7 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
   return {
     ...actual,
     // Only swap the DB-touching helper — keep the pure functions real.
-    enqueueCompileJob: mockEnqueue,
+    enqueueGraphCompileJob: mockGraphEnqueue,
   };
 });
 
@@ -67,7 +68,7 @@ vi.mock("@aws-sdk/client-lambda", () => ({
   InvokeCommand: vi.fn().mockImplementation((input: unknown) => ({ input })),
 }));
 
-import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
+import { maybeEnqueueGraphWikiCompile } from "../lib/wiki/enqueue.js";
 import {
   buildCompileDedupeKey,
   parseCompileDedupeBucket,
@@ -194,85 +195,45 @@ describe("renderBodyMarkdown", () => {
   });
 });
 
-// ─── maybeEnqueuePostTurnCompile branches ────────────────────────────────────
+// ─── maybeEnqueueGraphWikiCompile branches (plan 2026-06-09-004 U10/U11) ─────
 
-describe("maybeEnqueuePostTurnCompile", () => {
-  it("returns skipped_missing_inputs when tenant or owner absent", async () => {
-    const r = await maybeEnqueuePostTurnCompile({
-      tenantId: "",
-      ownerId: "a",
-      adapterKind: "hindsight",
-    });
+describe("maybeEnqueueGraphWikiCompile", () => {
+  it("returns skipped_missing_inputs when tenant absent", async () => {
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "" });
     expect(r.status).toBe("skipped_missing_inputs");
-    expect(mockTenantRows).not.toHaveBeenCalled();
-  });
-
-  it("returns skipped_adapter when adapter isn't hindsight", async () => {
-    const r = await maybeEnqueuePostTurnCompile({
-      tenantId: "t",
-      ownerId: "a",
-      adapterKind: "agentcore",
-    });
-    expect(r.status).toBe("skipped_adapter");
-    expect(mockTenantRows).not.toHaveBeenCalled();
-    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
   });
 
   it("returns skipped_tenant_not_found when tenant row is missing", async () => {
     mockTenantRows.mockResolvedValueOnce([]);
-    const r = await maybeEnqueuePostTurnCompile({
-      tenantId: "t",
-      ownerId: "a",
-      adapterKind: "hindsight",
-    });
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
     expect(r.status).toBe("skipped_tenant_not_found");
-    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
   });
 
-  it("returns skipped_flag_off when wiki_compile_enabled=false", async () => {
+  it("honors the tenant wiki_compile_enabled kill switch", async () => {
     mockTenantRows.mockResolvedValueOnce([{ enabled: false }]);
-    const r = await maybeEnqueuePostTurnCompile({
-      tenantId: "t",
-      ownerId: "a",
-      adapterKind: "hindsight",
-    });
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
     expect(r.status).toBe("skipped_flag_off");
-    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
   });
 
-  it("returns deduped when enqueueCompileJob reports existing job", async () => {
-    mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
-    mockEnqueue.mockResolvedValueOnce({
-      inserted: false,
-      job: { id: "job-existing" },
-    });
-    const r = await maybeEnqueuePostTurnCompile({
-      tenantId: "t",
-      ownerId: "a",
-      adapterKind: "hindsight",
-    });
-    expect(r.status).toBe("deduped");
-    expect(r.jobId).toBe("job-existing");
-    expect(mockInvoke).not.toHaveBeenCalled();
-  });
-
-  it("returns enqueued and invokes wiki-compile when job is inserted (STAGE resolves fn name)", async () => {
+  it("enqueues a tenant-keyed graph job and invokes wiki-compile (STAGE resolves fn name)", async () => {
     process.env.STAGE = "dev";
     mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
-    mockEnqueue.mockResolvedValueOnce({
+    mockGraphEnqueue.mockResolvedValueOnce({
       inserted: true,
-      job: { id: "job-new" },
+      job: { id: "graph-job-1" },
     });
-    mockInvoke.mockResolvedValueOnce({ StatusCode: 202 });
+    mockInvoke.mockResolvedValueOnce({});
 
-    const r = await maybeEnqueuePostTurnCompile({
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+
+    expect(r).toEqual({ status: "enqueued", jobId: "graph-job-1" });
+    expect(mockGraphEnqueue).toHaveBeenCalledWith({
       tenantId: "t",
-      ownerId: "a",
-      adapterKind: "hindsight",
+      trigger: "graph_materialize",
     });
-
-    expect(r.status).toBe("enqueued");
-    expect(r.jobId).toBe("job-new");
     expect(mockInvoke).toHaveBeenCalledTimes(1);
     const invokeArg = mockInvoke.mock.calls[0][0] as { input: any };
     expect(invokeArg.input.FunctionName).toBe("thinkwork-dev-api-wiki-compile");
@@ -283,35 +244,26 @@ describe("maybeEnqueuePostTurnCompile", () => {
     process.env.WIKI_COMPILE_FN = "override-fn-arn";
     process.env.STAGE = "dev";
     mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
-    mockEnqueue.mockResolvedValueOnce({
+    mockGraphEnqueue.mockResolvedValueOnce({
       inserted: true,
-      job: { id: "job-new" },
+      job: { id: "graph-job-1" },
     });
-    mockInvoke.mockResolvedValueOnce({ StatusCode: 202 });
+    mockInvoke.mockResolvedValueOnce({});
 
-    await maybeEnqueuePostTurnCompile({
-      tenantId: "t",
-      ownerId: "a",
-      adapterKind: "hindsight",
-    });
+    await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
     const invokeArg = mockInvoke.mock.calls[0][0] as { input: any };
     expect(invokeArg.input.FunctionName).toBe("override-fn-arn");
   });
 
   it("skips invoke (without failing) when no STAGE / no WIKI_COMPILE_FN", async () => {
     mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
-    mockEnqueue.mockResolvedValueOnce({
+    mockGraphEnqueue.mockResolvedValueOnce({
       inserted: true,
-      job: { id: "job-new" },
+      job: { id: "graph-job-1" },
     });
 
-    const r = await maybeEnqueuePostTurnCompile({
-      tenantId: "t",
-      ownerId: "a",
-      adapterKind: "hindsight",
-    });
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
 
-    // The helper logs a warning and returns enqueued (no invoke error captured).
     expect(r.status).toBe("enqueued");
     expect(mockInvoke).not.toHaveBeenCalled();
   });
@@ -319,30 +271,35 @@ describe("maybeEnqueuePostTurnCompile", () => {
   it("returns enqueued_invoke_failed when Lambda invoke throws", async () => {
     process.env.STAGE = "dev";
     mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
-    mockEnqueue.mockResolvedValueOnce({
+    mockGraphEnqueue.mockResolvedValueOnce({
       inserted: true,
-      job: { id: "job-new" },
+      job: { id: "graph-job-1" },
     });
     mockInvoke.mockRejectedValueOnce(new Error("ResourceNotFoundException"));
 
-    const r = await maybeEnqueuePostTurnCompile({
-      tenantId: "t",
-      ownerId: "a",
-      adapterKind: "hindsight",
-    });
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
 
     expect(r.status).toBe("enqueued_invoke_failed");
-    expect(r.jobId).toBe("job-new");
+    expect(r.jobId).toBe("graph-job-1");
     expect(r.error).toContain("ResourceNotFoundException");
   });
 
-  it("returns error (not throw) when repository blows up", async () => {
-    mockTenantRows.mockRejectedValueOnce(new Error("DB down"));
-    const r = await maybeEnqueuePostTurnCompile({
-      tenantId: "t",
-      ownerId: "a",
-      adapterKind: "hindsight",
+  it("dedupes against an existing job in the bucket", async () => {
+    mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
+    mockGraphEnqueue.mockResolvedValueOnce({
+      inserted: false,
+      job: { id: "graph-job-existing" },
     });
+
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+
+    expect(r).toEqual({ status: "deduped", jobId: "graph-job-existing" });
+    expect(mockInvoke).not.toHaveBeenCalled();
+  });
+
+  it("returns error (never throws) when the repository blows up", async () => {
+    mockTenantRows.mockRejectedValueOnce(new Error("DB down"));
+    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
     expect(r.status).toBe("error");
     expect(r.error).toBe("DB down");
   });

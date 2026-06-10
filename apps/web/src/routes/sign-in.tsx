@@ -3,8 +3,13 @@ import type { DesktopConfig } from "@thinkwork/desktop-ipc";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@thinkwork/ui";
 import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
+import { EmailPasswordForm } from "@/components/auth/EmailPasswordForm";
 import { useAuth } from "@/context/AuthContext";
-import { getHostedSignInUrl } from "@/lib/auth";
+import {
+  getGoogleSignInUrl,
+  getHostedSignInUrl,
+  isPasswordSignInConfigured,
+} from "@/lib/auth";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import {
   getDesktopBridge,
@@ -156,10 +161,17 @@ export function SignInPage() {
       return;
     }
 
-    window.location.href = getHostedSignInUrl();
+    // With the password form on the page, "Continue with Google" should land
+    // on Google's account picker directly — identity_provider=Google skips
+    // the unbranded Cognito hosted-UI login page. Without the form (password
+    // sign-in unconfigured), keep the generic hosted UI as the catch-all.
+    window.location.href = showPasswordForm
+      ? getGoogleSignInUrl()
+      : getHostedSignInUrl();
   }
 
   const webConfigBlocked = !isDesktop && !webDeploymentProfile.okForOAuth;
+  const showPasswordForm = !isDesktop && isPasswordSignInConfigured();
 
   const splash = (
     <main className="flex min-h-0 flex-1 items-center justify-center px-6 py-12">
@@ -167,15 +179,27 @@ export function SignInPage() {
         aria-label="Sign in"
         className="flex w-full max-w-xs flex-col items-center gap-8"
       >
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-4">
           <img
             src="/logo.png"
             alt=""
-            className="size-16 object-contain"
+            className="size-14 object-contain"
             aria-hidden="true"
           />
-          <div className="text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">ThinkWork</h1>
+          <div className="flex flex-col items-center gap-1.5 text-center">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Log in to ThinkWork
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Don&apos;t have an environment?{" "}
+              <Link
+                to="/onboarding/welcome"
+                className="rounded-sm font-medium text-foreground underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Create one
+              </Link>
+              .
+            </p>
           </div>
         </div>
         {error && (
@@ -202,25 +226,12 @@ export function SignInPage() {
             )}
           </div>
         )}
-        {!isDesktop && (
-          <div className="text-center text-xs text-muted-foreground">
-            <p>
-              {webDeploymentProfile.okForOAuth
-                ? `${webDeploymentProfile.displayName} · ${webDeploymentProfile.stage} · ${webDeploymentProfile.region}`
-                : `Configuration incomplete for ${webDeploymentProfile.stage}`}
-            </p>
-            <p className={webConfigBlocked ? "mt-1 text-destructive" : "mt-1"}>
-              {webConfigBlocked
-                ? `Missing ${webDeploymentProfile.missing.join(", ")}`
-                : webDeploymentProfile.trustLabel}
-            </p>
-          </div>
-        )}
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex w-full flex-col items-center gap-4">
           <Button
             onClick={() => void handleGoogle()}
             size="lg"
-            className="min-w-40"
+            variant={showPasswordForm ? "outline" : "default"}
+            className={showPasswordForm ? "w-full" : "min-w-40"}
             disabled={
               isLoading ||
               isStartingOAuth ||
@@ -229,18 +240,46 @@ export function SignInPage() {
               webConfigBlocked
             }
           >
-            {isLoading
-              ? "Checking session..."
-              : isStartingOAuth || isProfileBusy
-                ? "Opening..."
-                : "Log in"}
+            {isLoading ? (
+              "Checking session..."
+            ) : isStartingOAuth || isProfileBusy ? (
+              "Opening..."
+            ) : showPasswordForm ? (
+              <>
+                <GoogleIcon />
+                Log in with Google
+              </>
+            ) : (
+              "Log in"
+            )}
           </Button>
-          <Link
-            to="/onboarding/welcome"
-            className="rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Create New Environment
-          </Link>
+          {showPasswordForm && (
+            <>
+              <div
+                aria-hidden="true"
+                className="flex w-full items-center gap-3 text-xs text-muted-foreground"
+              >
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              <EmailPasswordForm disabled={isLoading || webConfigBlocked} />
+            </>
+          )}
+          {!isDesktop && (
+            <div className="text-center text-xs text-muted-foreground/60">
+              <p>
+                {webDeploymentProfile.okForOAuth
+                  ? `${webDeploymentProfile.displayName} · ${webDeploymentProfile.stage} · ${webDeploymentProfile.region}`
+                  : `Configuration incomplete for ${webDeploymentProfile.stage}`}
+              </p>
+              {webConfigBlocked && (
+                <p className="mt-1 text-destructive">
+                  Missing {webDeploymentProfile.missing.join(", ")}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </section>
     </main>
@@ -259,6 +298,14 @@ export function SignInPage() {
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       {splash}
     </div>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+      <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z" />
+    </svg>
   );
 }
 

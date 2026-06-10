@@ -316,7 +316,6 @@ describe("ontology suggestions", () => {
       [],
       [],
       [],
-      [],
     ]);
 
     const result = await collectOntologySuggestionSources({
@@ -423,7 +422,6 @@ describe("ontology suggestions", () => {
       [],
       [],
       [],
-      [],
     ]);
 
     const result = await collectOntologySuggestionSources({
@@ -447,7 +445,6 @@ describe("ontology suggestions", () => {
 
   it("collects Hindsight memory records as ontology suggestion evidence", async () => {
     const db = new FakeSourceDb([
-      [],
       [],
       [],
       [],
@@ -511,7 +508,6 @@ describe("ontology suggestions", () => {
 
   it("includes unresolved ontology-gate rejections as suggestion evidence", async () => {
     const db = new FakeSourceDb([
-      [],
       [],
       [],
       [

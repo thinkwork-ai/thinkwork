@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { selectApprovedCandidates } from "./enrichment-apply.js";
-import type { BrainEnrichmentCandidate } from "./enrichment-service.js";
+import type { BrainEnrichmentCandidate } from "./enrichment-types.js";
 
 const candidates: BrainEnrichmentCandidate[] = [
   {

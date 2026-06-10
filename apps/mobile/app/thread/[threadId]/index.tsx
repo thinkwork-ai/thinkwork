@@ -97,7 +97,6 @@ import {
   SaveRecipeSheet,
   type SaveRecipeSheetRef,
 } from "@/components/genui/SaveRecipeSheet";
-import { BrainEnrichmentReviewPanel } from "@/components/brain/BrainEnrichmentReviewPanel";
 import { CreateRecipeMutation } from "@/lib/graphql-queries";
 import { useAppMode } from "@/lib/hooks/use-app-mode";
 import { Text, Muted } from "@/components/ui/typography";
@@ -118,17 +117,6 @@ import {
   CancelAgentWorkspaceReviewMutation,
   ResumeAgentWorkspaceRunMutation,
 } from "@/lib/graphql-queries";
-import {
-  candidatesForBrainEnrichmentReview,
-  isBrainEnrichmentReviewPayload,
-  serializeBrainEnrichmentSelection,
-} from "@/lib/brain-enrichment-review";
-import {
-  defaultAcceptedRegionIds,
-  isBrainEnrichmentDraftReviewPayload,
-  serializeBrainEnrichmentDraftDecision,
-} from "@/lib/brain-enrichment-draft-review";
-import { BrainEnrichmentDraftReviewPanel } from "@/components/brain/BrainEnrichmentDraftReviewPanel";
 import {
   type WorkspaceReviewDecision,
   workspaceReviewActionsForStatus,
@@ -154,129 +142,31 @@ function ThreadHitlPrompt({
 }) {
   const proposedChanges = (review?.proposedChanges ?? []) as any[];
   const body = String(review?.reviewBody ?? "").trim();
-  const reviewPayload = useMemo(() => reviewPayloadFor(review), [review]);
-  const isBrainEnrichment = isBrainEnrichmentReviewPayload(reviewPayload);
-  const isBrainEnrichmentDraft =
-    isBrainEnrichmentDraftReviewPayload(reviewPayload);
-  const enrichmentReviewRunId = String(review?.run?.id ?? review?.id ?? "");
-  const enrichmentProposal = useMemo(
-    () =>
-      isBrainEnrichment
-        ? {
-            candidates: Array.isArray(reviewPayload.candidates)
-              ? reviewPayload.candidates
-              : [],
-            providerStatuses: Array.isArray(reviewPayload.providerStatuses)
-              ? reviewPayload.providerStatuses
-              : [],
-            reviewRunId: enrichmentReviewRunId,
-          }
-        : null,
-    [enrichmentReviewRunId, isBrainEnrichment, reviewPayload],
-  );
-  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>(
-    () =>
-      candidatesForBrainEnrichmentReview(enrichmentProposal).map(
-        (candidate) => candidate.id,
-      ),
-  );
-
-  useEffect(() => {
-    if (!isBrainEnrichment) return;
-    setSelectedCandidateIds(
-      candidatesForBrainEnrichmentReview(enrichmentProposal).map(
-        (candidate) => candidate.id,
-      ),
-    );
-  }, [enrichmentReviewRunId, isBrainEnrichment]);
-
-  useEffect(() => {
-    if (!isBrainEnrichment) return;
-    onChangeResponse(
-      serializeBrainEnrichmentSelection({
-        selectedCandidateIds,
-        note,
-      }),
-    );
-  }, [isBrainEnrichment, selectedCandidateIds, note, onChangeResponse]);
-
-  // ---- Draft-page review state (U4) ----
-  const draftPayload = isBrainEnrichmentDraft
-    ? (reviewPayload as ReturnType<typeof reviewPayloadFor> & {
-        proposedBodyMd: string;
-        snapshotMd: string;
-        regions: Array<{
-          id: string;
-          sectionSlug: string;
-          sectionHeading: string;
-          sourceFamily: "BRAIN" | "KNOWLEDGE_BASE" | "WEB" | "MIXED";
-          citation: { uri?: string | null; label?: string | null } | null;
-          beforeMd: string;
-          afterMd: string;
-          contributingCandidateIds: string[];
-        }>;
-        pageTitle: string;
-        targetPageTable: "wiki_pages" | "tenant_entity_pages";
-        targetPageId: string;
-      })
-    : null;
-  const draftReviewRunId = String(review?.run?.id ?? review?.id ?? "");
-  const [acceptedRegionIds, setAcceptedRegionIds] = useState<string[]>(() =>
-    draftPayload ? defaultAcceptedRegionIds(draftPayload.regions) : [],
-  );
-  const [showChanges, setShowChanges] = useState(false);
-
-  useEffect(() => {
-    if (!isBrainEnrichmentDraft || !draftPayload) return;
-    setAcceptedRegionIds(defaultAcceptedRegionIds(draftPayload.regions));
-    setShowChanges(false);
-  }, [draftReviewRunId, isBrainEnrichmentDraft]);
-
-  useEffect(() => {
-    if (!isBrainEnrichmentDraft || !draftPayload) return;
-    const acceptedSet = new Set(acceptedRegionIds);
-    const rejectedRegionIds = draftPayload.regions
-      .map((r: { id: string }) => r.id)
-      .filter((id: string) => !acceptedSet.has(id));
-    onChangeResponse(
-      serializeBrainEnrichmentDraftDecision({
-        acceptedRegionIds,
-        rejectedRegionIds,
-        note,
-      }),
-    );
-  }, [
-    isBrainEnrichmentDraft,
-    draftPayload,
-    acceptedRegionIds,
-    note,
-    onChangeResponse,
-  ]);
+  void onChangeResponse;
+  void note;
 
   return (
     <View
       className="flex-1 px-4 pt-4 pb-3"
       style={{ backgroundColor: colors.background }}
     >
-      {!isBrainEnrichment && !isBrainEnrichmentDraft ? (
-        <View className="flex-row items-center justify-between gap-3">
-          <View className="flex-1">
-            <Text
-              className="text-sm font-semibold"
-              style={{ color: colors.foreground }}
-            >
-              Agent waiting for confirmation
-            </Text>
-            <Muted className="text-xs" numberOfLines={1}>
-              {review?.targetPath ||
-                review?.run?.targetPath ||
-                "Workspace review"}
-            </Muted>
-          </View>
+      <View className="flex-row items-center justify-between gap-3">
+        <View className="flex-1">
+          <Text
+            className="text-sm font-semibold"
+            style={{ color: colors.foreground }}
+          >
+            Agent waiting for confirmation
+          </Text>
+          <Muted className="text-xs" numberOfLines={1}>
+            {review?.targetPath ||
+              review?.run?.targetPath ||
+              "Workspace review"}
+          </Muted>
         </View>
-      ) : null}
+      </View>
 
-      {body && !isBrainEnrichment && !isBrainEnrichmentDraft ? (
+      {body ? (
         <Text
           className="mt-2 text-sm"
           numberOfLines={5}
@@ -284,47 +174,13 @@ function ThreadHitlPrompt({
         >
           {body.replace(/^#+\s*/gm, "").trim()}
         </Text>
-      ) : !isBrainEnrichment && !isBrainEnrichmentDraft && review?.reason ? (
+      ) : review?.reason ? (
         <Muted className="mt-2 text-sm">
           {String(review.reason).replace(/[_-]+/g, " ")}
         </Muted>
       ) : null}
 
-      {isBrainEnrichmentDraft && draftPayload ? (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 8 }}
-          showsVerticalScrollIndicator={false}
-        >
-          <BrainEnrichmentDraftReviewPanel
-            payload={draftPayload}
-            colors={colors}
-            acceptedRegionIds={acceptedRegionIds}
-            onAcceptedRegionIdsChange={setAcceptedRegionIds}
-            showChanges={showChanges}
-            onShowChangesChange={setShowChanges}
-            note={note}
-            onNoteChange={() => {}}
-            showNote={false}
-          />
-        </ScrollView>
-      ) : isBrainEnrichment ? (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 8 }}
-          showsVerticalScrollIndicator={false}
-        >
-          <BrainEnrichmentReviewPanel
-            proposal={enrichmentProposal}
-            colors={colors}
-            note={note}
-            onNoteChange={() => {}}
-            selectedCandidateIds={selectedCandidateIds}
-            onSelectedCandidateIdsChange={setSelectedCandidateIds}
-            showNote={false}
-          />
-        </ScrollView>
-      ) : proposedChanges.length > 0 ? (
+      {proposedChanges.length > 0 ? (
         <View className="mt-3 gap-1.5">
           {proposedChanges.slice(0, 3).map((change, index) => (
             <View
@@ -375,86 +231,6 @@ function reviewPayloadFor(review: any): any | null {
       )?.payload,
     )
   );
-}
-
-function brainEnrichmentCandidates(payload: any): any[] | null {
-  if (payload?.kind !== "brain_enrichment_review") return null;
-  return Array.isArray(payload.candidates)
-    ? dedupeBrainEnrichmentCandidates(payload.candidates)
-    : [];
-}
-
-function sourceFamilyLabel(sourceFamily?: string | null): string {
-  if (sourceFamily === "WEB") return "Web";
-  if (sourceFamily === "KNOWLEDGE_BASE") return "KB";
-  return "Brain";
-}
-
-function dedupeBrainEnrichmentCandidates(candidates: any[]): any[] {
-  const deduped: any[] = [];
-
-  for (const candidate of candidates) {
-    const existingIndex = deduped.findIndex((existing) =>
-      areSimilarEnrichmentCandidates(existing, candidate),
-    );
-
-    if (existingIndex === -1) {
-      deduped.push(candidate);
-      continue;
-    }
-
-    const existingScore = Number(deduped[existingIndex]?.score ?? 0);
-    const candidateScore = Number(candidate?.score ?? 0);
-    if (candidateScore > existingScore) deduped[existingIndex] = candidate;
-  }
-
-  return deduped;
-}
-
-function areSimilarEnrichmentCandidates(a: any, b: any): boolean {
-  const titleA = normalizeCandidateText(String(a?.title ?? ""));
-  const titleB = normalizeCandidateText(String(b?.title ?? ""));
-  if (!titleA || titleA !== titleB) return false;
-
-  const summaryA = normalizeCandidateText(String(a?.summary ?? ""));
-  const summaryB = normalizeCandidateText(String(b?.summary ?? ""));
-  if (!summaryA || !summaryB) return false;
-  if (summaryA === summaryB) return true;
-
-  return candidateTokenSimilarity(summaryA, summaryB) >= 0.88;
-}
-
-function normalizeCandidateText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/\s+\|\s*(involving|when|where|source|sources):.*$/i, "")
-    .replace(/[*_`#>[\](){}]/g, " ")
-    .replace(/[^a-z0-9'\s-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function candidateTokenSimilarity(a: string, b: string): number {
-  const aTokens = new Set(tokensForCandidateSimilarity(a));
-  const bTokens = new Set(tokensForCandidateSimilarity(b));
-  if (aTokens.size === 0 || bTokens.size === 0) return 0;
-
-  let intersection = 0;
-  for (const token of aTokens) {
-    if (bTokens.has(token)) intersection += 1;
-  }
-
-  const union = new Set([...aTokens, ...bTokens]).size;
-  const jaccard = intersection / union;
-  const containment = intersection / Math.min(aTokens.size, bTokens.size);
-  return Math.max(jaccard, containment);
-}
-
-function tokensForCandidateSimilarity(value: string): string[] {
-  return value
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length > 2);
 }
 
 function ThreadHitlTabs({
@@ -579,9 +355,7 @@ function ThreadHitlReviewFooter({
 }) {
   const insets = useSafeAreaInsets();
   const actions = workspaceReviewActionsForStatus(review?.run?.status);
-  const isBrainEnrichment =
-    reviewPayloadFor(review)?.kind === "brain_enrichment_review";
-  const showResume = actions.resume && !isBrainEnrichment;
+  const showResume = actions.resume;
 
   return (
     <View
@@ -1055,7 +829,7 @@ export default function ThreadDetailRoute() {
   const visibleTurns = turns;
   const isOptimisticStartRunning = Boolean(
     pendingThreadStart?.expectAssistantResponse &&
-    !hasPendingStartAssistantMessage,
+      !hasPendingStartAssistantMessage,
   );
   useEffect(() => {
     if (!pendingThreadStart) return;
@@ -1168,8 +942,6 @@ export default function ThreadDetailRoute() {
       if (!pendingReviewRunId) return;
       setPendingDecision(decision);
       try {
-        const isBrainEnrichmentReview =
-          reviewPayloadFor(reviewDetail)?.kind === "brain_enrichment_review";
         const input = {
           idempotencyKey: `mobile-${pendingReviewRunId}-${decision}-${Date.now()}`,
           expectedReviewEtag:
@@ -1186,9 +958,7 @@ export default function ThreadDetailRoute() {
         if (result.error) throw result.error;
         setReviewResponse("");
         setReviewNote("");
-        if (isBrainEnrichmentReview && threadId) {
-          clearThreadActive(threadId);
-        } else if (decision !== "cancel" && threadId) {
+        if (decision !== "cancel" && threadId) {
           markThreadActive(threadId);
         }
         reexecuteReviews({ requestPolicy: "network-only" });
@@ -1196,16 +966,7 @@ export default function ThreadDetailRoute() {
         reexecuteThread({ requestPolicy: "network-only" });
         reexecuteTurns({ requestPolicy: "network-only" });
         reexecuteMessages({ requestPolicy: "network-only" });
-        Alert.alert(
-          "Done",
-          isBrainEnrichmentReview
-            ? decision === "accept"
-              ? "Brain enrichment applied"
-              : decision === "cancel"
-                ? "Brain enrichment rejected"
-                : "Brain enrichment review resumed"
-            : workspaceReviewDecisionToast(decision),
-        );
+        Alert.alert("Done", workspaceReviewDecisionToast(decision));
       } catch (error: any) {
         Alert.alert(
           "Could not update review",
@@ -1235,15 +996,10 @@ export default function ThreadDetailRoute() {
     ],
   );
 
-  const handleReviewNoteChange = useCallback(
-    (value: string) => {
-      setReviewNote(value);
-      if (reviewPayloadFor(reviewDetail)?.kind !== "brain_enrichment_review") {
-        setReviewResponse(value);
-      }
-    },
-    [reviewDetail],
-  );
+  const handleReviewNoteChange = useCallback((value: string) => {
+    setReviewNote(value);
+    setReviewResponse(value);
+  }, []);
 
   // ── Send message ──
   const [messageText, setMessageText] = useState("");

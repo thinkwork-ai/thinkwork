@@ -1,48 +1,36 @@
+/**
+ * wiki-compile handler tests — graph-only since the U11 cutover (plan
+ * 2026-06-09-004): every invocation dispatches to the graph→wiki
+ * materializer; the planner pipeline (compiler, draft-compile, Google
+ * Places priming, per-user knowledge packs) no longer exists.
+ */
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  runCompileJob: vi.fn(),
-  runJobById: vi.fn(),
-  runDraftCompileJob: vi.fn(),
-  runDraftCompileJobById: vi.fn(),
-  claimNextCompileJob: vi.fn(),
+  runGraphCompileJobById: vi.fn(),
+  runNextGraphCompileJob: vi.fn(),
   getCompileJob: vi.fn(),
-  writeUserKnowledgePack: vi.fn(),
-  loadGooglePlacesClientFromSsm: vi.fn(),
 }));
 
-vi.mock("../lib/wiki/compiler.js", () => ({
-  runCompileJob: mocks.runCompileJob,
-  runJobById: mocks.runJobById,
-}));
-
-vi.mock("../lib/wiki/draft-compile.js", () => ({
-  runDraftCompileJob: mocks.runDraftCompileJob,
-  runDraftCompileJobById: mocks.runDraftCompileJobById,
+vi.mock("../lib/wiki/graph-materializer.js", () => ({
+  runGraphCompileJobById: mocks.runGraphCompileJobById,
+  runNextGraphCompileJob: mocks.runNextGraphCompileJob,
 }));
 
 vi.mock("../lib/wiki/repository.js", () => ({
-  claimNextCompileJob: mocks.claimNextCompileJob,
   getCompileJob: mocks.getCompileJob,
-}));
-
-vi.mock("../lib/wiki/pack-renderer.js", () => ({
-  writeUserKnowledgePack: mocks.writeUserKnowledgePack,
-}));
-
-vi.mock("../lib/wiki/google-places-client.js", () => ({
-  loadGooglePlacesClientFromSsm: mocks.loadGooglePlacesClientFromSsm,
 }));
 
 import { handler } from "./wiki-compile.js";
 
-const job = {
+const tenantJob = {
   id: "job-1",
   tenant_id: "tenant-1",
-  owner_id: "owner-1",
-  dedupe_key: "tenant-1:owner-1:1",
+  owner_id: null,
+  dedupe_key: "graph:obs:tenant-1:5601200",
   status: "pending",
-  trigger: "admin",
+  trigger: "graph_materialize",
   attempt: 0,
   claimed_at: null,
   started_at: null,
@@ -52,38 +40,107 @@ const job = {
   created_at: new Date("2026-05-02T12:00:00Z"),
 };
 
-describe("wiki-compile handler", () => {
+describe("wiki-compile handler (graph-only)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.loadGooglePlacesClientFromSsm.mockResolvedValue(null);
-    mocks.getCompileJob.mockResolvedValue(job);
-    mocks.runJobById.mockResolvedValue({
+    mocks.getCompileJob.mockResolvedValue(tenantJob);
+    mocks.runGraphCompileJobById.mockResolvedValue({
       jobId: "job-1",
       status: "succeeded",
-      metrics: { pages_written: 3 },
-      error: null,
+      metrics: { pages_upserted: 2 },
+    });
+    mocks.runNextGraphCompileJob.mockResolvedValue({
+      jobId: "job-2",
+      status: "succeeded",
+      metrics: { pages_upserted: 1 },
     });
   });
 
-  it("runs the compile job by id and returns succeeded", async () => {
+  it("routes id-targeted invocations to the materializer", async () => {
     const result = await handler({ jobId: "job-1" });
 
     expect(result).toMatchObject({
       ok: true,
       jobId: "job-1",
       status: "succeeded",
+      metrics: { pages_upserted: 2 },
     });
-    expect(mocks.runJobById).toHaveBeenCalledWith("job-1", {
-      googlePlacesClient: null,
+    expect(mocks.runGraphCompileJobById).toHaveBeenCalledWith("job-1");
+  });
+
+  it("ignores the legacy planner-era modelId payload field", async () => {
+    const result = await handler({ jobId: "job-1", modelId: "some-model" });
+
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.runGraphCompileJobById).toHaveBeenCalledWith("job-1");
+  });
+
+  it("routes queue-drain invocations to the materializer", async () => {
+    const result = await handler({});
+
+    expect(result).toMatchObject({
+      ok: true,
+      jobId: "job-2",
+      status: "succeeded",
+    });
+    expect(mocks.runNextGraphCompileJob).toHaveBeenCalled();
+    expect(mocks.runGraphCompileJobById).not.toHaveBeenCalled();
+  });
+
+  it("returns no_job when the queue is empty", async () => {
+    mocks.runNextGraphCompileJob.mockResolvedValue(null);
+    expect(await handler({})).toEqual({ ok: true, status: "no_job" });
+  });
+
+  it("treats terminal jobs as idempotent success without invoking the materializer", async () => {
+    mocks.getCompileJob.mockResolvedValue({
+      ...tenantJob,
+      status: "succeeded",
+    });
+
+    const result = await handler({ jobId: "job-1" });
+
+    expect(result).toEqual({
+      ok: true,
+      jobId: "job-1",
+      status: "already_done",
+    });
+    expect(mocks.runGraphCompileJobById).not.toHaveBeenCalled();
+  });
+
+  it("does not redrive an id-targeted job when the CAS claim loses", async () => {
+    mocks.runGraphCompileJobById.mockResolvedValue(null);
+
+    const result = await handler({ jobId: "job-1" });
+
+    expect(result).toEqual({
+      ok: true,
+      jobId: "job-1",
+      status: "already_done",
     });
   });
 
-  it("returns failed result with error when compile fails", async () => {
-    mocks.runJobById.mockResolvedValue({
+  it("reports skipped residual owner-scoped jobs as ok", async () => {
+    mocks.getCompileJob.mockResolvedValue({ ...tenantJob, owner_id: "u-1" });
+    mocks.runGraphCompileJobById.mockResolvedValue({
+      jobId: "job-1",
+      status: "skipped",
+    });
+
+    const result = await handler({ jobId: "job-1" });
+
+    expect(result).toMatchObject({
+      ok: true,
+      jobId: "job-1",
+      status: "skipped",
+    });
+  });
+
+  it("surfaces materializer failures as ok:false", async () => {
+    mocks.runGraphCompileJobById.mockResolvedValue({
       jobId: "job-1",
       status: "failed",
-      metrics: { records_seen: 2 },
-      error: "model output invalid",
+      error: "mirror unavailable",
     });
 
     const result = await handler({ jobId: "job-1" });
@@ -92,36 +149,15 @@ describe("wiki-compile handler", () => {
       ok: false,
       jobId: "job-1",
       status: "failed",
-      error: "model output invalid",
+      error: "mirror unavailable",
     });
   });
 
-  it("treats already-terminal jobs as idempotent success", async () => {
-    mocks.getCompileJob.mockResolvedValue({
-      ...job,
-      status: "succeeded",
-    });
+  it("never throws — unexpected errors return ok:false", async () => {
+    mocks.getCompileJob.mockRejectedValue(new Error("db down"));
 
     const result = await handler({ jobId: "job-1" });
 
-    expect(result).toEqual({
-      ok: true,
-      jobId: "job-1",
-      status: "already_done",
-    });
-    expect(mocks.runJobById).not.toHaveBeenCalled();
-  });
-
-  it("does not redrive an id-targeted job when the CAS claim loses", async () => {
-    mocks.runJobById.mockResolvedValue(null);
-
-    const result = await handler({ jobId: "job-1" });
-
-    expect(result).toEqual({
-      ok: true,
-      jobId: "job-1",
-      status: "already_done",
-    });
-    expect(mocks.writeUserKnowledgePack).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, error: "db down" });
   });
 });

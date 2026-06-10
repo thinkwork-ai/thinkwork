@@ -5,19 +5,29 @@
  * The compiler, GraphQL resolvers, admin mutations, lint job, export job, and
  * bootstrap importer all route their writes and reads through here.
  *
- * v1 scope rule (see .prds/compounding-memory-scoping.md):
- *   - Every compiled object is strictly owner-scoped. `ownerId` is required on
- *     every public function. There is no null-owner code path.
+ * Scope rule (revised 2026-06 — plan 2026-06-09-004 U9):
+ *   - TENANT-scoped pages and compile jobs carry `owner_id IS NULL` (graph
+ *     materializer). Pass `ownerId: null` to read/write tenant scope —
+ *     Drizzle's `eq(col, null)` emits `= NULL` (never true), so every scoped
+ *     read routes through {@link ownerScopeWhere} instead of a bare `eq`.
+ *   - USER-scoped rows (`owner_id` set) keep the strict v1 owner-scope
+ *     behavior until the U11 cutover archives them. Callers passing a
+ *     non-null `ownerId` see byte-identical behavior to the v1 contract.
  *   - `entity`, `topic`, and `decision` pages all live inside a single
- *     `(tenant, owner)` scope. Type describes shape, not sharing.
+ *     scope. Type describes shape, not sharing.
  *
- * Dedupe/debounce: compile jobs dedupe on `${tenant}:${owner}:${bucket}` where
- * bucket = floor(epoch_s / 300) — a 5-minute wall-clock window. See
- * .prds/compounding-memory-v1-build-plan.md.
+ * Dedupe/debounce: planner compile jobs dedupe on
+ * `${tenant}:${owner}:${bucket}` where bucket = floor(epoch_s / 300) — a
+ * 5-minute wall-clock window (see .prds/compounding-memory-v1-build-plan.md).
+ * Graph-mode compile jobs are tenant-keyed and use the FOUR-part key
+ * `graph:obs:${tenant}:${bucket}` so `parseCompileDedupeBucket` (which
+ * splits on ':' expecting 3 parts) never routes them into the planner's
+ * continuation-chaining logic.
  */
 
-import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
-import type { PgTransaction } from "drizzle-orm/pg-core";
+import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import type { PgColumn, PgTransaction } from "drizzle-orm/pg-core";
 import {
   wikiPages,
   wikiPageSections,
@@ -48,11 +58,13 @@ export type WikiCompileTrigger =
   | "bootstrap_import"
   | "admin"
   | "lint"
-  | "enrichment_draft";
+  | "enrichment_draft"
+  | "graph_materialize";
 export type WikiSectionSourceKind =
   | "memory_unit"
   | "artifact"
   | "journal_idea"
+  | "hindsight_observation"
   | "hindsight_memory_unit"
   | "erp_customer"
   | "crm_opportunity"
@@ -101,7 +113,8 @@ export function emptySectionAggregation(): SectionAggregation {
 export interface WikiCompileJobRow {
   id: string;
   tenant_id: string;
-  owner_id: string;
+  /** NULL = tenant-keyed graph-mode job; non-null = user-scoped planner job. */
+  owner_id: string | null;
   dedupe_key: string;
   status: WikiCompileJobStatus;
   trigger: WikiCompileTrigger;
@@ -116,6 +129,21 @@ export interface WikiCompileJobRow {
   created_at: Date;
 }
 
+/**
+ * A compile job known to be user-scoped (planner / enrichment-draft paths).
+ * Tenant-keyed graph-mode jobs (owner_id NULL) must never reach those paths —
+ * narrow with {@link isOwnerScopedCompileJob} at the dispatch seam.
+ */
+export type OwnerScopedWikiCompileJobRow = WikiCompileJobRow & {
+  owner_id: string;
+};
+
+export function isOwnerScopedCompileJob(
+  job: WikiCompileJobRow,
+): job is OwnerScopedWikiCompileJobRow {
+  return job.owner_id !== null;
+}
+
 export interface WikiCompileCursorRow {
   tenant_id: string;
   owner_id: string;
@@ -127,7 +155,8 @@ export interface WikiCompileCursorRow {
 export interface WikiPageRow {
   id: string;
   tenant_id: string;
-  owner_id: string;
+  /** NULL = tenant-scoped page (graph materializer); non-null = user-scoped. */
+  owner_id: string | null;
   type: WikiPageType;
   entity_subtype?: string | null;
   slug: string;
@@ -191,7 +220,8 @@ export interface WikiSectionInput {
 
 export interface UpsertPageInput {
   tenant_id: string;
-  owner_id: string;
+  /** Pass `null` to upsert a tenant-scoped page (graph materializer). */
+  owner_id: string | null;
   type: WikiPageType;
   /** Approved ontology entity type slug, when this page materializes one. */
   entity_subtype?: string | null;
@@ -227,6 +257,49 @@ export interface Cursor {
 }
 
 export type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
+
+// ---------------------------------------------------------------------------
+// Scope discriminators — owner vs tenant scope, and the transitional
+// union-read scope (plan 2026-06-09-004 U9)
+// ---------------------------------------------------------------------------
+
+/**
+ * Owner-scope predicate for a `(tenant, owner)` read/write. Drizzle's
+ * `eq(col, null)` emits `= NULL` (never true in SQL), so every scoped query
+ * MUST route owner matching through here instead of a bare `eq`:
+ *   - non-null ownerId → `owner_id = $1` (v1 behavior, unchanged)
+ *   - null ownerId     → `owner_id IS NULL` (tenant scope)
+ */
+export function ownerScopeWhere(column: PgColumn, ownerId: string | null): SQL {
+  return ownerId === null ? isNull(column) : (eq(column, ownerId) as SQL);
+}
+
+/**
+ * Read scope for wiki page reads.
+ *
+ *   - `{ kind: "owner", ownerId }` — the v1 single-scope read (also covers
+ *     pure tenant-scope reads via `ownerId: null`).
+ *   - `{ kind: "tenantUnion", userId }` — transition semantics for the
+ *     tenant-wiki cutover: returns null-owner tenant pages PLUS the
+ *     requesting user's own pages (when a userId is in scope). This is what
+ *     keeps client surfaces non-empty between the client flip (U14) and the
+ *     graph materializer populating tenant pages / the U11 archive pass.
+ */
+export type WikiReadScope =
+  | { kind: "owner"; ownerId: string | null }
+  | { kind: "tenantUnion"; userId: string | null };
+
+/** Predicate for {@link WikiReadScope} over an owner_id column. */
+export function wikiReadScopeWhere(
+  column: PgColumn,
+  scope: WikiReadScope,
+): SQL {
+  if (scope.kind === "owner") {
+    return ownerScopeWhere(column, scope.ownerId);
+  }
+  if (!scope.userId) return isNull(column);
+  return or(isNull(column), eq(column, scope.userId)) as SQL;
+}
 
 // ---------------------------------------------------------------------------
 // Alias normalization — shared canonical form for lookup & dedupe
@@ -331,6 +404,23 @@ export function buildEnrichmentDraftDedupeKey(args: {
   return `enrichment-draft:${args.tenantId}:${args.ownerId}:${args.pageId}:${bucket}`;
 }
 
+/**
+ * Dedupe key for tenant-keyed graph-mode compile jobs (plan 2026-06-09-004
+ * U10). MUST stay four-part: `parseCompileDedupeBucket` splits on ':'
+ * expecting exactly 3 parts, and a 3-part graph key would parse as a planner
+ * bucket and silently enter the planner's continuation-chaining logic
+ * (compiler.ts). The `graph:obs:` prefix keys the wiki materialization off
+ * the observations-sourced mirror.
+ */
+export function buildGraphCompileDedupeKey(args: {
+  tenantId: string;
+  nowEpochSeconds?: number;
+}): string {
+  const now = args.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
+  const bucket = Math.floor(now / DEDUPE_BUCKET_SECONDS);
+  return `graph:obs:${args.tenantId}:${bucket}`;
+}
+
 // ---------------------------------------------------------------------------
 // Compile jobs
 // ---------------------------------------------------------------------------
@@ -389,6 +479,62 @@ export async function enqueueCompileJob(
   if (!existing[0]) {
     throw new Error(
       `enqueueCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
+    );
+  }
+  return { inserted: false, job: existing[0] as WikiCompileJobRow };
+}
+
+/**
+ * Insert a tenant-keyed graph-mode compile job (owner_id NULL). Dedupes on
+ * the four-part `graph:obs:${tenant}:${bucket}` key — see
+ * {@link buildGraphCompileDedupeKey} for why the part count is load-bearing.
+ * Same insert/conflict contract as {@link enqueueCompileJob}.
+ */
+export async function enqueueGraphCompileJob(
+  args: {
+    tenantId: string;
+    trigger: WikiCompileTrigger;
+    nowEpochSeconds?: number;
+    /** Optional suffix for operator-driven reruns (compileWikiNow
+     * forceNew) that must not dedupe against an earlier job in the same
+     * 5-minute bucket. Appending a fifth part keeps the key un-parseable
+     * by `parseCompileDedupeBucket` (which requires exactly 3 parts). */
+    dedupeDiscriminator?: string;
+  },
+  db: DbClient = defaultDb,
+): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
+  const baseDedupeKey = buildGraphCompileDedupeKey({
+    tenantId: args.tenantId,
+    nowEpochSeconds: args.nowEpochSeconds,
+  });
+  const dedupeKey = args.dedupeDiscriminator
+    ? `${baseDedupeKey}:${args.dedupeDiscriminator}`
+    : baseDedupeKey;
+
+  const [inserted] = await db
+    .insert(wikiCompileJobs)
+    .values({
+      tenant_id: args.tenantId,
+      owner_id: null,
+      dedupe_key: dedupeKey,
+      trigger: args.trigger,
+    })
+    .onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
+    .returning();
+
+  if (inserted) {
+    return { inserted: true, job: inserted as WikiCompileJobRow };
+  }
+
+  const existing = await db
+    .select()
+    .from(wikiCompileJobs)
+    .where(eq(wikiCompileJobs.dedupe_key, dedupeKey))
+    .limit(1);
+
+  if (!existing[0]) {
+    throw new Error(
+      `enqueueGraphCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
     );
   }
   return { inserted: false, job: existing[0] as WikiCompileJobRow };
@@ -740,7 +886,10 @@ export async function resetCursor(
 export async function findPageBySlug(
   args: {
     tenantId: string;
-    ownerId: string;
+    /** `null` = tenant scope (owner_id IS NULL). A bare eq() would emit
+     * `= NULL` and never match — the find-then-insert upsert would then
+     * violate the tenant-scope partial unique index on the second run. */
+    ownerId: string | null;
     type: WikiPageType;
     slug: string;
   },
@@ -752,7 +901,7 @@ export async function findPageBySlug(
     .where(
       and(
         eq(wikiPages.tenant_id, args.tenantId),
-        eq(wikiPages.owner_id, args.ownerId),
+        ownerScopeWhere(wikiPages.owner_id, args.ownerId),
         eq(wikiPages.type, args.type),
         eq(wikiPages.slug, args.slug),
       ),
@@ -820,7 +969,7 @@ export async function bumpSectionLastSeen(
  * shows up in CloudWatch next to `links_written_*`.
  */
 export async function countDuplicateTitleCandidates(
-  args: { tenantId: string; ownerId: string },
+  args: { tenantId: string; ownerId: string | null },
   db: DbClient = defaultDb,
 ): Promise<number> {
   const result = await db.execute(sql`
@@ -829,7 +978,7 @@ export async function countDuplicateTitleCandidates(
 			SELECT ${wikiPages.owner_id}, ${wikiPages.title}
 			FROM ${wikiPages}
 			WHERE ${wikiPages.tenant_id} = ${args.tenantId}
-				AND ${wikiPages.owner_id} = ${args.ownerId}
+				AND ${ownerScopeWhere(wikiPages.owner_id, args.ownerId)}
 				AND ${wikiPages.status} = 'active'
 			GROUP BY ${wikiPages.owner_id}, ${wikiPages.title}
 			HAVING COUNT(*) > 1
@@ -855,7 +1004,7 @@ export async function countDuplicateTitleCandidates(
 export async function findPagesByFuzzyTitle(
   args: {
     tenantId: string;
-    ownerId: string;
+    ownerId: string | null;
     title: string;
     threshold?: number;
     limit?: number;
@@ -882,7 +1031,7 @@ export async function findPagesByFuzzyTitle(
 				similarity(${wikiPages.title}, ${args.title}) AS "similarity"
 			FROM ${wikiPages}
 			WHERE ${wikiPages.tenant_id} = ${args.tenantId}
-				AND ${wikiPages.owner_id} = ${args.ownerId}
+				AND ${ownerScopeWhere(wikiPages.owner_id, args.ownerId)}
 				AND ${wikiPages.status} = 'active'
 				AND similarity(${wikiPages.title}, ${args.title}) >= ${threshold}
 			ORDER BY similarity(${wikiPages.title}, ${args.title}) DESC
@@ -918,7 +1067,7 @@ export async function findPagesByFuzzyTitle(
 }
 
 export async function findPagesByExactTitle(
-  args: { tenantId: string; ownerId: string; title: string },
+  args: { tenantId: string; ownerId: string | null; title: string },
   db: DbClient = defaultDb,
 ): Promise<
   Array<{ id: string; type: WikiPageType; slug: string; title: string }>
@@ -934,7 +1083,7 @@ export async function findPagesByExactTitle(
     .where(
       and(
         eq(wikiPages.tenant_id, args.tenantId),
-        eq(wikiPages.owner_id, args.ownerId),
+        ownerScopeWhere(wikiPages.owner_id, args.ownerId),
         eq(wikiPages.title, args.title),
         eq(wikiPages.status, "active"),
       ),
@@ -959,7 +1108,7 @@ export async function findPagesByExactTitle(
 export async function findMemoryUnitPageSources(
   args: {
     tenantId: string;
-    ownerId: string;
+    ownerId: string | null;
     memoryUnitIds: string[];
   },
   db: DbClient = defaultDb,
@@ -992,7 +1141,7 @@ export async function findMemoryUnitPageSources(
         eq(wikiSectionSources.source_kind, "memory_unit"),
         inArray(wikiSectionSources.source_ref, args.memoryUnitIds),
         eq(wikiPages.tenant_id, args.tenantId),
-        eq(wikiPages.owner_id, args.ownerId),
+        ownerScopeWhere(wikiPages.owner_id, args.ownerId),
         eq(wikiPages.status, "active"),
       ),
     );
@@ -1026,7 +1175,7 @@ export async function findPageById(
  * update-vs-create against a finite set it has already seen.
  */
 export async function listPagesForScope(
-  args: { tenantId: string; ownerId: string; limit?: number },
+  args: { tenantId: string; ownerId: string | null; limit?: number },
   db: DbClient = defaultDb,
 ): Promise<
   Array<{
@@ -1058,7 +1207,7 @@ export async function listPagesForScope(
     .where(
       and(
         eq(wikiPages.tenant_id, args.tenantId),
-        eq(wikiPages.owner_id, args.ownerId),
+        ownerScopeWhere(wikiPages.owner_id, args.ownerId),
         eq(wikiPages.status, "active"),
       ),
     )
@@ -1391,12 +1540,13 @@ export async function upsertSections(
 
 /**
  * Find pages in the caller's (tenant, owner) scope whose alias matches the
- * normalized input. v1 is strictly owner-scoped — no cross-agent alias lookup.
+ * normalized input. No cross-owner alias lookup; `ownerId: null` scopes to
+ * tenant pages.
  */
 export async function findAliasMatches(
   args: {
     tenantId: string;
-    ownerId: string;
+    ownerId: string | null;
     aliasNormalized: string;
   },
   db: DbClient = defaultDb,
@@ -1413,7 +1563,7 @@ export async function findAliasMatches(
       and(
         eq(wikiPageAliases.alias, args.aliasNormalized),
         eq(wikiPages.tenant_id, args.tenantId),
-        eq(wikiPages.owner_id, args.ownerId),
+        ownerScopeWhere(wikiPages.owner_id, args.ownerId),
       ),
     );
   return rows.map((r) => ({
@@ -1454,7 +1604,7 @@ export const PARENT_TITLE_FUZZY_THRESHOLD = 0.5;
 export async function findAliasMatchesFuzzy(
   args: {
     tenantId: string;
-    ownerId: string;
+    ownerId: string | null;
     aliasNormalized: string;
     threshold?: number;
   },
@@ -1483,7 +1633,7 @@ export async function findAliasMatchesFuzzy(
 			INNER JOIN ${wikiPages}
 				ON ${wikiPageAliases.page_id} = ${wikiPages.id}
 			WHERE ${wikiPages.tenant_id} = ${args.tenantId}
-				AND ${wikiPages.owner_id} = ${args.ownerId}
+				AND ${ownerScopeWhere(wikiPages.owner_id, args.ownerId)}
 				AND ${wikiPages.status} = 'active'
 				AND similarity(${wikiPageAliases.alias}, ${args.aliasNormalized}) >= ${threshold}
 			ORDER BY similarity(${wikiPageAliases.alias}, ${args.aliasNormalized}) DESC
@@ -1974,10 +2124,21 @@ export async function listChildPages(
 export const SOURCE_MEMORY_IDS_MAX_LIMIT = 50;
 
 /**
- * Count distinct `memory_unit` source_refs across every section on `pageId`.
- * Drives the "Based on N memories" badge in the mobile page detail screen.
- * Returns 0 for pages with no section-sources rows (the compile pipeline
- * hasn't cited them yet, or they're pure-aggregation sections).
+ * Source kinds that resolve to Hindsight-backed memory records for the
+ * "Based on N memories" drill-in: `memory_unit` (planner provenance) and
+ * `hindsight_observation` (graph-materializer provenance, plan
+ * 2026-06-09-004 U10/U14). Non-admin readers only ever see the IDs (R17);
+ * dereferencing them to raw memory content stays gated by the existing
+ * memory user-scope rule on the MemoryRecord lookup.
+ */
+const MEMORY_SOURCE_KINDS = ["memory_unit", "hindsight_observation"] as const;
+
+/**
+ * Count distinct memory-backed source_refs (`memory_unit` +
+ * `hindsight_observation`) across every section on `pageId`. Drives the
+ * "Based on N memories" badge in the mobile page detail screen. Returns 0
+ * for pages with no section-sources rows (the compile pipeline hasn't
+ * cited them yet, or they're pure-aggregation sections).
  */
 export async function countSourceMemoriesForPage(
   pageId: string,
@@ -1990,7 +2151,7 @@ export async function countSourceMemoriesForPage(
 		INNER JOIN ${wikiPageSections}
 			ON ${wikiPageSections.id} = ${wikiSectionSources.section_id}
 		WHERE ${wikiPageSections.page_id} = ${pageId}
-			AND ${wikiSectionSources.source_kind} = 'memory_unit'
+			AND ${wikiSectionSources.source_kind} IN (${MEMORY_SOURCE_KINDS[0]}, ${MEMORY_SOURCE_KINDS[1]})
 	`);
   const rows =
     (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
@@ -1998,10 +2159,11 @@ export async function countSourceMemoriesForPage(
 }
 
 /**
- * Up to `limit` distinct `memory_unit` ids sourcing sections on `pageId`,
- * ordered by `created_at` DESC (most recently cited first). Caller's `limit`
- * is clamped to `[1, SOURCE_MEMORY_IDS_MAX_LIMIT]` — protects the API from
- * unbounded scans when a mobile client accidentally asks for 100k.
+ * Up to `limit` distinct memory-backed source ids (`memory_unit` +
+ * `hindsight_observation`) sourcing sections on `pageId`, ordered by
+ * most recently cited first. Caller's `limit` is clamped to
+ * `[1, SOURCE_MEMORY_IDS_MAX_LIMIT]` — protects the API from unbounded
+ * scans when a mobile client accidentally asks for 100k.
  */
 export async function listSourceMemoryIdsForPage(
   pageId: string,
@@ -2018,7 +2180,7 @@ export async function listSourceMemoryIdsForPage(
 		INNER JOIN ${wikiPageSections}
 			ON ${wikiPageSections.id} = ${wikiSectionSources.section_id}
 		WHERE ${wikiPageSections.page_id} = ${pageId}
-			AND ${wikiSectionSources.source_kind} = 'memory_unit'
+			AND ${wikiSectionSources.source_kind} IN (${MEMORY_SOURCE_KINDS[0]}, ${MEMORY_SOURCE_KINDS[1]})
 		ORDER BY ${wikiSectionSources.source_ref}, ${wikiSectionSources.first_seen_at} DESC
 		LIMIT ${bounded}
 	`);
@@ -2053,6 +2215,135 @@ export async function listActiveChildPages(
     )
     .orderBy(asc(wikiPages.type), asc(wikiPages.slug));
   return rows as WikiPageRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Tenant-scope read surfaces (plan 2026-06-09-004 U9)
+//
+// Union-read transition semantics: until the U11 archive pass retires the
+// user-scoped corpus, a tenant-scope read must return null-owner tenant pages
+// PLUS the caller's own active user-scoped pages — otherwise every client
+// surface goes empty between the U14 client flip and graph materialization.
+// GraphQL wiki resolvers opt in via `{ kind: "tenantUnion", userId }` at U14;
+// existing owner-scoped callers are untouched.
+// ---------------------------------------------------------------------------
+
+/**
+ * Active pages visible to a {@link WikiReadScope}, newest-compiled first
+ * (COALESCE(last_compiled_at, updated_at) — same ordering the mobile
+ * recentWikiPages surface uses). Archived pages are always excluded.
+ */
+export async function listActivePagesForReadScope(
+  args: { tenantId: string; scope: WikiReadScope; limit?: number },
+  db: DbClient = defaultDb,
+): Promise<WikiPageRow[]> {
+  const limit = Math.max(1, Math.min(args.limit ?? 200, 500));
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        wikiReadScopeWhere(wikiPages.owner_id, args.scope),
+        eq(wikiPages.status, "active"),
+      ),
+    )
+    .orderBy(
+      desc(
+        sql`COALESCE(${wikiPages.last_compiled_at}, ${wikiPages.updated_at})`,
+      ),
+    )
+    .limit(limit);
+  return rows as WikiPageRow[];
+}
+
+/**
+ * Single-page lookup by (type, slug) under a {@link WikiReadScope}. With a
+ * tenantUnion scope, a user page and a tenant page can share a slug during
+ * the transition window — the caller's own active page wins (it carries the
+ * content they already know); the tenant page is the fallback and becomes
+ * the only candidate once the U11 archive pass lands.
+ */
+export async function findReadablePageBySlug(
+  args: {
+    tenantId: string;
+    scope: WikiReadScope;
+    type: WikiPageType;
+    slug: string;
+  },
+  db: DbClient = defaultDb,
+): Promise<WikiPageRow | null> {
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        wikiReadScopeWhere(wikiPages.owner_id, args.scope),
+        eq(wikiPages.type, args.type),
+        eq(wikiPages.slug, args.slug),
+        eq(wikiPages.status, "active"),
+      ),
+    )
+    // false < true: rows with a non-null owner (caller's own page) sort
+    // ahead of tenant pages.
+    .orderBy(asc(sql`${wikiPages.owner_id} IS NULL`))
+    .limit(1);
+  return (rows[0] as WikiPageRow | undefined) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Graph-materializer reconciliation (plan 2026-06-09-004 U10)
+// ---------------------------------------------------------------------------
+
+/**
+ * Active tenant-scoped pages that were produced by the graph materializer —
+ * identified by section provenance rows with source_kind
+ * 'hindsight_observation' (the materializer is the only writer of that
+ * kind). The reconciliation pass archives those whose backing mirror entity
+ * has vanished (shrink-guard recovery / full-rebuild path).
+ */
+export async function listGraphMaterializedTenantPages(
+  args: { tenantId: string },
+  db: DbClient = defaultDb,
+): Promise<Array<{ id: string; type: WikiPageType; slug: string }>> {
+  const result = await db.execute(sql`
+		SELECT DISTINCT p.id, p.type, p.slug
+		FROM ${wikiPages} p
+		WHERE p.tenant_id = ${args.tenantId}
+		  AND p.owner_id IS NULL
+		  AND p.status = 'active'
+		  AND EXISTS (
+		    SELECT 1
+		    FROM ${wikiPageSections} s
+		    INNER JOIN ${wikiSectionSources} ss ON ss.section_id = s.id
+		    WHERE s.page_id = p.id
+		      AND ss.source_kind = 'hindsight_observation'
+		  )
+	`);
+  const rows = Array.isArray(result)
+    ? result
+    : ((result as { rows?: unknown[] })?.rows ?? []);
+  return rows as Array<{ id: string; type: WikiPageType; slug: string }>;
+}
+
+/**
+ * Archive pages by id. Used by the graph materializer's reconciliation pass;
+ * idempotent (already-archived rows are filtered out). Returns the number of
+ * rows flipped.
+ */
+export async function archivePagesByIds(
+  args: { pageIds: string[] },
+  db: DbClient = defaultDb,
+): Promise<number> {
+  const ids = args.pageIds.filter(isValidUuid);
+  if (ids.length === 0) return 0;
+  const rows = await db
+    .update(wikiPages)
+    .set({ status: "archived", updated_at: sql`now()` as any })
+    .where(and(inArray(wikiPages.id, ids), eq(wikiPages.status, "active")))
+    .returning({ id: wikiPages.id });
+  return rows.length;
 }
 
 /**
@@ -2269,7 +2560,7 @@ export async function recomputeHubness(
 export async function listRecentlyChangedPagesForAggregation(
   args: {
     tenantId: string;
-    ownerId: string;
+    ownerId: string | null;
     sinceUpdatedAt: Date | null;
     limit?: number;
   },
@@ -2283,7 +2574,7 @@ export async function listRecentlyChangedPagesForAggregation(
     .where(
       and(
         eq(wikiPages.tenant_id, args.tenantId),
-        eq(wikiPages.owner_id, args.ownerId),
+        ownerScopeWhere(wikiPages.owner_id, args.ownerId),
         eq(wikiPages.status, "active"),
         gte(wikiPages.updated_at, since),
       ),
@@ -2429,76 +2720,6 @@ export async function countWikiScope(
     sections_promoted: sectionsPromoted?.n ?? 0,
     sections_promotion_candidate: sectionsCandidate?.n ?? 0,
   };
-}
-
-/**
- * Delete every compiled wiki row for a single (tenant, owner) scope.
- *
- * DESTRUCTIVE. Intended for the wipe-and-rebuild path: purge compiled rows
- * so a subsequent `bootstrapJournalImport` rebuilds from canonical memory.
- * Canonical memory (Hindsight) is NOT touched — only this compiled store.
- *
- * Runs inside a transaction; if any DELETE fails, nothing is committed.
- * Cascades on `wiki_pages` handle sections / links / aliases / section-
- * sources automatically (see FK definitions in the schema). Unresolved
- * mentions and compile jobs/cursor are scoped directly.
- */
-export async function wipeWikiScope(
-  args: { tenantId: string; ownerId: string },
-  db: DbClient = defaultDb,
-): Promise<{
-  before: WikiScopeCounts;
-  after: WikiScopeCounts;
-}> {
-  if (!args.tenantId || !args.ownerId) {
-    throw new Error(
-      "wipeWikiScope: tenantId and ownerId are both required — refusing to wipe unscoped",
-    );
-  }
-  const before = await countWikiScope(args, db);
-  await db.transaction(async (tx) => {
-    // Delete unresolved mentions FIRST so the page delete that follows isn't
-    // blocked by the FK from wiki_unresolved_mentions.promoted_page_id →
-    // wiki_pages.id. The FK is not set to cascade (nulling promoted_page_id
-    // would preserve mention history, but the wipe explicitly discards the
-    // whole scope's mention set anyway, so just delete the mentions up
-    // front).
-    await tx
-      .delete(wikiUnresolvedMentions)
-      .where(
-        and(
-          eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
-          eq(wikiUnresolvedMentions.owner_id, args.ownerId),
-        ),
-      );
-    // Cascades delete sections / links / aliases / section_sources.
-    await tx
-      .delete(wikiPages)
-      .where(
-        and(
-          eq(wikiPages.tenant_id, args.tenantId),
-          eq(wikiPages.owner_id, args.ownerId),
-        ),
-      );
-    await tx
-      .delete(wikiCompileJobs)
-      .where(
-        and(
-          eq(wikiCompileJobs.tenant_id, args.tenantId),
-          eq(wikiCompileJobs.owner_id, args.ownerId),
-        ),
-      );
-    await tx
-      .delete(wikiCompileCursors)
-      .where(
-        and(
-          eq(wikiCompileCursors.tenant_id, args.tenantId),
-          eq(wikiCompileCursors.owner_id, args.ownerId),
-        ),
-      );
-  });
-  const after = await countWikiScope(args, db);
-  return { before, after };
 }
 
 function dedupe<T>(items: T[]): T[] {

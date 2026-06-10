@@ -52,7 +52,6 @@ import {
 } from "./skill-catalog/index.js";
 import { runtimeQueries } from "./runtime/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
-import { brainQueries, brainMutations } from "./brain/index.js";
 import { routineMutations, routineQueries } from "./routines/index.js";
 import {
   tenantCredentialMutations,
@@ -107,7 +106,6 @@ export const queryResolvers: Record<string, any> = {
   ...skillCatalogQueries,
   ...runtimeQueries,
   ...workspaceQueries,
-  ...brainQueries,
   ...routineQueries,
   ...tenantCredentialQueries,
   ...deploymentQueries,
@@ -145,7 +143,6 @@ export const mutationResolvers: Record<string, any> = {
   ...skillRunsMutations,
   ...skillCatalogMutations,
   ...workspaceMutations,
-  ...brainMutations,
   ...routineMutations,
   ...tenantCredentialMutations,
   ...deploymentMutations,

@@ -17,7 +17,10 @@ import { and, eq } from "drizzle-orm";
 import { wikiPages, wikiPageLinks } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
-import { assertCanReadWikiScope } from "./auth.js";
+import {
+  assertCanReadWikiScope,
+  assertCanReadWikiTenantScope,
+} from "./auth.js";
 import { toGraphQLPage, type GraphQLWikiPage } from "./mappers.js";
 
 export const wikiConnectedPages = async (
@@ -36,10 +39,16 @@ export const wikiConnectedPages = async (
     .limit(1);
   if (!source) return [];
 
-  await assertCanReadWikiScope(ctx, {
-    tenantId: source.tenant_id,
-    userId: source.owner_id,
-  });
+  // Tenant-scoped source (owner NULL, graph materializer) → any member of
+  // the tenant may read. User-scoped source keeps the owner-or-admin rule.
+  if (source.owner_id === null) {
+    await assertCanReadWikiTenantScope(ctx, { tenantId: source.tenant_id });
+  } else {
+    await assertCanReadWikiScope(ctx, {
+      tenantId: source.tenant_id,
+      userId: source.owner_id,
+    });
+  }
 
   const rows = await db
     .select()

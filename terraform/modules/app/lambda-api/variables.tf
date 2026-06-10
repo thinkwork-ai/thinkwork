@@ -494,16 +494,10 @@ variable "company_brain_source_agent_model_id" {
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
-variable "wiki_aggregation_pass_enabled" {
-  description = "Feature flag for the wiki aggregation pass (parent section rollups + section promotion). Pipeline stops after leaf compile when this is off and never populates hub rollups. Stored as a string because the Lambda reads it verbatim from env; must be 'true' / '1' / 'yes' to enable."
+variable "kg_obs_max_candidates_per_run" {
+  description = "Per-run candidate cap for the observations → Knowledge Graph ingest worker (KG_OBS_MAX_CANDIDATES_PER_RUN). Bounds the layered-gate classifier cost AND keeps each Cognee cognify small enough to index within budget on the single dogfood task; truncated runs self-invoke to drain the remaining backlog. Stored as a string because the Lambda reads it verbatim from env."
   type        = string
-  default     = "true"
-}
-
-variable "wiki_deterministic_linking_enabled" {
-  description = "Feature flag for deterministic compile-time link emission (parent-expander-driven city/journal references + entity↔entity co-mention edges). When off, the compile pipeline never calls the deterministic linkers and `links_written_deterministic` / `links_written_co_mention` stay at 0 in metrics. Stored as a string because the Lambda reads it verbatim from env; must be 'true' / '1' / 'yes' to enable."
-  type        = string
-  default     = "true"
+  default     = "25"
 }
 
 variable "google_places_api_key" {
@@ -581,13 +575,13 @@ variable "routines_log_group_arn" {
 }
 
 variable "deployment_state_machine_arn" {
-  description = "ARN of the GitHub-free deployment orchestration state machine. Passed only to the deployment-sessions handler."
+  description = "ARN of the GitHub-free deployment orchestration state machine. Passed to deployment-sessions and graphql-http so Settings can start release updates."
   type        = string
   default     = ""
 }
 
 variable "deployment_evidence_bucket" {
-  description = "S3 bucket name that stores deployment runner evidence. Passed only to the deployment-sessions handler."
+  description = "S3 bucket name that stores deployment runner evidence. Passed to deployment-sessions and graphql-http so Settings can report release update evidence."
   type        = string
   default     = ""
 }

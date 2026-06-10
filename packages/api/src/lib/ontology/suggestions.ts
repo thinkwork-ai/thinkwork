@@ -7,8 +7,6 @@ import {
   ontologyEvidenceExamples,
   ontologySuggestionScanJobs,
   tenantEntityExternalRefs,
-  tenantEntityPageSections,
-  tenantEntityPages,
   users,
   wikiUnresolvedMentions,
 } from "@thinkwork/database-pg/schema";
@@ -49,12 +47,7 @@ const COMMITMENT_TEXT_RE =
   /\b(commitment|committed|promise|promised|due|follow[-\s]?up|owner|deliver by|by \d{1,2}\/\d{1,2}|by (mon|tue|wed|thu|fri|sat|sun|january|february|march|april|may|june|july|august|september|october|november|december))/i;
 
 export interface OntologyScanProviderStatus {
-  provider:
-    | "observation_runs"
-    | "brain"
-    | "external_refs"
-    | "hindsight"
-    | "llm";
+  provider: "observation_runs" | "external_refs" | "hindsight" | "llm";
   state: "ok" | "degraded" | "unavailable" | "skipped" | "error";
   detail?: string;
   count?: number;
@@ -452,54 +445,6 @@ export async function collectOntologySuggestionSources(args: {
     provider: "observation_runs",
     state: "ok",
     count: observationRunEvidenceCount,
-  });
-
-  const sectionRows = await db
-    .select({
-      pageId: tenantEntityPages.id,
-      pageTitle: tenantEntityPages.title,
-      pageSlug: tenantEntityPages.slug,
-      entitySubtype: tenantEntityPages.entity_subtype,
-      sectionId: tenantEntityPageSections.id,
-      heading: tenantEntityPageSections.heading,
-      bodyMd: tenantEntityPageSections.body_md,
-      updatedAt: tenantEntityPageSections.updated_at,
-    })
-    .from(tenantEntityPageSections)
-    .innerJoin(
-      tenantEntityPages,
-      eq(tenantEntityPageSections.page_id, tenantEntityPages.id),
-    )
-    .where(
-      and(
-        eq(tenantEntityPages.tenant_id, args.tenantId),
-        eq(tenantEntityPages.status, "active"),
-        eq(tenantEntityPageSections.status, "active"),
-      ),
-    )
-    .orderBy(desc(tenantEntityPageSections.updated_at))
-    .limit(300);
-
-  for (const row of sectionRows) {
-    const evidence = evidenceFromText({
-      sourceKind: "brain_section",
-      sourceRef: row.sectionId,
-      sourceLabel: `${row.pageTitle} / ${row.heading}`,
-      text: row.bodyMd,
-      observedAt: row.updatedAt,
-      metadata: {
-        pageId: row.pageId,
-        pageSlug: row.pageSlug,
-        entitySubtype: row.entitySubtype,
-        heading: row.heading,
-      },
-    });
-    if (evidence) observations.push({ ...evidence, text: row.bodyMd });
-  }
-  providerStatuses.push({
-    provider: "brain",
-    state: "ok",
-    count: sectionRows.length,
   });
 
   const externalRows = await db
