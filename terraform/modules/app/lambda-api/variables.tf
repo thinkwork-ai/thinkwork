@@ -697,3 +697,9 @@ variable "compliance_exports_runner_role_name" {
   type        = string
   default     = ""
 }
+
+variable "knowledge_graph_tool_enabled" {
+  description = "Stage gate for the Pi knowledge_graph_search tool (plan 2026-06-09-004 U8). Per-agent tool policy gates on top."
+  type        = bool
+  default     = true
+}

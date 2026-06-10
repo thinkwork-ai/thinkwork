@@ -108,7 +108,9 @@ export function createMemoryExtension(
           "the same ground: they are deduplicated and evidence-weighted. " +
           "Use only when the current prompt and workspace files, especially `User/USER.md`, " +
           "do not already contain the needed fact, or when the user explicitly asks to search memory " +
-          "or prior context.\n\n" +
+          "or prior context. For questions about shared institutional entities and their " +
+          "relationships (customers, projects, decisions across the company), use " +
+          "`knowledge_graph_search` instead — recall is the user's own episodic memory.\n\n" +
           "REQUIRED FOLLOW-UP: after recall you MUST call `reflect` on the same query to " +
           "synthesize the raw units into a coherent answer. Returning recall output without " +
           "reflect produces fragmented, low-quality responses.",
@@ -148,7 +150,9 @@ export function createMemoryExtension(
           "Synthesize the memory units recalled for a query into a coherent answer. " +
           "The synthesis is hierarchical — consolidated observations are weighed ahead of " +
           "raw facts. Call this AFTER `recall` on the same query. Do not call it for facts " +
-          "that are already available in `User/USER.md` or the current workspace.",
+          "that are already available in `User/USER.md` or the current workspace. For shared " +
+          "institutional entity/relationship questions, prefer `knowledge_graph_search` over " +
+          "the recall/reflect chain — reflect synthesizes the user's own episodic memory.",
         parameters: Type.Object({
           query: Type.String({
             description:

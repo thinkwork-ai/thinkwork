@@ -5,6 +5,7 @@ import type {
 import { Type } from "typebox";
 import type {
   DelegationProvider,
+  KnowledgeGraphProvider,
   MemoryProvider,
   ModelProvider,
   WorkspaceProvider,
@@ -26,6 +27,7 @@ export interface ProviderBundle {
   workspace?: WorkspaceProvider;
   memory?: MemoryProvider;
   delegation?: DelegationProvider;
+  knowledgeGraph?: KnowledgeGraphProvider;
 }
 
 /**

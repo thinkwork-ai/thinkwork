@@ -7,7 +7,16 @@ const CONTEXT_ENGINE_ALIASES = [
   "query_catalog_context",
 ] as const;
 
+const KNOWLEDGE_GRAPH_ALIASES = [
+  "knowledge_graph_search",
+  "knowledge-graph",
+  "knowledge_graph",
+] as const;
+
 const TOOL_POLICY_ALIASES: Record<string, readonly string[]> = {
+  knowledge_graph_search: KNOWLEDGE_GRAPH_ALIASES,
+  "knowledge-graph": KNOWLEDGE_GRAPH_ALIASES,
+  knowledge_graph: KNOWLEDGE_GRAPH_ALIASES,
   "web-search": ["web-search", "web_search"],
   web_search: ["web-search", "web_search"],
   "web-extract": ["web-extract", "web_extract"],
