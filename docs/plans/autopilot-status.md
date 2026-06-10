@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U20 - persist selected release pins back into the
-  deployment controller.
-- Current branch: `codex/fix-controller-release-pins`.
+- Current implementation unit: U21 - persist selected release status parameters
+  after controller-driven app updates.
+- Current branch: `codex/u21-controller-ssm-selection`.
 - Current worktree:
-  `.Codex/worktrees/fix-controller-release-pins`.
+  `.Codex/worktrees/u21-controller-ssm-selection`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -41,7 +41,9 @@ status: in_progress
   merged; U18 VPC endpoint ingress PR [#2316](https://github.com/thinkwork-ai/thinkwork/pull/2316)
   merged; U19 release trust-policy PR
   [#2317](https://github.com/thinkwork-ai/thinkwork/pull/2317) merged; U20
-  controller release-pin persistence PR not opened yet.
+  controller release-pin persistence PR
+  [#2318](https://github.com/thinkwork-ai/thinkwork/pull/2318) merged; U21
+  controller selected-release status persistence PR not opened yet.
 - Status: U11 merged and deployed to main. TEI's customer deployment controller
   was refreshed to the U11 runner and `.137` selected-release pins, then TEI
   update execution `tei-e2e-update-137-20260609204430` failed closed because
@@ -155,7 +157,21 @@ status: in_progress
   pins still pointed at `.145`. U20 updates the deployment runner so the
   payload-selected release contract is written into the generated Terraform
   controller inputs and evidence, including manifest URL, SHA-256, signature
-  URL, trust policy, trusted-key JSON, and module source/version.
+  URL, trust policy, trusted-key JSON, and module source/version. U20 PR #2318
+  passed required CI and was squash merged as `37d72462`. Canary releases
+  `v0.1.0-canary.147` and `desktop-v0.1.0-canary.147` were cut from that merge;
+  both release workflows succeeded. TEI update execution
+  `tw-update-147-20260610043912` succeeded via CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:b651b3fa-9ba5-4016-8a49-0e4e02620968`,
+  and the runtime config reports release `v0.1.0-canary.147` with manifest
+  SHA-256 `f89c5903c06830474d0471907173e33640257e7f5e05996721b2951fa2c93da3`.
+  Post-deploy proof showed the app/runtime was updated, but the controller SSM
+  selected-release status parameters still pointed at `.145` because the app
+  Terraform root deliberately disables ownership of the deployment control-plane
+  module during customer updates. U21 persists the selected release contract
+  directly to the controller SSM status parameters after a successful deploy or
+  update, including release version, manifest URL/SHA, trust policy, trusted
+  keys JSON, module source, and the derived registry module version.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -231,6 +247,10 @@ status: in_progress
   - U20 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
     passed: 22 tests.
   - U20 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U21 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 24 tests.
+  - U21 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
     passed.
   - `pnpm install` completed; local Node 25 logged the known optional
     `canvas@2.11.2` native fallback build warning because `pkg-config` /

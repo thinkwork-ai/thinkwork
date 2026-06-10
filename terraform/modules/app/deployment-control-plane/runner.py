@@ -1412,6 +1412,55 @@ def write_outputs_to_ssm(outputs_path, vars_json):
     )
 
 
+def controller_terraform_module_version(vars_json):
+    configured = vars_json.get("deployment_terraform_module_version")
+    if configured:
+        return configured
+    source = vars_json.get("deployment_terraform_module_source") or ""
+    if source.startswith("git::") or source.startswith("github.com/"):
+        return ""
+    return str(vars_json.get("deployment_release_version") or "").removeprefix("v")
+
+
+def put_controller_parameter(name, value):
+    if not value:
+        return
+    run(
+        [
+            "aws",
+            "ssm",
+            "put-parameter",
+            "--overwrite",
+            "--type",
+            "String",
+            "--name",
+            f"{os.environ['THINKWORK_SSM_PREFIX']}/{name}",
+            "--value",
+            str(value),
+        ]
+    )
+
+
+def write_controller_release_selection_to_ssm(vars_json):
+    if not os.environ.get("THINKWORK_SSM_PREFIX"):
+        return {}
+    selected = {
+        "selected-release-version": vars_json.get("deployment_release_version"),
+        "selected-release-manifest-url": vars_json.get("deployment_release_manifest_url"),
+        "selected-release-manifest-sha256": vars_json.get("deployment_release_manifest_sha256"),
+        "selected-release-signature-url": vars_json.get("deployment_release_manifest_signature_url"),
+        "selected-release-trust-policy": vars_json.get("deployment_release_manifest_trust_policy"),
+        "selected-release-trusted-keys-json": vars_json.get(
+            "deployment_release_manifest_trusted_keys_json"
+        ),
+        "terraform-module-source": vars_json.get("deployment_terraform_module_source"),
+        "terraform-module-version": controller_terraform_module_version(vars_json),
+    }
+    for name, value in selected.items():
+        put_controller_parameter(name, value)
+    return {name: value for name, value in selected.items() if value}
+
+
 def runtime_profile(outputs, vars_json):
     def output_value(name):
         return outputs.get(name, {}).get("value")
@@ -1705,6 +1754,12 @@ def main():
         }
         push_database_schema(outputs_path, vars_json)
         write_outputs_to_ssm(outputs_path, vars_json)
+        selected_controller_release = write_controller_release_selection_to_ssm(vars_json)
+        if selected_controller_release:
+            CONTROLLER_EVIDENCE["releaseSelection"] = write_json_evidence_artifact(
+                "controller-release-selection.json",
+                selected_controller_release,
+            )
         sync_static(outputs_path, static_files, vars_json)
     write_evidence(
         "succeeded" if result.returncode == 0 else "failed",
