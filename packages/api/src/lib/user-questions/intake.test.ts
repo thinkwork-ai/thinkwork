@@ -484,6 +484,34 @@ describe("question intake — happy path", () => {
     expect(res.statusCode).toBe(200);
     expect(mocks.insertedQuestions[0].delegation_context).toBeNull();
   });
+
+  it("still returns 200 with questionId when a notify rejects (question already committed)", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    mocks.notifyNewMessage.mockRejectedValue(new Error("appsync down"));
+    mocks.notifyThreadUpdate.mockRejectedValue(new Error("appsync down"));
+
+    const res = await handleQuestionIntake(mockEvent());
+
+    // A committed question must NOT surface as a tool failure — that would
+    // skip the sentinel and orphan the pending row.
+    expect(res.statusCode).toBe(200);
+    const body = parseBody(res);
+    expect(body.ok).toBe(true);
+    expect(typeof body.questionId).toBe("string");
+    expect(body.messageId).toBe(MESSAGE_ID);
+    // Both failures are visible in logs.
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("notifyNewMessage failed"),
+      expect.any(Error),
+    );
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("notifyThreadUpdate failed"),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
+  });
 });
 
 describe("question intake — one pending per thread (409)", () => {

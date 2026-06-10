@@ -48,9 +48,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * human-readable reason on failure, or null when the batch is valid.
  *
  * Contract: 1–4 questions; each has a non-empty `question`, a non-empty
- * `header` ≤ 12 chars, 2–4 options each { label: non-empty ≤ 60 chars,
- * description: string }, optional `multiSelect` boolean; optional
- * `delegation_context` plain object; serialized payload ≤ 8 KB total.
+ * `header` ≤ 12 chars UNIQUE within the batch (case-insensitive — card
+ * answers are keyed by header), 2–4 options each { label: non-empty
+ * ≤ 60 chars, description: string }, optional `multiSelect` boolean;
+ * optional `delegation_context` plain object; serialized payload ≤ 8 KB
+ * total.
  */
 export function validateQuestionBatch(
   questions: unknown,
@@ -62,6 +64,7 @@ export function validateQuestionBatch(
   if (questions.length > MAX_QUESTIONS_PER_BATCH) {
     return `too many questions in one batch (max ${MAX_QUESTIONS_PER_BATCH})`;
   }
+  const seenHeaders = new Set<string>();
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     if (!isRecord(q)) return `questions[${i}] must be an object`;
@@ -74,6 +77,13 @@ export function validateQuestionBatch(
     if (q.header.length > MAX_HEADER_CHARS) {
       return `questions[${i}].header exceeds ${MAX_HEADER_CHARS} characters`;
     }
+    // Card answers are keyed by header — a duplicate header makes two
+    // questions indistinguishable in the answers payload.
+    const headerKey = q.header.trim().toLowerCase();
+    if (seenHeaders.has(headerKey)) {
+      return `questions[${i}].header duplicates an earlier question header (headers must be unique, case-insensitive)`;
+    }
+    seenHeaders.add(headerKey);
     if (!Array.isArray(q.options)) {
       return `questions[${i}].options must be an array`;
     }

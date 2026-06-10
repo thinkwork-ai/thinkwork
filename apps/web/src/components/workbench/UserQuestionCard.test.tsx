@@ -291,9 +291,18 @@ describe("UserQuestionCard — answered / cancelled (record-derived)", () => {
     expect(screen.getByText("us-east-1")).toBeTruthy();
     expect(screen.getByText("eu-west-1")).toBeTruthy();
     expect(screen.getByText(/answered by eric odom/i)).toBeTruthy();
-    expect(screen.getByText(/5 min ago/)).toBeTruthy();
+    // Compact shared relative-time format (formatTinyRelativeDate).
+    expect(screen.getByText(/· 5m/)).toBeTruthy();
     // Unanswered question in the batch shows as not answered.
     expect(screen.getByText(/not answered/i)).toBeTruthy();
+  });
+
+  it("never renders the answeredBy UUID — falls back to a plain Answered byline", () => {
+    const { answeredByDisplayName: _omitted, ...withoutName } = answeredRecord;
+    render(<UserQuestionCard data={batch} question={withoutName} />);
+
+    expect(screen.queryByText(/user-1/)).toBeNull();
+    expect(screen.getByText(/^answered · /i)).toBeTruthy();
   });
 
   it("renders the answered-by-reply state for REPLY consumption", () => {
@@ -311,6 +320,18 @@ describe("UserQuestionCard — answered / cancelled (record-derived)", () => {
     expect(screen.getByText(/answered by reply/i)).toBeTruthy();
     expect(screen.queryByText("Staging")).toBeNull();
     expect(screen.queryByRole("button", { name: /submit|retry/i })).toBeNull();
+  });
+
+  it("renders the pending card when the question record has not hydrated yet", () => {
+    // DataLoader not hydrated: the message-level record is undefined but
+    // the part still carries the questions — render pending, don't crash.
+    render(<UserQuestionCard data={batch} question={undefined} />);
+
+    expect(screen.getAllByTestId("user-question-card")).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: /submit answers/i }),
+    ).toBeTruthy();
+    expect(screen.getByText("Env")).toBeTruthy();
   });
 
   it("renders the cancelled state as a muted line", () => {

@@ -23,9 +23,15 @@
  * idempotency_key, so producers use find-then-insert, see
  * default-agent-routing.ts) — the mutation throws so the card can show a
  * retry. NOTE the question row STAYS answered in that case: the CAS
- * already committed. v1 recovery is a manual re-trigger (the
- * answered-no-resume reconciler is explicitly deferred — see plan
- * "Scope Boundaries").
+ * already committed.
+ *
+ * Recovery re-entry: a retry after WAKEUP_ENQUEUE_FAILED hits a row
+ * that is already status='answered'. When it was answered via 'card'
+ * and NO wakeup row exists under `question-answer:<id>`, the retry
+ * skips the CAS and proceeds straight to the enqueue step (using the
+ * answers persisted on the row) instead of dead-ending on
+ * QUESTION_ALREADY_ANSWERED. Only when the wakeup row exists (or the
+ * row was consumed by a plain reply / cancelled) does the retry throw.
  */
 
 import { GraphQLError } from "graphql";
@@ -110,23 +116,52 @@ export const answerUserQuestion = async (
     }
   }
 
+  const idempotencyKey = `question-answer:${question.id}`;
+
   // ---- Status pre-check (friendly error before the CAS) ------------------
+  // Exception: recovery re-entry. A previous attempt may have committed the
+  // CAS (status 'answered', answered_via 'card') and then failed to enqueue
+  // the resume wakeup (WAKEUP_ENQUEUE_FAILED). A retry must be able to
+  // finish the enqueue instead of dead-ending on QUESTION_ALREADY_ANSWERED.
+  let recoveryRow: typeof question | null = null;
   if (question.status !== "pending") {
-    throw alreadyAnsweredError(question.status);
+    const cardAnswered =
+      question.status === "answered" && question.answered_via === "card";
+    if (!cardAnswered) {
+      throw alreadyAnsweredError(question.status);
+    }
+    const [existingResume] = await db
+      .select({ id: agentWakeupRequests.id })
+      .from(agentWakeupRequests)
+      .where(
+        and(
+          eq(agentWakeupRequests.tenant_id, question.tenant_id),
+          eq(agentWakeupRequests.idempotency_key, idempotencyKey),
+        ),
+      )
+      .limit(1);
+    if (existingResume) {
+      // The resume wakeup made it out — this really is a double submit.
+      throw alreadyAnsweredError(question.status);
+    }
+    recoveryRow = question;
   }
 
-  // ---- CAS consume (card route) -------------------------------------------
-  const consumed = await consumePendingQuestions(db, {
-    threadId: question.thread_id,
-    answeredVia: "card",
-    answers: parsedAnswers,
-    answeredBy: caller.userId ?? null,
-  });
-  const winnerRow = consumed.find((row) => row.id === question.id);
+  // ---- CAS consume (card route; skipped on recovery re-entry) -------------
+  let winnerRow = recoveryRow;
   if (!winnerRow) {
-    // Zero rows (or a different orphan row) consumed — this caller lost the
-    // race (double card submit, or a plain reply got there first).
-    throw alreadyAnsweredError("answered");
+    const consumed = await consumePendingQuestions(db, {
+      threadId: question.thread_id,
+      answeredVia: "card",
+      answers: parsedAnswers,
+      answeredBy: caller.userId ?? null,
+    });
+    winnerRow = consumed.find((row) => row.id === question.id) ?? null;
+    if (!winnerRow) {
+      // Zero rows (or a different orphan row) consumed — this caller lost the
+      // race (double card submit, or a plain reply got there first).
+      throw alreadyAnsweredError("answered");
+    }
   }
 
   // ---- Resume wakeup (winner only) ----------------------------------------
@@ -163,16 +198,23 @@ export const answerUserQuestion = async (
     );
   }
 
-  const idempotencyKey = `question-answer:${question.id}`;
+  // On recovery re-entry the committed row is the source of truth for the
+  // answer fields (the original CAS already persisted them).
+  const effectiveAnswers = recoveryRow
+    ? ((recoveryRow.answers as Record<string, unknown> | null) ?? parsedAnswers)
+    : parsedAnswers;
+  const effectiveAnsweredBy = recoveryRow
+    ? (recoveryRow.answered_by ?? caller.userId ?? null)
+    : (caller.userId ?? null);
   const wakeupPayload = {
     // TOP-LEVEL threadId — promoteNextDeferredWakeup() matches on
     // payload->>'threadId'; do not nest or rename this key.
     threadId: question.thread_id,
     questionId: question.id,
     questions: question.questions,
-    answers: parsedAnswers,
+    answers: effectiveAnswers,
     answeredVia: "card",
-    answeredBy: caller.userId ?? null,
+    answeredBy: effectiveAnsweredBy,
     delegationContext: question.delegation_context ?? null,
   };
 
@@ -235,12 +277,22 @@ export const answerUserQuestion = async (
 
   // The AWAITING_USER badge clears on this thread-update event (the same
   // event consumers already subscribe to — no separate dismissal signal).
-  notifyThreadUpdate({
-    threadId: question.thread_id,
-    tenantId: question.tenant_id,
-    status: thread?.status ?? "in_progress",
-    title: thread?.title ?? "",
-  }).catch(() => {});
+  // Awaited (Lambda Web Adapter only guarantees awaited promises), but a
+  // notify failure must not fail the mutation — the wakeup is already
+  // enqueued; it just has to be visible in logs.
+  try {
+    await notifyThreadUpdate({
+      threadId: question.thread_id,
+      tenantId: question.tenant_id,
+      status: thread?.status ?? "in_progress",
+      title: thread?.title ?? "",
+    });
+  } catch (err) {
+    console.error(
+      `[answerUserQuestion] notifyThreadUpdate failed for thread=${question.thread_id} question=${question.id}:`,
+      err,
+    );
+  }
 
   return userQuestionToGraphql(winnerRow);
 };

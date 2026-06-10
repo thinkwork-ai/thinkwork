@@ -251,22 +251,31 @@ function parseJsonRecord(value: string): Record<string, unknown> | null {
   }
 }
 
+/** Tool name the ask_user_question sentinel is honored for. Keep in sync
+ *  with ASK_USER_QUESTION_TOOL_NAME in @thinkwork/pi-extensions
+ *  ask-user-question (pi-runtime-core does not depend on pi-extensions). */
+export const ASK_USER_QUESTION_TOOL_NAME = "ask_user_question";
+
 /**
  * ask_user_question sentinel detection (plan 2026-06-09-005 U5).
  *
  * The ask-user-question extension returns
- * `details.thinkworkAskUserQuestion.endTurn === true` ONLY after the platform
- * intake confirmed the pending-question row persisted (phantom-wait rule), so
- * observing the flag on a non-error `tool_execution_end` means the thread is
- * now waiting on the USER and the loop must end the turn deterministically —
- * never rely on the model choosing to stop.
+ * `details.thinkworkAskUserQuestion.endTurn === true` ONLY when the thread is
+ * waiting on the USER (intake-confirmed persistence, or a 409 confirming a
+ * batch already pending), so observing the flag on a non-error
+ * `tool_execution_end` for the ask_user_question tool means the loop must end
+ * the turn deterministically — never rely on the model choosing to stop.
+ *
+ * Only the canonical `details.thinkworkAskUserQuestion` shape is accepted,
+ * and callers must also gate on the event's toolName — a third-party/MCP
+ * tool result echoing the sentinel must never terminate the turn.
  */
 export function askUserQuestionEndTurn(result: unknown): boolean {
   const record = recordValue(result);
   if (!record) return false;
-  const sentinel =
-    recordValue(recordValue(record.details)?.thinkworkAskUserQuestion) ??
-    recordValue(record.thinkworkAskUserQuestion);
+  const sentinel = recordValue(
+    recordValue(record.details)?.thinkworkAskUserQuestion,
+  );
   return sentinel?.endTurn === true;
 }
 
@@ -801,7 +810,11 @@ export async function runAgentLoop(
         // abort signal is checked after each recorded result, so this result
         // survives). The success path below treats the sentinel as
         // authoritative so an abort-shaped trailing stub can't fail the turn.
-        if (!event.isError && askUserQuestionEndTurn(event.result)) {
+        if (
+          !event.isError &&
+          event.toolName === ASK_USER_QUESTION_TOOL_NAME &&
+          askUserQuestionEndTurn(event.result)
+        ) {
           askEndTurnSeen = true;
           deps.log?.({
             level: "info",

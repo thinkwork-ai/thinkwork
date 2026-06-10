@@ -123,6 +123,24 @@ const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 const WORKSPACE_RENDERER_FUNCTION_NAME =
   process.env.WORKSPACE_RENDERER_FUNCTION_NAME || "";
 
+/**
+ * Wakeup sources whose response handling ALREADY inserts the assistant
+ * message in a source-specific branch above the catch-all. Any source in
+ * this list must be excluded from the catch-all insert or the turn's
+ * response is persisted twice (duplicate assistant message).
+ * `question_answer` resumes reply into the chat thread via the same
+ * branch as `chat_message` — keep all three chat-flow sources in sync
+ * with that branch's condition.
+ */
+export const SOURCES_WITH_MESSAGES = [
+  "chat_message",
+  "automation",
+  "question_answer",
+  "email_triage",
+  "email_received",
+  "webhook",
+];
+
 function tenantCatalogSkillS3Key(tenantSlug: string, skillId: string): string {
   return `tenants/${tenantSlug}/skill-catalog/${skillId}`;
 }
@@ -2136,14 +2154,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     }
 
     // Catch-all: insert assistant message for sources that don't already do it
-    // (chat_message, automation, email_triage, email_received, webhook already insert above)
-    const SOURCES_WITH_MESSAGES = [
-      "chat_message",
-      "automation",
-      "email_triage",
-      "email_received",
-      "webhook",
-    ];
+    // (see SOURCES_WITH_MESSAGES at module scope)
     if (
       runThreadId &&
       responseText &&

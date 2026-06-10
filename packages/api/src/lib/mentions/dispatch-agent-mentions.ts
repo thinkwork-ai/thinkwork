@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agentWakeupRequests } from "@thinkwork/database-pg/schema";
 import type { ParsedMention } from "./parse-message-mentions.js";
+import type { PendingQuestionAnswersPayload } from "../user-questions/runtime-payload.js";
 
 export interface AgentMentionWakeup {
   tenantId: string;
@@ -32,6 +33,15 @@ export interface DispatchAgentMentionInput {
   content?: string | null;
   requestedModelId?: string | null;
   mentions: ParsedMention[];
+  /**
+   * ask_user_question (plan 2026-06-09-005 U3): when the dispatching
+   * message CAS-consumed the thread's pending question batch (plain-reply
+   * route), this carries the answer context on the mention path's PRIMARY
+   * wakeup — exactly one turn carries the answers; NO second wakeup is
+   * enqueued. The wakeup-processor reads the nested
+   * `pendingQuestionAnswers` payload key for chat_message wakeups.
+   */
+  pendingQuestionAnswers?: PendingQuestionAnswersPayload | null;
   sender?: {
     type?: string | null;
     id?: string | null;
@@ -79,7 +89,7 @@ export function buildAgentMentionWakeups(
 ): AgentMentionWakeup[] {
   return input.mentions
     .filter((mention) => mention.targetType === "agent")
-    .map((mention) => ({
+    .map((mention, index) => ({
       tenantId: input.tenantId,
       agentId: mention.targetId,
       source: "chat_message",
@@ -102,6 +112,13 @@ export function buildAgentMentionWakeups(
               modelId: input.requestedModelId,
               requestedModelId: input.requestedModelId,
             }
+          : {}),
+        // Reply-consumed answer context rides the PRIMARY mention wakeup
+        // only — exactly one turn carries the answers (the consume already
+        // committed; dropping it would orphan the answers, duplicating it
+        // would resume the agent twice). Plan 2026-06-09-005 U3.
+        ...(index === 0 && input.pendingQuestionAnswers
+          ? { pendingQuestionAnswers: input.pendingQuestionAnswers }
           : {}),
       },
       idempotencyKey: `agent-mention:${input.tenantId}:${input.messageId}:${mention.targetId}`,

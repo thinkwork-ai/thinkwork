@@ -16,11 +16,14 @@
  *     the batch sets it), so a single-call batch ends cleanly with the
  *     turn still finalizing as a SUCCESS.
  *
- * Phantom-wait rule: the sentinel is returned ONLY when the intake
- * confirmed persistence (HTTP 200). A 409 (a batch is already pending)
- * or any other failure returns a plain error-text result with NO endTurn
- * flag and NO terminate hint — the loop must never park a thread on a
- * question that was not stored. `execute` never throws.
+ * Phantom-wait rule: the sentinel is returned ONLY when a pending row is
+ * known to EXIST — intake-confirmed persistence (HTTP 200), or HTTP 409
+ * (a batch persisted earlier is already pending, so the thread IS waiting
+ * on the user and the turn must end deterministically; the 409 sentinel
+ * additionally carries `alreadyPending: true`). Network/timeout/other
+ * HTTP failures return a plain error-text result with NO endTurn flag and
+ * NO terminate hint — the loop must never park a thread on a question
+ * that was not stored. `execute` never throws.
  *
  * State: the only state is a turn-scoped guard closure. The host builds
  * a fresh extension instance per invocation (buildInvocationResources in
@@ -91,6 +94,10 @@ function errorResult(text: string) {
 const ALREADY_PENDING_MESSAGE =
   "a question is already pending for this thread — end your turn now; " +
   "the user's answer arrives in the next turn.";
+
+/** Intake POST deadline; past this the question delivery is treated as a
+ *  network failure (no sentinel — phantom-wait rule). */
+const INTAKE_TIMEOUT_MS = 15_000;
 
 const askUserQuestionParameters = Type.Object({
   questions: Type.Array(
@@ -208,6 +215,11 @@ export function createAskUserQuestionExtension(
           }
           const delegationContext = asRecord(typed.delegationContext);
 
+          const timeoutController = new AbortController();
+          const timeoutHandle = setTimeout(
+            () => timeoutController.abort(),
+            INTAKE_TIMEOUT_MS,
+          );
           let response: Response;
           try {
             response = await fetchImpl(
@@ -227,26 +239,49 @@ export function createAskUserQuestionExtension(
                       ? delegationContext
                       : null,
                 }),
+                signal: timeoutController.signal,
               },
             );
           } catch (err) {
-            // Network failure — the question was NOT delivered, so the
-            // turn must not park (phantom-wait rule). No sentinel.
-            const detail = err instanceof Error ? err.message : String(err);
+            // Network failure / timeout — the question was NOT delivered,
+            // so the turn must not park (phantom-wait rule). No sentinel.
+            const detail = timeoutController.signal.aborted
+              ? `request timed out after ${INTAKE_TIMEOUT_MS}ms`
+              : err instanceof Error
+                ? err.message
+                : String(err);
             return errorResult(
               `ask_user_question could not reach the platform (${detail}). ` +
                 "The question was NOT delivered. Proceed on your best " +
                 "judgment, or ask the user in prose if the answer is " +
                 "essential.",
             );
+          } finally {
+            clearTimeout(timeoutHandle);
           }
 
           if (response.status === 409) {
             // A batch is already pending (persisted by an earlier turn or
-            // a racing path) — the thread IS waiting on the user, so stop
-            // asking, but this call persisted nothing: no sentinel.
+            // a racing path) — the thread IS waiting on the user. This
+            // call persisted nothing, but the pending row EXISTS, so the
+            // turn must still end deterministically: return the sentinel
+            // (flagged alreadyPending) with the instructive error text.
             askedThisTurn = true;
-            return errorResult(ALREADY_PENDING_MESSAGE);
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: `Error: ${ALREADY_PENDING_MESSAGE}`,
+                },
+              ],
+              details: {
+                [ASK_USER_QUESTION_DETAIL_KEY]: {
+                  endTurn: true,
+                  alreadyPending: true,
+                },
+              },
+              terminate: true,
+            };
           }
 
           if (!response.ok) {

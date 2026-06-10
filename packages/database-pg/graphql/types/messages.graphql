@@ -75,8 +75,13 @@ type UserQuestion {
   # Validated ask_user_question tool payload (questions only; written once
   # at intake).
   questions: AWSJSON!
-  # Structured card answers, or a reference to the consuming message when
-  # answered via plain reply.
+  # Answer payload — TWO shapes, discriminated by answeredVia:
+  #   - answeredVia CARD: a JSON object keyed by question header, each
+  #     value the selected option label (string) or, for multiSelect
+  #     questions, an array of labels. Example:
+  #     {"Environment": "Dev", "Regions": ["us-east-1", "eu-west-1"]}
+  #   - answeredVia REPLY: {"replyMessageId": "<message id>"} — a
+  #     reference to the consuming user message, never its text.
   answers: AWSJSON
   answeredVia: UserQuestionAnsweredVia
   answeredBy: String
@@ -175,5 +180,10 @@ extend type Query {
 extend type Mutation {
   sendMessage(input: SendMessageInput!): Message!
   deleteMessage(id: ID!): Boolean!
+  # The CARD-route answer mutation: submits structured card answers
+  # (a JSON object keyed by question header → label | [labels]) and
+  # enqueues the agent's resume wakeup. The plain-reply route is just
+  # sendMessage — any user message on the thread consumes the pending
+  # batch with answeredVia REPLY.
   answerUserQuestion(questionId: ID!, answers: AWSJSON!): UserQuestion!
 }

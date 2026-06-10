@@ -204,7 +204,7 @@ describe("ask_user_question execute", () => {
     ).toBeNull();
   });
 
-  it("409 returns the already-pending error result with NO sentinel and arms the guard", async () => {
+  it("409 ends the turn: already-pending text plus the endTurn sentinel, and arms the guard", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json(
         { ok: false, code: "QUESTION_ALREADY_PENDING" },
@@ -222,8 +222,10 @@ describe("ask_user_question execute", () => {
     );
     expect(resultText(result)).toContain("already pending");
     expect(resultText(result)).toContain("end your turn");
-    expect(sentinel(result)?.endTurn).toBeUndefined();
-    expect((result as { terminate?: boolean }).terminate).toBeUndefined();
+    // A pending row EXISTS (persisted earlier), so the thread IS waiting on
+    // the user — the 409 carries the same deterministic turn-end sentinel.
+    expect(sentinel(result)).toEqual({ endTurn: true, alreadyPending: true });
+    expect((result as { terminate?: boolean }).terminate).toBe(true);
 
     // Guard armed: a second same-turn call short-circuits without POSTing.
     const second = await tool.execute(
@@ -254,6 +256,62 @@ describe("ask_user_question execute", () => {
     expect(resultText(result)).toContain("best judgment");
     expect(sentinel(result)?.endTurn).toBeUndefined();
     expect((result as { terminate?: boolean }).terminate).toBeUndefined();
+  });
+
+  it("intake POST timeout returns a best-judgment error result with no sentinel", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(
+        (_input: string | URL | Request, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(
+                new DOMException("The operation was aborted.", "AbortError"),
+              ),
+            );
+          }),
+      );
+      const { tool } = await buildTool(fetchImpl as unknown as typeof fetch);
+
+      const pending = tool.execute(
+        "call-1",
+        { questions: [question()] },
+        NO_SIGNAL,
+        NO_UPDATE,
+        NO_CTX,
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      const result = await pending;
+
+      expect(resultText(result)).toContain("timed out after 15000ms");
+      expect(resultText(result)).toContain("NOT delivered");
+      expect(resultText(result)).toContain("best judgment");
+      expect(sentinel(result)?.endTurn).toBeUndefined();
+      expect((result as { terminate?: boolean }).terminate).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the timeout on completion (no stray abort after a fast response)", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(async () =>
+        Response.json({ ok: true, questionId: "q-1" }),
+      );
+      const { tool } = await buildTool(fetchImpl as unknown as typeof fetch);
+      const result = await tool.execute(
+        "call-1",
+        { questions: [question()] },
+        NO_SIGNAL,
+        NO_UPDATE,
+        NO_CTX,
+      );
+      expect(sentinel(result)?.endTurn).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("non-409 HTTP failure returns a best-judgment error result with no sentinel (phantom-wait rule)", async () => {

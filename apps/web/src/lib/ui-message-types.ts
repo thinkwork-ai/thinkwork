@@ -139,6 +139,28 @@ export interface UserQuestionData {
   questions?: UserQuestionItem[];
 }
 
+/** Lifecycle of a `pending_user_questions` row (GraphQL `UserQuestionStatus`). */
+export type UserQuestionStatus = "PENDING" | "ANSWERED" | "CANCELLED";
+
+/**
+ * Answer-state record resolved from `Message.userQuestion`
+ * (pending_user_questions row → GraphQL `UserQuestion`). Narrow raw GraphQL
+ * status strings through `toUserQuestionStatus` in
+ * `@/lib/user-question-record` at the mapping boundary.
+ */
+export interface UserQuestionRecord {
+  id: string;
+  status: UserQuestionStatus;
+  /** AWSJSON — JSON string (or already-parsed object) of structured answers. */
+  answers?: unknown | null;
+  answeredVia?: string | null; // CARD | REPLY
+  /** users.id of the answerer — never rendered directly (it's a UUID). */
+  answeredBy?: string | null;
+  /** Display name resolved by the caller (mention targets / current user). */
+  answeredByDisplayName?: string | null;
+  answeredAt?: string | null;
+}
+
 export interface RunbookQueueTask {
   id?: string;
   key?: string;

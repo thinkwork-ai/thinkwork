@@ -271,6 +271,31 @@ describe("answerUserQuestion — already answered / CAS race", () => {
     expect(mocks.insertedWakeups).toHaveLength(0);
   });
 
+  it("a reply-consumed row errors QUESTION_ALREADY_ANSWERED (no recovery)", async () => {
+    mocks.questionRow = pendingQuestionRow({
+      status: "answered",
+      answered_via: "reply",
+      answered_by: USER_ID,
+    });
+    await expectGraphQLError(
+      answerUserQuestion({}, { questionId: QUESTION_ID, answers: "{}" }, ctx),
+      "QUESTION_ALREADY_ANSWERED",
+    );
+    expect(mocks.consumePendingQuestions).not.toHaveBeenCalled();
+    expect(mocks.insertedWakeups).toHaveLength(0);
+  });
+
+  it("card-answered + resume wakeup already exists → QUESTION_ALREADY_ANSWERED (true double submit)", async () => {
+    mocks.questionRow = answeredRow({ env: "Dev" });
+    mocks.existingWakeupRows = [{ id: "wakeup-already-there" }];
+    await expectGraphQLError(
+      answerUserQuestion({}, { questionId: QUESTION_ID, answers: "{}" }, ctx),
+      "QUESTION_ALREADY_ANSWERED",
+    );
+    expect(mocks.consumePendingQuestions).not.toHaveBeenCalled();
+    expect(mocks.insertedWakeups).toHaveLength(0);
+  });
+
   it("lost CAS race: zero rows consumed → QUESTION_ALREADY_ANSWERED, no wakeup", async () => {
     mocks.consumePendingQuestions.mockResolvedValue([]);
     await expectGraphQLError(
@@ -368,5 +393,81 @@ describe("answerUserQuestion — enqueue failure is LOUD (R22)", () => {
       answerUserQuestion({}, { questionId: QUESTION_ID, answers: "{}" }, ctx),
       "WAKEUP_ENQUEUE_FAILED",
     );
+  });
+});
+
+describe("answerUserQuestion — recovery re-entry after enqueue failure", () => {
+  it("retry after WAKEUP_ENQUEUE_FAILED succeeds and enqueues exactly once (no second CAS)", async () => {
+    // First attempt: the CAS commits but the wakeup insert fails.
+    mocks.insertError = new Error("connection reset");
+    await expectGraphQLError(
+      answerUserQuestion(
+        {},
+        { questionId: QUESTION_ID, answers: JSON.stringify({ env: "Dev" }) },
+        ctx,
+      ),
+      "WAKEUP_ENQUEUE_FAILED",
+    );
+    expect(mocks.consumePendingQuestions).toHaveBeenCalledTimes(1);
+    expect(mocks.insertedWakeups).toHaveLength(0);
+
+    // Retry: the row is now answered (card) and NO wakeup row exists —
+    // recovery re-entry skips the CAS and finishes the enqueue.
+    mocks.insertError = null;
+    mocks.questionRow = answeredRow({ env: "Dev" });
+    mocks.existingWakeupRows = [];
+
+    const result = await answerUserQuestion(
+      {},
+      { questionId: QUESTION_ID, answers: JSON.stringify({ env: "Dev" }) },
+      ctx,
+    );
+
+    // No second consume — the original CAS already committed.
+    expect(mocks.consumePendingQuestions).toHaveBeenCalledTimes(1);
+    // Exactly one wakeup enqueued, under the same idempotency key, with
+    // the answers persisted on the row.
+    expect(mocks.insertedWakeups).toHaveLength(1);
+    expect(mocks.insertedWakeups[0]).toMatchObject({
+      source: "question_answer",
+      idempotency_key: `question-answer:${QUESTION_ID}`,
+    });
+    expect(mocks.insertedWakeups[0].payload).toMatchObject({
+      threadId: THREAD_ID,
+      questionId: QUESTION_ID,
+      answers: { env: "Dev" },
+      answeredVia: "card",
+      answeredBy: USER_ID,
+    });
+    expect(result).toMatchObject({
+      id: QUESTION_ID,
+      status: "ANSWERED",
+      answeredVia: "CARD",
+    });
+  });
+});
+
+describe("answerUserQuestion — notify failure is logged, not thrown", () => {
+  it("notifyThreadUpdate rejection does not fail the mutation and logs the error", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    mocks.notifyThreadUpdate.mockRejectedValue(new Error("appsync down"));
+
+    const result = await answerUserQuestion(
+      {},
+      { questionId: QUESTION_ID, answers: JSON.stringify({ env: "Dev" }) },
+      ctx,
+    );
+
+    // The wakeup is enqueued and the mutation still returns the row…
+    expect(mocks.insertedWakeups).toHaveLength(1);
+    expect(result).toMatchObject({ id: QUESTION_ID, status: "ANSWERED" });
+    // …and the badge-clear failure is visible in logs.
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("notifyThreadUpdate failed"),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
   });
 });

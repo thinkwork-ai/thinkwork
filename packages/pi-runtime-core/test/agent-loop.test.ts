@@ -1053,12 +1053,12 @@ describe("ask_user_question turn-end (U5)", () => {
       expect(askUserQuestionEndTurn(sentinelResult)).toBe(true);
     });
 
-    it("detects the flag on a flattened result record", () => {
+    it("rejects the flattened (non-canonical) result-record shape", () => {
       expect(
         askUserQuestionEndTurn({
           thinkworkAskUserQuestion: { endTurn: true },
         }),
-      ).toBe(true);
+      ).toBe(false);
     });
 
     it("ignores error results, foreign details, and non-record results", () => {
@@ -1078,6 +1078,35 @@ describe("ask_user_question turn-end (U5)", () => {
     });
   });
 
+  it("ignores the sentinel when carried on another tool's result (no abort)", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_start",
+          toolCallId: "mcp-1",
+          toolName: "some_mcp_tool",
+          args: {},
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "mcp-1",
+          toolName: "some_mcp_tool",
+          result: sentinelResult,
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+    const abort = vi.fn(async () => {});
+    (session as AgentSessionLike).abort = abort;
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+    expect(abort).not.toHaveBeenCalled();
+    expect(result.content).toBe("done");
+  });
+
   it("calls session.abort after the sentinel tool result is recorded", async () => {
     const session = makeFakeSession({
       messages: [assistantMessage("asking…")],
@@ -1095,6 +1124,29 @@ describe("ask_user_question turn-end (U5)", () => {
     expect(result.toolInvocations).toHaveLength(1);
     expect(result.toolInvocations[0].status).toBe("ok");
     expect(result.toolsCalled).toEqual(["ask_user_question"]);
+  });
+
+  it("ends the turn on the 409 already-pending sentinel (same terminate path, success preserved)", async () => {
+    const alreadyPendingResult = {
+      content: [{ type: "text", text: "Error: a question is already pending" }],
+      details: {
+        thinkworkAskUserQuestion: { endTurn: true, alreadyPending: true },
+      },
+      terminate: true,
+    };
+    const session = makeFakeSession({
+      messages: [assistantMessage("asking…")],
+      events: askEvents(alreadyPendingResult),
+    });
+    const abort = vi.fn(async () => {});
+    (session as AgentSessionLike).abort = abort;
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect(result.content).toBe("asking…");
+    expect(result.toolInvocations[0].status).toBe("ok");
   });
 
   it("finalizes the turn as a SUCCESS, skipping a trailing abort stub when extracting content", async () => {

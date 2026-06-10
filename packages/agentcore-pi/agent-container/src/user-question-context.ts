@@ -118,9 +118,16 @@ export function parsePendingUserQuestions(
   };
 }
 
-/** Strip tag-shaped sequences so user text cannot close/open the literal tags. */
+/**
+ * Strip tag-shaped sequences so user text cannot close/open the literal
+ * tags, and neutralize the block's frame markers so user-derived strings
+ * (answer values, answer KEYS, reply text) cannot forge a
+ * [USER_QUESTION_ANSWERS_START]/[USER_QUESTION_ANSWERS_END] boundary.
+ */
 function sanitizeUserText(text: string): string {
-  return text.replace(/<\/?user_answer>/gi, "");
+  return text
+    .replace(/<\/?user_answer>/gi, "")
+    .replace(/\[USER_QUESTION_ANSWERS_(?:START|END)\]/gi, "");
 }
 
 function userAnswerTag(text: string): string {
@@ -340,7 +347,10 @@ export function formatUserQuestionAnswerContext(
     for (const key of leftover) {
       const rendered = renderAnswerValue(context.answers[key], []);
       if (rendered) {
-        lines.push(`Additional answer (${key}): ${rendered}`);
+        // The key is user-controlled (unvalidated JSON keys from the answer
+        // payload) — tag it like any other user text so it cannot inject
+        // bare prompt content outside the <user_answer> boundary.
+        lines.push(`Additional answer (${userAnswerTag(key)}): ${rendered}`);
       }
     }
     if (leftover.length > 0) lines.push("");

@@ -80,7 +80,8 @@ import {
 } from "@/components/workbench/turnHeader";
 import { useTurnElapsed } from "@/components/workbench/useTurnElapsed";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
-import type { UserQuestionRecord } from "@/components/workbench/UserQuestionCard";
+import type { UserQuestionRecord } from "@/lib/ui-message-types";
+import { resolveUserQuestionRecord } from "@/lib/user-question-record";
 import {
   TaskQueue,
   taskQueueFromRunbookQueue,
@@ -2029,11 +2030,10 @@ function TranscriptMessage({
       }))
     : [];
   const typedParts = !isUser ? (message.parts ?? []) : [];
-  const userQuestion = resolveUserQuestionRecord(
-    message.userQuestion,
+  const userQuestion = resolveUserQuestionRecord(message.userQuestion, {
     currentUser,
     mentionTargets,
-  );
+  });
   const renderedTypedParts =
     typedParts.length > 0
       ? renderTypedParts(typedParts, {
@@ -2230,35 +2230,6 @@ function isCurrentUserMessage(
 
 function sameIdentity(left?: string | null, right?: string | null) {
   return Boolean(left?.trim() && right?.trim() && left.trim() === right.trim());
-}
-
-/**
- * Attach a display name to the message's userQuestion record. answeredBy is
- * a users.id — resolve it through the current user and the thread's mention
- * targets so the answered card shows a human name, not a UUID.
- */
-function resolveUserQuestionRecord(
-  record: UserQuestionRecord | null | undefined,
-  currentUser?: CurrentUserIdentity | null,
-  mentionTargets?: MentionTarget[],
-): UserQuestionRecord | null {
-  if (!record) return null;
-  if (record.answeredByDisplayName || !record.answeredBy) return record;
-  let displayName: string | null = null;
-  if (sameIdentity(record.answeredBy, currentUser?.id)) {
-    displayName = currentUser?.name?.trim() || null;
-  }
-  if (!displayName) {
-    displayName =
-      mentionTargets?.find(
-        (target) =>
-          target.targetType === "USER" &&
-          sameIdentity(target.targetId, record.answeredBy),
-      )?.displayName ?? null;
-  }
-  return displayName
-    ? { ...record, answeredByDisplayName: displayName }
-    : record;
 }
 
 function initialsForName(name: string) {

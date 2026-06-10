@@ -15,6 +15,7 @@ import {
   checkAndFireUnblockWakeups,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
+import { cancelPendingQuestions } from "../../../lib/user-questions/consume.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "../../../lib/spaces/customer-onboarding-goal-md.js";
 import {
   resolveCallerTenantId,
@@ -163,8 +164,6 @@ export const updateThread = async (
   // cascades on pending_user_questions.thread_id/message_id.)
   if (i.archivedAt !== undefined && i.archivedAt) {
     try {
-      const { cancelPendingQuestions } =
-        await import("../../../lib/user-questions/consume.js");
       await cancelPendingQuestions(db, { threadId: args.id });
     } catch (err) {
       console.warn(

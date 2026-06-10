@@ -240,6 +240,7 @@ export const ChatGlobalInboxQuery = gql`
         identifier
         title
         status
+        lifecycleStatus
         channel
         spaceId
         space {

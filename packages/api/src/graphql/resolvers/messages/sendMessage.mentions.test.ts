@@ -96,12 +96,33 @@ describe("sendMessage pending-question reply consumption (plan 2026-06-09-005 U3
     expect(source).toContain("answers: null");
   });
 
-  it("consumes BEFORE the dispatch it attaches the answer context to", () => {
+  it("consumes BEFORE the dispatch-mode branch so BOTH dispatch paths see it", () => {
+    // ANY user message consumes (origin R7) — including @agent-mention
+    // replies, which dispatch via dispatchAgentMentions, not the default
+    // path.
+    expect(source.indexOf("await consumePendingQuestions")).toBeLessThan(
+      source.indexOf("await dispatchAgentMentions"),
+    );
     expect(source.indexOf("await consumePendingQuestions")).toBeLessThan(
       source.indexOf("await dispatchDefaultAgentChatTurn"),
     );
+    // …and the answer context is attached to whichever dispatch fires.
+    const attachments =
+      source.split(
+        "...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {})",
+      ).length - 1;
+    expect(attachments).toBe(2); // mention dispatch + default dispatch
+  });
+
+  it("logs consume failures at error level with thread context (message still sends)", () => {
     expect(source).toContain(
-      "...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {})",
+      "pending-question consume failed for thread=${i.threadId}",
+    );
+    expect(source).toMatch(
+      /console\.error\(\s*`\[sendMessage\] pending-question consume failed/,
+    );
+    expect(source).not.toMatch(
+      /console\.warn\([^)]*pending-question consume failed/,
     );
   });
 

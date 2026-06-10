@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   sendThreadReplyEmail: vi.fn(),
   refreshCustomerOnboardingGoalFolderSafely: vi.fn(),
   recordGuardrailBlock: vi.fn(),
+  promoteNextDeferredWakeup: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -101,6 +102,10 @@ vi.mock("./record-guardrail-block.js", () => ({
   recordGuardrailBlock: mocks.recordGuardrailBlock,
 }));
 
+vi.mock("../wakeup-defer.js", () => ({
+  promoteNextDeferredWakeup: mocks.promoteNextDeferredWakeup,
+}));
+
 import {
   capturedSystemPromptFromFinalizePayload,
   collectAgentProfileRuns,
@@ -154,6 +159,7 @@ beforeEach(() => {
   mocks.sendThreadReplyEmail.mockResolvedValue(undefined);
   mocks.refreshCustomerOnboardingGoalFolderSafely.mockResolvedValue(undefined);
   mocks.recordGuardrailBlock.mockResolvedValue(undefined);
+  mocks.promoteNextDeferredWakeup.mockResolvedValue(null);
 });
 
 describe("capturedSystemPromptFromFinalizePayload", () => {
@@ -1234,7 +1240,10 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
     expect(mocks.sendTurnCompletedPush).not.toHaveBeenCalled();
   });
 
-  it("falls back to the normal preview when no pending row exists (already answered) but still suppresses the push", async () => {
+  it("sends the push when the ask tool ran but NO pending row exists (failed/409'd ask)", async () => {
+    // tools_called records at execution START, so the ask tool name alone
+    // is not proof a question is pending — suppression is gated on the
+    // pending-row probe. With no row, the turn finalizes normally.
     mocks.selectRows = [];
 
     await processFinalize(askingPayload);
@@ -1248,7 +1257,7 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
     expect(threadUpdate?.last_response_preview).toBe(
       "I have a couple of questions before I proceed.",
     );
-    expect(mocks.sendTurnCompletedPush).not.toHaveBeenCalled();
+    expect(mocks.sendTurnCompletedPush).toHaveBeenCalledTimes(1);
   });
 
   it("leaves normal turns unaffected: preview from the response text + push sent", async () => {
@@ -1265,6 +1274,64 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
     ) as Record<string, unknown> | undefined;
     expect(threadUpdate?.last_response_preview).toBe("All done!");
     expect(mocks.sendTurnCompletedPush).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("processFinalize deferred-wakeup promotion", () => {
+  it("promotes the next deferred wakeup for the thread once the turn finalizes", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: { content: "done" },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    // A deferred question_answer wakeup (card answered mid-turn) would
+    // otherwise be stranded — promotion flips it to 'queued' for the
+    // wakeup-processor's poll.
+    expect(mocks.promoteNextDeferredWakeup).toHaveBeenCalledWith(
+      TENANT_ID,
+      THREAD_ID,
+    );
+  });
+
+  it("does not promote on idempotent re-entry (turn already finalized)", async () => {
+    mocks.updateReturning = [[]]; // claim fails — already finalized
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: { content: "done" },
+      }),
+    ).resolves.toMatchObject({ finalized: false });
+
+    expect(mocks.promoteNextDeferredWakeup).not.toHaveBeenCalled();
+  });
+
+  it("a promotion failure does not fail the finalize", async () => {
+    mocks.promoteNextDeferredWakeup.mockRejectedValue(new Error("db down"));
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: { content: "done" },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
   });
 });
 

@@ -10,6 +10,7 @@
 -- creates: public.pending_user_questions_one_pending_per_thread
 -- creates: public.idx_pending_user_questions_tenant
 -- creates: public.idx_pending_user_questions_thread_status
+-- creates: public.idx_pending_user_questions_message
 -- creates-constraint: public.pending_user_questions.pending_user_questions_tenant_id_tenants_id_fk
 -- creates-constraint: public.pending_user_questions.pending_user_questions_thread_id_threads_id_fk
 -- creates-constraint: public.pending_user_questions.pending_user_questions_message_id_messages_id_fk
@@ -70,5 +71,10 @@ CREATE INDEX IF NOT EXISTS idx_pending_user_questions_tenant
 
 CREATE INDEX IF NOT EXISTS idx_pending_user_questions_thread_status
   ON public.pending_user_questions (thread_id, status);
+
+-- Message.userQuestion resolves by message id; the messages.id FK cascade
+-- also needs this to avoid a sequential scan on message deletes.
+CREATE INDEX IF NOT EXISTS idx_pending_user_questions_message
+  ON public.pending_user_questions (message_id);
 
 SELECT pg_advisory_unlock(hashtext('migration:0158_pending_user_questions'));

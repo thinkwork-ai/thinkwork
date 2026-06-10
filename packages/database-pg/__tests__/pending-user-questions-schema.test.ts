@@ -41,6 +41,7 @@ describe("Pending user questions schema", () => {
       "creates: public.pending_user_questions_one_pending_per_thread",
       "creates: public.idx_pending_user_questions_tenant",
       "creates: public.idx_pending_user_questions_thread_status",
+      "creates: public.idx_pending_user_questions_message",
       "creates-constraint: public.pending_user_questions.pending_user_questions_tenant_id_tenants_id_fk",
       "creates-constraint: public.pending_user_questions.pending_user_questions_thread_id_threads_id_fk",
       "creates-constraint: public.pending_user_questions.pending_user_questions_message_id_messages_id_fk",
@@ -50,6 +51,15 @@ describe("Pending user questions schema", () => {
     ]) {
       expect(migration0158).toContain(`-- ${marker}`);
     }
+  });
+
+  it("indexes message_id for Message.userQuestion lookups and FK-cascade deletes", () => {
+    expect(migration0158).toContain(
+      "CREATE INDEX IF NOT EXISTS idx_pending_user_questions_message",
+    );
+    expect(migration0158).toMatch(
+      /idx_pending_user_questions_message\s+ON public\.pending_user_questions \(message_id\)/,
+    );
   });
 
   it("enforces one pending batch per thread via a partial unique index", () => {

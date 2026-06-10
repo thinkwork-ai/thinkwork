@@ -27,6 +27,8 @@ import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions"
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
 import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
+import type { UserQuestionRecord } from "@/lib/ui-message-types";
+import { toUserQuestionStatus } from "@/lib/user-question-record";
 import {
   InlineShortcutText,
   shortcutDisplayText,
@@ -172,14 +174,12 @@ interface ThreadResult {
             displayName?: string | null;
             rawText?: string | null;
           }> | null;
-          userQuestion?: {
-            id: string;
-            status?: string | null;
-            answers?: unknown;
-            answeredVia?: string | null;
-            answeredBy?: string | null;
-            answeredAt?: string | null;
-          } | null;
+          userQuestion?:
+            | (Omit<UserQuestionRecord, "status"> & {
+                /** Raw GraphQL enum string — narrowed in toTaskThread. */
+                status?: string | null;
+              })
+            | null;
           durableArtifact?: {
             id: string;
             title: string;
@@ -2280,7 +2280,7 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
       userQuestion: node.userQuestion
         ? {
             id: node.userQuestion.id,
-            status: node.userQuestion.status ?? "PENDING",
+            status: toUserQuestionStatus(node.userQuestion.status),
             answers: node.userQuestion.answers ?? null,
             answeredVia: node.userQuestion.answeredVia ?? null,
             answeredBy: node.userQuestion.answeredBy ?? null,

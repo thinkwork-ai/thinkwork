@@ -67,6 +67,57 @@ describe("dispatchAgentMentions", () => {
     ]);
   });
 
+  it("attaches reply-consumed answer context to the PRIMARY mention wakeup only", () => {
+    const pendingQuestionAnswers = {
+      questionId: "question-1",
+      questions: [{ question: "Which env?", header: "Env", options: [] }],
+      answers: null,
+      answeredVia: "reply" as const,
+      answeredBy: "user-1",
+      replyMessageId: "message-1",
+      replyText: "@Coordinator use Dev",
+      delegationContext: null,
+    };
+    const wakeups = buildAgentMentionWakeups({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      content: "@Coordinator use Dev",
+      mentions: [
+        mentions[0],
+        {
+          targetType: "agent" as const,
+          targetId: "33333333-3333-4333-8333-333333333333",
+          displayName: "Reviewer",
+          rawText: "@Reviewer",
+          startOffset: 21,
+          endOffset: 30,
+        },
+      ],
+      pendingQuestionAnswers,
+      sender: { type: "user", id: "user-1" },
+    });
+
+    expect(wakeups).toHaveLength(2);
+    // The nested payload key is the one the wakeup-processor parses for
+    // chat_message wakeups (pendingQuestionAnswersFromPayload).
+    expect(wakeups[0].payload.pendingQuestionAnswers).toEqual(
+      pendingQuestionAnswers,
+    );
+    // Exactly one turn carries the answer context.
+    expect(wakeups[1].payload).not.toHaveProperty("pendingQuestionAnswers");
+  });
+
+  it("omits the answer-context key when no question was consumed", () => {
+    const [wakeup] = buildAgentMentionWakeups({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      mentions,
+    });
+    expect(wakeup.payload).not.toHaveProperty("pendingQuestionAnswers");
+  });
+
   it("does not enqueue when the mention wakeup already exists", async () => {
     const repository = makeRepository("existing-wakeup");
 

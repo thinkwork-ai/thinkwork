@@ -121,19 +121,30 @@ export const createThreadLoaders = () => ({
       // Probe 3 (plan 2026-06-09-005 U3): pending ask_user_question rows.
       // A pending question parks the thread in AWAITING_USER — including
       // when the latest turn failed, so an unattended thread never loses
-      // its needs-attention signal.
+      // its needs-attention signal. Best-effort (mirrors the
+      // loadPendingQuestionState guard in process-finalize.ts): a probe
+      // failure — e.g. the pending_user_questions table not yet applied
+      // on this stage — degrades to hasPendingQuestion=false instead of
+      // breaking every thread list.
       const pendingSet = new Set<string>();
-      const pendingRows = await db
-        .select({ threadId: pendingUserQuestions.thread_id })
-        .from(pendingUserQuestions)
-        .where(
-          and(
-            inArray(pendingUserQuestions.thread_id, ids),
-            eq(pendingUserQuestions.status, "pending"),
-          ),
+      try {
+        const pendingRows = await db
+          .select({ threadId: pendingUserQuestions.thread_id })
+          .from(pendingUserQuestions)
+          .where(
+            and(
+              inArray(pendingUserQuestions.thread_id, ids),
+              eq(pendingUserQuestions.status, "pending"),
+            ),
+          );
+        for (const row of pendingRows) {
+          if (row.threadId) pendingSet.add(row.threadId);
+        }
+      } catch (err) {
+        console.error(
+          "[threadLifecycleStatus] pending-question probe failed:",
+          err,
         );
-      for (const row of pendingRows) {
-        if (row.threadId) pendingSet.add(row.threadId);
       }
 
       return ids.map((id) =>

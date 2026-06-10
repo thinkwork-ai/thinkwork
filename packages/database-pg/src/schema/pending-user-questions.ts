@@ -77,6 +77,8 @@ export const pendingUserQuestions = pgTable(
       table.thread_id,
       table.status,
     ),
+    // Message.userQuestion lookups + the messages.id FK cascade path.
+    index("idx_pending_user_questions_message").on(table.message_id),
     check(
       "pending_user_questions_status_allowed",
       sql`${table.status} IN ('pending','answered','cancelled')`,

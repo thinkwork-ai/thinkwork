@@ -18,27 +18,21 @@ import { useState } from "react";
 import { useMutation } from "urql";
 import { Badge, Button, Input, Spinner } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
+import { formatTinyRelativeDate } from "@/lib/relative-time";
 import { AnswerUserQuestionMutation } from "@/lib/user-question-queries";
+import { toUserQuestionStatus } from "@/lib/user-question-record";
 import type {
   UserQuestionData,
   UserQuestionItem,
+  UserQuestionRecord,
 } from "@/lib/ui-message-types";
 
-/**
- * Answer-state record resolved from `Message.userQuestion`
- * (pending_user_questions row → GraphQL `UserQuestion`).
- */
-export interface UserQuestionRecord {
-  id: string;
-  status: string; // PENDING | ANSWERED | CANCELLED
-  /** AWSJSON — JSON string (or already-parsed object) of structured answers. */
-  answers?: unknown | null;
-  answeredVia?: string | null; // CARD | REPLY
-  answeredBy?: string | null;
-  /** Display name resolved by the caller (mention targets / current user). */
-  answeredByDisplayName?: string | null;
-  answeredAt?: string | null;
-}
+// Canonical home is `@/lib/ui-message-types`; re-exported for existing
+// imports that reach for the record type via the card module.
+export type {
+  UserQuestionRecord,
+  UserQuestionStatus,
+} from "@/lib/ui-message-types";
 
 interface UserQuestionCardProps {
   data: UserQuestionData;
@@ -150,23 +144,6 @@ function answerLabels(value: unknown): string[] {
     )
     .map((entry) => String(entry))
     .filter((entry) => entry.trim() !== "");
-}
-
-function formatRelativeTime(value?: string | null): string | null {
-  if (!value) return null;
-  const time = new Date(value).getTime();
-  if (Number.isNaN(time)) return null;
-  const diffMs = Date.now() - time;
-  if (diffMs >= 0 && diffMs < 86_400_000) {
-    const minutes = Math.max(1, Math.floor(diffMs / 60_000));
-    if (minutes < 60) return `${minutes} min ago`;
-    return `${Math.floor(minutes / 60)} hr ago`;
-  }
-  const date = new Date(time);
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 export function UserQuestionCard({ data, question }: UserQuestionCardProps) {
@@ -284,7 +261,7 @@ export function UserQuestionCard({ data, question }: UserQuestionCardProps) {
     if (answered) {
       setSubmittedRecord({
         id: answered.id,
-        status: String(answered.status),
+        status: toUserQuestionStatus(answered.status),
         answers: answered.answers ?? null,
         answeredVia: answered.answeredVia ? String(answered.answeredVia) : null,
         answeredBy: answered.answeredBy ?? null,
@@ -460,9 +437,10 @@ function AnsweredQuestionCard({
     ? String(record.answeredVia).toUpperCase()
     : null;
   const answers = parseAnswersRecord(record?.answers);
-  const answeredByName =
-    record?.answeredByDisplayName?.trim() || record?.answeredBy?.trim() || null;
-  const relativeTime = formatRelativeTime(record?.answeredAt);
+  // answeredBy is a users.id UUID — only a resolved display name is ever
+  // rendered; with no name source the byline is just "Answered".
+  const answeredByName = record?.answeredByDisplayName?.trim() || null;
+  const relativeTime = formatTinyRelativeDate(record?.answeredAt);
   const byline = [
     answeredByName ? `Answered by ${answeredByName}` : "Answered",
     relativeTime,

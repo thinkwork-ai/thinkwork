@@ -33,7 +33,10 @@
  * After commit, notifyNewMessage + notifyThreadUpdate are AWAITED — this
  * runs behind Lambda Web Adapter, where only awaited promises are
  * guaranteed to complete (docs/solutions/runtime-errors/
- * lambda-web-adapter-in-flight-promise-lifecycle-2026-05-06.md).
+ * lambda-web-adapter-in-flight-promise-lifecycle-2026-05-06.md) — but
+ * individually guarded (log + continue): once the question row is
+ * committed the endpoint must return 200, or the tool reports failure
+ * and the pending row is orphaned.
  */
 
 import type {
@@ -50,6 +53,7 @@ import {
   threadTurns,
 } from "@thinkwork/database-pg/schema";
 import { extractBearerToken, validateApiSecret } from "../auth.js";
+import { hasPgErrorCode } from "../pg-utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import {
   renderQuestionMarkdown,
@@ -85,21 +89,6 @@ function json(
 
 function badRequest(reason: string): APIGatewayProxyStructuredResultV2 {
   return json(400, { ok: false, error: reason, code: "BAD_REQUEST" });
-}
-
-/**
- * Walk err.cause chain for a Postgres error code. Local copy of
- * hasPgErrorCode (graphql/resolvers/core/tenantSlugValidation.ts) so the
- * handler bundle doesn't pull in the GraphQL resolver graph.
- */
-function hasPgErrorCode(err: unknown, code: string): boolean {
-  let current: unknown = err;
-  while (current && typeof current === "object") {
-    const maybe = current as { code?: unknown; cause?: unknown };
-    if (maybe.code === code) return true;
-    current = maybe.cause;
-  }
-  return false;
 }
 
 export async function handleQuestionIntake(
@@ -269,21 +258,39 @@ export async function handleQuestionIntake(
   }
 
   // ---- Fan-out (AWAITED — LWA in-flight promise lifecycle) ----------------
-  await notifyNewMessage({
-    messageId,
-    threadId: pathThreadId,
-    tenantId,
-    role: "assistant",
-    content,
-    senderType: "agent",
-    senderId: turn.agent_id ?? undefined,
-  });
-  await notifyThreadUpdate({
-    threadId: pathThreadId,
-    tenantId,
-    status: thread.status,
-    title: thread.title,
-  });
+  // Each notify is individually guarded: the question row is COMMITTED at
+  // this point, so a notify throw must not turn the response into a
+  // non-200 — the tool would report failure, skip its sentinel, and leave
+  // an orphan pending row the agent never waits on.
+  try {
+    await notifyNewMessage({
+      messageId,
+      threadId: pathThreadId,
+      tenantId,
+      role: "assistant",
+      content,
+      senderType: "agent",
+      senderId: turn.agent_id ?? undefined,
+    });
+  } catch (err) {
+    console.error(
+      `[question-intake] notifyNewMessage failed for thread=${pathThreadId} question=${questionId}:`,
+      err,
+    );
+  }
+  try {
+    await notifyThreadUpdate({
+      threadId: pathThreadId,
+      tenantId,
+      status: thread.status,
+      title: thread.title,
+    });
+  } catch (err) {
+    console.error(
+      `[question-intake] notifyThreadUpdate failed for thread=${pathThreadId} question=${questionId}:`,
+      err,
+    );
+  }
 
   return json(200, { ok: true, questionId, messageId });
 }

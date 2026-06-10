@@ -219,6 +219,46 @@ describe("threadLifecycleStatus DataLoader", () => {
     const { threadLifecycleStatus } = createThreadLoaders();
     expect(await threadLifecycleStatus.load("t-1")).toBe("COMPLETED");
   });
+
+  it("degrades to hasPendingQuestion=false when the pending probe fails (missing table must not break thread lists)", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    // Probe 1 (FROM the mocked threadTurns table) succeeds; probe 3 (FROM
+    // the real pendingUserQuestions table) rejects, simulating a stage
+    // where the table has not been applied yet.
+    dbSelectMock.mockImplementation(() => ({
+      from: (table: unknown) => ({
+        where: () =>
+          table === mockedThreadTurns
+            ? Promise.resolve([])
+            : Promise.reject(
+                new Error('relation "pending_user_questions" does not exist'),
+              ),
+      }),
+    }));
+    dbExecuteMock.mockResolvedValue({
+      rows: [
+        { thread_id: "t-1", status: "succeeded", created_at: new Date() },
+        { thread_id: "t-2", status: "failed", created_at: new Date() },
+      ],
+    });
+
+    const { threadLifecycleStatus } = createThreadLoaders();
+    const [r1, r2] = await Promise.all([
+      threadLifecycleStatus.load("t-1"),
+      threadLifecycleStatus.load("t-2"),
+    ]);
+
+    // Statuses still resolve from the other probes — no AWAITING_USER.
+    expect(r1).toBe("COMPLETED");
+    expect(r2).toBe("FAILED");
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("pending-question probe failed"),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
+  });
 });
 
 describe("threadPendingUserQuestion DataLoader", () => {

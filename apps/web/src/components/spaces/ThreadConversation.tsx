@@ -1,7 +1,11 @@
 import { Bot, Clock, Download, FileText, UserRound } from "lucide-react";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
 import { normalizePersistedParts } from "@/components/workbench/TaskThreadView";
-import type { UserQuestionRecord } from "@/components/workbench/UserQuestionCard";
+import type { UserQuestionRecord } from "@/lib/ui-message-types";
+import {
+  resolveUserQuestionRecord,
+  type UserQuestionNameTarget,
+} from "@/lib/user-question-record";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import {
   resolveMessageAttachments,
@@ -35,6 +39,11 @@ export interface ThreadConversationMessage {
 interface ThreadConversationProps {
   messages: ThreadConversationMessage[];
   attachments?: ThreadAttachmentSummary[];
+  /**
+   * Name sources for resolving `userQuestion.answeredBy` (a users.id) to a
+   * display name — without them the answered card falls back to "Answered".
+   */
+  mentionTargets?: UserQuestionNameTarget[];
   onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
   isLoading?: boolean;
   error?: string | null;
@@ -43,6 +52,7 @@ interface ThreadConversationProps {
 export function ThreadConversation({
   messages,
   attachments = [],
+  mentionTargets,
   onDownloadAttachment,
   isLoading = false,
   error,
@@ -81,6 +91,7 @@ export function ThreadConversation({
               key={group.id}
               group={group}
               attachments={attachments}
+              mentionTargets={mentionTargets}
               onDownloadAttachment={onDownloadAttachment}
             />
           ),
@@ -132,10 +143,12 @@ function groupMessages(messages: ThreadConversationMessage[]): MessageGroup[] {
 function MessageGroup({
   group,
   attachments,
+  mentionTargets,
   onDownloadAttachment,
 }: {
   group: Extract<MessageGroup, { kind: "message" }>;
   attachments: ThreadAttachmentSummary[];
+  mentionTargets?: UserQuestionNameTarget[];
   onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
 }) {
   const Icon = group.senderType === "agent" ? Bot : UserRound;
@@ -157,6 +170,7 @@ function MessageGroup({
               key={message.id}
               message={message}
               attachments={attachments}
+              mentionTargets={mentionTargets}
               onDownloadAttachment={onDownloadAttachment}
             />
           ))}
@@ -169,17 +183,21 @@ function MessageGroup({
 function MessageBody({
   message,
   attachments,
+  mentionTargets,
   onDownloadAttachment,
 }: {
   message: ThreadConversationMessage;
   attachments: ThreadAttachmentSummary[];
+  mentionTargets?: UserQuestionNameTarget[];
   onDownloadAttachment?: (attachmentId: string) => void | Promise<void>;
 }) {
   const typedParts = normalizePersistedParts(message.parts);
   const renderedParts = typedParts.length
     ? renderTypedParts(typedParts, {
         keyPrefix: message.id,
-        userQuestion: message.userQuestion ?? null,
+        userQuestion: resolveUserQuestionRecord(message.userQuestion, {
+          mentionTargets,
+        }),
       }).filter(Boolean)
     : null;
   const messageAttachments = resolveMessageAttachments({

@@ -38,14 +38,12 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
-import {
-  UserQuestionCard,
-  type UserQuestionRecord,
-} from "@/components/workbench/UserQuestionCard";
+import { UserQuestionCard } from "@/components/workbench/UserQuestionCard";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
 import type {
   RunbookConfirmationData,
   UserQuestionData,
+  UserQuestionRecord,
 } from "@/lib/ui-message-types";
 
 export interface RenderTypedPartOptions {

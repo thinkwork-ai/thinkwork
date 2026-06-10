@@ -29,17 +29,47 @@ function q(overrides: Partial<UserQuestionInput> = {}): UserQuestionInput {
 
 describe("validateQuestionBatch — boundary acceptance", () => {
   it("accepts exactly 4 questions with 4 options each", () => {
-    const four = {
-      ...q(),
+    const four = (header: string) => ({
+      ...q({ header }),
       options: [
         { label: "A", description: "" },
         { label: "B", description: "" },
         { label: "C", description: "" },
         { label: "D", description: "" },
       ],
-    };
+    });
     expect(
-      validateQuestionBatch([four, four, four, four], undefined),
+      validateQuestionBatch(
+        [four("One"), four("Two"), four("Three"), four("Four")],
+        undefined,
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects duplicate question headers (card answers are keyed by header)", () => {
+    expect(
+      validateQuestionBatch(
+        [q({ header: "Env" }), q({ header: "Env" })],
+        undefined,
+      ),
+    ).toContain("duplicates an earlier question header");
+  });
+
+  it("rejects duplicate headers case-insensitively and after trimming", () => {
+    expect(
+      validateQuestionBatch(
+        [q({ header: "Env" }), q({ header: " env " })],
+        undefined,
+      ),
+    ).toContain("duplicates an earlier question header");
+  });
+
+  it("accepts distinct headers", () => {
+    expect(
+      validateQuestionBatch(
+        [q({ header: "Env" }), q({ header: "Region" })],
+        undefined,
+      ),
     ).toBeNull();
   });
 

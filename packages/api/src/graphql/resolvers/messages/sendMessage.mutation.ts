@@ -343,43 +343,19 @@ export const sendMessage = async (
       );
     }
   }
-  if (hasAgentMentions) {
-    try {
-      await dispatchAgentMentions({
-        tenantId: thread.tenant_id,
-        threadId: i.threadId,
-        spaceId: thread.space_id,
-        messageId: row.id,
-        content: i.content,
-        mentions: parsedMentions,
-        requestedModelId,
-        sender: { type: senderType, id: senderId },
-      });
-    } catch (err) {
-      console.warn("[sendMessage] agent mention dispatch failed:", err);
-    }
-  }
-  if (
-    shouldDispatchDefaultAgentTurn({
-      isUserMessage,
-      senderType,
-      agentRequested: i.agentRequested,
-      dispatchMode: i.dispatchMode,
-      hasAgentMentions,
-      hasComputerThread: Boolean(thread.computer_id),
-      customerOnboardingHandled,
-    })
-  ) {
-    // ask_user_question plain-reply route (plan 2026-06-09-005 U3): a user
-    // reply CAS-consumes the thread's pending question batch
-    // (answeredVia 'reply', answers = a reference to this message — never
-    // its text) and attaches the answer context to the turn this dispatch
-    // ALREADY fires. NO second wakeup is enqueued from this path — the
-    // card mutation (answerUserQuestion) owns the wakeup route; exactly
-    // one turn carries the answer context regardless of route. A lost
-    // race (card got there first) consumes zero rows and this lands as a
-    // normal message whose turn is serialized by wakeup-defer.
-    let pendingQuestionAnswers: PendingQuestionAnswersPayload | undefined;
+  // ask_user_question plain-reply route (plan 2026-06-09-005 U3, R7): ANY
+  // user message on the thread CAS-consumes the pending question batch
+  // (answeredVia 'reply', answers = a reference to this message — never
+  // its text) BEFORE the dispatch-mode branch, so @agent-mention replies
+  // consume too. The answer context then rides whichever dispatch this
+  // mutation ALREADY fires (mention dispatch or default dispatch) — NO
+  // second wakeup is enqueued from this path; the card mutation
+  // (answerUserQuestion) owns the wakeup route; exactly one turn carries
+  // the answer context regardless of route. A lost race (card got there
+  // first) consumes zero rows and this lands as a normal message whose
+  // turn is serialized by wakeup-defer.
+  let pendingQuestionAnswers: PendingQuestionAnswersPayload | undefined;
+  if (isUserMessage) {
     try {
       const consumed = await consumePendingQuestions(db, {
         threadId: i.threadId,
@@ -402,8 +378,42 @@ export const sendMessage = async (
         };
       }
     } catch (err) {
-      console.warn("[sendMessage] pending-question consume failed:", err);
+      // The message still sends — but a swallowed consume failure means an
+      // answered question stays pending, so it must be loud in logs.
+      console.error(
+        `[sendMessage] pending-question consume failed for thread=${i.threadId}:`,
+        err,
+      );
     }
+  }
+  if (hasAgentMentions) {
+    try {
+      await dispatchAgentMentions({
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        spaceId: thread.space_id,
+        messageId: row.id,
+        content: i.content,
+        mentions: parsedMentions,
+        requestedModelId,
+        ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
+        sender: { type: senderType, id: senderId },
+      });
+    } catch (err) {
+      console.warn("[sendMessage] agent mention dispatch failed:", err);
+    }
+  }
+  if (
+    shouldDispatchDefaultAgentTurn({
+      isUserMessage,
+      senderType,
+      agentRequested: i.agentRequested,
+      dispatchMode: i.dispatchMode,
+      hasAgentMentions,
+      hasComputerThread: Boolean(thread.computer_id),
+      customerOnboardingHandled,
+    })
+  ) {
     try {
       await dispatchDefaultAgentChatTurn({
         tenantId: thread.tenant_id,
