@@ -5760,6 +5760,7 @@ export type TenantEntitySection = {
 export type TenantMember = {
   __typename?: "TenantMember";
   agent?: Maybe<Agent>;
+  cognitoStatus?: Maybe<Scalars["String"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   id: Scalars["ID"]["output"];
   principalId: Scalars["ID"]["output"];
@@ -9011,6 +9012,7 @@ export type SettingsTenantMembersQuery = {
     principalId: string;
     role: string;
     status: string;
+    cognitoStatus?: string | null;
     createdAt: any;
     user?: {
       __typename?: "User";
@@ -16958,6 +16960,10 @@ export const SettingsTenantMembersDocument = {
                 { kind: "Field", name: { kind: "Name", value: "principalId" } },
                 { kind: "Field", name: { kind: "Name", value: "role" } },
                 { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cognitoStatus" },
+                },
                 { kind: "Field", name: { kind: "Name", value: "createdAt" } },
                 {
                   kind: "Field",

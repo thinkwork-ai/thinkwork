@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
@@ -243,11 +244,7 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
       ) : (
         <div className="divide-y divide-border">
           {releases.map((release) => (
-            <SettingsRow
-              key={release.version}
-              label={release.version}
-              description={releaseDescription(release)}
-            >
+            <ReleaseRow key={release.version} release={release}>
               <Button
                 size="sm"
                 variant="outline"
@@ -256,7 +253,7 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
               >
                 Deploy
               </Button>
-            </SettingsRow>
+            </ReleaseRow>
           ))}
         </div>
       )}
@@ -331,6 +328,26 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
         </DialogContent>
       </Dialog>
     </SettingsSection>
+  );
+}
+
+function ReleaseRow({
+  release,
+  children,
+}: {
+  release: DeploymentReleaseRow;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-4 py-3.5">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{release.version}</p>
+        <p className="mt-0.5 whitespace-nowrap text-sm text-muted-foreground">
+          {releaseDescription(release)}
+        </p>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
   );
 }
 

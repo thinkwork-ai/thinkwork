@@ -106,6 +106,7 @@ function seedMember(overrides: Record<string, unknown> = {}) {
     principalType: "USER",
     role: "member",
     status: "active",
+    cognitoStatus: null,
     user: {
       id: "user-9",
       name: "Dana Member",
@@ -237,6 +238,7 @@ describe("SettingsUserDetail role merge", () => {
   it("resends the invite for the current user", async () => {
     seedMember({
       role: "admin",
+      cognitoStatus: "FORCE_CHANGE_PASSWORD",
       user: {
         id: "user-9",
         name: "Dana Member",
@@ -258,6 +260,13 @@ describe("SettingsUserDetail role merge", () => {
       },
     });
     expect(screen.getByText("Invite resent")).toBeTruthy();
+  });
+
+  it("hides resend invite after the Cognito user is confirmed", () => {
+    seedMember({ cognitoStatus: "CONFIRMED" });
+    render(<SettingsUserDetail />);
+
+    expect(screen.queryByRole("button", { name: /resend invite/i })).toBeNull();
   });
 
   it("deletes the tenant member and returns to the users list", async () => {

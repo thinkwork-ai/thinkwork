@@ -70,6 +70,7 @@ type TenantMember {
   principalId: ID!
   role: String!
   status: String!
+  cognitoStatus: String
   user: User
   agent: Agent
   createdAt: AWSDateTime!
