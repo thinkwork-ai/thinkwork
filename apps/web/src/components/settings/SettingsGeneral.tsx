@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
@@ -51,7 +51,7 @@ export function SettingsGeneral() {
   // Operators only — members never issue the deployment query (it is also
   // gated server-side in U8).
   const showOperator = roleResolved && isOperator;
-  const [deployResult] = useQuery({
+  const [deployResult, refreshDeploymentStatus] = useQuery({
     query: SettingsDeploymentStatusQuery,
     pause: !showOperator,
   });
@@ -178,7 +178,13 @@ export function SettingsGeneral() {
             </SettingsSection>
           ) : null}
 
-          <DeploymentReleasesSection enabled={showOperator} />
+          <DeploymentReleasesSection
+            enabled={showOperator}
+            currentReleaseVersion={deployment?.releaseVersion}
+            onRefreshDeploymentStatus={() =>
+              refreshDeploymentStatus({ requestPolicy: "network-only" })
+            }
+          />
         </>
       ) : null}
     </SettingsPane>
@@ -210,11 +216,37 @@ interface DeploymentReleaseUpdateResult {
   >;
 }
 
-function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
+type DeploymentProgressState =
+  | {
+      phase: "starting";
+      release: DeploymentReleaseRow;
+      message: string;
+    }
+  | {
+      phase: "accepted";
+      release: DeploymentReleaseRow;
+      message: string;
+      result: DeploymentReleaseUpdateResult;
+    }
+  | {
+      phase: "failed";
+      release: DeploymentReleaseRow;
+      message: string;
+    };
+
+function DeploymentReleasesSection({
+  enabled,
+  currentReleaseVersion,
+  onRefreshDeploymentStatus,
+}: {
+  enabled: boolean;
+  currentReleaseVersion?: string | null;
+  onRefreshDeploymentStatus?: () => void;
+}) {
   const [selectedRelease, setSelectedRelease] =
     useState<DeploymentReleaseRow | null>(null);
-  const [lastDeployment, setLastDeployment] =
-    useState<DeploymentReleaseUpdateResult | null>(null);
+  const [deploymentProgress, setDeploymentProgress] =
+    useState<DeploymentProgressState | null>(null);
   const [result] = useQuery({
     query: SettingsDeploymentReleasesQuery,
     variables: { limit: 5 },
@@ -225,30 +257,76 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
   );
   const releases = (result.data?.deploymentReleases ??
     []) as DeploymentReleaseRow[];
+  const deploymentCompleted =
+    deploymentProgress?.phase === "accepted" &&
+    deploymentProgress.release.version === currentReleaseVersion;
+  const deploymentBusy = updateState.fetching;
+
+  useEffect(() => {
+    if (deploymentProgress?.phase !== "accepted" || deploymentCompleted) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      onRefreshDeploymentStatus?.();
+    }, 8000);
+    return () => window.clearInterval(interval);
+  }, [
+    deploymentCompleted,
+    deploymentProgress?.phase,
+    onRefreshDeploymentStatus,
+  ]);
 
   async function confirmDeploy() {
     if (!selectedRelease) return;
-    const response = await startReleaseUpdate({
-      input: {
-        version: selectedRelease.version,
-        manifestUrl: selectedRelease.manifestUrl,
-        manifestSha256: selectedRelease.manifestSha256,
-        idempotencyKey: `settings-release-${selectedRelease.version}`,
-      },
-    });
-    if (response.error) {
-      toast.error("Release deploy failed", {
-        description: response.error.message,
-      });
-      return;
-    }
-    const deployResult = response.data
-      ?.startDeploymentReleaseUpdate as DeploymentReleaseUpdateResult | null;
-    if (deployResult) setLastDeployment(deployResult);
-    toast.success("Release deploy started", {
-      description: deployResult?.message ?? selectedRelease.version,
-    });
+    const release = selectedRelease;
     setSelectedRelease(null);
+    setDeploymentProgress({
+      phase: "starting",
+      release,
+      message: "Contacting the deployment API and starting the controller.",
+    });
+
+    try {
+      const response = await startReleaseUpdate({
+        input: {
+          version: release.version,
+          manifestUrl: release.manifestUrl,
+          manifestSha256: release.manifestSha256,
+          idempotencyKey: `settings-release-${release.version}`,
+        },
+      });
+      if (response.error) {
+        const message = response.error.message;
+        setDeploymentProgress({ phase: "failed", release, message });
+        toast.error("Release deploy failed", { description: message });
+        return;
+      }
+
+      const deployResult = response.data
+        ?.startDeploymentReleaseUpdate as DeploymentReleaseUpdateResult | null;
+      if (!deployResult) {
+        const message = "The deployment API returned no controller execution.";
+        setDeploymentProgress({ phase: "failed", release, message });
+        toast.error("Release deploy failed", { description: message });
+        return;
+      }
+
+      setDeploymentProgress({
+        phase: "accepted",
+        release,
+        message: deployResult.message,
+        result: deployResult,
+      });
+      onRefreshDeploymentStatus?.();
+      toast.success("Release deploy started", {
+        description: deployResult.message,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown deployment error.";
+      setDeploymentProgress({ phase: "failed", release, message });
+      toast.error("Release deploy failed", { description: message });
+    }
   }
 
   return (
@@ -273,7 +351,7 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
                 size="sm"
                 variant="outline"
                 onClick={() => setSelectedRelease(release)}
-                disabled={!release.deployable || updateState.fetching}
+                disabled={!release.deployable || deploymentBusy}
               >
                 Deploy
               </Button>
@@ -282,33 +360,11 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
         </div>
       )}
 
-      {lastDeployment ? (
-        <div className="border-t border-border p-4 text-sm">
-          <div className="mb-3">
-            <div className="font-medium">Deployment controller started</div>
-            <div className="text-muted-foreground">
-              {lastDeployment.message}
-            </div>
-          </div>
-          <div className="grid gap-3">
-            <ConfirmFact
-              label="Release"
-              value={lastDeployment.release.version}
-            />
-            <ConfirmFact
-              label="Execution"
-              value={lastDeployment.executionArn}
-            />
-            <ConfirmFact
-              label="Evidence"
-              value={
-                lastDeployment.evidenceBucket
-                  ? `${lastDeployment.evidenceBucket}/${lastDeployment.evidencePrefix}`
-                  : lastDeployment.evidencePrefix
-              }
-            />
-          </div>
-        </div>
+      {deploymentProgress ? (
+        <DeploymentProgressPanel
+          progress={deploymentProgress}
+          completed={deploymentCompleted}
+        />
       ) : null}
 
       <Dialog
@@ -341,17 +397,152 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
             <Button
               variant="ghost"
               onClick={() => setSelectedRelease(null)}
-              disabled={updateState.fetching}
+              disabled={deploymentBusy}
             >
               Cancel
             </Button>
-            <Button onClick={confirmDeploy} disabled={updateState.fetching}>
-              {updateState.fetching ? "Deploying…" : "Confirm Deploy"}
+            <Button onClick={confirmDeploy} disabled={deploymentBusy}>
+              {deploymentBusy ? "Starting…" : "Confirm Deploy"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </SettingsSection>
+  );
+}
+
+function DeploymentProgressPanel({
+  progress,
+  completed,
+}: {
+  progress: DeploymentProgressState;
+  completed: boolean;
+}) {
+  const steps = useMemo(
+    () => deploymentSteps(progress.phase, completed),
+    [completed, progress.phase],
+  );
+  const result = progress.phase === "accepted" ? progress.result : null;
+  const title = completed
+    ? "Deployment completed"
+    : progress.phase === "failed"
+      ? "Deployment failed before the controller started"
+      : progress.phase === "accepted"
+        ? "Deployment controller started"
+        : "Starting deployment controller";
+
+  return (
+    <div
+      className="border-t border-border p-4 text-sm"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="mb-4">
+        <div className="font-medium">{title}</div>
+        <div
+          className={
+            progress.phase === "failed"
+              ? "text-destructive"
+              : "text-muted-foreground"
+          }
+        >
+          {progress.message}
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-2">
+        {steps.map((step) => (
+          <DeploymentStep
+            key={step.label}
+            label={step.label}
+            state={step.state}
+          />
+        ))}
+      </div>
+
+      <div className="grid gap-3">
+        <ConfirmFact label="Release" value={progress.release.version} />
+        {result ? (
+          <>
+            <ConfirmFact label="Execution" value={result.executionArn} />
+            <ConfirmFact
+              label="Evidence"
+              value={
+                result.evidenceBucket
+                  ? `${result.evidenceBucket}/${result.evidencePrefix}`
+                  : result.evidencePrefix
+              }
+            />
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function deploymentSteps(
+  phase: DeploymentProgressState["phase"],
+  completed: boolean,
+) {
+  if (phase === "failed") {
+    return [
+      { label: "Submit release request", state: "failed" as const },
+      { label: "Start deployment controller", state: "pending" as const },
+      { label: "Run Terraform update", state: "pending" as const },
+      { label: "Record deployment evidence", state: "pending" as const },
+    ];
+  }
+  if (phase === "starting") {
+    return [
+      { label: "Submit release request", state: "active" as const },
+      { label: "Start deployment controller", state: "pending" as const },
+      { label: "Run Terraform update", state: "pending" as const },
+      { label: "Record deployment evidence", state: "pending" as const },
+    ];
+  }
+  return [
+    { label: "Submit release request", state: "complete" as const },
+    { label: "Start deployment controller", state: "complete" as const },
+    {
+      label: "Run Terraform update",
+      state: completed ? ("complete" as const) : ("active" as const),
+    },
+    {
+      label: "Record deployment evidence",
+      state: completed ? ("complete" as const) : ("pending" as const),
+    },
+  ];
+}
+
+function DeploymentStep({
+  label,
+  state,
+}: {
+  label: string;
+  state: "active" | "complete" | "failed" | "pending";
+}) {
+  const marker =
+    state === "complete"
+      ? "bg-emerald-500"
+      : state === "failed"
+        ? "bg-destructive"
+        : state === "active"
+          ? "bg-blue-500"
+          : "bg-muted";
+  const text =
+    state === "pending" ? "text-muted-foreground" : "text-foreground";
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`h-2 w-2 rounded-full ${marker}`} />
+      <span className={`text-xs ${text}`}>{label}</span>
+      {state === "active" ? (
+        <span className="text-xs text-muted-foreground">in progress</span>
+      ) : null}
+      {state === "failed" ? (
+        <span className="text-xs text-destructive">failed</span>
+      ) : null}
+    </div>
   );
 }
 

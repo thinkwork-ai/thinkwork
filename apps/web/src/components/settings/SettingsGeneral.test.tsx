@@ -168,6 +168,40 @@ describe("SettingsGeneral releases", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("shows inline deployment progress immediately after confirmation", async () => {
+    startReleaseUpdateMock.mockReturnValueOnce(new Promise(() => undefined));
+    render(<SettingsGeneral />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Deploy" }));
+
+    expect(
+      await screen.findByText("Starting deployment controller"),
+    ).toBeTruthy();
+    expect(screen.getByText("Submit release request")).toBeTruthy();
+    expect(screen.getByText("in progress")).toBeTruthy();
+    expect(screen.getAllByText("v0.1.0-canary.134").length).toBeGreaterThan(1);
+  });
+
+  it("shows the deployment API error inline", async () => {
+    startReleaseUpdateMock.mockResolvedValueOnce({
+      error: { message: "Deployment controller is not configured." },
+    });
+    render(<SettingsGeneral />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Deploy" }));
+
+    expect(
+      await screen.findByText(
+        "Deployment failed before the controller started",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Deployment controller is not configured."),
+    ).toBeTruthy();
+  });
 });
 
 const deployment = {
