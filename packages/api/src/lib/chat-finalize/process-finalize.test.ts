@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   updateSets: [] as unknown[],
   updateReturning: [] as Array<unknown[]>,
+  selectRows: [] as Array<Record<string, unknown>>,
   reconcileChangedFiles: vi.fn(),
   recordCostEvents: vi.fn(),
   checkBudgetAndPause: vi.fn(),
@@ -30,6 +31,16 @@ vi.mock("@thinkwork/database-pg", () => ({
           }),
         };
       },
+    }),
+    // Used only by the asking-turn pending-question preview lookup.
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          orderBy: () => ({
+            limit: async () => mocks.selectRows,
+          }),
+        }),
+      }),
     }),
   }),
 }));
@@ -100,6 +111,7 @@ import {
   isHiddenDesktopDelegation,
   processFinalize,
   toFinalizeResponse,
+  turnAskedUserQuestion,
 } from "./process-finalize";
 
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
@@ -110,6 +122,7 @@ const TURN_ID = "44444444-4444-4444-4444-444444444444";
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.updateSets = [];
+  mocks.selectRows = [];
   mocks.updateReturning = [
     [
       {
@@ -1134,6 +1147,124 @@ describe("processFinalize reconcile seam", () => {
         expect.objectContaining({ context_snapshot: expect.anything() }),
       ]),
     );
+  });
+});
+
+describe("turnAskedUserQuestion", () => {
+  it("detects the ask tool in tools_called", () => {
+    expect(
+      turnAskedUserQuestion({ tools_called: ["bash", "ask_user_question"] }),
+    ).toBe(true);
+  });
+
+  it("detects the ask tool across tool_invocations name-key variants", () => {
+    expect(
+      turnAskedUserQuestion({
+        tool_invocations: [{ toolName: "ask_user_question" }],
+      }),
+    ).toBe(true);
+    expect(
+      turnAskedUserQuestion({
+        tool_invocations: [{ tool_name: "ask_user_question" }],
+      }),
+    ).toBe(true);
+    expect(
+      turnAskedUserQuestion({
+        tool_invocations: [{ name: "ask_user_question" }],
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for ordinary turns", () => {
+    expect(
+      turnAskedUserQuestion({
+        tools_called: ["bash"],
+        tool_invocations: [{ toolName: "web_search" }],
+      }),
+    ).toBe(false);
+    expect(turnAskedUserQuestion({})).toBe(false);
+  });
+});
+
+describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => {
+  const askingPayload = {
+    thread_turn_id: TURN_ID,
+    tenant_id: TENANT_ID,
+    agent_id: AGENT_ID,
+    thread_id: THREAD_ID,
+    duration_ms: 25,
+    status: "completed" as const,
+    response: {
+      content: "I have a couple of questions before I proceed.",
+      tools_called: ["ask_user_question"],
+    },
+  };
+
+  it("sets last_response_preview from the pending question text and suppresses the push", async () => {
+    mocks.selectRows = [
+      {
+        questions: [
+          {
+            question: "Which environment should I deploy to?",
+            header: "Environment",
+            options: [],
+          },
+        ],
+      },
+    ];
+
+    await expect(processFinalize(askingPayload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+
+    // The trailing assistant text still persists as a normal message…
+    expect(mocks.insertAssistantMessage).toHaveBeenCalled();
+    // …but the thread preview shows the QUESTION, not the trailing prose.
+    const threadUpdate = mocks.updateSets.find(
+      (set) =>
+        set &&
+        typeof set === "object" &&
+        "last_response_preview" in (set as Record<string, unknown>),
+    ) as Record<string, unknown> | undefined;
+    expect(threadUpdate?.last_response_preview).toBe(
+      "Which environment should I deploy to?",
+    );
+    // The thread is waiting on the user, not done: no turn-completed push.
+    expect(mocks.sendTurnCompletedPush).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the normal preview when no pending row exists (already answered) but still suppresses the push", async () => {
+    mocks.selectRows = [];
+
+    await processFinalize(askingPayload);
+
+    const threadUpdate = mocks.updateSets.find(
+      (set) =>
+        set &&
+        typeof set === "object" &&
+        "last_response_preview" in (set as Record<string, unknown>),
+    ) as Record<string, unknown> | undefined;
+    expect(threadUpdate?.last_response_preview).toBe(
+      "I have a couple of questions before I proceed.",
+    );
+    expect(mocks.sendTurnCompletedPush).not.toHaveBeenCalled();
+  });
+
+  it("leaves normal turns unaffected: preview from the response text + push sent", async () => {
+    await processFinalize({
+      ...askingPayload,
+      response: { content: "All done!", tools_called: ["bash"] },
+    });
+
+    const threadUpdate = mocks.updateSets.find(
+      (set) =>
+        set &&
+        typeof set === "object" &&
+        "last_response_preview" in (set as Record<string, unknown>),
+    ) as Record<string, unknown> | undefined;
+    expect(threadUpdate?.last_response_preview).toBe("All done!");
+    expect(mocks.sendTurnCompletedPush).toHaveBeenCalledTimes(1);
   });
 });
 

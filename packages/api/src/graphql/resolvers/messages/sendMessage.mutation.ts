@@ -22,6 +22,8 @@ import {
 } from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
 import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agent-routing.js";
+import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
+import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/runtime-payload.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { applyCustomerOnboardingChatUpdate } from "../../../lib/spaces/customer-onboarding-chat-updates.js";
@@ -368,6 +370,40 @@ export const sendMessage = async (
       customerOnboardingHandled,
     })
   ) {
+    // ask_user_question plain-reply route (plan 2026-06-09-005 U3): a user
+    // reply CAS-consumes the thread's pending question batch
+    // (answeredVia 'reply', answers = a reference to this message — never
+    // its text) and attaches the answer context to the turn this dispatch
+    // ALREADY fires. NO second wakeup is enqueued from this path — the
+    // card mutation (answerUserQuestion) owns the wakeup route; exactly
+    // one turn carries the answer context regardless of route. A lost
+    // race (card got there first) consumes zero rows and this lands as a
+    // normal message whose turn is serialized by wakeup-defer.
+    let pendingQuestionAnswers: PendingQuestionAnswersPayload | undefined;
+    try {
+      const consumed = await consumePendingQuestions(db, {
+        threadId: i.threadId,
+        answeredVia: "reply",
+        answers: null,
+        replyMessageId: row.id,
+        answeredBy: senderType === "user" ? (senderId ?? null) : null,
+      });
+      if (consumed.length > 0) {
+        const primary = consumed[0];
+        pendingQuestionAnswers = {
+          questionId: primary.id,
+          questions: primary.questions,
+          answers: null,
+          answeredVia: "reply",
+          answeredBy: senderType === "user" ? (senderId ?? null) : null,
+          replyMessageId: row.id,
+          replyText: i.content ?? "",
+          delegationContext: primary.delegation_context ?? null,
+        };
+      }
+    } catch (err) {
+      console.warn("[sendMessage] pending-question consume failed:", err);
+    }
     try {
       await dispatchDefaultAgentChatTurn({
         tenantId: thread.tenant_id,
@@ -377,6 +413,7 @@ export const sendMessage = async (
         content: i.content,
         requestedModelId,
         requestedProfileSlug,
+        ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
         sender: { type: senderType, id: senderId },
       });
     } catch (err) {

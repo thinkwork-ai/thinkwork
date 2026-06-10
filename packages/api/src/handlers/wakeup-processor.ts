@@ -104,6 +104,10 @@ import {
   ModelApprovalError,
 } from "../lib/model-approvals.js";
 import { normalizeRequestedModelId } from "../lib/turn-model-selection.js";
+import {
+  pendingQuestionAnswersFromPayload,
+  toRuntimePendingUserQuestions,
+} from "../lib/user-questions/runtime-payload.js";
 
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
@@ -159,9 +163,8 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -268,9 +271,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -1133,15 +1135,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } = await import(
-          "../lib/orchestration/process-parser.js"
-        );
-        const { materializeProcess } = await import(
-          "../lib/orchestration/process-materializer.js"
-        );
-        const { S3Client, GetObjectCommand } = await import(
-          "@aws-sdk/client-s3"
-        );
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -1358,6 +1357,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     case "heartbeat_timer": {
       agentMessage =
         "Heartbeat timer triggered. Check for pending work in your thread inbox.";
+      break;
+    }
+    case "question_answer": {
+      // ask_user_question card-route resume (plan 2026-06-09-005 U3). The
+      // structured answer context travels in the payload and reaches the
+      // runtime as `pending_user_questions` — U4 renders the actual
+      // answer block; this message just frames the resume.
+      agentMessage =
+        "The user answered your pending question. Continue the task using the structured answers provided in this turn's context.";
       break;
     }
     case "on_demand":
@@ -1677,8 +1685,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   // Insert synthetic user message for non-chat sources so all thread types
   // have a consistent user → assistant message flow in the timeline.
-  // For chat_message source, sendMessage.mutation.ts already inserted the user message.
-  if (runThreadId && wakeup.source !== "chat_message") {
+  // For chat_message source, sendMessage.mutation.ts already inserted the user
+  // message. For question_answer, the answered card IS the user's visible
+  // input — a synthetic "wakeup" message would duplicate it (plan
+  // 2026-06-09-005 U3).
+  if (
+    runThreadId &&
+    wakeup.source !== "chat_message" &&
+    wakeup.source !== "question_answer"
+  ) {
     const userContent = agentMessage.trim();
     await insertUserMessage(runThreadId, wakeup.tenant_id, userContent);
   }
@@ -1840,6 +1855,27 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
     }
 
+    // ask_user_question answer context (plan 2026-06-09-005 U3) — both
+    // resume routes deliver the same snake_case `pending_user_questions`
+    // runtime field:
+    //   - card route: source 'question_answer', answer fields top-level in
+    //     the wakeup payload (threadId stays top-level for
+    //     promoteNextDeferredWakeup).
+    //   - reply route fallback: a chat_message wakeup whose payload nests
+    //     `pendingQuestionAnswers` (the direct chat-agent-invoke dispatch
+    //     failed, but the consume already committed — don't drop it).
+    {
+      const answerContext =
+        wakeup.source === "question_answer"
+          ? pendingQuestionAnswersFromPayload(payload)
+          : pendingQuestionAnswersFromPayload(payload?.pendingQuestionAnswers);
+      if (answerContext) {
+        Object.assign(agentCorePayload, {
+          pending_user_questions: toRuntimePendingUserQuestions(answerContext),
+        });
+      }
+    }
+
     if (wakeup.source === "workspace_event" && workspacePayload) {
       Object.assign(agentCorePayload, {
         workspace_run_id: workspacePayload.workspaceRunId,
@@ -1899,8 +1935,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     // 6. Handle response based on source type
 
-    if (wakeup.source === "chat_message" || wakeup.source === "automation") {
-      // Insert assistant message + notify subscribers (chat flow)
+    if (
+      wakeup.source === "chat_message" ||
+      wakeup.source === "automation" ||
+      wakeup.source === "question_answer"
+    ) {
+      // Insert assistant message + notify subscribers (chat flow; the
+      // question_answer resume turn replies into the same thread)
       const threadId = String(payload?.threadId || "");
       if (threadId && responseText && responseText !== "{}") {
         const assistantMsg = await insertAssistantMessage(
@@ -2398,7 +2439,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         // Insert loop response as assistant message for chat sources
         if (
           (wakeup.source === "chat_message" ||
-            wakeup.source === "automation") &&
+            wakeup.source === "automation" ||
+            wakeup.source === "question_answer") &&
           loopResponseText &&
           loopResponseText !== "{}"
         ) {
@@ -2525,9 +2567,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,
@@ -2626,8 +2667,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
     }
 
-    // If this was a chat message, insert error reply so user gets feedback
-    if (wakeup.source === "chat_message" || wakeup.source === "automation") {
+    // If this was a chat message (or a question-answer resume), insert
+    // error reply so user gets feedback
+    if (
+      wakeup.source === "chat_message" ||
+      wakeup.source === "automation" ||
+      wakeup.source === "question_answer"
+    ) {
       const threadId = String(
         (payload as Record<string, unknown>)?.threadId || "",
       );

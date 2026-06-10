@@ -61,6 +61,12 @@ export const messageTypeResolvers = {
       avatarUrl: null,
     };
   },
+  // Answer-state read path for ask_user_question messages (plan
+  // 2026-06-09-005 U3): resolved from pending_user_questions by message
+  // id via DataLoader. Null for ordinary messages.
+  userQuestion: (message: any, _args: unknown, ctx: GraphQLContext) => {
+    return message.id ? ctx.loaders.messageUserQuestion.load(message.id) : null;
+  },
   mentions: async (message: any) => {
     const messageId = message.id;
     const tenantId = message.tenantId ?? message.tenant_id ?? null;

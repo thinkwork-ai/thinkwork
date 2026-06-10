@@ -4,15 +4,17 @@
  * The pure function is covered by lifecycle-status.test.ts. This suite
  * exercises the batching integration:
  *
- *  1. Two SQL probes fire regardless of the number of thread IDs (one
- *     active probe, one latest-row probe). Batching invariant.
+ *  1. Three SQL probes fire regardless of the number of thread IDs (one
+ *     active probe, one latest-row probe, one pending-question probe).
+ *     Batching invariant.
  *  2. Loader output order matches input thread-id order (DataLoader
  *     contract).
  *  3. An active-turn hit on one thread doesn't leak the RUNNING result
  *     to its siblings.
  *  4. The mapping pipes through deriveLifecycleStatus — stuck queued,
  *     latest succeeded, and no-turns cases resolve per the unit-tested
- *     table.
+ *     table; a pending question resolves AWAITING_USER (plan
+ *     2026-06-09-005 U3).
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -42,18 +44,23 @@ vi.mock("../graphql/utils.js", () => {
 });
 
 import { createThreadLoaders } from "../graphql/resolvers/threads/loaders.js";
+// The mocked module's table sentinel — used to route the select stub
+// between probe 1 (active turns, FROM thread_turns) and probe 3 (pending
+// questions, FROM the real pendingUserQuestions schema object).
+import { threadTurns as mockedThreadTurns } from "../graphql/utils.js";
 
 /**
- * Stubbed select()-chain builder. Accepts the where() input and replays
- * the rows set per test. Shape matches Drizzle's fluent select builder
- * enough for the loader's probe 1.
+ * Table-aware select()-chain stub. Probe 1 selects FROM the mocked
+ * threadTurns table; probe 3 (pending ask_user_question rows) selects
+ * FROM the real pendingUserQuestions table — route by table identity.
  */
-function selectChain(rows: unknown[]) {
-  return {
-    from: () => ({
-      where: () => Promise.resolve(rows),
+function stubSelect(activeRows: unknown[], pendingRows: unknown[] = []) {
+  dbSelectMock.mockImplementation(() => ({
+    from: (table: unknown) => ({
+      where: () =>
+        Promise.resolve(table === mockedThreadTurns ? activeRows : pendingRows),
     }),
-  };
+  }));
 }
 
 describe("threadLifecycleStatus DataLoader", () => {
@@ -63,7 +70,7 @@ describe("threadLifecycleStatus DataLoader", () => {
   });
 
   it("fires exactly one active-probe and one latest-probe regardless of thread count", async () => {
-    dbSelectMock.mockReturnValue(selectChain([])); // no active turns
+    stubSelect([]); // no active turns, no pending questions
     dbExecuteMock.mockResolvedValue({ rows: [] }); // no rows in latest probe
 
     const { threadLifecycleStatus } = createThreadLoaders();
@@ -73,14 +80,15 @@ describe("threadLifecycleStatus DataLoader", () => {
       threadLifecycleStatus.load("t-3"),
     ]);
 
-    // Probe 1 (active) fired once, covering all 3 thread IDs in a single query.
-    expect(dbSelectMock).toHaveBeenCalledTimes(1);
+    // Probe 1 (active) + probe 3 (pending questions) each fired once,
+    // covering all 3 thread IDs in a single query apiece.
+    expect(dbSelectMock).toHaveBeenCalledTimes(2);
     // Probe 2 (latest DISTINCT ON) fired once.
     expect(dbExecuteMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns results in input-id order — DataLoader contract", async () => {
-    dbSelectMock.mockReturnValue(selectChain([]));
+    stubSelect([]);
     dbExecuteMock.mockResolvedValue({
       rows: [
         { thread_id: "t-2", status: "succeeded", created_at: new Date() },
@@ -102,7 +110,7 @@ describe("threadLifecycleStatus DataLoader", () => {
 
   it("active-turn hit on one thread doesn't leak RUNNING to siblings", async () => {
     // Only t-1 has a fresh active turn.
-    dbSelectMock.mockReturnValue(selectChain([{ threadId: "t-1" }]));
+    stubSelect([{ threadId: "t-1" }]);
     dbExecuteMock.mockResolvedValue({
       rows: [
         { thread_id: "t-2", status: "succeeded", created_at: new Date() },
@@ -124,7 +132,7 @@ describe("threadLifecycleStatus DataLoader", () => {
 
   it("routes stuck-queued (> 5 min) via the latest-row fallback → FAILED", async () => {
     // No active turns — the stuck queued row is older than 5 min.
-    dbSelectMock.mockReturnValue(selectChain([]));
+    stubSelect([]);
     dbExecuteMock.mockResolvedValue({
       rows: [
         {
@@ -140,7 +148,7 @@ describe("threadLifecycleStatus DataLoader", () => {
   });
 
   it("resolves a thread with zero turns as IDLE", async () => {
-    dbSelectMock.mockReturnValue(selectChain([]));
+    stubSelect([]);
     dbExecuteMock.mockResolvedValue({ rows: [] });
 
     const { threadLifecycleStatus } = createThreadLoaders();
@@ -155,7 +163,7 @@ describe("threadLifecycleStatus DataLoader", () => {
     // if the loader queries with the kind filter, the dbExecuteMock
     // only sees agent_turn rows and this thread has none, so the
     // lifecycle falls through to IDLE (not COMPLETED).
-    dbSelectMock.mockReturnValue(selectChain([]));
+    stubSelect([]);
     dbExecuteMock.mockResolvedValue({ rows: [] }); // loader-with-kind-filter returns no rows
 
     const { threadLifecycleStatus } = createThreadLoaders();
@@ -166,7 +174,7 @@ describe("threadLifecycleStatus DataLoader", () => {
     // Some raw SQL drivers return created_at as a string. Loader must
     // rehydrate it so deriveLifecycleStatus can compute age.
     const tenMinAgoIso = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    dbSelectMock.mockReturnValue(selectChain([]));
+    stubSelect([]);
     dbExecuteMock.mockResolvedValue({
       rows: [
         { thread_id: "t-iso", status: "queued", created_at: tenMinAgoIso },
@@ -175,5 +183,85 @@ describe("threadLifecycleStatus DataLoader", () => {
 
     const { threadLifecycleStatus } = createThreadLoaders();
     expect(await threadLifecycleStatus.load("t-iso")).toBe("FAILED");
+  });
+
+  it("pending question → AWAITING_USER, without leaking to siblings (plan 2026-06-09-005 U3)", async () => {
+    // t-1 has a pending question on a SUCCEEDED latest turn; t-2 has one
+    // on a FAILED latest turn (the badge must survive failure); t-3 has
+    // no pending question.
+    stubSelect([], [{ threadId: "t-1" }, { threadId: "t-2" }]);
+    dbExecuteMock.mockResolvedValue({
+      rows: [
+        { thread_id: "t-1", status: "succeeded", created_at: new Date() },
+        { thread_id: "t-2", status: "failed", created_at: new Date() },
+        { thread_id: "t-3", status: "succeeded", created_at: new Date() },
+      ],
+    });
+
+    const { threadLifecycleStatus } = createThreadLoaders();
+    const [r1, r2, r3] = await Promise.all([
+      threadLifecycleStatus.load("t-1"),
+      threadLifecycleStatus.load("t-2"),
+      threadLifecycleStatus.load("t-3"),
+    ]);
+
+    expect(r1).toBe("AWAITING_USER");
+    expect(r2).toBe("AWAITING_USER"); // failed latest turn still badges
+    expect(r3).toBe("COMPLETED");
+  });
+
+  it("clears AWAITING_USER once the question is consumed (no pending rows)", async () => {
+    stubSelect([], []);
+    dbExecuteMock.mockResolvedValue({
+      rows: [{ thread_id: "t-1", status: "succeeded", created_at: new Date() }],
+    });
+
+    const { threadLifecycleStatus } = createThreadLoaders();
+    expect(await threadLifecycleStatus.load("t-1")).toBe("COMPLETED");
+  });
+});
+
+describe("threadPendingUserQuestion DataLoader", () => {
+  beforeEach(() => {
+    dbSelectMock.mockReset();
+    dbExecuteMock.mockReset();
+  });
+
+  it("returns the open batch as a GraphQL UserQuestion, null for threads without one", async () => {
+    stubSelect(
+      [],
+      [
+        {
+          id: "question-1",
+          thread_id: "t-1",
+          message_id: "message-1",
+          status: "pending",
+          questions: [{ question: "Which env?", header: "Env", options: [] }],
+          answers: null,
+          answered_via: null,
+          answered_by: null,
+          answered_at: null,
+        },
+      ],
+    );
+
+    const { threadPendingUserQuestion } = createThreadLoaders();
+    const [q1, q2] = await Promise.all([
+      threadPendingUserQuestion.load("t-1"),
+      threadPendingUserQuestion.load("t-2"),
+    ]);
+
+    expect(q1).toMatchObject({
+      id: "question-1",
+      threadId: "t-1",
+      messageId: "message-1",
+      status: "PENDING",
+      answers: null,
+      answeredVia: null,
+    });
+    expect(JSON.parse(q1!.questions)).toEqual([
+      { question: "Which env?", header: "Env", options: [] },
+    ]);
+    expect(q2).toBeNull();
   });
 });

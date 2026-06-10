@@ -72,6 +72,10 @@ import {
   listApprovedModelCatalog,
   ModelApprovalError,
 } from "../lib/model-approvals.js";
+import {
+  toRuntimePendingUserQuestions,
+  type PendingQuestionAnswersPayload,
+} from "../lib/user-questions/runtime-payload.js";
 
 /**
  * Extract or generate a trace ID for correlating CloudWatch/X-Ray traces.
@@ -157,6 +161,17 @@ interface InvokeEvent {
    * can load + emphasize them for this turn without a permanent install.
    */
   pinnedSkills?: string[];
+  /**
+   * Reply-consumed ask_user_question answer context (plan 2026-06-09-005
+   * U3). The dispatch caller (sendMessage → default-agent-routing)
+   * CAS-consumed the pending batch and attaches the answer context to the
+   * turn it already fires. Forwarded to the runtime as the snake_case
+   * `pending_user_questions` payload field (like message_attachments).
+   * The turn keeps invocation_source 'chat_message' on this path; the
+   * wakeup-resume path (wakeup-processor, source 'question_answer') sets
+   * invocation_source 'question_answer' from the wakeup row.
+   */
+  pendingQuestionAnswers?: PendingQuestionAnswersPayload;
   modelId?: string;
   requestedModelId?: string;
   requestedProfileSlug?: string;
@@ -1335,6 +1350,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               size_bytes: att.sizeBytes,
             }))
           : undefined,
+      // ask_user_question answer context (plan 2026-06-09-005 U3) — same
+      // camelCase → snake_case boundary as message_attachments. U4 renders
+      // the runtime prompt block from this; here we only deliver the field.
+      pending_user_questions: event.pendingQuestionAnswers
+        ? toRuntimePendingUserQuestions(event.pendingQuestionAnswers)
+        : undefined,
       // Finalize-callback opt-in (plan 2026-05-22-006 U3). The AgentCore
       // runtime POSTs its end-of-turn result to this URL with the bearer
       // secret, so chat-agent-invoke can dispatch Event-mode without

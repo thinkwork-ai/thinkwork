@@ -28,9 +28,14 @@
  * insertion, etc. The behavior must match chat-agent-invoke today.
  */
 
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { artifacts, threadTurns, threads } from "@thinkwork/database-pg/schema";
+import {
+  artifacts,
+  pendingUserQuestions,
+  threadTurns,
+  threads,
+} from "@thinkwork/database-pg/schema";
 import {
   checkBudgetAndPause,
   extractUsage,
@@ -489,6 +494,17 @@ export async function processFinalize(
   const displayResponse = responseText;
   const computerThreadResponse = invokeResult.computer_thread_response;
 
+  // ask_user_question asking-turn finalize (plan 2026-06-09-005 U3): when
+  // this turn called the ask tool, the thread is waiting on the USER, not
+  // done — the list preview shows the question (not the trailing prose)
+  // and the turn-completed push is suppressed. Trailing assistant text
+  // still persists as a normal message below.
+  const askedUserQuestion = turnAskedUserQuestion(invokeResult);
+  let askingQuestionPreview: string | null = null;
+  if (askedUserQuestion) {
+    askingQuestionPreview = await loadPendingQuestionPreview(threadId);
+  }
+
   // 7. Insert assistant message (or reuse the one the runtime already
   //    created when invoked via the Computer thread surface)
   const assistantMsg = computerThreadResponse?.responseMessageId
@@ -533,10 +549,14 @@ export async function processFinalize(
           updated_at: new Date(),
           last_turn_completed_at: new Date(),
           last_response_preview:
-            displayResponse
+            // Asking turn: preview the question the thread is waiting on,
+            // not the trailing prose.
+            askingQuestionPreview ??
+            (displayResponse
               .replace(/[#*_`]/g, "")
               .trim()
-              .slice(0, 200) || null,
+              .slice(0, 200) ||
+              null),
         })
         .where(eq(threads.id, threadId));
     } catch (err) {
@@ -569,8 +589,9 @@ export async function processFinalize(
     } catch {}
   }
 
-  // 7e. Send push notification to user devices
-  if (!computerThreadResponse?.responseMessageId) {
+  // 7e. Send push notification to user devices — suppressed for asking
+  // turns: the thread is waiting on the user, not done.
+  if (!computerThreadResponse?.responseMessageId && !askedUserQuestion) {
     try {
       await sendTurnCompletedPush({
         threadId,
@@ -613,6 +634,81 @@ export async function processFinalize(
     messageId: assistantMsg?.id ?? null,
     reconcile: reconcileReport,
   };
+}
+
+/** Tool name the ask-user-question Pi extension registers (U5). */
+const ASK_USER_QUESTION_TOOL = "ask_user_question";
+
+/**
+ * Detect whether the finalizing turn called ask_user_question (the "ask
+ * sentinel" for finalize purposes, plan 2026-06-09-005 U3).
+ *
+ * Detection is deliberately belt-and-suspenders across the two places the
+ * runtime reports tool activity — `tools_called` (flat string list) and
+ * `tool_invocations` (rich records whose name key has varied across
+ * runtime versions: toolName | tool_name | name). Matching by TOOL NAME
+ * (not a payload marker) is robust to U5's sentinel-result shape evolving:
+ * the tool only ever returns successfully after the intake persisted the
+ * pending row, so name presence ⇒ a question was asked this turn. The
+ * preview lookup below re-checks the pending row, so a 409'd or failed
+ * ask call degrades to normal-finalize behavior, not a wrong preview.
+ */
+export function turnAskedUserQuestion(invokeResult: {
+  tools_called?: string[];
+  tool_invocations?: Array<Record<string, unknown>>;
+}): boolean {
+  if (
+    Array.isArray(invokeResult.tools_called) &&
+    invokeResult.tools_called.includes(ASK_USER_QUESTION_TOOL)
+  ) {
+    return true;
+  }
+  for (const invocation of invokeResult.tool_invocations ?? []) {
+    if (!invocation || typeof invocation !== "object") continue;
+    const name = invocation.toolName ?? invocation.tool_name ?? invocation.name;
+    if (name === ASK_USER_QUESTION_TOOL) return true;
+  }
+  return false;
+}
+
+/**
+ * First question text of the thread's open batch, for
+ * threads.last_response_preview. Best-effort: null (→ normal preview)
+ * when no pending row exists — e.g. the ask 409'd, or the user already
+ * answered in the finalize window.
+ */
+async function loadPendingQuestionPreview(
+  threadId: string,
+): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ questions: pendingUserQuestions.questions })
+      .from(pendingUserQuestions)
+      .where(
+        and(
+          eq(pendingUserQuestions.thread_id, threadId),
+          eq(pendingUserQuestions.status, "pending"),
+        ),
+      )
+      .orderBy(desc(pendingUserQuestions.created_at))
+      .limit(1);
+    const questions = row?.questions;
+    if (!Array.isArray(questions) || questions.length === 0) return null;
+    const first = questions[0] as Record<string, unknown> | null;
+    const text =
+      first && typeof first.question === "string"
+        ? first.question
+        : first && typeof first.header === "string"
+          ? first.header
+          : null;
+    return text ? text.trim().slice(0, 200) || null : null;
+  } catch (err) {
+    console.error(
+      "[chat-finalize] Failed to load pending question preview:",
+      err,
+    );
+    return null;
+  }
 }
 
 export function diagnosticsWithWorkspaceReconcile(

@@ -157,6 +157,23 @@ export const updateThread = async (
     }
   }
 
+  // ask_user_question cancel hygiene (plan 2026-06-09-005 U3): archiving a
+  // thread cancels its pending question batch so AWAITING_USER can't park
+  // an archived thread forever. (Thread DELETE is covered by the FK
+  // cascades on pending_user_questions.thread_id/message_id.)
+  if (i.archivedAt !== undefined && i.archivedAt) {
+    try {
+      const { cancelPendingQuestions } =
+        await import("../../../lib/user-questions/consume.js");
+      await cancelPendingQuestions(db, { threadId: args.id });
+    } catch (err) {
+      console.warn(
+        "[updateThread] failed to cancel pending questions on archive:",
+        err,
+      );
+    }
+  }
+
   // Fire real-time notification (non-blocking) — skip for read-state-only updates
   const isReadStateOnly = Object.keys(updates).every(
     (k) => k === "updated_at" || k === "last_read_at",

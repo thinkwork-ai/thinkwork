@@ -174,6 +174,150 @@ describe("default agent routing", () => {
     ]);
   });
 
+  it("forwards reply-consumed pendingQuestionAnswers to the direct chat invoke WITHOUT enqueueing a wakeup", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const invoked: unknown[] = [];
+    const pendingQuestionAnswers = {
+      questionId: "question-1",
+      questions: [{ question: "Which env?", header: "Env", options: [] }],
+      answers: null,
+      answeredVia: "reply" as const,
+      answeredBy: "user-1",
+      replyMessageId: "message-1",
+      replyText: "Dev please",
+      delegationContext: null,
+    };
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "Dev please",
+        pendingQuestionAnswers,
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input);
+          return true;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(invoked).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        messageId: "message-1",
+        userMessage: "Dev please",
+        pendingQuestionAnswers,
+      },
+    ]);
+    // Exactly one answer-carrying turn: the reply path NEVER enqueues a
+    // second wakeup (the card mutation owns the wakeup route).
+    expect(repository.wakeups).toEqual([]);
+  });
+
+  it("#2013 parity: an attachment-bearing answering message still resolves attachments alongside the answer context", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const invoked: unknown[] = [];
+    const attachment = {
+      attachmentId: "att-1",
+      s3Key: "tenants/t/attachments/a/x/Budget.xlsx",
+      name: "Budget.xlsx",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      sizeBytes: 7704,
+    };
+    const pendingQuestionAnswers = {
+      questionId: "question-1",
+      questions: [{ question: "Which file?", header: "File", options: [] }],
+      answers: null,
+      answeredVia: "reply" as const,
+      answeredBy: "user-1",
+      replyMessageId: "message-1",
+      replyText: "Use the attached budget",
+      delegationContext: null,
+    };
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "Use the attached budget",
+        pendingQuestionAnswers,
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input);
+          return true;
+        },
+      },
+      async () => [attachment],
+      async () => [],
+    );
+
+    expect(invoked).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        messageId: "message-1",
+        userMessage: "Use the attached budget",
+        messageAttachments: [attachment],
+        pendingQuestionAnswers,
+      },
+    ]);
+  });
+
+  it("carries pendingQuestionAnswers into the fallback wakeup payload when direct invoke is unavailable", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const pendingQuestionAnswers = {
+      questionId: "question-1",
+      questions: [],
+      answers: null,
+      answeredVia: "reply" as const,
+      replyMessageId: "message-1",
+      replyText: "Dev please",
+      delegationContext: null,
+    };
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "Dev please",
+        pendingQuestionAnswers,
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent() {
+          return false;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    // The consume already committed — the fallback wakeup must not drop
+    // the answer context.
+    expect(repository.wakeups).toHaveLength(1);
+    expect(repository.wakeups[0].payload).toMatchObject({
+      threadId: "thread-1",
+      pendingQuestionAnswers,
+    });
+  });
+
   it("forwards the selected parent model to direct chat invoke", async () => {
     const repository = makeRepository({ agentId: "agent-1" });
     const invoked: unknown[] = [];

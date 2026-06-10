@@ -339,6 +339,12 @@ export async function invokeChatAgent(payload: {
    * the blocklist guardrail and forwards them to AgentCore as `pinned_skills`.
    */
   pinnedSkills?: string[];
+  /**
+   * Reply-consumed ask_user_question answer context (plan 2026-06-09-005
+   * U3). chat-agent-invoke forwards it to the runtime as the snake_case
+   * `pending_user_questions` payload field.
+   */
+  pendingQuestionAnswers?: import("../lib/user-questions/runtime-payload.js").PendingQuestionAnswersPayload;
   requestedModelId?: string;
 }): Promise<boolean> {
   try {
