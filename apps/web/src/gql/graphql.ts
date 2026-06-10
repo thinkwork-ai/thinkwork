@@ -1586,6 +1586,7 @@ export enum KnowledgeGraphEvidenceSourceKind {
   BrainPage = "BRAIN_PAGE",
   BrainSection = "BRAIN_SECTION",
   CogneePayload = "COGNEE_PAYLOAD",
+  HindsightObservation = "HINDSIGHT_OBSERVATION",
   Normalizer = "NORMALIZER",
   ThreadMessage = "THREAD_MESSAGE",
   WikiPage = "WIKI_PAGE",
@@ -1714,6 +1715,7 @@ export type KnowledgeGraphRelationship = {
 
 export enum KnowledgeGraphSourceKind {
   Brain = "BRAIN",
+  Observations = "OBSERVATIONS",
   Thread = "THREAD",
   Wiki = "WIKI",
 }
@@ -2410,6 +2412,7 @@ export type Mutation = {
   startDeploymentReleaseUpdate: DeploymentReleaseUpdate;
   startEvalRun: EvalRun;
   startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
+  startKnowledgeGraphObservationsIngest: KnowledgeGraphIngestRun;
   startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
   startManagedApplicationPlan: ManagedApplicationDeploymentJob;
   startOntologySuggestionScan: OntologySuggestionScanJob;
@@ -3128,6 +3131,10 @@ export type MutationStartEvalRunArgs = {
 
 export type MutationStartKnowledgeGraphIngestArgs = {
   input: StartKnowledgeGraphIngestInput;
+};
+
+export type MutationStartKnowledgeGraphObservationsIngestArgs = {
+  input?: InputMaybe<StartKnowledgeGraphObservationsIngestInput>;
 };
 
 export type MutationStartKnowledgeGraphThreadIngestArgs = {
@@ -5511,6 +5518,12 @@ export type StartKnowledgeGraphIngestInput = {
   sourceRef?: InputMaybe<Scalars["String"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type StartKnowledgeGraphObservationsIngestInput = {
+  fullRebuild?: InputMaybe<Scalars["Boolean"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type StartKnowledgeGraphThreadIngestInput = {

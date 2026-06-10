@@ -60,6 +60,7 @@ export interface NormalizedKnowledgeGraphEvidence {
     | "wiki_section"
     | "brain_page"
     | "brain_section"
+    | "hindsight_observation"
     | "cognee_payload"
     | "normalizer";
   sourceRef: string | null;

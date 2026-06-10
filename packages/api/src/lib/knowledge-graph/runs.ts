@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   type KnowledgeGraphSourceKind,
   knowledgeGraphIngestRuns,
@@ -38,11 +38,140 @@ export interface CreateKnowledgeGraphThreadIngestRunResult {
   inserted: boolean;
 }
 
+export interface CreateKnowledgeGraphObservationsIngestRunArgs {
+  db: Database;
+  tenantId: string;
+  requestedByUserId: string | null;
+  trigger?: "manual" | "scheduled" | null;
+  fullRebuild?: boolean | null;
+  metadata?: string | Record<string, unknown> | null;
+}
+
 export class KnowledgeGraphRunError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "KnowledgeGraphRunError";
   }
+}
+
+export const OBSERVATIONS_SOURCE_LABEL = "Hindsight observations";
+
+/** Stable per-tenant identities — one observations dataset/run-ref per tenant. */
+export function buildObservationsSourceRef(tenantId: string): string {
+  return `tenant:${tenantId}:observations`;
+}
+
+export function buildObservationsDatasetName(tenantId: string): string {
+  return `thinkwork:${tenantId}:observations`;
+}
+
+const DEFAULT_OBSERVATIONS_RUN_CEILING_MINUTES = 20;
+
+export function observationsRunCeilingMinutes(): number {
+  const raw = process.env.KG_OBS_RUN_CEILING_MINUTES;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_OBSERVATIONS_RUN_CEILING_MINUTES;
+}
+
+/**
+ * Fail observation runs stranded in queued/running past the run ceiling.
+ * The stable source_ref makes the active-run dedupe index a permanent lock
+ * if a worker dies mid-run — without this, one stranded row blocks every
+ * future observations run for the tenant forever.
+ */
+export async function reapStaleObservationIngestRuns(args: {
+  db: Database;
+  tenantId?: string | null;
+  ceilingMinutes?: number;
+}): Promise<number> {
+  const ceilingMinutes = args.ceilingMinutes ?? observationsRunCeilingMinutes();
+  const cutoff = new Date(Date.now() - ceilingMinutes * 60_000);
+  const now = new Date();
+  const predicates = [
+    eq(knowledgeGraphIngestRuns.source_kind, "observations"),
+    sql`${knowledgeGraphIngestRuns.status} IN ('queued','running')`,
+    lt(knowledgeGraphIngestRuns.created_at, cutoff),
+  ];
+  if (args.tenantId) {
+    predicates.push(eq(knowledgeGraphIngestRuns.tenant_id, args.tenantId));
+  }
+  const reaped = await args.db
+    .update(knowledgeGraphIngestRuns)
+    .set({
+      status: "failed",
+      finished_at: now,
+      error: "reaped: exceeded run ceiling",
+      updated_at: now,
+    })
+    .where(and(...predicates))
+    .returning({ id: knowledgeGraphIngestRuns.id });
+  return reaped.length;
+}
+
+/**
+ * Claim an observations ingest run for the tenant. Unlike per-thread runs
+ * there is no eligible-source precheck — an empty incremental read finishes
+ * as `stale_noop` in the worker rather than refusing to start.
+ */
+export async function createKnowledgeGraphObservationsIngestRun(
+  args: CreateKnowledgeGraphObservationsIngestRunArgs,
+): Promise<CreateKnowledgeGraphThreadIngestRunResult> {
+  await reapStaleObservationIngestRuns({
+    db: args.db,
+    tenantId: args.tenantId,
+  });
+
+  const sourceRef = buildObservationsSourceRef(args.tenantId);
+  const [inserted] = await args.db
+    .insert(knowledgeGraphIngestRuns)
+    .values({
+      id: randomUUID(),
+      tenant_id: args.tenantId,
+      thread_id: null,
+      source_kind: "observations",
+      source_ref: sourceRef,
+      source_label: OBSERVATIONS_SOURCE_LABEL,
+      requested_by_user_id: args.requestedByUserId,
+      status: "queued",
+      trigger: args.trigger ?? "manual",
+      cognee_dataset_name: buildObservationsDatasetName(args.tenantId),
+      message_count: 0,
+      input: {
+        source: "observations",
+        sourceKind: "observations",
+        sourceRef,
+        fullRebuild: args.fullRebuild === true,
+      },
+      metadata: normalizeMetadata(args.metadata),
+    })
+    .onConflictDoNothing({
+      target: [
+        knowledgeGraphIngestRuns.tenant_id,
+        knowledgeGraphIngestRuns.source_kind,
+        knowledgeGraphIngestRuns.source_ref,
+      ],
+      where: sql`status IN ('queued','running')`,
+    })
+    .returning();
+
+  if (inserted) {
+    return { run: inserted as KnowledgeGraphIngestRunRow, inserted: true };
+  }
+
+  const existing = await loadActiveRun(
+    args.db,
+    args.tenantId,
+    "observations",
+    sourceRef,
+  );
+  if (!existing) {
+    throw new KnowledgeGraphRunError(
+      "Knowledge Graph observations ingest start raced with an active-run conflict",
+    );
+  }
+  return { run: existing, inserted: false };
 }
 
 export async function createKnowledgeGraphThreadIngestRun(
@@ -120,27 +249,41 @@ export async function createKnowledgeGraphIngestRun(
     return { run: inserted as KnowledgeGraphIngestRunRow, inserted: true };
   }
 
-  const [existing] = await args.db
-    .select()
-    .from(knowledgeGraphIngestRuns)
-    .where(
-      and(
-        eq(knowledgeGraphIngestRuns.tenant_id, args.tenantId),
-        eq(knowledgeGraphIngestRuns.source_kind, source.sourceKind),
-        eq(knowledgeGraphIngestRuns.source_ref, source.sourceRef),
-        sql`${knowledgeGraphIngestRuns.status} IN ('queued','running')`,
-      ),
-    )
-    .orderBy(knowledgeGraphIngestRuns.created_at)
-    .limit(1);
-
+  const existing = await loadActiveRun(
+    args.db,
+    args.tenantId,
+    source.sourceKind,
+    source.sourceRef,
+  );
   if (!existing) {
     throw new KnowledgeGraphRunError(
       "Knowledge Graph ingest start raced with an active-run conflict",
     );
   }
 
-  return { run: existing as KnowledgeGraphIngestRunRow, inserted: false };
+  return { run: existing, inserted: false };
+}
+
+async function loadActiveRun(
+  db: Database,
+  tenantId: string,
+  sourceKind: KnowledgeGraphSourceKind,
+  sourceRef: string,
+): Promise<KnowledgeGraphIngestRunRow | null> {
+  const [existing] = await db
+    .select()
+    .from(knowledgeGraphIngestRuns)
+    .where(
+      and(
+        eq(knowledgeGraphIngestRuns.tenant_id, tenantId),
+        eq(knowledgeGraphIngestRuns.source_kind, sourceKind),
+        eq(knowledgeGraphIngestRuns.source_ref, sourceRef),
+        sql`${knowledgeGraphIngestRuns.status} IN ('queued','running')`,
+      ),
+    )
+    .orderBy(knowledgeGraphIngestRuns.created_at)
+    .limit(1);
+  return (existing as KnowledgeGraphIngestRunRow | undefined) ?? null;
 }
 
 export async function markKnowledgeGraphRunInvokeFailed(args: {

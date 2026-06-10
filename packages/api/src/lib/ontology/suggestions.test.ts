@@ -276,8 +276,178 @@ describe("ontology suggestions", () => {
     expect(proposals).toEqual([]);
   });
 
+  it("re-anchors the scan on observation ingest run drop evidence first", async () => {
+    const db = new FakeSourceDb([
+      // observation ingest runs (primary source — queried first)
+      [
+        {
+          id: "run-1",
+          status: "succeeded",
+          metrics: {
+            unapprovedNodeCount: 2,
+            droppedNodeSamples: [
+              {
+                id: "node-1",
+                label: "Sprocket Inc",
+                rawType: "vendor",
+                dropReason: "unapproved_entity_type",
+                propertyKeys: [],
+              },
+              {
+                id: "node-2",
+                label: "Gear Co",
+                rawType: "Vendor",
+                dropReason: "unapproved_entity_type",
+                propertyKeys: [],
+              },
+              {
+                id: "node-3",
+                label: "doc-chunk",
+                rawType: "document",
+                dropReason: "structural_node",
+                propertyKeys: [],
+              },
+            ],
+          },
+          finishedAt: new Date("2026-06-08T12:00:00.000Z"),
+          createdAt: new Date("2026-06-08T11:59:00.000Z"),
+        },
+      ],
+      [],
+      [],
+      [],
+      [],
+    ]);
+
+    const result = await collectOntologySuggestionSources({
+      tenantId: "tenant-1",
+      db: db as any,
+      memoryAdapter: {
+        kind: "hindsight" as const,
+        inspect: vi.fn().mockResolvedValue([]),
+      },
+    });
+
+    expect(result.providerStatuses[0]).toEqual({
+      provider: "observation_runs",
+      state: "ok",
+      count: 2,
+    });
+    const runObservations = result.observations.filter(
+      (observation) => observation.metadata?.observationRunId === "run-1",
+    );
+    expect(runObservations).toHaveLength(2);
+    expect(runObservations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceKind: "ontology_gate_rejection",
+          sourceRef: "observation_run:run-1",
+          sourceLabel: "Sprocket Inc",
+          text: expect.stringContaining('unapproved entity type "vendor"'),
+          metadata: expect.objectContaining({
+            observationRunId: "run-1",
+            entitySubtype: "vendor",
+            dropReason: "unapproved_entity_type",
+            unapprovedNodeCount: 2,
+          }),
+        }),
+      ]),
+    );
+    // Structural Cognee plumbing nodes are not ontology signal.
+    expect(
+      runObservations.some(
+        (observation) => observation.metadata?.cogneeNodeId === "node-3",
+      ),
+    ).toBe(false);
+
+    const features = extractOntologySuggestionFeatures({
+      observations: result.observations,
+      activeOntology: activeOntology(),
+    });
+    const proposals = await synthesizeOntologyChangeSetProposals({
+      tenantId: "tenant-1",
+      features,
+      activeOntology: activeOntology(),
+      llmEnabled: false,
+    });
+
+    expect(proposals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "rejected-vendor-entity-type",
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              itemType: "entity_type",
+              targetSlug: "vendor",
+              evidence: expect.arrayContaining([
+                expect.objectContaining({
+                  sourceRef: "observation_run:run-1",
+                }),
+              ]),
+            }),
+          ]),
+        }),
+      ]),
+    );
+  });
+
+  it("does not surface drop evidence for entity types that are already approved", async () => {
+    const db = new FakeSourceDb([
+      [
+        {
+          id: "run-2",
+          status: "succeeded",
+          metrics: {
+            unapprovedNodeCount: 2,
+            droppedNodeSamples: [
+              {
+                id: "node-1",
+                label: "Acme",
+                rawType: "customer",
+                dropReason: "unapproved_entity_type",
+                propertyKeys: [],
+              },
+              {
+                id: "node-2",
+                label: "Initech",
+                rawType: "customer",
+                dropReason: "unapproved_entity_type",
+                propertyKeys: [],
+              },
+            ],
+          },
+          finishedAt: new Date("2026-06-08T12:00:00.000Z"),
+          createdAt: new Date("2026-06-08T11:59:00.000Z"),
+        },
+      ],
+      [],
+      [],
+      [],
+      [],
+    ]);
+
+    const result = await collectOntologySuggestionSources({
+      tenantId: "tenant-1",
+      db: db as any,
+      memoryAdapter: {
+        kind: "hindsight" as const,
+        inspect: vi.fn().mockResolvedValue([]),
+      },
+    });
+    const features = extractOntologySuggestionFeatures({
+      observations: result.observations,
+      // `customer` is already in the active ontology.
+      activeOntology: activeOntology(),
+    });
+
+    expect(
+      features.filter((feature) => feature.kind === "rejected_entity_type"),
+    ).toEqual([]);
+  });
+
   it("collects Hindsight memory records as ontology suggestion evidence", async () => {
     const db = new FakeSourceDb([
+      [],
       [],
       [],
       [],
@@ -341,6 +511,7 @@ describe("ontology suggestions", () => {
 
   it("includes unresolved ontology-gate rejections as suggestion evidence", async () => {
     const db = new FakeSourceDb([
+      [],
       [],
       [],
       [

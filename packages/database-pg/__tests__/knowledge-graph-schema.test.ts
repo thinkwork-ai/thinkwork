@@ -103,7 +103,12 @@ describe("Knowledge Graph schema", () => {
   });
 
   it("keeps trust and provenance status values explicit", () => {
-    expect(KNOWLEDGE_GRAPH_SOURCE_KINDS).toEqual(["thread", "wiki", "brain"]);
+    expect(KNOWLEDGE_GRAPH_SOURCE_KINDS).toEqual([
+      "thread",
+      "wiki",
+      "brain",
+      "observations",
+    ]);
     expect(KNOWLEDGE_GRAPH_GROUNDING_STATUSES).toEqual([
       "grounded",
       "unapproved_type",
@@ -122,6 +127,7 @@ describe("Knowledge Graph schema", () => {
       "wiki_section",
       "brain_page",
       "brain_section",
+      "hindsight_observation",
       "cognee_payload",
       "normalizer",
     ]);
