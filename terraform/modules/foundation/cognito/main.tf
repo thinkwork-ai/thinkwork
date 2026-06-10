@@ -114,6 +114,7 @@ resource "aws_cognito_user_pool" "main" {
     invite_message_template {
       email_subject = var.invite_email_subject
       email_message = var.invite_email_message
+      sms_message   = var.invite_sms_message
     }
   }
 

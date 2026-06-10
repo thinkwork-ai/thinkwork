@@ -10,10 +10,10 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U17 - pending Cognito invite resend.
-- Current branch: `codex/u17-invite-resend-pending-users`.
+- Current implementation unit: U18 - Cognito invite SMS template deploy unblock.
+- Current branch: `codex/fix-cognito-invite-sms`.
 - Current worktree:
-  `.Codex/worktrees/u15-tei-141-status`.
+  `.Codex/worktrees/fix-cognito-invite-sms`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -32,7 +32,8 @@ status: in_progress
   merged; U15/U17 status and invite-email PR
   [#2304](https://github.com/thinkwork-ai/thinkwork/pull/2304) merged; U16
   PR [#2305](https://github.com/thinkwork-ai/thinkwork/pull/2305) merged; U17
-  pending-invite resend PR not opened yet.
+  pending-invite resend PR not opened yet; U18 Cognito invite SMS template
+  unblock PR not opened yet.
 - Status: U11 merged and deployed to main. TEI's customer deployment controller
   was refreshed to the U11 runner and `.137` selected-release pins, then TEI
   update execution `tei-e2e-update-137-20260609204430` failed closed because
@@ -106,6 +107,13 @@ status: in_progress
   `FORCE_CHANGE_PASSWORD` or `UNCONFIRMED` users, and adds Settings -> Users
   detail actions so operators can resend an invite from the top-right action
   area or delete a user's tenant membership from the bottom danger zone.
+  Deploying `.144` to TEI then exposed a Terraform provider validation gap in
+  the Cognito user-pool invite template: the module configured
+  `email_message`/`email_subject` but omitted `sms_message`, causing AWS to
+  reject updates with
+  `adminCreateUserConfig.inviteMessageTemplate.sMSMessage` length validation.
+  U18 adds a validated SMS invite message to the foundation module and wires a
+  top-level `cognito_invite_sms_message` override through the ThinkWork module.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS

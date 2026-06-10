@@ -1081,6 +1081,17 @@ variable "cognito_invite_email_message" {
   }
 }
 
+variable "cognito_invite_sms_message" {
+  description = "SMS invitation body for Cognito AdminCreateUser messages. Must include {username} and {####} so Cognito can send the temporary password."
+  type        = string
+  default     = "Your ThinkWork username is {username} and temporary password is {####}."
+
+  validation {
+    condition     = strcontains(var.cognito_invite_sms_message, "{username}") && strcontains(var.cognito_invite_sms_message, "{####}")
+    error_message = "cognito_invite_sms_message must include Cognito placeholders {username} and {####}."
+  }
+}
+
 variable "wiki_compile_model_id" {
   description = "Bedrock model id used by the wiki-compile Lambda (leaf planner + aggregation planner + section writer). Any Converse-compatible model works; change without a code deploy."
   type        = string
