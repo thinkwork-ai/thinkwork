@@ -205,6 +205,12 @@ input StartKnowledgeGraphIngestInput {
   metadata: AWSJSON
 }
 
+input StartKnowledgeGraphObservationsIngestInput {
+  tenantId: ID
+  fullRebuild: Boolean = false
+  metadata: AWSJSON
+}
+
 extend type Query {
   knowledgeGraphThreadCandidates(
     tenantId: ID
@@ -251,5 +257,8 @@ extend type Mutation {
   ): KnowledgeGraphIngestRun!
   startKnowledgeGraphThreadIngest(
     input: StartKnowledgeGraphThreadIngestInput!
+  ): KnowledgeGraphIngestRun!
+  startKnowledgeGraphObservationsIngest(
+    input: StartKnowledgeGraphObservationsIngestInput
   ): KnowledgeGraphIngestRun!
 }

@@ -74,7 +74,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -495,6 +495,10 @@ build_handler "wiki-compile" \
 
 build_handler "knowledge-graph-thread-ingest" \
   "$REPO_ROOT/packages/api/src/handlers/knowledge-graph-thread-ingest.ts"
+# Uses BUNDLED_AGENTCORE_ESBUILD_FLAGS — the promotion-gate classifier needs
+# @aws-sdk/client-bedrock-runtime newer than the runtime's built-in SDK.
+build_handler "knowledge-graph-observations-ingest" \
+  "$REPO_ROOT/packages/api/src/handlers/knowledge-graph-observations-ingest.ts"
 
 build_handler "ontology-scan" \
   "$REPO_ROOT/packages/api/src/handlers/ontology-scan.ts"

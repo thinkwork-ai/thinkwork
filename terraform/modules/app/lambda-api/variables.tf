@@ -266,6 +266,12 @@ variable "cognee_worker_security_group_ids" {
   default     = []
 }
 
+variable "observation_classifier_model_id" {
+  description = "Bedrock model id for the observations promotion-gate classifier. Empty uses the API default (pinned Haiku)."
+  type        = string
+  default     = ""
+}
+
 variable "twenty_provisioned" {
   description = "Whether the Twenty CRM retained managed-app substrate is provisioned."
   type        = bool

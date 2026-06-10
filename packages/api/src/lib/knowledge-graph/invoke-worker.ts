@@ -20,11 +20,43 @@ export class KnowledgeGraphWorkerInvokeError extends Error {
   }
 }
 
+export interface KnowledgeGraphObservationsIngestWorkerPayload {
+  runId: string;
+  tenantId: string;
+  fullRebuild?: boolean;
+  trigger?: "manual" | "scheduled";
+  requestedByUserId: string | null;
+}
+
 export async function invokeKnowledgeGraphThreadIngestWorker(
   payload: KnowledgeGraphThreadIngestWorkerPayload,
   deps: InvokeWorkerDeps = {},
 ): Promise<void> {
-  const functionName = deps.functionName ?? resolveWorkerFunctionName();
+  return invokeWorker(
+    deps.functionName ?? resolveWorkerFunctionName(),
+    payload,
+    deps,
+  );
+}
+
+export async function invokeKnowledgeGraphObservationsIngestWorker(
+  payload: KnowledgeGraphObservationsIngestWorkerPayload,
+  deps: InvokeWorkerDeps = {},
+): Promise<void> {
+  return invokeWorker(
+    deps.functionName ?? resolveObservationsWorkerFunctionName(),
+    payload,
+    deps,
+  );
+}
+
+async function invokeWorker(
+  functionName: string | null,
+  payload:
+    | KnowledgeGraphThreadIngestWorkerPayload
+    | KnowledgeGraphObservationsIngestWorkerPayload,
+  deps: InvokeWorkerDeps,
+): Promise<void> {
   if (!functionName) {
     throw new KnowledgeGraphWorkerInvokeError(
       "Knowledge Graph ingest worker function name is not configured",
@@ -62,6 +94,14 @@ export function resolveWorkerFunctionName(): string | null {
   }
   if (!process.env.STAGE) return null;
   return `thinkwork-${process.env.STAGE}-api-knowledge-graph-thread-ingest`;
+}
+
+export function resolveObservationsWorkerFunctionName(): string | null {
+  if (process.env.KNOWLEDGE_GRAPH_OBSERVATIONS_INGEST_FUNCTION_NAME) {
+    return process.env.KNOWLEDGE_GRAPH_OBSERVATIONS_INGEST_FUNCTION_NAME;
+  }
+  if (!process.env.STAGE) return null;
+  return `thinkwork-${process.env.STAGE}-api-knowledge-graph-observations-ingest`;
 }
 
 async function resolveLambdaDeps(deps: InvokeWorkerDeps) {
