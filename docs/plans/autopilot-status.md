@@ -10,11 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U21 - persist selected release status parameters
-  after controller-driven app updates.
-- Current branch: `codex/u21-controller-ssm-selection`.
+- Current implementation unit: U9 follow-up - reconcile TEI proving-run
+  evidence and operator docs after the `.148` controller-managed update.
+- Current branch: `codex/u9-tei-proof-docs`.
 - Current worktree:
-  `.Codex/worktrees/u21-controller-ssm-selection`.
+  `.Codex/worktrees/u9-tei-proof-docs`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -43,8 +43,32 @@ status: in_progress
   [#2317](https://github.com/thinkwork-ai/thinkwork/pull/2317) merged; U20
   controller release-pin persistence PR
   [#2318](https://github.com/thinkwork-ai/thinkwork/pull/2318) merged; U21
-  controller selected-release status persistence PR not opened yet.
-- Status: U11 merged and deployed to main. TEI's customer deployment controller
+  controller selected-release status persistence PR
+  [#2319](https://github.com/thinkwork-ai/thinkwork/pull/2319) merged; U9
+  proof-doc reconciliation PR not opened yet.
+- Status: U21 merged and was released as `v0.1.0-canary.148`. TEI's customer
+  deployment controller was refreshed to the `.148` runner, then TEI update
+  execution `tw-update-148-current-sha-20260610053146` succeeded through Step
+  Functions and CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:8e1857eb-0b8e-4b08-a69f-fff5d3d76788`.
+  The deployed runtime config at
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
+  reports `releaseVersion=v0.1.0-canary.148`, manifest SHA-256
+  `5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93`, TEI
+  Cognito/API/AppSync endpoints, and the customer-owned controller ARNs. TEI
+  SSM selected-release status parameters now also point at `.148`, including
+  release version, manifest URL/SHA, trust policy `allow_unsigned_canary`,
+  trusted keys JSON `[]`, module source `thinkwork-ai/thinkwork/aws`, and
+  module version `0.1.0-canary.148`. Evidence for the accepted run is stored at
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/a015f5fb-60a3-457c-8c31-e73caf93f37a/update/`
+  and includes `controller-input-summary.json`,
+  `controller-release-selection.json`, `redacted-terraform-vars.json`,
+  `terraform-plan.json`, `terraform-outputs.json`, and
+  `deployment-evidence.json`. The current U9 follow-up branch updates
+  `docs/verification/tei-new-environment-deployment-e2e.md` to make `.148` the
+  current accepted proof while preserving the `.141` remediation history and
+  explicit teardown/mobile proof gaps. Historical notes follow. U11 merged and
+  deployed to main. TEI's customer deployment controller
   was refreshed to the U11 runner and `.137` selected-release pins, then TEI
   update execution `tei-e2e-update-137-20260609204430` failed closed because
   the fetched `.137` release manifest SHA-256 was
