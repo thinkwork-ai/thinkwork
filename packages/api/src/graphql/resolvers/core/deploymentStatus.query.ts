@@ -54,6 +54,30 @@ export const deploymentStatus = async (
     source: "AWS",
     region,
     accountId,
+    releaseVersion: stringEnv(
+      process.env.THINKWORK_RELEASE_VERSION || process.env.VITE_RELEASE_VERSION,
+    ),
+    releaseManifestUrl: stringEnv(
+      process.env.THINKWORK_RELEASE_MANIFEST_URL ||
+        process.env.VITE_RELEASE_MANIFEST_URL,
+    ),
+    releaseManifestSha256: stringEnv(
+      process.env.THINKWORK_RELEASE_MANIFEST_SHA256 ||
+        process.env.VITE_RELEASE_MANIFEST_SHA256,
+    ),
+    deploymentControllerArn: stringEnv(
+      process.env.THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN ||
+        process.env.VITE_DEPLOYMENT_CONTROLLER_ARN,
+    ),
+    deploymentRunnerProjectName: stringEnv(
+      process.env.THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME ||
+        process.env.VITE_DEPLOYMENT_RUNNER_PROJECT_NAME,
+    ),
+    deploymentEvidenceBucket: stringEnv(
+      process.env.THINKWORK_EVIDENCE_BUCKET ||
+        process.env.THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET ||
+        process.env.VITE_DEPLOYMENT_EVIDENCE_BUCKET,
+    ),
     bucketName: process.env.BUCKET_NAME || null,
     databaseEndpoint: process.env.DATABASE_HOST || null,
     ecrUrl: process.env.ECR_REPOSITORY_URL || null,
@@ -89,3 +113,7 @@ export const deploymentStatus = async (
     managedApplications,
   };
 };
+
+function stringEnv(value: string | undefined): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}

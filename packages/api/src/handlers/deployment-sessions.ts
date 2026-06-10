@@ -1032,6 +1032,10 @@ function deploymentEvidenceBucket(): string | null {
   );
 }
 
+function releaseVersionToTerraformModuleVersion(version: string): string {
+  return version.replace(/^v/, "");
+}
+
 function buildControllerInput(
   session: ControllerSessionRow,
   action: ControllerAction,
@@ -1066,6 +1070,9 @@ function buildControllerInput(
     releaseVersion: release.version,
     releaseManifestUrl: release.manifestUrl,
     releaseManifestSha256: release.manifestSha256,
+    terraformModuleVersion: releaseVersionToTerraformModuleVersion(
+      release.version,
+    ),
     release,
     session: {
       id: session.id,

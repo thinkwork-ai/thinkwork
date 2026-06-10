@@ -122,6 +122,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SettingsGeneral releases", () => {
+  it("shows app build and deployed platform release in deployment details", () => {
+    render(<SettingsGeneral />);
+
+    expect(screen.queryByText("About")).toBeNull();
+    expect(screen.getByText("App build")).toBeTruthy();
+    expect(screen.getByText("v0.1.0-test")).toBeTruthy();
+    expect(screen.getByText("Deployed release")).toBeTruthy();
+    expect(screen.getByText("v0.1.0-canary.152")).toBeTruthy();
+    expect(screen.getByText("Manifest SHA")).toBeTruthy();
+    expect(screen.getByText("c".repeat(64))).toBeTruthy();
+  });
+
   it("confirms a selected release before starting deployment", async () => {
     render(<SettingsGeneral />);
 
@@ -164,6 +176,14 @@ const deployment = {
   source: "AWS",
   region: "us-east-1",
   accountId: "123456789012",
+  releaseVersion: "v0.1.0-canary.152",
+  releaseManifestUrl:
+    "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.152/thinkwork-release.json",
+  releaseManifestSha256: "c".repeat(64),
+  deploymentControllerArn:
+    "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment",
+  deploymentRunnerProjectName: "thinkwork-dev-deployment-runner",
+  deploymentEvidenceBucket: "thinkwork-dev-evidence",
   agentcoreStatus: "ready",
   hindsightEnabled: false,
   managedMemoryEnabled: true,
