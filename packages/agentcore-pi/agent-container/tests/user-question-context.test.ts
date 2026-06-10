@@ -76,9 +76,13 @@ describe("parsePendingUserQuestions", () => {
   });
 
   it("returns null when the envelope is missing question_id or answered_via", () => {
-    expect(parsePendingUserQuestions(cardPayload({ question_id: "" }))).toBeNull();
     expect(
-      parsePendingUserQuestions(cardPayload({ answered_via: "carrier-pigeon" })),
+      parsePendingUserQuestions(cardPayload({ question_id: "" })),
+    ).toBeNull();
+    expect(
+      parsePendingUserQuestions(
+        cardPayload({ answered_via: "carrier-pigeon" }),
+      ),
     ).toBeNull();
     expect(
       parsePendingUserQuestions(cardPayload({ answered_via: null })),
@@ -231,7 +235,9 @@ describe("formatUserQuestionAnswerContext — reply-consumed", () => {
     expect(block).toContain(
       "the reply may answer them fully, partially, or be a new request",
     );
-    expect(block).toContain("re-ask only if a question is still genuinely open");
+    expect(block).toContain(
+      "re-ask only if a question is still genuinely open",
+    );
     expect(block).toContain(
       "If the reply is a clear never-mind/skip/cancel, proceed on your " +
         "best judgment.",

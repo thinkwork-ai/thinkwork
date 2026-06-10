@@ -3170,9 +3170,7 @@ describe("handleInvocation — pending question answer context", () => {
 
     expect(result.statusCode).toBe(200);
     // The block leads the turn prompt…
-    expect(seen.message.startsWith("[USER_QUESTION_ANSWERS_START]")).toBe(
-      true,
-    );
+    expect(seen.message.startsWith("[USER_QUESTION_ANSWERS_START]")).toBe(true);
     expect(seen.message).toContain(
       "Question 1 — Environment: Which environment should I deploy to?",
     );
