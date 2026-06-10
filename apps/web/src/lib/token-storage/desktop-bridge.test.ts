@@ -168,6 +168,21 @@ describe("DesktopBridgeTokenStorage", () => {
     expect(bridge.getSessionTokensCalls()).toBe(2);
   });
 
+  it("does not notify subscribers when hydration returns the same snapshot", async () => {
+    const bridge = makeBridge({
+      items: { token: "one" },
+      version: 1,
+    });
+    const storage = new DesktopBridgeTokenStorage(bridge);
+    const listener = vi.fn();
+    storage.subscribe(listener);
+
+    await storage.hydrate();
+    await storage.hydrate();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it("updates from token change broadcasts", async () => {
     const bridge = makeBridge({ items: { token: "one" }, version: 1 });
     const storage = new DesktopBridgeTokenStorage(bridge);
@@ -201,6 +216,33 @@ describe("DesktopBridgeTokenStorage", () => {
 
     expect(storage.getItem("token")).toBe("value");
     expect(setSpy).toHaveBeenCalledWith({ key: "token", value: "value" });
+  });
+
+  it("does not notify subscribers for renderer-owned mutations", async () => {
+    const bridge = makeBridge({ items: {}, version: 0 });
+    const storage = new DesktopBridgeTokenStorage(bridge);
+    const listener = vi.fn();
+    storage.subscribe(listener);
+
+    storage.setItem("token", "value");
+    storage.removeItem("token");
+    storage.clear();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("does not persist no-op renderer mutations", async () => {
+    const bridge = makeBridge({ items: { token: "value" }, version: 1 });
+    const setSpy = vi.spyOn(bridge, "setTokenStorageItem");
+    const removeSpy = vi.spyOn(bridge, "removeTokenStorageItem");
+    const storage = new DesktopBridgeTokenStorage(bridge);
+    await storage.hydrate();
+
+    storage.setItem("token", "value");
+    storage.removeItem("missing");
+
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
   });
 
   it("clears the cache when the bridge returns no tokens", async () => {

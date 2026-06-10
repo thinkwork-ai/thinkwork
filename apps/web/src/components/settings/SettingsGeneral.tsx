@@ -124,8 +124,6 @@ export function SettingsGeneral() {
             )}
           </SettingsSection>
 
-          <DeploymentReleasesSection enabled={showOperator} />
-
           {!deploymentFailed ? (
             <SettingsSection label="Resources & URLs">
               <ResourceRow
@@ -155,6 +153,8 @@ export function SettingsGeneral() {
               />
             </SettingsSection>
           ) : null}
+
+          <DeploymentReleasesSection enabled={showOperator} />
         </>
       ) : null}
     </SettingsPane>
@@ -193,7 +193,7 @@ function DeploymentReleasesSection({ enabled }: { enabled: boolean }) {
     useState<DeploymentReleaseUpdateResult | null>(null);
   const [result] = useQuery({
     query: SettingsDeploymentReleasesQuery,
-    variables: { limit: 10 },
+    variables: { limit: 5 },
     pause: !enabled,
   });
   const [updateState, startReleaseUpdate] = useMutation(

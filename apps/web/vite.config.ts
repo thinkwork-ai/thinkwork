@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
+import packageJson from "./package.json";
 
 // Plan-012 U10/U11.5: the parent IframeAppletController consumes
 // `__SANDBOX_IFRAME_SRC__` (build-time-injected) as the pinned iframe
@@ -18,6 +19,10 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, new URL(".", import.meta.url).pathname, ["VITE_"]);
+  const appVersion =
+    env.VITE_APP_VERSION ||
+    process.env.VITE_APP_VERSION ||
+    `${packageJson.version}-dev`;
 
   const sandboxIframeSrc =
     env.VITE_SANDBOX_IFRAME_SRC ||
@@ -44,6 +49,7 @@ export default defineConfig(({ mode }) => {
     define: {
       // amazon-cognito-identity-js uses Node.js globals
       global: "globalThis",
+      __THINKWORK_WEB_VERSION__: JSON.stringify(appVersion),
       // The Electron renderer config overrides this to true. Keeping the web
       // default false lets Rollup tree-shake desktop-only dynamic imports.
       __DESKTOP_BUILD__: "false",
