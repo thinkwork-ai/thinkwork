@@ -540,6 +540,7 @@ describe("deployment session handler", () => {
         sessionId: SESSION_ID,
         awsAccountId: "123456789012",
         releaseVersion: "v0.1.0-canary.134",
+        terraformModuleVersion: "0.1.0-canary.134",
       }),
     );
     expect(payload.release).toEqual({
@@ -673,6 +674,7 @@ describe("deployment session handler", () => {
         awsRegion: "us-east-1",
         evidenceBucket: "thinkwork-evidence",
         releaseVersion: "v0.1.0-canary.134",
+        terraformModuleVersion: "0.1.0-canary.134",
       }),
     );
     expect(payload.release).toEqual({

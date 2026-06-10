@@ -172,6 +172,7 @@ describe("deployment releases", () => {
           phase: "update",
           environmentName: "dev",
           awsAccountId: "123456789012",
+          terraformModuleVersion: "0.1.0-canary.134",
           release: {
             version: "v0.1.0-canary.134",
             manifestUrl:

@@ -562,6 +562,26 @@ resource "aws_sfn_state_machine" "deployment" {
               "Value.$" = "States.JsonToString($)"
             },
             {
+              Name      = "THINKWORK_RELEASE_VERSION"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.releaseVersion"
+            },
+            {
+              Name      = "THINKWORK_RELEASE_MANIFEST_URL"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.releaseManifestUrl"
+            },
+            {
+              Name      = "THINKWORK_RELEASE_MANIFEST_SHA256"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.releaseManifestSha256"
+            },
+            {
+              Name      = "THINKWORK_TERRAFORM_MODULE_VERSION"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.terraformModuleVersion"
+            },
+            {
               Name      = "THINKWORK_EVIDENCE_PREFIX"
               Type      = "PLAINTEXT"
               "Value.$" = "States.Format('sessions/{}/{}', $.sessionId, $.action)"
