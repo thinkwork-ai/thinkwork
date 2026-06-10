@@ -29,7 +29,7 @@ describe("desktop native menu", () => {
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
-  it("disables Sign Out when unauthenticated and enables it when authenticated", () => {
+  it("keeps Sign Out available but only runs it when authenticated", () => {
     const signOut = vi.fn();
     const unauthenticated = buildDesktopMenuTemplate({
       isMac: false,
@@ -44,7 +44,7 @@ describe("desktop native menu", () => {
       checkForUpdates: vi.fn(),
     });
 
-    expect(findMenuItem(unauthenticated, "Sign Out")?.enabled).toBe(false);
+    expect(findMenuItem(unauthenticated, "Sign Out")?.enabled).toBe(true);
     expect(findMenuItem(authenticated, "Sign Out")?.enabled).toBe(true);
 
     clickMenuItem(unauthenticated, "Sign Out");
@@ -53,7 +53,7 @@ describe("desktop native menu", () => {
     expect(signOut).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshes the installed menu when authentication changes", () => {
+  it("does not rebuild the installed menu when authentication changes", () => {
     const listeners = new Set<() => void>();
     let authenticated = false;
     const menu = {
@@ -79,9 +79,10 @@ describe("desktop native menu", () => {
     authenticated = true;
     for (const listener of listeners) listener();
 
-    expect(menu.setApplicationMenu).toHaveBeenCalledTimes(2);
+    expect(menu.setApplicationMenu).toHaveBeenCalledTimes(1);
     const latestMenu = menu.buildFromTemplate.mock.calls.at(-1)?.[0];
     expect(findMenuItem(latestMenu ?? [], "Sign Out")?.enabled).toBe(true);
+    expect(listeners.size).toBe(0);
   });
 });
 
