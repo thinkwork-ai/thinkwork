@@ -294,7 +294,7 @@ describe("SpacesWorkbench", () => {
     });
   });
 
-  it("routes to the created thread before the first managed send finishes", async () => {
+  it("waits for the first managed send before routing to the created thread", async () => {
     let resolveSend:
       | ((value: { data: { sendMessage: { id: string } } }) => void)
       | undefined;
@@ -312,6 +312,12 @@ describe("SpacesWorkbench", () => {
     await waitFor(() => {
       expect(createThread).toHaveBeenCalled();
     });
+    expect(navigate).not.toHaveBeenCalled();
+
+    resolveSend?.({ data: { sendMessage: { id: "message-1" } } });
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+    });
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -319,11 +325,6 @@ describe("SpacesWorkbench", () => {
           params: { id: "thread-1" },
         }),
       );
-    });
-
-    resolveSend?.({ data: { sendMessage: { id: "message-1" } } });
-    await waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledTimes(1);
     });
   });
 

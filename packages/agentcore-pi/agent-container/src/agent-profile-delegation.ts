@@ -36,7 +36,6 @@ export interface ProfileDelegationToolOptions {
   profiles: AgentProfileConfig[];
   parentThreadTurnId: string;
   parentModelId: string;
-  approvedModelIds: string[];
   tools: AgentTool<any>[];
   extensionFactories: ExtensionFactory[];
   extensionToolNames: string[];
@@ -494,7 +493,6 @@ export async function executeAgentProfileDelegation(input: {
     task: input.task,
     parentThreadTurnId: input.options.parentThreadTurnId,
     parentModelId: input.options.parentModelId,
-    approvedModelIds: input.options.approvedModelIds,
     availableToolNames: [
       ...BUILTIN_TOOL_NAMES,
       ...input.options.tools.map((tool) => tool.name),

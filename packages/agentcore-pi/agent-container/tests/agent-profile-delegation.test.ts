@@ -97,10 +97,6 @@ async function options(
     profiles: [researchProfile()],
     parentThreadTurnId: "turn-parent",
     parentModelId: "anthropic/claude-sonnet-4-5",
-    approvedModelIds: [
-      "anthropic/claude-sonnet-4-5",
-      "anthropic/claude-haiku-4-5",
-    ],
     tools: [...mcpTools, tool("execute_code")],
     extensionFactories: [],
     extensionToolNames: ["web_search", "web_extract"],

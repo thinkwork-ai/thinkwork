@@ -35,9 +35,9 @@ demo environment prematurely.
 - Release manifest URL:
   `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.150/thinkwork-release.json`
 - Release manifest SHA-256:
-  `dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb`
+  `8645040c1645fddecc5e34649c1bda91124777fb3368776a2ddefd04c8259bfe`
 - Platform bundle SHA-256:
-  `3c2e00aacc5d5b354d6e9a67b19c5a1c4f98225fca8f0ab7551dff315de40e06`
+  `ac0c8c988f3adfc013ba45843bd8e571cba1acccaf0271ed95808b61a2f7390c`
 - Deployed app URL:
   `https://d1eqjv7ijcmtqz.cloudfront.net`
 - Runtime config URL:
@@ -51,9 +51,79 @@ demo environment prematurely.
 The `tei` profile currently has no configured default region, so every command
 in this runbook pins `AWS_REGION=us-east-1`.
 
-## 2026-06-10 Controller Proof - v0.1.0-canary.150
+## 2026-06-10 Controller Reconcile Proof - v0.1.0-canary.150
 
-The current accepted controller update is:
+The current accepted controller update is the final manifest reconcile run:
+
+- Step Functions execution:
+  `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-tei-e2e-update-v150-final-20260610103343`
+- Step Functions status: `SUCCEEDED`
+- Step Functions duration: 2026-06-10 05:33:43 CT to 05:41:50 CT
+- CodeBuild run:
+  `thinkwork-tei-e2e-deployment-runner:1067b856-2661-482b-b49d-2e282e08ec33`
+- CodeBuild status: `SUCCEEDED`
+- Evidence prefix:
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/tei-e2e-update-v150-final-20260610103343/update/`
+- Evidence objects present:
+  `controller-input-summary.json`, `redacted-terraform-vars.json`,
+  `terraform-plan.json`, `terraform-outputs.json`,
+  `controller-release-selection.json`, and `deployment-evidence.json`
+- Release manifest SHA-256:
+  `8645040c1645fddecc5e34649c1bda91124777fb3368776a2ddefd04c8259bfe`
+- Platform bundle SHA-256:
+  `ac0c8c988f3adfc013ba45843bd8e571cba1acccaf0271ed95808b61a2f7390c`
+- App CloudFront invalidation `IBJHWAN2QEMY7R0BA6SH2K3Q52`: created for
+  `/*` at 2026-06-10 10:41:41 UTC.
+- Controller selected-release SSM status parameters now report:
+  `selected-release-version=v0.1.0-canary.150`,
+  `selected-release-manifest-sha256=8645040c1645fddecc5e34649c1bda91124777fb3368776a2ddefd04c8259bfe`,
+  `selected-release-manifest-url=https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.150/thinkwork-release.json`,
+  and `selected-release-trust-policy=allow_unsigned_canary`.
+
+Runtime smoke evidence:
+
+- `thinkwork-runtime-config.json` reports release
+  `v0.1.0-canary.150`, manifest SHA-256
+  `8645040c1645fddecc5e34649c1bda91124777fb3368776a2ddefd04c8259bfe`,
+  GraphQL HTTP endpoint
+  `https://8puq24dl63.execute-api.us-east-1.amazonaws.com/graphql`, and
+  Cognito domain
+  `https://thinkwork-tei-e2e.auth.us-east-1.amazoncognito.com`.
+- `curl -fsSI https://d1eqjv7ijcmtqz.cloudfront.net/` returned HTTP 200 with
+  `last-modified: Wed, 10 Jun 2026 10:41:40 GMT`.
+- `curl -fsSI https://d1eqjv7ijcmtqz.cloudfront.net/sign-in` returned HTTP
+  200 through the SPA fallback.
+- `node scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed in
+  strict read-only mode on 2026-06-10 with evidence written to
+  `/tmp/thinkwork-tei-smoke-proof-150/managed-app-controller-readiness-final.json`:
+  - the selected TEI release manifest URL/SHA from SSM matched the downloaded
+    `v0.1.0-canary.150` manifest;
+  - Cognee and Twenty CRM descriptors exist in `managedApps`;
+  - both descriptors point at their Terraform module source/version and required
+    smoke command paths;
+  - both smoke command paths exist in this checkout;
+  - `descriptorReady=true`, `deployReady=true`, and
+    `strictDeployReadyRequired=true`;
+  - Cognee resolved
+    `ghcr.io/thinkwork-ai/thinkwork-cognee:v0.1.0-canary.150-cognee-amd64@sha256:be910a950a31ec6b7e070927f6143b244fbec8b8d66fa3b84f047ee43b996680`;
+  - Twenty resolved
+    `twentycrm/twenty@sha256:37380b56aa86c6949f6e9f00e21f6e2a2a19bfa94c9e86f5e3202304367c7510`.
+
+Manifest digest note:
+
+- The first `.150` controller run pinned manifest digest
+  `dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb`.
+  The release asset later finalized to
+  `8645040c1645fddecc5e34649c1bda91124777fb3368776a2ddefd04c8259bfe`
+  with platform bundle digest
+  `ac0c8c988f3adfc013ba45843bd8e571cba1acccaf0271ed95808b61a2f7390c`.
+  TEI was rerun through the customer deployment controller pinned to the final
+  digest above so runtime config, selected-release SSM, and the GitHub release
+  manifest are coherent.
+
+## 2026-06-10 Previous Controller Proof - v0.1.0-canary.150
+
+The previous `.150` controller update was:
 
 - Step Functions execution:
   `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-update-150-20260610095036`

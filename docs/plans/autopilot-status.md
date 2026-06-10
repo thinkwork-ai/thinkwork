@@ -13,8 +13,8 @@ status: in_progress
 - Current implementation unit: U9 remaining proof gates after TEI canary 150:
   optional-app deploy smoke, human desktop/mobile launch proof, and final
   teardown proof.
-- Current branch: `codex/deployment-controller-status-v150`.
-- Current worktree: `.Codex/worktrees/deployment-controller-status-v150`.
+- Current branch: `codex/deployment-controller-next`.
+- Current worktree: `.Codex/worktrees/deployment-controller-next`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -64,8 +64,36 @@ status: in_progress
   release finalization hardening PR
   [#2329](https://github.com/thinkwork-ai/thinkwork/pull/2329) merged; U9 TEI
   canary 150 proof PR
-  [#2330](https://github.com/thinkwork-ai/thinkwork/pull/2330) merged.
-- Status: U9 TEI canary 150 proof PR #2330 passed required CI (`cla`, `lint`,
+  [#2330](https://github.com/thinkwork-ai/thinkwork/pull/2330) merged; U9
+  deployment-controller status refresh PR
+  [#2331](https://github.com/thinkwork-ai/thinkwork/pull/2331) merged.
+- Status: TEI was reconciled through the customer deployment controller after
+  the `v0.1.0-canary.150` release manifest finalized to SHA-256
+  `8645040c1645fddecc5e34649c1bda91124777fb3368776a2ddefd04c8259bfe`.
+  Step Functions execution
+  `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-tei-e2e-update-v150-final-20260610103343`
+  and CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:1067b856-2661-482b-b49d-2e282e08ec33`
+  both succeeded on 2026-06-10. Evidence was written under
+  `s3://thinkwork-tei-e2e-637423202447-deploy-evidence/sessions/tei-e2e-update-v150-final-20260610103343/update/`
+  and includes `controller-input-summary.json`,
+  `redacted-terraform-vars.json`, `terraform-plan.json`,
+  `terraform-outputs.json`, `controller-release-selection.json`, and
+  `deployment-evidence.json`. TEI selected-release SSM and
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json` now
+  both report `releaseVersion=v0.1.0-canary.150` with manifest SHA-256
+  `8645040c1645fddecc5e34649c1bda91124777fb3368776a2ddefd04c8259bfe`;
+  the deployed app root, `/sign-in`, and runtime config returned HTTP 200.
+  Strict managed-app controller readiness passed in read-only mode with local
+  evidence
+  `/tmp/thinkwork-tei-smoke-proof-150/managed-app-controller-readiness-final.json`,
+  confirming Cognee and Twenty are descriptor-ready and deploy-ready for the
+  selected release. Remaining deployment-controller proof gates: run a full
+  optional Cognee/Twenty deploy smoke after those apps are selected, capture
+  human desktop/mobile launch proof against the TEI profile, and run final
+  teardown/destroy proof when TEI no longer needs to stay live for demo
+  testing. Historical notes follow. U9 TEI canary 150 proof PR #2330 passed
+  required CI (`cla`, `lint`,
   `verify`, `typecheck`, and `test`) and was squash merged as `0b18c3987`.
   `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
   currently reports `releaseVersion=v0.1.0-canary.150` and manifest SHA-256
