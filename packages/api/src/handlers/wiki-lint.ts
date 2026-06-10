@@ -1,28 +1,29 @@
 /**
  * wiki-lint Lambda — nightly hygiene sweep for the Compounding Memory wiki.
  *
- * v1 hygiene-only (no auto-mutation):
+ * Hygiene-only (no auto-mutation):
  *   - Broken links: wiki_page_links rows pointing at missing/archived pages
  *   - Duplicate aliases inside one (tenant, owner, type) scope
  *   - Stale pages: active pages untouched for 90+ days
  *   - Oversize pages: body_md > 8000 chars (~2000 tokens)
- *   - Promotion sweep: open unresolved mentions with mention_count ≥ 3 AND
- *     last_seen within 30 days — enqueue a compile job so the next compile
- *     handles promotion through the same (audited, provenanced) path.
+ *   - Compile-job ledger pruning (terminal rows older than 30 days)
+ *
+ * The planner-era promotion sweep (open unresolved mentions → enqueue
+ * compile jobs) was retired at the U11 cutover (plan 2026-06-09-004):
+ * `wiki.unresolved_mentions` froze with the planner and the graph
+ * materializer ignores promotion compile jobs.
  *
  * Output is logged as JSON so the metric filter can be simple. Job itself
- * does NOT mutate wiki tables — promotion goes through the compile pipeline.
+ * does NOT mutate wiki content tables.
  */
 
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import {
   wikiCompileJobs,
   wikiPageLinks,
   wikiPages,
-  wikiUnresolvedMentions,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
-import { enqueueCompileJob } from "../lib/wiki/repository.js";
 
 type WikiLintEvent = Record<string, never>;
 
@@ -32,15 +33,11 @@ export interface WikiLintResult {
   duplicate_aliases: number;
   stale_pages: number;
   oversize_pages: number;
-  promotion_candidates: number;
-  promotion_jobs_enqueued: number;
   error?: string;
 }
 
 const STALE_DAYS = 90;
 const OVERSIZE_BODY_CHARS = 8000;
-const PROMOTION_MIN_COUNT = 3;
-const PROMOTION_WITHIN_DAYS = 30;
 
 export async function handler(
   _event: WikiLintEvent = {},
@@ -51,8 +48,6 @@ export async function handler(
     duplicate_aliases: 0,
     stale_pages: 0,
     oversize_pages: 0,
-    promotion_candidates: 0,
-    promotion_jobs_enqueued: 0,
   };
 
   try {
@@ -107,52 +102,7 @@ export async function handler(
       );
     result.oversize_pages = oversize[0]?.count ?? 0;
 
-    // 5. Promotion sweep — collect unique (tenant, owner) pairs with any
-    // candidate and enqueue one compile job per scope. The compile handler
-    // will call listPromotionCandidates + include them in the next run.
-    const recencyCutoff = new Date(
-      Date.now() - PROMOTION_WITHIN_DAYS * 24 * 3600 * 1000,
-    );
-    const candidates = await db
-      .select({
-        tenant_id: wikiUnresolvedMentions.tenant_id,
-        owner_id: wikiUnresolvedMentions.owner_id,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(wikiUnresolvedMentions)
-      .where(
-        and(
-          eq(wikiUnresolvedMentions.status, "open"),
-          gte(wikiUnresolvedMentions.mention_count, PROMOTION_MIN_COUNT),
-          gte(wikiUnresolvedMentions.last_seen_at, recencyCutoff),
-        ),
-      )
-      .groupBy(
-        wikiUnresolvedMentions.tenant_id,
-        wikiUnresolvedMentions.owner_id,
-      );
-
-    result.promotion_candidates = candidates.reduce(
-      (sum, c) => sum + (c.count ?? 0),
-      0,
-    );
-
-    for (const c of candidates) {
-      try {
-        const { inserted } = await enqueueCompileJob({
-          tenantId: c.tenant_id,
-          ownerId: c.owner_id,
-          trigger: "lint",
-        });
-        if (inserted) result.promotion_jobs_enqueued += 1;
-      } catch (err) {
-        console.warn(
-          `[wiki-lint] enqueue failed for tenant=${c.tenant_id} owner=${c.owner_id}: ${(err as Error)?.message}`,
-        );
-      }
-    }
-
-    // Also prune old job rows (succeeded/skipped/failed > 30 days) so the
+    // 5. Prune old job rows (succeeded/skipped/failed > 30 days) so the
     // ledger doesn't grow without bound.
     const jobCutoff = new Date(Date.now() - 30 * 24 * 3600 * 1000);
     await db

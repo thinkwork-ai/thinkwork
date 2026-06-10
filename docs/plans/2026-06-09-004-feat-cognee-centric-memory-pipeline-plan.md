@@ -403,6 +403,7 @@ Units appear in execution order. U-IDs are stable identifiers, not a sequence �
 ## Documentation / Operational Notes
 
 - Record the brain-freeze date when U11 lands; brain UI removal (U12) should follow within the same arc to avoid a long frozen-data window.
+- **Brain freeze declared 2026-06-10 (U11 PR):** `brain.*` writes freeze the moment this PR deploys — the wiki planner was the only brain writer (`materializePlannerPageToBrain` + the compiler's `upsertTenantEntityPageLink` call), and both were deleted with the planner. One ontology-owned writer remains by design: `lib/ontology/reprocess.ts` rewrites brain pages via `materializeOntologyTemplatesForImpact` when an approved change-set applies — Phase E (U12) must retire or re-target that path along with the brain read surfaces.
 - Wire the R9 pipeline-lag signal into run rows / Explorer and set an alarm threshold — every backlog failure mode degrades silently without it.
 - Update `docs/src/content/docs/` memory architecture pages after Phase D (wiki source change is user-visible).
 - Each PR in the arc: watch the post-merge Deploy run (pre-merge CI doesn't run terraform apply).

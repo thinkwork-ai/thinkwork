@@ -157,26 +157,11 @@ locals {
       THINKWORK_BOOTSTRAP_LEASE_SECRET_PREFIX = "thinkwork/${var.stage}/deployment-bootstrap-leases"
       THINKWORK_BOOTSTRAP_LEASE_KMS_KEY_ID    = var.bootstrap_credential_lease_kms_key_id
     }
-    # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
-    # model works; the planner + section-writer cap themselves at ~500
-    # records / 25 new pages per invocation so a 480 s timeout covers
-    # the worst case comfortably. Env vars come from variables so
-    # unrelated deploys don't wipe them back to defaults (the aggregation
-    # flag got reset on every terraform apply before this was pinned).
-    "wiki-compile" = {
-      BEDROCK_MODEL_ID                   = var.wiki_compile_model_id
-      WIKI_AGGREGATION_PASS_ENABLED      = var.wiki_aggregation_pass_enabled
-      WIKI_DETERMINISTIC_LINKING_ENABLED = var.wiki_deterministic_linking_enabled
-      # Wiki pipeline source dispatch (plan 2026-06-09-004 U10):
-      # 'planner' (default, LLM compile) | 'graph' (deterministic
-      # graph→wiki materializer over the knowledge-graph mirror).
-      WIKI_SOURCE = var.wiki_source
-      # Name (not value) of the SecureString SSM parameter that holds the
-      # Google Places API key. wiki-compile fetches + caches on cold start.
-      # The parameter may contain a placeholder value at apply time — the
-      # Lambda logs and degrades gracefully if decryption returns empty.
-      GOOGLE_PLACES_SSM_PARAM_NAME = "/thinkwork/${var.stage}/google-places/api-key"
-    }
+    # NOTE: wiki-compile needs no extra env since the U11 cutover (plan
+    # 2026-06-09-004) — it is the deterministic, LLM-free graph→wiki
+    # materializer; the planner-era env (BEDROCK_MODEL_ID, aggregation /
+    # linking flags, WIKI_SOURCE, Google Places SSM name) went with the
+    # planner extraction path.
     "ontology-scan" = {
       BEDROCK_MODEL_ID = var.wiki_compile_model_id
     }
@@ -228,11 +213,10 @@ locals {
       COGNEE_BACKEND_MODE             = var.cognee_backend_mode
       COGNEE_INGEST_MODE              = "add_cognify"
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
-      # When 'graph', a successful ingest run best-effort enqueues a
-      # tenant-keyed wiki-compile job (the mirror just changed — that's the
-      # graph-mode wiki trigger). Same variable as the wiki-compile handler
-      # so the two flags can't drift (plan 2026-06-09-004 U10).
-      WIKI_SOURCE = var.wiki_source
+      # Per-run candidate cap: bounds classifier cost so one run fits the
+      # Lambda timeout; truncated runs self-invoke (Event) to drain the
+      # backlog across successive runs.
+      KG_OBS_MAX_CANDIDATES_PER_RUN = var.kg_obs_max_candidates_per_run
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
@@ -276,14 +260,6 @@ locals {
       # in main.tf grants secretsmanager:GetSecretValue on the
       # thinkwork/* wildcard, so no new IAM resource is needed.
       COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
-      # Wiki source dispatch (plan 2026-06-09-004 U14): compileWikiNow
-      # routes to ONE tenant-keyed graph compile when this is 'graph',
-      # so the U11 flag flip retargets the CLI/admin compile surface
-      # without a client release. Same variable as wiki-compile and
-      # knowledge-graph-observations-ingest so the flags can't drift.
-      # Tiny value ('planner'|'graph') — measured dev env was ~3.7 KB of
-      # the 4 KB ceiling; keep future additions out of this block.
-      WIKI_SOURCE = var.wiki_source
       # Phase 3 U11.U2 — createComplianceExport mutation dispatches a
       # jobId to a known-name SQS queue. We do NOT pass the queue URL
       # as an env var here: graphql-http's env block is already at the
@@ -597,7 +573,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-thread-ingest" ? 300 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-thread-ingest" ? 300 : each.key == "knowledge-graph-observations-ingest" ? 900 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-thread-ingest" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null

@@ -636,6 +636,11 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
         # startKnowledgeGraphThreadIngest mutation invokes this with
         # RequestResponse after inserting the durable ingest run.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-graph-thread-ingest",
+        # knowledge-graph-observations-ingest: graphql-http's
+        # startKnowledgeGraphObservationsIngest mutation invokes this with
+        # RequestResponse; the worker also Event-invokes ITSELF to drain a
+        # truncated candidate backlog across successive runs.
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-graph-observations-ingest",
         # wiki-bootstrap-import: bootstrapJournalImport admin mutation
         # Event-invokes this for the long-running ingest path.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-bootstrap-import",

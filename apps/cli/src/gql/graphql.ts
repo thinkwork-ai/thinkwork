@@ -2298,20 +2298,15 @@ export type Mutation = {
   captureMobileMemory: MobileMemoryCapture;
   checkoutThread: Thread;
   /**
-   * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
-   * Returns the job row (newly inserted or the in-flight dedupe hit).
+   * Admin-only: enqueue an ad-hoc tenant-level compile job for the graph→wiki
+   * materializer. Returns the job row (newly inserted or the in-flight dedupe
+   * hit).
    *
-   * When `modelId` is supplied, it is forwarded to the compile Lambda event
-   * payload so a single run can override `BEDROCK_MODEL_ID` without a
-   * redeploy. The override takes effect only on the direct Event-invoke
-   * path; if the invoke fails and a polling worker claims the job later, the
-   * compile falls back to the env-default model.
-   *
-   * Graph mode (plan 2026-06-09-004 U14): when `tenantScope` is true — or
-   * the server's wiki source is `graph` — the per-user owner key is ignored
-   * and ONE tenant-keyed compile job (null `userId`) is enqueued for the
-   * graph→wiki materializer. `modelId` is meaningless on that path (the
-   * materializer is deterministic/LLM-free) and is not forwarded.
+   * Tenant-routed unconditionally since the U11 cutover (plan
+   * 2026-06-09-004): the per-user owner key is ignored and ONE tenant-keyed
+   * compile job (null `userId`) is enqueued. `tenantScope`, `userId`,
+   * `ownerId`, and `modelId` are accepted for contract compatibility but no
+   * longer change behavior (the materializer is deterministic/LLM-free).
    */
   compileWikiNow: WikiCompileJob;
   createAgentProfile: AgentProfile;

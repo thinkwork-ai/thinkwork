@@ -1,34 +1,23 @@
 /**
- * compileWikiNow — admin-only: ad-hoc enqueue of a compile job for a
- * specific (tenant, user). Returns the job row so the admin UI can poll.
+ * compileWikiNow — admin-only: ad-hoc enqueue of a tenant-level compile job
+ * for the graph→wiki materializer. Returns the job row so the admin UI can
+ * poll. Dedupe on the 5-minute bucket, fire-and-forget invoke of the
+ * `wiki-compile` Lambda, never fail on the invoke.
  *
- * Semantics match the post-turn enqueue path: dedupe on the 5-minute
- * bucket, fire-and-forget invoke of `wiki-compile` Lambda, never fail.
- *
- * Optional `modelId` is passed through to the Lambda event payload so a
- * single run can override `BEDROCK_MODEL_ID` without redeploying. The
- * override reaches the compile pipeline only via the Event-invoke payload;
- * if the invoke fails and a polling worker picks up the job later, it
- * falls back to the env default. Acceptable for v1 — follow-up can
- * persist `model_id` on `wiki_compile_jobs` if the gap bites.
- *
- * Graph mode (plan 2026-06-09-004 U14): when `tenantScope` is true — or
- * this Lambda's `WIKI_SOURCE` env is 'graph' (the U11 cutover state) —
- * the per-user owner key is ignored and ONE tenant-keyed job (owner_id
- * NULL, four-part `graph:obs:` dedupe key) is enqueued for the graph→wiki
- * materializer. The null `ownerId` in the response is the client-visible
- * signal that the server compiled tenant-level — the CLI uses it to stop
- * per-agent fan-out. `modelId` is not forwarded on this path (the
+ * Tenant-routed unconditionally since the U11 cutover (plan 2026-06-09-004):
+ * the planner's per-user compile path is gone, so the per-user owner key is
+ * ignored and ONE tenant-keyed job (owner_id NULL, four-part `graph:obs:`
+ * dedupe key) is enqueued. The null `ownerId` in the response is the
+ * client-visible signal that the server compiled tenant-level — the CLI
+ * uses it to stop per-agent fan-out. `tenantScope` and `modelId` args are
+ * accepted for contract compatibility but no longer change behavior (the
  * materializer is deterministic / LLM-free).
  */
 
 import type { GraphQLContext } from "../../context.js";
-import {
-  enqueueCompileJob,
-  enqueueGraphCompileJob,
-} from "../../../lib/wiki/repository.js";
+import { enqueueGraphCompileJob } from "../../../lib/wiki/repository.js";
 import { hasServiceSecret } from "../core/authz.js";
-import { assertCanAdminWikiScope, WikiAuthError } from "./auth.js";
+import { WikiAuthError } from "./auth.js";
 
 interface CompileWikiNowArgs {
   tenantId: string;
@@ -39,41 +28,29 @@ interface CompileWikiNowArgs {
   tenantScope?: boolean | null;
 }
 
-/** Read at call time (Lambda env + vitest env-timing rule). Anything other
- * than the literal 'graph' means planner — same guard as wiki-compile. */
-function resolveWikiSource(): "planner" | "graph" {
-  return process.env.WIKI_SOURCE === "graph" ? "graph" : "planner";
-}
-
 export const compileWikiNow = async (
   _parent: unknown,
   args: CompileWikiNowArgs,
   ctx: GraphQLContext,
 ) => {
-  if (args.tenantScope === true || resolveWikiSource() === "graph") {
-    return compileTenantWikiNow(args, ctx);
+  if (!hasServiceSecret(ctx)) {
+    throw new WikiAuthError("Admin-only: requires internal API key credential");
   }
-  const { tenantId, userId } = await assertCanAdminWikiScope(ctx, args);
+  if (ctx.auth.tenantId && ctx.auth.tenantId !== args.tenantId) {
+    throw new WikiAuthError("Access denied: tenant mismatch");
+  }
 
-  const { job } = await enqueueCompileJob({
-    tenantId,
-    ownerId: userId,
+  const { job } = await enqueueGraphCompileJob({
+    tenantId: args.tenantId,
     trigger: "admin",
     dedupeDiscriminator:
       args.forceNew === true ? `rebuild-${Date.now()}` : undefined,
   });
 
-  // Treat empty string as "not provided" — the compile pipeline's default
-  // resolution (env var → code default) should kick in, not forward "".
-  const modelId =
-    typeof args.modelId === "string" && args.modelId.length > 0
-      ? args.modelId
-      : undefined;
-
   // Best-effort invoke of the compile Lambda. We don't await because the
   // dedupe job row gives us our idempotency guarantee; the Lambda handler
   // can also pick it up via claimNextCompileJob if this invoke fails.
-  invokeWikiCompile(job.id, modelId).catch((invokeErr) => {
+  invokeWikiCompile(job.id).catch((invokeErr) => {
     console.warn(
       `[compileWikiNow] invoke failed (job will be picked up by worker): ${(invokeErr as Error)?.message}`,
     );
@@ -97,76 +74,21 @@ export const compileWikiNow = async (
   };
 };
 
-/**
- * Tenant-level enqueue for the graph→wiki materializer. Admin-only via the
- * same service-credential bar as `assertCanAdminWikiScope`, but without the
- * per-user scope resolution — there is no owner to validate. Tenant match
- * mirrors the tenant-wide branch of `wikiCompileJobs`.
- */
-async function compileTenantWikiNow(
-  args: CompileWikiNowArgs,
-  ctx: GraphQLContext,
-) {
-  if (!hasServiceSecret(ctx)) {
-    throw new WikiAuthError("Admin-only: requires internal API key credential");
-  }
-  if (ctx.auth.tenantId && ctx.auth.tenantId !== args.tenantId) {
-    throw new WikiAuthError("Access denied: tenant mismatch");
-  }
-
-  const { job } = await enqueueGraphCompileJob({
-    tenantId: args.tenantId,
-    trigger: "admin",
-    dedupeDiscriminator:
-      args.forceNew === true ? `rebuild-${Date.now()}` : undefined,
-  });
-
-  // No modelId on this path — the materializer is deterministic.
-  invokeWikiCompile(job.id).catch((invokeErr) => {
-    console.warn(
-      `[compileWikiNow] tenant-scope invoke failed (job will be picked up by worker): ${(invokeErr as Error)?.message}`,
-    );
-  });
-
-  return {
-    id: job.id,
-    tenantId: job.tenant_id,
-    userId: job.owner_id,
-    ownerId: job.owner_id,
-    status: job.status,
-    trigger: job.trigger,
-    dedupeKey: job.dedupe_key,
-    attempt: job.attempt,
-    claimedAt: job.claimed_at?.toISOString() ?? null,
-    startedAt: job.started_at?.toISOString() ?? null,
-    finishedAt: job.finished_at?.toISOString() ?? null,
-    error: job.error,
-    metrics: job.metrics,
-    createdAt: job.created_at.toISOString(),
-  };
-}
-
-async function invokeWikiCompile(
-  jobId: string,
-  modelId?: string,
-): Promise<void> {
+async function invokeWikiCompile(jobId: string): Promise<void> {
   const fnName =
     process.env.WIKI_COMPILE_FN ??
     (process.env.STAGE
       ? `thinkwork-${process.env.STAGE}-api-wiki-compile`
       : null);
   if (!fnName) return;
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
-  const payload: { jobId: string; modelId?: string } = { jobId };
-  if (modelId) payload.modelId = modelId;
   await lambda.send(
     new InvokeCommand({
       FunctionName: fnName,
       InvocationType: "Event",
-      Payload: new TextEncoder().encode(JSON.stringify(payload)),
+      Payload: new TextEncoder().encode(JSON.stringify({ jobId })),
     }),
   );
 }

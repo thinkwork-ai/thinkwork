@@ -533,19 +533,6 @@ variable "company_brain_source_agent_model_id" {
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
-variable "wiki_aggregation_pass_enabled" {
-  description = <<-EOT
-    Feature flag for the wiki aggregation pass — the second LLM call
-    per compile job that builds parent/hub rollup sections and promotes
-    dense sections into their own topic pages.
-
-    Accepts a string so the Lambda reads the env var verbatim; must be
-    "true" / "1" / "yes" to enable. Set to "false" to stop the pipeline
-    after the leaf pass (no rollups, no promotions).
-  EOT
-  type        = string
-  default     = "true"
-}
 
 variable "google_places_api_key" {
   description = <<-EOT
@@ -585,20 +572,6 @@ variable "mapbox_public_token" {
   sensitive   = true
 }
 
-variable "wiki_deterministic_linking_enabled" {
-  description = <<-EOT
-    Feature flag for deterministic compile-time link emission:
-      - city/journal parent references from parent-expander candidates
-      - entity↔entity co-mention edges via wiki_section_sources
-
-    Accepts a string so the Lambda reads the env var verbatim; must be
-    "true" / "1" / "yes" to enable. Rollback is a targeted DELETE:
-    `DELETE FROM wiki_page_links WHERE context LIKE 'deterministic:%' OR
-    context LIKE 'co_mention:%'` — provenance is preserved on every row.
-  EOT
-  type        = string
-  default     = "true"
-}
 
 variable "agentcore_code_interpreter_id" {
   description = "AgentCore Code Interpreter id used by routine-task-python for SFN python recipe states."
@@ -905,8 +878,6 @@ module "thinkwork" {
   # whatever the Lambda env defaults to.
   wiki_compile_model_id                         = var.wiki_compile_model_id
   company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
-  wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
-  wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
   requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled

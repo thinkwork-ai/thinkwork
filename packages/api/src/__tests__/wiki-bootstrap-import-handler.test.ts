@@ -1,14 +1,14 @@
 /**
- * wiki-bootstrap-import handler — graph-mode contract note
- * (plan 2026-06-09-004 U14).
+ * wiki-bootstrap-import handler — graph contract note
+ * (plan 2026-06-09-004 U14/U11).
  *
- * In graph mode the "retain → terminal compile produces pages" contract
- * breaks: pages materialize only after consolidation → observations ingest
- * → graph materialization. The handler must SAY so in its operator-facing
+ * The "retain → terminal compile produces pages" contract no longer holds:
+ * pages materialize only after consolidation → observations ingest →
+ * graph materialization. The handler must SAY so in its operator-facing
  * result rather than faking synchronous pages.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { mockRunJournalImport } = vi.hoisted(() => ({
   mockRunJournalImport: vi.fn(),
@@ -28,7 +28,6 @@ const EVENT = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  delete process.env.WIKI_SOURCE;
   mockRunJournalImport.mockResolvedValue({
     recordsIngested: 10,
     recordsSkipped: 1,
@@ -37,24 +36,12 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
-  delete process.env.WIKI_SOURCE;
-});
-
-describe("wiki-bootstrap-import graph-mode note", () => {
-  it("states the materialization contract when WIKI_SOURCE=graph", async () => {
-    process.env.WIKI_SOURCE = "graph";
+describe("wiki-bootstrap-import graph contract note", () => {
+  it("always states the materialization contract (graph-only since U11)", async () => {
     const out = await handler(EVENT);
     expect(out.ok).toBe(true);
-    expect(out.note).toMatch(/WIKI_SOURCE=graph/);
     expect(out.note).toMatch(/observations ingest/i);
     expect(out.note).toMatch(/NOT produce wiki pages/);
-  });
-
-  it("emits no note on the planner path (contract unchanged)", async () => {
-    const out = await handler(EVENT);
-    expect(out.ok).toBe(true);
-    expect(out.note).toBeUndefined();
   });
 
   it("still fails loudly on missing event fields", async () => {
