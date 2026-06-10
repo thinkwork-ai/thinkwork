@@ -110,7 +110,7 @@ describe("SignInPage", () => {
 
     render(<SignInPage />);
 
-    expect(screen.getByRole("heading", { name: "ThinkWork" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Log in to ThinkWork" })).toBeTruthy();
     expect(screen.queryByText("Spaces")).toBeNull();
     expect(screen.getByText("Acme ThinkWork · dev · us-east-1")).toBeTruthy();
     // Trust plumbing (e.g. "Unsigned build-time fallback") must not leak
@@ -119,7 +119,7 @@ describe("SignInPage", () => {
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: "Create New Environment" })
+        .getByRole("link", { name: "Create one" })
         .getAttribute("href"),
     ).toBe("/onboarding/welcome");
     expect(screen.queryByText(/Sign in with the Google account/i)).toBeNull();
@@ -243,7 +243,7 @@ describe("SignInPage", () => {
     expect(screen.queryByText("File")).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
     expect(
-      screen.getByRole("link", { name: "Create New Environment" }),
+      screen.getByRole("link", { name: "Create one" }),
     ).toBeTruthy();
   });
 
@@ -451,7 +451,7 @@ describe("SignInPage", () => {
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     // OAuth demotes to a secondary action alongside the form.
     expect(
-      screen.getByRole("button", { name: "Continue with Google" }),
+      screen.getByRole("button", { name: "Log in with Google" }),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Log in" })).toBeNull();
   });
@@ -474,7 +474,7 @@ describe("SignInPage", () => {
 
     render(<SignInPage />);
     fireEvent.click(
-      screen.getByRole("button", { name: "Continue with Google" }),
+      screen.getByRole("button", { name: "Log in with Google" }),
     );
 
     expect(navigations).toEqual([
