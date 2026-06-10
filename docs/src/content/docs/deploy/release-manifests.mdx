@@ -75,6 +75,13 @@ signing key rollout is in progress. Production and customer-safe controllers
 should set `release_manifest_trust_policy = "require_signature"` and configure
 trusted public keys before accepting a release.
 
+The TEI proving environment accepted `v0.1.0-canary.148` under the explicit
+`allow_unsigned_canary` trust policy. Evidence records both the raw manifest
+SHA-256
+`5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93` and the
+platform bundle SHA-256
+`1ed207c7aa92801629b2b7e5572220261f97f16fbe6f26c257d4ad523b92f5b9`.
+
 ## Upgrade Evidence
 
 Release upgrade evidence should record:
