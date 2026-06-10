@@ -1225,6 +1225,9 @@ export type DeploymentStatus = {
   cogneeLogGroupName?: Maybe<Scalars["String"]["output"]>;
   cogneeServiceName?: Maybe<Scalars["String"]["output"]>;
   databaseEndpoint?: Maybe<Scalars["String"]["output"]>;
+  deploymentControllerArn?: Maybe<Scalars["String"]["output"]>;
+  deploymentEvidenceBucket?: Maybe<Scalars["String"]["output"]>;
+  deploymentRunnerProjectName?: Maybe<Scalars["String"]["output"]>;
   docsUrl?: Maybe<Scalars["String"]["output"]>;
   ecrUrl?: Maybe<Scalars["String"]["output"]>;
   hindsightEnabled: Scalars["Boolean"]["output"];
@@ -1232,6 +1235,9 @@ export type DeploymentStatus = {
   managedApplications: Array<ManagedApplicationDeployment>;
   managedMemoryEnabled: Scalars["Boolean"]["output"];
   region: Scalars["String"]["output"];
+  releaseManifestSha256?: Maybe<Scalars["String"]["output"]>;
+  releaseManifestUrl?: Maybe<Scalars["String"]["output"]>;
+  releaseVersion?: Maybe<Scalars["String"]["output"]>;
   source: Scalars["String"]["output"];
   stage: Scalars["String"]["output"];
   twentyAlbArn?: Maybe<Scalars["String"]["output"]>;
@@ -1711,6 +1717,33 @@ export type KnowledgeGraphRelationship = {
   tenantId: Scalars["ID"]["output"];
   threadId?: Maybe<Scalars["ID"]["output"]>;
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type KnowledgeGraphSearchEntity = {
+  __typename?: "KnowledgeGraphSearchEntity";
+  aliases: Array<Scalars["String"]["output"]>;
+  evidenceCount: Scalars["Int"]["output"];
+  id: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  observationIds: Array<Scalars["String"]["output"]>;
+  relationshipCount: Scalars["Int"]["output"];
+  summary?: Maybe<Scalars["String"]["output"]>;
+  typeSlug?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type KnowledgeGraphSearchRelationship = {
+  __typename?: "KnowledgeGraphSearchRelationship";
+  fromLabel: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  toLabel: Scalars["String"]["output"];
+  typeSlug?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type KnowledgeGraphSearchResult = {
+  __typename?: "KnowledgeGraphSearchResult";
+  entities: Array<KnowledgeGraphSearchEntity>;
+  relationships: Array<KnowledgeGraphSearchRelationship>;
 };
 
 export enum KnowledgeGraphSourceKind {
@@ -3760,6 +3793,7 @@ export type Query = {
   knowledgeGraphGraph: KnowledgeGraphGraph;
   knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
   knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
+  knowledgeGraphSearch: KnowledgeGraphSearchResult;
   knowledgeGraphThreadCandidates: Array<KnowledgeGraphThreadCandidate>;
   managedApplicationDeployment?: Maybe<ManagedApplicationDeploymentJob>;
   managedApplicationHealthCheck: ManagedApplicationHealthCheck;
@@ -4208,6 +4242,12 @@ export type QueryKnowledgeGraphIngestRunsArgs = {
   sourceRef?: InputMaybe<Scalars["String"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryKnowledgeGraphSearchArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  query: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryKnowledgeGraphThreadCandidatesArgs = {

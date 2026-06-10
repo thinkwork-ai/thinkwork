@@ -3,6 +3,7 @@ export * from "./attachments.js";
 export * from "./browser.js";
 export * from "./context-engine.js";
 export * from "./delegation.js";
+export * from "./knowledge-graph.js";
 export * from "./memory.js";
 export * from "./send-email.js";
 export * from "./skills.js";

@@ -2,6 +2,7 @@ import { knowledgeGraphEntities } from "./entities.query.js";
 import { knowledgeGraphEntity } from "./entity.query.js";
 import { knowledgeGraphGraph } from "./graph.query.js";
 import { knowledgeGraphIngestRuns } from "./ingestRuns.query.js";
+import { knowledgeGraphSearch } from "./search.query.js";
 import { startKnowledgeGraphObservationsIngest } from "./startObservationsIngest.mutation.js";
 import {
   startKnowledgeGraphIngest,
@@ -15,6 +16,7 @@ export const knowledgeGraphQueries = {
   knowledgeGraphEntities,
   knowledgeGraphGraph,
   knowledgeGraphEntity,
+  knowledgeGraphSearch,
 };
 export const knowledgeGraphMutations = {
   startKnowledgeGraphIngest,

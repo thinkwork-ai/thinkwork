@@ -196,6 +196,11 @@ locals {
       CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
       CONTEXT_ENGINE_MEMORY_TIMEOUT_MS = "20000"
     }
+    # Agent graph access (plan 2026-06-09-004 U8): stage gate for the Pi
+    # knowledge_graph_search tool; the per-agent tool policy gates on top.
+    "chat-agent-invoke" = {
+      KNOWLEDGE_GRAPH_TOOL_ENABLED = tostring(var.knowledge_graph_tool_enabled)
+    }
     "kestra-control-mcp" = local.kestra_env
     # Bedrock KB provisioning. Per-handler (not common_env) so these don't bloat
     # the already-near-4KB graphql-http env. Bedrock's RDS-backed KB needs the

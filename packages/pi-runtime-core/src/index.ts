@@ -5,6 +5,7 @@ export * from "./desktop-session.js";
 export * from "./durable-session-manager.js";
 export * from "./finalize-client.js";
 export * from "./history.js";
+export * from "./knowledge-graph-provider.js";
 export * from "./memory-provider.js";
 export * from "./model-provider.js";
 export * from "./model-routing-policy.js";

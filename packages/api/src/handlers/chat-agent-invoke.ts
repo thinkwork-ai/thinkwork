@@ -98,6 +98,12 @@ const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const THINKWORK_API_URL =
   process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+// Plan 2026-06-09-004 U8 — stage-level seam flag for the agent-facing
+// knowledge-graph tool. Lands inert (flag absent → tool never ships in the
+// invoke payload); the consumer seam flips by setting
+// KNOWLEDGE_GRAPH_TOOL_ENABLED=true on this Lambda in its own PR.
+const KNOWLEDGE_GRAPH_TOOL_ENABLED =
+  (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true";
 const WORKSPACE_RENDERER_FUNCTION_NAME =
   process.env.WORKSPACE_RENDERER_FUNCTION_NAME || "";
 // Used by sandbox-preflight to namespace Secrets Manager paths per stage.
@@ -1268,6 +1274,15 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       )
         ? runtimeConfig.contextEngineConfig
         : undefined,
+      // Plan 2026-06-09-004 U8 — knowledge-graph tool seam. Stage env flag
+      // gates the rollout (inert until set); the per-agent tool policy can
+      // still block it. The runtime additionally requires thread_turn_id /
+      // thread id for the turn-bound auth the U7 resolver enforces.
+      knowledge_graph_enabled:
+        KNOWLEDGE_GRAPH_TOOL_ENABLED &&
+        isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"))
+          ? true
+          : undefined,
       runtime_type: runtimeType,
       model: agentModel,
       model_routing_policy: modelRoutingPolicy,

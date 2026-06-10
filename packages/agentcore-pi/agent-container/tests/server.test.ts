@@ -375,7 +375,9 @@ describe("handleInvocation — happy path", () => {
         runAgentLoop: async ({ modelId, message, systemPrompt }) => {
           calls.push({ modelId, message, systemPrompt });
           if (modelId === "anthropic/claude-haiku-4-5") {
-            expect(String(systemPrompt)).toContain("internal Verifier/Reviewer");
+            expect(String(systemPrompt)).toContain(
+              "internal Verifier/Reviewer",
+            );
             expect(String(systemPrompt)).toContain("Review gate: required");
             expect(String(message)).not.toContain("#Reviewer");
             return {
@@ -2267,6 +2269,116 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(bundle.tools.map((tool) => tool.name)).not.toContain(
       "query_context",
     );
+  });
+
+  it("registers knowledge_graph_search as an extension tool when the payload flag is on", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {
+        knowledge_graph_enabled: true,
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    // Folded into the allowlist (extension tools are silently gated
+    // otherwise) but NOT a plain AgentTool.
+    expect(bundle.extensionToolNames).toContain("knowledge_graph_search");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
+      "knowledge_graph_search",
+    );
+  });
+
+  it("does not register knowledge_graph_search when the payload flag is off or in eval mode", async () => {
+    const baseArgs = {
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed" as const,
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      mcpJsonConfig: { directTools: [] },
+    };
+
+    const flagOff = await buildInvocationResources({
+      ...baseArgs,
+      payload: {
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
+      },
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpRegistry: new McpToolRegistry(),
+    });
+    expect(flagOff.extensionToolNames).not.toContain("knowledge_graph_search");
+
+    const evalMode = await buildInvocationResources({
+      ...baseArgs,
+      payload: {
+        eval_mode: true,
+        knowledge_graph_enabled: true,
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
+      },
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpRegistry: new McpToolRegistry(),
+    });
+    expect(evalMode.extensionToolNames).not.toContain("knowledge_graph_search");
   });
 
   it("registers web_extract when Web Extraction config is present", async () => {

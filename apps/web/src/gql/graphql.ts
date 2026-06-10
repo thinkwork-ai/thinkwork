@@ -1719,6 +1719,33 @@ export type KnowledgeGraphRelationship = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+export type KnowledgeGraphSearchEntity = {
+  __typename?: "KnowledgeGraphSearchEntity";
+  aliases: Array<Scalars["String"]["output"]>;
+  evidenceCount: Scalars["Int"]["output"];
+  id: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  observationIds: Array<Scalars["String"]["output"]>;
+  relationshipCount: Scalars["Int"]["output"];
+  summary?: Maybe<Scalars["String"]["output"]>;
+  typeSlug?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type KnowledgeGraphSearchRelationship = {
+  __typename?: "KnowledgeGraphSearchRelationship";
+  fromLabel: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  toLabel: Scalars["String"]["output"];
+  typeSlug?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type KnowledgeGraphSearchResult = {
+  __typename?: "KnowledgeGraphSearchResult";
+  entities: Array<KnowledgeGraphSearchEntity>;
+  relationships: Array<KnowledgeGraphSearchRelationship>;
+};
+
 export enum KnowledgeGraphSourceKind {
   Brain = "BRAIN",
   Observations = "OBSERVATIONS",
@@ -3766,6 +3793,7 @@ export type Query = {
   knowledgeGraphGraph: KnowledgeGraphGraph;
   knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
   knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
+  knowledgeGraphSearch: KnowledgeGraphSearchResult;
   knowledgeGraphThreadCandidates: Array<KnowledgeGraphThreadCandidate>;
   managedApplicationDeployment?: Maybe<ManagedApplicationDeploymentJob>;
   managedApplicationHealthCheck: ManagedApplicationHealthCheck;
@@ -4214,6 +4242,12 @@ export type QueryKnowledgeGraphIngestRunsArgs = {
   sourceRef?: InputMaybe<Scalars["String"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryKnowledgeGraphSearchArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  query: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryKnowledgeGraphThreadCandidatesArgs = {
