@@ -25,6 +25,10 @@ import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-us
 const { tenants, tenantMembers, tenantSettings, users } = schema;
 
 const cognito = new CognitoIdentityProviderClient({});
+const RESENDABLE_INVITE_STATUSES = new Set([
+  "FORCE_CHANGE_PASSWORD",
+  "UNCONFIRMED",
+]);
 const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
 
 // ---------------------------------------------------------------------------
@@ -245,6 +249,22 @@ async function inviteMember(
         existing.UserAttributes?.find((a) => a.Name === "sub")?.Value || "";
       if (!cognitoSub) {
         return error("Could not resolve existing Cognito user sub", 502);
+      }
+      if (
+        existing.UserStatus &&
+        RESENDABLE_INVITE_STATUSES.has(existing.UserStatus)
+      ) {
+        const resent = await cognito.send(
+          new AdminCreateUserCommand({
+            UserPoolId: COGNITO_USER_POOL_ID,
+            Username: email,
+            DesiredDeliveryMediums: ["EMAIL"],
+            MessageAction: "RESEND",
+          }),
+        );
+        cognitoSub =
+          resent.User?.Attributes?.find((a) => a.Name === "sub")?.Value ||
+          cognitoSub;
       }
     } else {
       console.error("inviteMember: Cognito admin-create-user failed", err);

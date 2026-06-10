@@ -10,9 +10,8 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U17 - status ledger reconciliation and TEI
-  invite-email remediation.
-- Current branch: `codex/u15-tei-141-status`.
+- Current implementation unit: U17 - pending Cognito invite resend.
+- Current branch: `codex/u17-invite-resend-pending-users`.
 - Current worktree:
   `.Codex/worktrees/u15-tei-141-status`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
@@ -31,8 +30,9 @@ status: in_progress
   merged; U13 PR [#2301](https://github.com/thinkwork-ai/thinkwork/pull/2301)
   merged; U14 PR [#2302](https://github.com/thinkwork-ai/thinkwork/pull/2302)
   merged; U15/U17 status and invite-email PR
-  [#2304](https://github.com/thinkwork-ai/thinkwork/pull/2304) pending; U16
-  PR [#2305](https://github.com/thinkwork-ai/thinkwork/pull/2305) merged.
+  [#2304](https://github.com/thinkwork-ai/thinkwork/pull/2304) merged; U16
+  PR [#2305](https://github.com/thinkwork-ai/thinkwork/pull/2305) merged; U17
+  pending-invite resend PR not opened yet.
 - Status: U11 merged and deployed to main. TEI's customer deployment controller
   was refreshed to the U11 runner and `.137` selected-release pins, then TEI
   update execution `tei-e2e-update-137-20260609204430` failed closed because
@@ -98,7 +98,14 @@ status: in_progress
   (`cognito_email_source_arn`, `cognito_from_email_address`,
   `cognito_reply_to_email_address`) and a ThinkWork AdminCreateUser invite
   template so future controller updates can configure invite mail without
-  console drift.
+  console drift. U15/U17 PR #2304 passed required CI and was squash merged as
+  `cde7bed2`. A follow-up invite-path gap remained: retrying an invite for an
+  existing pending Cognito user returned success without resending the invite
+  email. The current U17 branch changes both GraphQL and CLI-facing tenant
+  invite paths to call `AdminCreateUser` with `MessageAction=RESEND` for
+  `FORCE_CHANGE_PASSWORD` or `UNCONFIRMED` users, and adds Settings -> Users
+  detail actions so operators can resend an invite from the top-right action
+  area or delete a user's tenant membership from the bottom danger zone.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -256,7 +263,7 @@ status: in_progress
   base-install optional apps disabled.
 - U6 adds a General Settings `Releases` section where operators can select a
   release, review manifest URL/digest, and click `Confirm Deploy`.
-- U6 local verification:
+  - U6 local verification:
   - `pnpm schema:build` passed.
   - GraphQL codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
     `@thinkwork/mobile`.
@@ -10769,6 +10776,15 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `enabled=false`, `provisioned=false`, and `runtimeEnabled=false`.
   `managedApplications` planning rows exist for both with desired status
   `disabled`. Optional Slack and Stripe remain excluded from the base install.
+- U17 pending-invite resend local verification:
+  `npx vitest run src/__tests__/inviteMember-computer-claim.test.ts` from
+  `packages/api` passed with 2 tests, `pnpm --filter @thinkwork/api typecheck`
+  passed, `pnpm dlx prettier@3.8.2 --check` passed for the touched API/docs
+  files, `terraform fmt -check -recursive terraform/modules/foundation/cognito terraform/modules/thinkwork`
+  passed, and `git diff --check` passed. User-detail UI follow-up
+  verification passed:
+  `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsUserDetail.test.tsx`
+  with 9 tests and `pnpm --filter @thinkwork/web typecheck`.
 
 ## Agent Profile Closed Loops - 2026-06-08
 
