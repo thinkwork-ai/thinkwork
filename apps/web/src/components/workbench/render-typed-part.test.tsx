@@ -190,6 +190,74 @@ describe("renderTypedPart", () => {
     expect(anchor!.getAttribute("href")).toBe("https://example.com/x.png");
   });
 
+  it("routes data-user-question parts to the UserQuestionCard", () => {
+    const part: AccumulatedPart = {
+      type: "data-user-question",
+      id: "user-question:q-1",
+      data: {
+        questionId: "q-1",
+        questions: [
+          {
+            question: "Which environment should this target?",
+            header: "Env",
+            options: [
+              { label: "Staging (Recommended)", description: "Safe default." },
+              { label: "Production", description: "Live traffic." },
+            ],
+          },
+        ],
+      },
+    };
+    render(<>{renderTypedPart(part, rk())}</>);
+
+    expect(screen.getByTestId("user-question-card")).toBeTruthy();
+    expect(screen.getByText("Env")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /submit answers/i }),
+    ).toBeTruthy();
+    // Not the forward-compat debug strip.
+    expect(screen.queryByText("data-user-question")).toBeNull();
+  });
+
+  it("renders the answered question card from the message-level record", () => {
+    const part: AccumulatedPart = {
+      type: "data-user-question",
+      id: "user-question:q-1",
+      data: {
+        questionId: "q-1",
+        questions: [
+          {
+            question: "Which environment should this target?",
+            header: "Env",
+            options: [
+              { label: "Staging", description: "" },
+              { label: "Production", description: "" },
+            ],
+          },
+        ],
+      },
+    };
+    render(
+      <>
+        {renderTypedPart(part, {
+          ...rk(),
+          userQuestion: {
+            id: "q-1",
+            status: "ANSWERED",
+            answers: JSON.stringify({ Env: "Production" }),
+            answeredVia: "CARD",
+            answeredBy: "user-1",
+            answeredAt: "2026-06-09T12:00:00Z",
+          },
+        })}
+      </>,
+    );
+
+    expect(screen.getByTestId("user-question-card")).toBeTruthy();
+    expect(screen.getByText("Production")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
+  });
+
   it("renders an unknown data-${name} part as a forward-compat debug strip", () => {
     const part: AccumulatedPart = {
       type: "data-future-shape",

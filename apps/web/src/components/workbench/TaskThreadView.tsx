@@ -80,6 +80,7 @@ import {
 } from "@/components/workbench/turnHeader";
 import { useTurnElapsed } from "@/components/workbench/useTurnElapsed";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
+import type { UserQuestionRecord } from "@/components/workbench/UserQuestionCard";
 import {
   TaskQueue,
   taskQueueFromRunbookQueue,
@@ -141,6 +142,13 @@ export interface TaskThreadMessage {
   toolCalls?: unknown;
   toolResults?: unknown;
   parts?: AccumulatedPart[];
+  /**
+   * Answer-state record for ask_user_question messages (resolved from
+   * pending_user_questions via Message.userQuestion); null for ordinary
+   * messages. Parts carry questions only — answered state derives from
+   * this row, never from parts mutation.
+   */
+  userQuestion?: UserQuestionRecord | null;
   durableArtifact?: GeneratedArtifact | null;
   /**
    * Display-ready chips for a not-yet-persisted optimistic user message, so the
@@ -2021,9 +2029,17 @@ function TranscriptMessage({
       }))
     : [];
   const typedParts = !isUser ? (message.parts ?? []) : [];
+  const userQuestion = resolveUserQuestionRecord(
+    message.userQuestion,
+    currentUser,
+    mentionTargets,
+  );
   const renderedTypedParts =
     typedParts.length > 0
-      ? renderTypedParts(typedParts, { keyPrefix: message.id }).filter(Boolean)
+      ? renderTypedParts(typedParts, {
+          keyPrefix: message.id,
+          userQuestion,
+        }).filter(Boolean)
       : [];
   const transcriptContentClassName =
     "grid w-full grid-cols-[minmax(0,1fr)] gap-0.5 overflow-visible py-1";
@@ -2214,6 +2230,35 @@ function isCurrentUserMessage(
 
 function sameIdentity(left?: string | null, right?: string | null) {
   return Boolean(left?.trim() && right?.trim() && left.trim() === right.trim());
+}
+
+/**
+ * Attach a display name to the message's userQuestion record. answeredBy is
+ * a users.id — resolve it through the current user and the thread's mention
+ * targets so the answered card shows a human name, not a UUID.
+ */
+function resolveUserQuestionRecord(
+  record: UserQuestionRecord | null | undefined,
+  currentUser?: CurrentUserIdentity | null,
+  mentionTargets?: MentionTarget[],
+): UserQuestionRecord | null {
+  if (!record) return null;
+  if (record.answeredByDisplayName || !record.answeredBy) return record;
+  let displayName: string | null = null;
+  if (sameIdentity(record.answeredBy, currentUser?.id)) {
+    displayName = currentUser?.name?.trim() || null;
+  }
+  if (!displayName) {
+    displayName =
+      mentionTargets?.find(
+        (target) =>
+          target.targetType === "USER" &&
+          sameIdentity(target.targetId, record.answeredBy),
+      )?.displayName ?? null;
+  }
+  return displayName
+    ? { ...record, answeredByDisplayName: displayName }
+    : record;
 }
 
 function initialsForName(name: string) {
@@ -3929,11 +3974,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-      stringValue(payload.profileSlug) ||
-      stringValue(payload.profile_name) ||
-      stringValue(payload.profileName) ||
-      stringValue(payload.profile_run_id) ||
-      stringValue(payload.profileRunId),
+    stringValue(payload.profileSlug) ||
+    stringValue(payload.profile_name) ||
+    stringValue(payload.profileName) ||
+    stringValue(payload.profile_run_id) ||
+    stringValue(payload.profileRunId),
   );
 }
 

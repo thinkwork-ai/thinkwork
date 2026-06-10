@@ -57,6 +57,38 @@ describe("GlobalInboxSection", () => {
     expect(screen.getByRole("button", { name: /mark as read/i })).toBeTruthy();
   });
 
+  it("renders a Waiting-for-you badge for AWAITING_USER threads and not otherwise", () => {
+    render(
+      <GlobalInboxSection
+        totalCount={2}
+        threads={[
+          {
+            id: "thread-1",
+            title: "Waiting thread",
+            lifecycleStatus: "AWAITING_USER",
+            lastActivityAt: "2026-06-09T18:00:00Z",
+            lastReadAt: null,
+          },
+          {
+            id: "thread-2",
+            title: "Running thread",
+            lifecycleStatus: "RUNNING",
+            lastActivityAt: "2026-06-09T18:00:00Z",
+            lastReadAt: null,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText("Waiting for you")).toHaveLength(1);
+    expect(
+      screen.getByRole("link", { name: /waiting thread/i }).textContent,
+    ).toContain("Waiting for you");
+    expect(
+      screen.getByRole("link", { name: /running thread/i }).textContent,
+    ).not.toContain("Waiting for you");
+  });
+
   it("contains query errors inside the section", () => {
     render(<GlobalInboxSection totalCount={0} threads={[]} error="Nope" />);
 

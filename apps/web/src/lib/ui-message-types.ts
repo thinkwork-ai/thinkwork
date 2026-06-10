@@ -116,6 +116,29 @@ export interface RunbookConfirmationData {
   matchedKeywords?: unknown;
 }
 
+/**
+ * `data-user-question` part payload (plan 2026-06-09-005 U8). Written ONCE
+ * at intake — questions only, never answer state. Answered state derives
+ * from the message-level `userQuestion` GraphQL field (the
+ * pending_user_questions row), not from parts mutation.
+ */
+export interface UserQuestionOption {
+  label?: string;
+  description?: string;
+}
+
+export interface UserQuestionItem {
+  question?: string;
+  header?: string;
+  options?: UserQuestionOption[];
+  multiSelect?: boolean;
+}
+
+export interface UserQuestionData {
+  questionId?: string;
+  questions?: UserQuestionItem[];
+}
+
 export interface RunbookQueueTask {
   id?: string;
   key?: string;

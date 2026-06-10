@@ -107,6 +107,7 @@ import {
   filterUnreadThreads,
   formatCompactCount,
   formatTinyRelativeDate,
+  isThreadAwaitingUser,
   isThreadUnread,
   selectNextThreadBelowDeleted,
   sortThreadsByActivityDesc,
@@ -1738,6 +1739,7 @@ function ChatThreadRow({
   pinned?: boolean;
 }) {
   const unread = isThreadUnread(thread) && !locallyRead;
+  const awaitingUser = isThreadAwaitingUser(thread);
   const activity = threadActivityAt(thread);
   const relativeDate = formatTinyRelativeDate(activity);
   const title = threadTitle(thread);
@@ -1971,7 +1973,14 @@ function ChatThreadRow({
         </button>
       ) : (
         <>
-          {!renamingTitle && relativeDate ? (
+          {!renamingTitle && awaitingUser ? (
+            <span
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-600 group-hover/thread-row:hidden dark:text-amber-400"
+              title="The agent asked a question and is waiting for an answer"
+            >
+              Waiting for you
+            </span>
+          ) : !renamingTitle && relativeDate ? (
             <span
               className="absolute right-2 top-1/2 -translate-y-1/2 text-xs tabular-nums text-sidebar-foreground/45 group-hover/thread-row:hidden"
               title={activity ?? undefined}

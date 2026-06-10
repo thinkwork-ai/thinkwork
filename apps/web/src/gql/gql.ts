@@ -118,6 +118,7 @@ type Documents = {
   "\n  mutation SettingsDeleteWebhook($id: ID!) {\n    deleteWebhook(id: $id)\n  }\n": typeof types.SettingsDeleteWebhookDocument;
   "\n  mutation SettingsRegenerateWebhookToken($id: ID!) {\n    regenerateWebhookToken(id: $id) {\n      id\n      token\n    }\n  }\n": typeof types.SettingsRegenerateWebhookTokenDocument;
   "\n  query TenantSkillCatalog($agentId: ID) {\n    tenantSkillCatalog(agentId: $agentId) {\n      slug\n      displayName\n      description\n      icon\n      installed\n    }\n  }\n": typeof types.TenantSkillCatalogDocument;
+  "\n  mutation AnswerUserQuestion($questionId: ID!, $answers: AWSJSON!) {\n    answerUserQuestion(questionId: $questionId, answers: $answers) {\n      id\n      threadId\n      messageId\n      status\n      answers\n      answeredVia\n      answeredBy\n      answeredAt\n    }\n  }\n": typeof types.AnswerUserQuestionDocument;
   "\n  mutation OnboardingBootstrapUser {\n    bootstrapUser {\n      tenant {\n        id\n        name\n        slug\n        plan\n      }\n    }\n  }\n": typeof types.OnboardingBootstrapUserDocument;
 };
 const documents: Documents = {
@@ -329,6 +330,8 @@ const documents: Documents = {
     types.SettingsRegenerateWebhookTokenDocument,
   "\n  query TenantSkillCatalog($agentId: ID) {\n    tenantSkillCatalog(agentId: $agentId) {\n      slug\n      displayName\n      description\n      icon\n      installed\n    }\n  }\n":
     types.TenantSkillCatalogDocument,
+  "\n  mutation AnswerUserQuestion($questionId: ID!, $answers: AWSJSON!) {\n    answerUserQuestion(questionId: $questionId, answers: $answers) {\n      id\n      threadId\n      messageId\n      status\n      answers\n      answeredVia\n      answeredBy\n      answeredAt\n    }\n  }\n":
+    types.AnswerUserQuestionDocument,
   "\n  mutation OnboardingBootstrapUser {\n    bootstrapUser {\n      tenant {\n        id\n        name\n        slug\n        plan\n      }\n    }\n  }\n":
     types.OnboardingBootstrapUserDocument,
 };
@@ -971,6 +974,12 @@ export function graphql(
 export function graphql(
   source: "\n  query TenantSkillCatalog($agentId: ID) {\n    tenantSkillCatalog(agentId: $agentId) {\n      slug\n      displayName\n      description\n      icon\n      installed\n    }\n  }\n",
 ): (typeof documents)["\n  query TenantSkillCatalog($agentId: ID) {\n    tenantSkillCatalog(agentId: $agentId) {\n      slug\n      displayName\n      description\n      icon\n      installed\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation AnswerUserQuestion($questionId: ID!, $answers: AWSJSON!) {\n    answerUserQuestion(questionId: $questionId, answers: $answers) {\n      id\n      threadId\n      messageId\n      status\n      answers\n      answeredVia\n      answeredBy\n      answeredAt\n    }\n  }\n",
+): (typeof documents)["\n  mutation AnswerUserQuestion($questionId: ID!, $answers: AWSJSON!) {\n    answerUserQuestion(questionId: $questionId, answers: $answers) {\n      id\n      threadId\n      messageId\n      status\n      answers\n      answeredVia\n      answeredBy\n      answeredAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

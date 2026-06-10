@@ -43,6 +43,7 @@ const {
     title: string;
     spaceId?: string;
     space?: { id: string; name: string };
+    lifecycleStatus?: string | null;
     lastActivityAt?: string;
     lastReadAt?: string | null;
   }>,
@@ -51,6 +52,7 @@ const {
     title: string;
     spaceId?: string;
     space?: { id: string; name: string };
+    lifecycleStatus?: string | null;
     lastActivityAt?: string;
     lastReadAt?: string | null;
   }>,
@@ -59,6 +61,7 @@ const {
     title: string;
     spaceId?: string;
     space?: { id: string; name: string };
+    lifecycleStatus?: string | null;
     lastActivityAt?: string;
     lastReadAt?: string | null;
   }>,
@@ -957,6 +960,34 @@ describe("ChatSidebar", () => {
         replace: true,
       }),
     );
+  });
+
+  it("shows a Waiting-for-you badge for AWAITING_USER threads in place of the date", () => {
+    recentThreadItemsMock.length = 0;
+    recentThreadItemsMock.push({
+      id: "waiting-thread",
+      title: "Waiting thread",
+      lifecycleStatus: "AWAITING_USER",
+      lastActivityAt: new Date(Date.now() - 4 * 60 * 60_000).toISOString(),
+      lastReadAt: new Date().toISOString(),
+    });
+    recentThreadItemsMock.push({
+      id: "running-thread",
+      title: "Running thread",
+      lifecycleStatus: "RUNNING",
+      lastActivityAt: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
+      lastReadAt: new Date().toISOString(),
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    // The waiting badge replaces the compact date on the awaiting thread
+    // only; it clears when a thread-update event refreshes lifecycleStatus.
+    expect(screen.getAllByText("Waiting for you")).toHaveLength(1);
+    expect(screen.queryByText("4h")).toBeNull();
+    expect(screen.getByText("2h")).toBeTruthy();
   });
 
   it("highlights the replacement thread selected after delete", () => {

@@ -1,6 +1,7 @@
 import { Bot, Clock, Download, FileText, UserRound } from "lucide-react";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
 import { normalizePersistedParts } from "@/components/workbench/TaskThreadView";
+import type { UserQuestionRecord } from "@/components/workbench/UserQuestionCard";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import {
   resolveMessageAttachments,
@@ -27,6 +28,8 @@ export interface ThreadConversationMessage {
     targetId?: string | null;
     displayName?: string | null;
   }> | null;
+  /** Answer-state record for ask_user_question messages (Message.userQuestion). */
+  userQuestion?: UserQuestionRecord | null;
 }
 
 interface ThreadConversationProps {
@@ -174,7 +177,10 @@ function MessageBody({
 }) {
   const typedParts = normalizePersistedParts(message.parts);
   const renderedParts = typedParts.length
-    ? renderTypedParts(typedParts, { keyPrefix: message.id }).filter(Boolean)
+    ? renderTypedParts(typedParts, {
+        keyPrefix: message.id,
+        userQuestion: message.userQuestion ?? null,
+      }).filter(Boolean)
     : null;
   const messageAttachments = resolveMessageAttachments({
     metadata: message.metadata,

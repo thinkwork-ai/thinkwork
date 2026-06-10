@@ -4,6 +4,8 @@ export interface ChatThreadSummary {
   identifier?: string | null;
   title?: string | null;
   status?: string | null;
+  /** Derived lifecycle (RUNNING | AWAITING_USER | ...); drives the waiting badge. */
+  lifecycleStatus?: string | null;
   channel?: string | null;
   spaceId?: string | null;
   space?: {
@@ -18,6 +20,15 @@ export interface ChatThreadSummary {
   archivedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+}
+
+/**
+ * True when the agent parked the thread on a pending ask_user_question
+ * batch — drives the amber "Waiting for you" badge. Clears automatically
+ * when a thread-update event refreshes lifecycleStatus.
+ */
+export function isThreadAwaitingUser(thread: ChatThreadSummary): boolean {
+  return (thread.lifecycleStatus ?? "").toUpperCase() === "AWAITING_USER";
 }
 
 export function formatCompactCount(value: number): string {

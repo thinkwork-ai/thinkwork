@@ -38,8 +38,15 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
+import {
+  UserQuestionCard,
+  type UserQuestionRecord,
+} from "@/components/workbench/UserQuestionCard";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
-import type { RunbookConfirmationData } from "@/lib/ui-message-types";
+import type {
+  RunbookConfirmationData,
+  UserQuestionData,
+} from "@/lib/ui-message-types";
 
 export interface RenderTypedPartOptions {
   /** Stable React key prefix (usually the message id). */
@@ -47,11 +54,17 @@ export interface RenderTypedPartOptions {
   /** Index of the part within the message — appended to `keyPrefix`
    * to form a stable React key. */
   index: number;
+  /**
+   * Message-level `userQuestion` record (answer state for a
+   * `data-user-question` part). Parts carry questions only; answered
+   * state always derives from this row.
+   */
+  userQuestion?: UserQuestionRecord | null;
 }
 
 export function renderTypedPart(
   part: AccumulatedPart,
-  { keyPrefix, index }: RenderTypedPartOptions,
+  { keyPrefix, index, userQuestion }: RenderTypedPartOptions,
 ): ReactNode {
   const key = `${keyPrefix}::${index}`;
 
@@ -145,6 +158,10 @@ export function renderTypedPart(
   }
 
   if (part.type.startsWith("data-")) {
+    if (part.type === "data-user-question") {
+      const data = recordData(part.data) as UserQuestionData;
+      return <UserQuestionCard key={key} data={data} question={userQuestion} />;
+    }
     if (part.type === "data-runbook-confirmation") {
       return (
         <RunbookConfirmation
@@ -185,7 +202,7 @@ function recordData(value: unknown): Record<string, unknown> {
  */
 export function renderTypedParts(
   parts: AccumulatedPart[],
-  options: { keyPrefix: string },
+  options: { keyPrefix: string; userQuestion?: UserQuestionRecord | null },
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
   let toolBuffer: Array<Extract<AccumulatedPart, { type: `tool-${string}` }>> =
@@ -214,6 +231,7 @@ export function renderTypedParts(
       renderTypedPart(part, {
         keyPrefix: options.keyPrefix,
         index,
+        userQuestion: options.userQuestion,
       }),
     );
   });

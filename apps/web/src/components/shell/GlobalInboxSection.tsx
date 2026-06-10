@@ -3,6 +3,7 @@ import { SidebarGroup, SidebarGroupLabel } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
 import {
   formatCompactCount,
+  isThreadAwaitingUser,
   isThreadUnread,
   threadTitle,
   type ChatThreadSummary,
@@ -61,6 +62,7 @@ export function GlobalInboxSection({
 
 function InboxThreadRow({ thread }: { thread: ChatThreadSummary }) {
   const unread = isThreadUnread(thread);
+  const awaitingUser = isThreadAwaitingUser(thread);
 
   const content = (
     <>
@@ -73,6 +75,14 @@ function InboxThreadRow({ thread }: { thread: ChatThreadSummary }) {
       <span className="min-w-0 flex-1 truncate text-sm font-medium">
         {threadTitle(thread)}
       </span>
+      {awaitingUser ? (
+        <span
+          className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-600 dark:text-amber-400"
+          title="The agent asked a question and is waiting for an answer"
+        >
+          Waiting for you
+        </span>
+      ) : null}
     </>
   );
 

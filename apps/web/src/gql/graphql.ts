@@ -9492,6 +9492,26 @@ export type TenantSkillCatalogQuery = {
   }>;
 };
 
+export type AnswerUserQuestionMutationVariables = Exact<{
+  questionId: Scalars["ID"]["input"];
+  answers: Scalars["AWSJSON"]["input"];
+}>;
+
+export type AnswerUserQuestionMutation = {
+  __typename?: "Mutation";
+  answerUserQuestion: {
+    __typename?: "UserQuestion";
+    id: string;
+    threadId: string;
+    messageId: string;
+    status: UserQuestionStatus;
+    answers?: any | null;
+    answeredVia?: UserQuestionAnsweredVia | null;
+    answeredBy?: string | null;
+    answeredAt?: any | null;
+  };
+};
+
 export type OnboardingBootstrapUserMutationVariables = Exact<{
   [key: string]: never;
 }>;
@@ -18560,6 +18580,86 @@ export const TenantSkillCatalogDocument = {
 } as unknown as DocumentNode<
   TenantSkillCatalogQuery,
   TenantSkillCatalogQueryVariables
+>;
+export const AnswerUserQuestionDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "AnswerUserQuestion" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "questionId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "answers" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "AWSJSON" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "answerUserQuestion" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "questionId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "questionId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "answers" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "answers" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "threadId" } },
+                { kind: "Field", name: { kind: "Name", value: "messageId" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "answers" } },
+                { kind: "Field", name: { kind: "Name", value: "answeredVia" } },
+                { kind: "Field", name: { kind: "Name", value: "answeredBy" } },
+                { kind: "Field", name: { kind: "Name", value: "answeredAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AnswerUserQuestionMutation,
+  AnswerUserQuestionMutationVariables
 >;
 export const OnboardingBootstrapUserDocument = {
   kind: "Document",
