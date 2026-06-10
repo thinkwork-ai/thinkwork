@@ -109,7 +109,7 @@ async function runLiveSmoke() {
   const graphql = await probeGraphql(endpoints.graphqlUrl);
   const cognito = validateCognitoDomain(endpoints.cognitoDomain);
   const deploymentProfile = validateDeploymentProfileJson();
-  const controlPlane = validateControlPlane(terraform);
+  const controlPlane = validateControlPlane(terraform, endpoints);
 
   if (!spaces.ok) {
     throw new Error(
@@ -320,32 +320,69 @@ function missingDeploymentProfileFields(profile) {
     .map((fields) => fields.join(" or "));
 }
 
-function validateControlPlane(terraform) {
-  const enabled = bool(terraform.deployment_control_plane_enabled);
+function validateControlPlane(terraform, endpoints) {
+  const endpointValues = {
+    deployment_state_machine_arn: endpoints.stateMachineArn,
+    deployment_runner_project_name: endpoints.codeBuildProject,
+    deployment_evidence_bucket_name: endpoints.evidenceBucket,
+  };
+  const hasEndpointControlPlane = Object.values(endpointValues).some(Boolean);
+  const enabled =
+    bool(terraform.deployment_control_plane_enabled) ||
+    hasEndpointControlPlane ||
+    env.SMOKE_REQUIRE_CONTROL_PLANE === "1";
   if (!enabled) {
     return {
       ok: true,
       enabled: false,
       skipped: true,
-      reason: "deployment_control_plane_enabled is false or unavailable.",
+      reason:
+        "deployment_control_plane_enabled is false or unavailable, and no SMOKE_* control-plane endpoints were provided.",
     };
   }
 
   const missing = [
-    ["deployment_state_machine_arn", terraform.deployment_state_machine_arn],
+    [
+      "deployment_state_machine_arn",
+      first(
+        terraform.deployment_state_machine_arn,
+        endpointValues.deployment_state_machine_arn,
+      ),
+    ],
     [
       "deployment_runner_project_name",
-      terraform.deployment_runner_project_name,
+      first(
+        terraform.deployment_runner_project_name,
+        endpointValues.deployment_runner_project_name,
+      ),
     ],
     [
       "deployment_evidence_bucket_name",
-      terraform.deployment_evidence_bucket_name,
+      first(
+        terraform.deployment_evidence_bucket_name,
+        endpointValues.deployment_evidence_bucket_name,
+      ),
     ],
   ].filter(([, value]) => !value);
 
   return {
     ok: missing.length === 0,
     enabled: true,
+    source: bool(terraform.deployment_control_plane_enabled)
+      ? "terraform"
+      : "runtime-config-or-env",
+    stateMachineArn: first(
+      terraform.deployment_state_machine_arn,
+      endpointValues.deployment_state_machine_arn,
+    ),
+    codeBuildProject: first(
+      terraform.deployment_runner_project_name,
+      endpointValues.deployment_runner_project_name,
+    ),
+    evidenceBucket: first(
+      terraform.deployment_evidence_bucket_name,
+      endpointValues.deployment_evidence_bucket_name,
+    ),
     missing: missing.map(([name]) => name),
     message:
       missing.length === 0
