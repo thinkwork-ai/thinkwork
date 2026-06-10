@@ -10,10 +10,11 @@ status: in_progress
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.
 - Target branch: `main`.
-- Current implementation unit: U18 - Cognito invite SMS template deploy unblock.
-- Current branch: `codex/fix-cognito-invite-sms`.
+- Current implementation unit: U19 - release manifest trust policy and unsigned
+  canary guardrail.
+- Current branch: `codex/u19-release-signature-contract`.
 - Current worktree:
-  `.Codex/worktrees/fix-cognito-invite-sms`.
+  `.Codex/worktrees/u19-release-signature-contract`.
 - Pull request: U1 PR [#2285](https://github.com/thinkwork-ai/thinkwork/pull/2285)
   merged; U2 PR [#2287](https://github.com/thinkwork-ai/thinkwork/pull/2287)
   merged; U3 PR [#2289](https://github.com/thinkwork-ai/thinkwork/pull/2289)
@@ -32,8 +33,13 @@ status: in_progress
   merged; U15/U17 status and invite-email PR
   [#2304](https://github.com/thinkwork-ai/thinkwork/pull/2304) merged; U16
   PR [#2305](https://github.com/thinkwork-ai/thinkwork/pull/2305) merged; U17
-  pending-invite resend PR not opened yet; U18 Cognito invite SMS template
-  unblock PR not opened yet.
+  resend/delete user PR [#2308](https://github.com/thinkwork-ai/thinkwork/pull/2308)
+  merged; U17 release-list PR [#2309](https://github.com/thinkwork-ai/thinkwork/pull/2309)
+  merged; U18 desktop restore PR [#2313](https://github.com/thinkwork-ai/thinkwork/pull/2313)
+  merged; U18 Bedrock runtime endpoint PR [#2314](https://github.com/thinkwork-ai/thinkwork/pull/2314)
+  merged; U18 Cognito invite SMS template PR [#2315](https://github.com/thinkwork-ai/thinkwork/pull/2315)
+  merged; U18 VPC endpoint ingress PR [#2316](https://github.com/thinkwork-ai/thinkwork/pull/2316)
+  merged; U19 release trust-policy PR not opened yet.
 - Status: U11 merged and deployed to main. TEI's customer deployment controller
   was refreshed to the U11 runner and `.137` selected-release pins, then TEI
   update execution `tei-e2e-update-137-20260609204430` failed closed because
@@ -114,6 +120,26 @@ status: in_progress
   `adminCreateUserConfig.inviteMessageTemplate.sMSMessage` length validation.
   U18 adds a validated SMS invite message to the foundation module and wires a
   top-level `cognito_invite_sms_message` override through the ThinkWork module.
+  U18 PR #2315 passed required CI and was squash merged as `f5832dc7`. Canary
+  releases `v0.1.0-canary.145` and `desktop-v0.1.0-canary.145` were cut from
+  that merge; both platform and desktop release workflows succeeded. TEI's
+  deployment controller was updated to release `v0.1.0-canary.145` with
+  manifest SHA-256
+  `f0a149db34d59e290fc4a43bc098a57539dcae508445e0fb626b8ce45f9eaf1c`.
+  Step Functions execution
+  `arn:aws:states:us-east-1:637423202447:execution:thinkwork-tei-e2e-deployment-orchestrator:tw-update-145-20260610030853`
+  succeeded, CodeBuild run
+  `thinkwork-tei-e2e-deployment-runner:a3370ede-cd73-407f-9673-87f7d1af3290`
+  succeeded, and
+  `https://d1eqjv7ijcmtqz.cloudfront.net/thinkwork-runtime-config.json`
+  reports `releaseVersion: v0.1.0-canary.145`. Auditing that release exposed
+  the next trust gap: the release contains `thinkwork-release.json` and
+  `platform-artifacts.tar.gz` but no `thinkwork-release.sig.json`, while docs
+  and release notes implied a signed manifest. U19 makes the controller trust
+  policy explicit: unsigned canaries are allowed only under
+  `allow_unsigned_canary`, non-canary unsigned manifests fail closed, and
+  customer-safe controllers can require a detached signature with
+  `require_signature`.
 - Notes:
   - Started autopilot execution after reading `AGENTS.md`, the deployment
     controller process plan, `ce-work`, and the prior GitHub-free AWS
@@ -163,9 +189,29 @@ status: in_progress
     endpoints to connect/revoke the lease, and minimal browser wiring so
     temporary STS credentials or an assumable role are posted to the server
     lease vault without entering local storage.
+  - Created isolated U19 worktree from `origin/main` at `0560bd0b7`.
+  - U19 adds `release_manifest_trust_policy`,
+    `release_manifest_signature_url`, and trusted-key JSON inputs to the
+    deployment control plane and top-level ThinkWork module.
+  - U19 runner behavior records raw manifest digest, canonical manifest digest,
+    trust policy, signature status, and unsigned-canary allowance in deployment
+    evidence before artifact bundle extraction or Terraform runs.
+  - U19 updates release notes/docs so unsigned canaries are documented as
+    dogfood/TEI-only while customer-safe controllers require signatures.
 - Local verification:
   - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
     passed: 7 tests.
+  - U19 `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -q`
+    passed: 21 tests.
+  - U19 `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U19 `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed.
+  - U19 `terraform fmt -check terraform/modules/app/deployment-control-plane terraform/modules/thinkwork`
+    passed.
+  - U19 `pnpm dlx prettier@3.8.2 --check --ignore-unknown` over touched
+    Terraform, docs, and release workflow files passed.
+  - U19 `git diff --check` passed.
   - `pnpm install` completed; local Node 25 logged the known optional
     `canvas@2.11.2` native fallback build warning because `pkg-config` /
     `pixman-1` are not installed.

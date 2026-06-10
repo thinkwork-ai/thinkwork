@@ -122,6 +122,34 @@ variable "deployment_release_manifest_sha256" {
   default     = ""
 }
 
+variable "deployment_release_manifest_signature_url" {
+  description = "Optional selected ThinkWork release manifest detached signature URL stored in the deployment control plane."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_release_manifest_trust_policy" {
+  description = "Release manifest trust policy for the deployment control plane: allow_unsigned_canary or require_signature."
+  type        = string
+  default     = "allow_unsigned_canary"
+
+  validation {
+    condition     = contains(["allow_unsigned_canary", "require_signature"], var.deployment_release_manifest_trust_policy)
+    error_message = "deployment_release_manifest_trust_policy must be allow_unsigned_canary or require_signature."
+  }
+}
+
+variable "deployment_release_manifest_trusted_keys_json" {
+  description = "JSON array of trusted release signing keys for the deployment control plane."
+  type        = string
+  default     = "[]"
+
+  validation {
+    condition     = can(jsondecode(var.deployment_release_manifest_trusted_keys_json))
+    error_message = "deployment_release_manifest_trusted_keys_json must be valid JSON."
+  }
+}
+
 variable "deployment_terraform_state_bucket" {
   description = "Customer-owned S3 bucket used by the GitHub-free deployment runner for ThinkWork app Terraform state. Empty uses the legacy thinkwork-terraform-state bucket name."
   type        = string

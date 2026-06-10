@@ -1,6 +1,8 @@
+import base64
 import importlib.util
 import io
 import json
+import subprocess
 import tarfile
 from hashlib import sha256
 from pathlib import Path
@@ -39,11 +41,16 @@ def write_manifest(path: Path, manifest: dict) -> str:
     return digest(encoded)
 
 
-def release_manifest(bundle_path: Path, bundle_sha: str, artifacts: list[dict]) -> dict:
+def release_manifest(
+    bundle_path: Path,
+    bundle_sha: str,
+    artifacts: list[dict],
+    version: str = "0.1.0-canary.134",
+) -> dict:
     return {
         "schemaVersion": 1,
         "release": {
-            "version": "0.1.0-canary.134",
+            "version": version,
             "gitSha": "abc123",
             "createdAt": "2026-06-09T00:00:00.000Z",
         },
@@ -139,8 +146,222 @@ def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
         ]
     ]
     assert runner.RELEASE_EVIDENCE["manifestSha256"] == manifest_sha
+    assert runner.RELEASE_EVIDENCE["trust"] == {
+        "policy": "allow_unsigned_canary",
+        "signatureRequired": False,
+        "signatureVerified": False,
+        "unsignedCanaryAllowed": True,
+    }
     assert runner.RELEASE_EVIDENCE["bundles"][0]["contains"] == ["graphql-http", "web"]
     assert {artifact["source"] for artifact in runner.RELEASE_EVIDENCE["artifacts"]} == {"bundle"}
+
+
+def test_sync_release_artifacts_requires_signature_for_non_canary_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    release_dir = tmp_path / "release-work"
+    manifest_path = tmp_path / "thinkwork-release.json"
+    bundle_path = tmp_path / "platform-artifacts.tar.gz"
+    lambda_bytes = b"lambda-zip"
+    write_tar(bundle_path, {"lambdas/graphql-http.zip": lambda_bytes})
+    artifacts = [
+        {
+            "name": "graphql-http",
+            "type": "lambda",
+            "fileName": "graphql-http.zip",
+            "relativePath": "lambdas/graphql-http.zip",
+            "url": None,
+            "sha256": digest(lambda_bytes),
+            "sizeBytes": len(lambda_bytes),
+        }
+    ]
+    manifest_sha = write_manifest(
+        manifest_path,
+        release_manifest(
+            bundle_path,
+            runner.sha256_file(bundle_path),
+            artifacts,
+            version="1.0.0",
+        ),
+    )
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(runner, "RELEASE", release_dir)
+    monkeypatch.setattr(runner, "MANIFEST", release_dir / "thinkwork-release.json")
+    monkeypatch.setattr(runner, "RELEASE_EVIDENCE", {})
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", file_url(manifest_path))
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", manifest_sha)
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "1.0.0")
+    monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
+
+    with pytest.raises(RuntimeError, match="Unsigned release manifest is only allowed"):
+        runner.sync_release_artifacts()
+
+    assert calls == []
+    assert runner.RELEASE_EVIDENCE == {}
+
+
+def test_sync_release_artifacts_require_signature_policy_fails_without_signature_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    release_dir = tmp_path / "release-work"
+    manifest_path = tmp_path / "custom-manifest.json"
+    bundle_path = tmp_path / "platform-artifacts.tar.gz"
+    lambda_bytes = b"lambda-zip"
+    write_tar(bundle_path, {"lambdas/graphql-http.zip": lambda_bytes})
+    artifacts = [
+        {
+            "name": "graphql-http",
+            "type": "lambda",
+            "fileName": "graphql-http.zip",
+            "relativePath": "lambdas/graphql-http.zip",
+            "url": None,
+            "sha256": digest(lambda_bytes),
+            "sizeBytes": len(lambda_bytes),
+        }
+    ]
+    manifest_sha = write_manifest(
+        manifest_path,
+        release_manifest(bundle_path, runner.sha256_file(bundle_path), artifacts),
+    )
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(runner, "RELEASE", release_dir)
+    monkeypatch.setattr(runner, "MANIFEST", release_dir / "thinkwork-release.json")
+    monkeypatch.setattr(runner, "RELEASE_EVIDENCE", {})
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", file_url(manifest_path))
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", manifest_sha)
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_TRUST_POLICY", "require_signature")
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "0.1.0-canary.134")
+    monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
+
+    with pytest.raises(RuntimeError, match="signature URL is required"):
+        runner.sync_release_artifacts()
+
+    assert calls == []
+    assert runner.RELEASE_EVIDENCE == {}
+
+
+def test_sync_release_artifacts_verifies_detached_manifest_signature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    release_dir = tmp_path / "release-work"
+    manifest_path = tmp_path / "thinkwork-release.json"
+    signature_path = tmp_path / "thinkwork-release.sig.json"
+    bundle_path = tmp_path / "platform-artifacts.tar.gz"
+    private_key_path = tmp_path / "private.pem"
+    public_key_path = tmp_path / "public.pem"
+    canonical_path = tmp_path / "manifest.canonical.json"
+    signature_bytes_path = tmp_path / "thinkwork-release.sig"
+    lambda_bytes = b"lambda-zip"
+    write_tar(bundle_path, {"lambdas/graphql-http.zip": lambda_bytes})
+    artifacts = [
+        {
+            "name": "graphql-http",
+            "type": "lambda",
+            "fileName": "graphql-http.zip",
+            "relativePath": "lambdas/graphql-http.zip",
+            "url": None,
+            "sha256": digest(lambda_bytes),
+            "sizeBytes": len(lambda_bytes),
+        }
+    ]
+    manifest = release_manifest(
+        bundle_path,
+        runner.sha256_file(bundle_path),
+        artifacts,
+        version="1.0.0",
+    )
+    manifest["signing"]["acceptedKeyIds"] = ["test-key"]
+    manifest_sha = write_manifest(manifest_path, manifest)
+    canonical_path.write_bytes(runner.stable_json_bytes(manifest))
+
+    subprocess.run(
+        ["openssl", "genpkey", "-algorithm", "Ed25519", "-out", str(private_key_path)],
+        check=True,
+    )
+    subprocess.run(
+        ["openssl", "pkey", "-in", str(private_key_path), "-pubout", "-out", str(public_key_path)],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "openssl",
+            "pkeyutl",
+            "-sign",
+            "-rawin",
+            "-inkey",
+            str(private_key_path),
+            "-in",
+            str(canonical_path),
+            "-out",
+            str(signature_bytes_path),
+        ],
+        check=True,
+    )
+    signature_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "algorithm": "ed25519",
+                "keyId": "test-key",
+                "manifestSha256": runner.release_manifest_sha256(manifest),
+                "signedAt": "2026-06-09T00:00:00.000Z",
+                "notBefore": "2026-06-09T00:00:00.000Z",
+                "expiresAt": "9999-12-31T23:59:59.999Z",
+                "signature": base64.b64encode(signature_bytes_path.read_bytes()).decode("ascii"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(runner, "RELEASE", release_dir)
+    monkeypatch.setattr(runner, "MANIFEST", release_dir / "thinkwork-release.json")
+    monkeypatch.setattr(runner, "RELEASE_EVIDENCE", {})
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", file_url(manifest_path))
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", manifest_sha)
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL", file_url(signature_path))
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_TRUST_POLICY", "require_signature")
+    monkeypatch.setenv(
+        "THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON",
+        json.dumps(
+            [
+                {
+                    "keyId": "test-key",
+                    "publicKeyPem": public_key_path.read_text(encoding="utf-8"),
+                }
+            ]
+        ),
+    )
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "1.0.0")
+    monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
+
+    runner.sync_release_artifacts()
+
+    assert calls == [
+        [
+            "aws",
+            "s3",
+            "cp",
+            str(release_dir / "lambdas/graphql-http.zip"),
+            "s3://thinkwork-artifacts/releases/1.0.0/lambdas/graphql-http.zip",
+        ]
+    ]
+    assert runner.RELEASE_EVIDENCE["trust"] == {
+        "policy": "require_signature",
+        "signatureRequired": True,
+        "signatureVerified": True,
+        "unsignedCanaryAllowed": False,
+        "keyId": "test-key",
+        "signatureUrl": file_url(signature_path),
+    }
 
 
 def test_push_database_schema_updates_existing_db_with_platform_migrations(
