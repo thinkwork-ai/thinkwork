@@ -29,6 +29,7 @@ This kit fills the gap.
 | `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                               |
 | `spaces-runbook-smoke.mjs`                | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback. |
 | `foundation-bootstrap-smoke.mjs`          | GitHub-free foundation bootstrap smoke. Dry-run reports required endpoint/evidence inputs; live mode verifies generated Spaces/API/Auth/profile/control-plane outputs and emits a support evidence envelope.                                |
+| `deployment-profile-binding-smoke.mjs`    | Deployment profile binding smoke. Dry-run reports profile requirements; live mode validates runtime-config-backed web, desktop, and mobile profile binding without recording credential material.                                           |
 | `deployment-evidence.mjs`                 | Shared JSON evidence envelope writer/uploader for foundation and managed-app smokes. Writes locally or uploads to S3 only when explicitly configured.                                                                                       |
 | `knowledge-graph-thread-ingest-smoke.mjs` | Cognee Knowledge Graph smoke. Dry-run reports required live-mode configuration; live mode starts a manual thread ingest, polls the run, and verifies table/graph/detail GraphQL reads from the normalized snapshot.                         |
 | `twenty-managed-app-smoke.mjs`            | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                    |
@@ -207,6 +208,32 @@ SMOKE_ENABLE_FOUNDATION_BOOTSTRAP=1 \
   SMOKE_EVIDENCE_FILE=/tmp/foundation-smoke.json \
   node scripts/smoke/foundation-bootstrap-smoke.mjs
 ```
+
+## Deployment profile binding smoke
+
+The deployment profile binding smoke is read-only and dry-run by default:
+
+```sh
+node scripts/smoke/deployment-profile-binding-smoke.mjs
+
+pnpm --filter @thinkwork/deployment-profile build
+SMOKE_ENABLE_DEPLOYMENT_PROFILE_BINDING=1 \
+  SMOKE_SPACES_URL=https://customer.example.com \
+  SMOKE_EVIDENCE_FILE=/tmp/deployment-profile-binding-smoke.json \
+  node scripts/smoke/deployment-profile-binding-smoke.mjs
+```
+
+Live mode reads `thinkwork-runtime-config.json`, builds the canonical v1
+deployment profile through `@thinkwork/deployment-profile`, validates it, and
+checks that web, desktop, and mobile binding snapshots all target the same
+deployment id, stage, region, Auth, API, and AppSync endpoints. The smoke fails
+if the generated profile or evidence contains API keys, passwords, AWS keys,
+tokens, credential material, or secret payload fields.
+
+Use this smoke after authority transfer or release update to prove that a
+universal client can bind to the selected environment by profile. It does not
+replace a human desktop/mobile launch test; it proves the profile contract that
+those clients consume.
 
 ## Knowledge Graph thread ingest smoke
 
