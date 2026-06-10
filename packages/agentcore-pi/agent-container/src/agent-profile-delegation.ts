@@ -19,6 +19,7 @@ import {
   runCompiledAgentProfile,
   type AgentLoopPolicy,
   type AgentProfileConfig,
+  type AgentProfileHandoffQuestion,
   type CompiledAgentProfileRunRequest,
   type ProfileChildRunResult,
   type ProfileChildRunner,
@@ -26,6 +27,7 @@ import {
 import { getMcpAgentToolIdentity } from "./mcp.js";
 import type { McpToolRegistry } from "./mcp-registry.js";
 import type { WorkspaceSkill } from "./runtime/workspace-skills.js";
+import type { ResumeDelegationContext } from "./user-question-context.js";
 
 export interface AgentProfileSlashCommand {
   profileSlug: string;
@@ -51,6 +53,14 @@ export interface ProfileDelegationToolOptions {
   runLoop?: typeof runAgentLoop;
   emitActivity?: (event: ActivityEmitEvent) => void;
   now?: () => Date;
+  /** R21 — eval mode has no ask_user_question tool: a needs_clarification
+   *  handoff converts immediately to a best-judgment re-invoke. */
+  evalMode?: boolean;
+  /** R20 — delegation_context carried by this turn's pending-question
+   *  resume payload (parsed in user-question-context.ts). A re-escalation
+   *  for the same profile+task with escalationCount >= 1 converts to a
+   *  best-judgment re-invoke instead of another ask. */
+  resumeDelegationContext?: ResumeDelegationContext | null;
 }
 
 function asString(value: unknown): string {
@@ -245,7 +255,7 @@ function profileSystemPrompt(request: CompiledAgentProfileRunRequest): string {
     request.instructions,
     [
       "Run a closed specialist loop for only the delegated task:",
-      "1. Discovery - identify the facts, files, tools, or context needed.",
+      "1. Discovery - identify the facts, files, tools, or context needed. If the request is ambiguous on a decision that changes the outcome, hand off with Verdict: needs_clarification instead of assuming; surface ALL clarification needs in that one handoff (max 4 questions) - you get one escalation per delegation.",
       "2. Planning - choose a bounded approach before using tools.",
       "3. Execution - do the delegated work with only your configured capabilities.",
       "4. Verification - act as the internal Verifier/Reviewer for this profile run. Check the work against the delegated task, evidence, constraints, and user-visible quality bar.",
@@ -274,11 +284,16 @@ function profileSystemPrompt(request: CompiledAgentProfileRunRequest): string {
       .join("\n"),
     [
       "Handoff contract for the parent Agent:",
-      "Verdict: pass | revise | fail",
+      "Verdict: pass | revise | fail | needs_clarification",
       "Summary: one concise paragraph with the outcome.",
       "Evidence: short bullet list of sources, files, tool outputs, or checks.",
       "Confidence: low | medium | high",
       "Feedback: required only for revise or fail.",
+      "Questions: required only for needs_clarification - a single-line JSON array of 1-4 questions, each " +
+        '{"question":"...","header":"...","options":[{"label":"...","description":"..."}],"multiSelect":false}. ' +
+        'Header max 12 chars; 2-4 options per question; append " (Recommended)" to exactly one option label ' +
+        "per question when you have a preferred answer. Example:",
+      'Questions: [{"question":"Which environment should this target?","header":"Env","options":[{"label":"Staging (Recommended)","description":"Safe default."},{"label":"Production","description":"Live traffic."}],"multiSelect":false}]',
     ].join("\n"),
     "A verifier verdict is required for every Agent Profile run, even when no external Reviewer profile is requested. The external Reviewer profile is an additional gate, not the only verification step.",
     "The parent Agent owns the final user-facing response. Do not answer the user directly unless the delegated task explicitly asks for final-response copy.",
@@ -525,6 +540,212 @@ export async function executeAgentProfileDelegation(input: {
   });
 }
 
+/** An unconverted needs_clarification escalation the PARENT must handle
+ *  (answer from context and re-delegate, or ask_user_question). */
+export interface PendingClarificationEscalation {
+  profileSlug: string;
+  profileName: string;
+  /** The delegated task to record as delegation context (chain paths pass
+   *  the unwrapped base task; tool paths pass the tool's task argument). */
+  task: string;
+  questions: AgentProfileHandoffQuestion[];
+  /** The escalation count the parent must pass to ask_user_question. */
+  escalationCount: number;
+}
+
+export interface AgentProfileDelegationOutcome {
+  /** Evidence for the FINAL run (the best-judgment re-invoke when a
+   *  conversion happened). */
+  evidence: AgentProfileRunRecord;
+  /** Every run executed for this delegation, in order (1, or 2 after a
+   *  conversion re-invoke). */
+  runs: AgentProfileRunRecord[];
+  /** Present only when a needs_clarification handoff was NOT converted —
+   *  the chain must unwind and the parent must handle it. */
+  clarification?: PendingClarificationEscalation;
+  /** Why a needs_clarification handoff was converted to a best-judgment
+   *  re-invoke (R20 budget / R21 eval mode). */
+  clarificationConversion?: "eval_mode" | "escalation_budget";
+  /** True when the re-invoke ALSO handed off needs_clarification. Documented
+   *  choice: treated as a best-effort completion — the second run's evidence
+   *  is returned as the final handoff (goal status clarification_requested,
+   *  never failed) and no further re-invokes or asks happen. */
+  clarificationBestEffort?: boolean;
+}
+
+function normalizedTaskForMatch(task: string): string {
+  return task.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** Same-delegation match for the R20 budget. The re-delegated task embeds
+ *  the original task plus the user's answers, so equality is too strict:
+ *  profile slugs must match and one normalized task must contain the other. */
+function matchesResumeDelegation(input: {
+  resume: ResumeDelegationContext;
+  profileSlug: string;
+  task: string;
+}): boolean {
+  if (
+    input.resume.profileSlug.toLowerCase() !== input.profileSlug.toLowerCase()
+  ) {
+    return false;
+  }
+  const original = normalizedTaskForMatch(input.resume.originalTask);
+  const current = normalizedTaskForMatch(input.task);
+  if (!original || !current) return false;
+  return (
+    original === current ||
+    current.includes(original) ||
+    original.includes(current)
+  );
+}
+
+function clarificationConversionReason(input: {
+  options: ProfileDelegationToolOptions;
+  profileSlug: string;
+  task: string;
+}): "eval_mode" | "escalation_budget" | undefined {
+  if (input.options.evalMode === true) return "eval_mode";
+  const resume = input.options.resumeDelegationContext;
+  if (
+    resume &&
+    resume.escalationCount >= 1 &&
+    matchesResumeDelegation({
+      resume,
+      profileSlug: input.profileSlug,
+      task: input.task,
+    })
+  ) {
+    return "escalation_budget";
+  }
+  return undefined;
+}
+
+function renderClarificationQuestionList(
+  questions: readonly AgentProfileHandoffQuestion[],
+): string {
+  return questions
+    .map((question, index) => `${index + 1}. ${question.question}`)
+    .join("\n");
+}
+
+/** Best-judgment re-invoke task (mirrors the retrySpecialistTask injected-text
+ *  pattern in server.ts). Used for R20 budget exhaustion and R21 eval mode. */
+export function bestJudgmentClarificationTask(input: {
+  baseTask: string;
+  specialist: Pick<AgentProfileConfig, "name">;
+  questions: readonly AgentProfileHandoffQuestion[];
+}): string {
+  return [
+    `Original user request:\n${input.baseTask}`,
+    `You handed off needs_clarification with these questions:\n${renderClarificationQuestionList(input.questions)}`,
+    `User clarification is not available for this run. Your task as ${input.specialist.name}: proceed on your best judgment - choose the most reasonable interpretation for each open question (prefer any option you marked Recommended), state the assumptions you made in your handoff Summary, and complete the delegated work. Do not hand off needs_clarification again.`,
+  ].join("\n\n");
+}
+
+/** Parent-facing instruction surfaced with an unconverted escalation, via the
+ *  delegation tool result (tool path) or the orchestration's parent message
+ *  (chain path). The delegationContext keys (profileSlug / originalTask /
+ *  escalationCount) are EXACTLY what the U4 resume renderer reads back. */
+export function clarificationEscalationInstruction(
+  clarification: PendingClarificationEscalation,
+): string {
+  const delegationContext = JSON.stringify({
+    profileSlug: clarification.profileSlug,
+    originalTask: clarification.task,
+    escalationCount: clarification.escalationCount,
+  });
+  return [
+    `The '${clarification.profileSlug}' Agent Profile stopped with Verdict: needs_clarification and the delegation chain was terminated.`,
+    `Delegated task: ${clarification.task}`,
+    `Specialist questions (JSON):\n${JSON.stringify(clarification.questions)}`,
+    "First, answer any of these questions you can from the conversation, workspace, or memory. If ALL are answerable, do NOT ask the user - re-delegate to the same profile now with the answers included in the task.",
+    `Otherwise, call ask_user_question with the remaining questions (consolidate them with any open questions of your own; max 4 total) and pass delegationContext exactly as: ${delegationContext}. After the user answers, re-delegate to '${clarification.profileSlug}' with the answers. You get one clarification cycle for this delegation.`,
+  ].join("\n");
+}
+
+const BEST_EFFORT_CLARIFICATION_NOTE =
+  "The specialist asked for clarification again after a proceed-on-best-" +
+  "judgment instruction; treat its handoff as best-effort output and proceed.";
+
+/**
+ * Clarification-aware delegation (plan 005 U6). Runs the profile once; on a
+ * needs_clarification handoff either surfaces the escalation to the caller
+ * (interactive first escalation) or converts it to ONE best-judgment
+ * re-invoke (R20 re-escalation budget / R21 eval mode). Clarification cycles
+ * never consume the reviewLoops budget — the conversion re-invoke happens
+ * here, outside the orchestration's review-loop counter.
+ */
+export async function runAgentProfileDelegationWithClarification(input: {
+  options: ProfileDelegationToolOptions;
+  profileSlug: string;
+  task: string;
+  /** Task recorded in the surfaced delegation context; chain orchestration
+   *  passes the unwrapped base task. Defaults to `task`. */
+  delegationTaskForContext?: string;
+  requestedOverrides?: Record<string, unknown>;
+}): Promise<AgentProfileDelegationOutcome> {
+  const first = await executeAgentProfileDelegation({
+    options: input.options,
+    profileSlug: input.profileSlug,
+    task: input.task,
+    requestedOverrides: input.requestedOverrides,
+  });
+  if (first.handoff?.verdict !== "needs_clarification") {
+    return { evidence: first, runs: [first] };
+  }
+  const questions = first.handoff.questions ?? [];
+  const contextTask = input.delegationTaskForContext ?? input.task;
+  const conversion = clarificationConversionReason({
+    options: input.options,
+    profileSlug: input.profileSlug,
+    task: contextTask,
+  });
+  if (!conversion) {
+    const resume = input.options.resumeDelegationContext;
+    const priorCount =
+      resume &&
+      matchesResumeDelegation({
+        resume,
+        profileSlug: input.profileSlug,
+        task: contextTask,
+      })
+        ? resume.escalationCount
+        : 0;
+    return {
+      evidence: first,
+      runs: [first],
+      clarification: {
+        profileSlug: input.profileSlug,
+        profileName: first.profileName,
+        task: contextTask,
+        questions,
+        escalationCount: priorCount + 1,
+      },
+    };
+  }
+
+  // Converted: one best-judgment re-invoke, outside any review-loop budget.
+  const second = await executeAgentProfileDelegation({
+    options: input.options,
+    profileSlug: input.profileSlug,
+    task: bestJudgmentClarificationTask({
+      baseTask: input.task,
+      specialist: { name: first.profileName },
+      questions,
+    }),
+    requestedOverrides: input.requestedOverrides,
+  });
+  return {
+    evidence: second,
+    runs: [first, second],
+    clarificationConversion: conversion,
+    ...(second.handoff?.verdict === "needs_clarification"
+      ? { clarificationBestEffort: true }
+      : {}),
+  };
+}
+
 export function buildAgentProfileDelegationTool(
   options: ProfileDelegationToolOptions,
 ): AgentTool<any> | null {
@@ -552,7 +773,7 @@ export function buildAgentProfileDelegationTool(
           ([key]) => key !== "profileSlug" && key !== "task",
         ),
       );
-      const evidence = await executeAgentProfileDelegation({
+      const outcome = await runAgentProfileDelegationWithClarification({
         options,
         profileSlug,
         task,
@@ -561,14 +782,35 @@ export function buildAgentProfileDelegationTool(
             ? requestedOverrides
             : undefined,
       });
+      const evidence = outcome.evidence;
+      const body: Record<string, unknown> = {
+        agent_profile_run: evidence,
+        handoff_summary: evidence.handoffSummary,
+      };
+      if (outcome.clarification) {
+        body.needs_clarification = {
+          questions: outcome.clarification.questions,
+          delegation_context: {
+            profileSlug: outcome.clarification.profileSlug,
+            originalTask: outcome.clarification.task,
+            escalationCount: outcome.clarification.escalationCount,
+          },
+          instruction: clarificationEscalationInstruction(
+            outcome.clarification,
+          ),
+        };
+      }
+      if (outcome.clarificationConversion) {
+        body.clarification_conversion = outcome.clarificationConversion;
+      }
+      if (outcome.clarificationBestEffort) {
+        body.clarification_note = BEST_EFFORT_CLARIFICATION_NOTE;
+      }
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
-              agent_profile_run: evidence,
-              handoff_summary: evidence.handoffSummary,
-            }),
+            text: JSON.stringify(body),
           },
         ],
         details: {

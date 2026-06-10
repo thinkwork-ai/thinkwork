@@ -582,4 +582,180 @@ describe("agent profile adapter", () => {
       "chain-of-thought",
     );
   });
+
+  it("parses needs_clarification with questions from the JSON record form", async () => {
+    const evidence = await runCompiledAgentProfile({
+      request: compile(),
+      runner: {
+        runProfile: async () => ({
+          content: "Clarification needed before research can proceed.",
+          status: "completed",
+          handoff: {
+            verdict: "needs_clarification",
+            summary: "Two scope decisions change the outcome.",
+            questions: [
+              {
+                question: "Which market should the research cover?",
+                header: "Market",
+                options: [
+                  { label: "US only (Recommended)", description: "Fastest." },
+                  { label: "Global", description: "Broader but slower." },
+                ],
+                multiSelect: false,
+              },
+              {
+                question: "Include paid sources?",
+                header: "Sources",
+                options: [
+                  { label: "Free only", description: "No subscriptions." },
+                  { label: "Paid OK", description: "Use paid databases." },
+                ],
+              },
+            ],
+          },
+        }),
+      },
+      now: vi
+        .fn()
+        .mockReturnValueOnce(new Date("2026-06-09T10:00:00.000Z"))
+        .mockReturnValueOnce(new Date("2026-06-09T10:00:01.000Z")),
+    });
+
+    expect(evidence.status).toBe("completed");
+    expect(evidence.handoff).toMatchObject({
+      verdict: "needs_clarification",
+      summary: "Two scope decisions change the outcome.",
+    });
+    expect(evidence.handoff?.questions).toHaveLength(2);
+    expect(evidence.handoff?.questions?.[0]).toEqual({
+      question: "Which market should the research cover?",
+      header: "Market",
+      options: [
+        { label: "US only (Recommended)", description: "Fastest." },
+        { label: "Global", description: "Broader but slower." },
+      ],
+    });
+    // Status maps to the clarification analog, never failed.
+    expect(evidence.loopEvidence.goalState.status).toBe(
+      "clarification_requested",
+    );
+    expect(evidence.loopEvidence.phases).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: "verification",
+          status: "clarification_requested",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(evidence.loopEvidence.goalState)).not.toContain(
+      '"status":"failed"',
+    );
+  });
+
+  it("parses needs_clarification with a Questions: JSON array from labeled text", async () => {
+    const questionsJson = JSON.stringify([
+      {
+        question: "Which environment should this target?",
+        header: "Env",
+        options: [
+          { label: "Staging (Recommended)", description: "Safe default." },
+          { label: "Production", description: "Live traffic." },
+        ],
+        multiSelect: false,
+      },
+    ]);
+    const evidence = await runCompiledAgentProfile({
+      request: compile(),
+      runner: {
+        runProfile: async () => ({
+          content: [
+            "Verdict: needs_clarification",
+            "Summary: The target environment changes the rollout plan.",
+            `Questions: ${questionsJson}`,
+            "Confidence: high",
+          ].join("\n"),
+          status: "completed",
+        }),
+      },
+      now: vi
+        .fn()
+        .mockReturnValueOnce(new Date("2026-06-09T10:01:00.000Z"))
+        .mockReturnValueOnce(new Date("2026-06-09T10:01:01.000Z")),
+    });
+
+    expect(evidence.handoff).toMatchObject({
+      verdict: "needs_clarification",
+      summary: "The target environment changes the rollout plan.",
+      confidence: "high",
+    });
+    expect(evidence.handoff?.questions).toEqual([
+      {
+        question: "Which environment should this target?",
+        header: "Env",
+        options: [
+          { label: "Staging (Recommended)", description: "Safe default." },
+          { label: "Production", description: "Live traffic." },
+        ],
+      },
+    ]);
+    expect(evidence.loopEvidence.goalState.status).toBe(
+      "clarification_requested",
+    );
+  });
+
+  it("defaults the summary when a labeled needs_clarification handoff omits it", async () => {
+    const evidence = await runCompiledAgentProfile({
+      request: compile(),
+      runner: {
+        runProfile: async () => ({
+          content: [
+            "Verdict: needs_clarification",
+            'Questions: [{"question":"Which quarter?","header":"Quarter","options":[{"label":"Q1","description":"Jan-Mar."},{"label":"Q2","description":"Apr-Jun."}]}]',
+          ].join("\n"),
+          status: "completed",
+        }),
+      },
+      now: vi
+        .fn()
+        .mockReturnValueOnce(new Date("2026-06-09T10:02:00.000Z"))
+        .mockReturnValueOnce(new Date("2026-06-09T10:02:01.000Z")),
+    });
+
+    expect(evidence.handoff?.verdict).toBe("needs_clarification");
+    expect(evidence.handoff?.summary).toBe(
+      "Specialist requested clarification before proceeding.",
+    );
+    expect(evidence.handoff?.questions).toHaveLength(1);
+  });
+
+  it("caps parsed clarification questions at four", async () => {
+    const questions = Array.from({ length: 6 }, (_, index) => ({
+      question: `Question ${index + 1}?`,
+      header: `Q${index + 1}`,
+      options: [
+        { label: "Yes", description: "Yes." },
+        { label: "No", description: "No." },
+      ],
+    }));
+    const evidence = await runCompiledAgentProfile({
+      request: compile(),
+      runner: {
+        runProfile: async () => ({
+          content: "Needs clarification.",
+          status: "completed",
+          handoff: {
+            verdict: "needs_clarification",
+            summary: "Too many open questions.",
+            questions,
+          },
+        }),
+      },
+      now: vi
+        .fn()
+        .mockReturnValueOnce(new Date("2026-06-09T10:03:00.000Z"))
+        .mockReturnValueOnce(new Date("2026-06-09T10:03:01.000Z")),
+    });
+
+    expect(evidence.handoff?.questions).toHaveLength(4);
+  });
 });

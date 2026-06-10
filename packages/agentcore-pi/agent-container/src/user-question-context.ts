@@ -235,21 +235,40 @@ function renderQuestionEcho(
   return lines;
 }
 
-function renderDelegationInstruction(
+/** Typed view of a pending-question row's delegation_context (specialist
+ *  escalation flow, plan 005 U6). Camel and snake key forms both flow
+ *  through intake untouched, so both are read. */
+export interface ResumeDelegationContext {
+  profileSlug: string;
+  originalTask: string;
+  escalationCount: number;
+}
+
+export function resumeDelegationContextDetails(
   delegationContext: Record<string, unknown>,
-): string {
-  const profile =
+): ResumeDelegationContext {
+  const profileSlug =
     asTrimmedString(delegationContext.profileSlug) ||
-    asTrimmedString(delegationContext.profile_slug) ||
-    "(unknown profile)";
+    asTrimmedString(delegationContext.profile_slug);
   const originalTask =
     asTrimmedString(delegationContext.originalTask) ||
-    asTrimmedString(delegationContext.original_task) ||
-    "(original task not recorded)";
+    asTrimmedString(delegationContext.original_task);
   const rawCount =
     delegationContext.escalationCount ?? delegationContext.escalation_count;
   const escalationCount =
-    typeof rawCount === "number" && Number.isFinite(rawCount) ? rawCount : 0;
+    typeof rawCount === "number" && Number.isFinite(rawCount)
+      ? Math.trunc(rawCount)
+      : 0;
+  return { profileSlug, originalTask, escalationCount };
+}
+
+function renderDelegationInstruction(
+  delegationContext: Record<string, unknown>,
+): string {
+  const details = resumeDelegationContextDetails(delegationContext);
+  const profile = details.profileSlug || "(unknown profile)";
+  const originalTask = details.originalTask || "(original task not recorded)";
+  const escalationCount = details.escalationCount;
   return (
     `You asked this on behalf of a delegated '${profile}' task: ` +
     `${originalTask}. Re-delegate to that profile now, passing these ` +
