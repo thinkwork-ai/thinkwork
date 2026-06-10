@@ -114,7 +114,7 @@ output "deployment_control_plane_enabled" {
 
 output "deployment_state_machine_arn" {
   description = "Deployment orchestration Step Functions state machine ARN."
-  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].state_machine_arn : null
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].state_machine_arn : (var.deployment_state_machine_arn != "" ? var.deployment_state_machine_arn : null)
 }
 
 output "deployment_state_machine_name" {
@@ -134,7 +134,7 @@ output "deployment_runner_project_arn" {
 
 output "deployment_evidence_bucket_name" {
   description = "S3 bucket for deployment evidence artifacts."
-  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].evidence_bucket_name : null
+  value       = var.enable_deployment_control_plane ? module.deployment_control_plane[0].evidence_bucket_name : (var.deployment_evidence_bucket != "" ? var.deployment_evidence_bucket : null)
 }
 
 output "deployment_ssm_prefix" {

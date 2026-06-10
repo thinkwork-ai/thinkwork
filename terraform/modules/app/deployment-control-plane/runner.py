@@ -1107,6 +1107,11 @@ def write_runner_files(payload, runner_secrets):
         "deployment_release_manifest_signature_url": release_manifest_signature_url,
         "deployment_release_manifest_trust_policy": release_manifest_trust_policy_value,
         "deployment_release_manifest_trusted_keys_json": release_manifest_trusted_keys_json,
+        "deployment_state_machine_arn": os.environ.get(
+            "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN",
+            "",
+        ),
+        "deployment_evidence_bucket": os.environ.get("THINKWORK_EVIDENCE_BUCKET", ""),
         "deployment_terraform_module_source": module_source,
         "deployment_terraform_module_version": terraform_module_version,
         "agentcore_pi_source_image_uri": safe_get(
@@ -1238,6 +1243,14 @@ variable "deployment_release_manifest_trusted_keys_json" {{
   type = string
 }}
 
+variable "deployment_state_machine_arn" {{
+  type = string
+}}
+
+variable "deployment_evidence_bucket" {{
+  type = string
+}}
+
 variable "deployment_terraform_module_source" {{
   type = string
 }}
@@ -1277,6 +1290,8 @@ module "thinkwork" {{
   enable_slack_workspace_app = false
 
   enable_deployment_control_plane    = false
+  deployment_state_machine_arn        = var.deployment_state_machine_arn
+  deployment_evidence_bucket          = var.deployment_evidence_bucket
   deployment_release_version         = var.deployment_release_version
   deployment_release_manifest_url    = var.deployment_release_manifest_url
   deployment_release_manifest_sha256 = var.deployment_release_manifest_sha256
