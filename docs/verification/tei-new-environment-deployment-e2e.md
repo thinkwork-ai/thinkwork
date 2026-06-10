@@ -122,6 +122,22 @@ Runtime smoke evidence:
   explicit skip because Twenty CRM is not provisioned for this base TEI stage;
   local evidence:
   `/tmp/thinkwork-tei-smoke-proof/twenty-smoke-148.json`.
+- `node scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed in
+  live read-only diagnostic mode on 2026-06-10 with evidence written to
+  `/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-148.json`:
+  - the selected TEI release manifest URL/SHA from SSM matched the downloaded
+    `v0.1.0-canary.148` manifest;
+  - Cognee and Twenty CRM descriptors exist in `managedApps`;
+  - both descriptors point at their Terraform module source/version and required
+    smoke command paths;
+  - both smoke command paths exist in this checkout;
+  - `descriptorReady=true`, but `deployReady=false` because the `.148`
+    `runtimeImages` list does not include the required `cognee` or `twenty`
+    image entries.
+- Strict deploy-ready mode failed closed as expected:
+  `SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1` reported
+  `cognee: required image cognee is not present in runtimeImages` and
+  `twenty: required image twenty is not present in runtimeImages`.
 - `node scripts/smoke/deployment-teardown-readiness-smoke.mjs` passed in live
   read-only mode on 2026-06-10 with evidence written to
   `/tmp/thinkwork-tei-smoke-proof/deployment-teardown-readiness-148.json`:
@@ -476,6 +492,36 @@ Use the deployed Spaces UI first:
 
 Then run read-only smokes where their live-mode prerequisites are available.
 
+Before enabling either app, prove the selected release has deployable managed
+app descriptors and images:
+
+```bash
+SMOKE_ENABLE_MANAGED_APP_CONTROLLER_READINESS=1 \
+AWS_PROFILE="$AWS_PROFILE" \
+AWS_REGION="$AWS_REGION" \
+SMOKE_STAGE="$THINKWORK_STAGE" \
+SMOKE_RELEASE_VERSION="$THINKWORK_RELEASE_VERSION" \
+SMOKE_MANIFEST_SHA256="$THINKWORK_MANIFEST_SHA256" \
+SMOKE_EVIDENCE_FILE=/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-148.json \
+node /Users/ericodom/Projects/thinkwork/scripts/smoke/managed-app-controller-readiness-smoke.mjs
+```
+
+For final optional-app acceptance, rerun with strict deploy readiness:
+
+```bash
+SMOKE_ENABLE_MANAGED_APP_CONTROLLER_READINESS=1 \
+SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1 \
+AWS_PROFILE="$AWS_PROFILE" \
+AWS_REGION="$AWS_REGION" \
+SMOKE_STAGE="$THINKWORK_STAGE" \
+node /Users/ericodom/Projects/thinkwork/scripts/smoke/managed-app-controller-readiness-smoke.mjs
+```
+
+Current `.148` result: descriptors are ready, but strict mode fails because the
+release manifest does not include `cognee` or `twenty` runtime image entries.
+Publish a release with those required images before treating Cognee/Twenty as
+deployable through the controller.
+
 Twenty CRM:
 
 ```bash
@@ -617,6 +663,8 @@ Use this table during the run:
 | Deployment profile contract smoke    | PASS on 2026-06-10     | Web/desktop/mobile binding snapshots target TEI from runtime config profile                   |
 | First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                                                                |
 | Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                                                        |
+| Managed-app descriptor readiness     | PASS on 2026-06-10     | Cognee/Twenty descriptors and smoke contracts exist in `.148` release manifest                |
+| Managed-app deploy readiness         | BLOCKED                | `.148` manifest is missing required `cognee` and `twenty` runtime images                      |
 | Managed-app UI smoke                 | Partial                | Cognee/Twenty skip evidence captured for base install; full optional-app deploy smoke remains |
 | Desktop profile selection            | Partial                | Profile contract passes; desktop `.148` assets are available for user launch test             |
 | Mobile profile selection             | Partial                | Profile contract passes; mobile launch proof remains                                          |
