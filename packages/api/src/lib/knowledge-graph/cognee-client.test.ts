@@ -276,4 +276,101 @@ describe("CogneeClient", () => {
       "Cognee /api/v1/ontologies failed with 503: 503 Service Temporarily Unavailable",
     );
   });
+
+  it("rides through a transient 503 on the status endpoint and completes", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response(200, {
+          "11111111-1111-4111-8111-111111111111": "DATASET_PROCESSING_STARTED",
+        }),
+      )
+      .mockResolvedValueOnce(response(503, { detail: "Service Unavailable" }))
+      .mockResolvedValueOnce(response(503, { detail: "Service Unavailable" }))
+      .mockResolvedValueOnce(
+        response(200, {
+          "11111111-1111-4111-8111-111111111111":
+            "DATASET_PROCESSING_COMPLETED",
+        }),
+      );
+
+    vi.stubEnv("COGNEE_INDEX_POLL_MS", "1");
+    try {
+      const client = new CogneeClient({
+        endpoint: "http://cognee.local",
+        fetchFn,
+        retryDelayMs: 0,
+        retryAttempts: 1,
+      });
+      const status = await client.waitForDatasetIndexing(
+        "11111111-1111-4111-8111-111111111111",
+      );
+      expect(status.status).toBe("completed");
+      expect(status.rawStatus).toBe("DATASET_PROCESSING_COMPLETED");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("falls back to a graph probe when status stays unavailable past timeout", async () => {
+    // status endpoint always 503; the graph probe finds nodes (pipeline done)
+    const fetchFn = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (String(url).includes("/datasets/status")) {
+        return response(503, { detail: "Service Unavailable" });
+      }
+      if (String(url).includes("/graph")) {
+        return response(200, {
+          nodes: [{ id: "n1", label: "Acme", type: "Company" }],
+          edges: [],
+        });
+      }
+      return response(200, {});
+    });
+
+    vi.stubEnv("COGNEE_INDEX_POLL_MS", "1");
+    vi.stubEnv("COGNEE_INDEX_TIMEOUT_MS", "5");
+    try {
+      const client = new CogneeClient({
+        endpoint: "http://cognee.local",
+        fetchFn,
+        retryDelayMs: 0,
+        retryAttempts: 1,
+      });
+      const status = await client.waitForDatasetIndexing(
+        "11111111-1111-4111-8111-111111111111",
+      );
+      expect(status.status).toBe("completed");
+      expect(status.rawStatus).toBe("completed_via_graph_probe");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("throws past timeout when status is unavailable AND the graph is empty", async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (String(url).includes("/datasets/status")) {
+        return response(503, { detail: "Service Unavailable" });
+      }
+      if (String(url).includes("/graph")) {
+        return response(200, { nodes: [], edges: [] });
+      }
+      return response(200, {});
+    });
+
+    vi.stubEnv("COGNEE_INDEX_POLL_MS", "1");
+    vi.stubEnv("COGNEE_INDEX_TIMEOUT_MS", "5");
+    try {
+      const client = new CogneeClient({
+        endpoint: "http://cognee.local",
+        fetchFn,
+        retryDelayMs: 0,
+        retryAttempts: 1,
+      });
+      await expect(
+        client.waitForDatasetIndexing("11111111-1111-4111-8111-111111111111"),
+      ).rejects.toThrow(/did not complete|failed with 503/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
