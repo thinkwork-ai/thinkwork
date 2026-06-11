@@ -309,6 +309,91 @@ describe("deployment releases", () => {
   });
 });
 
+describe("deployment releases caching", () => {
+  const releasePayload = [
+    {
+      tag_name: "v0.1.0-canary.170",
+      name: "canary.170",
+      prerelease: true,
+      draft: false,
+      published_at: "2026-06-11T13:00:00Z",
+      html_url:
+        "https://github.com/thinkwork-ai/thinkwork/releases/tag/v0.1.0-canary.170",
+      assets: [
+        {
+          name: "thinkwork-release.json",
+          browser_download_url:
+            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.170/thinkwork-release.json",
+        },
+      ],
+    },
+  ];
+  const manifest = JSON.stringify({ schemaVersion: 1, version: "v170" });
+
+  it("serves the releases list and manifest digests from cache within the TTL", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(releasePayload))
+      .mockResolvedValueOnce(bytesResponse(manifest));
+
+    const first = await releasesMod.deploymentReleases(null, {}, {} as any, {
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    const second = await releasesMod.deploymentReleases(null, {}, {} as any, {
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+
+    expect(first).toHaveLength(1);
+    expect(second).toEqual(first);
+    // one list fetch + one manifest fetch total — the second query was
+    // served entirely from cache
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("serves the last good list when the GitHub fetch fails (rate limit)", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(releasePayload))
+      .mockResolvedValueOnce(bytesResponse(manifest))
+      .mockResolvedValue({ ok: false, status: 403 } as Response);
+
+    const first = await releasesMod.deploymentReleases(null, {}, {} as any, {
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    // Jump past the TTL so the next query re-fetches the list and hits the
+    // 403 — the cached list must be served instead of failing the panel.
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 6 * 60 * 1000);
+    try {
+      const stale = await releasesMod.deploymentReleases(null, {}, {} as any, {
+        fetch: fetchMock as unknown as typeof fetch,
+      });
+      expect(first).toHaveLength(1);
+      expect(stale).toEqual(first);
+      expect(consoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining("serving stale release list"),
+        expect.anything(),
+      );
+    } finally {
+      vi.useRealTimers();
+      consoleWarn.mockRestore();
+    }
+  });
+
+  it("still fails when GitHub is unavailable and no cache exists", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 403 } as Response);
+
+    await expect(
+      releasesMod.deploymentReleases(null, {}, {} as any, {
+        fetch: fetchMock as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow(/unable to load thinkwork releases/i);
+  });
+});
+
 function jsonResponse(body: unknown): Response {
   return {
     ok: true,
