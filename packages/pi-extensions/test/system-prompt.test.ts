@@ -138,9 +138,13 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     expect(prompt).toContain(
       "Do not ask when: the task has a single obvious path, the answer is already in the conversation/workspace/memory, or the question is purely cosmetic",
     );
-    // Batching rule.
+    // Batching rule — ONE decision per batch.
     expect(prompt).toContain(
-      "Batch every question for the current decision point into ONE call (max 4 questions); never ask sequentially what you can ask together",
+      "Ask about ONE decision at a time. A single call may carry up to 4 questions ONLY when they are facets of the same decision — never bundle unrelated decisions",
+    );
+    // Re-asks must go through the tool, never prose.
+    expect(prompt).toContain(
+      "NEVER write questions as a bulleted list or prose in your reply. If you still need answers — including follow-ups after the user answered a previous question — call `ask_user_question` again. A plain-text question list is a failure mode",
     );
     // " (Recommended)" convention.
     expect(prompt).toContain(
