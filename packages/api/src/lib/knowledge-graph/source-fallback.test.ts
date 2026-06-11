@@ -13,6 +13,7 @@ const emptySnapshot: NormalizedKnowledgeGraphSnapshot = {
     droppedEdgeCount: 3,
     structuralNodeCount: 4,
     unapprovedNodeCount: 0,
+    outOfScopeNodeCount: 0,
     isolatedNodeCount: 0,
     unapprovedRelationshipCount: 0,
     incompatibleRelationshipCount: 0,
