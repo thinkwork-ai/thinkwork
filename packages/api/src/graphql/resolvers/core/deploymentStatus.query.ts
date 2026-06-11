@@ -76,7 +76,7 @@ export const deploymentStatus = async (
     deploymentControllerArn: deploymentProfile.stateMachineArn,
     deploymentRunnerProjectName: deploymentProfile.runnerProjectName,
     deploymentEvidenceBucket: deploymentProfile.evidenceBucket,
-    bucketName: process.env.BUCKET_NAME || null,
+    bucketName: process.env.BUCKET_NAME || process.env.WORKSPACE_BUCKET || null,
     databaseEndpoint: process.env.DATABASE_HOST || null,
     ecrUrl: process.env.ECR_REPOSITORY_URL || null,
     adminUrl: process.env.ADMIN_URL || null,

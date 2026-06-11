@@ -235,6 +235,14 @@ export const db = getDb();
 // Chat Agent Invoke — resolved from SSM at cold start
 // ---------------------------------------------------------------------------
 
+export function deriveChatAgentInvokeFnArn(): string | null {
+  const stage = process.env.STAGE;
+  const accountId = process.env.AWS_ACCOUNT_ID;
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+  if (!stage || !accountId || !region) return null;
+  return `arn:aws:lambda:${region}:${accountId}:function:thinkwork-${stage}-api-chat-agent-invoke`;
+}
+
 let _chatAgentInvokeFnArn: string | null | undefined;
 export async function getChatAgentInvokeFnArn(): Promise<string | null> {
   if (_chatAgentInvokeFnArn !== undefined) return _chatAgentInvokeFnArn;
@@ -245,6 +253,16 @@ export async function getChatAgentInvokeFnArn(): Promise<string | null> {
   const envArn = process.env.CHAT_AGENT_INVOKE_FN_ARN;
   if (envArn) {
     _chatAgentInvokeFnArn = envArn;
+    return _chatAgentInvokeFnArn;
+  }
+
+  // Derive the ARN from the deterministic naming pattern Terraform uses.
+  // The dedicated env var was dropped to stay under Lambda's 4KB env limit
+  // (graphql-http sits at the ceiling); AWS_REGION is Lambda-provided and
+  // STAGE/AWS_ACCOUNT_ID are in the shared handler env.
+  const derived = deriveChatAgentInvokeFnArn();
+  if (derived) {
+    _chatAgentInvokeFnArn = derived;
     return _chatAgentInvokeFnArn;
   }
 

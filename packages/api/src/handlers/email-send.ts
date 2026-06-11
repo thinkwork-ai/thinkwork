@@ -22,7 +22,8 @@ import { deriveSpaceAddress } from "../lib/email/space-address.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 import { renderForEmail } from "../lib/channel-rendering/email-renderer.js";
 
-const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
+const THINKWORK_API_SECRET =
+  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 
 const db = getDb();
 

@@ -724,6 +724,7 @@ function signingSecret(): string {
     process.env.MCP_OAUTH_SIGNING_SECRET ||
     process.env.API_AUTH_SECRET ||
     process.env.THINKWORK_API_SECRET ||
+    process.env.API_AUTH_SECRET ||
     ""
   );
 }

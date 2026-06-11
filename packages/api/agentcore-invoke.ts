@@ -23,7 +23,8 @@ interface LambdaResult {
   body: string;
 }
 
-const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
+const THINKWORK_API_SECRET =
+  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
 const AGENTCORE_RUNTIME_SSM_PREFIX =
   process.env.AGENTCORE_RUNTIME_SSM_PREFIX || "";
