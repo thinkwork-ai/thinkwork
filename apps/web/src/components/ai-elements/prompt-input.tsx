@@ -37,7 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ChatStatus, FileUIPart } from "ai";
 import {
-  CornerDownLeftIcon,
+  ArrowUpIcon,
   ImageIcon,
   Loader2Icon,
   MicIcon,
@@ -1052,7 +1052,9 @@ export const PromptInputSubmit = ({
   children,
   ...props
 }: PromptInputSubmitProps) => {
-  let Icon = <CornerDownLeftIcon className="size-4" />;
+  // Bigger, bolder send arrow (button footprint is unchanged — it's set by
+  // `size` on InputGroupButton, not the glyph).
+  let Icon = <ArrowUpIcon className="size-5" strokeWidth={2.25} />;
 
   if (status === "submitted") {
     Icon = <Loader2Icon className="size-4 animate-spin" />;

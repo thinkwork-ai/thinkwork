@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { toast } from "sonner";
+import { useReportSidebarHealth } from "@/components/shell/sidebar-health";
 import {
   Anchor,
   Archive,
@@ -284,6 +285,29 @@ export function ChatSidebar() {
     pause: !tenantId || !searchOpen,
     requestPolicy: "cache-and-network",
   });
+
+  // The sidebar's data queries can fail transiently (e.g. "Requester user
+  // identity required" before the Cognito identity settles). Instead of
+  // printing a dramatic red GraphQL error in the thread list, we surface a
+  // subtle warning + Retry on the footer Settings item via SidebarHealth.
+  const reportSidebarHealth = useReportSidebarHealth();
+  const refreshSidebarData = useCallback(() => {
+    reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
+    reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
+    reexecuteSpacesQuery({ requestPolicy: "network-only" });
+  }, [
+    reexecuteRecentThreadsQuery,
+    reexecutePinnedThreadsQuery,
+    reexecuteSpacesQuery,
+  ]);
+  const sidebarHasError = Boolean(recentError || pinnedError || spacesError);
+  useEffect(() => {
+    reportSidebarHealth({
+      hasError: sidebarHasError,
+      message: sidebarHasError ? "Couldn't sync your threads." : null,
+      refresh: refreshSidebarData,
+    });
+  }, [sidebarHasError, refreshSidebarData, reportSidebarHealth]);
 
   const persistThreadRead = useCallback(
     (threadId: string) => {
@@ -806,11 +830,7 @@ export function ChatSidebar() {
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
         <SidebarGroup className="px-3 group-data-[collapsible=icon]:hidden">
-          {recentError ? (
-            <p className="rounded-md border border-destructive/40 px-2 py-2 text-xs text-destructive">
-              {recentError.message}
-            </p>
-          ) : recentFetching && !recentData ? (
+          {recentFetching && !recentData ? (
             <p className="px-2 py-2 text-xs text-sidebar-foreground/60">
               Loading threads...
             </p>
@@ -823,11 +843,6 @@ export function ChatSidebar() {
             </p>
           ) : (
             <div className="space-y-1">
-              {pinnedError ? (
-                <p className="px-2 py-1 text-xs text-destructive">
-                  {pinnedError.message}
-                </p>
-              ) : null}
               <PinnedThreadListSection
                 threads={pinnedThreads}
                 selectedThreadId={selectedThreadId}
@@ -852,11 +867,7 @@ export function ChatSidebar() {
                 onMarkSectionRead={markSectionThreadsRead}
               />
               <div className="space-y-1">
-                {spacesError ? (
-                  <p className="px-2 py-1 text-xs text-destructive">
-                    {spacesError.message}
-                  </p>
-                ) : spacesFetching && spaces.length === 0 ? (
+                {spacesFetching && spaces.length === 0 ? (
                   <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
                     Loading Spaces...
                   </p>

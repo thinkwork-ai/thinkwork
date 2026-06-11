@@ -356,7 +356,9 @@ describe("SpacesComposer", () => {
       (screen.getByRole("button", { name: /start/i }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
-    expect(screen.getByText(/no approved model/i)).toBeTruthy();
+    // The blocked state is communicated by the disabled send button alone — we
+    // deliberately no longer render a distracting red "no approved model" banner.
+    expect(screen.queryByText(/no approved model/i)).toBeNull();
   });
 
   it("passes agent opt-out through submit", async () => {
