@@ -289,8 +289,10 @@ jobs:
           MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}
         run: |
           # Stamp the same release version the desktop build uses so the web
-          # sidebar header shows the running build (e.g. "canary 95").
+          # bundle can report the deployed platform version.
+          version="${GITHUB_REF_NAME#desktop-v}"
           VITE_APP_VERSION="${GITHUB_REF_NAME#desktop-v}" \
+          VITE_RELEASE_VERSION="v${version}" \
             bash scripts/build-web.sh "${STAGE}"
 
       - name: Publish desktop update metadata

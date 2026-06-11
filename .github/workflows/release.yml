@@ -403,3 +403,55 @@ jobs:
         run: bash scripts/release/publish-release-assets.sh "$RELEASE_REF_NAME" dist/release
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: ${{ contains(env.RELEASE_REF_NAME, '-canary.') }}
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        if: ${{ contains(env.RELEASE_REF_NAME, '-canary.') }}
+        with:
+          terraform_wrapper: false
+
+      - name: Record ThinkWork dev release status pointer
+        if: ${{ contains(env.RELEASE_REF_NAME, '-canary.') }}
+        working-directory: terraform/examples/greenfield
+        run: |
+          set -euo pipefail
+          terraform init
+          terraform workspace select dev
+          source ../../../scripts/lib/terraform-output.sh
+          evidence_bucket="$(tf_output_raw deployment_evidence_bucket_name 2>/dev/null || echo "")"
+          if [ -z "$evidence_bucket" ] || [ "$evidence_bucket" = "null" ]; then
+            echo "No deployment evidence bucket output; skipping deployment status pointer."
+            exit 0
+          fi
+
+          state_machine_arn="$(tf_output_raw deployment_state_machine_arn 2>/dev/null || echo "")"
+          runner_project_name="$(tf_output_raw deployment_runner_project_name 2>/dev/null || echo "")"
+          manifest_path="../../../dist/release/thinkwork-release.json"
+          manifest_sha256="$(shasum -a 256 "$manifest_path" | awk '{print $1}')"
+          manifest_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_REF_NAME}/thinkwork-release.json"
+          release_commit="$(git rev-parse "${RELEASE_REF_NAME}^{commit}")"
+
+          ../../../scripts/release/write-deployment-status.sh \
+            --stage "dev" \
+            --bucket "$evidence_bucket" \
+            --release-version "$RELEASE_REF_NAME" \
+            --manifest-url "$manifest_url" \
+            --manifest-sha256 "$manifest_sha256" \
+            --commit "$release_commit" \
+            --source "github-actions-release" \
+            --status "succeeded" \
+            --state-machine-arn "$state_machine_arn" \
+            --runner-project-name "$runner_project_name" \
+            --github-repository "$GITHUB_REPOSITORY" \
+            --github-run-id "$GITHUB_RUN_ID" \
+            --github-run-at "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+            --github-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --github-ref "$GITHUB_REF" \
+            --github-workflow "$GITHUB_WORKFLOW" \
+            --github-actor "$GITHUB_ACTOR"
