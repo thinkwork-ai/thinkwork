@@ -1,13 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "urql";
-import {
-  MoreHorizontal,
-  Archive,
-  FileText,
-  Trash2,
-  Pencil,
-} from "lucide-react";
+import { MoreHorizontal, Archive, Trash2, Pencil } from "lucide-react";
 import { IconPin, IconPinnedOff } from "@tabler/icons-react";
 import { THREAD_RENAME_EVENT } from "@/lib/thread-rename";
 import { toast } from "sonner";
@@ -38,8 +32,6 @@ import {
 } from "@/lib/graphql-queries";
 import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
 import { setThreadDeletePending } from "@/lib/pending-thread-deletes";
-import { SystemPromptDialog } from "@/components/workbench/SystemPromptDialog";
-import type { TaskThreadTurn } from "@/components/workbench/TaskThreadView";
 
 export interface AttachedArtifactSummary {
   id: string;
@@ -54,8 +46,6 @@ export interface ThreadDetailActionsProps {
   /** Whether the thread is currently pinned (drives Pin vs Unpin). */
   isPinned?: boolean;
   attachedArtifacts: AttachedArtifactSummary[];
-  /** Persisted turns, used by the read-only System Prompt viewer. */
-  turns?: TaskThreadTurn[];
   /** Test seam: override the navigate destination after archive/delete fallbacks. */
   onDoneNavigateTo?: string;
   onDeleted?: (threadId: string) => Promise<void> | void;
@@ -63,7 +53,6 @@ export interface ThreadDetailActionsProps {
 
 export function ThreadDetailActions(props: ThreadDetailActionsProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const navigate = useNavigate();
   const [, updateThread] = useMutation(UpdateThreadMutation);
   const [, pinThread] = useMutation(PinThreadMutation);
@@ -184,19 +173,6 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
             <Pencil className="mr-2 h-3.5 w-3.5" />
             Rename thread
           </DropdownMenuItem>
-          <DropdownMenuItem
-            className="whitespace-nowrap"
-            data-testid="thread-actions-system-prompt"
-            // Defer the dialog open by one frame so Radix's menu close
-            // doesn't trap focus before the dialog mounts (same race the
-            // delete item guards against).
-            onSelect={() => {
-              window.setTimeout(() => setSystemPromptOpen(true), 0);
-            }}
-          >
-            <FileText className="mr-2 h-3.5 w-3.5" />
-            System Prompt
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="whitespace-nowrap"
@@ -234,12 +210,6 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
         {...props}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-      />
-
-      <SystemPromptDialog
-        open={systemPromptOpen}
-        onOpenChange={setSystemPromptOpen}
-        turns={props.turns ?? []}
       />
     </>
   );

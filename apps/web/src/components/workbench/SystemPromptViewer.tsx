@@ -24,8 +24,8 @@ export interface SystemPromptViewerProps {
 /**
  * Read-only viewer for a captured system prompt: a line-numbered, wrapping
  * CodeMirror pane plus a Copy button. Presentational — it takes the prompt
- * string directly and never selects or fetches turns. Shared by the thread
- * execution-trace Agent modal and the thread `SystemPromptDialog`.
+ * string directly and never selects or fetches turns. Used by the thread
+ * execution-trace Agent step modal.
  */
 export function SystemPromptViewer({
   prompt,
