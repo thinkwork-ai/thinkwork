@@ -217,6 +217,9 @@ export function UserQuestionCard({ data, question }: UserQuestionCardProps) {
         data-testid="user-question-card"
         className="grid gap-2 rounded-lg border border-border/70 bg-background/70 p-4"
       >
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Agent questions
+        </p>
         <p className="text-sm text-muted-foreground">
           No longer waiting on this question.
         </p>
@@ -494,6 +497,9 @@ export function UserQuestionCard({ data, question }: UserQuestionCardProps) {
       data-testid="user-question-card"
       className="grid gap-4 rounded-lg border border-border/70 bg-background/70 p-4"
     >
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Agent questions
+      </p>
       {tabbed ? (
         <Tabs
           value={String(activeIndex)}
