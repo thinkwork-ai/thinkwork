@@ -6,7 +6,7 @@
  *   2. Check budget policies and pause agents if exceeded
  */
 
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { eq, and, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -432,7 +432,6 @@ export async function checkBudgetAndPause(
 function appsyncEndpoint(): string {
   return getConfig("APPSYNC_ENDPOINT", "");
 }
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
 
 export async function notifyCostRecorded(payload: {
   tenantId: string;
@@ -446,7 +445,8 @@ export async function notifyCostRecorded(payload: {
   model: string | null;
 }): Promise<void> {
   const endpoint = appsyncEndpoint();
-  if (!endpoint || !APPSYNC_API_KEY) return;
+  const apiKey = getAppsyncApiKey();
+  if (!endpoint || !apiKey) return;
 
   const mutation = `
 		mutation NotifyCostRecorded(
@@ -490,7 +490,7 @@ export async function notifyCostRecorded(payload: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ query: mutation, variables: payload }),
     });

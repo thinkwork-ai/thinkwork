@@ -20,7 +20,11 @@
  * cascade.
  */
 
-import { getConfig } from "@thinkwork/runtime-config";
+import {
+  getConfig,
+  getApiAuthSecret,
+  getAppsyncApiKey,
+} from "@thinkwork/runtime-config";
 import { eq, and, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -97,14 +101,11 @@ function getTraceId(): string {
 // Config-class values are read at call time via getConfig (env-wins merge
 // over the SSM document) — never captured at module load (R3): the SSM
 // document may load after module init, and vitest stubs env after import.
-// Secret-class values (APPSYNC_API_KEY, THINKWORK_API_SECRET) stay on
-// process.env until their own migration unit.
+// Secret-class values are read at call time via getApiAuthSecret /
+// getAppsyncApiKey — never captured at module load.
 function appsyncEndpoint(): string {
   return getConfig("APPSYNC_ENDPOINT", "");
 }
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const THINKWORK_API_SECRET =
-  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 function workspaceBucket(): string {
   return getConfig("WORKSPACE_BUCKET", "");
 }
@@ -524,6 +525,11 @@ async function markThreadTurnSetupFailed(input: {
 }
 
 export async function handler(event: InvokeEvent): Promise<unknown | void> {
+  // Snapshot secret-class values at handler entry — read at call time, never
+  // at module load (vitest stubs env after import; the secret cache fills
+  // during cold-start prime).
+  const apiAuthSecret = getApiAuthSecret();
+  const appsyncApiKey = getAppsyncApiKey();
   const { threadId, tenantId, agentId, userMessage } = event;
   const existingThreadTurnId = event.existingThreadTurnId?.trim();
   const traceId = getTraceId();
@@ -598,8 +604,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         allowHumanPairEmailFallback: true,
         logPrefix: "[chat-agent-invoke]",
         thinkworkApiUrl: thinkworkApiUrl(),
-        thinkworkApiSecret: THINKWORK_API_SECRET,
-        appsyncApiKey: APPSYNC_API_KEY,
+        thinkworkApiSecret: apiAuthSecret,
+        appsyncApiKey,
       });
     } catch (err) {
       if (err instanceof AgentNotFoundError) {
@@ -1276,9 +1282,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // container can set them on os.environ and use them for the
       // composer fetch.
       thinkwork_api_url: thinkworkApiUrl() || undefined,
-      thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
+      thinkwork_api_secret: apiAuthSecret || undefined,
       appsync_endpoint: appsyncEndpoint() || undefined,
-      appsync_api_key: APPSYNC_API_KEY || undefined,
+      appsync_api_key: appsyncApiKey || undefined,
       computer_id: event.computerId || undefined,
       computer_task_id: event.computerTaskId || undefined,
       computer_response_mode: "thread_turn",
@@ -1382,7 +1388,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           ? `${thinkworkApiUrl().replace(/\/$/, "")}/api/threads/${threadId}/finalize`
           : undefined,
       finalize_callback_secret:
-        THINKWORK_API_SECRET && turnId ? THINKWORK_API_SECRET : undefined,
+        apiAuthSecret && turnId ? apiAuthSecret : undefined,
       // Activity-callback opt-in (plan 2026-06-03-001). The Pi runtime POSTs
       // live mid-turn activity (tool/skill/phase steps, coalesced text deltas)
       // to this URL with the same bearer secret, so the Spaces thread can
@@ -1392,7 +1398,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           ? `${thinkworkApiUrl().replace(/\/$/, "")}/api/threads/${threadId}/activity`
           : undefined,
       activity_callback_secret:
-        THINKWORK_API_SECRET && turnId ? THINKWORK_API_SECRET : undefined,
+        apiAuthSecret && turnId ? apiAuthSecret : undefined,
       thread_turn_id: turnId || undefined,
       cost_owner_user_id: currentUserId || undefined,
     } as Record<string, unknown>;

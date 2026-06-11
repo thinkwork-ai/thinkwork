@@ -1,3 +1,4 @@
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -536,7 +537,7 @@ async function verifyBearerToken(
     return true;
   }
 
-  const superSecret = process.env.API_AUTH_SECRET;
+  const superSecret = getApiAuthSecret();
   return !!superSecret && token === superSecret;
 }
 

@@ -1,4 +1,4 @@
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
 
 /**
  * AppSync subscription notifications.
@@ -12,7 +12,7 @@ import { getConfig } from "@thinkwork/runtime-config";
 function appsyncConfig(): { endpoint: string; apiKey: string } {
   return {
     endpoint: getConfig("APPSYNC_ENDPOINT") || "",
-    apiKey: process.env.APPSYNC_API_KEY || "",
+    apiKey: getAppsyncApiKey(),
   };
 }
 

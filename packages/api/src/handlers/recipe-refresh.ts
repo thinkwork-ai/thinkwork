@@ -9,12 +9,12 @@
  * Auth: X-API-Key (Thinkwork API auth)
  */
 
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import { getDb } from "@thinkwork/database-pg";
 import { recipes } from "@thinkwork/database-pg/schema";
 import { eq } from "drizzle-orm";
 import { resolveTemplates } from "../lib/template-resolver.js";
 
-const API_AUTH_SECRET = process.env.API_AUTH_SECRET || "";
 // NOTE: MCP URL + service key are NOT read from env anymore. Look up
 // `tenant_mcp_servers.url` + `auth_config` by (tenantId, server slug)
 // when this handler is re-wired. TODO(mcp-url-record follow-up).
@@ -63,7 +63,8 @@ export async function handler(event: LambdaEvent) {
     event.headers?.authorization || event.headers?.Authorization;
   const token =
     apiKey || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
-  if (!API_AUTH_SECRET || !token || token !== API_AUTH_SECRET) {
+  const apiAuthSecret = getApiAuthSecret();
+  if (!apiAuthSecret || !token || token !== apiAuthSecret) {
     return json(401, { ok: false, error: "Unauthorized" });
   }
   let body: Record<string, unknown>;

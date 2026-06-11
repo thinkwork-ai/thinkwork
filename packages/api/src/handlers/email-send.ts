@@ -9,6 +9,7 @@
  * Auth: THINKWORK_API_SECRET bearer token (agent runtime → API)
  */
 
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
@@ -21,9 +22,6 @@ import { generateReplyToken } from "../lib/email-tokens.js";
 import { deriveSpaceAddress } from "../lib/email/space-address.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 import { renderForEmail } from "../lib/channel-rendering/email-renderer.js";
-
-const THINKWORK_API_SECRET =
-  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 
 const db = getDb();
 
@@ -98,7 +96,7 @@ export async function handler(
   // Auth — service secret from the managed cloud runtime.
   const authHeader = event.headers?.authorization || "";
   const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (bearer && bearer === THINKWORK_API_SECRET) {
+  if (bearer && bearer === getApiAuthSecret()) {
     // service-authed: trust the request body's agentId (existing behavior).
   } else {
     return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };

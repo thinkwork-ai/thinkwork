@@ -19,6 +19,7 @@
  *   POST   /api/thread-turns/wakeup/:agentId — On-demand agent wakeup
  */
 
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -142,7 +143,7 @@ async function invokeJobScheduleManager(
             requestContext: { http: { method } },
             rawPath: "/api/job-schedules",
             headers: {
-              authorization: `Bearer ${process.env.API_AUTH_SECRET || ""}`,
+              authorization: `Bearer ${getApiAuthSecret()}`,
             },
           }),
         ),

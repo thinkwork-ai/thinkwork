@@ -5,7 +5,7 @@
  * the resolver modules (queries.ts, mutations.ts, types.ts).
  */
 
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
 import { createHash, randomUUID, randomBytes } from "node:crypto";
 import {
   eq,
@@ -452,7 +452,7 @@ export async function invokeJobScheduleManager(
             requestContext: { http: { method } },
             rawPath: "/api/job-schedules",
             headers: {
-              authorization: `Bearer ${process.env.API_AUTH_SECRET || ""}`,
+              authorization: `Bearer ${getApiAuthSecret()}`,
             },
           }),
         ),
@@ -618,7 +618,7 @@ export async function invokeSkillRun(
       rawPath: "/invocations",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || ""}`,
+        authorization: `Bearer ${getApiAuthSecret()}`,
       },
       body,
       isBase64Encoded: false,

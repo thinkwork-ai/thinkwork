@@ -4,6 +4,8 @@ import {
   __resetRuntimeConfigForTests,
   deriveFunctionArn,
   deriveFunctionName,
+  getApiAuthSecret,
+  getAppsyncApiKey,
   getConfig,
   getSecret,
   primeRuntimeConfig,
@@ -33,6 +35,9 @@ const ENV_KEYS = [
   "PARAMETERS_SECRETS_EXTENSION_HTTP_PORT",
   "THINKWORK_RUNTIME_CONFIG_PARAM",
   "TEST_KEY",
+  "API_AUTH_SECRET",
+  "THINKWORK_API_SECRET",
+  "APPSYNC_API_KEY",
 ];
 
 const savedEnv: Record<string, string | undefined> = {};
@@ -141,6 +146,9 @@ describe("fetch path selection", () => {
     process.env.STAGE = "test";
     process.env.AWS_LAMBDA_FUNCTION_NAME = "thinkwork-test-api-graphql-http";
     process.env.AWS_SESSION_TOKEN = "token-123";
+    // env secret copies present → no secret prefetch; isolates the param path
+    process.env.API_AUTH_SECRET = "env-secret";
+    process.env.APPSYNC_API_KEY = "env-key";
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -164,6 +172,8 @@ describe("fetch path selection", () => {
     process.env.STAGE = "test";
     process.env.AWS_LAMBDA_FUNCTION_NAME = "thinkwork-test-api-graphql-http";
     process.env.AWS_SESSION_TOKEN = "token-123";
+    process.env.API_AUTH_SECRET = "env-secret";
+    process.env.APPSYNC_API_KEY = "env-key";
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
     ssmSend.mockResolvedValue({
       Parameter: { Value: JSON.stringify({ TEST_KEY: "from-sdk" }) },
@@ -273,6 +283,68 @@ describe("getSecret", () => {
     );
     await Promise.all([getSecret("a"), getSecret("a")]);
     expect(secretsSend).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("platform secret accessors", () => {
+  it("serves THINKWORK_API_SECRET over API_AUTH_SECRET over the cached secret", () => {
+    process.env.API_AUTH_SECRET = "from-canonical";
+    expect(getApiAuthSecret()).toBe("from-canonical");
+    process.env.THINKWORK_API_SECRET = "from-alias";
+    expect(getApiAuthSecret()).toBe("from-alias");
+  });
+
+  it("returns '' when neither env nor cache has the secret", () => {
+    expect(getApiAuthSecret()).toBe("");
+    expect(getAppsyncApiKey()).toBe("");
+  });
+
+  it("prefetches api-auth + appsync-api-key at Lambda prime when env copies are absent", async () => {
+    process.env.STAGE = "test";
+    process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
+    ssmSend.mockResolvedValue({ Parameter: { Value: "{}" } });
+    secretsSend.mockResolvedValue({ SecretString: "prefetched" });
+
+    await primeRuntimeConfig({ force: true });
+
+    const requested = secretsSend.mock.calls.map((c) => c[0].input.SecretId).sort();
+    expect(requested).toEqual(["thinkwork/test/api-auth", "thinkwork/test/appsync-api-key"]);
+    expect(getApiAuthSecret()).toBe("prefetched");
+    expect(getAppsyncApiKey()).toBe("prefetched");
+  });
+
+  it("skips prefetch while the env copies still exist (transition window)", async () => {
+    process.env.STAGE = "test";
+    process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
+    process.env.API_AUTH_SECRET = "env-secret";
+    process.env.APPSYNC_API_KEY = "env-key";
+    ssmSend.mockResolvedValue({ Parameter: { Value: "{}" } });
+
+    await primeRuntimeConfig({ force: true });
+
+    expect(secretsSend).not.toHaveBeenCalled();
+    expect(getApiAuthSecret()).toBe("env-secret");
+    expect(getAppsyncApiKey()).toBe("env-key");
+  });
+
+  it("degrades to '' and warns once when prefetch fails", async () => {
+    process.env.STAGE = "test";
+    process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    ssmSend.mockResolvedValue({ Parameter: { Value: "{}" } });
+    secretsSend.mockRejectedValue(new Error("AccessDeniedException"));
+
+    await expect(primeRuntimeConfig({ force: true })).resolves.toBeUndefined();
+
+    expect(getApiAuthSecret()).toBe("");
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips prefetch outside Lambda", async () => {
+    process.env.STAGE = "test";
+    ssmSend.mockResolvedValue({ Parameter: { Value: "{}" } });
+    await primeRuntimeConfig({ force: true });
+    expect(secretsSend).not.toHaveBeenCalled();
   });
 });
 

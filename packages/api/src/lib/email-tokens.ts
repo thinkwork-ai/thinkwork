@@ -5,6 +5,7 @@
  * Tokens are embedded in outbound email headers and verified on inbound.
  */
 
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import {
   createHmac,
   createHash,
@@ -16,7 +17,7 @@ import {
 // env (same Terraform value); the alias was dropped to stay under the 4KB
 // env limit — fall back to the canonical name.
 const EMAIL_HMAC_SECRET =
-  process.env.EMAIL_HMAC_SECRET || process.env.API_AUTH_SECRET || "";
+  process.env.EMAIL_HMAC_SECRET || getApiAuthSecret();
 
 export interface TokenPayload {
   agentId: string;

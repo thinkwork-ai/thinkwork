@@ -178,7 +178,7 @@ export async function primeRuntimeConfig(options?: {
 }): Promise<void> {
   if (options?.ttlMs !== undefined) state.ttlMs = options.ttlMs;
   if (!options?.force && state.doc !== null && !isStale()) return;
-  await refresh();
+  await Promise.all([refresh(), prefetchPlatformSecrets()]);
 }
 
 /**
@@ -253,6 +253,72 @@ export async function getSecret(secretId: string): Promise<string> {
   return promise;
 }
 
+function stageSecretName(suffix: string): string | null {
+  const stage = envValue("STAGE");
+  return stage ? `thinkwork/${stage}/${suffix}` : null;
+}
+
+function cachedSecret(suffix: string): string | undefined {
+  const name = stageSecretName(suffix);
+  return name ? state.secrets.get(name)?.value : undefined;
+}
+
+let warnedSecretPrefetch = false;
+
+/**
+ * Prefetch the platform secrets that sync accessors below serve. Runs as
+ * part of the Lambda cold-start prime; skipped wherever the env copies
+ * still exist (transition window) or outside Lambda. Failures degrade to
+ * the env fallback and log once — request-time auth then fails loudly.
+ */
+async function prefetchPlatformSecrets(): Promise<void> {
+  if (!process.env.AWS_LAMBDA_FUNCTION_NAME) return;
+  const wanted: string[] = [];
+  if (!envValue("THINKWORK_API_SECRET") && !envValue("API_AUTH_SECRET")) {
+    wanted.push("api-auth");
+  }
+  if (!envValue("APPSYNC_API_KEY")) {
+    wanted.push("appsync-api-key");
+  }
+  await Promise.all(
+    wanted.map(async (suffix) => {
+      const name = stageSecretName(suffix);
+      if (!name) return;
+      try {
+        await getSecret(name);
+      } catch (error) {
+        if (!warnedSecretPrefetch) {
+          warnedSecretPrefetch = true;
+          console.warn(`[runtime-config] failed to prefetch secret ${name}`, error);
+        }
+      }
+    }),
+  );
+}
+
+/**
+ * The shared service-auth secret (Bearer token between platform services).
+ * Env-wins during the migration window (THINKWORK_API_SECRET is the legacy
+ * alias of API_AUTH_SECRET — #2377); once terraform stops injecting the env
+ * copies, the value comes from the thinkwork/<stage>/api-auth secret
+ * prefetched at cold start. Returns "" when unresolved, matching the
+ * legacy `process.env.API_AUTH_SECRET || ""` reader idiom — callers fail
+ * with a 401 at request time rather than at import time.
+ */
+export function getApiAuthSecret(): string {
+  return (
+    envValue("THINKWORK_API_SECRET") ??
+    envValue("API_AUTH_SECRET") ??
+    cachedSecret("api-auth") ??
+    ""
+  );
+}
+
+/** AppSync API key for subscription-notify fan-out. Same contract as getApiAuthSecret. */
+export function getAppsyncApiKey(): string {
+  return envValue("APPSYNC_API_KEY") ?? cachedSecret("appsync-api-key") ?? "";
+}
+
 /**
  * Derive an api handler function name from the per-stage naming pattern.
  * Anything shaped `thinkwork-<stage>-api-<name>` is computed, never stored
@@ -280,6 +346,7 @@ export function deriveFunctionArn(shortName: string): string {
 
 /** Test hook: drop all cached state so each test starts cold. */
 export function __resetRuntimeConfigForTests(): void {
+  warnedSecretPrefetch = false;
   state.doc = null;
   state.loadedAt = 0;
   state.ttlMs = DEFAULT_TTL_MS;

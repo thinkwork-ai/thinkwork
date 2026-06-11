@@ -36,7 +36,7 @@
  * inside the container (admin-skill refusals).
  */
 
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { eq, and } from "drizzle-orm";
 import {
   GetObjectCommand,
@@ -288,9 +288,9 @@ export async function resolveAgentRuntimeConfig(
     opts.thinkworkApiUrl ?? getConfig("THINKWORK_API_URL") ?? "";
   const thinkworkApiSecret =
     opts.thinkworkApiSecret ??
-    (process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET) ??
+    (getApiAuthSecret()) ??
     "";
-  const appsyncApiKey = opts.appsyncApiKey ?? process.env.APPSYNC_API_KEY ?? "";
+  const appsyncApiKey = opts.appsyncApiKey ?? getAppsyncApiKey();
 
   const [agent] = await db
     .select({

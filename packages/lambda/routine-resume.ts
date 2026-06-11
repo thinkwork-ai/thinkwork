@@ -18,7 +18,7 @@
  * handler entry per `feedback_completion_callback_snapshot_pattern`.
  */
 
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
 import {
   SendTaskFailureCommand,
   SendTaskSuccessCommand,
@@ -164,10 +164,9 @@ export async function handler(event: ResumeInput): Promise<ResumeResult> {
   // pattern; never re-read process.env in async paths.
   const apiUrl = getConfig("THINKWORK_API_URL");
   const stepCallbackEnv: StepCallbackEnv | undefined =
-    apiUrl && process.env.API_AUTH_SECRET
-      ? {
+    apiUrl && getApiAuthSecret()? {
           apiUrl,
-          authSecret: process.env.API_AUTH_SECRET,
+          authSecret: getApiAuthSecret(),
         }
       : undefined;
   return resumeRoutineExecution(event, { stepCallbackEnv });

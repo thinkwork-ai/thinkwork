@@ -1,3 +1,5 @@
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
+
 /**
  * Memory Lambda — Proxies Hindsight memory operations.
  *
@@ -62,7 +64,7 @@ async function queryHindsightDB(
 export async function handler(
   event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> {
-  const expectedSecret = process.env.API_AUTH_SECRET;
+  const expectedSecret = getApiAuthSecret();
   const token = authToken(event.headers);
   if (!expectedSecret || !token || token !== expectedSecret) {
     return json(401, { ok: false, error: "Unauthorized" });

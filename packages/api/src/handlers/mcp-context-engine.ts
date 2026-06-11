@@ -1,3 +1,4 @@
+import { getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -875,10 +876,10 @@ function bearerToken(event: APIGatewayProxyEventV2): string | null {
 
 function isServiceBearer(bearer: string): boolean {
   return [
-    process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET,
-    process.env.API_AUTH_SECRET,
+    getApiAuthSecret(),
+    getApiAuthSecret(),
     process.env.GRAPHQL_API_KEY,
-    process.env.APPSYNC_API_KEY,
+    getAppsyncApiKey(),
   ]
     .filter(Boolean)
     .some((secret) => secret === bearer);

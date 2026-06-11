@@ -11,7 +11,6 @@ import { handleCors, json, error, notFound } from "../lib/response.js";
 const { agents, budgetPolicies, agentWakeupRequests } = schema;
 
 const JOB_SCHEDULE_API_URL = process.env.JOB_SCHEDULE_API_URL || "";
-const API_AUTH_SECRET = process.env.API_AUTH_SECRET || "";
 
 // ---------------------------------------------------------------------------
 // Helpers

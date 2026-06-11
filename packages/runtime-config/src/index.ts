@@ -3,6 +3,8 @@ export {
   getConfig,
   requireConfig,
   getSecret,
+  getApiAuthSecret,
+  getAppsyncApiKey,
   deriveFunctionName,
   deriveFunctionArn,
   __resetRuntimeConfigForTests,

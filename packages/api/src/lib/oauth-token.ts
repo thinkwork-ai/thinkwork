@@ -12,7 +12,7 @@
  * 5. On failure: mark connection status="expired" + notify
  */
 
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { schema } from "@thinkwork/database-pg";
@@ -37,7 +37,6 @@ import {
 } from "./oauth-client-credentials.js";
 
 const STAGE = process.env.STAGE || process.env.APP_STAGE || "dev";
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
 
 function appsyncEndpoint(): string {
   return getConfig("APPSYNC_ENDPOINT", "");
@@ -503,7 +502,7 @@ export async function buildSkillEnvOverrides(
   // Always provide the API URL and secret so skills can call back
   envOverrides.THINKWORK_API_URL = process.env.MCP_BASE_URL || "";
   envOverrides.THINKWORK_API_SECRET =
-    process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
+    getApiAuthSecret();
 
   return envOverrides;
 }
@@ -564,7 +563,8 @@ export async function notifyConnectionExpired(
 
   // Send AppSync notification if configured
   const endpoint = appsyncEndpoint();
-  if (endpoint && APPSYNC_API_KEY) {
+  const apiKey = getAppsyncApiKey();
+  if (endpoint && apiKey) {
     const mutation = `
 			mutation NotifyNewMessage(
 				$messageId: ID!
@@ -596,7 +596,7 @@ export async function notifyConnectionExpired(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": APPSYNC_API_KEY,
+          "x-api-key": apiKey,
         },
         body: JSON.stringify({
           query: mutation,

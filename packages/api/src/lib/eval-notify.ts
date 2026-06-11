@@ -1,4 +1,4 @@
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
 
 /**
  * AppSync notify helper for eval run status updates.
@@ -10,7 +10,6 @@ import { getConfig } from "@thinkwork/runtime-config";
 function appsyncEndpoint(): string {
   return getConfig("APPSYNC_ENDPOINT", "");
 }
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
 
 const MUTATION = `
 	mutation NotifyEvalRunUpdate(
@@ -61,13 +60,14 @@ export async function notifyEvalRunUpdate(payload: {
   errorMessage?: string;
 }): Promise<void> {
   const endpoint = appsyncEndpoint();
-  if (!endpoint || !APPSYNC_API_KEY) return;
+  const apiKey = getAppsyncApiKey();
+  if (!endpoint || !apiKey) return;
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ query: MUTATION, variables: payload }),
     });

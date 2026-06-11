@@ -1,4 +1,4 @@
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import {
   resolveAgentRuntimeConfig,
@@ -16,9 +16,6 @@ const lambdaClient = new LambdaClient({});
 function appsyncEndpoint(): string {
   return getConfig("APPSYNC_ENDPOINT", "");
 }
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const THINKWORK_API_SECRET =
-  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 function workspaceBucket(): string {
   return getConfig("WORKSPACE_BUCKET", "");
 }
@@ -123,9 +120,9 @@ export function buildEvalAgentCorePayload(input: {
     human_name: runtimeConfig.humanName || undefined,
     workspace_bucket: workspaceBucket() || undefined,
     thinkwork_api_url: thinkworkApiUrl() || undefined,
-    thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
+    thinkwork_api_secret: getApiAuthSecret() || undefined,
     appsync_endpoint: appsyncEndpoint() || undefined,
-    appsync_api_key: APPSYNC_API_KEY || undefined,
+    appsync_api_key: getAppsyncApiKey() || undefined,
     hindsight_endpoint: hindsightEndpoint() || undefined,
     web_search_config: runtimeConfig.webSearchConfig,
     web_extract_config: runtimeConfig.webExtractConfig,
@@ -214,8 +211,8 @@ async function invokeAgentCoreForEvalOnce(input: {
     tenantId: input.tenantId,
     agentId: input.agentId,
     thinkworkApiUrl: thinkworkApiUrl(),
-    thinkworkApiSecret: THINKWORK_API_SECRET,
-    appsyncApiKey: APPSYNC_API_KEY,
+    thinkworkApiSecret: getApiAuthSecret(),
+    appsyncApiKey: getAppsyncApiKey(),
     logPrefix: "[eval-worker]",
   });
   const agentcoreFunctionName = resolveRuntimeFunctionName(

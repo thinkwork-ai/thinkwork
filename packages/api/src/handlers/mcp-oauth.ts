@@ -1,4 +1,4 @@
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -723,10 +723,8 @@ function issuerUrl(event: APIGatewayProxyEventV2): string {
 function signingSecret(): string {
   return (
     process.env.MCP_OAUTH_SIGNING_SECRET ||
-    process.env.API_AUTH_SECRET ||
-    process.env.THINKWORK_API_SECRET ||
-    process.env.API_AUTH_SECRET ||
-    ""
+    getApiAuthSecret()||
+    getApiAuthSecret()
   );
 }
 

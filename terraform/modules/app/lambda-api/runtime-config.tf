@@ -43,6 +43,57 @@ locals {
   )
 }
 
+# ----------------------------------------------------------------------------
+# Platform secrets (plan 2026-06-11-006 U5/R4)
+#
+# API_AUTH_SECRET and APPSYNC_API_KEY leave plaintext Lambda env: the
+# runtime-config loader prefetches these at cold start (getApiAuthSecret /
+# getAppsyncApiKey accessors, env-wins during the transition window). Names
+# use the `thinkwork/${stage}/...` prefix so the shared role's existing
+# `secretsmanager:GetSecretValue` grant on `thinkwork/*` covers them.
+# The env copies in common_env are dropped one release AFTER this ships
+# (R8 two-release transition) so mid-apply old-code containers never lose
+# their env copy before the prefetch path exists.
+# ----------------------------------------------------------------------------
+
+resource "aws_secretsmanager_secret" "api_auth" {
+  name        = "thinkwork/${var.stage}/api-auth"
+  description = "Shared service-auth Bearer secret between platform services. Prefetched at Lambda cold start by @thinkwork/runtime-config."
+  tags = {
+    Name  = "thinkwork-${var.stage}-api-auth"
+    Stage = var.stage
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "api_auth" {
+  secret_id     = aws_secretsmanager_secret.api_auth.id
+  secret_string = var.api_auth_secret
+
+  # Operator rotations via console/CLI shouldn't be clobbered on apply —
+  # same pattern as oauth-secrets.tf.
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+resource "aws_secretsmanager_secret" "appsync_api_key" {
+  name        = "thinkwork/${var.stage}/appsync-api-key"
+  description = "AppSync API key for subscription notify fan-out. Prefetched at Lambda cold start by @thinkwork/runtime-config."
+  tags = {
+    Name  = "thinkwork-${var.stage}-appsync-api-key"
+    Stage = var.stage
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "appsync_api_key" {
+  secret_id     = aws_secretsmanager_secret.appsync_api_key.id
+  secret_string = var.appsync_api_key
+
+  # AppSync keys are terraform-rotated (the appsync module recreates them),
+  # so track the var here — unlike api_auth there is no operator rotation
+  # path outside terraform.
+}
+
 resource "aws_ssm_parameter" "runtime_config" {
   count = local.deploy_lambda_handlers ? 1 : 0
 

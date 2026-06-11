@@ -12,6 +12,7 @@
  *   { triggerId, triggerType, tenantId, agentId?, routineId?, prompt?, scheduleName?, oneTime? }
  */
 
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import { createHash, randomBytes } from "node:crypto";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -309,7 +310,7 @@ async function invokeAgentcoreRunSkill(payload: {
             rawPath: "/invocations",
             headers: {
               "content-type": "application/json",
-              authorization: `Bearer ${process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || ""}`,
+              authorization: `Bearer ${getApiAuthSecret()}`,
             },
             body: JSON.stringify(envelope),
             isBase64Encoded: false,

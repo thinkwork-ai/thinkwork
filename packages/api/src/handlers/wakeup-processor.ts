@@ -10,7 +10,11 @@
  * triggers, approval decisions, and on-demand wakeups still flow through here.
  */
 
-import { getConfig } from "@thinkwork/runtime-config";
+import {
+  getConfig,
+  getApiAuthSecret,
+  getAppsyncApiKey,
+} from "@thinkwork/runtime-config";
 import { randomBytes } from "crypto";
 import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
@@ -113,15 +117,13 @@ import {
 // Config-class values are read at call time via getConfig (env-wins merge
 // over the SSM document) — never captured at module load (R3): the SSM
 // document may load after module init, and vitest stubs env after import.
-// Secret-class values (APPSYNC_API_KEY, THINKWORK_API_SECRET) and the
-// remaining process.env reads stay as-is until their own migration unit.
+// Secret-class values are read at call time via getApiAuthSecret /
+// getAppsyncApiKey — never captured at module load. The remaining
+// process.env reads stay as-is until their own migration unit.
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
 function appsyncEndpoint(): string {
   return getConfig("APPSYNC_ENDPOINT", "");
 }
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const THINKWORK_API_SECRET =
-  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 const MCP_BASE_URL = process.env.MCP_BASE_URL || "";
 const MCP_AUTH_SECRET = process.env.MCP_AUTH_SECRET || "";
 const AGENTCORE_GATEWAY_URL = process.env.AGENTCORE_GATEWAY_URL || "";
@@ -231,13 +233,12 @@ export async function invokeAgentCore(
   }
 
   // Fallback to HTTP fetch
+  const apiAuthSecret = getApiAuthSecret();
   const resp = await fetch(AGENTCORE_INVOKE_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(THINKWORK_API_SECRET
-        ? { Authorization: `Bearer ${THINKWORK_API_SECRET}` }
-        : {}),
+      ...(apiAuthSecret ? { Authorization: `Bearer ${apiAuthSecret}` } : {}),
     },
     body: JSON.stringify(payload),
   });
@@ -849,8 +850,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     if (!skillsConfig.some((s) => s.skillId === ds.skillId)) {
       const env: Record<string, string> = {
         THINKWORK_API_URL: thinkworkApiUrl(),
-        THINKWORK_API_SECRET: THINKWORK_API_SECRET,
-        GRAPHQL_API_KEY: APPSYNC_API_KEY,
+        THINKWORK_API_SECRET: getApiAuthSecret(),
+        GRAPHQL_API_KEY: getAppsyncApiKey(),
         AGENT_ID: wakeup.agent_id,
       };
       skillsConfig.push({
@@ -974,7 +975,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           agentId: wakeup.agent_id,
           tenantId: wakeup.tenant_id,
           apiUrl: thinkworkApiUrl(),
-          apiSecret: THINKWORK_API_SECRET,
+          apiSecret: getApiAuthSecret(),
           inboundMessageId: (payload?.originalMessageId as string) || "",
           inboundSubject: (payload?.subject as string) || "",
           inboundFrom: (payload?.from as string) || "",
@@ -1148,7 +1149,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         mcpServer: undefined,
         envOverrides: {
           THINKWORK_API_URL: appsyncEndpoint(),
-          THINKWORK_API_SECRET: APPSYNC_API_KEY,
+          THINKWORK_API_SECRET: getAppsyncApiKey(),
           AGENT_ID: wakeup.agent_id,
           TENANT_ID: wakeup.tenant_id,
           CURRENT_THREAD_ID: runThreadId,
@@ -1795,7 +1796,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       workspace_prefix: workspacePrefix,
       rendered_workspace_prefix: renderedWorkspacePrefix,
       appsync_endpoint: appsyncEndpoint() || undefined,
-      appsync_api_key: APPSYNC_API_KEY || undefined,
+      appsync_api_key: getAppsyncApiKey() || undefined,
       hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: effectiveWebSearchConfig,
       web_extract_config: effectiveWebExtractConfig
@@ -2373,7 +2374,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             workspace_prefix: workspacePrefix,
             rendered_workspace_prefix: renderedWorkspacePrefix,
             appsync_endpoint: appsyncEndpoint() || undefined,
-            appsync_api_key: APPSYNC_API_KEY || undefined,
+            appsync_api_key: getAppsyncApiKey() || undefined,
             hindsight_endpoint: hindsightEndpoint() || undefined,
             web_search_config: effectiveWebSearchConfig,
             web_extract_config: effectiveWebExtractConfig
@@ -3043,7 +3044,8 @@ async function notifyThreadTurnUpdate(payload: {
   status: string;
   triggerName: string | null;
 }): Promise<void> {
-  if (!appsyncEndpoint() || !APPSYNC_API_KEY) return;
+  const appsyncApiKey = getAppsyncApiKey();
+  if (!appsyncEndpoint() || !appsyncApiKey) return;
 
   const mutation = `
 		mutation NotifyThreadTurnUpdate(
@@ -3081,7 +3083,7 @@ async function notifyThreadTurnUpdate(payload: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": appsyncApiKey,
       },
       body: JSON.stringify({ query: mutation, variables: payload }),
     });
@@ -3108,7 +3110,8 @@ async function notifyNewMessage(payload: {
   senderType: string;
   senderId: string;
 }): Promise<void> {
-  if (!appsyncEndpoint() || !APPSYNC_API_KEY) {
+  const appsyncApiKey = getAppsyncApiKey();
+  if (!appsyncEndpoint() || !appsyncApiKey) {
     console.warn(
       `[wakeup-processor] AppSync not configured, skipping notification`,
     );
@@ -3157,7 +3160,7 @@ async function notifyNewMessage(payload: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": appsyncApiKey,
       },
       body: JSON.stringify({
         query: mutation,
