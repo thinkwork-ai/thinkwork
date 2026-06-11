@@ -1198,6 +1198,26 @@ variable "platform_operator_emails" {{
   type = string
 }}
 
+variable "cognito_email_source_arn" {{
+  type = string
+}}
+
+variable "cognito_from_email_address" {{
+  type = string
+}}
+
+variable "cognito_reply_to_email_address" {{
+  type = string
+}}
+
+variable "app_domain" {{
+  type = string
+}}
+
+variable "app_certificate_arn" {{
+  type = string
+}}
+
 variable "google_oauth_client_id" {{
   type = string
 }}
@@ -1274,6 +1294,13 @@ module "thinkwork" {{
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   platform_operator_emails   = var.platform_operator_emails
+
+  cognito_email_source_arn       = var.cognito_email_source_arn
+  cognito_from_email_address     = var.cognito_from_email_address
+  cognito_reply_to_email_address = var.cognito_reply_to_email_address
+
+  app_domain          = var.app_domain
+  app_certificate_arn = var.app_certificate_arn
 
   lambda_artifact_bucket   = var.lambda_artifact_bucket
   lambda_artifact_prefix   = var.lambda_artifact_prefix

@@ -437,6 +437,16 @@ Invite email remediation status (2026-06-10):
   and `cognitoFromEmailAddress=ThinkWork <noreply@lastmile-tei.com>` in the
   controller input (or runner secrets), on a release containing this runner
   fix.
+- Correction (2026-06-10, found during ce-compound verification): the #2341
+  vars_json threading was necessary but NOT sufficient. The runner's generated
+  root module (`main.tf` template in `write_runner_files`) must also declare
+  each variable and pass it into `module "thinkwork"` — Terraform drops
+  `terraform.auto.tfvars.json` values for undeclared variables with only a
+  warning. `platform_operator_emails` has all three wiring points; the five
+  new vars had only vars_json. Fixed by adding the declarations + module
+  arguments, and the threading test now asserts the generated `main.tf`
+  carries all three points. The TEI redeploy must pin the release containing
+  THIS fix (v0.1.0-canary.159+), not canary.158.
 
 Custom app domain (2026-06-10):
 
