@@ -24,10 +24,15 @@ RELEASE_MANIFEST_TRUST_POLICIES = {
     "allow_unsigned_canary",
     "require_signature",
 }
-PLATFORM_UPDATE_MIGRATIONS = [
-    "0149_user_model_approvals.sql",
-    "0152_agent_profiles.sql",
+# Migrations that intentionally re-run after seed data lands (idempotent;
+# they backfill from seeded rows). Everything else is ledger-driven.
+POST_SEED_MIGRATIONS = [
     "0155_tenant_model_catalog.sql",
+]
+MIGRATION_MARKER_KINDS = [
+    ("-- creates-column:", "column"),
+    ("-- creates-constraint:", "constraint"),
+    ("-- creates:", "object"),
 ]
 
 
@@ -761,8 +766,29 @@ def ensure_compliance_roles(database_url, outputs, vars_json):
     )
 
 
-def initialize_greenfield_database(database_url, outputs, vars_json):
+def migration_files():
     migrations = SOURCE / "packages/database-pg/drizzle"
+    return sorted(path for path in migrations.glob("*.sql") if "rollback" not in path.name)
+
+
+def apply_migration_file(database_url, outputs, vars_json, path):
+    if path.name == "0031_thread_cleanup_drops.sql":
+        psql(
+            database_url,
+            sql="""
+DROP INDEX IF EXISTS public.idx_threads_tenant_status;
+DROP INDEX IF EXISTS public.idx_threads_parent_id;
+DROP TABLE IF EXISTS public.thread_comments CASCADE;
+""",
+        )
+        return
+    if path.name == "0070_compliance_aurora_roles.sql":
+        ensure_compliance_roles(database_url, outputs, vars_json)
+        return
+    psql(database_url, file=path, variables={"stage": vars_json["stage"]})
+
+
+def initialize_greenfield_database(database_url, outputs, vars_json):
     psql(
         database_url,
         sql="""
@@ -776,31 +802,162 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS vector;
 """,
     )
-    files = sorted(path for path in migrations.glob("*.sql") if "rollback" not in path.name)
-    for path in files:
-        if path.name == "0031_thread_cleanup_drops.sql":
-            psql(
-                database_url,
-                sql="""
-DROP INDEX IF EXISTS public.idx_threads_tenant_status;
-DROP INDEX IF EXISTS public.idx_threads_parent_id;
-DROP TABLE IF EXISTS public.thread_comments CASCADE;
+    for path in migration_files():
+        apply_migration_file(database_url, outputs, vars_json, path)
+
+
+def sql_literal(value):
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def ensure_migration_ledger(database_url):
+    psql(
+        database_url,
+        sql="""
+CREATE TABLE IF NOT EXISTS public.platform_schema_migrations (
+  name text PRIMARY KEY,
+  source text NOT NULL DEFAULT 'runner',
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
 """,
+    )
+
+
+def recorded_platform_migrations(database_url):
+    rows = psql_output(database_url, "SELECT name FROM public.platform_schema_migrations")
+    return {line.strip() for line in rows.splitlines() if line.strip()}
+
+
+def record_platform_migrations(database_url, names, source):
+    names = list(names)
+    if not names:
+        return
+    values = ", ".join(f"({sql_literal(name)}, {sql_literal(source)})" for name in names)
+    psql(
+        database_url,
+        sql=(
+            "INSERT INTO public.platform_schema_migrations (name, source) "
+            f"VALUES {values} ON CONFLICT (name) DO NOTHING;"
+        ),
+    )
+
+
+def declared_migration_objects(path):
+    """Parse `-- creates*:` markers from a migration file's leading comment block."""
+    objects = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not stripped.startswith("--"):
+            break
+        for prefix, kind in MIGRATION_MARKER_KINDS:
+            if stripped.startswith(prefix):
+                name = stripped[len(prefix) :].strip()
+                if name:
+                    objects.append((kind, name))
+                break
+    return objects
+
+
+def platform_migration_object_present(database_url, kind, name):
+    """True/False when verifiable against the database; None when the marker
+    names something we cannot check (the transition then assumes applied)."""
+    parts = [part for part in name.split(".") if part]
+    if kind == "column" and len(parts) == 3:
+        schema, table, column = parts
+        return bool(
+            psql_output(
+                database_url,
+                "SELECT 1 FROM information_schema.columns WHERE "
+                f"table_schema = {sql_literal(schema)} AND table_name = {sql_literal(table)} "
+                f"AND column_name = {sql_literal(column)}",
+            ).strip()
+        )
+    if kind == "constraint" and len(parts) == 3:
+        schema, table, constraint = parts
+        return bool(
+            psql_output(
+                database_url,
+                "SELECT 1 FROM pg_constraint c "
+                "JOIN pg_class r ON r.oid = c.conrelid "
+                "JOIN pg_namespace n ON n.oid = r.relnamespace "
+                f"WHERE n.nspname = {sql_literal(schema)} AND r.relname = {sql_literal(table)} "
+                f"AND c.conname = {sql_literal(constraint)}",
+            ).strip()
+        )
+    if kind == "object" and len(parts) == 2:
+        schema, obj = parts
+        return bool(
+            psql_output(
+                database_url,
+                f"SELECT 1 WHERE to_regclass({sql_literal(name)}) IS NOT NULL "
+                "UNION ALL SELECT 1 FROM pg_proc p "
+                "JOIN pg_namespace n ON n.oid = p.pronamespace "
+                f"WHERE n.nspname = {sql_literal(schema)} AND p.proname = {sql_literal(obj)} "
+                "LIMIT 1",
+            ).strip()
+        )
+    if kind == "object" and len(parts) == 3:
+        schema, table, child = parts
+        return bool(
+            psql_output(
+                database_url,
+                "SELECT 1 FROM information_schema.columns WHERE "
+                f"table_schema = {sql_literal(schema)} AND table_name = {sql_literal(table)} "
+                f"AND column_name = {sql_literal(child)} "
+                "UNION ALL SELECT 1 FROM pg_constraint c "
+                "JOIN pg_class r ON r.oid = c.conrelid "
+                "JOIN pg_namespace n ON n.oid = r.relnamespace "
+                f"WHERE n.nspname = {sql_literal(schema)} AND r.relname = {sql_literal(table)} "
+                f"AND c.conname = {sql_literal(child)} "
+                "UNION ALL SELECT 1 FROM pg_trigger t "
+                "JOIN pg_class r ON r.oid = t.tgrelid "
+                "JOIN pg_namespace n ON n.oid = r.relnamespace "
+                f"WHERE n.nspname = {sql_literal(schema)} AND r.relname = {sql_literal(table)} "
+                f"AND t.tgname = {sql_literal(child)} AND NOT t.tgisinternal "
+                "LIMIT 1",
+            ).strip()
+        )
+    return None
+
+
+def backfill_platform_migration_ledger(database_url):
+    """One-time ledger bootstrap for environments installed before the ledger
+    existed. Every file shipping with this release is recorded as assumed
+    applied — auto-re-running old files is unsafe (markers can name objects
+    that later migrations intentionally dropped). Marker-verified drift is
+    reported so an operator can true it up manually; releases after the
+    transition apply through the exact pending path."""
+    verified = []
+    assumed = []
+    for path in migration_files():
+        verdicts = [
+            platform_migration_object_present(database_url, kind, name)
+            for kind, name in declared_migration_objects(path)
+        ]
+        if any(verdict is False for verdict in verdicts):
+            print(
+                f"[migrations] transition WARNING: {path.name} declares objects missing from "
+                "this database; apply it manually if the feature it backs is expected here"
             )
-            continue
-        if path.name == "0070_compliance_aurora_roles.sql":
-            ensure_compliance_roles(database_url, outputs, vars_json)
-            continue
-        psql(database_url, file=path, variables={"stage": vars_json["stage"]})
+            assumed.append(path.name)
+        elif any(verdict is True for verdict in verdicts):
+            verified.append(path.name)
+        else:
+            assumed.append(path.name)
+    record_platform_migrations(database_url, verified, "transition-verified")
+    record_platform_migrations(database_url, assumed, "transition-assumed")
 
 
-def apply_platform_update_migrations(database_url, vars_json, migration_names):
-    migrations = SOURCE / "packages/database-pg/drizzle"
-    for name in migration_names:
-        path = migrations / name
-        if not path.is_file():
-            raise RuntimeError(f"Required platform migration is missing: {path}")
-        psql(database_url, file=path, variables={"stage": vars_json["stage"]})
+def apply_pending_platform_migrations(database_url, outputs, vars_json):
+    recorded = recorded_platform_migrations(database_url)
+    for path in migration_files():
+        if path.name in recorded:
+            continue
+        print(f"[migrations] applying {path.name}")
+        apply_migration_file(database_url, outputs, vars_json, path)
+        record_platform_migrations(database_url, [path.name], "runner")
 
 
 def seed_platform_bootstrap_defaults(database_url):
@@ -956,15 +1113,29 @@ def push_database_schema(outputs_path, vars_json):
         os.environ.get("THINKWORK_RELEASE_VERSION", "main"),
     )
     database_url = database_url_from_outputs(outputs)
-    if not psql_output(database_url, "SELECT to_regclass('public.tenants')").strip():
-        initialize_greenfield_database(database_url, outputs, vars_json)
-    apply_platform_update_migrations(database_url, vars_json, PLATFORM_UPDATE_MIGRATIONS)
-    seed_platform_bootstrap_defaults(database_url)
-    apply_platform_update_migrations(
-        database_url,
-        vars_json,
-        ["0155_tenant_model_catalog.sql"],
+    fresh = not psql_output(database_url, "SELECT to_regclass('public.tenants')").strip()
+    ledger_present = bool(
+        psql_output(
+            database_url, "SELECT to_regclass('public.platform_schema_migrations')"
+        ).strip()
     )
+    if fresh:
+        initialize_greenfield_database(database_url, outputs, vars_json)
+    ensure_migration_ledger(database_url)
+    if fresh:
+        record_platform_migrations(
+            database_url, [path.name for path in migration_files()], "greenfield"
+        )
+    elif not ledger_present:
+        backfill_platform_migration_ledger(database_url)
+    apply_pending_platform_migrations(database_url, outputs, vars_json)
+    seed_platform_bootstrap_defaults(database_url)
+    migrations = SOURCE / "packages/database-pg/drizzle"
+    for name in POST_SEED_MIGRATIONS:
+        path = migrations / name
+        if not path.is_file():
+            raise RuntimeError(f"Required platform migration is missing: {path}")
+        apply_migration_file(database_url, outputs, vars_json, path)
 
 
 def write_runner_files(payload, runner_secrets):
@@ -1680,6 +1851,124 @@ def sync_static(outputs_path, static_files, vars_json):
             )
 
 
+def read_current_status_pointer(bucket):
+    try:
+        return json.loads(
+            output(["aws", "s3", "cp", f"s3://{bucket}/deployment/status/current.json", "-"])
+        )
+    except Exception:
+        return {}
+
+
+def build_deployment_status_pointer(
+    status,
+    *,
+    action,
+    release,
+    previous,
+    controller,
+    environment_url,
+    stage,
+    region,
+    account_id,
+    started_at,
+    recorded_at,
+    terraform_exit_code=None,
+    error=None,
+    evidence_bucket=None,
+    evidence_key=None,
+):
+    pointer = {
+        "schemaVersion": 1,
+        "contract": "thinkwork.deployment.status.v1",
+        "stage": stage,
+        "region": region,
+        "accountId": account_id,
+        "environmentUrl": environment_url or previous.get("environmentUrl"),
+        "status": status,
+        "action": action,
+        "source": "deployment-controller",
+        "recordedAt": recorded_at,
+        "controller": {key: value for key, value in controller.items() if value},
+    }
+    if status == "succeeded":
+        pointer["activeRelease"] = release
+        pointer["lastSuccessfulDeployment"] = {
+            "sessionId": controller.get("sessionId"),
+            "startedAt": started_at,
+            "finishedAt": recorded_at,
+            "terraformExitCode": terraform_exit_code,
+            "evidenceBucket": evidence_bucket,
+            "evidenceKey": evidence_key,
+        }
+    else:
+        pointer["targetRelease"] = release
+        for carried in ("activeRelease", "lastSuccessfulDeployment", "historyKey"):
+            if previous.get(carried):
+                pointer[carried] = previous[carried]
+        if error:
+            pointer["error"] = str(error)
+    return pointer
+
+
+def write_deployment_status_pointer(status, vars_json=None, terraform_exit_code=None, error=None):
+    """Publish environment-owned deployed-release state. Best-effort: a status
+    write must never change the deploy result."""
+    bucket = os.environ.get("THINKWORK_EVIDENCE_BUCKET")
+    action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION")
+    if not bucket or action not in {"deploy", "update"}:
+        return
+    vars_json = vars_json or {}
+    previous = read_current_status_pointer(bucket)
+    environment_url = None
+    outputs_path = TF / "outputs.json"
+    if outputs_path.is_file():
+        try:
+            outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
+            environment_url = outputs.get("app_url", {}).get("value")
+        except Exception:
+            environment_url = None
+    recorded_at = datetime.now(UTC).isoformat()
+    prefix = os.environ.get("THINKWORK_EVIDENCE_PREFIX")
+    pointer = build_deployment_status_pointer(
+        status,
+        action=action,
+        release={
+            "version": os.environ.get("THINKWORK_RELEASE_VERSION"),
+            "manifestUrl": os.environ.get("THINKWORK_RELEASE_MANIFEST_URL"),
+            "manifestSha256": os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256"),
+        },
+        previous=previous,
+        controller={
+            "stateMachineArn": os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN"),
+            "codebuildProjectName": os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME"),
+            "codebuildBuildId": os.environ.get("CODEBUILD_BUILD_ID"),
+            "sessionId": os.environ.get("THINKWORK_DEPLOYMENT_SESSION_ID"),
+        },
+        environment_url=environment_url,
+        stage=os.environ.get("THINKWORK_STAGE"),
+        region=vars_json.get("region") or os.environ.get("AWS_REGION"),
+        account_id=vars_json.get("account_id") or previous.get("accountId"),
+        started_at=STARTED_AT,
+        recorded_at=recorded_at,
+        terraform_exit_code=terraform_exit_code,
+        error=error,
+        evidence_bucket=bucket,
+        evidence_key=f"{prefix}/deployment-evidence.json" if prefix else None,
+    )
+    if status in {"succeeded", "failed"}:
+        timestamp = recorded_at.replace("-", "").replace(":", "").split(".")[0] + "Z"
+        version = (
+            pointer.get("activeRelease") or pointer.get("targetRelease") or {}
+        ).get("version") or "unknown"
+        pointer["historyKey"] = f"deployment/status/history/{timestamp}-{version}.json"
+    body = Path("deployment-status-pointer.json")
+    body.write_text(json.dumps(pointer, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if status in {"succeeded", "failed"}:
+        run(["aws", "s3", "cp", str(body), f"s3://{bucket}/{pointer['historyKey']}"])
+    run(["aws", "s3", "cp", str(body), f"s3://{bucket}/deployment/status/current.json"])
+
+
 def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None):
     vars_json = vars_json or {}
     evidence = {
@@ -1721,6 +2010,10 @@ def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None)
                 f"s3://{bucket}/{prefix}/deployment-evidence.json",
             ]
         )
+    try:
+        write_deployment_status_pointer(status, vars_json, terraform_exit_code, error)
+    except Exception as status_error:
+        print(f"[status] failed to write deployment status pointer: {status_error}")
 
 
 def main():

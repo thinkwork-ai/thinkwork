@@ -168,15 +168,23 @@ export const createThreadLoaders = () => ({
     async (threadIds) => {
       const ids = [...threadIds];
       if (ids.length === 0) return [];
-      const rows = await db
-        .select()
-        .from(pendingUserQuestions)
-        .where(
-          and(
-            inArray(pendingUserQuestions.thread_id, ids),
-            eq(pendingUserQuestions.status, "pending"),
-          ),
-        );
+      // Best-effort (mirrors the lifecycle pending-question probe above): a
+      // stage whose pending_user_questions migration hasn't been applied
+      // degrades to "no question" instead of failing the thread query.
+      let rows: (typeof pendingUserQuestions.$inferSelect)[] = [];
+      try {
+        rows = await db
+          .select()
+          .from(pendingUserQuestions)
+          .where(
+            and(
+              inArray(pendingUserQuestions.thread_id, ids),
+              eq(pendingUserQuestions.status, "pending"),
+            ),
+          );
+      } catch (err) {
+        console.error("[threadPendingUserQuestion] probe failed:", err);
+      }
       const map = new Map(
         rows.map((row) => [row.thread_id, userQuestionToGraphql(row)]),
       );

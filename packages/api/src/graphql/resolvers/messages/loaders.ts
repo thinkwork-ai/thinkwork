@@ -25,10 +25,19 @@ export const createMessageLoaders = () => ({
     async (messageIds) => {
       const ids = [...messageIds];
       if (ids.length === 0) return [];
-      const rows = await db
-        .select()
-        .from(pendingUserQuestions)
-        .where(inArray(pendingUserQuestions.message_id, ids));
+      // Best-effort (mirrors the threadLifecycleStatus pending-question
+      // probe): a stage whose pending_user_questions migration hasn't been
+      // applied degrades to "no question" instead of failing every message
+      // on the thread page.
+      let rows: (typeof pendingUserQuestions.$inferSelect)[] = [];
+      try {
+        rows = await db
+          .select()
+          .from(pendingUserQuestions)
+          .where(inArray(pendingUserQuestions.message_id, ids));
+      } catch (err) {
+        console.error("[messageUserQuestion] probe failed:", err);
+      }
       const map = new Map(
         rows.map((row) => [row.message_id, userQuestionToGraphql(row)]),
       );

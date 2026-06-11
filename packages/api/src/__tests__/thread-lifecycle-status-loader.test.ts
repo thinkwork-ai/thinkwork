@@ -304,4 +304,58 @@ describe("threadPendingUserQuestion DataLoader", () => {
     ]);
     expect(q2).toBeNull();
   });
+
+  it("degrades to null when the select fails (missing table must not break the thread query)", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    dbSelectMock.mockImplementation(() => ({
+      from: () => ({
+        where: () =>
+          Promise.reject(
+            new Error('relation "pending_user_questions" does not exist'),
+          ),
+      }),
+    }));
+
+    const { threadPendingUserQuestion } = createThreadLoaders();
+    expect(await threadPendingUserQuestion.load("t-1")).toBeNull();
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("threadPendingUserQuestion"),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
+  });
+});
+
+describe("messageUserQuestion DataLoader", () => {
+  beforeEach(() => {
+    dbSelectMock.mockReset();
+    dbExecuteMock.mockReset();
+  });
+
+  it("degrades to null when the select fails (missing table must not break the messages query)", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    dbSelectMock.mockImplementation(() => ({
+      from: () => ({
+        where: () =>
+          Promise.reject(
+            new Error('relation "pending_user_questions" does not exist'),
+          ),
+      }),
+    }));
+
+    const { createMessageLoaders } = await import(
+      "../graphql/resolvers/messages/loaders.js"
+    );
+    const { messageUserQuestion } = createMessageLoaders();
+    expect(await messageUserQuestion.load("message-1")).toBeNull();
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("messageUserQuestion"),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
+  });
 });
