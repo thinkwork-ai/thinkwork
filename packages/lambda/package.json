@@ -18,6 +18,7 @@
     "@octokit/rest": "^22.0.1",
     "@thinkwork/admin-ops": "workspace:*",
     "@thinkwork/database-pg": "workspace:*",
+    "@thinkwork/runtime-config": "workspace:*",
     "drizzle-orm": "^0.39.0",
     "p-limit": "^6.2.0",
     "pg": "^8.16.3",

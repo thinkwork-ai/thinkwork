@@ -21,6 +21,7 @@
  * Keep tool definitions mechanical wrappers over imported functions.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -80,7 +81,7 @@ interface ToolDefinition {
 }
 
 function buildTools(auth: AuthResult): ToolDefinition[] {
-  const apiUrl = process.env.THINKWORK_API_URL ?? "";
+  const apiUrl = getConfig("THINKWORK_API_URL") ?? "";
   const authSecret = process.env.API_AUTH_SECRET ?? "";
 
   // Tenant pinning: a tenant-scoped key forces tenantId on every downstream

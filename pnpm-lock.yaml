@@ -1139,6 +1139,9 @@ importers:
       '@thinkwork/database-pg':
         specifier: workspace:*
         version: link:../database-pg
+      '@thinkwork/runtime-config':
+        specifier: workspace:*
+        version: link:../runtime-config
       drizzle-orm:
         specifier: ^0.39.0
         version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)

@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetSecretValueCommand,
   SecretsManagerClient,
@@ -156,7 +157,7 @@ export function readKestraRuntimeStatus(): {
   url: string | null;
   basicAuthSecretArn: string | null;
 } {
-  const raw = process.env.KESTRA || process.env.KESTRA_STATUS;
+  const raw = getConfig("KESTRA") || process.env.KESTRA_STATUS;
   if (raw) {
     const parts = raw.split("|");
     const provisioned = truthyFlag(parts[0]);
@@ -229,7 +230,7 @@ function truthyFlag(value: unknown): boolean {
 }
 
 function deriveKestraUrlFromWwwUrl(): string | null {
-  const raw = process.env.WWW_URL;
+  const raw = getConfig("WWW_URL");
   if (!raw) return null;
   try {
     const url = new URL(raw);

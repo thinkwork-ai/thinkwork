@@ -34,6 +34,7 @@
  *     errorClass?, errorMessage? }
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   BedrockAgentCoreClient,
   type CodeInterpreterStreamOutput,
@@ -694,10 +695,11 @@ export async function handler(
     .split(",")
     .map((k) => k.trim())
     .filter(Boolean);
+  const apiUrl = getConfig("THINKWORK_API_URL");
   const stepCallback: StepCallbackEnv | undefined =
-    process.env.THINKWORK_API_URL && process.env.API_AUTH_SECRET
+    apiUrl && process.env.API_AUTH_SECRET
       ? {
-          apiUrl: process.env.THINKWORK_API_URL,
+          apiUrl,
           authSecret: process.env.API_AUTH_SECRET,
         }
       : undefined;
