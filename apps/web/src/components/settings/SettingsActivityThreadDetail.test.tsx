@@ -75,6 +75,9 @@ vi.mock("@thinkwork/ui", () => ({
   DialogTitle: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  DialogDescription: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   Separator: (props: React.HTMLAttributes<HTMLHRElement>) => <hr {...props} />,
 }));
 
