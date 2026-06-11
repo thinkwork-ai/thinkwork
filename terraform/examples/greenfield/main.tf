@@ -1216,6 +1216,31 @@ output "app_bucket_name" {
   value       = module.thinkwork.app_bucket_name
 }
 
+output "deployment_state_machine_arn" {
+  description = "Deployment orchestration Step Functions state machine ARN."
+  value       = module.thinkwork.deployment_state_machine_arn
+}
+
+output "deployment_state_machine_name" {
+  description = "Deployment orchestration Step Functions state machine name."
+  value       = module.thinkwork.deployment_state_machine_name
+}
+
+output "deployment_runner_project_name" {
+  description = "CodeBuild project name for the deployment runner."
+  value       = module.thinkwork.deployment_runner_project_name
+}
+
+output "deployment_runner_project_arn" {
+  description = "CodeBuild project ARN for the deployment runner."
+  value       = module.thinkwork.deployment_runner_project_arn
+}
+
+output "deployment_evidence_bucket_name" {
+  description = "S3 bucket for deployment evidence artifacts."
+  value       = module.thinkwork.deployment_evidence_bucket_name
+}
+
 output "computer_url" {
   description = "Deprecated alias for app_url"
   value       = local.www_dns_enabled ? "https://${local.app_domain}" : "https://${module.thinkwork.app_distribution_domain}"
