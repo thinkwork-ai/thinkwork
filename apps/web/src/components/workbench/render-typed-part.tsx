@@ -167,7 +167,11 @@ export function renderTypedPart(
           ? nested
           : { questionId: flat.questionId, questions: flat.questions }
       ) as UserQuestionData;
-      return <UserQuestionCard key={key} data={data} question={userQuestion} />;
+      return (
+        <div key={key} className="pt-1">
+          <UserQuestionCard data={data} question={userQuestion} />
+        </div>
+      );
     }
     if (part.type === "data-runbook-confirmation") {
       return (
