@@ -2,6 +2,7 @@ import base64
 import importlib.util
 import io
 import json
+import re
 import subprocess
 import tarfile
 from hashlib import sha256
@@ -364,95 +365,304 @@ def test_sync_release_artifacts_verifies_detached_manifest_signature(
     }
 
 
-def test_push_database_schema_updates_existing_db_with_platform_migrations(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    runner = load_runner()
+class FakeLedgerDb:
+    """In-memory stand-in for the psql/psql_output pair: tracks the migration
+    ledger and records which migration files were applied."""
+
+    def __init__(self, tenants_exist: bool, ledger: set[str] | None = None,
+                 present_objects: set[str] | None = None) -> None:
+        self.tenants_exist = tenants_exist
+        self.ledger: dict[str, str] = {name: "preexisting" for name in (ledger or set())}
+        self.ledger_table_exists = ledger is not None
+        self.present_objects = present_objects or set()
+        self.applied_files: list[str] = []
+        self.events: list[tuple[str, str]] = []
+
+    def psql(self, _database_url, sql=None, file=None, variables=None):
+        if file is not None:
+            self.applied_files.append(Path(file).name)
+            self.events.append(("apply", Path(file).name))
+            return
+        assert sql is not None
+        if "CREATE TABLE IF NOT EXISTS public.platform_schema_migrations" in sql:
+            self.ledger_table_exists = True
+            self.events.append(("ensure-ledger", ""))
+            return
+        if "INSERT INTO public.platform_schema_migrations" in sql:
+            for name, source in re.findall(r"\('([^']+)', '([^']+)'\)", sql):
+                self.ledger.setdefault(name, source)
+                self.events.append(("record", f"{name}:{source}"))
+            return
+        self.events.append(("sql", sql.strip().splitlines()[0] if sql.strip() else ""))
+
+    def psql_output(self, _database_url, sql):
+        if "to_regclass('public.tenants')" in sql:
+            return "public.tenants" if self.tenants_exist else ""
+        if "to_regclass('public.platform_schema_migrations')" in sql:
+            return "public.platform_schema_migrations" if self.ledger_table_exists else ""
+        if "SELECT name FROM public.platform_schema_migrations" in sql:
+            return "\n".join(sorted(self.ledger))
+        for obj in self.present_objects:
+            if f"'{obj}'" in sql or f"to_regclass('{obj}')" in sql:
+                return "1"
+        return ""
+
+
+def run_push_database_schema(
+    runner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    db: FakeLedgerDb,
+    migration_names: list[str],
+    migration_bodies: dict[str, str] | None = None,
+) -> list[tuple[str, str]]:
     source_dir = tmp_path / "source"
     outputs_path = tmp_path / "outputs.json"
     outputs_path.write_text("{}", encoding="utf-8")
-    write_drizzle_files(source_dir, runner.PLATFORM_UPDATE_MIGRATIONS)
-    calls: list[tuple[str, str | None]] = []
+    write_drizzle_files(source_dir, migration_names)
+    for name, body in (migration_bodies or {}).items():
+        (source_dir / "packages/database-pg/drizzle" / name).write_text(body, encoding="utf-8")
 
     monkeypatch.setattr(runner, "SOURCE", source_dir)
     monkeypatch.setenv("THINKWORK_TERRAFORM_MODULE_SOURCE", "thinkwork-ai/thinkwork/aws")
-    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.141")
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.170")
     monkeypatch.setattr(runner, "checkout_source", lambda *_args: None)
     monkeypatch.setattr(runner, "database_url_from_outputs", lambda _outputs: "postgres://db")
-    monkeypatch.setattr(
-        runner,
-        "psql_output",
-        lambda _database_url, _sql: "public.tenants",
-    )
+    monkeypatch.setattr(runner, "psql", db.psql)
+    monkeypatch.setattr(runner, "psql_output", db.psql_output)
     monkeypatch.setattr(
         runner,
         "initialize_greenfield_database",
-        lambda *_args: calls.append(("initialize", None)),
+        lambda *_args: db.events.append(("initialize", "")),
     )
     monkeypatch.setattr(
         runner,
         "seed_platform_bootstrap_defaults",
-        lambda _database_url: calls.append(("seed", None)),
+        lambda _database_url: db.events.append(("seed", "")),
     )
 
-    def record_psql(_database_url, sql=None, file=None, variables=None):
-        calls.append(("psql", Path(file).name if file else "sql"))
-
-    monkeypatch.setattr(runner, "psql", record_psql)
-
     runner.push_database_schema(outputs_path, {"stage": "tei-e2e"})
-
-    assert calls == [
-        ("psql", "0149_user_model_approvals.sql"),
-        ("psql", "0152_agent_profiles.sql"),
-        ("psql", "0155_tenant_model_catalog.sql"),
-        ("seed", None),
-        ("psql", "0155_tenant_model_catalog.sql"),
-    ]
+    return db.events
 
 
-def test_push_database_schema_backfills_tenant_catalog_after_greenfield_seed(
+def test_push_database_schema_applies_only_unrecorded_migrations(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     runner = load_runner()
-    source_dir = tmp_path / "source"
-    outputs_path = tmp_path / "outputs.json"
-    outputs_path.write_text("{}", encoding="utf-8")
-    write_drizzle_files(source_dir, runner.PLATFORM_UPDATE_MIGRATIONS)
-    calls: list[tuple[str, str | None]] = []
-
-    monkeypatch.setattr(runner, "SOURCE", source_dir)
-    monkeypatch.setenv("THINKWORK_TERRAFORM_MODULE_SOURCE", "thinkwork-ai/thinkwork/aws")
-    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.141")
-    monkeypatch.setattr(runner, "checkout_source", lambda *_args: None)
-    monkeypatch.setattr(runner, "database_url_from_outputs", lambda _outputs: "postgres://db")
-    monkeypatch.setattr(runner, "psql_output", lambda _database_url, _sql: "")
-    monkeypatch.setattr(
-        runner,
-        "initialize_greenfield_database",
-        lambda *_args: calls.append(("initialize", None)),
+    db = FakeLedgerDb(
+        tenants_exist=True,
+        ledger={
+            "0149_user_model_approvals.sql",
+            "0152_agent_profiles.sql",
+            "0155_tenant_model_catalog.sql",
+        },
     )
-    monkeypatch.setattr(
+    run_push_database_schema(
         runner,
-        "seed_platform_bootstrap_defaults",
-        lambda _database_url: calls.append(("seed", None)),
+        tmp_path,
+        monkeypatch,
+        db,
+        [
+            "0149_user_model_approvals.sql",
+            "0152_agent_profiles.sql",
+            "0155_tenant_model_catalog.sql",
+            "0158_pending_user_questions.sql",
+        ],
     )
 
-    def record_psql(_database_url, sql=None, file=None, variables=None):
-        calls.append(("psql", Path(file).name if file else "sql"))
-
-    monkeypatch.setattr(runner, "psql", record_psql)
-
-    runner.push_database_schema(outputs_path, {"stage": "tei-e2e"})
-
-    assert calls == [
-        ("initialize", None),
-        ("psql", "0149_user_model_approvals.sql"),
-        ("psql", "0152_agent_profiles.sql"),
-        ("psql", "0155_tenant_model_catalog.sql"),
-        ("seed", None),
-        ("psql", "0155_tenant_model_catalog.sql"),
+    assert db.applied_files == [
+        "0158_pending_user_questions.sql",
+        "0155_tenant_model_catalog.sql",  # post-seed backfill re-run
     ]
+    assert db.ledger["0158_pending_user_questions.sql"] == "runner"
+    assert ("seed", "") in db.events
+    # seed runs after the pending migration and before the post-seed re-run
+    assert db.events.index(("seed", "")) > db.events.index(
+        ("apply", "0158_pending_user_questions.sql")
+    )
+
+
+def test_push_database_schema_transition_backfills_ledger_via_markers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    db = FakeLedgerDb(
+        tenants_exist=True,
+        ledger=None,  # no ledger table yet: pre-ledger environment
+        present_objects={"public.user_model_approvals"},
+    )
+    run_push_database_schema(
+        runner,
+        tmp_path,
+        monkeypatch,
+        db,
+        ["0001_ancient.sql", "0155_tenant_model_catalog.sql"],
+        migration_bodies={
+            "0149_user_model_approvals.sql": (
+                "-- creates: public.user_model_approvals\nSELECT 1;\n"
+            ),
+            "0158_pending_user_questions.sql": (
+                "-- creates: public.pending_user_questions\nCREATE TABLE IF NOT EXISTS "
+                "public.pending_user_questions ();\n"
+            ),
+        },
+    )
+
+    # transition never re-runs existing files — markers can name objects that
+    # later migrations intentionally dropped, so auto-apply is unsafe
+    assert db.applied_files == ["0155_tenant_model_catalog.sql"]  # post-seed re-run only
+    # marker objects present -> verified
+    assert db.ledger["0149_user_model_approvals.sql"] == "transition-verified"
+    # marker objects missing -> recorded as assumed, surfaced as a warning
+    assert db.ledger["0158_pending_user_questions.sql"] == "transition-assumed"
+    # no markers -> assumed applied
+    assert db.ledger["0001_ancient.sql"] == "transition-assumed"
+
+
+def test_push_database_schema_greenfield_records_full_ledger(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    db = FakeLedgerDb(tenants_exist=False)
+    run_push_database_schema(
+        runner,
+        tmp_path,
+        monkeypatch,
+        db,
+        ["0001_init.sql", "0155_tenant_model_catalog.sql"],
+    )
+
+    assert ("initialize", "") in db.events
+    assert db.ledger == {
+        "0001_init.sql": "greenfield",
+        "0155_tenant_model_catalog.sql": "greenfield",
+    }
+    # nothing re-applies through the pending path; only the post-seed re-run
+    assert db.applied_files == ["0155_tenant_model_catalog.sql"]
+
+
+def test_declared_migration_objects_parses_header_markers(tmp_path: Path) -> None:
+    runner = load_runner()
+    path = tmp_path / "0158_pending_user_questions.sql"
+    path.write_text(
+        "-- Purpose: example\n"
+        "-- creates: public.pending_user_questions\n"
+        "-- creates: public.idx_pending_user_questions_tenant\n"
+        "-- creates-column: public.computers.scope\n"
+        "-- creates-constraint: public.pending_user_questions.pending_status_allowed\n"
+        "\n"
+        "CREATE TABLE IF NOT EXISTS public.pending_user_questions ();\n"
+        "-- creates: public.after_body_ignored\n",
+        encoding="utf-8",
+    )
+
+    assert runner.declared_migration_objects(path) == [
+        ("object", "public.pending_user_questions"),
+        ("object", "public.idx_pending_user_questions_tenant"),
+        ("column", "public.computers.scope"),
+        ("constraint", "public.pending_user_questions.pending_status_allowed"),
+    ]
+
+
+def test_build_deployment_status_pointer_success_sets_active_release() -> None:
+    runner = load_runner()
+    pointer = runner.build_deployment_status_pointer(
+        "succeeded",
+        action="update",
+        release={"version": "v0.1.0-canary.170", "manifestUrl": "u", "manifestSha256": "s"},
+        previous={"activeRelease": {"version": "v0.1.0-canary.165"}},
+        controller={"codebuildBuildId": "b:1", "sessionId": "sess", "stateMachineArn": None},
+        environment_url="https://example.cloudfront.net",
+        stage="tei-e2e",
+        region="us-east-1",
+        account_id="123",
+        started_at="t0",
+        recorded_at="t1",
+        terraform_exit_code=0,
+        evidence_bucket="bucket",
+        evidence_key="sessions/sess/update/deployment-evidence.json",
+    )
+
+    assert pointer["contract"] == "thinkwork.deployment.status.v1"
+    assert pointer["activeRelease"]["version"] == "v0.1.0-canary.170"
+    assert pointer["lastSuccessfulDeployment"]["sessionId"] == "sess"
+    assert pointer["lastSuccessfulDeployment"]["terraformExitCode"] == 0
+    assert "targetRelease" not in pointer
+    assert "stateMachineArn" not in pointer["controller"]
+
+
+def test_build_deployment_status_pointer_failure_preserves_active_release() -> None:
+    runner = load_runner()
+    previous = {
+        "activeRelease": {"version": "v0.1.0-canary.165"},
+        "lastSuccessfulDeployment": {"sessionId": "old"},
+        "environmentUrl": "https://example.cloudfront.net",
+    }
+    pointer = runner.build_deployment_status_pointer(
+        "failed",
+        action="update",
+        release={"version": "v0.1.0-canary.170", "manifestUrl": "u", "manifestSha256": "s"},
+        previous=previous,
+        controller={"codebuildBuildId": "b:2"},
+        environment_url=None,
+        stage="tei-e2e",
+        region="us-east-1",
+        account_id="123",
+        started_at="t0",
+        recorded_at="t1",
+        error=RuntimeError("terraform exploded"),
+    )
+
+    assert pointer["status"] == "failed"
+    assert pointer["activeRelease"]["version"] == "v0.1.0-canary.165"
+    assert pointer["targetRelease"]["version"] == "v0.1.0-canary.170"
+    assert pointer["lastSuccessfulDeployment"]["sessionId"] == "old"
+    assert pointer["environmentUrl"] == "https://example.cloudfront.net"
+    assert "terraform exploded" in pointer["error"]
+
+
+def test_write_deployment_status_pointer_uploads_current_and_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(runner, "TF", tmp_path / "tf-none")
+    monkeypatch.setenv("THINKWORK_EVIDENCE_BUCKET", "evidence-bucket")
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_ACTION", "update")
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.170")
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", "https://example.com/m.json")
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", "abc")
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_SESSION_ID", "sess-1")
+    monkeypatch.setenv("THINKWORK_EVIDENCE_PREFIX", "sessions/sess-1/update")
+
+    uploads: list[str] = []
+    monkeypatch.setattr(runner, "run", lambda args, **_kw: uploads.append(args[-1]))
+    monkeypatch.setattr(
+        runner, "output", lambda *_args, **_kw: (_ for _ in ()).throw(RuntimeError("404"))
+    )
+
+    runner.write_deployment_status_pointer("succeeded", {"region": "us-east-1"}, 0)
+
+    body = json.loads((tmp_path / "deployment-status-pointer.json").read_text(encoding="utf-8"))
+    assert body["activeRelease"]["version"] == "v0.1.0-canary.170"
+    assert body["lastSuccessfulDeployment"]["sessionId"] == "sess-1"
+    assert uploads[-1] == "s3://evidence-bucket/deployment/status/current.json"
+    assert any("deployment/status/history/" in target for target in uploads)
+
+
+def test_write_deployment_status_pointer_skips_non_deploy_actions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("THINKWORK_EVIDENCE_BUCKET", "evidence-bucket")
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_ACTION", "plan")
+    uploads: list[str] = []
+    monkeypatch.setattr(runner, "run", lambda args, **_kw: uploads.append(args[-1]))
+
+    runner.write_deployment_status_pointer("succeeded", {}, 0)
+
+    assert uploads == []
 
 
 def test_payload_release_selection_overrides_stale_runner_environment(
