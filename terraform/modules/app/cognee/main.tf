@@ -111,6 +111,21 @@ locals {
     # per-request embedding + LLM timeouts so a batch completes.
     { name = "EMBEDDING_REQUEST_TIMEOUT", value = "180" },
     { name = "LLM_REQUEST_TIMEOUT", value = "180" },
+    # Bedrock throttles (HTTP 429) the burst of per-entity titan embedding
+    # calls cognify fires — the pipeline errored on EmbeddingException. Pace
+    # embedding requests with Cognee's built-in rate limiter so they stay
+    # under the account's on-demand embedding throughput; litellm still
+    # retries, but pacing prevents the burst that trips the limit. 60 req/60s
+    # is conservative for the single dogfood task; the self-invoke ingest
+    # chain drains the backlog across runs.
+    { name = "EMBEDDING_RATE_LIMIT_ENABLED", value = "true" },
+    { name = "EMBEDDING_RATE_LIMIT_REQUESTS", value = "60" },
+    { name = "EMBEDDING_RATE_LIMIT_INTERVAL", value = "60" },
+    # Cognee's generic LLM rate limiter (shared limiter implementation) —
+    # enable it too so the Kimi extraction calls don't trip Bedrock either.
+    { name = "LLM_RATE_LIMIT_ENABLED", value = "true" },
+    { name = "LLM_RATE_LIMIT_REQUESTS", value = "60" },
+    { name = "LLM_RATE_LIMIT_INTERVAL", value = "60" },
   ]
 
   optional_environment = concat(
