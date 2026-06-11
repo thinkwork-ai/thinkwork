@@ -166,7 +166,7 @@ describe("UserQuestionCard — pending (tabbed batch)", () => {
   it("does NOT auto-advance when Other is selected (the inline input must stay visible)", () => {
     render(<UserQuestionCard data={batch} question={pendingRecord} />);
 
-    fireEvent.click(screen.getByRole("radio", { name: /^other$/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /type something/i }));
 
     expect(
       screen.getByText("Which environment should this target?"),
@@ -256,7 +256,7 @@ describe("UserQuestionCard — pending (tabbed batch)", () => {
     render(<UserQuestionCard data={batch} question={pendingRecord} />);
 
     expect(screen.queryByLabelText(/other answer for env/i)).toBeNull();
-    fireEvent.click(screen.getByRole("radio", { name: /^other$/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /type something/i }));
 
     const input = screen.getByLabelText(/other answer for env/i);
     fireEvent.change(input, { target: { value: "A canary environment" } });

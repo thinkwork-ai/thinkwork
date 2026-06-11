@@ -467,7 +467,7 @@ export function UserQuestionCard({ data, question }: UserQuestionCardProps) {
                   : setSingle(index, OTHER_VALUE)
               }
             />
-            <span className="text-sm text-foreground">Other</span>
+            <span className="text-sm text-foreground">Type something...</span>
           </label>
           {otherSelected ? (
             <Input
