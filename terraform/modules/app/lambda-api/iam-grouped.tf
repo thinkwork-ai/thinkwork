@@ -218,24 +218,28 @@ locals {
     local.deploy_lambda_handlers ? [
       # (was inline policy "thinkwork-${stage}-wiki-compile-dlq-send")
       {
+        Sid      = "WikiCompileDlqSend"
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.wiki_compile_dlq[0].arn
       },
       # (was inline policy "thinkwork-${stage}-ontology-scan-dlq-send")
       {
+        Sid      = "OntologyScanDlqSend"
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.ontology_scan_dlq[0].arn
       },
       # (was inline policy "thinkwork-${stage}-ontology-reprocess-dlq-send")
       {
+        Sid      = "OntologyReprocessDlqSend"
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.ontology_reprocess_dlq[0].arn
       },
       # (was inline policy "compliance-drainer-dlq-send")
       {
+        Sid      = "ComplianceDrainerDlqSend"
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.compliance_drainer_dlq[0].arn
@@ -247,6 +251,7 @@ locals {
       # queue-specific. (The runner's receive grants stay on the dedicated
       # runner role — see compliance_exports_runner_sqs in handlers.tf.)
       {
+        Sid      = "ComplianceExportsSend"
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.compliance_exports[0].arn
