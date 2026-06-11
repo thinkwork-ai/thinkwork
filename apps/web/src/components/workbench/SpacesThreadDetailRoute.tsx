@@ -147,6 +147,7 @@ interface ThreadResult {
     } | null;
     lifecycleStatus?: string | null;
     metadata?: unknown;
+    lastModel?: string | null;
     costSummary?: number | null;
     createdAt?: string | null;
     updatedAt?: string | null;
@@ -474,6 +475,25 @@ export function SpacesThreadDetailRoute({
     }
   }, [approvedModels, selectedModelId]);
 
+  // Seed the composer with the model this thread last used, so a follow-up
+  // defaults to the thread's own history rather than the global stored pick
+  // (which is shared across every thread). Runs once per thread on load —
+  // after that, the operator's manual picks win and must not be re-clobbered.
+  // The stored/default selection stays in place when the thread has no
+  // last-used model (a genuinely new thread) or it isn't an approved option.
+  const seededModelThreadRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!approvedModels || !routeThread) return;
+    if (seededModelThreadRef.current === routeThread.id) return;
+    seededModelThreadRef.current = routeThread.id;
+    const lastModel = routeThread.lastModel ?? null;
+    if (!lastModel) return;
+    const resolved = chooseApprovedModelId(approvedModels, lastModel);
+    if (resolved === lastModel && resolved !== selectedModelId) {
+      setSelectedModelId(resolved);
+    }
+  }, [approvedModels, routeThread, selectedModelId]);
+
   useEffect(() => {
     if (approvedModelError) {
       console.warn(
@@ -484,6 +504,12 @@ export function SpacesThreadDetailRoute({
   }, [approvedModelError]);
 
   function handleSelectedModelChange(modelId: string) {
+    // Radix Select's controllable-state sync fires onValueChange("") whenever
+    // the controlled value is changed programmatically (e.g. seeding from the
+    // thread's last-used model). No approved model has an empty modelId and the
+    // picker has no empty-valued item, so an empty value is never a real user
+    // pick — ignore it, otherwise it clobbers the selection back to the default.
+    if (!modelId) return;
     setSelectedModelId(modelId);
     writeStoredModelId(modelId);
   }
