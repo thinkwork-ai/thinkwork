@@ -140,6 +140,12 @@ variable "wait_for_steady_state" {
   default     = true
 }
 
+variable "enable_execute_command" {
+  description = "Enable `aws ecs execute-command` into the Cognee container (and grant the SSM-messages channel on the task role). The dogfood Cognee ALB is VPC-internal, so exec is the only way to introspect its store/API directly. Defaults on for the current dogfood/dev deployment; set false for hardened multi-tenant production."
+  type        = bool
+  default     = true
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention for the Cognee service"
   type        = number
