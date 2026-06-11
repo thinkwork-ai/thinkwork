@@ -181,7 +181,7 @@ describe("Kestra Terraform managed app composition", () => {
     expect(handlers).not.toMatch(
       /KESTRA = ".*var\.kestra_basic_auth_secret_arn/s,
     );
-    expect(handlers).toMatch(/}, local\.cognee_env\)/);
+    expect(handlers).toMatch(/local\.cognee_env,\s*\)/);
     expect(handlers).toMatch(/}, local\.twenty_env, local\.kestra_env\)/);
     expect(handlers).toMatch(/"kestra-control-mcp"\s*=\s*local\.kestra_env/);
   });
