@@ -11,6 +11,7 @@
  * Idempotent: if the user already exists, returns the existing records.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type { GraphQLContext } from "../../context.js";
 import {
   db,
@@ -157,7 +158,7 @@ export const bootstrapUser = async (
       await cognito.send(
         new AdminUpdateUserAttributesCommand({
           UserPoolId:
-            process.env.COGNITO_USER_POOL_ID || process.env.USER_POOL_ID,
+            getConfig("COGNITO_USER_POOL_ID") || process.env.USER_POOL_ID,
           Username: cognitoSub,
           UserAttributes: [
             { Name: "custom:tenant_id", Value: pendingTenant.id },
@@ -248,7 +249,7 @@ export const bootstrapUser = async (
     await cognito.send(
       new AdminUpdateUserAttributesCommand({
         UserPoolId:
-          process.env.COGNITO_USER_POOL_ID || process.env.USER_POOL_ID,
+          getConfig("COGNITO_USER_POOL_ID") || process.env.USER_POOL_ID,
         Username: cognitoSub,
         UserAttributes: [{ Name: "custom:tenant_id", Value: tenant.id }],
       }),

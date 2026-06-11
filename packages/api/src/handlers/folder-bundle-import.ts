@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -33,7 +34,7 @@ import {
 const s3 = new S3Client({});
 
 function workspaceBucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 export async function handler(

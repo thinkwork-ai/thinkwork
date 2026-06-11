@@ -47,6 +47,7 @@
  *     secret like a platform-root credential.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -90,7 +91,7 @@ const STAGE = process.env.STAGE || "dev";
 function defaultMcpUrl(): string {
   const custom = process.env.MCP_CUSTOM_DOMAIN;
   if (custom) return `https://${custom.replace(/^https?:\/\//, "")}/mcp/admin`;
-  const apiUrl = process.env.THINKWORK_API_URL;
+  const apiUrl = getConfig("THINKWORK_API_URL");
   if (!apiUrl)
     throw new Error("Neither MCP_CUSTOM_DOMAIN nor THINKWORK_API_URL is set");
   return `${apiUrl.replace(/\/+$/, "")}/mcp/admin`;

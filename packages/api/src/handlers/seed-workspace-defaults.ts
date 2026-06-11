@@ -24,6 +24,7 @@
  * deploy-pipeline wiring lands in plan §008 U4.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { and, eq, isNotNull, or } from "drizzle-orm";
 import {
   GetObjectCommand,
@@ -66,7 +67,7 @@ type SeedSummary = {
 };
 
 function workspaceBucket(): string {
-  const bucket = process.env.WORKSPACE_BUCKET || "";
+  const bucket = getConfig("WORKSPACE_BUCKET") || "";
   if (!bucket)
     throw new Error("WORKSPACE_BUCKET environment variable is required");
   return bucket;
@@ -188,7 +189,7 @@ async function ensureCustomerOnboardingSpaceSources(
 }
 
 export async function handler(): Promise<SeedSummary> {
-  if (!process.env.WORKSPACE_BUCKET) {
+  if (!getConfig("WORKSPACE_BUCKET")) {
     throw new Error("WORKSPACE_BUCKET environment variable is required");
   }
 

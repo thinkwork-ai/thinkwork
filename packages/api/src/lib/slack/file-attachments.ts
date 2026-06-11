@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { randomUUID } from "node:crypto";
 
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -59,7 +60,7 @@ export async function materializeSlackFilesAsThreadAttachments(
 ): Promise<MaterializedSlackAttachment[]> {
   if (input.fileRefs.length === 0) return [];
 
-  const bucket = deps.bucket ?? process.env.WORKSPACE_BUCKET ?? "";
+  const bucket = deps.bucket ?? getConfig("WORKSPACE_BUCKET") ?? "";
   if (!bucket) {
     console.warn("[slack:files] WORKSPACE_BUCKET missing; skipping files", {
       fileCount: input.fileRefs.length,

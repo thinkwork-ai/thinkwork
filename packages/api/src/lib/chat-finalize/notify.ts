@@ -12,12 +12,15 @@
  * file in the lift; that belongs in a follow-up.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { messages } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
 
 const db = getDb();
 
-const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
+function appsyncEndpoint(): string {
+  return getConfig("APPSYNC_ENDPOINT", "");
+}
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
 
 export const GENERIC_AGENT_ERROR_MESSAGE =
@@ -114,7 +117,8 @@ export async function notifyNewMessage(payload: {
   senderType: string;
   senderId: string;
 }): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) {
+  const endpoint = appsyncEndpoint();
+  if (!endpoint || !APPSYNC_API_KEY) {
     console.warn(
       `[chat-finalize] AppSync not configured, skipping notification`,
     );
@@ -159,7 +163,7 @@ export async function notifyNewMessage(payload: {
   `;
 
   try {
-    const response = await fetch(APPSYNC_ENDPOINT, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -206,7 +210,8 @@ export async function notifyThreadTurnUpdate(payload: {
   status: string;
   triggerName: string | null;
 }): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) return;
+  const endpoint = appsyncEndpoint();
+  if (!endpoint || !APPSYNC_API_KEY) return;
 
   const mutation = `
     mutation NotifyThreadTurnUpdate(
@@ -237,7 +242,7 @@ export async function notifyThreadTurnUpdate(payload: {
   `;
 
   try {
-    await fetch(APPSYNC_ENDPOINT, {
+    await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   CopyObjectCommand,
   DeleteObjectsCommand,
@@ -642,7 +643,7 @@ function s3ObjectToWorkspaceObject(object: _Object): WorkspaceObject {
 
 function parseCliOptions(argv: string[]): CliOptions {
   const options: CliOptions = {
-    bucket: process.env.WORKSPACE_BUCKET ?? "thinkwork-dev-storage",
+    bucket: getConfig("WORKSPACE_BUCKET") ?? "thinkwork-dev-storage",
     tenantSlug: "sleek-squirrel-230",
     agentSlug: "fleet-caterpillar-456",
     runId: new Date().toISOString().replace(/[:.]/g, "-"),

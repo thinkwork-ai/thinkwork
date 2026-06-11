@@ -7,6 +7,7 @@
  * Run via: Lambda invoke, or `npx tsx packages/api/src/handlers/bootstrap-workspaces.ts`
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { eq, and, isNotNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, agentSkills } from "@thinkwork/database-pg/schema";
@@ -15,7 +16,9 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 const s3 = new S3Client({
   region: process.env.AWS_REGION || "us-east-1",
 });
-const BUCKET = process.env.WORKSPACE_BUCKET || "";
+function workspaceBucket(): string {
+  return getConfig("WORKSPACE_BUCKET", "");
+}
 
 const db = getDb();
 
@@ -89,7 +92,7 @@ async function writeWorkspaceFile(
   const key = `tenants/${tenantSlug}/agents/${agentSlug}/${path}`;
   await s3.send(
     new PutObjectCommand({
-      Bucket: BUCKET,
+      Bucket: workspaceBucket(),
       Key: key,
       Body: content,
       ContentType: "text/plain; charset=utf-8",
@@ -207,12 +210,13 @@ export async function handler(): Promise<{
   migrated: number;
   bootstrapped: number;
 }> {
-  if (!BUCKET) {
+  const bucket = workspaceBucket();
+  if (!bucket) {
     throw new Error("WORKSPACE_BUCKET environment variable is required");
   }
 
   console.log("[bootstrap] Starting workspace bootstrap migration...");
-  console.log(`[bootstrap] S3 bucket: ${BUCKET}`);
+  console.log(`[bootstrap] S3 bucket: ${bucket}`);
 
   // Step 1: Convert DB sub-agents to workspace folders
   const migrated = await migrateSubAgentsToWorkspaces();

@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -435,7 +436,7 @@ export async function reconcileChangedFiles(
     return { status: "no_changes", files: [] };
   }
 
-  const bucket = input.bucket ?? process.env.WORKSPACE_BUCKET ?? "";
+  const bucket = input.bucket ?? getConfig("WORKSPACE_BUCKET") ?? "";
   if (!bucket) {
     throw new ReconcileContextError(
       "WORKSPACE_BUCKET is required to reconcile workspace changes.",

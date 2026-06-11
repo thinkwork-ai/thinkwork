@@ -19,6 +19,7 @@
  *   Emit only `{agentId, success, errorCategory?}` from the caller.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetObjectCommand,
   NoSuchKey,
@@ -48,7 +49,7 @@ const REGION =
 const s3 = new S3Client({ region: REGION });
 
 function bucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 // Accept either the root `db` handle or a transaction tx — the structural

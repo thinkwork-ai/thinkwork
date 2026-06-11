@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   CopyObjectCommand,
   DeleteObjectsCommand,
@@ -1084,7 +1085,7 @@ export async function runWorkspaceLayoutMigration(
   options: WorkspaceLayoutMigrationOptions = {},
   deps: WorkspaceLayoutMigrationDeps = {},
 ): Promise<WorkspaceLayoutMigrationResult> {
-  const bucket = options.bucket ?? process.env.WORKSPACE_BUCKET ?? "";
+  const bucket = options.bucket ?? getConfig("WORKSPACE_BUCKET") ?? "";
   if (!bucket) {
     throw new Error("WORKSPACE_BUCKET is required");
   }

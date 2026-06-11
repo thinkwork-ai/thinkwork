@@ -22,6 +22,7 @@
  * exact content, independent of subsequent template edits.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { createHash } from "node:crypto";
 import {
   GetObjectCommand,
@@ -37,7 +38,7 @@ const REGION =
 const s3 = new S3Client({ region: REGION });
 
 function bucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 function templateKey(

@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { createHash } from "node:crypto";
 import {
   DeleteObjectCommand,
@@ -483,7 +484,7 @@ async function putTextObject(key: string, content: string): Promise<void> {
 }
 
 function workspaceBucket(): string {
-  const bucket = process.env.WORKSPACE_BUCKET || "";
+  const bucket = getConfig("WORKSPACE_BUCKET") || "";
   if (!bucket) throw new Error("WORKSPACE_BUCKET env is not configured");
   return bucket;
 }

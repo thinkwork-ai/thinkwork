@@ -5,6 +5,7 @@
  * Follows the workspace-files.ts pattern.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -36,7 +37,9 @@ interface APIGatewayProxyResult {
 const s3 = new S3Client({
   region: process.env.AWS_REGION || "us-east-1",
 });
-const BUCKET = process.env.WORKSPACE_BUCKET || "";
+function workspaceBucket(): string {
+  return getConfig("WORKSPACE_BUCKET", "");
+}
 const db = getDb();
 
 const ACCEPTED_EXTENSIONS = new Set([
@@ -119,7 +122,7 @@ export async function handler(
     return json(401, { ok: false, error: "Could not resolve caller tenant" });
   }
 
-  if (!BUCKET) {
+  if (!workspaceBucket()) {
     return json(500, { ok: false, error: "WORKSPACE_BUCKET not configured" });
   }
 
@@ -167,7 +170,7 @@ export async function handler(
       const contentType = body.contentType || "application/octet-stream";
       const key = `${prefix}${filename}`;
       const command = new PutObjectCommand({
-        Bucket: BUCKET,
+        Bucket: workspaceBucket(),
         Key: key,
         ContentType: contentType as string,
       });
@@ -204,7 +207,7 @@ export async function handler(
       }
       await s3.send(
         new PutObjectCommand({
-          Bucket: BUCKET,
+          Bucket: workspaceBucket(),
           Key: `${prefix}${filename}`,
           Body: buf,
         }),
@@ -218,7 +221,7 @@ export async function handler(
       do {
         const result = await s3.send(
           new ListObjectsV2Command({
-            Bucket: BUCKET,
+            Bucket: workspaceBucket(),
             Prefix: prefix,
             ContinuationToken: continuationToken,
           }),
@@ -251,7 +254,7 @@ export async function handler(
       }
       await s3.send(
         new DeleteObjectCommand({
-          Bucket: BUCKET,
+          Bucket: workspaceBucket(),
           Key: `${prefix}${filename}`,
         }),
       );

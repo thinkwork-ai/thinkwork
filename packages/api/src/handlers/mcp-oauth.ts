@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -708,7 +709,7 @@ function resourceUrl(event: APIGatewayProxyEventV2): string {
 
 function mcpOAuthCallbackUrl(event: APIGatewayProxyEventV2): string {
   return (
-    process.env.MCP_OAUTH_CALLBACK_URL ||
+    getConfig("MCP_OAUTH_CALLBACK_URL") ||
     `${issuerUrl(event)}/mcp/oauth/callback`
   );
 }

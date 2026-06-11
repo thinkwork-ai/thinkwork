@@ -14,6 +14,7 @@
  * can navigate to invoices, tax IDs, etc.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type Stripe from "stripe";
 import type {
   APIGatewayProxyEventV2,
@@ -117,7 +118,7 @@ export async function handler(
   const appUrl =
     process.env.APP_URL ||
     process.env.WEB_URL ||
-    process.env.ADMIN_URL ||
+    getConfig("ADMIN_URL") ||
     "https://app.thinkwork.ai";
   const returnUrl = `${appUrl.replace(/\/$/, "")}/settings/billing`;
 

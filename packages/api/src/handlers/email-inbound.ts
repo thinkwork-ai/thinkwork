@@ -12,6 +12,7 @@
  *   Unauthorized Space/reply traffic → silent drop (no bounce = no info leakage)
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type { SESEvent } from "aws-lambda";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
@@ -33,7 +34,7 @@ import { parseSpaceRecipient } from "../lib/email/space-address.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 
 const WORKSPACE_BUCKET =
-  process.env.EMAIL_INBOUND_BUCKET || process.env.WORKSPACE_BUCKET || "";
+  process.env.EMAIL_INBOUND_BUCKET || getConfig("WORKSPACE_BUCKET") || "";
 
 const db = getDb();
 

@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetObjectCommand,
   PutObjectCommand,
@@ -269,7 +270,7 @@ function client(deps: ThreadGoalStorageDeps): S3ClientType {
 }
 
 function bucket(deps: ThreadGoalStorageDeps): string {
-  const value = deps.bucket ?? process.env.WORKSPACE_BUCKET ?? "";
+  const value = deps.bucket ?? getConfig("WORKSPACE_BUCKET") ?? "";
   if (!value) throw new Error("WORKSPACE_BUCKET env is not configured");
   return value;
 }

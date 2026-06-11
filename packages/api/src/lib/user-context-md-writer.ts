@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { tenants, users, userProfiles } from "@thinkwork/database-pg/schema";
@@ -61,7 +62,7 @@ const EMPTY_OPERATING_MODEL =
   "_Activation hasn't been completed yet; use generic context until the human shares more._";
 
 function bucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 function workspaceSegment(value: string | null | undefined): string {

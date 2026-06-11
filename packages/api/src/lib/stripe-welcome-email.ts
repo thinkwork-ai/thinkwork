@@ -16,6 +16,7 @@
  * hello@thinkwork.ai identity is verified in SES.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 
 export interface WelcomeEmailInput {
@@ -57,7 +58,7 @@ function buildWelcomeLink(appUrl: string, sessionId: string): string {
 export async function sendStripeWelcomeEmail(
   input: WelcomeEmailInput,
 ): Promise<boolean> {
-  const fromEmail = process.env.STRIPE_WELCOME_FROM_EMAIL || DEFAULT_FROM_EMAIL;
+  const fromEmail = getConfig("STRIPE_WELCOME_FROM_EMAIL") || DEFAULT_FROM_EMAIL;
   const link = buildWelcomeLink(input.appUrl, input.sessionId);
 
   const planLabel =

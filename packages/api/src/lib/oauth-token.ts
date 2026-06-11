@@ -12,6 +12,7 @@
  * 5. On failure: mark connection status="expired" + notify
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { schema } from "@thinkwork/database-pg";
@@ -36,8 +37,11 @@ import {
 } from "./oauth-client-credentials.js";
 
 const STAGE = process.env.STAGE || process.env.APP_STAGE || "dev";
-const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
+
+function appsyncEndpoint(): string {
+  return getConfig("APPSYNC_ENDPOINT", "");
+}
 
 const sm = new SecretsManagerClient({
   region: process.env.AWS_REGION || "us-east-1",
@@ -559,7 +563,8 @@ export async function notifyConnectionExpired(
   const message = `Your ${conn.provider_name} connection has expired (${reason}). Please reconnect in Settings → Integrations.`;
 
   // Send AppSync notification if configured
-  if (APPSYNC_ENDPOINT && APPSYNC_API_KEY) {
+  const endpoint = appsyncEndpoint();
+  if (endpoint && APPSYNC_API_KEY) {
     const mutation = `
 			mutation NotifyNewMessage(
 				$messageId: ID!
@@ -587,7 +592,7 @@ export async function notifyConnectionExpired(
 		`;
 
     try {
-      await fetch(APPSYNC_ENDPOINT, {
+      await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

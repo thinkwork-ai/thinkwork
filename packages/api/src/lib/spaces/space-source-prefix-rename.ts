@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   CopyObjectCommand,
   DeleteObjectsCommand,
@@ -35,7 +36,7 @@ export interface DeleteSpaceSourcePrefixResult {
 }
 
 function bucket(input?: string): string {
-  return input || process.env.WORKSPACE_BUCKET || "";
+  return input || getConfig("WORKSPACE_BUCKET") || "";
 }
 
 async function listKeys(

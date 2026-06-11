@@ -8,6 +8,7 @@
  * authorization URL.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -25,7 +26,9 @@ import {
 const { connectProviders, connections, users } = schema;
 
 // Callback URL — in production this is api.thinkwork.ai, in dev it's the raw API Gateway URL
-const OAUTH_CALLBACK_URL = process.env.OAUTH_CALLBACK_URL || "";
+function oauthCallbackUrl(): string {
+  return getConfig("OAUTH_CALLBACK_URL", "");
+}
 
 interface ProviderConfig {
   authorization_url: string;
@@ -91,7 +94,8 @@ export async function handler(
       500,
     );
   }
-  if (!OAUTH_CALLBACK_URL) {
+  const callbackUrl = oauthCallbackUrl();
+  if (!callbackUrl) {
     return error("OAUTH_CALLBACK_URL is not configured", 500);
   }
 
@@ -186,7 +190,7 @@ export async function handler(
   // Build authorization URL
   const authUrl = new URL(config.authorization_url);
   authUrl.searchParams.set("client_id", clientId);
-  authUrl.searchParams.set("redirect_uri", OAUTH_CALLBACK_URL);
+  authUrl.searchParams.set("redirect_uri", callbackUrl);
   authUrl.searchParams.set("response_type", "code");
   if (providerName === "slack") {
     authUrl.searchParams.set("user_scope", scopeValues.join(","));
@@ -206,7 +210,7 @@ export async function handler(
     `[oauth-authorize] Redirecting to ${providerName} for connection ${conn.id}`,
     {
       authUrl: authUrl.toString(),
-      callbackUrl: OAUTH_CALLBACK_URL,
+      callbackUrl,
       clientId,
       scopes: scopeValues.join(" "),
     },

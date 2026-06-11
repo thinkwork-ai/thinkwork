@@ -15,6 +15,7 @@
  *     resolved at invocation time, so they don't need snapshotting per agent.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetObjectCommand,
   ListObjectsV2Command,
@@ -38,7 +39,9 @@ const s3 = new S3Client({
   region:
     process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
 });
-const BUCKET = process.env.WORKSPACE_BUCKET || "";
+function workspaceBucket(): string {
+  return getConfig("WORKSPACE_BUCKET", "");
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -67,7 +70,8 @@ export async function readWorkspaceFiles(
   tenantId: string,
   agentId: string,
 ): Promise<Record<string, string>> {
-  if (!process.env.WORKSPACE_BUCKET) return {};
+  const bucket = workspaceBucket();
+  if (!bucket) return {};
   const [agent] = await db
     .select({ slug: agents.slug, tenant_id: agents.tenant_id })
     .from(agents)
@@ -82,7 +86,7 @@ export async function readWorkspaceFiles(
   do {
     const list = await s3.send(
       new ListObjectsV2Command({
-        Bucket: BUCKET,
+        Bucket: bucket,
         Prefix: prefix,
         ContinuationToken: continuationToken,
       }),
@@ -94,7 +98,7 @@ export async function readWorkspaceFiles(
         continue;
       }
       const get = await s3.send(
-        new GetObjectCommand({ Bucket: BUCKET, Key: obj.Key }),
+        new GetObjectCommand({ Bucket: bucket, Key: obj.Key }),
       );
       out[rel] = (await get.Body?.transformToString("utf-8")) ?? "";
     }
@@ -112,14 +116,15 @@ async function clearWorkspaceFiles(
   tenantSlug: string,
   agentSlug: string,
 ): Promise<void> {
-  if (!BUCKET) return;
+  const bucket = workspaceBucket();
+  if (!bucket) return;
   const prefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
   let continuationToken: string | undefined;
 
   do {
     const list = await s3.send(
       new ListObjectsV2Command({
-        Bucket: BUCKET,
+        Bucket: bucket,
         Prefix: prefix,
         ContinuationToken: continuationToken,
       }),
@@ -129,7 +134,7 @@ async function clearWorkspaceFiles(
       .filter((k) => k.Key && !k.Key.endsWith("manifest.json"));
     if (keys.length > 0) {
       await s3.send(
-        new DeleteObjectsCommand({ Bucket: BUCKET, Delete: { Objects: keys } }),
+        new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys } }),
       );
     }
     continuationToken = list.IsTruncated
@@ -146,12 +151,13 @@ async function writeWorkspaceFiles(
   agentSlug: string,
   files: Record<string, string>,
 ): Promise<void> {
-  if (!BUCKET) return;
+  const bucket = workspaceBucket();
+  if (!bucket) return;
   const prefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
   for (const [relPath, content] of Object.entries(files)) {
     await s3.send(
       new PutObjectCommand({
-        Bucket: BUCKET,
+        Bucket: bucket,
         Key: `${prefix}${relPath}`,
         Body: content,
         ContentType: relPath.endsWith(".md") ? "text/markdown" : "text/plain",
@@ -328,6 +334,7 @@ export async function restoreAgentFromSnapshot(
     const tenantSlug = await resolveTenantSlug(agent.tenant_id);
     await clearWorkspaceFiles(tenantSlug, agent.slug);
     await writeWorkspaceFiles(tenantSlug, agent.slug, workspaceSnap);
-    if (BUCKET) await regenerateManifest(BUCKET, tenantSlug, agent.slug);
+    const bucket = workspaceBucket();
+    if (bucket) await regenerateManifest(bucket, tenantSlug, agent.slug);
   }
 }

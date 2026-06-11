@@ -14,6 +14,7 @@
  *     pnpm -C packages/api exec tsx scripts/bootstrap-user-context.ts --tenant <tenant-id>
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getDb } from "@thinkwork/database-pg";
 import { tenants, tenantMembers, users } from "@thinkwork/database-pg/schema";
@@ -76,7 +77,7 @@ function parseArgs(argv: string[]): CliOptions {
 }
 
 function workspaceBucket(): string {
-  const bucket = process.env.WORKSPACE_BUCKET || "";
+  const bucket = getConfig("WORKSPACE_BUCKET") || "";
   if (!bucket) throw new Error("WORKSPACE_BUCKET must be set");
   return bucket;
 }

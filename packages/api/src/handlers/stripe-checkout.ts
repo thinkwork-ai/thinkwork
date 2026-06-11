@@ -22,6 +22,7 @@
  * returns the hosted Checkout URL.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -86,11 +87,11 @@ export async function handler(
   }
 
   const successUrl =
-    body.successUrl || process.env.STRIPE_CHECKOUT_SUCCESS_URL || "";
+    body.successUrl || getConfig("STRIPE_CHECKOUT_SUCCESS_URL") || "";
   const cancelUrl =
     body.cancelUrl ||
-    process.env.STRIPE_CHECKOUT_CANCEL_URL ||
-    process.env.WWW_URL ||
+    getConfig("STRIPE_CHECKOUT_CANCEL_URL") ||
+    getConfig("WWW_URL") ||
     "";
   if (!successUrl || !cancelUrl) {
     console.error(

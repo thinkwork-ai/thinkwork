@@ -26,12 +26,13 @@
  * allowlist is the actual mechanism.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../graphql/context.js";
 import { resolveCallerTenantId } from "../../graphql/resolvers/core/resolve-auth-user.js";
 
 export function isPlatformOperator(ctx: GraphQLContext): boolean {
-  const allowlist = (process.env.THINKWORK_PLATFORM_OPERATOR_EMAILS ?? "")
+  const allowlist = (getConfig("THINKWORK_PLATFORM_OPERATOR_EMAILS") ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
@@ -75,7 +76,7 @@ export async function requireComplianceReader(
   }
 
   // 2. Required env var.
-  if (!process.env.COMPLIANCE_READER_SECRET_ARN) {
+  if (!getConfig("COMPLIANCE_READER_SECRET_ARN")) {
     throw new GraphQLError(
       "Compliance event browsing is not available in this environment — COMPLIANCE_READER_SECRET_ARN env var is unset on the graphql-http Lambda.",
       { extensions: { code: "INTERNAL_SERVER_ERROR" } },

@@ -39,6 +39,7 @@
  *     diff-preview flows that write a new override after accepting.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -176,7 +177,7 @@ const s3 = new S3Client({
 });
 
 function bucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 async function refreshAgentAgentsMdSections(

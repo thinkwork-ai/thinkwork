@@ -25,6 +25,7 @@
  *   - one-time backfill script — populate every existing agent's prefix
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { createHash } from "node:crypto";
 import {
   GetObjectCommand,
@@ -106,7 +107,7 @@ export class BootstrapError extends Error {
 }
 
 function bucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 function agentKey(tenantSlug: string, agentSlug: string, path: string): string {

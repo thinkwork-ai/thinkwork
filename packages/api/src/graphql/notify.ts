@@ -1,3 +1,5 @@
+import { getConfig } from "@thinkwork/runtime-config";
+
 /**
  * AppSync subscription notifications.
  * Fires mutations on AppSync to trigger @aws_subscribe fan-out to WebSocket clients.
@@ -9,7 +11,7 @@
 // + project_agentcore_deploy_race_env.
 function appsyncConfig(): { endpoint: string; apiKey: string } {
   return {
-    endpoint: process.env.APPSYNC_ENDPOINT || "",
+    endpoint: getConfig("APPSYNC_ENDPOINT") || "",
     apiKey: process.env.APPSYNC_API_KEY || "",
   };
 }

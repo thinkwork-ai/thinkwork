@@ -33,6 +33,7 @@
  * redaction allow-list drops them even if a future bug includes them).
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -74,7 +75,7 @@ const SIZE_TOLERANCE_RATIO = 0.01;
 const MAX_BUFFER_BYTES = 50 * 1024 * 1024; // 50 MB — comfortably above the 25 MB declared cap
 
 function workspaceBucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 export async function handler(

@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   DeleteObjectCommand,
   PutObjectCommand,
@@ -241,7 +242,7 @@ export async function writeAgentProfileFileForTenant(input: {
   slug: string;
   content: string;
 }): Promise<boolean> {
-  const workspaceBucket = process.env.WORKSPACE_BUCKET;
+  const workspaceBucket = getConfig("WORKSPACE_BUCKET");
   if (!workspaceBucket) return false;
   const target = await resolveAgentWorkspaceTarget(input.tenantId);
   if (!target) return false;
@@ -260,7 +261,7 @@ export async function deleteAgentProfileFileForTenant(input: {
   tenantId: string;
   slug: string;
 }): Promise<boolean> {
-  const workspaceBucket = process.env.WORKSPACE_BUCKET;
+  const workspaceBucket = getConfig("WORKSPACE_BUCKET");
   if (!workspaceBucket) return false;
   const target = await resolveAgentWorkspaceTarget(input.tenantId);
   if (!target) return false;

@@ -14,6 +14,7 @@
  * operator wants the counts back in the same call.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { GraphQLError } from "graphql";
 import { S3Client } from "@aws-sdk/client-s3";
 import type { GraphQLContext } from "../../context.js";
@@ -37,7 +38,7 @@ export const rebuildSkillCatalogIndex = async (
   const all = args.all === true;
   const dryRun = args.dryRun === true;
 
-  const bucket = process.env.WORKSPACE_BUCKET;
+  const bucket = getConfig("WORKSPACE_BUCKET");
   if (!bucket) {
     throw new GraphQLError("WORKSPACE_BUCKET not configured", {
       extensions: { code: "INTERNAL_SERVER_ERROR" },

@@ -1,7 +1,8 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { invokeClaudeJson, parseJsonResponse } from "../../wiki/bedrock.js";
 
 const SOURCE_AGENT_MODEL_ID =
-  process.env.COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID ||
+  getConfig("COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID") ||
   process.env.CONTEXT_ENGINE_SOURCE_AGENT_MODEL_ID;
 
 export interface SourceAgentModelRequest {

@@ -7,6 +7,7 @@
  * first-admin passwords.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -1007,7 +1008,7 @@ function constantTimeEquals(left: string, right: string): boolean {
 function deploymentStateMachineArn(): string | null {
   return (
     process.env.THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN ||
-    process.env.DEPLOYMENT_STATE_MACHINE_ARN ||
+    getConfig("DEPLOYMENT_STATE_MACHINE_ARN") ||
     null
   );
 }
@@ -1027,7 +1028,7 @@ function deploymentStateMachineArnForSession(session: {
 function deploymentEvidenceBucket(): string | null {
   return (
     process.env.THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET ||
-    process.env.DEPLOYMENT_EVIDENCE_BUCKET ||
+    getConfig("DEPLOYMENT_EVIDENCE_BUCKET") ||
     null
   );
 }

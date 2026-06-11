@@ -5,6 +5,7 @@
  * the resolver modules (queries.ts, mutations.ts, types.ts).
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { createHash, randomUUID, randomBytes } from "node:crypto";
 import {
   eq,
@@ -525,7 +526,7 @@ async function getSkillRunInvokeFnName(
   if (_skillRunInvokeFnName[normalizedRuntimeType] !== undefined) {
     return _skillRunInvokeFnName[normalizedRuntimeType] ?? null;
   }
-  _skillRunInvokeFnName.pi = process.env.AGENTCORE_PI_FUNCTION_NAME || null;
+  _skillRunInvokeFnName.pi = getConfig("AGENTCORE_PI_FUNCTION_NAME") || null;
   return _skillRunInvokeFnName.pi;
 }
 

@@ -6,6 +6,7 @@
  * - All events: proxy to API handler for delivery logging
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   getOctokit,
   syncPushToS3,
@@ -121,7 +122,7 @@ async function lookupTenantSlug(
 async function handlePushEvent(
   payload: PushPayload,
 ): Promise<{ synced: boolean; filesSynced: number }> {
-  const bucket = process.env.WORKSPACE_BUCKET;
+  const bucket = getConfig("WORKSPACE_BUCKET");
   const appId = process.env.GITHUB_APP_ID;
   const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
 

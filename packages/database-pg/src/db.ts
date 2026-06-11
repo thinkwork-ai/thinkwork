@@ -14,6 +14,7 @@
 
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { getConfig } from "@thinkwork/runtime-config";
 
 import * as schema from "./schema/index";
 
@@ -56,9 +57,10 @@ export function isConnectionError(err: unknown): boolean {
 function buildDatabaseUrl(): string | null {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
 
-  // Construct from individual components (set by Terraform)
-  const host = process.env.DATABASE_HOST || process.env.DB_CLUSTER_ENDPOINT;
-  const dbName = process.env.DATABASE_NAME || "thinkwork";
+  // Construct from individual components (terraform-owned; env wins over
+  // the SSM runtime-config document — plan 2026-06-11-006)
+  const host = getConfig("DATABASE_HOST") || process.env.DB_CLUSTER_ENDPOINT;
+  const dbName = getConfig("DATABASE_NAME") || "thinkwork";
   const user = process.env.DATABASE_USER || "thinkwork_admin";
   const password = process.env.DATABASE_PASSWORD;
   const port = process.env.DATABASE_PORT || "5432";
@@ -74,10 +76,10 @@ function buildDatabaseUrl(): string | null {
  * Resolve DATABASE_URL from Secrets Manager (async, used when password not in env).
  */
 async function resolveDatabaseUrlFromSecrets(): Promise<string> {
-  const secretArn = process.env.DATABASE_SECRET_ARN;
+  const secretArn = getConfig("DATABASE_SECRET_ARN");
   const host =
-    process.env.DATABASE_HOST || process.env.DB_CLUSTER_ENDPOINT || "localhost";
-  const dbName = process.env.DATABASE_NAME || "thinkwork";
+    getConfig("DATABASE_HOST") || process.env.DB_CLUSTER_ENDPOINT || "localhost";
+  const dbName = getConfig("DATABASE_NAME") || "thinkwork";
 
   if (!secretArn) {
     throw new Error(

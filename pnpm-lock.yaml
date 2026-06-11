@@ -772,6 +772,9 @@ importers:
       '@thinkwork/pi-runtime-core':
         specifier: workspace:*
         version: link:../pi-runtime-core
+      '@thinkwork/runtime-config':
+        specifier: workspace:*
+        version: link:../runtime-config
       '@thinkwork/ui':
         specifier: workspace:*
         version: link:../ui
@@ -977,6 +980,9 @@ importers:
 
   packages/database-pg:
     dependencies:
+      '@thinkwork/runtime-config':
+        specifier: workspace:*
+        version: link:../runtime-config
       drizzle-orm:
         specifier: ^0.39.3
         version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)

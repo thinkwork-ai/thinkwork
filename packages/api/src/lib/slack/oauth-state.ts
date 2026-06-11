@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const SLACK_INSTALL_STATE_TTL_MS = 10 * 60 * 1000;
@@ -104,7 +105,7 @@ export function buildSlackAuthorizeUrl(input: {
 export function slackOAuthRedirectUri(): string {
   const configured = process.env.SLACK_OAUTH_REDIRECT_URI?.trim();
   if (configured) return configured;
-  const apiUrl = process.env.THINKWORK_API_URL?.replace(/\/+$/, "");
+  const apiUrl = getConfig("THINKWORK_API_URL")?.replace(/\/+$/, "");
   if (!apiUrl) {
     throw new Error(
       "THINKWORK_API_URL or SLACK_OAUTH_REDIRECT_URI is required to start Slack install.",

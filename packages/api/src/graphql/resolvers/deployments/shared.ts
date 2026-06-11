@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { randomUUID } from "node:crypto";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { StartExecutionCommand, SFNClient } from "@aws-sdk/client-sfn";
@@ -238,7 +239,7 @@ export async function defaultStartExecution(input: {
 
 export function deploymentStateMachineArn(): string | null {
   return (
-    process.env.DEPLOYMENT_STATE_MACHINE_ARN ||
+    getConfig("DEPLOYMENT_STATE_MACHINE_ARN") ||
     process.env.THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN ||
     null
   );
@@ -246,7 +247,7 @@ export function deploymentStateMachineArn(): string | null {
 
 export function deploymentEvidenceBucket(): string | null {
   return (
-    process.env.DEPLOYMENT_EVIDENCE_BUCKET ||
+    getConfig("DEPLOYMENT_EVIDENCE_BUCKET") ||
     process.env.THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET ||
     null
   );
@@ -406,13 +407,13 @@ export function deploymentProfileConfigFromEnv(): DeploymentProfileConfig {
     ),
     stateMachineArn: stringEnv(
       process.env.THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN ||
-        process.env.DEPLOYMENT_STATE_MACHINE_ARN ||
+        getConfig("DEPLOYMENT_STATE_MACHINE_ARN") ||
         process.env.VITE_DEPLOYMENT_CONTROLLER_ARN,
     ),
     evidenceBucket: stringEnv(
       process.env.THINKWORK_EVIDENCE_BUCKET ||
         process.env.THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET ||
-        process.env.DEPLOYMENT_EVIDENCE_BUCKET ||
+        getConfig("DEPLOYMENT_EVIDENCE_BUCKET") ||
         process.env.VITE_DEPLOYMENT_EVIDENCE_BUCKET,
     ),
     runnerProjectName: stringEnv(

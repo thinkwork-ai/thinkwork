@@ -31,6 +31,7 @@
  * Lambda: invoke with payload { mode: "dry-run" | "commit", tenantSlug?, runId? }
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   DeleteObjectCommand,
   GetBucketVersioningCommand,
@@ -66,7 +67,7 @@ const s3 = new S3Client({ region: REGION });
 const db = getDb();
 
 function bucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 // ---------------------------------------------------------------------------

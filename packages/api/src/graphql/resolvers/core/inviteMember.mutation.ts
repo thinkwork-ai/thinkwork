@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
@@ -18,7 +19,9 @@ import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 
 const cognito = new CognitoIdentityProviderClient({});
-const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
+function userPoolId(): string {
+  return getConfig("COGNITO_USER_POOL_ID", "");
+}
 const RESENDABLE_INVITE_STATUSES = new Set([
   "FORCE_CHANGE_PASSWORD",
   "UNCONFIRMED",
@@ -73,7 +76,7 @@ async function inviteMemberCore(
   try {
     const result = await cognito.send(
       new AdminCreateUserCommand({
-        UserPoolId: USER_POOL_ID,
+        UserPoolId: userPoolId(),
         Username: email,
         UserAttributes: [
           { Name: "email", Value: email },
@@ -94,7 +97,7 @@ async function inviteMemberCore(
     if (err.name === "UsernameExistsException") {
       const existing = await cognito.send(
         new AdminGetUserCommand({
-          UserPoolId: USER_POOL_ID,
+          UserPoolId: userPoolId(),
           Username: email,
         }),
       );
@@ -110,7 +113,7 @@ async function inviteMemberCore(
       ) {
         const resent = await cognito.send(
           new AdminCreateUserCommand({
-            UserPoolId: USER_POOL_ID,
+            UserPoolId: userPoolId(),
             Username: email,
             DesiredDeliveryMediums: ["EMAIL"],
             MessageAction: "RESEND",

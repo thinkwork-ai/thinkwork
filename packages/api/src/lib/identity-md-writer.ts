@@ -23,6 +23,7 @@
  * and `name` stays at its previous value — DB and S3 never drift.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetObjectCommand,
   NoSuchKey,
@@ -41,7 +42,7 @@ const REGION =
 const s3 = new S3Client({ region: REGION });
 
 function bucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 // Structural subset matching both the root db handle and a tx (same

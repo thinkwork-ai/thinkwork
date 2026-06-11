@@ -19,6 +19,7 @@
  *   - Workspace is created/deleted/modified via wizard
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetObjectCommand,
   ListObjectsV2Command,
@@ -40,7 +41,7 @@ const s3 = new S3Client({
 });
 
 function getBucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 // ---------------------------------------------------------------------------

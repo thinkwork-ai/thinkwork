@@ -25,6 +25,7 @@
  *     Insights + lets tests assert cleanup without touching S3.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   DeleteObjectsCommand,
   ListObjectsV2Command,
@@ -53,7 +54,7 @@ export interface SweepResult {
 }
 
 function workspaceBucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 export async function handler(): Promise<SweepResult> {

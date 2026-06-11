@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   CopyObjectCommand,
   HeadObjectCommand,
@@ -58,7 +59,7 @@ export function legacyDefaultsWorkspacePrefix(tenantSlug: string): string {
 }
 
 function bucket(input?: string): string {
-  return input || process.env.WORKSPACE_BUCKET || "";
+  return input || getConfig("WORKSPACE_BUCKET") || "";
 }
 
 function isNotFound(err: unknown): boolean {

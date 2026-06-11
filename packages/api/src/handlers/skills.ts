@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -3003,7 +3004,7 @@ async function invokeAgentcoreRunSkill(payload: {
   invocationSource: string;
   completionHmacSecret: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const fnName = process.env.AGENTCORE_PI_FUNCTION_NAME;
+  const fnName = getConfig("AGENTCORE_PI_FUNCTION_NAME");
   if (!fnName)
     return { ok: false, error: "AGENTCORE_PI_FUNCTION_NAME env var not set" };
   try {
@@ -3029,7 +3030,7 @@ async function invokeAgentcoreRunSkill(payload: {
       // service callback credentials in the envelope so the dispatcher can
       // fetch runtime config and POST /api/skills/complete deterministically.
       thinkworkApiUrl:
-        process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "",
+        getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL || "",
       apiAuthSecret:
         process.env.API_AUTH_SECRET ||
         process.env.THINKWORK_API_SECRET ||
