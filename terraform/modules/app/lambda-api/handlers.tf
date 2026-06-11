@@ -52,13 +52,17 @@ locals {
 
   # Common environment variables shared by all API handlers
   common_env = merge({
-    STAGE                       = var.stage
-    DATABASE_URL                = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
-    DATABASE_SECRET_ARN         = var.graphql_db_secret_arn
-    DATABASE_HOST               = var.db_cluster_endpoint
-    DATABASE_NAME               = var.database_name
-    BUCKET_NAME                 = var.bucket_name
-    USER_POOL_ID                = var.user_pool_id
+    STAGE               = var.stage
+    DATABASE_URL        = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+    DATABASE_SECRET_ARN = var.graphql_db_secret_arn
+    DATABASE_HOST       = var.db_cluster_endpoint
+    DATABASE_NAME       = var.database_name
+    # BUCKET_NAME and USER_POOL_ID were duplicate aliases of WORKSPACE_BUCKET
+    # and COGNITO_USER_POOL_ID; GRAPHQL_API_KEY duplicated APPSYNC_API_KEY;
+    # THINKWORK_API_SECRET and EMAIL_HMAC_SECRET duplicated API_AUTH_SECRET
+    # (~310 serialized bytes total). graphql-http sits at Lambda's hard 4KB
+    # env ceiling (#2375) — every reader falls back to the canonical name.
+    # Same precedent as the APP_URL/WEB_URL dedupe below.
     COGNITO_USER_POOL_ID        = var.user_pool_id
     ADMIN_CLIENT_ID             = var.admin_client_id
     MOBILE_CLIENT_ID            = var.mobile_client_id
@@ -69,10 +73,7 @@ locals {
     COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
     APPSYNC_ENDPOINT            = var.appsync_api_url
     APPSYNC_API_KEY             = var.appsync_api_key
-    GRAPHQL_API_KEY             = var.appsync_api_key
     API_AUTH_SECRET             = var.api_auth_secret
-    THINKWORK_API_SECRET        = var.api_auth_secret
-    EMAIL_HMAC_SECRET           = var.api_auth_secret
     THINKWORK_API_URL           = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
@@ -88,12 +89,12 @@ locals {
     HINDSIGHT_ENDPOINT                 = var.hindsight_endpoint
     AGENTCORE_MEMORY_ID                = var.agentcore_memory_id
     MEMORY_ENGINE                      = var.memory_engine
-    # Skip the SSM indirection for cross-function ARN lookup. Terraform
-    # already knows this ARN at apply time and the Lambda role's SSM
-    # permission has been a recurring source of silent failures where
-    # getChatAgentInvokeFnArn falls back to null and sendMessage loses
-    # message_history on the wakeup-processor fallback path.
-    CHAT_AGENT_INVOKE_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke"
+    # CHAT_AGENT_INVOKE_FN_ARN (~112 serialized bytes) was dropped for the
+    # 4KB env ceiling (#2375): getChatAgentInvokeFnArn and managed-dispatch
+    # now derive the ARN from the deterministic naming pattern
+    # (AWS_REGION + AWS_ACCOUNT_ID + STAGE) before the SSM fallback, so the
+    # silent-SSM-failure path that originally motivated the env var stays
+    # closed without spending env bytes.
     # APP_URL/WEB_URL were duplicate aliases of ADMIN_URL (all = var.admin_url)
     # and pushed this Lambda's env block past AWS's hard 4KB limit, failing
     # every Terraform apply (UpdateFunctionConfiguration 400 InvalidParameter:
@@ -119,21 +120,28 @@ locals {
     OAUTH_CALLBACK_URL                   = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com/api/oauth/callback"
     REDIRECT_SUCCESS_URL                 = var.redirect_success_url
     COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID  = var.company_brain_source_agent_model_id
+    WWW_URL                              = var.www_url
+    },
     # Stripe billing — see stripe-secrets.tf. The ARN is the indirection;
     # the actual keys live in Secrets Manager and are fetched by
     # packages/api/src/lib/stripe-credentials.ts at cold-start. Price IDs
     # are non-secret per-stage config carried as a plain JSON env var so
     # staging/prod can use different products without a secret rotation.
-    STRIPE_CREDENTIALS_SECRET_ARN = var.enable_stripe_billing ? aws_secretsmanager_secret.stripe_api_credentials[0].arn : ""
-    STRIPE_PRICE_IDS_JSON         = var.stripe_price_ids_json
-    STRIPE_CHECKOUT_SUCCESS_URL   = "${var.admin_url}/onboarding/welcome?session_id={CHECKOUT_SESSION_ID}"
-    STRIPE_CHECKOUT_CANCEL_URL    = "${var.www_url}/cloud"
-    WWW_URL                       = var.www_url
-    # Override the welcome email's From: address. Defaults to
-    # hello@agents.thinkwork.ai (the already-verified SES inbound domain);
-    # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.
-    STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
-  }, local.cognee_env)
+    # The whole block is omitted when Stripe is disabled (~315 serialized
+    # bytes): the stripe-* handlers are excluded from deployment in that
+    # case and stripe-plans.ts defaults to "{}" — see #2375 (4KB env cap).
+    var.enable_stripe_billing ? {
+      STRIPE_CREDENTIALS_SECRET_ARN = aws_secretsmanager_secret.stripe_api_credentials[0].arn
+      STRIPE_PRICE_IDS_JSON         = var.stripe_price_ids_json
+      STRIPE_CHECKOUT_SUCCESS_URL   = "${var.admin_url}/onboarding/welcome?session_id={CHECKOUT_SESSION_ID}"
+      STRIPE_CHECKOUT_CANCEL_URL    = "${var.www_url}/cloud"
+      # Override the welcome email's From: address. Defaults to
+      # hello@agents.thinkwork.ai (the already-verified SES inbound domain);
+      # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.
+      STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
+    } : {},
+    local.cognee_env,
+  )
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't

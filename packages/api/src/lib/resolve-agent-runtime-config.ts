@@ -286,7 +286,9 @@ export async function resolveAgentRuntimeConfig(
   const thinkworkApiUrl =
     opts.thinkworkApiUrl ?? process.env.THINKWORK_API_URL ?? "";
   const thinkworkApiSecret =
-    opts.thinkworkApiSecret ?? process.env.THINKWORK_API_SECRET ?? "";
+    opts.thinkworkApiSecret ??
+    (process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET) ??
+    "";
   const appsyncApiKey = opts.appsyncApiKey ?? process.env.APPSYNC_API_KEY ?? "";
 
   const [agent] = await db

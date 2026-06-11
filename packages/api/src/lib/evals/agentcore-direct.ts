@@ -14,7 +14,8 @@ const lambdaClient = new LambdaClient({});
 
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
+const THINKWORK_API_SECRET =
+  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const THINKWORK_API_URL =
   process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";

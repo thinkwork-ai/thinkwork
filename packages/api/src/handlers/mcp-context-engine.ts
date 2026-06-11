@@ -752,9 +752,8 @@ async function resolveCaller(claims: Record<string, unknown>) {
 
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } = await import(
-    "../graphql/resolvers/core/resolve-auth-user.js"
-  );
+  const { resolveCallerFromAuth } =
+    await import("../graphql/resolvers/core/resolve-auth-user.js");
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,
@@ -876,9 +875,10 @@ function bearerToken(event: APIGatewayProxyEventV2): string | null {
 
 function isServiceBearer(bearer: string): boolean {
   return [
-    process.env.THINKWORK_API_SECRET,
+    process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET,
     process.env.API_AUTH_SECRET,
     process.env.GRAPHQL_API_KEY,
+    process.env.APPSYNC_API_KEY,
   ]
     .filter(Boolean)
     .some((secret) => secret === bearer);
@@ -963,9 +963,8 @@ async function canManageProviderSettings(
   const principalId = stringClaim(claims.sub);
   if (!principalId) return false;
   try {
-    const { requireTenantAdmin } = await import(
-      "../graphql/resolvers/core/authz.js"
-    );
+    const { requireTenantAdmin } =
+      await import("../graphql/resolvers/core/authz.js");
     await requireTenantAdmin(
       {
         auth: {

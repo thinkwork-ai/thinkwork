@@ -112,7 +112,8 @@ import {
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
+const THINKWORK_API_SECRET =
+  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 const MCP_BASE_URL = process.env.MCP_BASE_URL || "";
 const MCP_AUTH_SECRET = process.env.MCP_AUTH_SECRET || "";
 const AGENTCORE_GATEWAY_URL = process.env.AGENTCORE_GATEWAY_URL || "";

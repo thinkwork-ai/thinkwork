@@ -12,7 +12,11 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 
-const EMAIL_HMAC_SECRET = process.env.EMAIL_HMAC_SECRET || "";
+// EMAIL_HMAC_SECRET was a duplicate alias of API_AUTH_SECRET in the Lambda
+// env (same Terraform value); the alias was dropped to stay under the 4KB
+// env limit — fall back to the canonical name.
+const EMAIL_HMAC_SECRET =
+  process.env.EMAIL_HMAC_SECRET || process.env.API_AUTH_SECRET || "";
 
 export interface TokenPayload {
   agentId: string;

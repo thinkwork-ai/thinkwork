@@ -95,7 +95,8 @@ function getTraceId(): string {
 
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
+const THINKWORK_API_SECRET =
+  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 // API URL used by skills for callbacks (thread-management, email-send, etc.)
 // Reads THINKWORK_API_URL first, falls back to legacy MCP_BASE_URL until infra is updated.
