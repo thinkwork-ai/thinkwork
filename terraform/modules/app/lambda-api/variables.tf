@@ -497,7 +497,7 @@ variable "company_brain_source_agent_model_id" {
 variable "kg_obs_max_candidates_per_run" {
   description = "Per-run candidate cap for the observations → Knowledge Graph ingest worker (KG_OBS_MAX_CANDIDATES_PER_RUN). Bounds the layered-gate classifier cost AND keeps each Cognee cognify small enough to index within budget on the single dogfood task; truncated runs self-invoke to drain the remaining backlog. Stored as a string because the Lambda reads it verbatim from env."
   type        = string
-  default     = "25"
+  default     = "10"
 }
 
 variable "google_places_api_key" {
