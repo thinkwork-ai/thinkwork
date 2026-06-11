@@ -565,6 +565,7 @@ export const ComputerThreadQuery = gql`
       channel
       lifecycleStatus
       metadata
+      lastModel
       lastResponsePreview
       costSummary
       createdAt

@@ -636,6 +636,21 @@ def test_write_runner_files_threads_cognito_email_vars_from_payload(
     assert tfvars["cognito_reply_to_email_address"] == "support@lastmile-tei.com"
     assert tfvars["app_domain"] == "tw.lastmile-tei.com"
 
+    # A value in terraform.auto.tfvars.json that the generated root module
+    # never declares is dropped by Terraform with only a warning — every
+    # controller-configurable var needs all three wiring points: vars_json,
+    # a root-module variable declaration, and a module argument.
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+    for name in (
+        "cognito_email_source_arn",
+        "cognito_from_email_address",
+        "cognito_reply_to_email_address",
+        "app_domain",
+        "app_certificate_arn",
+    ):
+        assert f'variable "{name}"' in main_tf
+        assert f"= var.{name}" in main_tf
+
 
 def test_write_runner_files_cognito_email_vars_prefer_runner_secrets_and_default_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
