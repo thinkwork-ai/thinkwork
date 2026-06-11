@@ -1389,3 +1389,50 @@ def test_terraform_plan_summary_counts_resource_actions() -> None:
             "delete,create": 1,
         },
     }
+
+
+def test_self_update_runner_script_copies_release_runner_to_s3(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    source_dir = tmp_path / "source"
+    script = source_dir / "terraform/modules/app/deployment-control-plane/runner.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# release runner\n", encoding="utf-8")
+
+    monkeypatch.setattr(runner, "SOURCE", source_dir)
+    monkeypatch.setenv(
+        "THINKWORK_RUNNER_SCRIPT_S3_URI",
+        "s3://evidence-bucket/runner/thinkwork-runner.py",
+    )
+    calls: list[list[str]] = []
+    monkeypatch.setattr(runner, "run", lambda args, **_kw: calls.append(args))
+
+    runner.self_update_runner_script()
+
+    assert calls == [
+        [
+            "aws",
+            "s3",
+            "cp",
+            str(script),
+            "s3://evidence-bucket/runner/thinkwork-runner.py",
+        ]
+    ]
+
+
+def test_self_update_runner_script_skips_when_source_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(runner, "SOURCE", tmp_path / "missing-source")
+    monkeypatch.setenv(
+        "THINKWORK_RUNNER_SCRIPT_S3_URI",
+        "s3://evidence-bucket/runner/thinkwork-runner.py",
+    )
+    calls: list[list[str]] = []
+    monkeypatch.setattr(runner, "run", lambda args, **_kw: calls.append(args))
+
+    runner.self_update_runner_script()
+
+    assert calls == []

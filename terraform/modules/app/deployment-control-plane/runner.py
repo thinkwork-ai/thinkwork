@@ -1969,6 +1969,23 @@ def write_deployment_status_pointer(status, vars_json=None, terraform_exit_code=
     run(["aws", "s3", "cp", str(body), f"s3://{bucket}/deployment/status/current.json"])
 
 
+def self_update_runner_script():
+    """Refresh the controller's runner script from the release source just
+    deployed. The customer-update terraform root provisions with
+    enable_deployment_control_plane = false (the controller cannot manage
+    itself mid-run), so nothing else ever updates the script the next build
+    downloads — without this step it stays frozen at provision time."""
+    script_uri = os.environ.get("THINKWORK_RUNNER_SCRIPT_S3_URI")
+    if not script_uri:
+        return
+    source_script = SOURCE / "terraform/modules/app/deployment-control-plane/runner.py"
+    if not source_script.is_file():
+        print("[runner] release source has no runner.py; skipping self-update")
+        return
+    run(["aws", "s3", "cp", str(source_script), script_uri])
+    print(f"[runner] self-updated runner script at {script_uri}")
+
+
 def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None):
     vars_json = vars_json or {}
     evidence = {
@@ -2121,6 +2138,10 @@ def main():
                 selected_controller_release,
             )
         sync_static(outputs_path, static_files, vars_json)
+        try:
+            self_update_runner_script()
+        except Exception as self_update_error:
+            print(f"[runner] self-update failed (non-fatal): {self_update_error}")
     write_evidence(
         "succeeded" if result.returncode == 0 else "failed",
         vars_json,
