@@ -42,6 +42,7 @@ const THINKWORK_OUTPUTS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/outputs.tf",
 );
+const GREENFIELD_MAIN = resolve(REPO_ROOT, "terraform/examples/greenfield/main.tf");
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -130,6 +131,7 @@ describe("deployment control plane Terraform fixture", () => {
     const main = read(THINKWORK_MAIN);
     const vars = read(THINKWORK_VARS);
     const outputs = read(THINKWORK_OUTPUTS);
+    const greenfieldMain = read(GREENFIELD_MAIN);
 
     expect(vars).toMatch(/variable "enable_deployment_control_plane"/);
     expect(vars).toMatch(/variable "deployment_release_manifest_sha256"/);
@@ -153,6 +155,18 @@ describe("deployment control plane Terraform fixture", () => {
     );
     expect(outputs).toMatch(/output "deployment_evidence_bucket_name"/);
     expect(outputs).toMatch(/output "deployment_appconfig_application_id"/);
+    expect(greenfieldMain).toMatch(/output "deployment_state_machine_arn"/);
+    expect(greenfieldMain).toMatch(
+      /value\s*=\s*module\.thinkwork\.deployment_state_machine_arn/,
+    );
+    expect(greenfieldMain).toMatch(/output "deployment_runner_project_name"/);
+    expect(greenfieldMain).toMatch(
+      /value\s*=\s*module\.thinkwork\.deployment_runner_project_name/,
+    );
+    expect(greenfieldMain).toMatch(/output "deployment_evidence_bucket_name"/);
+    expect(greenfieldMain).toMatch(
+      /value\s*=\s*module\.thinkwork\.deployment_evidence_bucket_name/,
+    );
   });
 
   it("wires deployment controller config into graphql-http for Settings release updates", () => {
