@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { LogOut, Settings } from "lucide-react";
 import {
@@ -26,9 +26,9 @@ import {
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
-import { APP_VERSION_LABEL } from "@/lib/app-version";
 import { DesktopNavigationControls } from "@/components/DesktopApplicationHeader";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
+import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
 import { rememberSettingsReturnTo } from "@/lib/settings-return";
 
@@ -39,6 +39,10 @@ export function SpacesSidebar() {
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const isCollapsed = state === "collapsed";
   const isDesktop = isDesktopBuild();
+  const deploymentProfile = useMemo(
+    () => getSpacesDeploymentProfileSnapshot(),
+    [],
+  );
 
   return (
     <Sidebar collapsible={isDesktop ? "offcanvas" : "icon"}>
@@ -83,6 +87,7 @@ export function SpacesSidebar() {
         <AccountMenu
           name={user?.name}
           email={user?.email}
+          deployedReleaseVersion={deploymentProfile.releaseVersion}
           onOpenSettings={() => {
             rememberSettingsReturnTo(currentPath);
             navigate({ to: "/settings" });
@@ -104,16 +109,19 @@ export function SpacesSidebar() {
 function AccountMenu({
   name,
   email,
+  deployedReleaseVersion,
   onOpenSettings,
   onSignOut,
 }: {
   name?: string | null;
   email?: string | null;
+  deployedReleaseVersion?: string | null;
   onOpenSettings: () => void;
   onSignOut: () => void;
 }) {
   const displayName = name ?? email ?? "Account";
   const initials = getInitials(name, email);
+  const releaseLabel = deployedReleaseVersion?.trim() || "unknown";
   // Logout is easy to hit by accident, so confirm before signing out. The
   // dialog is controlled (not trigger-based) because the dropdown unmounts its
   // own children on select, which would tear down a nested trigger mid-open.
@@ -166,8 +174,8 @@ function AccountMenu({
           Log out
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <div className="px-2 py-1.5 text-xs text-muted-foreground">
-          ThinkWork {APP_VERSION_LABEL}
+        <div className="truncate px-2 py-1.5 font-mono text-xs text-muted-foreground">
+          {releaseLabel}
         </div>
       </DropdownMenuContent>
       <AlertDialog
