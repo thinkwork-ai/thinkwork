@@ -2775,10 +2775,8 @@ function FollowUpComposer({
           </PromptInputFooter>
         </PromptInput>
       </div>
-      {composer.error || modelSelectionBlocked ? (
-        <p className="text-sm text-destructive">
-          {composer.error ?? "No approved model is available for your account."}
-        </p>
+      {composer.error ? (
+        <p className="text-sm text-destructive">{composer.error}</p>
       ) : null}
     </div>
   );

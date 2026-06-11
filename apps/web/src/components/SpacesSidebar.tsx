@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LogOut, Settings } from "lucide-react";
+import { LogOut, RefreshCw, Settings, TriangleAlert } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +26,10 @@ import {
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
+import {
+  SidebarHealthProvider,
+  useSidebarHealth,
+} from "@/components/shell/sidebar-health";
 import { DesktopNavigationControls } from "@/components/DesktopApplicationHeader";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
@@ -45,64 +49,66 @@ export function SpacesSidebar() {
   );
 
   return (
-    <Sidebar collapsible={isDesktop ? "offcanvas" : "icon"}>
-      {isDesktop ? (
-        <SidebarHeader className="desktop-app-header h-[var(--desktop-app-header-height)] shrink-0 justify-center bg-sidebar px-4 py-0 pl-20">
-          <DesktopNavigationControls className="w-full" />
-        </SidebarHeader>
-      ) : (
-        <SidebarHeader className="pb-3">
-          <div className="flex items-center gap-2 px-1">
-            <Link
-              to="/new"
-              search={{ spaceId: undefined }}
-              onClick={(event) => {
-                if (isCollapsed) {
-                  event.preventDefault();
-                  setOpen(true);
-                  return;
-                }
-                requestSpacesComposerFocus();
-              }}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-            >
-              <img
-                src="/logo.png"
-                alt="ThinkWork"
-                className="h-7 w-7 shrink-0 object-contain"
-              />
-              <span className="truncate text-base font-semibold leading-none tracking-tight group-data-[collapsible=icon]:hidden">
-                ThinkWork
-              </span>
-            </Link>
-          </div>
-        </SidebarHeader>
-      )}
+    <SidebarHealthProvider>
+      <Sidebar collapsible={isDesktop ? "offcanvas" : "icon"}>
+        {isDesktop ? (
+          <SidebarHeader className="desktop-app-header h-[var(--desktop-app-header-height)] shrink-0 justify-center bg-sidebar px-4 py-0 pl-20">
+            <DesktopNavigationControls className="w-full" />
+          </SidebarHeader>
+        ) : (
+          <SidebarHeader className="pb-3">
+            <div className="flex items-center gap-2 px-1">
+              <Link
+                to="/new"
+                search={{ spaceId: undefined }}
+                onClick={(event) => {
+                  if (isCollapsed) {
+                    event.preventDefault();
+                    setOpen(true);
+                    return;
+                  }
+                  requestSpacesComposerFocus();
+                }}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              >
+                <img
+                  src="/logo.png"
+                  alt="ThinkWork"
+                  className="h-7 w-7 shrink-0 object-contain"
+                />
+                <span className="truncate text-base font-semibold leading-none tracking-tight group-data-[collapsible=icon]:hidden">
+                  ThinkWork
+                </span>
+              </Link>
+            </div>
+          </SidebarHeader>
+        )}
 
-      <SidebarContent className="min-h-0">
-        <ChatSidebar />
-      </SidebarContent>
+        <SidebarContent className="min-h-0">
+          <ChatSidebar />
+        </SidebarContent>
 
-      <SidebarFooter className="p-2 group-data-[collapsible=icon]:p-1">
-        <AccountMenu
-          name={user?.name}
-          email={user?.email}
-          deployedReleaseVersion={deploymentProfile.releaseVersion}
-          onOpenSettings={() => {
-            rememberSettingsReturnTo(currentPath);
-            navigate({ to: "/settings" });
-          }}
-          onSignOut={() => {
-            signOut();
-            navigate({
-              to: "/sign-in",
-              search: { next: currentPath },
-              replace: true,
-            });
-          }}
-        />
-      </SidebarFooter>
-    </Sidebar>
+        <SidebarFooter className="p-2 group-data-[collapsible=icon]:p-1">
+          <AccountMenu
+            name={user?.name}
+            email={user?.email}
+            deployedReleaseVersion={deploymentProfile.releaseVersion}
+            onOpenSettings={() => {
+              rememberSettingsReturnTo(currentPath);
+              navigate({ to: "/settings" });
+            }}
+            onSignOut={() => {
+              signOut();
+              navigate({
+                to: "/sign-in",
+                search: { next: currentPath },
+                replace: true,
+              });
+            }}
+          />
+        </SidebarFooter>
+      </Sidebar>
+    </SidebarHealthProvider>
   );
 }
 
@@ -122,6 +128,9 @@ function AccountMenu({
   const displayName = name ?? email ?? "Account";
   const initials = getInitials(name, email);
   const releaseLabel = deployedReleaseVersion?.trim() || "unknown";
+  // Transient sidebar query failures surface here as a subtle amber dot on the
+  // gear + a Retry action, rather than a dramatic red error in the thread list.
+  const sidebarHealth = useSidebarHealth();
   // Logout is easy to hit by accident, so confirm before signing out. The
   // dialog is controlled (not trigger-based) because the dropdown unmounts its
   // own children on select, which would tear down a nested trigger mid-open.
@@ -133,9 +142,21 @@ function AccountMenu({
         <button
           type="button"
           className="ml-px flex h-9 w-full min-w-0 items-center gap-2 rounded-md py-2 pl-2.5 pr-2 text-left text-sidebar-foreground/85 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
-          aria-label="Open settings menu"
+          aria-label={
+            sidebarHealth.hasError
+              ? "Open settings menu (sync issue)"
+              : "Open settings menu"
+          }
         >
-          <Settings className="size-4 shrink-0" />
+          <span className="relative shrink-0">
+            <Settings className="size-4" />
+            {sidebarHealth.hasError ? (
+              <span
+                className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500 ring-2 ring-sidebar"
+                aria-hidden
+              />
+            ) : null}
+          </span>
           <span className="truncate text-sm group-data-[collapsible=icon]:hidden">
             Settings
           </span>
@@ -165,6 +186,25 @@ function AccountMenu({
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {sidebarHealth.hasError ? (
+          <>
+            <div className="flex items-start gap-2 px-2 py-1.5 text-xs text-amber-500">
+              <TriangleAlert className="mt-px size-3.5 shrink-0" />
+              <span>{sidebarHealth.message ?? "Couldn't sync your data."}</span>
+            </div>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                // Keep the menu open so the user sees the retry resolve.
+                event.preventDefault();
+                sidebarHealth.refresh();
+              }}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuItem onSelect={onOpenSettings}>
           <Settings className="mr-2 h-4 w-4" />
           Settings

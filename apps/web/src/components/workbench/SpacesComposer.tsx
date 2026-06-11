@@ -199,11 +199,10 @@ export function SpacesComposer({
   const modelSelectionBlocked =
     approvedModels !== undefined &&
     (approvedModels.length === 0 || !selectedModelId);
-  const displayError =
-    error ??
-    (modelSelectionBlocked
-      ? "No approved model is available for your account."
-      : null);
+  // The send button is disabled while no approved model is available
+  // (see `disabled || modelSelectionBlocked` below), so we no longer
+  // surface a distracting red banner for that state — only real errors.
+  const displayError = error ?? null;
   useEffect(() => {
     function focusComposerInput() {
       const input = document.querySelector<HTMLElement>(
@@ -508,6 +507,7 @@ function ConditionalSubmit({
   const canSubmit = (hasText || hasFile) && !disabled && !isSubmitting;
   return (
     <PromptInputSubmit
+      className="rounded-full"
       disabled={!canSubmit}
       status={isSubmitting ? "submitted" : undefined}
       aria-label={isSubmitting ? "Starting" : "Start"}
