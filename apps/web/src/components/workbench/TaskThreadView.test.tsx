@@ -60,7 +60,11 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ),
 }));
 
-import { actionRowsForTurn, TaskThreadView } from "./TaskThreadView";
+import {
+  actionRowsForTurn,
+  normalizePersistedParts,
+  TaskThreadView,
+} from "./TaskThreadView";
 
 afterEach(() => {
   cleanup();
@@ -4399,5 +4403,48 @@ describe("TaskThreadView", () => {
         within(panel).queryByRole("link", { name: /open thread detail/i }),
       ).toBeNull();
     });
+  });
+});
+
+describe("normalizePersistedParts", () => {
+  it("folds flat data-part fields into the data envelope (user-question intake shape)", () => {
+    // Regression: the user-question intake persists {type, questionId,
+    // questions} flat on the part — no `data` envelope. The normalizer used
+    // to keep only {type, id, data}, stripping the questions entirely and
+    // rendering an empty card.
+    const parts = normalizePersistedParts([
+      {
+        type: "data-user-question",
+        questionId: "q-1",
+        questions: [
+          {
+            header: "Timing",
+            question: "When should the report run?",
+            options: [
+              { label: "Monday (Recommended)", description: "Plan ahead." },
+              { label: "Friday", description: "Close the week." },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    expect(parts).toHaveLength(1);
+    const part = parts[0] as { type: string; data?: Record<string, unknown> };
+    expect(part.type).toBe("data-user-question");
+    expect(part.data?.questionId).toBe("q-1");
+    expect(Array.isArray(part.data?.questions)).toBe(true);
+  });
+
+  it("prefers an explicit data envelope when present", () => {
+    const parts = normalizePersistedParts([
+      {
+        type: "data-user-question",
+        data: { questionId: "q-2", questions: [] },
+        questionId: "stale-flat-id",
+      },
+    ]);
+    const part = parts[0] as { data?: Record<string, unknown> };
+    expect(part.data?.questionId).toBe("q-2");
   });
 });

@@ -2320,10 +2320,19 @@ export function normalizePersistedParts(value: unknown): AccumulatedPart[] {
       continue;
     }
     if (type.startsWith("data-")) {
+      // Some producers (e.g. the user-question intake) persist their fields
+      // flat on the part with no `data` envelope. Fold the extra fields into
+      // `data` so renderers see one shape.
+      const { type: _type, id: _id, data, ...rest } = record;
       parts.push({
         type: type as `data-${string}`,
         id: stringValue(record.id) ?? undefined,
-        data: record.data,
+        data:
+          data !== undefined && data !== null
+            ? data
+            : Object.keys(rest).length > 0
+              ? rest
+              : undefined,
       });
     }
   }
