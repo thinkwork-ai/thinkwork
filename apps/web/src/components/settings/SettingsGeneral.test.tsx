@@ -32,10 +32,6 @@ vi.mock("@/lib/desktop-detection", () => ({
   isDesktop: () => false,
 }));
 
-vi.mock("@/lib/app-version", () => ({
-  APP_VERSION_LABEL: "v0.1.0-test",
-}));
-
 vi.mock("@thinkwork/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@thinkwork/ui")>();
   return {
@@ -122,12 +118,11 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SettingsGeneral releases", () => {
-  it("shows app build and deployed platform release in deployment details", () => {
+  it("shows deployed platform release in deployment details", () => {
     render(<SettingsGeneral />);
 
     expect(screen.queryByText("About")).toBeNull();
-    expect(screen.getByText("App build")).toBeTruthy();
-    expect(screen.getByText("v0.1.0-test")).toBeTruthy();
+    expect(screen.queryByText("App build")).toBeNull();
     expect(screen.getByText("Deployed release")).toBeTruthy();
     expect(screen.getByText("v0.1.0-canary.152")).toBeTruthy();
     expect(screen.getByText("Manifest SHA")).toBeTruthy();
