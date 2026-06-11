@@ -21,6 +21,7 @@
  */
 
 import {
+  deriveFunctionName,
   getConfig,
   getApiAuthSecret,
   getAppsyncApiKey,
@@ -124,7 +125,12 @@ function hindsightEndpoint(): string {
 const KNOWLEDGE_GRAPH_TOOL_ENABLED =
   (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true";
 function workspaceRendererFunctionName(): string {
-  return getConfig("WORKSPACE_RENDERER_FUNCTION_NAME", "");
+  // Derived from the per-stage naming convention (R7); a config/env
+  // override still wins. "" preserves the legacy unconfigured guard
+  // path for non-Lambda contexts without STAGE (vitest).
+  const explicit = getConfig("WORKSPACE_RENDERER_FUNCTION_NAME");
+  if (explicit) return explicit;
+  return process.env.STAGE ? deriveFunctionName("workspace-renderer") : "";
 }
 // Used by sandbox-preflight to namespace Secrets Manager paths per stage.
 // STACK_NAME is the legacy env var every other handler reads; mirror that.

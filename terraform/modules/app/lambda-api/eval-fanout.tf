@@ -37,53 +37,8 @@ resource "aws_sqs_queue" "eval_fanout" {
   }
 }
 
-resource "aws_iam_role_policy" "eval_fanout_send" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-  name  = "eval-fanout-send"
-  role  = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Sid    = "EvalRunnerSendFanoutMessages"
-      Effect = "Allow"
-      Action = [
-        "sqs:SendMessage",
-        "sqs:SendMessageBatch",
-      ]
-      Resource = aws_sqs_queue.eval_fanout[0].arn
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "eval_worker_sqs" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-  name  = "eval-worker-sqs"
-  role  = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "EvalWorkerReceiveFanoutMessages"
-        Effect = "Allow"
-        Action = [
-          "sqs:ReceiveMessage",
-          "sqs:DeleteMessage",
-          "sqs:GetQueueAttributes",
-          "sqs:ChangeMessageVisibility",
-        ]
-        Resource = aws_sqs_queue.eval_fanout[0].arn
-      },
-      {
-        Sid      = "EvalWorkerSendDlqMessages"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.eval_fanout_dlq[0].arn
-      },
-    ]
-  })
-}
+# The shared-role eval-fanout SQS grants (send + worker receive/DLQ) moved to
+# aws_iam_policy.api_data_plane in iam-grouped.tf (R9).
 
 resource "aws_lambda_event_source_mapping" "eval_fanout" {
   count = local.deploy_lambda_handlers ? 1 : 0

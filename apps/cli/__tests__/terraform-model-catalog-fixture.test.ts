@@ -11,13 +11,14 @@ function read(path: string): string {
 
 describe("tenant model catalog Terraform fixture", () => {
   it("grants graphql-http read access to Bedrock model metadata and AWS Price List APIs", () => {
-    const source = read("terraform/modules/app/lambda-api/main.tf");
+    // R9 (plan 2026-06-11-006 U6): the former standalone
+    // lambda_model_catalog_import_read managed policy was absorbed into the
+    // grouped api-data-plane policy in iam-grouped.tf.
+    const source = read("terraform/modules/app/lambda-api/iam-grouped.tf");
 
+    expect(source).toMatch(/resource "aws_iam_policy" "api_data_plane"/);
     expect(source).toMatch(
-      /resource "aws_iam_policy" "lambda_model_catalog_import_read"/,
-    );
-    expect(source).toMatch(
-      /resource "aws_iam_role_policy_attachment" "lambda_model_catalog_import_read"/,
+      /resource "aws_iam_role_policy_attachment" "api_data_plane"/,
     );
     expect(source).toMatch(/bedrock:ListFoundationModels/);
     expect(source).toMatch(/pricing:DescribeServices/);

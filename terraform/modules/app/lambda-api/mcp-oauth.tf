@@ -98,21 +98,5 @@ resource "aws_cognito_user_pool_ui_customization" "mcp_oauth" {
   CSS
 }
 
-resource "aws_iam_role_policy" "lambda_mcp_oauth_revocations" {
-  name = "mcp-oauth-revocations"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem"
-        ]
-        Resource = aws_dynamodb_table.mcp_oauth_revocations.arn
-      }
-    ]
-  })
-}
+# The shared-role DynamoDB grant for the revocations table moved to
+# aws_iam_policy.api_data_plane in iam-grouped.tf (R9).

@@ -441,12 +441,16 @@ describe("U1 - Twenty Terraform app module", () => {
       /TWENTY = "\$\{var\.twenty_provisioned \? "1" : "0"\}\|\$\{var\.twenty_runtime_enabled \? "1" : "0"\}\|\$\{var\.twenty_url\}"/,
     );
     expect(handlers).toMatch(/local\.cognee_env,\s*\)/);
-    // TWENTY reaches graphql-http env via graphql_http_config_env, which is
-    // also the runtime-config SSM document source (plan 2026-06-11-006).
+    // TWENTY reaches graphql-http via graphql_http_config_env → the SSM
+    // runtime-config document (plan 2026-06-11-006), no longer Lambda env.
     expect(handlers).toMatch(/}, local\.twenty_env, local\.kestra_env\)/);
-    expect(handlers).toMatch(
-      /"graphql-http" = merge\(local\.graphql_http_config_env, \{/,
+    const runtimeConfig = read(
+      resolve(
+        REPO_ROOT,
+        "terraform/modules/app/lambda-api/runtime-config.tf",
+      ),
     );
+    expect(runtimeConfig).toMatch(/local\.graphql_http_config_env/);
     expect(handlers).not.toMatch(/TWENTY_URL\s*=/);
   });
 

@@ -7,9 +7,10 @@
 # (@thinkwork/runtime-config; env always wins over the document), so the
 # hard 4KB Lambda env quota (#2375) stops being a deploy-failure class.
 #
-# IAM: the existing aws_iam_role_policy.lambda_ssm_read in main.tf already
-# grants ssm:GetParameter on arn:...:parameter/thinkwork/<stage>/*, which
-# covers this parameter, and aws_iam_role_policy.lambda_secrets covers the
+# IAM: the existing ssm-param-read grant in aws_iam_policy.api_data_plane
+# (iam-grouped.tf) already grants ssm:GetParameter on
+# arn:...:parameter/thinkwork/<stage>/*, which covers this parameter,
+# and its secrets-manager grant covers the
 # Secrets Manager reads — no new grants are needed here. R9's inline→managed
 # consolidation happens in U6.
 # ============================================================================

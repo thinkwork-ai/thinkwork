@@ -11,6 +11,7 @@
  */
 
 import {
+  deriveFunctionName,
   getConfig,
   getApiAuthSecret,
   getAppsyncApiKey,
@@ -137,7 +138,12 @@ function hindsightEndpoint(): string {
   return getConfig("HINDSIGHT_ENDPOINT", "");
 }
 function workspaceRendererFunctionName(): string {
-  return getConfig("WORKSPACE_RENDERER_FUNCTION_NAME", "");
+  // Derived from the per-stage naming convention (R7); a config/env
+  // override still wins. "" preserves the legacy unconfigured guard
+  // path for non-Lambda contexts without STAGE (vitest).
+  const explicit = getConfig("WORKSPACE_RENDERER_FUNCTION_NAME");
+  if (explicit) return explicit;
+  return process.env.STAGE ? deriveFunctionName("workspace-renderer") : "";
 }
 
 /**
