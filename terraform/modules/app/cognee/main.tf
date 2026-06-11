@@ -317,6 +317,31 @@ resource "aws_iam_role_policy" "bedrock_access" {
   })
 }
 
+# ECS Exec (`aws ecs execute-command`) needs the SSM messages channel on the
+# TASK role. Gated by var.enable_execute_command so it only grants when exec is
+# on. Used operationally to inspect the dogfood Cognee store / API directly
+# (its ALB is VPC-internal) — e.g. verify dataset names and graph-fetch scope.
+resource "aws_iam_role_policy" "ecs_exec_ssm" {
+  count = var.enable_execute_command ? 1 : 0
+
+  name = "ecs-exec-ssm-messages"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ssmmessages:CreateControlChannel",
+        "ssmmessages:CreateDataChannel",
+        "ssmmessages:OpenControlChannel",
+        "ssmmessages:OpenDataChannel",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 ################################################################################
 # Security Groups
 ################################################################################
@@ -573,6 +598,10 @@ resource "aws_ecs_service" "cognee" {
   task_definition = aws_ecs_task_definition.cognee.arn
   desired_count   = var.desired_count
   launch_type     = "FARGATE"
+
+  # Allow `aws ecs execute-command` into the running container (operational
+  # introspection of the dogfood Cognee store/API, whose ALB is VPC-internal).
+  enable_execute_command = var.enable_execute_command
 
   deployment_minimum_healthy_percent = var.backend_mode == "dogfood" ? 0 : 100
   deployment_maximum_percent         = var.backend_mode == "dogfood" ? 100 : 200
