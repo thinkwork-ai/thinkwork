@@ -18,7 +18,6 @@ import {
   Switch,
   useTheme,
 } from "@thinkwork/ui";
-import { APP_VERSION_LABEL } from "@/lib/app-version";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktop } from "@/lib/desktop-detection";
 import { requestDesktopNotificationPermission } from "@/lib/desktop-notifications";
@@ -87,12 +86,6 @@ export function SettingsGeneral() {
               </div>
             ) : (
               <>
-                <SettingsRow
-                  label="App build"
-                  description="The web or desktop bundle running on this device."
-                >
-                  <MonoValue value={APP_VERSION_LABEL} />
-                </SettingsRow>
                 <SettingsRow
                   label="Deployed release"
                   description="The ThinkWork platform release currently selected for this environment."

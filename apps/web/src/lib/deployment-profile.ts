@@ -35,6 +35,7 @@ export interface SpacesDeploymentProfileSnapshot {
   displayName: string;
   stage: string;
   region: string;
+  releaseVersion: string;
   status: DeploymentProfileTrustStatus;
   okForOAuth: boolean;
   trustLabel: string;
@@ -50,6 +51,7 @@ export function getSpacesDeploymentProfileSnapshot(
   const displayName =
     stringEnv(env.VITE_DEPLOYMENT_DISPLAY_NAME) || "ThinkWork";
   const region = stringEnv(env.VITE_AWS_REGION) || "us-east-1";
+  const releaseVersion = stringEnv(env.VITE_RELEASE_VERSION);
   const apiUrl = stringEnv(env.VITE_API_URL);
   const appsyncHttpUrl = stringEnv(env.VITE_GRAPHQL_URL);
   const values = {
@@ -58,7 +60,7 @@ export function getSpacesDeploymentProfileSnapshot(
     stage,
     region,
     accountId: stringEnv(env.VITE_AWS_ACCOUNT_ID),
-    releaseVersion: stringEnv(env.VITE_RELEASE_VERSION),
+    releaseVersion,
     releaseManifestUrl: stringEnv(env.VITE_RELEASE_MANIFEST_URL),
     releaseManifestSha256: stringEnv(env.VITE_RELEASE_MANIFEST_SHA256),
     controller: compactController({
@@ -115,6 +117,7 @@ export function getSpacesDeploymentProfileSnapshot(
       displayName,
       stage,
       region,
+      releaseVersion,
       status: "missing_required_field",
       okForOAuth: false,
       trustLabel: "Configuration incomplete",
@@ -137,6 +140,7 @@ export function getSpacesDeploymentProfileSnapshot(
     displayName,
     stage,
     region,
+    releaseVersion,
     status: result.status,
     okForOAuth: result.ok || result.status === "unsigned",
     trustLabel: trustLabel(result.status),

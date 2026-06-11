@@ -9,8 +9,16 @@ const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   pathname: "/threads/abc123",
 }));
+const deploymentProfileMocks = vi.hoisted(() => ({
+  releaseVersion: "v0.1.0-canary.164",
+}));
 
 vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
+vi.mock("@/lib/deployment-profile", () => ({
+  getSpacesDeploymentProfileSnapshot: () => ({
+    releaseVersion: deploymentProfileMocks.releaseVersion,
+  }),
+}));
 vi.mock("@/lib/composer-focus", () => ({
   requestSpacesComposerFocus: vi.fn(),
 }));
@@ -160,6 +168,7 @@ afterEach(() => {
   authMocks.signOut.mockReset();
   routerMocks.navigate.mockReset();
   routerMocks.pathname = "/threads/abc123";
+  deploymentProfileMocks.releaseVersion = "v0.1.0-canary.164";
 });
 
 describe("SpacesSidebar", () => {
@@ -208,5 +217,12 @@ describe("SpacesSidebar", () => {
       search: { next: "/threads/abc123" },
       replace: true,
     });
+  });
+
+  it("shows only the deployed release version in the account menu footer", () => {
+    render(<SpacesSidebar />);
+
+    expect(screen.getByText("v0.1.0-canary.164")).toBeTruthy();
+    expect(screen.queryByText(/ThinkWork v0/)).toBeNull();
   });
 });
