@@ -157,7 +157,16 @@ export function renderTypedPart(
 
   if (part.type.startsWith("data-")) {
     if (part.type === "data-user-question") {
-      const data = recordData(part.data) as UserQuestionData;
+      // Persisted question parts carry their fields flat on the part
+      // ({type, questionId, questions} — the intake write shape), while
+      // accumulator-style parts nest them under `data`. Accept both.
+      const nested = recordData(part.data);
+      const flat = part as unknown as Record<string, unknown>;
+      const data = (
+        Object.keys(nested).length > 0
+          ? nested
+          : { questionId: flat.questionId, questions: flat.questions }
+      ) as UserQuestionData;
       return <UserQuestionCard key={key} data={data} question={userQuestion} />;
     }
     if (part.type === "data-runbook-confirmation") {
