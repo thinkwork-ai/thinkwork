@@ -1,24 +1,14 @@
 import { useMemo } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { markdown } from "@codemirror/lang-markdown";
-import { EditorView } from "@codemirror/view";
-import { vscodeDark } from "@uiw/codemirror-theme-vscode";
-import { Copy } from "lucide-react";
-import { toast } from "sonner";
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@thinkwork/ui";
+import { SystemPromptViewer } from "@/components/workbench/SystemPromptViewer";
 import type { TaskThreadTurn } from "@/components/workbench/TaskThreadView";
 import { isRunningStatus } from "@/components/workbench/turnHeader";
-
-// Above this size we drop markdown highlighting so a very large composed
-// prompt (tens of KB) renders without the parser stalling the dialog.
-const HIGHLIGHT_MAX_CHARS = 50_000;
 
 export interface SystemPromptDialogProps {
   open: boolean;
@@ -41,24 +31,6 @@ export function SystemPromptDialog({
   const selected = useMemo(() => selectPromptTurn(turns), [turns]);
   const prompt = selected?.systemPrompt ?? "";
 
-  const extensions = useMemo(
-    () =>
-      prompt.length > HIGHLIGHT_MAX_CHARS
-        ? [EditorView.lineWrapping, EditorView.editable.of(false)]
-        : [markdown(), EditorView.lineWrapping, EditorView.editable.of(false)],
-    [prompt.length],
-  );
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(prompt);
-      toast.success("System prompt copied.");
-    } catch (err) {
-      console.error("[SystemPromptDialog] clipboard write failed", err);
-      toast.error("Could not copy the system prompt.");
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -74,38 +46,7 @@ export function SystemPromptDialog({
         </DialogHeader>
 
         {selected ? (
-          <>
-            <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border/60 bg-black">
-              <CodeMirror
-                value={prompt}
-                height="100%"
-                theme={vscodeDark}
-                extensions={extensions}
-                editable={false}
-                readOnly
-                basicSetup={{
-                  lineNumbers: true,
-                  foldGutter: false,
-                  highlightActiveLine: false,
-                  highlightActiveLineGutter: false,
-                }}
-                style={{ fontSize: "12px", height: "60vh" }}
-                className="[&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto"
-              />
-            </div>
-            <div className="flex shrink-0 justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleCopy()}
-                data-testid="system-prompt-copy"
-              >
-                <Copy className="mr-2 h-4 w-4" />
-                Copy
-              </Button>
-            </div>
-          </>
+          <SystemPromptViewer prompt={prompt} />
         ) : (
           <p
             className="py-8 text-center text-sm text-muted-foreground"
