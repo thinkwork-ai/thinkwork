@@ -1421,7 +1421,6 @@ export function SpacesThreadDetailRoute({
         tenantId={tenantId ?? ""}
         isPinned={Boolean(routeThread?.pinnedAt)}
         attachedArtifacts={attachedArtifacts}
-        turns={thread?.turns ?? []}
         onDeleted={() => {
           // ChatSidebar owns post-delete navigation because it has the
           // actual visible, filtered thread order the user is looking at.

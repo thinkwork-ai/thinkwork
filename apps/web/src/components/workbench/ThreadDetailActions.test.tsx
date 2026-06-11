@@ -65,6 +65,54 @@ vi.mock("urql", () => ({
 
 vi.mock("@/lib/graphql-queries", () => queryDocs);
 
+// Keep every @thinkwork/ui primitive real (the delete-dialog tests below rely
+// on the real AlertDialog/Checkbox), but render the Radix dropdown's content
+// inline so menu items are assertable without driving pointer events in jsdom.
+vi.mock("@thinkwork/ui", async () => {
+  const actual =
+    await vi.importActual<typeof import("@thinkwork/ui")>("@thinkwork/ui");
+  const Pass = ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    ...actual,
+    DropdownMenu: Pass,
+    DropdownMenuContent: Pass,
+    DropdownMenuSeparator: () => <hr />,
+    DropdownMenuTrigger: ({
+      children,
+      asChild,
+    }: {
+      children: React.ReactNode;
+      asChild?: boolean;
+    }) => (asChild ? children : <button type="button">{children}</button>),
+    DropdownMenuItem: ({
+      children,
+      onSelect,
+      disabled,
+      asChild,
+      ...props
+    }: {
+      children: React.ReactNode;
+      onSelect?: (event: { preventDefault: () => void }) => void;
+      disabled?: boolean;
+      asChild?: boolean;
+    }) =>
+      asChild ? (
+        children
+      ) : (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onSelect?.({ preventDefault: () => {} })}
+          {...props}
+        >
+          {children}
+        </button>
+      ),
+  };
+});
+
 vi.mock("sonner", () => ({
   toast: {
     success: (...args: unknown[]) => toastSuccessMock(...args),
@@ -106,6 +154,24 @@ describe("ThreadDetailActions (dropdown trigger)", () => {
     const trigger = screen.getByTestId("thread-actions-trigger");
     expect(trigger.getAttribute("aria-label")).toBe("Thread actions");
     expect(trigger.className).toContain("text-muted-foreground/70");
+  });
+
+  it("offers Pin/Rename/Archive/Delete but no System Prompt item", () => {
+    render(
+      <ThreadDetailActions
+        threadId="t1"
+        tenantId="t1"
+        threadTitle="Map runbook smoke"
+        attachedArtifacts={[]}
+      />,
+    );
+    expect(screen.getByText("Pin thread")).toBeTruthy();
+    expect(screen.getByText("Rename thread")).toBeTruthy();
+    expect(screen.getByText("Archive thread")).toBeTruthy();
+    expect(screen.getByText("Delete thread")).toBeTruthy();
+    // The System Prompt item moved to the operator execution trace (U3).
+    expect(screen.queryByText("System Prompt")).toBeNull();
+    expect(screen.queryByTestId("thread-actions-system-prompt")).toBeNull();
   });
 });
 
