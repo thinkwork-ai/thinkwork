@@ -27,7 +27,6 @@ import { Check } from "lucide-react";
 import {
   Badge,
   Button,
-  Input,
   Spinner,
   Tabs,
   TabsContent,
@@ -445,7 +444,9 @@ export function UserQuestionCard({ data, question }: UserQuestionCardProps) {
               </label>
             );
           })}
-          <label
+          {/* One row that IS the input once selected: the label text swaps
+              for an auto-growing textarea (up to 3 lines) in place. */}
+          <div
             className={cn(
               "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 transition-colors",
               otherSelected
@@ -453,6 +454,11 @@ export function UserQuestionCard({ data, question }: UserQuestionCardProps) {
                 : "border-border/60 bg-background/40 hover:bg-muted/40",
               fetching && "cursor-not-allowed opacity-70",
             )}
+            onClick={() => {
+              if (fetching || otherSelected) return;
+              if (questionItem.multiSelect) toggleMulti(index, OTHER_VALUE);
+              else setSingle(index, OTHER_VALUE);
+            }}
           >
             <input
               type={questionItem.multiSelect ? "checkbox" : "radio"}
@@ -460,33 +466,40 @@ export function UserQuestionCard({ data, question }: UserQuestionCardProps) {
               value={OTHER_VALUE}
               checked={otherSelected}
               disabled={fetching}
+              aria-label="Type something..."
               className="mt-0.5 size-3.5 shrink-0 accent-primary"
+              onClick={(event) => event.stopPropagation()}
               onChange={() =>
                 questionItem.multiSelect
                   ? toggleMulti(index, OTHER_VALUE)
                   : setSingle(index, OTHER_VALUE)
               }
             />
-            <span className="text-sm text-foreground">Other</span>
-          </label>
-          {otherSelected ? (
-            <Input
-              type="text"
-              value={otherTexts[index] ?? ""}
-              disabled={fetching}
-              placeholder="Type your answer"
-              aria-label={`Other answer for ${
-                questionItem.header || `question ${index + 1}`
-              }`}
-              className="h-8 text-sm"
-              onChange={(event) =>
-                setOtherTexts((prev) => ({
-                  ...prev,
-                  [index]: event.target.value,
-                }))
-              }
-            />
-          ) : null}
+            {otherSelected ? (
+              <textarea
+                rows={1}
+                autoFocus
+                value={otherTexts[index] ?? ""}
+                disabled={fetching}
+                placeholder="Type your answer"
+                aria-label={`Other answer for ${
+                  questionItem.header || `question ${index + 1}`
+                }`}
+                className="max-h-[3.75rem] w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm leading-5 text-foreground outline-none placeholder:text-muted-foreground [field-sizing:content]"
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) =>
+                  setOtherTexts((prev) => ({
+                    ...prev,
+                    [index]: event.target.value,
+                  }))
+                }
+              />
+            ) : (
+              <span className="text-sm text-foreground">
+                Type something...
+              </span>
+            )}
+          </div>
         </div>
       </fieldset>
     );
