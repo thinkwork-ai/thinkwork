@@ -156,7 +156,9 @@ describe("SettingsGeneral releases", () => {
         },
       }),
     );
-    expect(screen.getByText("Deployment controller started")).toBeTruthy();
+    expect(
+      await screen.findByText("Deployment controller started"),
+    ).toBeTruthy();
     expect(
       screen.getByText(
         "arn:aws:states:us-east-1:123456789012:execution:thinkwork-dev-deployment:release-134",
