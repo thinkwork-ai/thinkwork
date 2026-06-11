@@ -1977,7 +1977,7 @@ function ChatThreadRow({
         <>
           {!renamingTitle && awaitingUser ? (
             <span
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-600 group-hover/thread-row:hidden dark:text-amber-400"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-amber-500/15 px-1.5 py-1 text-[10px] font-medium leading-none text-amber-600 group-hover/thread-row:hidden dark:text-amber-400"
               title="The agent asked a question and is waiting for an answer"
             >
               Waiting for you
