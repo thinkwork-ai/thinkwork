@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import type { GraphQLContext } from "../../context.js";
 import { requireAdminOrServiceCaller } from "./authz.js";
 import {
@@ -76,20 +77,20 @@ export const deploymentStatus = async (
     deploymentControllerArn: deploymentProfile.stateMachineArn,
     deploymentRunnerProjectName: deploymentProfile.runnerProjectName,
     deploymentEvidenceBucket: deploymentProfile.evidenceBucket,
-    bucketName: process.env.BUCKET_NAME || process.env.WORKSPACE_BUCKET || null,
-    databaseEndpoint: process.env.DATABASE_HOST || null,
-    ecrUrl: process.env.ECR_REPOSITORY_URL || null,
-    adminUrl: process.env.ADMIN_URL || null,
-    docsUrl: process.env.DOCS_URL || null,
+    bucketName: process.env.BUCKET_NAME || getConfig("WORKSPACE_BUCKET") || null,
+    databaseEndpoint: getConfig("DATABASE_HOST") || null,
+    ecrUrl: getConfig("ECR_REPOSITORY_URL") || null,
+    adminUrl: getConfig("ADMIN_URL") || null,
+    docsUrl: getConfig("DOCS_URL") || null,
     apiEndpoint: process.env.API_ENDPOINT || null,
-    appsyncUrl: process.env.APPSYNC_ENDPOINT || null,
-    appsyncRealtimeUrl: process.env.APPSYNC_REALTIME_URL || null,
-    hindsightEndpoint: process.env.HINDSIGHT_ENDPOINT || null,
-    agentcoreStatus: process.env.AGENTCORE_PI_FUNCTION_NAME
+    appsyncUrl: getConfig("APPSYNC_ENDPOINT") || null,
+    appsyncRealtimeUrl: getConfig("APPSYNC_REALTIME_URL") || null,
+    hindsightEndpoint: getConfig("HINDSIGHT_ENDPOINT") || null,
+    agentcoreStatus: getConfig("AGENTCORE_PI_FUNCTION_NAME")
       ? "managed (always on)"
       : "not deployed",
-    hindsightEnabled: !!process.env.HINDSIGHT_ENDPOINT,
-    managedMemoryEnabled: !!process.env.AGENTCORE_MEMORY_ID,
+    hindsightEnabled: !!getConfig("HINDSIGHT_ENDPOINT"),
+    managedMemoryEnabled: !!getConfig("AGENTCORE_MEMORY_ID"),
     cogneeEnabled: cognee.enabled,
     cogneeEndpoint: cognee.endpoint,
     cogneeLogGroupName:

@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetObjectCommand,
   PutObjectCommand,
@@ -23,7 +24,7 @@ export function appletsBucket(): string {
   const bucket =
     process.env.APPLETS_BUCKET ||
     process.env.DASHBOARD_ARTIFACTS_BUCKET ||
-    process.env.WORKSPACE_BUCKET ||
+    getConfig("WORKSPACE_BUCKET") ||
     "";
   if (!bucket) {
     throw new Error(

@@ -1,3 +1,5 @@
+import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
+
 /**
  * AppSync notify helper for eval run status updates.
  *
@@ -5,8 +7,9 @@
  * Subscribers wired via @aws_subscribe in subscriptions.graphql.
  */
 
-const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
+function appsyncEndpoint(): string {
+  return getConfig("APPSYNC_ENDPOINT", "");
+}
 
 const MUTATION = `
 	mutation NotifyEvalRunUpdate(
@@ -56,13 +59,15 @@ export async function notifyEvalRunUpdate(payload: {
   passRate?: number;
   errorMessage?: string;
 }): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) return;
+  const endpoint = appsyncEndpoint();
+  const apiKey = getAppsyncApiKey();
+  if (!endpoint || !apiKey) return;
   try {
-    const response = await fetch(APPSYNC_ENDPOINT, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ query: MUTATION, variables: payload }),
     });

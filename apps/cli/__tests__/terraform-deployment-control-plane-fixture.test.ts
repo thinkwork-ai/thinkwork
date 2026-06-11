@@ -177,7 +177,9 @@ describe("deployment control plane Terraform fixture", () => {
       resolve(REPO_ROOT, "terraform/modules/app/lambda-api/variables.tf"),
     );
 
-    expect(lambdaHandlers).toMatch(/"graphql-http"\s*=\s*merge/);
+    // Deployment controller config rides graphql_http_config_env → the SSM
+    // runtime-config document (plan 2026-06-11-006), not Lambda env.
+    expect(lambdaHandlers).toMatch(/graphql_http_config_env\s*=\s*merge/);
     expect(lambdaHandlers).toMatch(
       /DEPLOYMENT_STATE_MACHINE_ARN\s*=\s*var\.deployment_state_machine_arn/,
     );

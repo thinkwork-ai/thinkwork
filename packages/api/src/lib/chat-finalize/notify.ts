@@ -12,13 +12,15 @@
  * file in the lift; that belongs in a follow-up.
  */
 
+import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { messages } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
 
 const db = getDb();
 
-const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
+function appsyncEndpoint(): string {
+  return getConfig("APPSYNC_ENDPOINT", "");
+}
 
 export const GENERIC_AGENT_ERROR_MESSAGE =
   "I'm sorry, I encountered an error processing your request. Please try again.";
@@ -114,7 +116,9 @@ export async function notifyNewMessage(payload: {
   senderType: string;
   senderId: string;
 }): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) {
+  const endpoint = appsyncEndpoint();
+  const apiKey = getAppsyncApiKey();
+  if (!endpoint || !apiKey) {
     console.warn(
       `[chat-finalize] AppSync not configured, skipping notification`,
     );
@@ -159,11 +163,11 @@ export async function notifyNewMessage(payload: {
   `;
 
   try {
-    const response = await fetch(APPSYNC_ENDPOINT, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({
         query: mutation,
@@ -206,7 +210,9 @@ export async function notifyThreadTurnUpdate(payload: {
   status: string;
   triggerName: string | null;
 }): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) return;
+  const endpoint = appsyncEndpoint();
+  const apiKey = getAppsyncApiKey();
+  if (!endpoint || !apiKey) return;
 
   const mutation = `
     mutation NotifyThreadTurnUpdate(
@@ -237,11 +243,11 @@ export async function notifyThreadTurnUpdate(payload: {
   `;
 
   try {
-    await fetch(APPSYNC_ENDPOINT, {
+    await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ query: mutation, variables: payload }),
     });

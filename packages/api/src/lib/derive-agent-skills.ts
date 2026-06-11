@@ -7,6 +7,7 @@
  * surfaces still use it for metadata and permissions.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { and, agents, agentSkills, db, eq, inArray } from "../graphql/utils.js";
 import {
   GetObjectCommand,
@@ -35,7 +36,7 @@ async function _readAgentPrefixFiles(
   agentId: string,
   matcher: (relPath: string) => boolean,
 ): Promise<AgentPrefixFile[]> {
-  const bucket = process.env.WORKSPACE_BUCKET;
+  const bucket = getConfig("WORKSPACE_BUCKET");
   if (!bucket) throw new Error("WORKSPACE_BUCKET not configured");
 
   const [agent] = await db

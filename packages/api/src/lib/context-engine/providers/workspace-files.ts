@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetObjectCommand,
   ListObjectsV2Command,
@@ -50,7 +51,7 @@ export function createWorkspaceFilesContextProvider(): ContextProviderDescriptor
           },
         };
       }
-      const bucket = process.env.WORKSPACE_BUCKET || "";
+      const bucket = getConfig("WORKSPACE_BUCKET") || "";
       if (!bucket) {
         return {
           hits: [],

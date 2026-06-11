@@ -18,6 +18,7 @@
  * Stick to that prefix or grants will silently fail.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   CreateStateMachineAliasCommand,
   CreateStateMachineCommand,
@@ -103,8 +104,8 @@ export function snapshotRoutinesEnv(): RoutinesEnv {
     process.env.AWS_ACCOUNT_ID ?? process.env.AWS_DEFAULT_ACCOUNT ?? "";
   const stage = process.env.STAGE ?? "dev";
   const routinesExecutionRoleArn =
-    process.env.ROUTINES_EXECUTION_ROLE_ARN ?? "";
-  const routinesLogGroupArn = process.env.ROUTINES_LOG_GROUP_ARN;
+    getConfig("ROUTINES_EXECUTION_ROLE_ARN") ?? "";
+  const routinesLogGroupArn = getConfig("ROUTINES_LOG_GROUP_ARN");
   // Fail at handler entry rather than letting AWS reject `roleArn=""` deep
   // inside CreateStateMachine — that error surfaces as `InvalidArn` far
   // from the actual cause (missing terraform wiring of the env var).

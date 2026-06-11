@@ -21,6 +21,7 @@
  * Keep tool definitions mechanical wrappers over imported functions.
  */
 
+import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -80,8 +81,8 @@ interface ToolDefinition {
 }
 
 function buildTools(auth: AuthResult): ToolDefinition[] {
-  const apiUrl = process.env.THINKWORK_API_URL ?? "";
-  const authSecret = process.env.API_AUTH_SECRET ?? "";
+  const apiUrl = getConfig("THINKWORK_API_URL") ?? "";
+  const authSecret = getApiAuthSecret();
 
   // Tenant pinning: a tenant-scoped key forces tenantId on every downstream
   // call regardless of what the caller passed. A superuser (API_AUTH_SECRET)
@@ -476,7 +477,7 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 // ---------------------------------------------------------------------------
 
 function routinesAgentToolsEnabled(): boolean {
-  return process.env.ROUTINES_AGENT_TOOLS_ENABLED === "true";
+  return getConfig("ROUTINES_AGENT_TOOLS_ENABLED") === "true";
 }
 
 function notYetEnabled(toolName: string): {
@@ -652,7 +653,7 @@ export interface AuthResult {
  * Order:
  *   1. Bearer matches a live (non-revoked) row in tenant_mcp_admin_keys
  *      → tenant-scoped auth. `tenantId` is populated.
- *   2. Bearer matches process.env.API_AUTH_SECRET → break-glass superuser.
+ *   2. Bearer matches getApiAuthSecret()→ break-glass superuser.
  *      No tenant pinning; reserved for bootstrap + ops debugging.
  *   3. Anything else → null (401).
  */
@@ -705,7 +706,7 @@ async function authenticate(
     );
   }
 
-  const superSecret = process.env.API_AUTH_SECRET;
+  const superSecret = getApiAuthSecret();
   if (superSecret && token === superSecret) {
     return { ok: true, superuser: true };
   }

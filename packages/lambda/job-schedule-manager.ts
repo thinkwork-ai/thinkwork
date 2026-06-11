@@ -25,6 +25,7 @@
  *   DATABASE_NAME        — Database name
  */
 
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import {
   SchedulerClient,
   CreateScheduleCommand,
@@ -114,7 +115,7 @@ interface ApiGwEvent {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 function authenticate(headers: Record<string, string> | undefined): boolean {
-  const expectedSecret = process.env.API_AUTH_SECRET;
+  const expectedSecret = getApiAuthSecret();
   if (!expectedSecret) return false;
   const authHeader = headers?.authorization ?? headers?.Authorization ?? "";
   const token = authHeader.replace(/^Bearer\s+/i, "");

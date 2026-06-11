@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import {
@@ -544,7 +545,7 @@ async function collectHindsightSuggestionObservations(args: {
         observations: [],
         providerStatus: {
           provider: "hindsight",
-          state: process.env.HINDSIGHT_ENDPOINT ? "degraded" : "unavailable",
+          state: getConfig("HINDSIGHT_ENDPOINT") ? "degraded" : "unavailable",
           detail:
             err instanceof Error
               ? err.message

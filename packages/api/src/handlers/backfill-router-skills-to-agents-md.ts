@@ -11,6 +11,7 @@
  * No `--destructive` means dry-run: report only, no S3 writes.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetObjectCommand,
   ListObjectsV2Command,
@@ -57,7 +58,7 @@ export interface BackfillResult {
 }
 
 function bucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 function workspacePrefix(tenantSlug: string, agentSlug: string): string {

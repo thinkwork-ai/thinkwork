@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   CreateSecretCommand,
   DeleteSecretCommand,
@@ -685,7 +686,7 @@ function kestraControlMcpUrl(): string | null {
   if (custom) {
     return `https://${custom.replace(/^https?:\/\//, "").replace(/\/+$/, "")}/mcp/kestra`;
   }
-  const apiUrl = process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL;
+  const apiUrl = getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL;
   if (!apiUrl) return null;
   return `${apiUrl.replace(/\/+$/, "")}/mcp/kestra`;
 }
@@ -934,7 +935,7 @@ async function deleteSecretIfPresent(
 }
 
 function kestraBasicAuthSecretRef(): string | null {
-  const raw = process.env.KESTRA || process.env.KESTRA_STATUS;
+  const raw = getConfig("KESTRA") || process.env.KESTRA_STATUS;
   if (raw) {
     const ref = raw.split("|")[8]?.trim();
     if (ref) return ref;

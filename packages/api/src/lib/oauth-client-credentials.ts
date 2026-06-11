@@ -20,6 +20,7 @@ import {
   SecretsManagerClient,
   GetSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
+import { getConfig } from "@thinkwork/runtime-config";
 
 export type OAuthProviderName =
   | "google_productivity"
@@ -56,7 +57,7 @@ export async function getOAuthClientCredentials(
   if (cached) return cached;
 
   const envVar = SECRET_ARN_ENV[providerName];
-  const secretArn = process.env[envVar] || "";
+  const secretArn = process.env[envVar] || getConfig(envVar) || "";
   if (!secretArn) {
     throw new Error(
       `${envVar} not set — the Lambda environment is missing the OAuth secret ARN. Check terraform/modules/app/lambda-api/handlers.tf.`,

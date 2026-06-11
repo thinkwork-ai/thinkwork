@@ -1,3 +1,4 @@
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export function buildDraftAppletSourceDigest(files: Record<string, string>) {
@@ -20,11 +21,7 @@ export function verifyDraftAppletPromotionProof(input: {
   secret?: string | null;
   now?: Date;
 }) {
-  const secret =
-    input.secret ??
-    process.env.API_AUTH_SECRET ??
-    (process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET) ??
-    "";
+  const secret = input.secret ?? getApiAuthSecret();
   if (!secret) return false;
   const expiresAt = new Date(input.expiresAt);
   if (!Number.isFinite(expiresAt.getTime())) return false;

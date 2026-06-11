@@ -19,6 +19,7 @@
  * is untouched.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { getComplianceReaderClient } from "../../../lib/compliance/reader-db.js";
@@ -419,7 +420,7 @@ export async function complianceOperatorCheck(
     // caller is hard-blocked at the actual list/event resolvers anyway.
     return { isOperator: false, allowlistConfigured: false };
   }
-  const allowlist = (process.env.THINKWORK_PLATFORM_OPERATOR_EMAILS ?? "")
+  const allowlist = (getConfig("THINKWORK_PLATFORM_OPERATOR_EMAILS") ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);

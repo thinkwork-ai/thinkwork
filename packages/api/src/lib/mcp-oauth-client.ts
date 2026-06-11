@@ -1,3 +1,5 @@
+import { getConfig } from "@thinkwork/runtime-config";
+
 export type McpOAuthResourceMetadata = {
   resource?: string;
   authorization_servers?: string[];
@@ -88,7 +90,7 @@ export function mcpOAuthCompletionUrl(
 function allowedReturnOrigins(env: EnvLike): Set<string> {
   const origins = new Set(DEFAULT_WEB_RETURN_ORIGINS);
   for (const key of CONFIGURED_RETURN_URL_KEYS) {
-    const value = env[key];
+    const value = env[key] ?? getConfig(key);
     if (!value) continue;
     try {
       origins.add(new URL(value).origin);
@@ -101,7 +103,7 @@ function allowedReturnOrigins(env: EnvLike): Set<string> {
 
 function firstConfiguredReturnOrigin(env: EnvLike): string | null {
   for (const key of CONFIGURED_RETURN_URL_KEYS) {
-    const value = env[key];
+    const value = env[key] ?? getConfig(key);
     if (!value) continue;
     try {
       return new URL(value).origin;

@@ -50,10 +50,18 @@ locals {
     ],
   )
 
-  # Common environment variables shared by all API handlers
-  common_env = merge({
-    STAGE               = var.stage
-    DATABASE_URL        = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+  # Config-class configuration shared by all API handlers. As of plan
+  # 2026-06-11-006 U6 these keys live ONLY in the SSM runtime-config
+  # document (runtime-config.tf) — they are NOT injected as Lambda env.
+  # Code reads them through @thinkwork/runtime-config's getConfig(), whose
+  # env-wins merge still honors a hand-set env var as an incident override.
+  # The reader-coverage fixture test in apps/cli fails CI if a key in this
+  # map still has a direct process.env reader. Identity values (STAGE,
+  # AWS_ACCOUNT_ID, NODE_OPTIONS) and secrets (DATABASE_URL,
+  # API_AUTH_SECRET, APPSYNC_API_KEY) stay out of this map — identity stays
+  # env forever, secrets live in Secrets Manager (R4), never in the String
+  # document.
+  config_env = merge({
     DATABASE_SECRET_ARN = var.graphql_db_secret_arn
     DATABASE_HOST       = var.db_cluster_endpoint
     DATABASE_NAME       = var.database_name
@@ -72,8 +80,6 @@ locals {
     MCP_OAUTH_REVOCATIONS_TABLE = aws_dynamodb_table.mcp_oauth_revocations.name
     COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
     APPSYNC_ENDPOINT            = var.appsync_api_url
-    APPSYNC_API_KEY             = var.appsync_api_key
-    API_AUTH_SECRET             = var.api_auth_secret
     THINKWORK_API_URL           = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
@@ -84,11 +90,13 @@ locals {
     # rejects every call, which is the safe default pre-rollout.
     THINKWORK_PLATFORM_OPERATOR_EMAILS = var.platform_operator_emails
     AGENTCORE_PI_FUNCTION_NAME         = var.agentcore_pi_function_name
-    WORKSPACE_RENDERER_FUNCTION_NAME   = "thinkwork-${var.stage}-api-workspace-renderer"
-    WORKSPACE_BUCKET                   = var.bucket_name
-    HINDSIGHT_ENDPOINT                 = var.hindsight_endpoint
-    AGENTCORE_MEMORY_ID                = var.agentcore_memory_id
-    MEMORY_ENGINE                      = var.memory_engine
+    # WORKSPACE_RENDERER_FUNCTION_NAME is derived from the per-stage naming
+    # convention by deriveFunctionName("workspace-renderer") — stored
+    # nowhere (R7).
+    WORKSPACE_BUCKET    = var.bucket_name
+    HINDSIGHT_ENDPOINT  = var.hindsight_endpoint
+    AGENTCORE_MEMORY_ID = var.agentcore_memory_id
+    MEMORY_ENGINE       = var.memory_engine
     # CHAT_AGENT_INVOKE_FN_ARN (~112 serialized bytes) was dropped for the
     # 4KB env ceiling (#2375): getChatAgentInvokeFnArn and managed-dispatch
     # now derive the ARN from the deterministic naming pattern
@@ -107,8 +115,6 @@ locals {
     DOCS_URL             = var.docs_url
     APPSYNC_REALTIME_URL = var.appsync_realtime_url
     ECR_REPOSITORY_URL   = var.ecr_repository_url
-    AWS_ACCOUNT_ID       = var.account_id
-    NODE_OPTIONS         = "--enable-source-maps"
     # Per-user OAuth wiring (Google Workspace today; Microsoft 365 follow-up).
     # Secret ARNs are the indirection; the actual client_id/client_secret
     # values live in Secrets Manager and are fetched by
@@ -143,9 +149,45 @@ locals {
     local.cognee_env,
   )
 
+  # graphql-http-only config that also belongs in the runtime-config
+  # document. Kept out of config_env so the legacy env copies stay scoped
+  # to graphql-http (handler_extra_env below) instead of growing every
+  # handler's env during the R8 transition window.
+  graphql_http_config_env = merge({
+    ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
+    ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
+    # Settings > General starts release updates from the GraphQL API.
+    DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
+    DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
+    # Phase 3 U10 — compliance read resolvers (complianceEvents,
+    # complianceEvent, complianceEventByHash) connect to Aurora as
+    # the compliance_reader role. The existing secrets-manager grant in
+    # aws_iam_policy.api_data_plane (iam-grouped.tf) grants
+    # secretsmanager:GetSecretValue on the thinkwork/* wildcard, so no
+    # new IAM resource is needed.
+    COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
+  }, local.twenty_env, local.kestra_env)
+
+  # Identity env + the secrets still in their one-release transition
+  # window (R8). Config-class keys live ONLY in the SSM runtime-config
+  # document now — adding a key here is guarded by the identity-allowlist
+  # fixture test in apps/cli (R10). Follow-up release: DATABASE_URL,
+  # APPSYNC_API_KEY, and API_AUTH_SECRET drop too (readers already resolve
+  # via Secrets Manager prefetch when the env copies are absent), bringing
+  # every handler under the ≤1KB R1 target.
+  common_env = {
+    STAGE           = var.stage
+    DATABASE_URL    = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+    APPSYNC_API_KEY = var.appsync_api_key
+    API_AUTH_SECRET = var.api_auth_secret
+    AWS_ACCOUNT_ID  = var.account_id
+    NODE_OPTIONS    = "--enable-source-maps"
+  }
+
   # Per-handler env-var overrides. ARNs are constructed from the naming
-  # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
-  # introduce a self-referential dependency inside the handler for_each.
+  # pattern (same trick as the api-cross-function-invoke statement in
+  # iam-grouped.tf) so we don't introduce a self-referential dependency
+  # inside the handler for_each.
   slack_handler_env = {
     SLACK_APP_CREDENTIALS_SECRET_ARN = var.enable_slack_workspace_app ? aws_secretsmanager_secret.slack_app_credentials[0].arn : ""
   }
@@ -245,43 +287,13 @@ locals {
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
     # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B
     # U8) which invokes routine-resume via the AWS SDK.
-    "graphql-http" = merge({
-      ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
-      ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
-      AWS_ACCOUNT_ID              = var.account_id
-      # Settings > General starts release updates from the GraphQL API. Keep
-      # these compact because graphql-http runs close to Lambda's 4 KB env cap.
-      DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
-      DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
-      # routine-approval-bridge (Phase B U8) calls this function name
-      # via the AWS SDK Lambda Invoke after a HITL decideInboxItem.
-      # The bridge throws if unset — terraform wiring is mandatory.
-      ROUTINE_RESUME_FUNCTION_NAME = "thinkwork-${var.stage}-api-routine-resume"
-      # triggerRoutineRun seeds this into the SFN execution input so the
-      # inbox_approval recipe Task can find the callback Lambda via
-      # $$.Execution.Input.inboxApprovalFunctionName.
-      ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME = "thinkwork-${var.stage}-api-routine-approval-callback"
-      EMAIL_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-email-send"
-      ROUTINE_TASK_PYTHON_FUNCTION_NAME       = "thinkwork-${var.stage}-api-routine-task-python"
-      ADMIN_OPS_MCP_FUNCTION_NAME             = "thinkwork-${var.stage}-api-admin-ops-mcp"
-      SLACK_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-slack-send"
-      # requester idle memory learning defaults on in API code so this
-      # env-heavy Lambda can stay below AWS's 4 KB environment limit.
-      # Phase 3 U10 — compliance read resolvers (complianceEvents,
-      # complianceEvent, complianceEventByHash) connect to Aurora as
-      # the compliance_reader role. The existing lambda_secrets policy
-      # in main.tf grants secretsmanager:GetSecretValue on the
-      # thinkwork/* wildcard, so no new IAM resource is needed.
-      COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
-      # Phase 3 U11.U2 — createComplianceExport mutation dispatches a
-      # jobId to a known-name SQS queue. We do NOT pass the queue URL
-      # as an env var here: graphql-http's env block is already at the
-      # AWS 4 KB ceiling, and adding another URL pushed the deploy over
-      # the limit. The mutation derives the URL from STAGE + AWS_REGION
-      # + AWS_ACCOUNT_ID, which the Lambda already has. The runner
-      # Lambda (separate function below) keeps an explicit
-      # COMPLIANCE_EXPORTS_QUEUE_URL because its env is small.
-    }, local.twenty_env, local.kestra_env)
+    # graphql-http's former env extras now ride the SSM runtime-config
+    # document (local.graphql_http_config_env feeds the document body in
+    # runtime-config.tf). The thinkwork-<stage>-api-* function names the
+    # routines bridge/dispatch paths use are derived from STAGE at call
+    # time (runtimeFunctionName/deriveFunctionName — R7), and the
+    # compliance-export queue URL is derived from STAGE + AWS_REGION +
+    # AWS_ACCOUNT_ID, so none of them are stored anywhere.
     # U2 eval fan-out substrate. eval-runner does not dispatch to this
     # queue until U3; eval-worker is a throwing inert stub that redrives
     # accidental traffic to the DLQ.
@@ -297,20 +309,9 @@ locals {
       EVAL_FANOUT_QUEUE_URL     = local.eval_fanout_queue_url
       EVAL_AGENTCORE_EVALUATORS = "disabled"
     }
-    # job-trigger fires scheduled routine runs via SFN.StartExecution
-    # (Phase B U7) — the alias ARN comes from the row, but the Lambda
-    # also reads AWS_ACCOUNT_ID for diagnostic logging. It also passes
-    # the routine-approval-callback function name in the SFN execution
-    # input so the inbox_approval recipe can fanout to it on .waitForTaskToken.
-    "job-trigger" = {
-      AWS_ACCOUNT_ID                            = var.account_id
-      ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME   = "thinkwork-${var.stage}-api-routine-approval-callback"
-      EMAIL_SEND_FUNCTION_NAME                  = "thinkwork-${var.stage}-api-email-send"
-      ROUTINE_TASK_PYTHON_FUNCTION_NAME         = "thinkwork-${var.stage}-api-routine-task-python"
-      ADMIN_OPS_MCP_FUNCTION_NAME               = "thinkwork-${var.stage}-api-admin-ops-mcp"
-      SLACK_SEND_FUNCTION_NAME                  = "thinkwork-${var.stage}-api-slack-send"
-      THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME = "thinkwork-${var.stage}-api-thread-idle-memory-learning"
-    }
+    # job-trigger's thinkwork-<stage>-api-* worker function names are
+    # derived from STAGE at call time (runtimeFunctionName — R7), and
+    # AWS_ACCOUNT_ID already rides common_env, so it needs no extras.
     # Phase 3 U4 Compliance outbox drainer.
     # Connects to Aurora as the compliance_drainer role (provisioned in
     # U2). The DATABASE_SECRET_ARN-style indirection is via
@@ -495,7 +496,8 @@ resource "aws_lambda_function" "handler" {
     # One-shot tenant provisioning: mints a tkm_ key + stores in Secrets
     # Manager at thinkwork/<stage>/mcp/<tenantId>/admin-ops + upserts
     # tenant_mcp_servers. SM IAM is already granted on thinkwork/* by
-    # aws_iam_role_policy.lambda_secrets in main.tf (Create/Update/Get).
+    # the secrets-manager grant in aws_iam_policy.api_data_plane
+    # (iam-grouped.tf; Create/Update/Get).
     "mcp-admin-provision",
     # Plugin-installed MCP server admin approval (plan §U11, SI-5). Cognito
     # JWT admin caller → approve/reject. Approve computes url_hash =
@@ -573,6 +575,18 @@ resource "aws_lambda_function" "handler" {
   role          = aws_iam_role.lambda.arn
   handler       = "index.handler"
   runtime       = local.runtime
+  # Parameters and Secrets extension: container-local cache for the SSM
+  # runtime-config document + Secrets Manager reads (runtime-config.tf).
+  layers = local.api_handler_layers
+
+  # The runtime-config document must exist before any function loses its
+  # env copies, or a mid-apply cold start could cache an empty document
+  # for a TTL window. Same reasoning for the platform secrets.
+  depends_on = [
+    aws_ssm_parameter.runtime_config,
+    aws_secretsmanager_secret_version.api_auth,
+    aws_secretsmanager_secret_version.appsync_api_key,
+  ]
   # eval-runner walks every test case sequentially, invoking an agent +
   # waiting up to 2 min for spans to propagate per test, so a 10-test run
   # can easily exceed the 30 s default. 900 s covers ~5-15 min sweeps.
@@ -668,21 +682,6 @@ resource "aws_lambda_function_event_invoke_config" "chat_agent_invoke" {
   maximum_event_age_in_seconds = 3600
 }
 
-resource "aws_iam_role_policy" "wiki_compile_dlq_send" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-  name  = "thinkwork-${var.stage}-wiki-compile-dlq-send"
-  role  = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage"]
-      Resource = aws_sqs_queue.wiki_compile_dlq[0].arn
-    }]
-  })
-}
-
 resource "aws_lambda_function_event_invoke_config" "wiki_compile" {
   count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["wiki-compile"].function_name
@@ -709,21 +708,6 @@ resource "aws_sqs_queue" "ontology_scan_dlq" {
   }
 }
 
-resource "aws_iam_role_policy" "ontology_scan_dlq_send" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-  name  = "thinkwork-${var.stage}-ontology-scan-dlq-send"
-  role  = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage"]
-      Resource = aws_sqs_queue.ontology_scan_dlq[0].arn
-    }]
-  })
-}
-
 resource "aws_lambda_function_event_invoke_config" "ontology_scan" {
   count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["ontology-scan"].function_name
@@ -747,21 +731,6 @@ resource "aws_sqs_queue" "ontology_reprocess_dlq" {
   tags = {
     Name = "thinkwork-${var.stage}-ontology-reprocess-dlq"
   }
-}
-
-resource "aws_iam_role_policy" "ontology_reprocess_dlq_send" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-  name  = "thinkwork-${var.stage}-ontology-reprocess-dlq-send"
-  role  = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage"]
-      Resource = aws_sqs_queue.ontology_reprocess_dlq[0].arn
-    }]
-  })
 }
 
 resource "aws_lambda_function_event_invoke_config" "ontology_reprocess" {
@@ -826,21 +795,6 @@ resource "aws_sqs_queue" "compliance_drainer_dlq" {
   tags = {
     Name = "thinkwork-${var.stage}-compliance-drainer-dlq"
   }
-}
-
-resource "aws_iam_role_policy" "compliance_drainer_dlq_send" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-  name  = "compliance-drainer-dlq-send"
-  role  = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage"]
-      Resource = aws_sqs_queue.compliance_drainer_dlq[0].arn
-    }]
-  })
 }
 
 resource "aws_lambda_function_event_invoke_config" "compliance_outbox_drainer" {
@@ -1597,20 +1551,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "wiki_exports" {
   }
 }
 
-resource "aws_iam_role_policy" "lambda_wiki_exports_s3" {
-  name = "wiki-exports-s3"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:PutObject", "s3:AbortMultipartUpload"]
-      Resource = "${aws_s3_bucket.wiki_exports.arn}/*"
-    }]
-  })
-}
-
 resource "aws_iam_role" "scheduler" {
   name = "thinkwork-${var.stage}-scheduler-role"
 
@@ -1995,24 +1935,6 @@ resource "aws_sqs_queue" "compliance_exports" {
   tags = {
     Name = "thinkwork-${var.stage}-compliance-exports"
   }
-}
-
-# graphql-http needs sqs:SendMessage on the new queue to dispatch jobIds
-# from the createComplianceExport mutation. Attached to the shared
-# lambda role (which graphql-http assumes); scope is queue-specific.
-resource "aws_iam_role_policy" "compliance_exports_send" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-  name  = "compliance-exports-send"
-  role  = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage"]
-      Resource = aws_sqs_queue.compliance_exports[0].arn
-    }]
-  })
 }
 
 # Runner role's SQS receive grants — only the runner consumes the queue.

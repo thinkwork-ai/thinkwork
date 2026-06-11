@@ -14,7 +14,7 @@
  * + payload shape without the real round-trip.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const { mockDbReturning, mockLambdaSend } = vi.hoisted(() => ({
   mockDbReturning: vi.fn(),
@@ -306,8 +306,16 @@ describe("routine-approval-bridge — SFN-side idempotency", () => {
 // ---------------------------------------------------------------------------
 
 describe("routine-approval-bridge — configuration guard", () => {
-  it("throws when ROUTINE_RESUME_FUNCTION_NAME env is not set", async () => {
+  it("throws when the resume function name is neither configured nor derivable", async () => {
+    // Plan 2026-06-11-006 U6 (R7): the name is derived from STAGE when the
+    // env/config override is absent; with neither present the bridge still
+    // fails loudly instead of invoking an empty function name.
     delete process.env.ROUTINE_RESUME_FUNCTION_NAME;
+    const savedStage = process.env.STAGE;
+    delete process.env.STAGE;
+    onTestFinished(() => {
+      if (savedStage !== undefined) process.env.STAGE = savedStage;
+    });
     mockDbReturning.mockReturnValueOnce([
       {
         id: "tok-1",
@@ -324,6 +332,6 @@ describe("routine-approval-bridge — configuration guard", () => {
         actorId: "user-1",
         decisionPayload: {},
       }),
-    ).rejects.toThrow(/ROUTINE_RESUME_FUNCTION_NAME/);
+    ).rejects.toThrow(/routine-resume.*STAGE unset/);
   });
 });

@@ -1,3 +1,5 @@
+import { getConfig } from "@thinkwork/runtime-config";
+
 export type ManagedApplicationKey = "cognee" | "twenty" | "kestra";
 
 export type CogneeStatus = {
@@ -86,7 +88,7 @@ export function normalizeManagedApplicationKey(
 export function readCogneeStatus(): CogneeStatus {
   const legacyEndpoint = process.env.COGNEE_ENDPOINT || null;
   const legacyBackendMode = process.env.COGNEE_BACKEND_MODE || null;
-  const raw = process.env.COGNEE || process.env.COGNEE_STATUS;
+  const raw = getConfig("COGNEE") || process.env.COGNEE_STATUS;
 
   if (!raw) {
     return {
@@ -139,7 +141,7 @@ export function readCogneeStatus(): CogneeStatus {
 }
 
 export function readTwentyStatus(): TwentyStatus {
-  const raw = process.env.TWENTY || process.env.TWENTY_STATUS;
+  const raw = getConfig("TWENTY") || process.env.TWENTY_STATUS;
   const fallbackUrl = process.env.TWENTY_URL || null;
 
   if (!raw) {
@@ -200,7 +202,7 @@ export function readTwentyStatus(): TwentyStatus {
 }
 
 export function readKestraStatus(): KestraStatus {
-  const raw = process.env.KESTRA || process.env.KESTRA_STATUS;
+  const raw = getConfig("KESTRA") || process.env.KESTRA_STATUS;
   const fallbackUrl = process.env.KESTRA_URL || deriveKestraUrlFromWwwUrl();
 
   if (!raw) {
@@ -481,7 +483,7 @@ function deriveKestraDefaults(
 }
 
 function deriveKestraUrlFromWwwUrl(): string | null {
-  const raw = process.env.WWW_URL;
+  const raw = getConfig("WWW_URL");
   if (!raw) return null;
   try {
     const url = new URL(raw);

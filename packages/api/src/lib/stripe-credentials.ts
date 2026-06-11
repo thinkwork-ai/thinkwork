@@ -20,6 +20,7 @@
  * lifecycle.ignore_changes) port cleanly.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   SecretsManagerClient,
   GetSecretValueCommand,
@@ -46,7 +47,7 @@ function getClient(): SecretsManagerClient {
 export async function getStripeCredentials(): Promise<StripeCredentials> {
   if (cached) return cached;
 
-  const secretArn = process.env.STRIPE_CREDENTIALS_SECRET_ARN || "";
+  const secretArn = getConfig("STRIPE_CREDENTIALS_SECRET_ARN") || "";
   if (!secretArn) {
     throw new Error(
       "STRIPE_CREDENTIALS_SECRET_ARN not set — the Lambda environment is missing the Stripe secret ARN. Check terraform/modules/app/lambda-api/handlers.tf common_env.",

@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import type { MemoryAdapter } from "../memory/adapter.js";
 import { HindsightAdapter } from "../memory/adapters/hindsight-adapter.js";
 
@@ -94,11 +95,11 @@ function createDefaultHindsightAdapter(): Pick<
   "kind" | "upsertMarkdownMemoryDocument"
 > | null {
   if (defaultAdapter !== undefined) return defaultAdapter;
-  if ((process.env.MEMORY_ENGINE || "hindsight") !== "hindsight") {
+  if ((getConfig("MEMORY_ENGINE") || "hindsight") !== "hindsight") {
     defaultAdapter = null;
     return null;
   }
-  const endpoint = process.env.HINDSIGHT_ENDPOINT || "";
+  const endpoint = getConfig("HINDSIGHT_ENDPOINT") || "";
   defaultAdapter = endpoint ? new HindsightAdapter({ endpoint }) : null;
   return defaultAdapter;
 }

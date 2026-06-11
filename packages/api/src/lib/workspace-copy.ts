@@ -7,6 +7,7 @@
  *   template → agent   (on "Use Template")
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   S3Client,
   ListObjectsV2Command,
@@ -21,7 +22,9 @@ const s3 = new S3Client({
     process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
 });
 
-const BUCKET = process.env.WORKSPACE_BUCKET || "";
+function workspaceBucket(): string {
+  return getConfig("WORKSPACE_BUCKET", "");
+}
 
 // ---------------------------------------------------------------------------
 // Default workspace file content
@@ -58,7 +61,7 @@ async function copyS3Prefix(
   do {
     const list = await s3.send(
       new ListObjectsV2Command({
-        Bucket: BUCKET,
+        Bucket: workspaceBucket(),
         Prefix: srcPrefix,
         ContinuationToken: continuationToken,
       }),
@@ -71,8 +74,8 @@ async function copyS3Prefix(
 
       await s3.send(
         new CopyObjectCommand({
-          Bucket: BUCKET,
-          CopySource: `${BUCKET}/${obj.Key}`,
+          Bucket: workspaceBucket(),
+          CopySource: `${workspaceBucket()}/${obj.Key}`,
           Key: `${dstPrefix}${relativePath}`,
         }),
       );
@@ -96,7 +99,7 @@ async function readStoredDefaultsVersion(tenantSlug: string): Promise<number> {
   const key = `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/${VERSION_KEY_SUFFIX}`;
   try {
     const resp = await s3.send(
-      new GetObjectCommand({ Bucket: BUCKET, Key: key }),
+      new GetObjectCommand({ Bucket: workspaceBucket(), Key: key }),
     );
     const body = await resp.Body?.transformToString();
     if (!body) return 0;
@@ -134,7 +137,7 @@ export async function ensureDefaultsExist(tenantSlug: string): Promise<{
   for (const [path, content] of Object.entries(DEFAULT_FILES)) {
     await s3.send(
       new PutObjectCommand({
-        Bucket: BUCKET,
+        Bucket: workspaceBucket(),
         Key: `${prefix}${path}`,
         Body: content,
         ContentType: "text/markdown",
@@ -143,7 +146,7 @@ export async function ensureDefaultsExist(tenantSlug: string): Promise<{
   }
   await s3.send(
     new PutObjectCommand({
-      Bucket: BUCKET,
+      Bucket: workspaceBucket(),
       Key: `${prefix}${VERSION_KEY_SUFFIX}`,
       Body: String(DEFAULTS_VERSION),
       ContentType: "text/plain",
@@ -191,7 +194,7 @@ export async function copyTemplateWorkspace(
 
   if (copied > 0) {
     const { regenerateManifest } = await import("./workspace-manifest.js");
-    await regenerateManifest(BUCKET, tenantSlug, agentSlug);
+    await regenerateManifest(workspaceBucket(), tenantSlug, agentSlug);
   }
 
   return copied;
@@ -221,7 +224,7 @@ export async function overlayTemplateWorkspace(
 
   if (copied > 0) {
     const { regenerateManifest } = await import("./workspace-manifest.js");
-    await regenerateManifest(BUCKET, tenantSlug, agentSlug);
+    await regenerateManifest(workspaceBucket(), tenantSlug, agentSlug);
   }
 
   return copied;
@@ -258,7 +261,7 @@ async function listWorkspaceFilePaths(prefix: string): Promise<string[]> {
   do {
     const list = await s3.send(
       new ListObjectsV2Command({
-        Bucket: BUCKET,
+        Bucket: workspaceBucket(),
         Prefix: prefix,
         ContinuationToken: continuationToken,
       }),

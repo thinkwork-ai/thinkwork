@@ -28,6 +28,7 @@
  * visibility surface for v1.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GraphQLError } from "graphql";
@@ -121,7 +122,7 @@ export async function writeDraftReviewSuccess(args: {
 }): Promise<DraftWritebackResult> {
   const io = args.io ?? {};
   const db = io.db ?? defaultDb;
-  const bucket = io.bucket ?? process.env.WORKSPACE_BUCKET ?? "";
+  const bucket = io.bucket ?? getConfig("WORKSPACE_BUCKET") ?? "";
   if (!bucket) {
     throw new GraphQLError("WORKSPACE_BUCKET is not configured", {
       extensions: { code: "FAILED_PRECONDITION" },

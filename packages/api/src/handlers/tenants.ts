@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -29,7 +30,9 @@ const RESENDABLE_INVITE_STATUSES = new Set([
   "FORCE_CHANGE_PASSWORD",
   "UNCONFIRMED",
 ]);
-const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
+function cognitoUserPoolId(): string {
+  return getConfig("COGNITO_USER_POOL_ID", "");
+}
 
 // ---------------------------------------------------------------------------
 // Router
@@ -203,7 +206,8 @@ async function inviteMember(
   tenantId: string,
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  if (!COGNITO_USER_POOL_ID) {
+  const userPoolId = cognitoUserPoolId();
+  if (!userPoolId) {
     return error("COGNITO_USER_POOL_ID not configured on this Lambda", 500);
   }
 
@@ -221,7 +225,7 @@ async function inviteMember(
   try {
     const result = await cognito.send(
       new AdminCreateUserCommand({
-        UserPoolId: COGNITO_USER_POOL_ID,
+        UserPoolId: userPoolId,
         Username: email,
         UserAttributes: [
           { Name: "email", Value: email },
@@ -241,7 +245,7 @@ async function inviteMember(
     if (err.name === "UsernameExistsException") {
       const existing = await cognito.send(
         new AdminGetUserCommand({
-          UserPoolId: COGNITO_USER_POOL_ID,
+          UserPoolId: userPoolId,
           Username: email,
         }),
       );
@@ -256,7 +260,7 @@ async function inviteMember(
       ) {
         const resent = await cognito.send(
           new AdminCreateUserCommand({
-            UserPoolId: COGNITO_USER_POOL_ID,
+            UserPoolId: userPoolId,
             Username: email,
             DesiredDeliveryMediums: ["EMAIL"],
             MessageAction: "RESEND",

@@ -10,6 +10,7 @@
  *   tenants/_ops/migrations/fat-folder/{run-id}.json
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -83,7 +84,7 @@ export interface FatMigrationResult {
 }
 
 function bucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 function db() {

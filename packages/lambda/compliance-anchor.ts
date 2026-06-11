@@ -36,6 +36,7 @@
  * Plan: docs/plans/2026-05-07-010-feat-compliance-u8a-anchor-lambda-inert-plan.md
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { createHash } from "node:crypto";
 import { createDb, type Database } from "@thinkwork/database-pg";
 import { tenantAnchorState } from "@thinkwork/database-pg/schema";
@@ -222,7 +223,7 @@ function getAnchorEnv(): AnchorEnv {
   const mode: "GOVERNANCE" | "COMPLIANCE" =
     rawMode === "COMPLIANCE" ? "COMPLIANCE" : "GOVERNANCE";
   return Object.freeze({
-    readerSecretArn: process.env.COMPLIANCE_READER_SECRET_ARN || "",
+    readerSecretArn: getConfig("COMPLIANCE_READER_SECRET_ARN") || "",
     drainerSecretArn: process.env.COMPLIANCE_DRAINER_SECRET_ARN || "",
     anchorBucketName: process.env.COMPLIANCE_ANCHOR_BUCKET_NAME || "",
     kmsKeyArn: process.env.COMPLIANCE_ANCHOR_KMS_KEY_ARN || "",

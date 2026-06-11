@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { parseAgentsMd } from "../lib/agents-md-parser.js";
 
@@ -9,12 +10,15 @@ interface SmokeResult {
 
 const region =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
-const bucket = process.env.WORKSPACE_BUCKET || "";
 const s3 = new S3Client({ region });
+
+function workspaceBucket(): string {
+  return getConfig("WORKSPACE_BUCKET", "");
+}
 
 async function readText(key: string): Promise<string> {
   const resp = await s3.send(
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    new GetObjectCommand({ Bucket: workspaceBucket(), Key: key }),
   );
   return (await resp.Body?.transformToString("utf-8")) ?? "";
 }
@@ -85,6 +89,7 @@ async function main() {
     process.argv
       .find((arg) => arg.startsWith("--stage="))
       ?.slice("--stage=".length) ?? "dev";
+  const bucket = workspaceBucket();
   if (!bucket) throw new Error("WORKSPACE_BUCKET not configured");
   const scenarios = [
     scenarioCanonicalFilesPresent,

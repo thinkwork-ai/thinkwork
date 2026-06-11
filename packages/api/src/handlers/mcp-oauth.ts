@@ -1,3 +1,4 @@
+import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -708,7 +709,7 @@ function resourceUrl(event: APIGatewayProxyEventV2): string {
 
 function mcpOAuthCallbackUrl(event: APIGatewayProxyEventV2): string {
   return (
-    process.env.MCP_OAUTH_CALLBACK_URL ||
+    getConfig("MCP_OAUTH_CALLBACK_URL") ||
     `${issuerUrl(event)}/mcp/oauth/callback`
   );
 }
@@ -720,13 +721,7 @@ function issuerUrl(event: APIGatewayProxyEventV2): string {
 }
 
 function signingSecret(): string {
-  return (
-    process.env.MCP_OAUTH_SIGNING_SECRET ||
-    process.env.API_AUTH_SECRET ||
-    process.env.THINKWORK_API_SECRET ||
-    process.env.API_AUTH_SECRET ||
-    ""
-  );
+  return process.env.MCP_OAUTH_SIGNING_SECRET || getApiAuthSecret();
 }
 
 function isTestRuntime(): boolean {
@@ -734,7 +729,7 @@ function isTestRuntime(): boolean {
 }
 
 function requiredEnv(name: string): string {
-  const value = process.env[name];
+  const value = getConfig(name);
   if (!value) throw new McpOAuthStateError(`${name} is not configured`);
   return value;
 }

@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetSecretValueCommand,
   SecretsManagerClient,
@@ -171,7 +172,7 @@ function parseJsonOrText(text: string): unknown {
 export async function requirePlatformOperator(
   ctx: GraphQLContext,
 ): Promise<void> {
-  const allowlist = (process.env.THINKWORK_PLATFORM_OPERATOR_EMAILS ?? "")
+  const allowlist = (getConfig("THINKWORK_PLATFORM_OPERATOR_EMAILS") ?? "")
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);

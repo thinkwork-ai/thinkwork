@@ -1,8 +1,12 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { invokeClaudeJson, parseJsonResponse } from "../../wiki/bedrock.js";
 
-const SOURCE_AGENT_MODEL_ID =
-  process.env.COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID ||
-  process.env.CONTEXT_ENGINE_SOURCE_AGENT_MODEL_ID;
+function sourceAgentModelId(): string | undefined {
+  return (
+    getConfig("COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID") ||
+    process.env.CONTEXT_ENGINE_SOURCE_AGENT_MODEL_ID
+  );
+}
 
 export interface SourceAgentModelRequest {
   system: string;
@@ -395,9 +399,10 @@ export async function runSourceAgent(args: {
 async function bedrockSourceAgentModel(
   request: SourceAgentModelRequest,
 ): Promise<SourceAgentModelResponse> {
+  const modelId = sourceAgentModelId();
   const response = await invokeClaudeJson<SourceAgentAction>({
     ...request,
-    ...(SOURCE_AGENT_MODEL_ID ? { modelId: SOURCE_AGENT_MODEL_ID } : {}),
+    ...(modelId ? { modelId } : {}),
     parse: parseSourceAgentActionForRetry,
   });
   return {

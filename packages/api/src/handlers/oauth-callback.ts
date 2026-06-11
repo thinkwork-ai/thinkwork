@@ -11,6 +11,7 @@
  * 6. Redirect to app.thinkwork.ai/settings/integrations
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -34,10 +35,15 @@ import { upsertSlackUserLink } from "../lib/slack/user-link-store.js";
 const { connections, connectProviders, credentials, agentSkills } = schema;
 
 const STAGE = process.env.STAGE || "dev";
-const OAUTH_CALLBACK_URL = process.env.OAUTH_CALLBACK_URL || "";
-const REDIRECT_SUCCESS_URL =
-  process.env.REDIRECT_SUCCESS_URL ||
-  "https://app.thinkwork.ai/settings/credentials";
+function oauthCallbackUrl(): string {
+  return getConfig("OAUTH_CALLBACK_URL", "");
+}
+function redirectSuccessUrl(): string {
+  return getConfig(
+    "REDIRECT_SUCCESS_URL",
+    "https://app.thinkwork.ai/settings/credentials",
+  );
+}
 
 const sm = new SecretsManagerClient({
   region: process.env.AWS_REGION || "us-east-1",
@@ -98,13 +104,13 @@ export async function handler(
       `[oauth-callback] Provider returned error: ${errorParam} - ${params.error_description}`,
     );
     return redirect(
-      `${REDIRECT_SUCCESS_URL}?status=error&reason=${encodeURIComponent(errorParam)}`,
+      `${redirectSuccessUrl()}?status=error&reason=${encodeURIComponent(errorParam)}`,
     );
   }
 
   if (!code || !state) {
     return redirect(
-      `${REDIRECT_SUCCESS_URL}?status=error&reason=missing_params`,
+      `${redirectSuccessUrl()}?status=error&reason=missing_params`,
     );
   }
 
@@ -131,7 +137,7 @@ export async function handler(
         `[oauth-callback] No pending connection found for state: ${state.slice(0, 8)}...`,
       );
       return redirect(
-        `${REDIRECT_SUCCESS_URL}?status=error&reason=invalid_state`,
+        `${redirectSuccessUrl()}?status=error&reason=invalid_state`,
       );
     }
 
@@ -168,7 +174,7 @@ export async function handler(
     const tokenBody = new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: OAUTH_CALLBACK_URL,
+      redirect_uri: oauthCallbackUrl(),
       client_id: clientId,
       client_secret: clientSecret,
     });
@@ -474,7 +480,7 @@ export async function handler(
   } catch (err) {
     console.error(`[oauth-callback] Unexpected error:`, err);
     return redirect(
-      `${REDIRECT_SUCCESS_URL}?status=error&reason=internal_error`,
+      `${redirectSuccessUrl()}?status=error&reason=internal_error`,
     );
   }
 }
@@ -504,7 +510,7 @@ function redirectForConn(
   const returnUrl =
     typeof meta.return_url === "string" && meta.return_url
       ? meta.return_url
-      : REDIRECT_SUCCESS_URL;
+      : redirectSuccessUrl();
   const separator = returnUrl.includes("?") ? "&" : "?";
   return redirect(`${returnUrl}${separator}status=${status}&${queryTail}`);
 }

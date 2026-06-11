@@ -31,6 +31,7 @@
  * `process.env`.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetObjectCommand,
   S3Client,
@@ -146,10 +147,10 @@ async function getDatabaseUrl(env: RunnerEnv): Promise<string> {
       const pass = encodeURIComponent(secret.password ?? "");
       const host =
         secret.host ??
-        process.env.DATABASE_HOST ??
+        getConfig("DATABASE_HOST") ??
         process.env.DB_CLUSTER_ENDPOINT;
       const port = secret.port ?? process.env.DATABASE_PORT ?? "5432";
-      const dbname = secret.dbname ?? process.env.DATABASE_NAME ?? "thinkwork";
+      const dbname = secret.dbname ?? getConfig("DATABASE_NAME") ?? "thinkwork";
       if (!host) {
         throw new Error(
           "compliance-export-runner: DATABASE_HOST (or DB_CLUSTER_ENDPOINT) is unset and the secret does not carry a host field. Wire DATABASE_HOST via Terraform.",

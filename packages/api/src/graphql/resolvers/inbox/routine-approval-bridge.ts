@@ -32,6 +32,7 @@
 import { eq } from "drizzle-orm";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { routineApprovalTokens } from "@thinkwork/database-pg/schema";
+import { deriveFunctionName, getConfig } from "@thinkwork/runtime-config";
 import { and, db } from "../../utils.js";
 
 // ---------------------------------------------------------------------------
@@ -98,14 +99,13 @@ export async function bridgeInboxDecisionToRoutineApproval(input: {
     return { dispatched: false, alreadyDecided: false };
   }
 
-  // Snapshot env at handler entry (the resolver — this function is
-  // called from decideInboxItem). Re-reading later would risk shadowing.
-  const resumeFunctionName = process.env.ROUTINE_RESUME_FUNCTION_NAME ?? "";
-  if (!resumeFunctionName) {
-    throw new Error(
-      "Routines HITL bridge is misconfigured: ROUTINE_RESUME_FUNCTION_NAME env var is not set",
-    );
-  }
+  // Snapshot at handler entry (the resolver — this function is called
+  // from decideInboxItem). Re-reading later would risk shadowing. The
+  // name is derived from the per-stage convention (R7); an env override
+  // still wins via getConfig for incident hot-patching.
+  const resumeFunctionName =
+    getConfig("ROUTINE_RESUME_FUNCTION_NAME") ??
+    deriveFunctionName("routine-resume");
 
   // Step 1 — conditional UPDATE: consumed=false → true.
   // The WHERE clause on (inbox_item_id, consumed=false) plus the partial

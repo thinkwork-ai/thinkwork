@@ -98,28 +98,5 @@ resource "aws_lambda_event_source_mapping" "workspace_event_dispatcher" {
   }
 }
 
-resource "aws_iam_role_policy" "lambda_workspace_events_sqs" {
-  count = local.workspace_event_enabled ? 1 : 0
-
-  name = "thinkwork-${var.stage}-lambda-workspace-events-sqs"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "sqs:ReceiveMessage",
-          "sqs:DeleteMessage",
-          "sqs:GetQueueAttributes",
-          "sqs:ChangeMessageVisibility",
-        ]
-        Resource = concat(
-          [for q in aws_sqs_queue.workspace_event : q.arn],
-          [for q in aws_sqs_queue.workspace_event_dlq : q.arn],
-        )
-      },
-    ]
-  })
-}
+# The shared-role workspace-event SQS receive grants moved to
+# aws_iam_policy.api_data_plane in iam-grouped.tf (R9).

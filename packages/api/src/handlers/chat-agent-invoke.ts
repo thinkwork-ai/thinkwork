@@ -20,6 +20,12 @@
  * cascade.
  */
 
+import {
+  deriveFunctionName,
+  getConfig,
+  getApiAuthSecret,
+  getAppsyncApiKey,
+} from "@thinkwork/runtime-config";
 import { eq, and, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -93,24 +99,39 @@ function getTraceId(): string {
   return randomBytes(16).toString("hex");
 }
 
-const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const THINKWORK_API_SECRET =
-  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
-const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
+// Config-class values are read at call time via getConfig (env-wins merge
+// over the SSM document) — never captured at module load (R3): the SSM
+// document may load after module init, and vitest stubs env after import.
+// Secret-class values are read at call time via getApiAuthSecret /
+// getAppsyncApiKey — never captured at module load.
+function appsyncEndpoint(): string {
+  return getConfig("APPSYNC_ENDPOINT", "");
+}
+function workspaceBucket(): string {
+  return getConfig("WORKSPACE_BUCKET", "");
+}
 // API URL used by skills for callbacks (thread-management, email-send, etc.)
 // Reads THINKWORK_API_URL first, falls back to legacy MCP_BASE_URL until infra is updated.
-const THINKWORK_API_URL =
-  process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
-const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+function thinkworkApiUrl(): string {
+  return getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL || "";
+}
+function hindsightEndpoint(): string {
+  return getConfig("HINDSIGHT_ENDPOINT", "");
+}
 // Plan 2026-06-09-004 U8 — stage-level seam flag for the agent-facing
 // knowledge-graph tool. Lands inert (flag absent → tool never ships in the
 // invoke payload); the consumer seam flips by setting
 // KNOWLEDGE_GRAPH_TOOL_ENABLED=true on this Lambda in its own PR.
 const KNOWLEDGE_GRAPH_TOOL_ENABLED =
   (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true";
-const WORKSPACE_RENDERER_FUNCTION_NAME =
-  process.env.WORKSPACE_RENDERER_FUNCTION_NAME || "";
+function workspaceRendererFunctionName(): string {
+  // Derived from the per-stage naming convention (R7); a config/env
+  // override still wins. "" preserves the legacy unconfigured guard
+  // path for non-Lambda contexts without STAGE (vitest).
+  const explicit = getConfig("WORKSPACE_RENDERER_FUNCTION_NAME");
+  if (explicit) return explicit;
+  return process.env.STAGE ? deriveFunctionName("workspace-renderer") : "";
+}
 // Used by sandbox-preflight to namespace Secrets Manager paths per stage.
 // STACK_NAME is the legacy env var every other handler reads; mirror that.
 const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
@@ -225,7 +246,7 @@ export async function renderWorkspaceTupleForInvoke(
   deps: RenderWorkspaceTupleForInvokeDeps = {},
 ): Promise<RenderWorkspaceTupleForInvokeResult> {
   const functionName =
-    deps.functionName ?? WORKSPACE_RENDERER_FUNCTION_NAME ?? "";
+    deps.functionName ?? workspaceRendererFunctionName() ?? "";
   if (!functionName) {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
@@ -510,6 +531,11 @@ async function markThreadTurnSetupFailed(input: {
 }
 
 export async function handler(event: InvokeEvent): Promise<unknown | void> {
+  // Snapshot secret-class values at handler entry — read at call time, never
+  // at module load (vitest stubs env after import; the secret cache fills
+  // during cold-start prime).
+  const apiAuthSecret = getApiAuthSecret();
+  const appsyncApiKey = getAppsyncApiKey();
   const { threadId, tenantId, agentId, userMessage } = event;
   const existingThreadTurnId = event.existingThreadTurnId?.trim();
   const traceId = getTraceId();
@@ -583,9 +609,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         // personalizing "you" in email copy — never used as currentUserId).
         allowHumanPairEmailFallback: true,
         logPrefix: "[chat-agent-invoke]",
-        thinkworkApiUrl: THINKWORK_API_URL,
-        thinkworkApiSecret: THINKWORK_API_SECRET,
-        appsyncApiKey: APPSYNC_API_KEY,
+        thinkworkApiUrl: thinkworkApiUrl(),
+        thinkworkApiSecret: apiAuthSecret,
+        appsyncApiKey,
       });
     } catch (err) {
       if (err instanceof AgentNotFoundError) {
@@ -1255,20 +1281,20 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       agent_name: agent.name,
       system_prompt: runtimeConfig.agentSystemPrompt || undefined,
       human_name: humanName || undefined,
-      workspace_bucket: WORKSPACE_BUCKET || undefined,
+      workspace_bucket: workspaceBucket() || undefined,
       rendered_workspace_prefix: renderedWorkspacePrefix,
       // Unit 7: container calls /api/workspaces/files at bootstrap via
       // x-api-key auth. Plumb the API URL + service secret so the
       // container can set them on os.environ and use them for the
       // composer fetch.
-      thinkwork_api_url: THINKWORK_API_URL || undefined,
-      thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
-      appsync_endpoint: APPSYNC_ENDPOINT || undefined,
-      appsync_api_key: APPSYNC_API_KEY || undefined,
+      thinkwork_api_url: thinkworkApiUrl() || undefined,
+      thinkwork_api_secret: apiAuthSecret || undefined,
+      appsync_endpoint: appsyncEndpoint() || undefined,
+      appsync_api_key: appsyncApiKey || undefined,
       computer_id: event.computerId || undefined,
       computer_task_id: event.computerTaskId || undefined,
       computer_response_mode: "thread_turn",
-      hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+      hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: isAnyToolAllowed(...toolPolicyAliases("web-search"))
         ? runtimeConfig.webSearchConfig
         : undefined,
@@ -1364,21 +1390,21 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // agentcore-direct do NOT supply these fields and keep their
       // synchronous response path.
       finalize_callback_url:
-        THINKWORK_API_URL && turnId
-          ? `${THINKWORK_API_URL.replace(/\/$/, "")}/api/threads/${threadId}/finalize`
+        thinkworkApiUrl() && turnId
+          ? `${thinkworkApiUrl().replace(/\/$/, "")}/api/threads/${threadId}/finalize`
           : undefined,
       finalize_callback_secret:
-        THINKWORK_API_SECRET && turnId ? THINKWORK_API_SECRET : undefined,
+        apiAuthSecret && turnId ? apiAuthSecret : undefined,
       // Activity-callback opt-in (plan 2026-06-03-001). The Pi runtime POSTs
       // live mid-turn activity (tool/skill/phase steps, coalesced text deltas)
       // to this URL with the same bearer secret, so the Spaces thread can
       // stream steps while the turn runs. Best-effort — never blocks the turn.
       activity_callback_url:
-        THINKWORK_API_URL && turnId
-          ? `${THINKWORK_API_URL.replace(/\/$/, "")}/api/threads/${threadId}/activity`
+        thinkworkApiUrl() && turnId
+          ? `${thinkworkApiUrl().replace(/\/$/, "")}/api/threads/${threadId}/activity`
           : undefined,
       activity_callback_secret:
-        THINKWORK_API_SECRET && turnId ? THINKWORK_API_SECRET : undefined,
+        apiAuthSecret && turnId ? apiAuthSecret : undefined,
       thread_turn_id: turnId || undefined,
       cost_owner_user_id: currentUserId || undefined,
     } as Record<string, unknown>;

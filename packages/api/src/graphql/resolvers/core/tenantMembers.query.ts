@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   AdminGetUserCommand,
   CognitoIdentityProviderClient,
@@ -7,7 +8,9 @@ import { db, eq, tenantMembers, snakeToCamel } from "../../utils.js";
 import { requireTenantMember } from "./authz.js";
 
 const cognito = new CognitoIdentityProviderClient({});
-const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
+function userPoolId(): string {
+  return getConfig("COGNITO_USER_POOL_ID", "");
+}
 
 export const tenantMembers_ = async (
   _parent: any,
@@ -47,11 +50,12 @@ export const tenantMembers_ = async (
 };
 
 async function resolveCognitoStatus(userId: string) {
-  if (!USER_POOL_ID) return null;
+  const poolId = userPoolId();
+  if (!poolId) return null;
   try {
     const result = await cognito.send(
       new AdminGetUserCommand({
-        UserPoolId: USER_POOL_ID,
+        UserPoolId: poolId,
         Username: userId,
       }),
     );

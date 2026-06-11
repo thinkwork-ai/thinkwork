@@ -15,6 +15,7 @@
  * lands this is the swap-out point.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type { GraphQLContext } from "../../context.js";
 import {
   db,
@@ -192,7 +193,7 @@ function validateComplianceTier(raw: unknown): ComplianceTier | undefined {
 }
 
 async function requirePlatformOperator(ctx: GraphQLContext): Promise<void> {
-  const allowlist = (process.env.THINKWORK_PLATFORM_OPERATOR_EMAILS ?? "")
+  const allowlist = (getConfig("THINKWORK_PLATFORM_OPERATOR_EMAILS") ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);

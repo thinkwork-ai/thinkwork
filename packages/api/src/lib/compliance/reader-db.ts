@@ -24,6 +24,7 @@
  * so resolver unit tests can point at a local pg or a mock client.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   GetSecretValueCommand,
   SecretsManagerClient,
@@ -51,7 +52,7 @@ function getSecretsManagerClient(): SecretsManagerClient {
 }
 
 async function resolveDatabaseUrl(): Promise<string> {
-  const secretArn = process.env.COMPLIANCE_READER_SECRET_ARN;
+  const secretArn = getConfig("COMPLIANCE_READER_SECRET_ARN");
   if (!secretArn) {
     throw new Error(
       "compliance/reader-db: COMPLIANCE_READER_SECRET_ARN is unset. " +

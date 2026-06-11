@@ -33,6 +33,7 @@
  * exits 1 only if every attempted agent failed.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, tenants } from "@thinkwork/database-pg/schema";
 import { eq } from "drizzle-orm";
@@ -120,7 +121,7 @@ async function processAgent(
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
 
-  if (!process.env.WORKSPACE_BUCKET) {
+  if (!getConfig("WORKSPACE_BUCKET")) {
     throw new Error("WORKSPACE_BUCKET must be set");
   }
 

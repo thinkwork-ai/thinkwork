@@ -10,6 +10,12 @@
  * triggers, approval decisions, and on-demand wakeups still flow through here.
  */
 
+import {
+  deriveFunctionName,
+  getConfig,
+  getApiAuthSecret,
+  getAppsyncApiKey,
+} from "@thinkwork/runtime-config";
 import { randomBytes } from "crypto";
 import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
@@ -109,20 +115,36 @@ import {
   toRuntimePendingUserQuestions,
 } from "../lib/user-questions/runtime-payload.js";
 
+// Config-class values are read at call time via getConfig (env-wins merge
+// over the SSM document) — never captured at module load (R3): the SSM
+// document may load after module init, and vitest stubs env after import.
+// Secret-class values are read at call time via getApiAuthSecret /
+// getAppsyncApiKey — never captured at module load. The remaining
+// process.env reads stay as-is until their own migration unit.
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
-const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const THINKWORK_API_SECRET =
-  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
+function appsyncEndpoint(): string {
+  return getConfig("APPSYNC_ENDPOINT", "");
+}
 const MCP_BASE_URL = process.env.MCP_BASE_URL || "";
 const MCP_AUTH_SECRET = process.env.MCP_AUTH_SECRET || "";
 const AGENTCORE_GATEWAY_URL = process.env.AGENTCORE_GATEWAY_URL || "";
-const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
-const THINKWORK_API_URL =
-  process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
-const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
-const WORKSPACE_RENDERER_FUNCTION_NAME =
-  process.env.WORKSPACE_RENDERER_FUNCTION_NAME || "";
+function workspaceBucket(): string {
+  return getConfig("WORKSPACE_BUCKET", "");
+}
+function thinkworkApiUrl(): string {
+  return getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL || "";
+}
+function hindsightEndpoint(): string {
+  return getConfig("HINDSIGHT_ENDPOINT", "");
+}
+function workspaceRendererFunctionName(): string {
+  // Derived from the per-stage naming convention (R7); a config/env
+  // override still wins. "" preserves the legacy unconfigured guard
+  // path for non-Lambda contexts without STAGE (vitest).
+  const explicit = getConfig("WORKSPACE_RENDERER_FUNCTION_NAME");
+  if (explicit) return explicit;
+  return process.env.STAGE ? deriveFunctionName("workspace-renderer") : "";
+}
 
 /**
  * Wakeup sources whose response handling ALREADY inserts the assistant
@@ -217,13 +239,12 @@ export async function invokeAgentCore(
   }
 
   // Fallback to HTTP fetch
+  const apiAuthSecret = getApiAuthSecret();
   const resp = await fetch(AGENTCORE_INVOKE_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(THINKWORK_API_SECRET
-        ? { Authorization: `Bearer ${THINKWORK_API_SECRET}` }
-        : {}),
+      ...(apiAuthSecret ? { Authorization: `Bearer ${apiAuthSecret}` } : {}),
     },
     body: JSON.stringify(payload),
   });
@@ -286,7 +307,7 @@ export async function renderWorkspaceTupleForWakeup(input: {
   agentBlockedTools?: unknown;
   agentAllowedTools?: unknown;
 }): Promise<RenderWorkspaceTupleForWakeupResult> {
-  if (!WORKSPACE_RENDERER_FUNCTION_NAME) {
+  if (!workspaceRendererFunctionName()) {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
@@ -297,7 +318,7 @@ export async function renderWorkspaceTupleForWakeup(input: {
   });
   const response = await lambda.send(
     new InvokeCommand({
-      FunctionName: WORKSPACE_RENDERER_FUNCTION_NAME,
+      FunctionName: workspaceRendererFunctionName(),
       InvocationType: "RequestResponse",
       Payload: new TextEncoder().encode(
         JSON.stringify({
@@ -834,9 +855,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   for (const ds of defaultSkills) {
     if (!skillsConfig.some((s) => s.skillId === ds.skillId)) {
       const env: Record<string, string> = {
-        THINKWORK_API_URL: THINKWORK_API_URL,
-        THINKWORK_API_SECRET: THINKWORK_API_SECRET,
-        GRAPHQL_API_KEY: APPSYNC_API_KEY,
+        THINKWORK_API_URL: thinkworkApiUrl(),
+        THINKWORK_API_SECRET: getApiAuthSecret(),
+        GRAPHQL_API_KEY: getAppsyncApiKey(),
         AGENT_ID: wakeup.agent_id,
       };
       skillsConfig.push({
@@ -959,8 +980,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       ? {
           agentId: wakeup.agent_id,
           tenantId: wakeup.tenant_id,
-          apiUrl: THINKWORK_API_URL,
-          apiSecret: THINKWORK_API_SECRET,
+          apiUrl: thinkworkApiUrl(),
+          apiSecret: getApiAuthSecret(),
           inboundMessageId: (payload?.originalMessageId as string) || "",
           inboundSubject: (payload?.subject as string) || "",
           inboundFrom: (payload?.from as string) || "",
@@ -1133,8 +1154,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         secretRef: undefined,
         mcpServer: undefined,
         envOverrides: {
-          THINKWORK_API_URL: APPSYNC_ENDPOINT,
-          THINKWORK_API_SECRET: APPSYNC_API_KEY,
+          THINKWORK_API_URL: appsyncEndpoint(),
+          THINKWORK_API_SECRET: getAppsyncApiKey(),
           AGENT_ID: wakeup.agent_id,
           TENANT_ID: wakeup.tenant_id,
           CURRENT_THREAD_ID: runThreadId,
@@ -1185,7 +1206,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             try {
               const resp = await s3.send(
                 new GetObjectCommand({
-                  Bucket: WORKSPACE_BUCKET,
+                  Bucket: workspaceBucket(),
                   Key: s3Path,
                 }),
               );
@@ -1777,12 +1798,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       agent_name: agent.name,
       system_prompt: agent.system_prompt || undefined,
       human_name: humanName || undefined,
-      workspace_bucket: WORKSPACE_BUCKET || undefined,
+      workspace_bucket: workspaceBucket() || undefined,
       workspace_prefix: workspacePrefix,
       rendered_workspace_prefix: renderedWorkspacePrefix,
-      appsync_endpoint: APPSYNC_ENDPOINT || undefined,
-      appsync_api_key: APPSYNC_API_KEY || undefined,
-      hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+      appsync_endpoint: appsyncEndpoint() || undefined,
+      appsync_api_key: getAppsyncApiKey() || undefined,
+      hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: effectiveWebSearchConfig,
       web_extract_config: effectiveWebExtractConfig
         ? {
@@ -2355,12 +2376,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             agent_name: agent.name,
             system_prompt: agent.system_prompt || undefined,
             human_name: humanName || undefined,
-            workspace_bucket: WORKSPACE_BUCKET || undefined,
+            workspace_bucket: workspaceBucket() || undefined,
             workspace_prefix: workspacePrefix,
             rendered_workspace_prefix: renderedWorkspacePrefix,
-            appsync_endpoint: APPSYNC_ENDPOINT || undefined,
-            appsync_api_key: APPSYNC_API_KEY || undefined,
-            hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+            appsync_endpoint: appsyncEndpoint() || undefined,
+            appsync_api_key: getAppsyncApiKey() || undefined,
+            hindsight_endpoint: hindsightEndpoint() || undefined,
             web_search_config: effectiveWebSearchConfig,
             web_extract_config: effectiveWebExtractConfig
               ? {
@@ -2741,19 +2762,19 @@ async function prependThreadProgressForAgentTurn(
         threadId: input.threadId,
         file: "GOAL.md",
       },
-      { bucket: WORKSPACE_BUCKET || process.env.WORKSPACE_BUCKET },
+      { bucket: workspaceBucket() },
     );
     if (goal?.trim()) {
       const goalFiles = await readThreadGoalPromptFiles(
         { tenantSlug: input.tenantSlug, threadId: input.threadId },
-        { bucket: WORKSPACE_BUCKET || process.env.WORKSPACE_BUCKET },
+        { bucket: workspaceBucket() },
       );
       return prependThreadGoalPromptBlock(agentMessage, goalFiles);
     }
 
     const content = await readThreadProgressMarkdown(
       { tenantSlug: input.tenantSlug, threadId: input.threadId },
-      { bucket: WORKSPACE_BUCKET || process.env.WORKSPACE_BUCKET },
+      { bucket: workspaceBucket() },
     );
     if (!content) return agentMessage;
     return prependThreadProgressPromptBlock(agentMessage, content);
@@ -3029,7 +3050,8 @@ async function notifyThreadTurnUpdate(payload: {
   status: string;
   triggerName: string | null;
 }): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) return;
+  const appsyncApiKey = getAppsyncApiKey();
+  if (!appsyncEndpoint() || !appsyncApiKey) return;
 
   const mutation = `
 		mutation NotifyThreadTurnUpdate(
@@ -3063,11 +3085,11 @@ async function notifyThreadTurnUpdate(payload: {
 	`;
 
   try {
-    const response = await fetch(APPSYNC_ENDPOINT, {
+    const response = await fetch(appsyncEndpoint(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": appsyncApiKey,
       },
       body: JSON.stringify({ query: mutation, variables: payload }),
     });
@@ -3094,7 +3116,8 @@ async function notifyNewMessage(payload: {
   senderType: string;
   senderId: string;
 }): Promise<void> {
-  if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) {
+  const appsyncApiKey = getAppsyncApiKey();
+  if (!appsyncEndpoint() || !appsyncApiKey) {
     console.warn(
       `[wakeup-processor] AppSync not configured, skipping notification`,
     );
@@ -3139,11 +3162,11 @@ async function notifyNewMessage(payload: {
 	`;
 
   try {
-    const response = await fetch(APPSYNC_ENDPOINT, {
+    const response = await fetch(appsyncEndpoint(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": APPSYNC_API_KEY,
+        "x-api-key": appsyncApiKey,
       },
       body: JSON.stringify({
         query: mutation,

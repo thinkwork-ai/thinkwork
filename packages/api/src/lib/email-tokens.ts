@@ -5,6 +5,7 @@
  * Tokens are embedded in outbound email headers and verified on inbound.
  */
 
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import {
   createHmac,
   createHash,
@@ -15,8 +16,9 @@ import {
 // EMAIL_HMAC_SECRET was a duplicate alias of API_AUTH_SECRET in the Lambda
 // env (same Terraform value); the alias was dropped to stay under the 4KB
 // env limit — fall back to the canonical name.
-const EMAIL_HMAC_SECRET =
-  process.env.EMAIL_HMAC_SECRET || process.env.API_AUTH_SECRET || "";
+function emailHmacSecret(): string {
+  return process.env.EMAIL_HMAC_SECRET || getApiAuthSecret();
+}
 
 export interface TokenPayload {
   agentId: string;
@@ -45,7 +47,7 @@ export function generateReplyToken(opts: {
   };
 
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = createHmac("sha256", EMAIL_HMAC_SECRET)
+  const signature = createHmac("sha256", emailHmacSecret())
     .update(encoded)
     .digest("base64url");
 
@@ -65,7 +67,7 @@ export function verifyReplyToken(token: string): TokenPayload | null {
 
   const [encoded, providedSig] = parts;
 
-  const expectedSig = createHmac("sha256", EMAIL_HMAC_SECRET)
+  const expectedSig = createHmac("sha256", emailHmacSecret())
     .update(encoded)
     .digest("base64url");
 

@@ -1,3 +1,5 @@
+import { getConfig } from "@thinkwork/runtime-config";
+
 /**
  * Stripe plan ↔ internal plan mapping.
  *
@@ -23,7 +25,7 @@ let cached: Map<string, string> | null = null;
 
 function loadPlansMap(): Map<string, string> {
   if (cached) return cached;
-  const raw = process.env.STRIPE_PRICE_IDS_JSON || "{}";
+  const raw = getConfig("STRIPE_PRICE_IDS_JSON") || "{}";
   let parsed: Record<string, string>;
   try {
     parsed = JSON.parse(raw);

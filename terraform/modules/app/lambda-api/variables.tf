@@ -697,3 +697,9 @@ variable "knowledge_graph_tool_enabled" {
   type        = bool
   default     = true
 }
+
+variable "parameters_secrets_extension_layer_arn" {
+  description = "Override for the AWS Parameters and Secrets Lambda Extension layer ARN. Empty uses the per-region map in runtime-config.tf; regions absent from the map run without the layer (the runtime-config loader falls back to SDK reads)."
+  type        = string
+  default     = ""
+}

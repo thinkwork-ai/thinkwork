@@ -21,6 +21,7 @@
  * See docs/solutions/best-practices/service-endpoint-vs-widening-resolvecaller-auth-2026-04-21.md
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -210,7 +211,7 @@ export async function handler(
         const appUrl =
           process.env.APP_URL ||
           process.env.WEB_URL ||
-          process.env.ADMIN_URL ||
+          getConfig("ADMIN_URL") ||
           "https://app.thinkwork.ai";
         await sendStripeWelcomeEmail({
           email: result.email,

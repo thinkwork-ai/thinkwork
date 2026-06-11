@@ -37,6 +37,7 @@
  * handler).
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -77,7 +78,7 @@ const ALLOWED_DECLARED_MIME_TYPES = new Set([
 ]);
 
 function workspaceBucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 
 export function attachmentStagingKey(

@@ -1,3 +1,5 @@
+import { getConfig } from "@thinkwork/runtime-config";
+
 export type AgentRuntimeType = "strands" | "pi";
 
 export class RuntimeNotProvisionedError extends Error {
@@ -21,7 +23,8 @@ export function resolveRuntimeFunctionName(
   > = process.env,
 ): string {
   const normalizedRuntimeType = normalizeAgentRuntimeType(runtimeType);
-  const functionName = env.AGENTCORE_PI_FUNCTION_NAME;
+  const functionName =
+    env.AGENTCORE_PI_FUNCTION_NAME ?? getConfig("AGENTCORE_PI_FUNCTION_NAME");
 
   if (!functionName) {
     throw new RuntimeNotProvisionedError(normalizedRuntimeType);

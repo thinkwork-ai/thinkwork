@@ -8,6 +8,7 @@
  * long-running invocations (up to 15 minutes).
  */
 
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import { createHash, timingSafeEqual } from "crypto";
 
 interface LambdaEvent {
@@ -23,8 +24,6 @@ interface LambdaResult {
   body: string;
 }
 
-const THINKWORK_API_SECRET =
-  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
 const AGENTCORE_RUNTIME_SSM_PREFIX =
   process.env.AGENTCORE_RUNTIME_SSM_PREFIX || "";
@@ -105,15 +104,15 @@ function json(statusCode: number, body: unknown): LambdaResult {
 }
 
 function checkAuth(headers?: Record<string, string | undefined>): boolean {
-  if (!THINKWORK_API_SECRET) return true; // dev mode — no secret configured
+  const apiSecret = getApiAuthSecret();
+  // No secret resolved: allow only outside Lambda (local dev convenience).
+  // In Lambda an unresolved secret must fail closed.
+  if (!apiSecret) return !process.env.AWS_LAMBDA_FUNCTION_NAME;
   const auth = headers?.authorization || headers?.Authorization || "";
   if (!auth.startsWith("Bearer ")) return false;
   const token = auth.slice(7);
   try {
-    return timingSafeEqual(
-      Buffer.from(token),
-      Buffer.from(THINKWORK_API_SECRET),
-    );
+    return timingSafeEqual(Buffer.from(token), Buffer.from(apiSecret));
   } catch {
     return false;
   }

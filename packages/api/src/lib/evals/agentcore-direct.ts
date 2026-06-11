@@ -1,3 +1,4 @@
+import { getConfig, getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import {
   resolveAgentRuntimeConfig,
@@ -12,14 +13,18 @@ export const DEFAULT_EVAL_MAX_TOKENS = 1_024;
 
 const lambdaClient = new LambdaClient({});
 
-const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
-const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const THINKWORK_API_SECRET =
-  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
-const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
-const THINKWORK_API_URL =
-  process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
-const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+function appsyncEndpoint(): string {
+  return getConfig("APPSYNC_ENDPOINT", "");
+}
+function workspaceBucket(): string {
+  return getConfig("WORKSPACE_BUCKET", "");
+}
+function thinkworkApiUrl(): string {
+  return getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL || "";
+}
+function hindsightEndpoint(): string {
+  return getConfig("HINDSIGHT_ENDPOINT", "");
+}
 
 export function evalModelId(model: string | null | undefined): string {
   return model?.trim() || DEFAULT_EVAL_MODEL_ID;
@@ -113,12 +118,12 @@ export function buildEvalAgentCorePayload(input: {
     system_prompt:
       input.systemPrompt || runtimeConfig.agentSystemPrompt || undefined,
     human_name: runtimeConfig.humanName || undefined,
-    workspace_bucket: WORKSPACE_BUCKET || undefined,
-    thinkwork_api_url: THINKWORK_API_URL || undefined,
-    thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
-    appsync_endpoint: APPSYNC_ENDPOINT || undefined,
-    appsync_api_key: APPSYNC_API_KEY || undefined,
-    hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+    workspace_bucket: workspaceBucket() || undefined,
+    thinkwork_api_url: thinkworkApiUrl() || undefined,
+    thinkwork_api_secret: getApiAuthSecret() || undefined,
+    appsync_endpoint: appsyncEndpoint() || undefined,
+    appsync_api_key: getAppsyncApiKey() || undefined,
+    hindsight_endpoint: hindsightEndpoint() || undefined,
     web_search_config: runtimeConfig.webSearchConfig,
     web_extract_config: runtimeConfig.webExtractConfig,
     send_email_config: runtimeConfig.sendEmailConfig || undefined,
@@ -205,9 +210,9 @@ async function invokeAgentCoreForEvalOnce(input: {
   const runtimeConfig = await resolveAgentRuntimeConfig({
     tenantId: input.tenantId,
     agentId: input.agentId,
-    thinkworkApiUrl: THINKWORK_API_URL,
-    thinkworkApiSecret: THINKWORK_API_SECRET,
-    appsyncApiKey: APPSYNC_API_KEY,
+    thinkworkApiUrl: thinkworkApiUrl(),
+    thinkworkApiSecret: getApiAuthSecret(),
+    appsyncApiKey: getAppsyncApiKey(),
     logPrefix: "[eval-worker]",
   });
   const agentcoreFunctionName = resolveRuntimeFunctionName(

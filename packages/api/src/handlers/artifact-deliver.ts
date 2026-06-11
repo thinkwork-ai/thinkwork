@@ -8,6 +8,7 @@
  * Auth: THINKWORK_API_SECRET bearer token
  */
 
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
@@ -25,9 +26,6 @@ import {
   readArtifactPayloadFromS3,
 } from "../lib/artifacts/payload-storage.js";
 
-const THINKWORK_API_SECRET =
-  process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || "";
-
 const db = getDb();
 
 interface DeliverRequest {
@@ -38,11 +36,12 @@ interface DeliverRequest {
 }
 
 export async function handler(event: APIGatewayProxyEventV2) {
-  // Auth
+  // Auth — fail closed when the secret is unresolved (empty)
   const authHeader = event.headers?.authorization || "";
+  const secret = getApiAuthSecret();
   if (
     !authHeader.startsWith("Bearer ") ||
-    authHeader.slice(7) !== THINKWORK_API_SECRET
+    !(secret && authHeader.slice(7) === secret)
   ) {
     return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
   }

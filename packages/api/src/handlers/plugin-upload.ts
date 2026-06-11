@@ -44,6 +44,7 @@
  *     with the admin UI PR so the two pieces land together.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -86,7 +87,7 @@ const s3 = new S3Client({});
 // Resolved at invocation time so tests can set process.env in
 // beforeEach and the module's cached copy doesn't stick at "".
 function workspaceBucket(): string {
-  return process.env.WORKSPACE_BUCKET || "";
+  return getConfig("WORKSPACE_BUCKET") || "";
 }
 const PRESIGN_EXPIRES_SECONDS = 300;
 const MAX_ZIP_BYTES = 50 * 1024 * 1024;

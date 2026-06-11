@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { S3Client } from "@aws-sdk/client-s3";
 import { shouldRenderWorkspaceSourcePath } from "../workspace-renderer.js";
 import {
@@ -571,7 +572,7 @@ export async function renderWorkspaceTuple(
   input: WorkspaceRenderTupleInput,
   deps: RenderWorkspaceTupleDeps = {},
 ): Promise<RenderedWorkspaceTuple> {
-  const bucket = deps.bucket ?? process.env.WORKSPACE_BUCKET ?? "";
+  const bucket = deps.bucket ?? getConfig("WORKSPACE_BUCKET") ?? "";
   if (!bucket) {
     throw new WorkspaceRenderError(
       "WorkspaceBucketNotConfigured",

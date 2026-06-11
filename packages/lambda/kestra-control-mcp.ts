@@ -1,3 +1,4 @@
+import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -136,7 +137,7 @@ export function buildTools(
   clientFactory: () => Promise<KestraToolClient>,
 ): ToolDefinition[] {
   const namespacePrefix =
-    process.env.KESTRA_ALLOWED_NAMESPACE_PREFIX || "thinkwork";
+    getConfig("KESTRA_ALLOWED_NAMESPACE_PREFIX") || "thinkwork";
   const policyOptions = { allowedNamespacePrefix: namespacePrefix };
 
   return [
@@ -536,7 +537,7 @@ async function verifyBearerToken(
     return true;
   }
 
-  const superSecret = process.env.API_AUTH_SECRET;
+  const superSecret = getApiAuthSecret();
   return !!superSecret && token === superSecret;
 }
 

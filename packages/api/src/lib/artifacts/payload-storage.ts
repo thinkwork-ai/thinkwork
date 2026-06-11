@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { createHash } from "node:crypto";
 import {
   GetObjectCommand,
@@ -36,7 +37,7 @@ export interface AppletStatePayloadKeyInput {
 
 export function artifactPayloadsBucket(): string {
   const bucket =
-    process.env.ARTIFACT_PAYLOADS_BUCKET || process.env.WORKSPACE_BUCKET || "";
+    process.env.ARTIFACT_PAYLOADS_BUCKET || getConfig("WORKSPACE_BUCKET") || "";
   if (!bucket) {
     throw new Error("ARTIFACT_PAYLOADS_BUCKET or WORKSPACE_BUCKET is required");
   }

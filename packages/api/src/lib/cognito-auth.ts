@@ -5,12 +5,16 @@
  * Supports both Cognito JWT and API key authentication.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 
-const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
-const CLIENT_IDS = (process.env.COGNITO_APP_CLIENT_IDS || "")
-  .split(",")
-  .filter(Boolean);
+function userPoolId(): string {
+  return getConfig("COGNITO_USER_POOL_ID", "");
+}
+
+function clientIds(): string[] {
+  return getConfig("COGNITO_APP_CLIENT_IDS", "").split(",").filter(Boolean);
+}
 
 /**
  * Accepted service-to-service secrets for `x-api-key` auth.
@@ -82,10 +86,11 @@ let verifier: ReturnType<typeof CognitoJwtVerifier.create> | null = null;
 
 function getVerifier() {
   if (!verifier) {
+    const ids = clientIds();
     verifier = CognitoJwtVerifier.create({
-      userPoolId: USER_POOL_ID,
+      userPoolId: userPoolId(),
       tokenUse: "id",
-      clientId: CLIENT_IDS.length > 0 ? CLIENT_IDS : null,
+      clientId: ids.length > 0 ? ids : null,
     });
   }
   return verifier;

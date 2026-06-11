@@ -5,6 +5,7 @@
  * Bedrock Knowledge Bases. Uses @aws-sdk/client-bedrock-agent.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import { eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -14,10 +15,16 @@ import {
 } from "@thinkwork/database-pg/schema";
 
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
-const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const KB_SERVICE_ROLE_ARN = process.env.KB_SERVICE_ROLE_ARN || "";
 const DB_CLUSTER_ARN = process.env.DATABASE_CLUSTER_ARN || "";
-const DB_NAME = process.env.DATABASE_NAME || "thinkwork";
+
+function workspaceBucket(): string {
+  return getConfig("WORKSPACE_BUCKET", "");
+}
+
+function databaseName(): string {
+  return getConfig("DATABASE_NAME", "thinkwork");
+}
 
 async function getBedrockKbSecretArn(): Promise<string> {
   // Bedrock's RDS storage needs a `{username, password}` secret to connect to
@@ -27,7 +34,7 @@ async function getBedrockKbSecretArn(): Promise<string> {
   // separate bedrock-kb secret (which was never provisioned, so the old
   // name-resolution path silently fell back to a bare name and Bedrock rejected
   // it as not-an-ARN).
-  const fromEnv = process.env.DATABASE_SECRET_ARN;
+  const fromEnv = getConfig("DATABASE_SECRET_ARN");
   if (fromEnv) return fromEnv;
   // Legacy fallback: resolve a dedicated secret by name.
   const stage = process.env.STAGE || "dev";
@@ -129,7 +136,7 @@ async function handleCreate(kbId: string): Promise<void> {
             rdsConfiguration: {
               resourceArn: DB_CLUSTER_ARN,
               credentialsSecretArn: secretArn,
-              databaseName: DB_NAME,
+              databaseName: databaseName(),
               tableName: `bedrock_kb.bedrock_kb_${kb.slug.replace(/-/g, "_")}`,
               fieldMapping: {
                 primaryKeyField: "id",
@@ -163,7 +170,7 @@ async function handleCreate(kbId: string): Promise<void> {
           dataSourceConfiguration: {
             type: "S3",
             s3Configuration: {
-              bucketArn: `arn:aws:s3:::${WORKSPACE_BUCKET}`,
+              bucketArn: `arn:aws:s3:::${workspaceBucket()}`,
               inclusionPrefixes: [s3Prefix],
             },
           },
@@ -384,7 +391,7 @@ async function handleDelete(kbId: string): Promise<void> {
         const prefix = `tenants/${tenant.slug}/knowledge-bases/${kb.slug}/documents/`;
         const listResp = await s3.send(
           new ListObjectsV2Command({
-            Bucket: WORKSPACE_BUCKET,
+            Bucket: workspaceBucket(),
             Prefix: prefix,
           }),
         );
@@ -394,7 +401,7 @@ async function handleDelete(kbId: string): Promise<void> {
         if (objects.length > 0) {
           await s3.send(
             new DeleteObjectsCommand({
-              Bucket: WORKSPACE_BUCKET,
+              Bucket: workspaceBucket(),
               Delete: { Objects: objects },
             }),
           );
@@ -466,7 +473,7 @@ async function handleRechunk(kbId: string): Promise<void> {
         dataSourceConfiguration: {
           type: "S3",
           s3Configuration: {
-            bucketArn: `arn:aws:s3:::${WORKSPACE_BUCKET}`,
+            bucketArn: `arn:aws:s3:::${workspaceBucket()}`,
             inclusionPrefixes: [s3Prefix],
           },
         },

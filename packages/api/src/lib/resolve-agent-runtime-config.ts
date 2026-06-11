@@ -36,6 +36,7 @@
  * inside the container (admin-skill refusals).
  */
 
+import { getConfig, getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { eq, and } from "drizzle-orm";
 import {
   GetObjectCommand,
@@ -250,7 +251,7 @@ export interface ResolveAgentRuntimeConfigOptions {
   logPrefix?: string;
   /**
    * Env-var-backed service credentials the helper plumbs into default skills'
-   * envOverrides. Defaults to `process.env.THINKWORK_API_URL` /
+   * envOverrides. Defaults to `getConfig("THINKWORK_API_URL")` /
    * `THINKWORK_API_SECRET` / `APPSYNC_API_KEY`. Passed explicitly so tests can
    * avoid touching process.env globally.
    */
@@ -284,12 +285,12 @@ export async function resolveAgentRuntimeConfig(
   const db = getDb();
   const logPrefix = opts.logPrefix ?? "[agent-runtime-config]";
   const thinkworkApiUrl =
-    opts.thinkworkApiUrl ?? process.env.THINKWORK_API_URL ?? "";
+    opts.thinkworkApiUrl ?? getConfig("THINKWORK_API_URL") ?? "";
   const thinkworkApiSecret =
     opts.thinkworkApiSecret ??
-    (process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET) ??
+    (getApiAuthSecret()) ??
     "";
-  const appsyncApiKey = opts.appsyncApiKey ?? process.env.APPSYNC_API_KEY ?? "";
+  const appsyncApiKey = opts.appsyncApiKey ?? getAppsyncApiKey();
 
   const [agent] = await db
     .select({
@@ -910,7 +911,7 @@ export async function loadWorkspaceSkillConfigs(input: {
   agentSlug: string;
   logPrefix: string;
 }): Promise<SkillConfig[]> {
-  const bucket = process.env.WORKSPACE_BUCKET || "";
+  const bucket = getConfig("WORKSPACE_BUCKET") || "";
   if (!bucket || !input.tenantSlug || !input.agentSlug) return [];
 
   const prefix = `tenants/${input.tenantSlug}/agents/${input.agentSlug}/workspace/`;
