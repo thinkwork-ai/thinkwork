@@ -1,7 +1,7 @@
 ---
 title: "refactor: SSM runtime-config — retire the Lambda env ceiling"
 type: refactor
-status: active
+status: completed
 date: 2026-06-11
 origin: "#2375 / #2377 / #2378 / #2379 — the 2026-06-11 quota-ceiling incident chain"
 ---
