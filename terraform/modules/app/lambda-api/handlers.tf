@@ -50,10 +50,17 @@ locals {
     ],
   )
 
-  # Common environment variables shared by all API handlers
-  common_env = merge({
-    STAGE               = var.stage
-    DATABASE_URL        = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+  # Config-class environment shared by all API handlers. This map is the
+  # source of BOTH the legacy env wiring (via common_env below) and the SSM
+  # runtime-config document (plan 2026-06-11-006 R2/R8): during the
+  # migration window every key ships both ways; once all readers resolve
+  # through @thinkwork/runtime-config's getConfig(), U6 drops these keys
+  # from common_env and the 4KB Lambda env ceiling (#2375) stops being a
+  # class of incident. Identity values (STAGE, AWS_ACCOUNT_ID,
+  # NODE_OPTIONS) and secrets (DATABASE_URL, API_AUTH_SECRET,
+  # APPSYNC_API_KEY) stay out of this map — identity stays env forever,
+  # secrets move to Secrets Manager (R4), never into the String document.
+  config_env = merge({
     DATABASE_SECRET_ARN = var.graphql_db_secret_arn
     DATABASE_HOST       = var.db_cluster_endpoint
     DATABASE_NAME       = var.database_name
@@ -72,8 +79,6 @@ locals {
     MCP_OAUTH_REVOCATIONS_TABLE = aws_dynamodb_table.mcp_oauth_revocations.name
     COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
     APPSYNC_ENDPOINT            = var.appsync_api_url
-    APPSYNC_API_KEY             = var.appsync_api_key
-    API_AUTH_SECRET             = var.api_auth_secret
     THINKWORK_API_URL           = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
@@ -107,8 +112,6 @@ locals {
     DOCS_URL             = var.docs_url
     APPSYNC_REALTIME_URL = var.appsync_realtime_url
     ECR_REPOSITORY_URL   = var.ecr_repository_url
-    AWS_ACCOUNT_ID       = var.account_id
-    NODE_OPTIONS         = "--enable-source-maps"
     # Per-user OAuth wiring (Google Workspace today; Microsoft 365 follow-up).
     # Secret ARNs are the indirection; the actual client_id/client_secret
     # values live in Secrets Manager and are fetched by
@@ -141,6 +144,37 @@ locals {
       STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
     } : {},
     local.cognee_env,
+  )
+
+  # graphql-http-only config that also belongs in the runtime-config
+  # document. Kept out of config_env so the legacy env copies stay scoped
+  # to graphql-http (handler_extra_env below) instead of growing every
+  # handler's env during the R8 transition window.
+  graphql_http_config_env = merge({
+    ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
+    ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
+    # Settings > General starts release updates from the GraphQL API.
+    DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
+    DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
+    # Phase 3 U10 — compliance read resolvers (complianceEvents,
+    # complianceEvent, complianceEventByHash) connect to Aurora as
+    # the compliance_reader role. The existing lambda_secrets policy
+    # in main.tf grants secretsmanager:GetSecretValue on the
+    # thinkwork/* wildcard, so no new IAM resource is needed.
+    COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
+  }, local.twenty_env, local.kestra_env)
+
+  # Identity + secrets that remain Lambda env during the migration window.
+  # After U5/U6 only identity survives here (target ≤ 1KB serialized, R1).
+  common_env = merge({
+    STAGE           = var.stage
+    DATABASE_URL    = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+    APPSYNC_API_KEY = var.appsync_api_key
+    API_AUTH_SECRET = var.api_auth_secret
+    AWS_ACCOUNT_ID  = var.account_id
+    NODE_OPTIONS    = "--enable-source-maps"
+    },
+    local.config_env,
   )
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
@@ -245,14 +279,8 @@ locals {
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
     # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B
     # U8) which invokes routine-resume via the AWS SDK.
-    "graphql-http" = merge({
-      ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
-      ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
-      AWS_ACCOUNT_ID              = var.account_id
-      # Settings > General starts release updates from the GraphQL API. Keep
-      # these compact because graphql-http runs close to Lambda's 4 KB env cap.
-      DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
-      DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
+    "graphql-http" = merge(local.graphql_http_config_env, {
+      AWS_ACCOUNT_ID = var.account_id
       # routine-approval-bridge (Phase B U8) calls this function name
       # via the AWS SDK Lambda Invoke after a HITL decideInboxItem.
       # The bridge throws if unset — terraform wiring is mandatory.
@@ -267,12 +295,6 @@ locals {
       SLACK_SEND_FUNCTION_NAME                = "thinkwork-${var.stage}-api-slack-send"
       # requester idle memory learning defaults on in API code so this
       # env-heavy Lambda can stay below AWS's 4 KB environment limit.
-      # Phase 3 U10 — compliance read resolvers (complianceEvents,
-      # complianceEvent, complianceEventByHash) connect to Aurora as
-      # the compliance_reader role. The existing lambda_secrets policy
-      # in main.tf grants secretsmanager:GetSecretValue on the
-      # thinkwork/* wildcard, so no new IAM resource is needed.
-      COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
       # Phase 3 U11.U2 — createComplianceExport mutation dispatches a
       # jobId to a known-name SQS queue. We do NOT pass the queue URL
       # as an env var here: graphql-http's env block is already at the
@@ -281,7 +303,7 @@ locals {
       # + AWS_ACCOUNT_ID, which the Lambda already has. The runner
       # Lambda (separate function below) keeps an explicit
       # COMPLIANCE_EXPORTS_QUEUE_URL because its env is small.
-    }, local.twenty_env, local.kestra_env)
+    })
     # U2 eval fan-out substrate. eval-runner does not dispatch to this
     # queue until U3; eval-worker is a throwing inert stub that redrives
     # accidental traffic to the DLQ.
@@ -573,6 +595,9 @@ resource "aws_lambda_function" "handler" {
   role          = aws_iam_role.lambda.arn
   handler       = "index.handler"
   runtime       = local.runtime
+  # Parameters and Secrets extension: container-local cache for the SSM
+  # runtime-config document + Secrets Manager reads (runtime-config.tf).
+  layers = local.api_handler_layers
   # eval-runner walks every test case sequentially, invoking an agent +
   # waiting up to 2 min for spans to propagate per test, so a 10-test run
   # can easily exceed the 30 s default. 900 s covers ~5-15 min sweeps.
