@@ -428,10 +428,12 @@ describe("UserQuestionCard — answered / cancelled (record-derived)", () => {
 
     expect(screen.queryByRole("button", { name: /submit|retry/i })).toBeNull();
     expect(screen.queryByRole("radio")).toBeNull();
-    // Chosen labels highlighted; Recommended suffix stripped for display.
-    expect(screen.getByText("Staging")).toBeTruthy();
-    expect(screen.getByText("us-east-1")).toBeTruthy();
-    expect(screen.getByText("eu-west-1")).toBeTruthy();
+    // Numbered "Header: answer" lines; Recommended suffix stripped, and
+    // multi-select answers joined with commas.
+    const items = screen.getAllByRole("listitem");
+    expect(items[0].textContent).toContain("Env: Staging");
+    expect(items[0].textContent).not.toContain("Recommended");
+    expect(items[1].textContent).toContain("Regions: us-east-1, eu-west-1");
     expect(screen.getByText(/answered by eric odom/i)).toBeTruthy();
     // Compact shared relative-time format (formatTinyRelativeDate).
     expect(screen.getByText(/· 5m/)).toBeTruthy();
@@ -459,14 +461,16 @@ describe("UserQuestionCard — answered / cancelled (record-derived)", () => {
       />,
     );
 
-    // Never a contentless shell: what was asked is always visible.
-    expect(screen.getByText("Env")).toBeTruthy();
-    expect(screen.getByText("Regions")).toBeTruthy();
-    expect(screen.getByText("Reporting")).toBeTruthy();
-    expect(
-      screen.getByText("Which environment should this target?"),
-    ).toBeTruthy();
-    expect(screen.getByText("Which regions should we include?")).toBeTruthy();
+    // Never a contentless shell: what was asked is always visible as
+    // numbered "Header: question" lines.
+    const items = screen.getAllByRole("listitem");
+    expect(items[0].textContent).toContain(
+      "Env: Which environment should this target?",
+    );
+    expect(items[1].textContent).toContain(
+      "Regions: Which regions should we include?",
+    );
+    expect(items[2].textContent).toContain("Reporting");
     expect(screen.getByText(/answered by reply — eric odom/i)).toBeTruthy();
     // Options/answers are not shown — the answer lives on the reply message.
     expect(screen.queryByText("Staging")).toBeNull();

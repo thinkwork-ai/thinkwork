@@ -623,55 +623,55 @@ function AnsweredQuestionCard({
         // Answered in chat: the structured answers live on the reply
         // message, but the card still shows WHAT was asked — never a
         // contentless shell.
-        <div className="grid gap-2">
+        <ol className="grid gap-1.5">
           {questions.map((questionItem, index) => (
-            <div
+            <li
               key={`${questionItem.header || questionItem.question}-${index}`}
-              className="grid min-w-0 gap-0.5"
+              className="flex min-w-0 gap-1.5 text-sm leading-5 text-muted-foreground"
             >
-              <p className="text-sm font-semibold text-muted-foreground">
-                {questionItem.header || `Question ${index + 1}`}
-              </p>
-              {questionItem.question ? (
-                <p className="text-sm leading-5 text-muted-foreground">
-                  {questionItem.question}
-                </p>
-              ) : null}
-            </div>
+              <span className="shrink-0 tabular-nums">{index + 1}.</span>
+              <span className="min-w-0">
+                <span className="font-semibold">
+                  {questionItem.header || `Question ${index + 1}`}
+                  {questionItem.question ? ": " : ""}
+                </span>
+                {questionItem.question || null}
+              </span>
+            </li>
           ))}
-        </div>
+        </ol>
       ) : (
-        <div className="grid gap-2">
+        <ol className="grid gap-1.5">
           {questions.map((questionItem, index) => {
             const labels = answerLabels(
               answerForQuestion(answers, questionItem, index),
             );
             return (
-              <div
+              <li
                 key={`${questionItem.header || questionItem.question}-${index}`}
-                className="grid min-w-0 gap-1"
+                className="flex min-w-0 gap-1.5 text-sm leading-5"
               >
-                <p className="text-sm font-semibold text-foreground">
-                  {questionItem.header || `Question ${index + 1}`}
-                </p>
-                {labels.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {labels.map((label) => (
-                      <span
-                        key={label}
-                        className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-                      >
-                        {splitRecommended(label).display}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Not answered</p>
-                )}
-              </div>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {index + 1}.
+                </span>
+                <span className="min-w-0">
+                  <span className="font-semibold text-foreground">
+                    {questionItem.header || `Question ${index + 1}`}:{" "}
+                  </span>
+                  {labels.length > 0 ? (
+                    <span className="text-foreground">
+                      {labels
+                        .map((label) => splitRecommended(label).display)
+                        .join(", ")}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">Not answered</span>
+                  )}
+                </span>
+              </li>
             );
           })}
-        </div>
+        </ol>
       )}
       <p className="text-xs text-muted-foreground">{byline}</p>
     </div>
