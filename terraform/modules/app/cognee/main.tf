@@ -112,19 +112,21 @@ locals {
     { name = "EMBEDDING_REQUEST_TIMEOUT", value = "180" },
     { name = "LLM_REQUEST_TIMEOUT", value = "180" },
     # Bedrock throttles (HTTP 429) the burst of per-entity titan embedding
-    # calls cognify fires — the pipeline errored on EmbeddingException. Pace
-    # embedding requests with Cognee's built-in rate limiter so they stay
-    # under the account's on-demand embedding throughput; litellm still
-    # retries, but pacing prevents the burst that trips the limit. 60 req/60s
-    # is conservative for the single dogfood task; the self-invoke ingest
-    # chain drains the backlog across runs.
+    # calls cognify fires — the pipeline errored on EmbeddingException. The
+    # account's hard quota is exactly 60 req/min for Titan Text Embeddings V2
+    # (Service Quotas), so a limiter set AT 60 still tips over under any
+    # concurrency. Pace embeddings to 25/min — comfortably under the ceiling
+    # with headroom for litellm retries. The single dogfood task is slow but
+    # completes; the self-invoke ingest chain drains the backlog across runs.
+    # Production-scale volume needs a Titan-embed quota increase (Service
+    # Quotas) — 60 RPM caps throughput regardless of pacing.
     { name = "EMBEDDING_RATE_LIMIT_ENABLED", value = "true" },
-    { name = "EMBEDDING_RATE_LIMIT_REQUESTS", value = "60" },
+    { name = "EMBEDDING_RATE_LIMIT_REQUESTS", value = "25" },
     { name = "EMBEDDING_RATE_LIMIT_INTERVAL", value = "60" },
     # Cognee's generic LLM rate limiter (shared limiter implementation) —
     # enable it too so the Kimi extraction calls don't trip Bedrock either.
     { name = "LLM_RATE_LIMIT_ENABLED", value = "true" },
-    { name = "LLM_RATE_LIMIT_REQUESTS", value = "60" },
+    { name = "LLM_RATE_LIMIT_REQUESTS", value = "30" },
     { name = "LLM_RATE_LIMIT_INTERVAL", value = "60" },
   ]
 
