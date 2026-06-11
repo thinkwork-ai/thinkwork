@@ -619,6 +619,9 @@ function AnsweredQuestionCard({
       data-testid="user-question-card"
       className="grid gap-3 rounded-lg border border-border/70 bg-background/70 p-4"
     >
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Agent questions
+      </p>
       {answeredVia === "REPLY" ? (
         // Answered in chat: the structured answers live on the reply
         // message, but the card still shows WHAT was asked — never a
