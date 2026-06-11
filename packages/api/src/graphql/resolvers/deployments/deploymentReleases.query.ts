@@ -40,6 +40,26 @@ export interface DeploymentReleaseDeps {
   fetch?: typeof fetch;
 }
 
+/**
+ * GitHub responses are cached per warm container. The releases list is
+ * fetched unauthenticated (customer environments carry no GITHUB_TOKEN),
+ * and GitHub's anonymous quota is 60 requests/hour per egress IP — shared
+ * with everything else behind the environment's NAT. Without a cache the
+ * operator Releases panel reads "Releases unavailable." whenever the quota
+ * is burned. On fetch failure the last good list is served instead;
+ * manifest digests are immutable per asset URL and cached unbounded.
+ */
+const RELEASES_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let releasesCache: { releases: GitHubRelease[]; fetchedAt: number } | null =
+  null;
+const manifestSha256Cache = new Map<string, string>();
+
+export function resetDeploymentReleasesCacheForTests() {
+  releasesCache = null;
+  manifestSha256Cache.clear();
+}
+
 export async function deploymentReleases(
   _parent: unknown,
   args: { limit?: number | null },
@@ -65,6 +85,29 @@ export async function deploymentReleases(
 }
 
 async function fetchGitHubReleases(
+  fetchImpl: typeof fetch,
+): Promise<GitHubRelease[]> {
+  const now = Date.now();
+  if (releasesCache && now - releasesCache.fetchedAt < RELEASES_CACHE_TTL_MS) {
+    return releasesCache.releases;
+  }
+  try {
+    const releases = await fetchGitHubReleasesUncached(fetchImpl);
+    releasesCache = { releases, fetchedAt: now };
+    return releases;
+  } catch (error) {
+    if (releasesCache) {
+      console.warn(
+        "[deploymentReleases] GitHub fetch failed; serving stale release list:",
+        error instanceof Error ? error.message : error,
+      );
+      return releasesCache.releases;
+    }
+    throw error;
+  }
+}
+
+async function fetchGitHubReleasesUncached(
   fetchImpl: typeof fetch,
 ): Promise<GitHubRelease[]> {
   const response = await fetchImpl(
@@ -144,6 +187,8 @@ async function sha256FromUrl(
   url: string,
   fetchImpl: typeof fetch,
 ): Promise<string> {
+  const cached = manifestSha256Cache.get(url);
+  if (cached) return cached;
   const response = await fetchImpl(url, {
     headers: { "User-Agent": "thinkwork-deployment-controller" },
   });
@@ -153,7 +198,9 @@ async function sha256FromUrl(
     });
   }
   const bytes = Buffer.from(await response.arrayBuffer());
-  return createHash("sha256").update(bytes).digest("hex");
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  manifestSha256Cache.set(url, digest);
+  return digest;
 }
 
 function releaseRepository(): string {
