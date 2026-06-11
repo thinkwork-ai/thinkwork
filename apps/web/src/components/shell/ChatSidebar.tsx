@@ -1919,9 +1919,11 @@ function ChatThreadRow({
                 "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                 confirmingDelete
                   ? "pr-20"
-                  : onPin || onUnpin
-                    ? "pr-12"
-                    : "pr-10",
+                  : awaitingUser && !renamingTitle
+                    ? "pr-24"
+                    : onPin || onUnpin
+                      ? "pr-12"
+                      : "pr-10",
                 active && "bg-sidebar-accent text-sidebar-accent-foreground",
               )}
               onClick={onActivate}
@@ -1975,7 +1977,7 @@ function ChatThreadRow({
         <>
           {!renamingTitle && awaitingUser ? (
             <span
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-600 group-hover/thread-row:hidden dark:text-amber-400"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-amber-500/15 px-1.5 py-1 text-[10px] font-medium leading-none text-amber-600 group-hover/thread-row:hidden dark:text-amber-400"
               title="The agent asked a question and is waiting for an answer"
             >
               Waiting for you

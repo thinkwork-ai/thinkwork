@@ -219,6 +219,34 @@ describe("renderTypedPart", () => {
     expect(screen.queryByText("data-user-question")).toBeNull();
   });
 
+  it("routes flat persisted data-user-question parts (intake write shape, no nested data)", () => {
+    // Regression: the intake endpoint persists {type, questionId, questions}
+    // flat on the part — no `data` envelope. The renderer must accept both.
+    const part = {
+      type: "data-user-question",
+      id: "user-question:q-2",
+      questionId: "q-2",
+      questions: [
+        {
+          question: "Which day works best?",
+          header: "Timing",
+          options: [
+            { label: "Monday (Recommended)", description: "Start of week." },
+            { label: "Friday", description: "End of week." },
+          ],
+        },
+      ],
+    } as unknown as AccumulatedPart;
+    render(<>{renderTypedPart(part, rk())}</>);
+
+    expect(screen.getByTestId("user-question-card")).toBeTruthy();
+    expect(screen.getByText("Timing")).toBeTruthy();
+    expect(screen.getByText(/Monday/)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /submit answers/i }),
+    ).toBeTruthy();
+  });
+
   it("renders the answered question card from the message-level record", () => {
     const part: AccumulatedPart = {
       type: "data-user-question",

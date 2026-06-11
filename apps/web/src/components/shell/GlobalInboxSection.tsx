@@ -77,7 +77,7 @@ function InboxThreadRow({ thread }: { thread: ChatThreadSummary }) {
       </span>
       {awaitingUser ? (
         <span
-          className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-600 dark:text-amber-400"
+          className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-1 text-[10px] font-medium leading-none text-amber-600 dark:text-amber-400"
           title="The agent asked a question and is waiting for an answer"
         >
           Waiting for you

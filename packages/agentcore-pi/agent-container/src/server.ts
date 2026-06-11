@@ -178,6 +178,12 @@ import {
   parsePendingUserQuestions,
   resumeDelegationContextDetails,
 } from "./user-question-context.js";
+import {
+  createIntakeQuestionPost,
+  detectLeakedAskUserQuestion,
+  rescueLeakedAskUserQuestion,
+  turnAlreadyAskedUserQuestion,
+} from "./ask-user-question-rescue.js";
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -2658,6 +2664,52 @@ export async function handleInvocation(
         runtime: "pi",
       },
     };
+  }
+
+  // Leaked-tool-call rescue — Kimi K2.5 intermittently emits ask_user_question
+  // as TEXT instead of a native tool-use block. This is the single seam every
+  // downstream consumer of the parent turn's final assistant content shares
+  // (memory retain, the finalize callback, and the synchronous response body
+  // all read `runResult.content`), so the rescue runs here: re-post the
+  // parsed questions through the same intake endpoint the extension uses
+  // (the intake writes the question-card message), and strip the raw token
+  // soup from the persisted content. Parent turns only by construction —
+  // specialist child runs never reach this writeback. In eval mode (or when
+  // a native ask already succeeded this turn) we strip without posting; the
+  // intake's 409 backstops any already-pending race.
+  if (detectLeakedAskUserQuestion(runResult.content)) {
+    const rescueApiUrl = asString(args.payload.thinkwork_api_url);
+    const rescueApiSecret = asString(args.payload.thinkwork_api_secret);
+    const canPost =
+      args.payload.eval_mode !== true &&
+      !turnAlreadyAskedUserQuestion(runResult.toolInvocations) &&
+      Boolean(
+        rescueApiUrl && rescueApiSecret && identity.threadId && threadTurnId,
+      );
+    const rescued = await rescueLeakedAskUserQuestion({
+      text: runResult.content,
+      post: canPost
+        ? createIntakeQuestionPost({
+            apiUrl: rescueApiUrl,
+            apiSecret: rescueApiSecret,
+            threadId: identity.threadId,
+            threadTurnId,
+            fetchImpl,
+          })
+        : null,
+    });
+    logStructured({
+      level: "warn",
+      event: "leaked_ask_user_question_rescue",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+      threadTurnId,
+      traceId: identity.traceId,
+      rescued: rescued.rescued,
+      posted: canPost,
+      ...(rescued.questionId ? { questionId: rescued.questionId } : {}),
+    });
+    runResult = { ...runResult, content: rescued.content };
   }
 
   // End-of-turn auto-retain — fire-and-forget invoke of the memory-retain
