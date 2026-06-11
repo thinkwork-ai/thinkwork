@@ -11,9 +11,11 @@ import {
   CollapsibleTrigger,
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@thinkwork/ui";
+import { SystemPromptViewer } from "@/components/workbench/SystemPromptViewer";
 import { formatCost } from "@/lib/settings-activity";
 import { extractSkillName } from "./skill-row-label";
 import { SettingsTenantModelCatalogQuery } from "@/lib/settings-queries";
@@ -1562,7 +1564,9 @@ function ExecutionTimeline({
   modelRouteTraces,
   modelRoutedToolCalls = [],
   agentProfileRuns = [],
+  systemPrompt,
   onViewDetail,
+  onViewSystemPrompt,
 }: {
   turnId: string;
   toolInvocations: any[];
@@ -1579,7 +1583,10 @@ function ExecutionTimeline({
   modelDisplayNames?: ModelDisplayNames;
   modelRouteTraces?: ExecutionTraceModelRouteTrace[];
   modelRoutedToolCalls?: Record<string, unknown>[];
+  /** Captured system prompt for this turn; shown when the Agent (llm) row is clicked. */
+  systemPrompt?: string | null;
   onViewDetail: (title: string, content: string) => void;
+  onViewSystemPrompt: (prompt: string) => void;
 }) {
   const { tenantId } = useTenant();
   const [result] = useQuery({
@@ -2015,7 +2022,11 @@ function ExecutionTimeline({
               data-branch-name={branch?.name ?? ""}
               className="w-full flex items-center gap-2 hover:bg-accent/20 transition-colors rounded text-left"
               style={{ height: ROW_H }}
-              onClick={() => onViewDetail(clickTitle, clickContent)}
+              onClick={() =>
+                ev.type === "llm"
+                  ? onViewSystemPrompt(systemPrompt ?? "")
+                  : onViewDetail(clickTitle, clickContent)
+              }
             >
               {icon}
               <span className="text-sm font-medium truncate">{label}</span>
@@ -2047,6 +2058,9 @@ function TurnRow({
   const [detailDialog, setDetailDialog] = useState<{
     title: string;
     content: string;
+  } | null>(null);
+  const [systemPromptDialog, setSystemPromptDialog] = useState<{
+    prompt: string;
   } | null>(null);
   const usage = parseJsonField(turn.usageJson);
   const result = parseJsonField(turn.resultJson);
@@ -2218,7 +2232,9 @@ function TurnRow({
               modelRouteTraces={modelRouteTraces}
               modelRoutedToolCalls={modelRoutedToolCalls}
               agentProfileRuns={agentProfileRuns}
+              systemPrompt={turn.systemPrompt}
               onViewDetail={(t, c) => setDetailDialog({ title: t, content: c })}
+              onViewSystemPrompt={(p) => setSystemPromptDialog({ prompt: p })}
             />
           )}
         </div>
@@ -2269,6 +2285,36 @@ function TurnRow({
               {detailDialog?.content}
             </pre>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* System prompt viewer — opened from the Agent (llm) execution step */}
+      <Dialog
+        open={!!systemPromptDialog}
+        onOpenChange={(open) => {
+          if (!open) setSystemPromptDialog(null);
+        }}
+      >
+        <DialogContent
+          className="flex max-h-[85vh] w-[75vw] max-w-[75vw] flex-col gap-3"
+          data-testid="trace-system-prompt-dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>System prompt</DialogTitle>
+            <DialogDescription>
+              Captured when this turn completed. Read-only.
+            </DialogDescription>
+          </DialogHeader>
+          {systemPromptDialog && systemPromptDialog.prompt.trim().length > 0 ? (
+            <SystemPromptViewer prompt={systemPromptDialog.prompt} />
+          ) : (
+            <p
+              className="py-8 text-center text-sm text-muted-foreground"
+              data-testid="trace-system-prompt-empty"
+            >
+              No system prompt was captured for this turn.
+            </p>
+          )}
         </DialogContent>
       </Dialog>
     </Collapsible>
