@@ -85,6 +85,19 @@ async function extensionGet(path: string): Promise<unknown> {
   return response.json();
 }
 
+// Memoized dynamic imports: concurrent first-time callers (e.g. the two
+// platform-secret prefetches at cold start) share one module load instead
+// of racing the module loader.
+let ssmModule: Promise<typeof import("@aws-sdk/client-ssm")> | null = null;
+function loadSsmModule() {
+  return (ssmModule ??= import("@aws-sdk/client-ssm"));
+}
+
+let secretsModule: Promise<typeof import("@aws-sdk/client-secrets-manager")> | null = null;
+function loadSecretsModule() {
+  return (secretsModule ??= import("@aws-sdk/client-secrets-manager"));
+}
+
 function isParameterNotFound(error: unknown): boolean {
   const name = (error as { name?: string })?.name ?? "";
   const message = error instanceof Error ? error.message : String(error);
@@ -103,7 +116,7 @@ async function fetchParameterValue(parameterName: string): Promise<string | null
       // Layer outage or first-boot race — fall through to the SDK.
     }
   }
-  const { SSMClient, GetParameterCommand } = await import("@aws-sdk/client-ssm");
+  const { SSMClient, GetParameterCommand } = await loadSsmModule();
   const client = new SSMClient({});
   try {
     const result = await client.send(
@@ -220,9 +233,7 @@ async function fetchSecretValue(secretId: string): Promise<string> {
       // paths before surfacing an error to the caller.
     }
   }
-  const { SecretsManagerClient, GetSecretValueCommand } = await import(
-    "@aws-sdk/client-secrets-manager"
-  );
+  const { SecretsManagerClient, GetSecretValueCommand } = await loadSecretsModule();
   const client = new SecretsManagerClient({});
   const result = await client.send(new GetSecretValueCommand({ SecretId: secretId }));
   if (result.SecretString === undefined) {
