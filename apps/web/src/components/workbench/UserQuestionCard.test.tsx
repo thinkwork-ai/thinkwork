@@ -2,11 +2,14 @@
  * UserQuestionCard tests (plan 2026-06-09-005 U8).
  *
  * Covers AE5 (three-question batch → one card, one submit) plus the
- * answer-payload wire convention: answers keyed by question HEADER,
- * single-select = label string, multiSelect = array of labels, "Other" =
- * the typed text, and " (Recommended)" suffixes submitted verbatim while
- * stripped for display. Answered state always renders from the question
- * RECORD, never local component state.
+ * one-question-at-a-time tab strip (tabs per question, single-select
+ * auto-advance, multiSelect stays put, single-question batches render with
+ * no tab chrome) and the answer-payload wire convention: answers keyed by
+ * question HEADER, single-select = label string, multiSelect = array of
+ * labels, "Other" = the typed text, and " (Recommended)" suffixes submitted
+ * verbatim while stripped for display. Answered state always renders from
+ * the question RECORD, never local component state — and an answered or
+ * cancelled card always shows what was asked (never a contentless shell).
  */
 
 import {
@@ -79,6 +82,11 @@ const batch: UserQuestionData = {
   ],
 };
 
+const singleBatch: UserQuestionData = {
+  questionId: "q-1",
+  questions: [batch.questions![0]],
+};
+
 const pendingRecord: UserQuestionRecord = { id: "q-1", status: "PENDING" };
 
 function lastSubmittedAnswers(): Record<string, unknown> {
@@ -90,18 +98,97 @@ function lastSubmittedAnswers(): Record<string, unknown> {
   >;
 }
 
-describe("UserQuestionCard — pending", () => {
-  it("renders a three-question batch as one card with one submit button", () => {
+/** Radix tab triggers select on mousedown (not click). */
+function selectTab(name: RegExp) {
+  fireEvent.mouseDown(screen.getByRole("tab", { name }));
+}
+
+describe("UserQuestionCard — pending (tabbed batch)", () => {
+  it("renders a three-question batch as one card with a tab strip and one submit button", () => {
     render(<UserQuestionCard data={batch} question={pendingRecord} />);
 
     expect(screen.getAllByTestId("user-question-card")).toHaveLength(1);
-    expect(screen.getByText("Env")).toBeTruthy();
-    expect(screen.getByText("Regions")).toBeTruthy();
-    expect(screen.getByText("Reporting")).toBeTruthy();
+    // One tab per question, labeled by header.
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getByRole("tab", { name: /env/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /regions/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /reporting/i })).toBeTruthy();
     expect(
       screen.getAllByRole("button", { name: /submit answers/i }),
     ).toHaveLength(1);
     expect(screen.getByText(/you can also just reply in chat/i)).toBeTruthy();
+  });
+
+  it("shows one question at a time — the first question by default", () => {
+    render(<UserQuestionCard data={batch} question={pendingRecord} />);
+
+    expect(
+      screen.getByText("Which environment should this target?"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Which regions should we include?")).toBeNull();
+    expect(screen.queryByText("How should failures be reported?")).toBeNull();
+  });
+
+  it("switches the visible question when a tab is selected", () => {
+    render(<UserQuestionCard data={batch} question={pendingRecord} />);
+
+    selectTab(/regions/i);
+
+    expect(screen.getByText("Which regions should we include?")).toBeTruthy();
+    expect(
+      screen.queryByText("Which environment should this target?"),
+    ).toBeNull();
+  });
+
+  it("auto-advances to the next unanswered question on a single-select choice", () => {
+    render(<UserQuestionCard data={batch} question={pendingRecord} />);
+
+    fireEvent.click(screen.getByRole("radio", { name: /production/i }));
+
+    expect(screen.getByText("Which regions should we include?")).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("tab", { name: /regions/i }) as HTMLElement
+      ).getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
+  it("does NOT auto-advance on a multiSelect choice", () => {
+    render(<UserQuestionCard data={batch} question={pendingRecord} />);
+
+    selectTab(/regions/i);
+    fireEvent.click(screen.getByRole("checkbox", { name: /us-east-1/i }));
+
+    // Still on Regions — multiSelect lets you keep picking.
+    expect(screen.getByText("Which regions should we include?")).toBeTruthy();
+  });
+
+  it("does NOT auto-advance when Other is selected (the inline input must stay visible)", () => {
+    render(<UserQuestionCard data={batch} question={pendingRecord} />);
+
+    fireEvent.click(screen.getByRole("radio", { name: /^other$/i }));
+
+    expect(
+      screen.getByText("Which environment should this target?"),
+    ).toBeTruthy();
+    expect(screen.getByLabelText(/other answer for env/i)).toBeTruthy();
+  });
+
+  it("offers Back/Next navigation between questions", () => {
+    render(<UserQuestionCard data={batch} question={pendingRecord} />);
+
+    const back = screen.getByRole("button", {
+      name: /back/i,
+    }) as HTMLButtonElement;
+    expect(back.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    expect(screen.getByText("Which regions should we include?")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    expect(
+      screen.getByText("Which environment should this target?"),
+    ).toBeTruthy();
   });
 
   it("strips the (Recommended) suffix for display and shows a badge", () => {
@@ -116,6 +203,8 @@ describe("UserQuestionCard — pending", () => {
     render(<UserQuestionCard data={batch} question={pendingRecord} />);
 
     fireEvent.click(screen.getByRole("radio", { name: /production/i }));
+    // Auto-advanced away — come back and change the answer.
+    selectTab(/env/i);
     fireEvent.click(screen.getByRole("radio", { name: /staging/i }));
     fireEvent.click(screen.getByRole("button", { name: /submit answers/i }));
 
@@ -128,6 +217,7 @@ describe("UserQuestionCard — pending", () => {
   it("multiSelect accumulates labels into an array", async () => {
     render(<UserQuestionCard data={batch} question={pendingRecord} />);
 
+    selectTab(/regions/i);
     fireEvent.click(screen.getByRole("checkbox", { name: /us-east-1/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /eu-west-1/i }));
     fireEvent.click(screen.getByRole("button", { name: /submit answers/i }));
@@ -136,10 +226,11 @@ describe("UserQuestionCard — pending", () => {
     expect(lastSubmittedAnswers().Regions).toEqual(["us-east-1", "eu-west-1"]);
   });
 
-  it("partial submit sends only answered questions, keyed by header", async () => {
+  it("partial submit from any tab sends only answered questions, keyed by header", async () => {
     render(<UserQuestionCard data={batch} question={pendingRecord} />);
 
     fireEvent.click(screen.getByRole("radio", { name: /production/i }));
+    // Auto-advance moved us to the Regions tab — submit still works there.
     fireEvent.click(screen.getByRole("button", { name: /submit answers/i }));
 
     await waitFor(() => expect(executeMutation).toHaveBeenCalledTimes(1));
@@ -149,12 +240,23 @@ describe("UserQuestionCard — pending", () => {
     expect(Object.keys(answers)).not.toContain("Reporting");
   });
 
+  it("marks answered tabs with a check while unanswered tabs stay muted", () => {
+    render(<UserQuestionCard data={batch} question={pendingRecord} />);
+
+    fireEvent.click(screen.getByRole("radio", { name: /production/i }));
+
+    const envTab = screen.getByRole("tab", { name: /env/i });
+    const reportingTab = screen.getByRole("tab", { name: /reporting/i });
+    expect(envTab.querySelector("svg")).toBeTruthy();
+    expect(reportingTab.querySelector("svg")).toBeNull();
+    expect(reportingTab.className).toContain("text-muted-foreground");
+  });
+
   it("selecting Other reveals an inline input and submits the typed text", async () => {
     render(<UserQuestionCard data={batch} question={pendingRecord} />);
 
     expect(screen.queryByLabelText(/other answer for env/i)).toBeNull();
-    const otherRadios = screen.getAllByRole("radio", { name: /^other$/i });
-    fireEvent.click(otherRadios[0]);
+    fireEvent.click(screen.getByRole("radio", { name: /^other$/i }));
 
     const input = screen.getByLabelText(/other answer for env/i);
     fireEvent.change(input, { target: { value: "A canary environment" } });
@@ -162,6 +264,18 @@ describe("UserQuestionCard — pending", () => {
 
     await waitFor(() => expect(executeMutation).toHaveBeenCalledTimes(1));
     expect(lastSubmittedAnswers().Env).toBe("A canary environment");
+  });
+
+  it("keeps selections when navigating between tabs", () => {
+    render(<UserQuestionCard data={batch} question={pendingRecord} />);
+
+    fireEvent.click(screen.getByRole("radio", { name: /production/i }));
+    selectTab(/env/i);
+
+    expect(
+      (screen.getByRole("radio", { name: /production/i }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
   });
 
   it("freezes the whole card while the mutation is in flight", () => {
@@ -176,8 +290,8 @@ describe("UserQuestionCard — pending", () => {
     for (const radio of screen.getAllByRole("radio")) {
       expect((radio as HTMLInputElement).disabled).toBe(true);
     }
-    for (const checkbox of screen.getAllByRole("checkbox")) {
-      expect((checkbox as HTMLInputElement).disabled).toBe(true);
+    for (const tab of screen.getAllByRole("tab")) {
+      expect((tab as HTMLButtonElement).disabled).toBe(true);
     }
     expect(screen.getByRole("status", { name: /loading/i })).toBeTruthy();
   });
@@ -205,6 +319,7 @@ describe("UserQuestionCard — pending", () => {
       ),
     );
     // Card is editable again, selection preserved, button reads Retry.
+    selectTab(/env/i);
     const production = screen.getByRole("radio", {
       name: /production/i,
     }) as HTMLInputElement;
@@ -265,6 +380,33 @@ describe("UserQuestionCard — pending", () => {
   });
 });
 
+describe("UserQuestionCard — pending (single question, no tab chrome)", () => {
+  it("renders a single-question batch with no tabs and the header inline", () => {
+    render(<UserQuestionCard data={singleBatch} question={pendingRecord} />);
+
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /next/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /back/i })).toBeNull();
+    expect(screen.getByText("Env")).toBeTruthy();
+    expect(
+      screen.getByText("Which environment should this target?"),
+    ).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: /submit answers/i }),
+    ).toHaveLength(1);
+  });
+
+  it("submits a single-question answer keyed by header", async () => {
+    render(<UserQuestionCard data={singleBatch} question={pendingRecord} />);
+
+    fireEvent.click(screen.getByRole("radio", { name: /production/i }));
+    fireEvent.click(screen.getByRole("button", { name: /submit answers/i }));
+
+    await waitFor(() => expect(executeMutation).toHaveBeenCalledTimes(1));
+    expect(lastSubmittedAnswers()).toEqual({ Env: "Production" });
+  });
+});
+
 describe("UserQuestionCard — answered / cancelled (record-derived)", () => {
   const answeredRecord: UserQuestionRecord = {
     id: "q-1",
@@ -305,7 +447,7 @@ describe("UserQuestionCard — answered / cancelled (record-derived)", () => {
     expect(screen.getByText(/^answered · /i)).toBeTruthy();
   });
 
-  it("renders the answered-by-reply state for REPLY consumption", () => {
+  it("reply-answered shows every question (header + text) plus one answered-by-reply line", () => {
     render(
       <UserQuestionCard
         data={batch}
@@ -317,9 +459,35 @@ describe("UserQuestionCard — answered / cancelled (record-derived)", () => {
       />,
     );
 
-    expect(screen.getByText(/answered by reply/i)).toBeTruthy();
+    // Never a contentless shell: what was asked is always visible.
+    expect(screen.getByText("Env")).toBeTruthy();
+    expect(screen.getByText("Regions")).toBeTruthy();
+    expect(screen.getByText("Reporting")).toBeTruthy();
+    expect(
+      screen.getByText("Which environment should this target?"),
+    ).toBeTruthy();
+    expect(screen.getByText("Which regions should we include?")).toBeTruthy();
+    expect(screen.getByText(/answered by reply — eric odom/i)).toBeTruthy();
+    // Options/answers are not shown — the answer lives on the reply message.
     expect(screen.queryByText("Staging")).toBeNull();
     expect(screen.queryByRole("button", { name: /submit|retry/i })).toBeNull();
+  });
+
+  it("reply-answered without a resolved name still reads Answered by reply", () => {
+    const { answeredByDisplayName: _omitted, ...withoutName } = answeredRecord;
+    render(
+      <UserQuestionCard
+        data={batch}
+        question={{
+          ...withoutName,
+          answeredVia: "REPLY",
+          answers: JSON.stringify({ messageId: "m-2" }),
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/answered by reply · 5m/i)).toBeTruthy();
+    expect(screen.queryByText(/user-1/)).toBeNull();
   });
 
   it("renders the pending card when the question record has not hydrated yet", () => {
@@ -331,10 +499,10 @@ describe("UserQuestionCard — answered / cancelled (record-derived)", () => {
     expect(
       screen.getByRole("button", { name: /submit answers/i }),
     ).toBeTruthy();
-    expect(screen.getByText("Env")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /env/i })).toBeTruthy();
   });
 
-  it("renders the cancelled state as a muted line", () => {
+  it("renders the cancelled state as a muted line that still shows the question headers", () => {
     render(
       <UserQuestionCard
         data={batch}
@@ -345,6 +513,9 @@ describe("UserQuestionCard — answered / cancelled (record-derived)", () => {
     expect(
       screen.getByText(/no longer waiting on this question/i),
     ).toBeTruthy();
+    expect(screen.getByText("Env")).toBeTruthy();
+    expect(screen.getByText("Regions")).toBeTruthy();
+    expect(screen.getByText("Reporting")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /submit|retry/i })).toBeNull();
   });
 });
