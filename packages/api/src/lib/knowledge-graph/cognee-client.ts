@@ -61,9 +61,12 @@ export interface CogneeDocumentIngestArgs {
 }
 
 export class CogneeClientError extends Error {
-  constructor(message: string) {
+  /** HTTP status when the error originated from a non-2xx Cognee response. */
+  readonly status?: number;
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "CogneeClientError";
+    this.status = status;
   }
 }
 
@@ -159,10 +162,42 @@ export class CogneeClient {
     const started = Date.now();
     const samples: CogneeDatasetStatusSnapshot[] = [];
     let attempts = 0;
+    let transientStatusErrors = 0;
 
     for (;;) {
       attempts += 1;
-      const snapshot = await this.fetchDatasetStatus(datasetId);
+      // The single dogfood Cognee task makes the /datasets/status endpoint
+      // briefly unavailable (502/503/504) while it writes the graph — but the
+      // cognify pipeline still completes. Treat a transient status error as
+      // "not ready yet, keep polling" within the index-timeout budget rather
+      // than failing the whole run on a flaky window.
+      let snapshot: CogneeDatasetStatusSnapshot;
+      try {
+        snapshot = await this.fetchDatasetStatus(datasetId);
+      } catch (err) {
+        const transient =
+          err instanceof CogneeClientError &&
+          (err.status === undefined || isTransientStatus(err.status));
+        if (!transient || Date.now() - started >= this.indexTimeoutMs) {
+          // Budget exhausted (or a non-transient error): before giving up,
+          // probe the graph directly — if cognify finished during a status
+          // outage, the graph has nodes and the run should proceed.
+          const probed = await this.probeGraphComplete(datasetId);
+          if (probed) {
+            return {
+              status: "completed",
+              rawStatus: "completed_via_graph_probe",
+              attempts,
+              elapsedMs: Date.now() - started,
+              samples: compactStatusSamples(samples),
+            };
+          }
+          throw err;
+        }
+        transientStatusErrors += 1;
+        await sleep(this.indexPollMs);
+        continue;
+      }
       samples.push(snapshot);
 
       if (snapshot.status === "completed") {
@@ -180,12 +215,39 @@ export class CogneeClient {
         );
       }
       if (Date.now() - started >= this.indexTimeoutMs) {
+        // Timed out waiting for "completed" — but a flaky status endpoint can
+        // report STARTED long after the pipeline actually finished. Probe the
+        // graph before failing.
+        const probed = await this.probeGraphComplete(datasetId);
+        if (probed) {
+          return {
+            status: "completed",
+            rawStatus: "completed_via_graph_probe",
+            attempts,
+            elapsedMs: Date.now() - started,
+            samples: compactStatusSamples(samples),
+          };
+        }
         throw new CogneeClientError(
-          `Cognee dataset ${datasetId} indexing did not complete within ${this.indexTimeoutMs}ms; latest status ${snapshot.rawStatus ?? "unknown"}`,
+          `Cognee dataset ${datasetId} indexing did not complete within ${this.indexTimeoutMs}ms; latest status ${snapshot.rawStatus ?? "unknown"} (transient status errors: ${transientStatusErrors})`,
         );
       }
 
       await sleep(this.indexPollMs);
+    }
+  }
+
+  /**
+   * Best-effort check that a dataset's graph is populated, used as a fallback
+   * when the status endpoint is flaky but the cognify pipeline may have
+   * finished. Returns true only when the graph fetch succeeds with >=1 node.
+   */
+  private async probeGraphComplete(datasetId: string): Promise<boolean> {
+    try {
+      const graph = await this.fetchDatasetGraph(datasetId);
+      return graph.nodes.length > 0;
+    } catch {
+      return false;
     }
   }
 
@@ -315,6 +377,7 @@ export class CogneeClient {
         if (response.ok) return payload;
         const error = new CogneeClientError(
           `Cognee ${path} failed with ${response.status}: ${summarizePayload(payload)}`,
+          response.status,
         );
         if (
           !opts.retryTransient ||
@@ -605,8 +668,8 @@ function isDuplicateOntologyError(err: unknown, ontologyKey: string): boolean {
 function hasOntologyKey(payload: unknown, ontologyKey: string): boolean {
   return Boolean(
     payload &&
-    typeof payload === "object" &&
-    Object.prototype.hasOwnProperty.call(payload, ontologyKey),
+      typeof payload === "object" &&
+      Object.prototype.hasOwnProperty.call(payload, ontologyKey),
   );
 }
 
