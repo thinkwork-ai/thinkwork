@@ -53,10 +53,18 @@ export interface DeploymentDeps {
 const sfn = new SFNClient({});
 const ssm = new SSMClient({});
 let cachedDeploymentControllerConfig: DeploymentControllerConfig | null = null;
+let cachedDeploymentProfile: DeploymentProfileConfig | null = null;
 
 export interface DeploymentControllerConfig {
   stateMachineArn: string | null;
   evidenceBucket: string | null;
+}
+
+export interface DeploymentProfileConfig extends DeploymentControllerConfig {
+  releaseVersion: string | null;
+  releaseManifestUrl: string | null;
+  releaseManifestSha256: string | null;
+  runnerProjectName: string | null;
 }
 
 export async function requireDeploymentTenantAdmin(
@@ -247,13 +255,35 @@ export async function resolveDeploymentControllerConfig(): Promise<DeploymentCon
   if (stateMachineArn) {
     return { stateMachineArn, evidenceBucket };
   }
-  if (cachedDeploymentControllerConfig) {
+
+  const profile = await resolveDeploymentProfileConfig();
+  if (profile.stateMachineArn) {
+    cachedDeploymentControllerConfig = {
+      stateMachineArn: profile.stateMachineArn,
+      evidenceBucket: profile.evidenceBucket,
+    };
     return cachedDeploymentControllerConfig;
+  }
+  return { stateMachineArn: null, evidenceBucket };
+}
+
+export async function resolveDeploymentProfileConfig(): Promise<DeploymentProfileConfig> {
+  const emptyProfile: DeploymentProfileConfig = {
+    releaseVersion: null,
+    releaseManifestUrl: null,
+    releaseManifestSha256: null,
+    stateMachineArn: null,
+    evidenceBucket: deploymentEvidenceBucket(),
+    runnerProjectName: null,
+  };
+  if (cachedDeploymentProfile) {
+    return cachedDeploymentProfile;
   }
 
   const stage = process.env.STAGE || process.env.THINKWORK_STAGE || "";
   if (!stage) {
-    return { stateMachineArn: null, evidenceBucket };
+    cachedDeploymentProfile = emptyProfile;
+    return cachedDeploymentProfile;
   }
 
   try {
@@ -271,19 +301,79 @@ export async function resolveDeploymentControllerConfig(): Promise<DeploymentCon
       profile.controller && typeof profile.controller === "object"
         ? (profile.controller as Record<string, unknown>)
         : {};
-    cachedDeploymentControllerConfig = {
+    cachedDeploymentProfile = {
+      releaseVersion: stringField(profile, "releaseVersion"),
+      releaseManifestUrl: stringField(profile, "releaseManifestUrl"),
+      releaseManifestSha256: stringField(profile, "releaseManifestSha256"),
       stateMachineArn: stringField(controller, "stateMachineArn"),
       evidenceBucket: stringField(controller, "evidenceBucketName"),
+      runnerProjectName: stringField(controller, "codebuildProjectName"),
     };
-    return cachedDeploymentControllerConfig;
+    return cachedDeploymentProfile;
   } catch (error) {
     console.warn(
       `[deployments] deployment profile SSM lookup failed: ${
         (error as Error)?.name
       }: ${(error as Error)?.message}`,
     );
-    return { stateMachineArn: null, evidenceBucket };
+    return emptyProfile;
   }
+}
+
+export function resetDeploymentProfileCacheForTests() {
+  cachedDeploymentControllerConfig = null;
+  cachedDeploymentProfile = null;
+}
+
+export function deploymentProfileConfigFromEnv(): DeploymentProfileConfig {
+  return {
+    releaseVersion: stringEnv(
+      process.env.THINKWORK_RELEASE_VERSION || process.env.VITE_RELEASE_VERSION,
+    ),
+    releaseManifestUrl: stringEnv(
+      process.env.THINKWORK_RELEASE_MANIFEST_URL ||
+        process.env.VITE_RELEASE_MANIFEST_URL,
+    ),
+    releaseManifestSha256: stringEnv(
+      process.env.THINKWORK_RELEASE_MANIFEST_SHA256 ||
+        process.env.VITE_RELEASE_MANIFEST_SHA256,
+    ),
+    stateMachineArn: stringEnv(
+      process.env.THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN ||
+        process.env.DEPLOYMENT_STATE_MACHINE_ARN ||
+        process.env.VITE_DEPLOYMENT_CONTROLLER_ARN,
+    ),
+    evidenceBucket: stringEnv(
+      process.env.THINKWORK_EVIDENCE_BUCKET ||
+        process.env.THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET ||
+        process.env.DEPLOYMENT_EVIDENCE_BUCKET ||
+        process.env.VITE_DEPLOYMENT_EVIDENCE_BUCKET,
+    ),
+    runnerProjectName: stringEnv(
+      process.env.THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME ||
+        process.env.VITE_DEPLOYMENT_RUNNER_PROJECT_NAME,
+    ),
+  };
+}
+
+function stringEnv(value: string | undefined): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function mergeDeploymentProfileConfig(
+  primary: DeploymentProfileConfig,
+  fallback: DeploymentProfileConfig,
+): DeploymentProfileConfig {
+  return {
+    releaseVersion: primary.releaseVersion ?? fallback.releaseVersion,
+    releaseManifestUrl:
+      primary.releaseManifestUrl ?? fallback.releaseManifestUrl,
+    releaseManifestSha256:
+      primary.releaseManifestSha256 ?? fallback.releaseManifestSha256,
+    stateMachineArn: primary.stateMachineArn ?? fallback.stateMachineArn,
+    evidenceBucket: primary.evidenceBucket ?? fallback.evidenceBucket,
+    runnerProjectName: primary.runnerProjectName ?? fallback.runnerProjectName,
+  };
 }
 
 function stringField(
