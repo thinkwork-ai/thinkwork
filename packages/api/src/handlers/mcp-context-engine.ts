@@ -875,12 +875,7 @@ function bearerToken(event: APIGatewayProxyEventV2): string | null {
 }
 
 function isServiceBearer(bearer: string): boolean {
-  return [
-    getApiAuthSecret(),
-    getApiAuthSecret(),
-    process.env.GRAPHQL_API_KEY,
-    getAppsyncApiKey(),
-  ]
+  return [getApiAuthSecret(), process.env.GRAPHQL_API_KEY, getAppsyncApiKey()]
     .filter(Boolean)
     .some((secret) => secret === bearer);
 }

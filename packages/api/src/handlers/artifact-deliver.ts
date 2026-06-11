@@ -36,11 +36,12 @@ interface DeliverRequest {
 }
 
 export async function handler(event: APIGatewayProxyEventV2) {
-  // Auth
+  // Auth — fail closed when the secret is unresolved (empty)
   const authHeader = event.headers?.authorization || "";
+  const secret = getApiAuthSecret();
   if (
     !authHeader.startsWith("Bearer ") ||
-    authHeader.slice(7) !== getApiAuthSecret()
+    !(secret && authHeader.slice(7) === secret)
   ) {
     return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
   }

@@ -21,11 +21,7 @@ export function verifyDraftAppletPromotionProof(input: {
   secret?: string | null;
   now?: Date;
 }) {
-  const secret =
-    input.secret ??
-    getApiAuthSecret()??
-    (getApiAuthSecret()) ??
-    "";
+  const secret = input.secret ?? getApiAuthSecret();
   if (!secret) return false;
   const expiresAt = new Date(input.expiresAt);
   if (!Number.isFinite(expiresAt.getTime())) return false;

@@ -105,7 +105,9 @@ function json(statusCode: number, body: unknown): LambdaResult {
 
 function checkAuth(headers?: Record<string, string | undefined>): boolean {
   const apiSecret = getApiAuthSecret();
-  if (!apiSecret) return true; // dev mode — no secret configured
+  // No secret resolved: allow only outside Lambda (local dev convenience).
+  // In Lambda an unresolved secret must fail closed.
+  if (!apiSecret) return !process.env.AWS_LAMBDA_FUNCTION_NAME;
   const auth = headers?.authorization || headers?.Authorization || "";
   if (!auth.startsWith("Bearer ")) return false;
   const token = auth.slice(7);

@@ -758,3 +758,40 @@ resource "aws_iam_role_policy_attachment" "api_observability" {
   role       = aws_iam_role.lambda.name
   policy_arn = aws_iam_policy.api_observability.arn
 }
+
+# ----------------------------------------------------------------------------
+# Quota-safe cutover from the absorbed standalone managed policies.
+#
+# The role had up to 9 managed-policy attachments before this consolidation;
+# IAM's default quota is 10 per role. Naively, terraform could create the 4
+# grouped attachments before destroying the 7 absorbed ones (creates and
+# destroys of unrelated resources have no ordering), transiently hitting 13
+# and failing the apply with LimitExceeded — in a customer account, that is
+# exactly the #2375-class deploy failure this plan exists to retire.
+#
+# These moved blocks alias 4 of the absorbed attachment addresses to the 4
+# grouped attachments. Changing policy_arn forces a same-address REPLACEMENT,
+# and attachments replace destroy-before-create, so each swap is
+# count-neutral; the remaining absorbed attachments are pure destroys. The
+# attachment count therefore never exceeds its pre-apply value.
+# ----------------------------------------------------------------------------
+
+moved {
+  from = aws_iam_role_policy_attachment.lambda_model_catalog_import_read
+  to   = aws_iam_role_policy_attachment.api_data_plane
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.lambda_thread_idle_memory_learning_invoke
+  to   = aws_iam_role_policy_attachment.api_orchestration
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.lambda_bedrock_knowledge_base
+  to   = aws_iam_role_policy_attachment.api_ai
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.lambda_cognee_health_read
+  to   = aws_iam_role_policy_attachment.api_observability
+}

@@ -33,8 +33,11 @@ import { createColdContactThread } from "../lib/email/cold-contact-trigger.js";
 import { parseSpaceRecipient } from "../lib/email/space-address.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 
-const WORKSPACE_BUCKET =
-  process.env.EMAIL_INBOUND_BUCKET || getConfig("WORKSPACE_BUCKET") || "";
+function workspaceBucket(): string {
+  return (
+    process.env.EMAIL_INBOUND_BUCKET || getConfig("WORKSPACE_BUCKET") || ""
+  );
+}
 
 const db = getDb();
 
@@ -196,7 +199,7 @@ async function fetchEmailBody(
     const s3 = new S3Client({});
     const obj = await s3.send(
       new GetObjectCommand({
-        Bucket: WORKSPACE_BUCKET,
+        Bucket: workspaceBucket(),
         Key: s3Key,
       }),
     );

@@ -19,8 +19,14 @@
  */
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
+// Negative TTL: when the FIRST load fails (or the parameter is missing
+// before any successful load), retry after 15s instead of serving
+// env/defaults for the full TTL while real config sits in the document.
+const NEGATIVE_TTL_MS = 15_000;
 const DEFAULT_EXTENSION_PORT = 2773;
-const EXTENSION_TIMEOUT_MS = 3_000;
+// The extension listens on localhost — 1s is generous, and a short timeout
+// keeps a wedged layer from stalling cold start before the SDK fallback.
+const EXTENSION_TIMEOUT_MS = 1_000;
 
 type ConfigDocument = Record<string, string>;
 
@@ -29,6 +35,10 @@ type LoaderState = {
   loadedAt: number;
   ttlMs: number;
   inflight: Promise<void> | null;
+  // True while the cached doc is a negative-cache placeholder (the first
+  // load failed or found no parameter before any success). Makes isStale()
+  // use NEGATIVE_TTL_MS so we retry quickly. Cleared by the first success.
+  lastLoadFailed: boolean;
   warnedLoadFailure: boolean;
   warnedMissingParam: boolean;
   secrets: Map<string, { value: string; loadedAt: number }>;
@@ -40,6 +50,7 @@ const state: LoaderState = {
   loadedAt: 0,
   ttlMs: DEFAULT_TTL_MS,
   inflight: null,
+  lastLoadFailed: false,
   warnedLoadFailure: false,
   warnedMissingParam: false,
   secrets: new Map(),
@@ -136,6 +147,7 @@ async function loadDocument(): Promise<void> {
     // resolves from process.env and defaults; nothing to load.
     state.doc = {};
     state.loadedAt = Date.now();
+    state.lastLoadFailed = false;
     return;
   }
   try {
@@ -147,12 +159,22 @@ async function loadDocument(): Promise<void> {
           `[runtime-config] parameter ${parameterName} not found; serving env vars and defaults only`,
         );
       }
+      // No parameter before any successful load → negative-cache for 15s
+      // (isStale) instead of the full TTL, so a parameter created after
+      // boot (or a transient lookup miss) is picked up quickly.
+      if (state.doc === null) state.lastLoadFailed = true;
       state.doc = state.doc ?? {};
       state.loadedAt = Date.now();
       return;
     }
-    state.doc = JSON.parse(raw) as ConfigDocument;
+    const parsed = JSON.parse(raw) as ConfigDocument;
+    // Terraform renders disabled-feature keys as "". The env layer already
+    // treats "" as unset (see envValue), so the document layer must too —
+    // otherwise `getConfig("X") ?? fallback` and 2-arg fallbacks would pin
+    // "" instead of falling through.
+    state.doc = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v !== ""));
     state.loadedAt = Date.now();
+    state.lastLoadFailed = false;
   } catch (error) {
     if (!state.warnedLoadFailure) {
       state.warnedLoadFailure = true;
@@ -161,21 +183,36 @@ async function loadDocument(): Promise<void> {
         error,
       );
     }
-    // Keep any previously loaded document; otherwise degrade to env-only.
+    // Keep any previously loaded document at the full TTL; a FIRST-load
+    // failure instead negative-caches the empty doc for 15s (isStale).
+    if (state.doc === null) state.lastLoadFailed = true;
     state.doc = state.doc ?? {};
     state.loadedAt = Date.now();
   }
 }
 
 function isStale(): boolean {
-  return state.doc === null || Date.now() - state.loadedAt >= state.ttlMs;
+  if (state.doc === null) return true;
+  // A negative-cached empty doc (first load failed / parameter missing)
+  // expires after NEGATIVE_TTL_MS — 15s — instead of the full TTL, so a
+  // boot-time outage doesn't pin env/defaults for 5 minutes. Clamped to
+  // ttlMs so tests running with tiny TTLs stay immediately stale.
+  const ttl = state.lastLoadFailed ? Math.min(NEGATIVE_TTL_MS, state.ttlMs) : state.ttlMs;
+  return Date.now() - state.loadedAt >= ttl;
 }
 
 function refresh(): Promise<void> {
   if (!state.inflight) {
-    state.inflight = loadDocument().finally(() => {
-      state.inflight = null;
-    });
+    // Refresh the document AND re-prefetch platform secrets together —
+    // stale-while-revalidate for secrets. cachedSecret keeps serving the
+    // old value while this runs (sync accessors never flap to ""), and a
+    // rotated secret propagates within ~1 TTL. getSecret's own TTL +
+    // inflight dedup makes the prefetch a no-op while its cache is fresh.
+    state.inflight = Promise.all([loadDocument(), prefetchPlatformSecrets()])
+      .then(() => undefined)
+      .finally(() => {
+        state.inflight = null;
+      });
   }
   return state.inflight;
 }
@@ -191,7 +228,8 @@ export async function primeRuntimeConfig(options?: {
 }): Promise<void> {
   if (options?.ttlMs !== undefined) state.ttlMs = options.ttlMs;
   if (!options?.force && state.doc !== null && !isStale()) return;
-  await Promise.all([refresh(), prefetchPlatformSecrets()]);
+  // refresh() loads the document and prefetches platform secrets.
+  await refresh();
 }
 
 /**
@@ -271,7 +309,22 @@ function stageSecretName(suffix: string): string | null {
 
 function cachedSecret(suffix: string): string | undefined {
   const name = stageSecretName(suffix);
-  return name ? state.secrets.get(name)?.value : undefined;
+  if (!name) return undefined;
+  const cached = state.secrets.get(name);
+  // Serve even past the TTL — sync accessors must never flap to "" while a
+  // refresh is pending. Rotation propagates via refresh(), which re-runs
+  // prefetchPlatformSecrets when the document TTL expires.
+  if (cached) return cached.value;
+  // Cache miss inside Lambda means the cold-start prefetch failed (or never
+  // ran). Fire a background fetch so a later request heals instead of
+  // returning "" for the container lifetime; getSecret dedupes inflight.
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    void getSecret(name).catch(() => {
+      // Swallow: accessors keep returning "" until a fetch succeeds, and
+      // prefetchPlatformSecrets already warned once.
+    });
+  }
+  return undefined;
 }
 
 let warnedSecretPrefetch = false;
@@ -362,6 +415,7 @@ export function __resetRuntimeConfigForTests(): void {
   state.loadedAt = 0;
   state.ttlMs = DEFAULT_TTL_MS;
   state.inflight = null;
+  state.lastLoadFailed = false;
   state.warnedLoadFailure = false;
   state.warnedMissingParam = false;
   state.secrets.clear();

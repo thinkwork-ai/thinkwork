@@ -696,10 +696,12 @@ export async function handler(
     .map((k) => k.trim())
     .filter(Boolean);
   const apiUrl = getConfig("THINKWORK_API_URL");
+  const authSecret = getApiAuthSecret();
   const stepCallback: StepCallbackEnv | undefined =
-    apiUrl && getApiAuthSecret()? {
+    apiUrl && authSecret
+      ? {
           apiUrl,
-          authSecret: getApiAuthSecret(),
+          authSecret,
         }
       : undefined;
 

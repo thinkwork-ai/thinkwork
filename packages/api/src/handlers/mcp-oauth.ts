@@ -721,11 +721,7 @@ function issuerUrl(event: APIGatewayProxyEventV2): string {
 }
 
 function signingSecret(): string {
-  return (
-    process.env.MCP_OAUTH_SIGNING_SECRET ||
-    getApiAuthSecret()||
-    getApiAuthSecret()
-  );
+  return process.env.MCP_OAUTH_SIGNING_SECRET || getApiAuthSecret();
 }
 
 function isTestRuntime(): boolean {
@@ -733,7 +729,7 @@ function isTestRuntime(): boolean {
 }
 
 function requiredEnv(name: string): string {
-  const value = process.env[name];
+  const value = getConfig(name);
   if (!value) throw new McpOAuthStateError(`${name} is not configured`);
   return value;
 }

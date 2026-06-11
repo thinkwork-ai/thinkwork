@@ -163,10 +163,12 @@ export async function handler(event: ResumeInput): Promise<ResumeResult> {
   // Snapshot env at handler entry per the completion-callback-snapshot
   // pattern; never re-read process.env in async paths.
   const apiUrl = getConfig("THINKWORK_API_URL");
+  const authSecret = getApiAuthSecret();
   const stepCallbackEnv: StepCallbackEnv | undefined =
-    apiUrl && getApiAuthSecret()? {
+    apiUrl && authSecret
+      ? {
           apiUrl,
-          authSecret: getApiAuthSecret(),
+          authSecret,
         }
       : undefined;
   return resumeRoutineExecution(event, { stepCallbackEnv });

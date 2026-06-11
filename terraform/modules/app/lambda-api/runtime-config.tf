@@ -37,11 +37,15 @@ locals {
 
   # The document body: config-class common env + graphql-http's config-class
   # extras. Secrets and identity never enter this map (R4) — it is a plain
-  # String parameter visible to anyone with ssm:GetParameter.
-  runtime_config_document = merge(
-    local.config_env,
-    local.graphql_http_config_env,
-  )
+  # String parameter visible to anyone with ssm:GetParameter. Empty values
+  # (disabled features) are stripped: the loader treats "" as unset on both
+  # the env and document layers, so carrying them would only spend bytes.
+  runtime_config_document = {
+    for key, value in merge(
+      local.config_env,
+      local.graphql_http_config_env,
+    ) : key => value if value != ""
+  }
 }
 
 # ----------------------------------------------------------------------------
@@ -93,6 +97,42 @@ resource "aws_secretsmanager_secret_version" "appsync_api_key" {
   # AppSync keys are terraform-rotated (the appsync module recreates them),
   # so track the var here — unlike api_auth there is no operator rotation
   # path outside terraform.
+}
+
+# The standalone compliance Lambdas (anchor, export-runner) bundle the
+# runtime-config loader but run under dedicated roles that lack the shared
+# role's ssm grant. Without these, every cold start auto-prime fails
+# AccessDenied and the loader retries on its 15s negative-cache cadence —
+# env-wins keeps them functional (their keys ride their own env blocks),
+# but the doomed GetParameter churn is noise worth closing.
+resource "aws_iam_role_policy" "compliance_anchor_runtime_config_read" {
+  count = local.deploy_lambda_handlers && var.compliance_anchor_lambda_role_name != "" ? 1 : 0
+  name  = "runtime-config-read"
+  role  = var.compliance_anchor_lambda_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ssm:GetParameter"]
+      Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/runtime-config"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "compliance_exports_runner_runtime_config_read" {
+  count = local.deploy_lambda_handlers && var.compliance_exports_runner_role_name != "" ? 1 : 0
+  name  = "runtime-config-read"
+  role  = var.compliance_exports_runner_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ssm:GetParameter"]
+      Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/runtime-config"
+    }]
+  })
 }
 
 resource "aws_ssm_parameter" "runtime_config" {

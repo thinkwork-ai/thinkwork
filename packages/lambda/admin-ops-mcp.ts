@@ -477,7 +477,7 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 // ---------------------------------------------------------------------------
 
 function routinesAgentToolsEnabled(): boolean {
-  return process.env.ROUTINES_AGENT_TOOLS_ENABLED === "true";
+  return getConfig("ROUTINES_AGENT_TOOLS_ENABLED") === "true";
 }
 
 function notYetEnabled(toolName: string): {

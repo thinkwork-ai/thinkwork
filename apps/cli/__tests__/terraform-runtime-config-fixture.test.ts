@@ -11,8 +11,8 @@
  * Pure file-content assertions — runnable without AWS credentials.
  */
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -133,6 +133,90 @@ describe("R2 — terraform-owned runtime-config document", () => {
     expect(read(HANDLERS)).toMatch(
       /depends_on = \[\s*aws_ssm_parameter\.runtime_config,/,
     );
+  });
+});
+
+/** Extract literal `KEY = ...` names from a named locals block. */
+function literalKeys(source: string, blockStart: string): string[] {
+  const start = source.indexOf(blockStart);
+  expect(start, `${blockStart} block must exist`).toBeGreaterThan(-1);
+  const rest = source.slice(start);
+  let depth = 0;
+  let end = rest.length;
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "{" || rest[i] === "(") depth++;
+    if (rest[i] === "}" || rest[i] === ")") {
+      depth--;
+      if (depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+  return [...rest.slice(0, end).matchAll(/^\s+([A-Z][A-Z0-9_]*)\s*=/gm)].map(
+    (m) => m[1],
+  );
+}
+
+function* walkTs(dir: string): Generator<string> {
+  for (const entry of readdirSync(dir)) {
+    if (entry === "node_modules" || entry === "dist") continue;
+    const p = join(dir, entry);
+    if (statSync(p).isDirectory()) yield* walkTs(p);
+    else if (/\.(ts|tsx|mts)$/.test(entry)) yield p;
+  }
+}
+
+describe("R10 — every document-only key has zero remaining direct process.env readers", () => {
+  // The exact bug class behind the 2026-06-11 review's P0/P1 findings:
+  // a key was removed from Lambda env, but a reader still consumed it via
+  // process.env (directly, or through an injected env object), so it broke
+  // only at runtime. This test makes the next missed reader a CI failure.
+  //
+  // Intentional exceptions go here with a reason, e.g.
+  // "packages/api/src/foo.ts" — env-injection seam, getConfig fallback added.
+  const ALLOWED: Record<string, string[]> = {};
+
+  it("finds no process.env.<doc-key> reads in packages/{api,lambda,database-pg}", () => {
+    const handlers = read(HANDLERS);
+    const docKeys = [
+      ...literalKeys(handlers, "config_env = merge({"),
+      ...literalKeys(handlers, "graphql_http_config_env = merge({"),
+    ];
+    expect(docKeys.length).toBeGreaterThan(20);
+
+    const keyAlt = docKeys.join("|");
+    const readRe = new RegExp(
+      String.raw`process\.env\.(${keyAlt})(?![A-Za-z0-9_$])`,
+      "g",
+    );
+
+    const offenders: string[] = [];
+    for (const pkg of ["packages/api", "packages/lambda", "packages/database-pg/src"]) {
+      for (const file of walkTs(resolve(REPO_ROOT, pkg))) {
+        const rel = relative(REPO_ROOT, file);
+        if (/\.test\.(ts|tsx)$/.test(file)) continue;
+        if (/(^|\/)(__tests__|__smoke__|test|tests|scripts)\//.test(rel)) continue;
+        const src = readFileSync(file, "utf8");
+        for (const match of src.matchAll(readRe)) {
+          const key = match[1];
+          if (ALLOWED[rel]?.includes(key)) continue;
+          // writes / deletes are test-setup style mutations, not reads
+          const after = src.slice(match.index! + match[0].length, match.index! + match[0].length + 4);
+          const before = src.slice(Math.max(0, match.index! - 8), match.index!);
+          if (/delete\s+$/.test(before) || /^\s*=[^=]/.test(after)) continue;
+          offenders.push(`${rel}: process.env.${key}`);
+        }
+      }
+    }
+
+    expect(
+      offenders,
+      `These keys live only in the SSM runtime-config document — reading ` +
+        `process.env returns undefined in production. Use getConfig("<KEY>") ` +
+        `from @thinkwork/runtime-config (env still wins when set):\n` +
+        offenders.join("\n"),
+    ).toEqual([]);
   });
 });
 

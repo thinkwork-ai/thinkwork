@@ -50,16 +50,17 @@ locals {
     ],
   )
 
-  # Config-class environment shared by all API handlers. This map is the
-  # source of BOTH the legacy env wiring (via common_env below) and the SSM
-  # runtime-config document (plan 2026-06-11-006 R2/R8): during the
-  # migration window every key ships both ways; once all readers resolve
-  # through @thinkwork/runtime-config's getConfig(), U6 drops these keys
-  # from common_env and the 4KB Lambda env ceiling (#2375) stops being a
-  # class of incident. Identity values (STAGE, AWS_ACCOUNT_ID,
-  # NODE_OPTIONS) and secrets (DATABASE_URL, API_AUTH_SECRET,
-  # APPSYNC_API_KEY) stay out of this map — identity stays env forever,
-  # secrets move to Secrets Manager (R4), never into the String document.
+  # Config-class configuration shared by all API handlers. As of plan
+  # 2026-06-11-006 U6 these keys live ONLY in the SSM runtime-config
+  # document (runtime-config.tf) — they are NOT injected as Lambda env.
+  # Code reads them through @thinkwork/runtime-config's getConfig(), whose
+  # env-wins merge still honors a hand-set env var as an incident override.
+  # The reader-coverage fixture test in apps/cli fails CI if a key in this
+  # map still has a direct process.env reader. Identity values (STAGE,
+  # AWS_ACCOUNT_ID, NODE_OPTIONS) and secrets (DATABASE_URL,
+  # API_AUTH_SECRET, APPSYNC_API_KEY) stay out of this map — identity stays
+  # env forever, secrets live in Secrets Manager (R4), never in the String
+  # document.
   config_env = merge({
     DATABASE_SECRET_ARN = var.graphql_db_secret_arn
     DATABASE_HOST       = var.db_cluster_endpoint

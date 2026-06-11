@@ -2762,19 +2762,19 @@ async function prependThreadProgressForAgentTurn(
         threadId: input.threadId,
         file: "GOAL.md",
       },
-      { bucket: workspaceBucket() || getConfig("WORKSPACE_BUCKET") },
+      { bucket: workspaceBucket() },
     );
     if (goal?.trim()) {
       const goalFiles = await readThreadGoalPromptFiles(
         { tenantSlug: input.tenantSlug, threadId: input.threadId },
-        { bucket: workspaceBucket() || getConfig("WORKSPACE_BUCKET") },
+        { bucket: workspaceBucket() },
       );
       return prependThreadGoalPromptBlock(agentMessage, goalFiles);
     }
 
     const content = await readThreadProgressMarkdown(
       { tenantSlug: input.tenantSlug, threadId: input.threadId },
-      { bucket: workspaceBucket() || getConfig("WORKSPACE_BUCKET") },
+      { bucket: workspaceBucket() },
     );
     if (!content) return agentMessage;
     return prependThreadProgressPromptBlock(agentMessage, content);

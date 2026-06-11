@@ -14,6 +14,8 @@
  * Defined per `.prds/memory-implementation-plan.md` §7.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
+
 import type { MemoryEngineType } from "./types.js";
 
 export type MemoryConfig = {
@@ -77,12 +79,15 @@ export function loadMemoryConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): MemoryConfig {
   const enabled = parseBool(env.MEMORY_ENABLED, true);
-  const engine = parseEngine(env.MEMORY_ENGINE);
+  const engine = parseEngine(env.MEMORY_ENGINE ?? getConfig("MEMORY_ENGINE"));
   const apiEnabled = parseBool(env.MEMORY_API_ENABLED, true);
   const mcpEnabled = parseBool(env.MEMORY_MCP_ENABLED, true);
 
-  const hindsightEndpoint = env.HINDSIGHT_ENDPOINT?.trim() || null;
-  const agentcoreMemoryId = env.AGENTCORE_MEMORY_ID?.trim() || null;
+  const hindsightEndpoint =
+    (env.HINDSIGHT_ENDPOINT ?? getConfig("HINDSIGHT_ENDPOINT"))?.trim() || null;
+  const agentcoreMemoryId =
+    (env.AGENTCORE_MEMORY_ID ?? getConfig("AGENTCORE_MEMORY_ID"))?.trim() ||
+    null;
   const awsRegion = env.AWS_REGION || "us-east-1";
 
   if (enabled) {

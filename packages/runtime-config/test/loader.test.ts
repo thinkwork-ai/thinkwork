@@ -100,6 +100,12 @@ describe("getConfig merge order", () => {
     await primeViaSdk({});
     expect(() => requireConfig("TEST_KEY")).toThrow(/TEST_KEY/);
   });
+
+  it("treats empty-string document values as unset (terraform disabled-feature keys)", async () => {
+    await primeViaSdk({ TEST_KEY: "" });
+    expect(getConfig("TEST_KEY")).toBeUndefined();
+    expect(getConfig("TEST_KEY", "fallback")).toBe("fallback");
+  });
 });
 
 describe("cache behavior", () => {
@@ -193,6 +199,26 @@ describe("fetch path selection", () => {
     expect(getConfig("TEST_KEY")).toBe("from-sdk");
   });
 
+  it("falls back to the SDK when the extension fetch times out", async () => {
+    process.env.STAGE = "test";
+    process.env.AWS_LAMBDA_FUNCTION_NAME = "thinkwork-test-api-graphql-http";
+    process.env.AWS_SESSION_TOKEN = "token-123";
+    process.env.API_AUTH_SECRET = "env-secret";
+    process.env.APPSYNC_API_KEY = "env-key";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(Object.assign(new DOMException("timeout", "TimeoutError"))),
+    );
+    ssmSend.mockResolvedValue({
+      Parameter: { Value: JSON.stringify({ TEST_KEY: "from-sdk" }) },
+    });
+
+    await primeRuntimeConfig({ force: true });
+
+    expect(ssmSend).toHaveBeenCalledTimes(1);
+    expect(getConfig("TEST_KEY")).toBe("from-sdk");
+  });
+
   it("honors THINKWORK_RUNTIME_CONFIG_PARAM over the STAGE-derived name", async () => {
     process.env.STAGE = "test";
     process.env.THINKWORK_RUNTIME_CONFIG_PARAM = "/custom/param";
@@ -246,6 +272,45 @@ describe("missing-document degradation", () => {
     process.env.TEST_KEY = "from-env";
     expect(getConfig("TEST_KEY")).toBe("from-env");
   });
+
+  it("negative-caches a first-load failure for ~15s instead of the full TTL", async () => {
+    process.env.STAGE = "test";
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    ssmSend.mockRejectedValueOnce(new Error("ThrottlingException"));
+
+    await primeRuntimeConfig({ force: true });
+    expect(getConfig("TEST_KEY", "fallback")).toBe("fallback");
+    expect(ssmSend).toHaveBeenCalledTimes(1);
+
+    // Within the 15s negative window the empty doc is served — no refetch
+    // even though a good document is now available.
+    ssmSend.mockResolvedValue({
+      Parameter: { Value: JSON.stringify({ TEST_KEY: "from-doc" }) },
+    });
+    await primeRuntimeConfig();
+    expect(ssmSend).toHaveBeenCalledTimes(1);
+    expect(getConfig("TEST_KEY", "fallback")).toBe("fallback");
+
+    // Past the negative TTL (but far inside the normal 5-minute TTL) the
+    // doc is stale again and a retry loads the real document.
+    const realNow = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(realNow + 16_000);
+    await primeRuntimeConfig();
+    expect(ssmSend).toHaveBeenCalledTimes(2);
+    expect(getConfig("TEST_KEY")).toBe("from-doc");
+  });
+
+  it("resolves prime, warns once, and serves fallback on a malformed JSON document", async () => {
+    process.env.STAGE = "test";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    ssmSend.mockResolvedValue({ Parameter: { Value: "not-json{{" } });
+
+    await expect(primeRuntimeConfig({ force: true })).resolves.toBeUndefined();
+    await expect(primeRuntimeConfig({ force: true })).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(getConfig("TEST_KEY", "fallback")).toBe("fallback");
+  });
 });
 
 describe("getSecret", () => {
@@ -268,6 +333,16 @@ describe("getSecret", () => {
     expect(await getSecret("thinkwork/test/api-auth")).toBe("ext-secret");
     expect(fetchMock.mock.calls[0][0]).toContain("/secretsmanager/get?secretId=");
     expect(secretsSend).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the SDK when the extension path fails", async () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
+    process.env.AWS_SESSION_TOKEN = "token-123";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+    secretsSend.mockResolvedValue({ SecretString: "sdk-secret" });
+
+    expect(await getSecret("thinkwork/test/api-auth")).toBe("sdk-secret");
+    expect(secretsSend).toHaveBeenCalledTimes(1);
   });
 
   it("throws when the secret cannot be fetched on either path", async () => {
@@ -346,6 +421,39 @@ describe("platform secret accessors", () => {
     await primeRuntimeConfig({ force: true });
     expect(secretsSend).not.toHaveBeenCalled();
   });
+
+  it("heals a failed prefetch via a background fetch on accessor miss", async () => {
+    process.env.STAGE = "test";
+    process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    ssmSend.mockResolvedValue({ Parameter: { Value: "{}" } });
+    // Both platform-secret prefetches (api-auth + appsync-api-key) fail at
+    // cold start, then the service recovers.
+    secretsSend
+      .mockRejectedValueOnce(new Error("ThrottlingException"))
+      .mockRejectedValueOnce(new Error("ThrottlingException"))
+      .mockResolvedValue({ SecretString: "healed" });
+
+    await primeRuntimeConfig({ force: true });
+
+    // First request after the failed prefetch still serves "" (legacy
+    // contract) but fires a background getSecret…
+    expect(getApiAuthSecret()).toBe("");
+    // …which heals the cache for subsequent requests.
+    await vi.waitFor(() => expect(getApiAuthSecret()).toBe("healed"));
+  });
+
+  it("no-ops prefetch and returns '' when STAGE is unset inside Lambda", async () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
+    await primeRuntimeConfig({ force: true });
+    expect(ssmSend).not.toHaveBeenCalled();
+    expect(secretsSend).not.toHaveBeenCalled();
+    expect(getApiAuthSecret()).toBe("");
+    expect(getAppsyncApiKey()).toBe("");
+    // The accessor misses must not have fired background fetches either —
+    // there is no stage to derive a secret name from.
+    expect(secretsSend).not.toHaveBeenCalled();
+  });
 });
 
 describe("derive-by-convention", () => {
@@ -365,5 +473,17 @@ describe("derive-by-convention", () => {
     expect(deriveFunctionArn("email-send")).toBe(
       "arn:aws:lambda:us-east-1:123456789012:function:thinkwork-dev-api-email-send",
     );
+  });
+
+  it("deriveFunctionArn throws when region is unset", () => {
+    process.env.STAGE = "dev";
+    process.env.AWS_ACCOUNT_ID = "123456789012";
+    expect(() => deriveFunctionArn("email-send")).toThrow(/region or AWS_ACCOUNT_ID/);
+  });
+
+  it("deriveFunctionArn throws when AWS_ACCOUNT_ID is unset", () => {
+    process.env.STAGE = "dev";
+    process.env.AWS_REGION = "us-east-1";
+    expect(() => deriveFunctionArn("email-send")).toThrow(/region or AWS_ACCOUNT_ID/);
   });
 });

@@ -3031,9 +3031,7 @@ async function invokeAgentcoreRunSkill(payload: {
       // fetch runtime config and POST /api/skills/complete deterministically.
       thinkworkApiUrl:
         getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL || "",
-      apiAuthSecret:
-        getApiAuthSecret()||
-        getApiAuthSecret(),
+      apiAuthSecret: getApiAuthSecret(),
       // snake_case — the container's dispatch reads tenant_id/user_id/
       // skill_id. See change 4 of the hardening plan.
       scope: {
