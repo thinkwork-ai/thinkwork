@@ -2165,6 +2165,59 @@ jobs:
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }}
 
+      - name: Record deployment status pointer
+        working-directory: terraform/examples/greenfield
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source ../../../scripts/lib/terraform-output.sh
+          evidence_bucket="$(tf_output_raw deployment_evidence_bucket_name 2>/dev/null || echo "")"
+          if [ -z "$evidence_bucket" ] || [ "$evidence_bucket" = "null" ]; then
+            echo "No deployment evidence bucket output; skipping deployment status pointer."
+            exit 0
+          fi
+
+          state_machine_arn="$(tf_output_raw deployment_state_machine_arn 2>/dev/null || echo "")"
+          runner_project_name="$(tf_output_raw deployment_runner_project_name 2>/dev/null || echo "")"
+          release_tag="$(git tag --points-at "$GITHUB_SHA" --list 'v*' --sort=-version:refname | head -1 || true)"
+          release_version="${release_tag:-source-${GITHUB_SHA:0:12}}"
+          manifest_url=""
+          manifest_sha256=""
+
+          if [[ "$release_tag" == v* ]]; then
+            manifest_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}/thinkwork-release.json"
+            tmpdir="$(mktemp -d)"
+            if gh release download "$release_tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern thinkwork-release.json \
+              --dir "$tmpdir"; then
+              manifest_sha256="$(shasum -a 256 "$tmpdir/thinkwork-release.json" | awk '{print $1}')"
+            else
+              echo "Release manifest is not published yet for ${release_tag}; release.yml will refresh the pointer after finalization."
+            fi
+            rm -rf "$tmpdir"
+          fi
+
+          ../../../scripts/release/write-deployment-status.sh \
+            --stage "${{ env.STAGE }}" \
+            --bucket "$evidence_bucket" \
+            --release-version "$release_version" \
+            --manifest-url "$manifest_url" \
+            --manifest-sha256 "$manifest_sha256" \
+            --commit "$GITHUB_SHA" \
+            --source "github-actions" \
+            --status "succeeded" \
+            --state-machine-arn "$state_machine_arn" \
+            --runner-project-name "$runner_project_name" \
+            --github-repository "$GITHUB_REPOSITORY" \
+            --github-run-id "$GITHUB_RUN_ID" \
+            --github-run-at "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+            --github-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --github-ref "$GITHUB_REF" \
+            --github-workflow "$GITHUB_WORKFLOW" \
+            --github-actor "$GITHUB_ACTOR"
+
       - name: Show deployment URLs
         working-directory: terraform/examples/greenfield
         run: |

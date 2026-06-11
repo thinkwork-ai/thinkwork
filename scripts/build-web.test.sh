@@ -35,4 +35,14 @@ for app_output in app_bucket_name app_distribution_id app_url; do
   fi
 done
 
+if ! grep -Eq '^VITE_RELEASE_VERSION=\$\{WEB_RELEASE_VERSION\}' "$BUILD_SCRIPT"; then
+  printf 'build-web.sh should write VITE_RELEASE_VERSION into the runtime env\n' >&2
+  exit 1
+fi
+
+if ! grep -Eq 'WEB_RELEASE_VERSION="v\$\{WEB_RELEASE_VERSION\}"' "$BUILD_SCRIPT"; then
+  printf 'build-web.sh should derive a v-prefixed release version from VITE_APP_VERSION\n' >&2
+  exit 1
+fi
+
 echo "build-web tests passed"
