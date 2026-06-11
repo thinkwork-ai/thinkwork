@@ -21,6 +21,7 @@ import {
   ThreadProgressMarkdownQuery,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
+import { APPROVED_MODEL_STORAGE_KEY } from "@/lib/approved-model-selection";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import {
   SpacesThreadDetailRoute,
@@ -1287,6 +1288,99 @@ describe("SpacesThreadDetailRoute", () => {
           }),
         },
       });
+    });
+  });
+
+  it("seeds the composer with the thread's last-used model over the global stored pick", async () => {
+    window.localStorage.setItem(
+      APPROVED_MODEL_STORAGE_KEY,
+      "anthropic.claude-haiku",
+    );
+    approvedModelsData = {
+      myApprovedModelCatalog: [
+        {
+          id: "model-haiku",
+          modelId: "anthropic.claude-haiku",
+          displayName: "Claude Haiku",
+          provider: "amazon_bedrock",
+          inputCostPerMillion: 0.15,
+          outputCostPerMillion: 0.6,
+        },
+        {
+          id: "model-sonnet",
+          modelId: "anthropic.claude-sonnet",
+          displayName: "Claude Sonnet",
+          provider: "amazon_bedrock",
+          inputCostPerMillion: 3,
+          outputCostPerMillion: 15,
+        },
+      ],
+    };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Route streaming thread",
+        lifecycleStatus: "COMPLETED",
+        lastModel: "anthropic.claude-sonnet",
+        messages: { edges: [] },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select model").textContent).toContain(
+        "Claude Sonnet",
+      );
+    });
+    expect(screen.getByLabelText("Select model").textContent).not.toContain(
+      "Claude Haiku",
+    );
+  });
+
+  it("falls back to the stored model when the thread has no last-used model", async () => {
+    window.localStorage.setItem(
+      APPROVED_MODEL_STORAGE_KEY,
+      "anthropic.claude-haiku",
+    );
+    approvedModelsData = {
+      myApprovedModelCatalog: [
+        {
+          id: "model-haiku",
+          modelId: "anthropic.claude-haiku",
+          displayName: "Claude Haiku",
+          provider: "amazon_bedrock",
+          inputCostPerMillion: 0.15,
+          outputCostPerMillion: 0.6,
+        },
+        {
+          id: "model-sonnet",
+          modelId: "anthropic.claude-sonnet",
+          displayName: "Claude Sonnet",
+          provider: "amazon_bedrock",
+          inputCostPerMillion: 3,
+          outputCostPerMillion: 15,
+        },
+      ],
+    };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Route streaming thread",
+        lifecycleStatus: "COMPLETED",
+        lastModel: null,
+        messages: { edges: [] },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select model").textContent).toContain(
+        "Claude Haiku",
+      );
     });
   });
 
