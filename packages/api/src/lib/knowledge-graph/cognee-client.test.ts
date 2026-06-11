@@ -373,4 +373,75 @@ describe("CogneeClient", () => {
       vi.unstubAllEnvs();
     }
   });
+
+  it("deleteDatasetByName finds matching datasets and deletes them", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response(200, {
+          datasets: [
+            { id: "ds-1", name: "thinkwork:t:observations" },
+            { id: "ds-2", name: "thinkwork:t:thread:x" },
+            { id: "ds-3", name: "thinkwork:t:observations" },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(response(200, {}))
+      .mockResolvedValueOnce(response(200, {}));
+    const client = new CogneeClient({
+      endpoint: "http://cognee.local",
+      fetchFn,
+      retryDelayMs: 0,
+    });
+    const deleted = await client.deleteDatasetByName(
+      "thinkwork:t:observations",
+    );
+    expect(deleted).toBe(2);
+    const calls = fetchFn.mock.calls.map((c) => [String(c[0]), c[1]?.method]);
+    expect(calls[0]).toEqual(["http://cognee.local/api/v1/datasets", "GET"]);
+    expect(calls).toContainEqual([
+      "http://cognee.local/api/v1/datasets/ds-1",
+      "DELETE",
+    ]);
+    expect(calls).toContainEqual([
+      "http://cognee.local/api/v1/datasets/ds-3",
+      "DELETE",
+    ]);
+    // ds-2 (a thread dataset) must NOT be deleted
+    expect(calls).not.toContainEqual([
+      "http://cognee.local/api/v1/datasets/ds-2",
+      "DELETE",
+    ]);
+  });
+
+  it("deleteDatasetByName is a no-op when no dataset matches", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response(200, { datasets: [{ id: "ds-2", name: "other" }] }),
+      );
+    const client = new CogneeClient({
+      endpoint: "http://cognee.local",
+      fetchFn,
+      retryDelayMs: 0,
+    });
+    expect(await client.deleteDatasetByName("missing")).toBe(0);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("pruneAll POSTs to the prune endpoint", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, {}));
+    const client = new CogneeClient({
+      endpoint: "http://cognee.local",
+      fetchFn,
+      retryDelayMs: 0,
+    });
+    expect(await client.pruneAll()).toBe(true);
+    expect(String(fetchFn.mock.calls[0][0])).toBe(
+      "http://cognee.local/api/v1/prune",
+    );
+    expect(fetchFn.mock.calls[0][1]?.method).toBe("POST");
+  });
 });

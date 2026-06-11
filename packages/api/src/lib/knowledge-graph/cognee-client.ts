@@ -156,6 +156,74 @@ export class CogneeClient {
     return parseGraphPayload(payload);
   }
 
+  /** List datasets currently known to Cognee (id + name pairs). */
+  async listDatasets(): Promise<Array<{ id: string; name: string }>> {
+    const payload = await this.requestJson(
+      "/api/v1/datasets",
+      { method: "GET" },
+      { retryTransient: true },
+    );
+    const rows = Array.isArray(payload)
+      ? payload
+      : Array.isArray((payload as Record<string, unknown>)?.datasets)
+        ? ((payload as Record<string, unknown>).datasets as unknown[])
+        : [];
+    return rows
+      .map((row) => row as Record<string, unknown>)
+      .filter(
+        (row) =>
+          row && (row.id ?? row.dataset_id) && (row.name ?? row.dataset_name),
+      )
+      .map((row) => ({
+        id: String(row.id ?? row.dataset_id),
+        name: String(row.name ?? row.dataset_name),
+      }));
+  }
+
+  /**
+   * Delete every Cognee dataset whose name matches `datasetName`, so a
+   * fullRebuild starts from an empty graph for that source instead of
+   * appending to the accumulated one. Idempotent — a missing dataset is a
+   * no-op. Returns the number of datasets deleted.
+   */
+  async deleteDatasetByName(datasetName: string): Promise<number> {
+    let datasets: Array<{ id: string; name: string }>;
+    try {
+      datasets = await this.listDatasets();
+    } catch {
+      return 0;
+    }
+    const matches = datasets.filter((d) => d.name === datasetName);
+    let deleted = 0;
+    for (const match of matches) {
+      await this.requestJson(
+        `/api/v1/datasets/${encodeURIComponent(match.id)}`,
+        { method: "DELETE" },
+        { retryTransient: true },
+      );
+      deleted += 1;
+    }
+    return deleted;
+  }
+
+  /**
+   * Nuclear clear of the entire Cognee store (all datasets + system graph).
+   * Only safe in single-tenant/dev contexts — callers gate this behind an
+   * explicit flag. Returns true on success.
+   */
+  async pruneAll(): Promise<boolean> {
+    await this.requestJson(
+      "/api/v1/prune",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      },
+      { retryTransient: true },
+    );
+    return true;
+  }
+
   async waitForDatasetIndexing(
     datasetId: string,
   ): Promise<CogneeDatasetWaitResult> {
