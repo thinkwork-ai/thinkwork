@@ -4,12 +4,14 @@ const {
   mockRequireAdminOrServiceCaller,
   mockRequireTenantMember,
   mockResolveCallerTenantId,
+  mockS3Send,
   mockSelect,
   mockSsmSend,
 } = vi.hoisted(() => ({
   mockRequireAdminOrServiceCaller: vi.fn(),
   mockRequireTenantMember: vi.fn(),
   mockResolveCallerTenantId: vi.fn(),
+  mockS3Send: vi.fn(),
   mockSelect: vi.fn(),
   mockSsmSend: vi.fn(),
 }));
@@ -34,6 +36,11 @@ vi.mock("../../utils.js", () => ({
 vi.mock("@aws-sdk/client-ssm", () => ({
   SSMClient: vi.fn(() => ({ send: mockSsmSend })),
   GetParameterCommand: vi.fn((input) => ({ input })),
+}));
+
+vi.mock("@aws-sdk/client-s3", () => ({
+  S3Client: vi.fn(() => ({ send: mockS3Send })),
+  GetObjectCommand: vi.fn((input) => ({ input })),
 }));
 
 function queryRows(rows: unknown[]) {
@@ -63,6 +70,9 @@ beforeEach(async () => {
   mockSelect.mockReset();
   mockSelect.mockReturnValue(queryRows([]));
   mockSsmSend.mockReset().mockResolvedValue({ Parameter: { Value: "{}" } });
+  mockS3Send
+    .mockReset()
+    .mockRejectedValue(Object.assign(new Error("missing"), { name: "NoSuchKey" }));
   deploymentStatusMod = await import("./deploymentStatus.query.js");
   tenantMod = await import("./tenant.query.js");
   tenantMembersMod = await import("./tenantMembers.query.js");
@@ -172,6 +182,63 @@ describe("deploymentStatus authz", () => {
               "thinkwork-tei-e2e-637423202447-deploy-evidence",
           },
         }),
+      },
+    });
+
+    const result = await deploymentStatusMod.deploymentStatus(
+      null,
+      {},
+      service,
+    );
+
+    expect(result).toMatchObject({
+      releaseVersion: "v0.1.0-canary.160",
+      releaseManifestUrl:
+        "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.160/thinkwork-release.json",
+      releaseManifestSha256: "f".repeat(64),
+      deploymentControllerArn:
+        "arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+      deploymentRunnerProjectName: "thinkwork-tei-e2e-deployment-runner",
+      deploymentEvidenceBucket: "thinkwork-tei-e2e-637423202447-deploy-evidence",
+    });
+  });
+
+  it("prefers the S3 deployment status pointer for the current deployed release", async () => {
+    mockRequireAdminOrServiceCaller.mockResolvedValueOnce(undefined);
+    vi.stubEnv("STAGE", "tei-e2e");
+    mockSsmSend.mockResolvedValueOnce({
+      Parameter: {
+        Value: JSON.stringify({
+          releaseVersion: "v0.1.0-canary.159",
+          releaseManifestUrl:
+            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.159/thinkwork-release.json",
+          releaseManifestSha256: "e".repeat(64),
+          controller: {
+            stateMachineArn:
+              "arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+            codebuildProjectName: "thinkwork-tei-e2e-deployment-runner",
+            evidenceBucketName:
+              "thinkwork-tei-e2e-637423202447-deploy-evidence",
+          },
+        }),
+      },
+    });
+    mockS3Send.mockResolvedValueOnce({
+      Body: {
+        transformToString: async () =>
+          JSON.stringify({
+            activeRelease: {
+              version: "v0.1.0-canary.160",
+              manifestUrl:
+                "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.160/thinkwork-release.json",
+              manifestSha256: "f".repeat(64),
+            },
+            controller: {
+              stateMachineArn:
+                "arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+              codebuildProjectName: "thinkwork-tei-e2e-deployment-runner",
+            },
+          }),
       },
     });
 

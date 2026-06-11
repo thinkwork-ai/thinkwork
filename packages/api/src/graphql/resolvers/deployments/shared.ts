@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { StartExecutionCommand, SFNClient } from "@aws-sdk/client-sfn";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { and, asc, eq } from "drizzle-orm";
@@ -51,9 +52,11 @@ export interface DeploymentDeps {
 }
 
 const sfn = new SFNClient({});
+const s3 = new S3Client({});
 const ssm = new SSMClient({});
 let cachedDeploymentControllerConfig: DeploymentControllerConfig | null = null;
 let cachedDeploymentProfile: DeploymentProfileConfig | null = null;
+let cachedDeploymentStatusPointer: DeploymentProfileConfig | null = null;
 
 export interface DeploymentControllerConfig {
   stateMachineArn: string | null;
@@ -320,9 +323,72 @@ export async function resolveDeploymentProfileConfig(): Promise<DeploymentProfil
   }
 }
 
+export async function resolveDeploymentStatusPointerConfig(
+  evidenceBucket: string | null,
+): Promise<DeploymentProfileConfig> {
+  const emptyProfile: DeploymentProfileConfig = {
+    releaseVersion: null,
+    releaseManifestUrl: null,
+    releaseManifestSha256: null,
+    stateMachineArn: null,
+    evidenceBucket,
+    runnerProjectName: null,
+  };
+  if (!evidenceBucket) {
+    cachedDeploymentStatusPointer = emptyProfile;
+    return cachedDeploymentStatusPointer;
+  }
+  if (cachedDeploymentStatusPointer?.evidenceBucket === evidenceBucket) {
+    return cachedDeploymentStatusPointer;
+  }
+
+  try {
+    const response = await s3.send(
+      new GetObjectCommand({
+        Bucket: evidenceBucket,
+        Key: "deployment/status/current.json",
+      }),
+    );
+    const status = JSON.parse(await bodyToString(response.Body)) as Record<
+      string,
+      unknown
+    >;
+    const activeRelease =
+      status.activeRelease && typeof status.activeRelease === "object"
+        ? (status.activeRelease as Record<string, unknown>)
+        : {};
+    const controller =
+      status.controller && typeof status.controller === "object"
+        ? (status.controller as Record<string, unknown>)
+        : {};
+    cachedDeploymentStatusPointer = {
+      releaseVersion: stringField(activeRelease, "version"),
+      releaseManifestUrl: stringField(activeRelease, "manifestUrl"),
+      releaseManifestSha256: stringField(activeRelease, "manifestSha256"),
+      stateMachineArn: stringField(controller, "stateMachineArn"),
+      evidenceBucket,
+      runnerProjectName: stringField(controller, "codebuildProjectName"),
+    };
+    return cachedDeploymentStatusPointer;
+  } catch (error) {
+    if (isMissingS3ObjectError(error)) {
+      cachedDeploymentStatusPointer = emptyProfile;
+      return cachedDeploymentStatusPointer;
+    }
+    console.warn(
+      `[deployments] deployment status pointer lookup failed: ${
+        (error as Error)?.name
+      }: ${(error as Error)?.message}`,
+    );
+    cachedDeploymentStatusPointer = emptyProfile;
+    return cachedDeploymentStatusPointer;
+  }
+}
+
 export function resetDeploymentProfileCacheForTests() {
   cachedDeploymentControllerConfig = null;
   cachedDeploymentProfile = null;
+  cachedDeploymentStatusPointer = null;
 }
 
 export function deploymentProfileConfigFromEnv(): DeploymentProfileConfig {
@@ -382,6 +448,31 @@ function stringField(
 ): string | null {
   const value = record[key];
   return typeof value === "string" && value ? value : null;
+}
+
+async function bodyToString(body: unknown): Promise<string> {
+  if (!body) return "";
+  if (typeof body === "string") return body;
+  if (body instanceof Uint8Array) return new TextDecoder().decode(body);
+  if (
+    typeof body === "object" &&
+    "transformToString" in body &&
+    typeof body.transformToString === "function"
+  ) {
+    return body.transformToString();
+  }
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array | string>) {
+    chunks.push(
+      typeof chunk === "string" ? new TextEncoder().encode(chunk) : chunk,
+    );
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
+function isMissingS3ObjectError(error: unknown): boolean {
+  const name = (error as Error)?.name;
+  return name === "NoSuchKey" || name === "NotFound";
 }
 
 export function defaultReleaseVersion(): string {

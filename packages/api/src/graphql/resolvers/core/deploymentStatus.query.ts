@@ -11,6 +11,7 @@ import {
   deploymentProfileConfigFromEnv,
   mergeDeploymentProfileConfig,
   resolveDeploymentProfileConfig,
+  resolveDeploymentStatusPointerConfig,
 } from "../deployments/shared.js";
 
 export { readCogneeStatus };
@@ -39,9 +40,15 @@ export const deploymentStatus = async (
   const stage = process.env.STAGE || "unknown";
   const region = process.env.AWS_REGION || "us-east-1";
   const accountId = process.env.AWS_ACCOUNT_ID || null;
-  const deploymentProfile = mergeDeploymentProfileConfig(
+  const configuredDeploymentProfile = mergeDeploymentProfileConfig(
     deploymentProfileConfigFromEnv(),
     await resolveDeploymentProfileConfig(),
+  );
+  const deploymentProfile = mergeDeploymentProfileConfig(
+    await resolveDeploymentStatusPointerConfig(
+      configuredDeploymentProfile.evidenceBucket,
+    ),
+    configuredDeploymentProfile,
   );
   const cognee = readCogneeStatus();
   const twenty = readTwentyStatus();
