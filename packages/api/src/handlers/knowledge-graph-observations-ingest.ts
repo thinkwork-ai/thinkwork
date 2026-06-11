@@ -348,6 +348,10 @@ async function processTenantObservationsIngest(
       graph,
       transcript: source.bundle.evidence,
       ontology,
+      // Cognee's dogfood graph fetch returns the GLOBAL graph (all datasets),
+      // so scope to the observations NodeSet — otherwise this run would ingest
+      // thread/wiki/brain entities under source_kind='observations'.
+      scopeNodeSetSubstrings: ["observations"],
     });
     const snapshot = applySourceDeclaredFallback({
       snapshot: normalizedSnapshot,

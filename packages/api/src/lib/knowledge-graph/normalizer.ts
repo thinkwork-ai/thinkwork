@@ -79,6 +79,7 @@ export interface NormalizedKnowledgeGraphSnapshot {
     droppedEdgeCount: number;
     structuralNodeCount: number;
     unapprovedNodeCount: number;
+    outOfScopeNodeCount: number;
     isolatedNodeCount: number;
     unapprovedRelationshipCount: number;
     incompatibleRelationshipCount: number;
@@ -92,7 +93,10 @@ export interface DroppedNodeSample {
   id: string;
   label: string;
   rawType: string | null;
-  dropReason: "structural_node" | "unapproved_entity_type";
+  dropReason:
+    | "structural_node"
+    | "unapproved_entity_type"
+    | "out_of_scope_nodeset";
   propertyKeys: string[];
 }
 
@@ -117,6 +121,14 @@ export function normalizeCogneeGraph(args: {
   graph: CogneeGraphPayload;
   transcript: ThreadTranscriptMessage[];
   ontology: KnowledgeGraphOntologyExport;
+  /**
+   * Restrict ingested entities to those that belong to a Cognee NodeSet whose
+   * (normalized) label contains one of these substrings. Cognee's dogfood
+   * `/datasets/{id}/graph` returns the GLOBAL graph (all datasets), so an
+   * observations run must scope to its own NodeSet (e.g. "observations") or it
+   * would ingest thread/wiki/brain entities too. Omit for no scoping.
+   */
+  scopeNodeSetSubstrings?: string[];
 }): NormalizedKnowledgeGraphSnapshot {
   const entityTypes = buildEntityTypeIndex(args.ontology.entityTypes);
   const relationshipTypes = buildRelationshipTypeIndex(
@@ -125,15 +137,38 @@ export function normalizeCogneeGraph(args: {
   const rawNodeById = new Map(
     args.graph.nodes.map((node) => [node.id, node] as const),
   );
+  // Cognee encodes an entity's ontology type as an `is_a` EDGE pointing at an
+  // EntityType node (whose label is the ontology slug, e.g. "place"), NOT as a
+  // node property — so the type must be resolved from edges, not coerced off
+  // the node. Build node-id → EntityType-label here.
+  const isAtypeByNodeId = buildIsATypeIndex(args.graph.edges, rawNodeById);
+  // NodeSet membership (via `belongs_to_set` edges) for source scoping.
+  const scopeSubstrings = (args.scopeNodeSetSubstrings ?? [])
+    .map((s) => normalizeOntologySlug(s))
+    .filter(Boolean);
+  const nodeSetMembership = scopeSubstrings.length
+    ? buildNodeSetMembership(args.graph.edges, rawNodeById)
+    : null;
+  const inScope = (nodeId: string): boolean => {
+    if (!nodeSetMembership) return true;
+    const sets = nodeSetMembership.get(nodeId);
+    if (!sets) return false;
+    for (const set of sets) {
+      const norm = normalizeOntologySlug(set);
+      if (scopeSubstrings.some((sub) => norm.includes(sub))) return true;
+    }
+    return false;
+  };
   const entityEvidence = new Map<string, NormalizedKnowledgeGraphEvidence>();
   const entities: NormalizedKnowledgeGraphEntity[] = [];
   const entityByTempId = new Map<string, NormalizedKnowledgeGraphEntity>();
   const droppedNodeSamples: DroppedNodeSample[] = [];
   let structuralNodeCount = 0;
   let unapprovedNodeCount = 0;
+  let outOfScopeNodeCount = 0;
   for (const node of dedupeNodes(args.graph.nodes)) {
     const label = node.label.trim();
-    const typeLabel = coerceTypeLabel(node);
+    const typeLabel = isAtypeByNodeId.get(node.id) ?? coerceTypeLabel(node);
     const ontologyType = findEntityType(entityTypes, typeLabel);
     if (!ontologyType) {
       if (isStructuralCogneeNodeType(typeLabel)) {
@@ -149,6 +184,16 @@ export function normalizeCogneeGraph(args: {
           dropReason: "unapproved_entity_type",
         });
       }
+      continue;
+    }
+    // Approved type, but out of this run's NodeSet scope (e.g. a thread entity
+    // surfacing in the global graph during an observations run).
+    if (!inScope(node.id)) {
+      outOfScopeNodeCount += 1;
+      addDroppedNodeSample(droppedNodeSamples, node, {
+        rawType: typeLabel,
+        dropReason: "out_of_scope_nodeset",
+      });
       continue;
     }
     const evidence = findEvidence(args.transcript, [label, typeLabel ?? ""]);
@@ -297,10 +342,12 @@ export function normalizeCogneeGraph(args: {
     metrics: {
       cogneeNodeCount: args.graph.nodes.length,
       cogneeEdgeCount: args.graph.edges.length,
-      droppedNodeCount: structuralNodeCount + unapprovedNodeCount,
+      droppedNodeCount:
+        structuralNodeCount + unapprovedNodeCount + outOfScopeNodeCount,
       droppedEdgeCount,
       structuralNodeCount,
       unapprovedNodeCount,
+      outOfScopeNodeCount,
       isolatedNodeCount,
       unapprovedRelationshipCount,
       incompatibleRelationshipCount,
@@ -429,7 +476,56 @@ const STRUCTURAL_COGNEE_NODE_TYPES = new Set([
   "textdocument",
   "text_summary",
   "textsummary",
+  // Cognee materializes each OWL ontology class as an `EntityType` node; it is
+  // scaffolding (the `is_a` edge target), not an ingestable entity.
+  "entitytype",
+  "entity_type",
 ]);
+
+/**
+ * Resolve each entity's ontology type from Cognee's `is_a` EDGES. Cognee links
+ * an Entity node to an EntityType node (label = ontology slug, e.g. "place")
+ * via an `is_a` relationship rather than a node property. Returns node-id →
+ * EntityType label.
+ */
+function buildIsATypeIndex(
+  edges: CogneeGraphEdge[],
+  nodeById: Map<string, CogneeGraphNode>,
+): Map<string, string> {
+  const index = new Map<string, string>();
+  for (const edge of edges) {
+    if ((edge.label ?? "").trim().toLowerCase() !== "is_a") continue;
+    const target = nodeById.get(edge.target);
+    const typeLabel = target?.label?.trim();
+    if (typeLabel && !index.has(edge.source)) {
+      index.set(edge.source, typeLabel);
+    }
+  }
+  return index;
+}
+
+/**
+ * Map each node id → the set of NodeSet labels it belongs to (via
+ * `belongs_to_set` edges), for source-scoped filtering of the global graph.
+ */
+function buildNodeSetMembership(
+  edges: CogneeGraphEdge[],
+  nodeById: Map<string, CogneeGraphNode>,
+): Map<string, Set<string>> {
+  const membership = new Map<string, Set<string>>();
+  for (const edge of edges) {
+    if ((edge.label ?? "").trim().toLowerCase() !== "belongs_to_set") continue;
+    const setLabel = nodeById.get(edge.target)?.label?.trim();
+    if (!setLabel) continue;
+    let sets = membership.get(edge.source);
+    if (!sets) {
+      sets = new Set<string>();
+      membership.set(edge.source, sets);
+    }
+    sets.add(setLabel);
+  }
+  return membership;
+}
 
 function relationshipEndpointsAllowed(
   relationshipType: OntologyRelationshipDefinition,

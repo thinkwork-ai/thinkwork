@@ -243,8 +243,26 @@ beforeEach(() => {
     samples: [],
   });
   fetchDatasetGraphMock.mockReset().mockResolvedValue({
-    nodes: [{ id: "acme", label: "Acme", type: "Company", properties: {} }],
-    edges: [],
+    // Includes an observations NodeSet + belongs_to_set edge so the entity is
+    // in scope under the worker's scopeNodeSetSubstrings: ["observations"].
+    nodes: [
+      { id: "acme", label: "Acme", type: "Company", properties: {} },
+      {
+        id: "ns-obs",
+        label: "thinkwork_observations",
+        type: "NodeSet",
+        properties: {},
+      },
+    ],
+    edges: [
+      {
+        id: null,
+        source: "acme",
+        target: "ns-obs",
+        label: "belongs_to_set",
+        properties: {},
+      },
+    ],
   });
   maybeEnqueueGraphWikiCompileMock
     .mockReset()

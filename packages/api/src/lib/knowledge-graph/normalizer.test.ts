@@ -156,6 +156,7 @@ describe("normalizeCogneeGraph", () => {
       droppedEdgeCount: 4,
       structuralNodeCount: 1,
       unapprovedNodeCount: 1,
+      outOfScopeNodeCount: 0,
       isolatedNodeCount: 1,
       unapprovedRelationshipCount: 1,
       incompatibleRelationshipCount: 0,
@@ -223,5 +224,111 @@ describe("normalizeCogneeGraph", () => {
         },
       ],
     });
+  });
+
+  it("resolves entity type from an is_a EDGE to an EntityType node (not a property)", () => {
+    // Cognee real shape: generic Entity nodes + an EntityType node + an is_a
+    // edge linking them. No is_a property anywhere.
+    const snapshot = normalizeCogneeGraph({
+      transcript,
+      ontology,
+      graph: {
+        nodes: [
+          { id: "acme", label: "Acme", type: "Entity", properties: {} },
+          {
+            id: "et-company",
+            label: "Company",
+            type: "EntityType",
+            properties: {},
+          },
+        ],
+        edges: [
+          {
+            id: null,
+            source: "acme",
+            target: "et-company",
+            label: "is_a",
+            properties: {},
+          },
+        ],
+      },
+    });
+    // Acme is typed via the edge → kept; the EntityType node is structural.
+    expect(snapshot.entities.map((e) => e.label)).toEqual(["Acme"]);
+    expect(snapshot.entities[0].ontologyTypeSlug).toBe("company");
+    expect(snapshot.metrics.unapprovedNodeCount).toBe(0);
+  });
+
+  it("scopes entities to the requested NodeSet via belongs_to_set edges", () => {
+    const graph = {
+      nodes: [
+        { id: "obs-ent", label: "Acme", type: "Entity", properties: {} },
+        { id: "thr-ent", label: "Beta", type: "Entity", properties: {} },
+        {
+          id: "et-company",
+          label: "Company",
+          type: "EntityType",
+          properties: {},
+        },
+        {
+          id: "ns-obs",
+          label: "thinkwork_observations",
+          type: "NodeSet",
+          properties: {},
+        },
+        {
+          id: "ns-thread",
+          label: "thread_abc",
+          type: "NodeSet",
+          properties: {},
+        },
+      ],
+      edges: [
+        {
+          id: null,
+          source: "obs-ent",
+          target: "et-company",
+          label: "is_a",
+          properties: {},
+        },
+        {
+          id: null,
+          source: "thr-ent",
+          target: "et-company",
+          label: "is_a",
+          properties: {},
+        },
+        {
+          id: null,
+          source: "obs-ent",
+          target: "ns-obs",
+          label: "belongs_to_set",
+          properties: {},
+        },
+        {
+          id: null,
+          source: "thr-ent",
+          target: "ns-thread",
+          label: "belongs_to_set",
+          properties: {},
+        },
+      ],
+    };
+    // Scoped to observations: only the observation entity survives.
+    const scoped = normalizeCogneeGraph({
+      transcript,
+      ontology,
+      graph,
+      scopeNodeSetSubstrings: ["observations"],
+    });
+    expect(scoped.entities.map((e) => e.label)).toEqual(["Acme"]);
+    expect(scoped.metrics.outOfScopeNodeCount).toBe(1);
+    // No scope: both typed entities survive.
+    const unscoped = normalizeCogneeGraph({ transcript, ontology, graph });
+    expect(unscoped.entities.map((e) => e.label).sort()).toEqual([
+      "Acme",
+      "Beta",
+    ]);
+    expect(unscoped.metrics.outOfScopeNodeCount).toBe(0);
   });
 });
