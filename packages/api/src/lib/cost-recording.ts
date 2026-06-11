@@ -69,13 +69,24 @@ export function extractUsage(
     number
   >;
   return {
+    // Pi runtime responses carry pi-ai style keys (`input`/`output`/
+    // `cacheRead`) — the same alias set finalize-client.ts normalizes.
     inputTokens:
-      usage.inputTokens || usage.input_tokens || usage.prompt_tokens || 0,
+      usage.inputTokens ||
+      usage.input_tokens ||
+      usage.input ||
+      usage.prompt_tokens ||
+      0,
     outputTokens:
-      usage.outputTokens || usage.output_tokens || usage.completion_tokens || 0,
+      usage.outputTokens ||
+      usage.output_tokens ||
+      usage.output ||
+      usage.completion_tokens ||
+      0,
     cachedReadTokens:
       usage.cacheReadInputTokens ||
       usage.cachedReadTokens ||
+      usage.cacheRead ||
       usage.cached_read_tokens ||
       usage.cache_read_input_tokens ||
       0,
