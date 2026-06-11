@@ -4,6 +4,8 @@ const {
   fetchDatasetGraphMock,
   ingestDocumentMock,
   waitForDatasetIndexingMock,
+  deleteDatasetByNameMock,
+  pruneAllMock,
   loadApprovedOntologyExportMock,
   loadKnowledgeGraphIngestRunMock,
   loadObservationsKnowledgeGraphSourceMock,
@@ -19,6 +21,8 @@ const {
   fetchDatasetGraphMock: vi.fn(),
   ingestDocumentMock: vi.fn(),
   waitForDatasetIndexingMock: vi.fn(),
+  deleteDatasetByNameMock: vi.fn(),
+  pruneAllMock: vi.fn(),
   loadApprovedOntologyExportMock: vi.fn(),
   loadKnowledgeGraphIngestRunMock: vi.fn(),
   loadObservationsKnowledgeGraphSourceMock: vi.fn(),
@@ -37,6 +41,8 @@ vi.mock("../lib/knowledge-graph/cognee-client.js", () => ({
     fetchDatasetGraph: fetchDatasetGraphMock,
     ingestDocument: ingestDocumentMock,
     waitForDatasetIndexing: waitForDatasetIndexingMock,
+    deleteDatasetByName: deleteDatasetByNameMock,
+    pruneAll: pruneAllMock,
   })),
 }));
 
@@ -216,6 +222,8 @@ beforeEach(() => {
   markKnowledgeGraphRunStaleNoopMock.mockReset().mockResolvedValue(undefined);
   replaceKnowledgeGraphSnapshotMock.mockReset().mockResolvedValue(undefined);
   countKnowledgeGraphEntitiesForSourceMock.mockReset().mockResolvedValue(0);
+  deleteDatasetByNameMock.mockReset().mockResolvedValue(1);
+  pruneAllMock.mockReset().mockResolvedValue(true);
   loadApprovedOntologyExportMock.mockReset().mockResolvedValue(ontology);
   loadObservationsKnowledgeGraphSourceMock
     .mockReset()
@@ -444,6 +452,45 @@ describe("knowledge-graph-observations-ingest handler", () => {
         runMetadata: { shrinkGuardBypassed: true },
       }),
     );
+  });
+
+  it("full rebuild purges this tenant's Cognee dataset before re-ingest", async () => {
+    const { db } = makeDb();
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID, fullRebuild: true },
+      { db },
+    );
+    expect(result.status).toBe("succeeded");
+    expect(deleteDatasetByNameMock).toHaveBeenCalledWith(
+      run.cognee_dataset_name,
+    );
+    expect(pruneAllMock).not.toHaveBeenCalled();
+    // purge happens before the re-ingest
+    expect(deleteDatasetByNameMock.mock.invocationCallOrder[0]!).toBeLessThan(
+      ingestDocumentMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("cogneePruneAll wipes the whole store instead of one dataset", async () => {
+    const { db } = makeDb();
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID, cogneePruneAll: true },
+      { db },
+    );
+    expect(result.status).toBe("succeeded");
+    expect(pruneAllMock).toHaveBeenCalledTimes(1);
+    expect(deleteDatasetByNameMock).not.toHaveBeenCalled();
+  });
+
+  it("a Cognee purge failure does not abort the rebuild", async () => {
+    const { db } = makeDb();
+    deleteDatasetByNameMock.mockRejectedValueOnce(new Error("cognee 503"));
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID, fullRebuild: true },
+      { db },
+    );
+    expect(result.status).toBe("succeeded");
+    expect(ingestDocumentMock).toHaveBeenCalledTimes(1);
   });
 
   it("drops a concurrent start when an active run already holds the dedupe key", async () => {
