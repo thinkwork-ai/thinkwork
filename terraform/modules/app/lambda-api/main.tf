@@ -217,10 +217,12 @@ resource "aws_iam_role_policy" "lambda_s3" {
 # pointer behind Settings > General and the sidebar release label) and
 # session evidence artifacts. Without this the S3 read fails with a 403 that
 # is indistinguishable from "no pointer yet" and the UI shows "unknown".
-resource "aws_iam_role_policy" "lambda_deployment_evidence_read" {
+# Managed policy, not inline: the role's inline-policy aggregate sits at
+# IAM's 10,240-byte limit (the #2378 inline variant failed the dev apply
+# with LimitExceeded). Managed policies have their own per-policy quota.
+resource "aws_iam_policy" "lambda_deployment_evidence_read" {
   count = var.deployment_evidence_bucket != "" ? 1 : 0
-  name  = "deployment-evidence-read"
-  role  = aws_iam_role.lambda.id
+  name  = "thinkwork-${var.stage}-api-deployment-evidence-read"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -236,6 +238,12 @@ resource "aws_iam_role_policy" "lambda_deployment_evidence_read" {
       ]
     }]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_deployment_evidence_read" {
+  count      = var.deployment_evidence_bucket != "" ? 1 : 0
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.lambda_deployment_evidence_read[0].arn
 }
 
 resource "aws_iam_role_policy" "lambda_cognito" {
