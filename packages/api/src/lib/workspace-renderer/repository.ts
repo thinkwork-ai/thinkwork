@@ -226,6 +226,7 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
         slug: agentProfiles.slug,
         name: agentProfiles.name,
         routingGuidance: agentProfiles.routing_guidance,
+        sourceSpaceId: agentProfiles.source_space_id,
       })
       .from(agentProfiles)
       .where(
@@ -250,14 +251,32 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       spaceIdsByProfileId.set(row.profileId, set);
     }
 
-    return profileRows
-      .filter((profile) => {
-        const assignedSpaceIds = spaceIdsByProfileId.get(profile.id);
-        // No assignments → globally available; otherwise the active Space
-        // must be among the assignments (mirrors
-        // loadAgentProfileRuntimeConfigs scoping).
-        return !assignedSpaceIds || assignedSpaceIds.has(tuple.spaceId);
-      })
+    const visible = profileRows.filter((profile) => {
+      if (profile.sourceSpaceId) {
+        // Space-local profile (plan 2026-06-12-002 U7): routable only while
+        // its origin Space is the active Space.
+        return profile.sourceSpaceId === tuple.spaceId;
+      }
+      const assignedSpaceIds = spaceIdsByProfileId.get(profile.id);
+      // No assignments → globally available; otherwise the active Space
+      // must be among the assignments (mirrors
+      // loadAgentProfileRuntimeConfigs scoping).
+      return !assignedSpaceIds || assignedSpaceIds.has(tuple.spaceId);
+    });
+
+    // Slug collision: the active Space's local profile shadows the central
+    // one in the routing tree (mirrors loadAgentProfileRuntimeConfigs U7).
+    const spaceLocalSlugs = new Set(
+      visible
+        .filter((profile) => profile.sourceSpaceId)
+        .map((profile) => profile.slug),
+    );
+
+    return visible
+      .filter(
+        (profile) =>
+          profile.sourceSpaceId || !spaceLocalSlugs.has(profile.slug),
+      )
       .map((profile) => ({
         id: profile.id,
         slug: profile.slug,

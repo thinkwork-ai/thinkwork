@@ -115,8 +115,11 @@ import {
 } from "./src/lib/agents-md-persona-surgery.js";
 import {
   deleteAgentProfileProjectionForFile,
+  deleteSpaceAgentProfileProjectionForFile,
   isAgentProfileWorkspacePath,
+  isSpaceAgentProfileWorkspacePath,
   upsertAgentProfileProjectionFromFile,
+  upsertSpaceAgentProfileProjectionFromFile,
 } from "./src/lib/agent-profile-workspace-files.js";
 import {
   isProtectedOrchestrationWritePath,
@@ -1214,6 +1217,27 @@ async function handlePut(
       );
       if (refreshError) return refreshError;
     }
+    if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
+      // Space-local Agent Profile projection (plan 2026-06-12-002 U7):
+      // operator puts to a Space source's agents/<slug>.md project into a
+      // space-scoped agent_profiles row. Mirrors the central agent-target
+      // hook below — S3 is committed first, a projection failure surfaces
+      // as 400 so the operator sees the validation error.
+      try {
+        await upsertSpaceAgentProfileProjectionFromFile({
+          tenantId,
+          spaceId: target.spaceId,
+          path: cleanPath,
+          content,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return json(400, {
+          ok: false,
+          error: `Agent Profile file saved but projection refresh failed: ${message}`,
+        });
+      }
+    }
     return json(200, { ok: true });
   }
 
@@ -1553,6 +1577,16 @@ async function handleDelete(
     }
     const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
     if (refreshError) return refreshError;
+  } else if (target.kind === "space") {
+    if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
+      // Mirror the central agents/<slug>.md delete: removing the file
+      // removes the space-local projection row (plan 2026-06-12-002 U7).
+      await deleteSpaceAgentProfileProjectionForFile({
+        tenantId,
+        spaceId: target.spaceId,
+        path: cleanPath,
+      });
+    }
   } else if (target.kind === "catalog") {
     // Re-index the affected slug: deleting one file of a multi-file skill
     // refreshes its sha; deleting the last file removes the row.

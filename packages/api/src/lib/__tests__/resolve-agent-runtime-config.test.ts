@@ -155,6 +155,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tool_policy: "agentProfiles.tool_policy",
     skill_policy: "agentProfiles.skill_policy",
     execution_controls: "agentProfiles.execution_controls",
+    source_space_id: "agentProfiles.source_space_id",
   },
   agentProfileSpaceAssignments: {
     profile_id: "agentProfileSpaceAssignments.profile_id",
@@ -223,6 +224,7 @@ vi.mock("../builtin-tools/web-extract.js", () => ({
 
 import {
   AgentNotFoundError,
+  loadAgentProfileRuntimeConfigs,
   resolveAgentRuntimeConfig,
 } from "../resolve-agent-runtime-config.js";
 
@@ -1233,5 +1235,174 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.budgetMonthlyCents).toBe(25_000);
     expect(cfg.budgetPaused).toBe(true);
     expect(cfg.sandboxTemplate).toBeNull();
+  });
+});
+
+// ─── Space-local profiles + shadowing (plan 2026-06-12-002 U7) ──────────────
+// Exercised through loadAgentProfileRuntimeConfigs directly (exported for the
+// wakeup dispatch path); staging order per call: profiles select → model
+// catalog mock → assignments select → MCP catalog select.
+
+describe("loadAgentProfileRuntimeConfigs space-local profiles (U7)", () => {
+  const SPACE_A = "space-aaaa";
+  const SPACE_B = "space-bbbb";
+
+  function centralResearchRow(overrides?: Record<string, unknown>) {
+    return {
+      id: "profile-central-research",
+      slug: "research",
+      name: "Research (central)",
+      description: null,
+      routing_guidance: null,
+      instructions: "Central research instructions.",
+      model_id: PROFILE_MODEL_ID,
+      enabled: true,
+      built_in_key: null,
+      source_space_id: null,
+      tool_policy: {},
+      skill_policy: {},
+      execution_controls: {},
+      ...overrides,
+    };
+  }
+
+  function spaceLocalResearchRow(overrides?: Record<string, unknown>) {
+    return {
+      id: "profile-space-research",
+      slug: "research",
+      name: "Research (space B)",
+      description: null,
+      routing_guidance: null,
+      instructions: "Space B research instructions.",
+      model_id: PROFILE_MODEL_ID,
+      enabled: true,
+      built_in_key: null,
+      source_space_id: SPACE_B,
+      tool_policy: {},
+      skill_policy: {},
+      execution_controls: {},
+      ...overrides,
+    };
+  }
+
+  function stageLoad(
+    profiles: Array<Record<string, unknown>>,
+    assignments: Array<Record<string, unknown>> = [],
+  ) {
+    rowsQueue.push(profiles);
+    mockListTenantModelCatalogByIds.mockResolvedValueOnce([
+      { modelId: PROFILE_MODEL_ID },
+    ]);
+    rowsQueue.push(assignments);
+    rowsQueue.push([]); // MCP server catalog
+  }
+
+  async function load(spaceId: string | null) {
+    return loadAgentProfileRuntimeConfigs({
+      tenantId: TENANT_ID,
+      spaceId,
+      mcpConfigs: [],
+      logPrefix: "[test]",
+    });
+  }
+
+  it("covers AE4: a Space B local profile resolves for Space B threads and is absent for Space A threads", async () => {
+    const spaceProfile = spaceLocalResearchRow({
+      slug: "deal-desk",
+      id: "profile-space-deal-desk",
+    });
+    const assignment = {
+      profile_id: "profile-space-deal-desk",
+      space_id: SPACE_B,
+    };
+
+    stageLoad([spaceProfile], [assignment]);
+    const spaceBConfigs = await load(SPACE_B);
+    expect(spaceBConfigs).toEqual([
+      expect.objectContaining({
+        id: "profile-space-deal-desk",
+        slug: "deal-desk",
+        sourceSpaceId: SPACE_B,
+        shadowedCentralProfileId: null,
+        availability: {
+          scope: "space_restricted",
+          spaceIds: [SPACE_B],
+        },
+      }),
+    ]);
+
+    stageLoad([spaceProfile], [assignment]);
+    const spaceAConfigs = await load(SPACE_A);
+    expect(spaceAConfigs).toEqual([]);
+
+    stageLoad([spaceProfile], [assignment]);
+    const noSpaceConfigs = await load(null);
+    expect(noSpaceConfigs).toEqual([]);
+  });
+
+  it("space-local profile shadows the central slug while its Space is active; central resolves elsewhere", async () => {
+    const rows = [centralResearchRow(), spaceLocalResearchRow()];
+    const assignments = [
+      { profile_id: "profile-space-research", space_id: SPACE_B },
+    ];
+
+    stageLoad(rows, assignments);
+    const spaceBConfigs = await load(SPACE_B);
+    expect(spaceBConfigs).toHaveLength(1);
+    expect(spaceBConfigs[0]).toMatchObject({
+      id: "profile-space-research",
+      slug: "research",
+      sourceSpaceId: SPACE_B,
+      // Shadowing fact surfaced on the winning space-local config.
+      shadowedCentralProfileId: "profile-central-research",
+    });
+
+    stageLoad(rows, assignments);
+    const spaceAConfigs = await load(SPACE_A);
+    expect(spaceAConfigs).toHaveLength(1);
+    expect(spaceAConfigs[0]).toMatchObject({
+      id: "profile-central-research",
+      sourceSpaceId: null,
+      shadowedCentralProfileId: null,
+    });
+
+    stageLoad(rows, assignments);
+    const noSpaceConfigs = await load(null);
+    expect(noSpaceConfigs).toHaveLength(1);
+    expect(noSpaceConfigs[0]).toMatchObject({
+      id: "profile-central-research",
+    });
+  });
+
+  it("does not shadow central when the space-local profile is skipped for an unavailable model", async () => {
+    const rows = [
+      centralResearchRow(),
+      spaceLocalResearchRow({ model_id: "missing-model" }),
+    ];
+    const assignments = [
+      { profile_id: "profile-space-research", space_id: SPACE_B },
+    ];
+
+    stageLoad(rows, assignments);
+    const configs = await load(SPACE_B);
+    expect(configs).toHaveLength(1);
+    expect(configs[0]).toMatchObject({
+      id: "profile-central-research",
+      sourceSpaceId: null,
+    });
+  });
+
+  it("central profiles keep resolving unchanged when no space-local rows exist (regression)", async () => {
+    stageLoad([centralResearchRow()], []);
+    const configs = await load(SPACE_A);
+    expect(configs).toEqual([
+      expect.objectContaining({
+        id: "profile-central-research",
+        slug: "research",
+        sourceSpaceId: null,
+        shadowedCentralProfileId: null,
+        availability: { scope: "global", spaceIds: [] },
+      }),
+    ]);
   });
 });
