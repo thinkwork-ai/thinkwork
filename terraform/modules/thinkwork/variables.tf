@@ -1002,6 +1002,43 @@ variable "computer_certificate_arn" {
   default     = ""
 }
 
+# ---------------------------------------------------------------------------
+# Customer domain (<name>.thinkwork.ai — optional, customer deployments)
+#
+# Two-phase by design (the shared claim tool owns the Cloudflare apex zone;
+# this module owns the customer-account half): setting customer_domain
+# creates the Route53 zone + CAA record only — inert until the NS hop lands.
+# Flipping customer_domain_delegated after delegation resolves mints +
+# validates the ACM cert, aliases the customer domain onto the app
+# distribution, and adds the customer-domain Cognito callback/logout entries
+# alongside the legacy ones (the dual window). Flipping
+# customer_domain_legacy_retired afterwards removes the legacy app
+# callback/logout entries — retirement is a reviewable Terraform change,
+# not a console edit.
+#
+# Setting customer_domain (with or without the gates) requires the caller to
+# pass an aliased us-east-1 AWS provider:
+#   providers = { aws.us_east_1 = aws.us_east_1 }
+# ---------------------------------------------------------------------------
+
+variable "customer_domain" {
+  description = "Customer domain for this deployment (e.g. tei.thinkwork.ai), claimed via the shared namespace claim tool. Leave empty to skip all customer-domain resources."
+  type        = string
+  default     = ""
+}
+
+variable "customer_domain_delegated" {
+  description = "Set true once the apex zone's NS records point at the customer zone (claim tool phase two). Gates the ACM certificate, the web alias records, and the customer-domain Cognito callback entries. Requires customer_domain."
+  type        = bool
+  default     = false
+}
+
+variable "customer_domain_legacy_retired" {
+  description = "Set true to remove the legacy (non-customer-domain) end-user app URLs from the Cognito callback/logout lists after the dual-domain cutover window closes. Requires customer_domain_delegated."
+  type        = bool
+  default     = false
+}
+
 variable "computer_sandbox_domain" {
   description = "Custom domain for the LLM-fragment iframe substrate (e.g. sandbox.thinkwork.ai). Cross-origin from the computer SPA — load-bearing for the iframe-isolation security boundary documented in docs/specs/computer-ai-elements-contract-v1.md. Leave empty to skip provisioning the sandbox distribution."
   type        = string

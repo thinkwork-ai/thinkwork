@@ -9,6 +9,31 @@
 #   source = "thinkwork-ai/thinkwork/aws//modules/foundation/vpc"
 ################################################################################
 
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+
+      # The customer-domain ACM certificate must live in us-east-1
+      # (CloudFront requirement) regardless of the deployment region, so the
+      # module needs an explicitly aliased us-east-1 provider. Root modules
+      # must declare it and pass it through:
+      #
+      #   provider "aws" {
+      #     alias  = "us_east_1"
+      #     region = "us-east-1"
+      #   }
+      #
+      #   module "thinkwork" {
+      #     providers = { aws.us_east_1 = aws.us_east_1 }
+      #     ...
+      #   }
+      configuration_aliases = [aws.us_east_1]
+    }
+  }
+}
+
 locals {
   bucket_name                    = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
   backups_bucket_name            = "thinkwork-${var.stage}-backups"
@@ -60,12 +85,40 @@ locals {
     : local.hindsight_enabled ? "hindsight" : "agentcore"
   )
 
+  # Customer-domain namespace (<name>.thinkwork.ai). The zone is created as
+  # soon as customer_domain is set; the cert/aliases/callback entries wait
+  # behind the delegation gate. Once delegated, the customer domain becomes
+  # the canonical end-user app domain (CloudFront takes exactly one ACM
+  # cert, so the customer cert replaces the legacy app cert on the
+  # distribution; legacy web access during the dual window is via the
+  # CloudFront default domain, which always serves). The retirement gate
+  # only ever takes effect on a delegated customer domain — the guardrail
+  # below rejects any other combination at plan time.
+  customer_domain_web_enabled = var.customer_domain != "" && var.customer_domain_delegated
+  customer_domain_legacy_retired = (
+    local.customer_domain_web_enabled && var.customer_domain_legacy_retired
+  )
+
   # The end-user app is now canonically hosted at app.<domain>. Keep
   # computer_domain as a compatibility fallback so older module callers and
-  # stages can upgrade without a flag-day.
-  end_user_app_domain          = var.app_domain != "" ? var.app_domain : var.computer_domain
-  end_user_app_certificate_arn = var.app_certificate_arn != "" ? var.app_certificate_arn : var.computer_certificate_arn
+  # stages can upgrade without a flag-day. A delegated customer domain takes
+  # precedence over both.
+  legacy_end_user_app_domain          = var.app_domain != "" ? var.app_domain : var.computer_domain
+  legacy_end_user_app_certificate_arn = var.app_certificate_arn != "" ? var.app_certificate_arn : var.computer_certificate_arn
+  end_user_app_domain = (
+    local.customer_domain_web_enabled ? var.customer_domain : local.legacy_end_user_app_domain
+  )
+  end_user_app_certificate_arn = (
+    local.customer_domain_web_enabled
+    ? module.customer_domain.certificate_arn
+    : local.legacy_end_user_app_certificate_arn
+  )
+  # The compat redirect rides on the same distribution/cert as the app
+  # domain. Once the customer-domain cert takes over, computer_domain is no
+  # longer covered by the distribution's certificate, so the compat alias
+  # must drop off (CloudFront rejects aliases the cert doesn't cover).
   computer_compat_redirect_enabled = (
+    !local.customer_domain_web_enabled &&
     var.app_domain != "" &&
     var.computer_domain != "" &&
     var.computer_domain != local.end_user_app_domain
@@ -113,6 +166,32 @@ locals {
 module "workspace_guard" {
   source = "../_internal/workspace-guard"
   stage  = var.stage
+}
+
+resource "terraform_data" "customer_domain_configuration_guardrails" {
+  count = (
+    var.customer_domain != "" ||
+    var.customer_domain_delegated ||
+    var.customer_domain_legacy_retired
+  ) ? 1 : 0
+
+  input = {
+    customer_domain                = var.customer_domain
+    customer_domain_delegated      = var.customer_domain_delegated
+    customer_domain_legacy_retired = var.customer_domain_legacy_retired
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.customer_domain_delegated || var.customer_domain != ""
+      error_message = "customer_domain_delegated requires customer_domain to be set."
+    }
+
+    precondition {
+      condition     = !var.customer_domain_legacy_retired || (var.customer_domain != "" && var.customer_domain_delegated)
+      error_message = "customer_domain_legacy_retired requires customer_domain and customer_domain_delegated — the legacy app URLs can only be retired after the customer domain serves the app."
+    }
+  }
 }
 
 resource "terraform_data" "cognee_configuration_guardrails" {
@@ -477,19 +556,29 @@ module "cognito" {
   # SPA/static site is retired. Each origin needs both bare and /auth/callback
   # entries because OAuth lands on /auth/callback and the SPA's post-OAuth
   # redirect lands on the bare origin.
+  #
+  # Customer-domain cutover (dual window): the customer-domain entries are
+  # ADDED once customer_domain_delegated is true, alongside every legacy
+  # entry — login works on both domains. Flipping
+  # customer_domain_legacy_retired REMOVES the legacy (non-customer-domain)
+  # app entries — the CloudFront default domain, the legacy app/computer
+  # domains — as a reviewable Terraform change. Explicit caller-supplied,
+  # localhost dev, and desktop entries are never retired here.
   admin_callback_urls = distinct(concat(
     var.admin_callback_urls,
-    ["https://${module.computer_site.distribution_domain}", "https://${module.computer_site.distribution_domain}/auth/callback"],
-    local.end_user_app_domain != "" ? ["https://${local.end_user_app_domain}", "https://${local.end_user_app_domain}/auth/callback"] : [],
-    var.computer_domain != "" ? ["https://${var.computer_domain}", "https://${var.computer_domain}/auth/callback"] : [],
+    local.customer_domain_legacy_retired ? [] : ["https://${module.computer_site.distribution_domain}", "https://${module.computer_site.distribution_domain}/auth/callback"],
+    local.customer_domain_legacy_retired ? [] : (local.legacy_end_user_app_domain != "" ? ["https://${local.legacy_end_user_app_domain}", "https://${local.legacy_end_user_app_domain}/auth/callback"] : []),
+    local.customer_domain_web_enabled ? ["https://${var.customer_domain}", "https://${var.customer_domain}/auth/callback"] : [],
+    local.customer_domain_legacy_retired ? [] : (var.computer_domain != "" ? ["https://${var.computer_domain}", "https://${var.computer_domain}/auth/callback"] : []),
     ["http://localhost:5180", "http://localhost:5180/auth/callback"],
     var.desktop_callback_urls
   ))
   admin_logout_urls = distinct(concat(
     var.admin_logout_urls,
-    ["https://${module.computer_site.distribution_domain}"],
-    local.end_user_app_domain != "" ? ["https://${local.end_user_app_domain}"] : [],
-    var.computer_domain != "" ? ["https://${var.computer_domain}"] : [],
+    local.customer_domain_legacy_retired ? [] : ["https://${module.computer_site.distribution_domain}"],
+    local.customer_domain_legacy_retired ? [] : (local.legacy_end_user_app_domain != "" ? ["https://${local.legacy_end_user_app_domain}"] : []),
+    local.customer_domain_web_enabled ? ["https://${var.customer_domain}"] : [],
+    local.customer_domain_legacy_retired ? [] : (var.computer_domain != "" ? ["https://${var.computer_domain}"] : []),
     ["http://localhost:5180"],
     var.desktop_callback_urls
   ))
@@ -1149,6 +1238,35 @@ module "computer_site" {
       override           = true
     }
   }
+}
+
+################################################################################
+# Customer Domain (<name>.thinkwork.ai — optional)
+#
+# Route53 zone + CAA as soon as customer_domain is set; ACM cert (us-east-1),
+# validation, and A/AAAA aliases onto the app distribution once
+# customer_domain_delegated flips. The module is always instantiated — every
+# resource inside is count-gated on the plain bool/string vars, so stacks
+# without a customer domain plan zero resources here. The bidirectional
+# module references (cert → distribution, distribution domain → alias
+# records) are acyclic at the resource level.
+################################################################################
+
+module "customer_domain" {
+  source = "../app/customer-domain"
+
+  providers = {
+    aws.us_east_1 = aws.us_east_1
+  }
+
+  # No depends_on on the guardrails: a module-level depends_on coarsens the
+  # module's output dependencies, which would turn the intentional
+  # cert → distribution → alias-records chain into a module-level cycle.
+  # The guardrail preconditions fail the plan on their own.
+  stage                        = var.stage
+  customer_domain              = var.customer_domain
+  customer_domain_delegated    = var.customer_domain_delegated
+  app_distribution_domain_name = module.computer_site.distribution_domain
 }
 
 ################################################################################

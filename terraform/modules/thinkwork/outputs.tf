@@ -398,8 +398,32 @@ output "app_bucket_name" {
 }
 
 output "app_url" {
-  description = "Public URL for the end-user app (custom app domain when set, CloudFront default otherwise)"
+  description = "Public URL for the end-user app (delegated customer domain first, then custom app domain, CloudFront default otherwise)"
   value       = local.end_user_app_url
+}
+
+# Customer domain (<name>.thinkwork.ai). Zone outputs are populated as soon
+# as customer_domain is set; the certificate output waits for the
+# customer_domain_delegated gate. The name servers are the phase-two input
+# for the namespace claim tool's `claim --set-targets <ns...>`.
+output "customer_domain" {
+  description = "Customer domain configured for this deployment (empty when none)"
+  value       = var.customer_domain
+}
+
+output "customer_domain_zone_id" {
+  description = "Route53 hosted zone ID for the customer domain (empty when no customer domain is configured)"
+  value       = module.customer_domain.zone_id
+}
+
+output "customer_domain_name_servers" {
+  description = "The four Route53 name servers for the customer-domain zone — publish these via the claim tool's `claim --set-targets` to delegate (empty when no customer domain is configured)"
+  value       = module.customer_domain.name_servers
+}
+
+output "customer_domain_certificate_arn" {
+  description = "Validated ACM certificate ARN for the customer domain (us-east-1; empty until customer_domain_delegated is true)"
+  value       = module.customer_domain.certificate_arn
 }
 
 # Deprecated compatibility aliases. Keep these stable for existing scripts and

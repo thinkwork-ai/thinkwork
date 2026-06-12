@@ -48,6 +48,13 @@ provider "aws" {
   region = var.region
 }
 
+# us-east-1 alias required by the thinkwork module's customer-domain wiring
+# (CloudFront ACM certs must live in us-east-1 regardless of stack region).
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
 # Cloudflare provider reads its token from the CLOUDFLARE_API_TOKEN env var.
 # Never commit the token to tfvars or source control.
 provider "cloudflare" {}
@@ -798,6 +805,10 @@ moved {
 
 module "thinkwork" {
   source = "../../modules/thinkwork"
+
+  providers = {
+    aws.us_east_1 = aws.us_east_1
+  }
 
   stage      = var.stage
   region     = var.region
