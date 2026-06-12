@@ -98,6 +98,16 @@ describe("reconcileChangedFiles", () => {
     ],
     files: [
       {
+        path: "AGENTS.md",
+        owner: "agent",
+        sourceKey: "tenants/acme/threads/thread-1/AGENTS.md",
+        sourcePrefix: "tenants/acme/threads/thread-1/",
+        sourcePath: "AGENTS.md",
+        etag: '"agents-generated"',
+        readOnly: true,
+        generated: true,
+      },
+      {
         path: "User/memory/preferences.md",
         owner: "user",
         sourceKey: "tenants/acme/users/eric/memory/preferences.md",
@@ -362,12 +372,6 @@ describe("reconcileChangedFiles", () => {
           content: "# Edited progress\n",
           base_etag: '"progress-db"',
         },
-        {
-          path: "Spaces/INDEX.md",
-          op: "modify",
-          content: "# Spaces\n\n- changed\n",
-          base_etag: '"spaces-index"',
-        },
       ],
     });
 
@@ -385,15 +389,48 @@ describe("reconcileChangedFiles", () => {
         status: "rejected",
         code: "read_only_status_file",
       }),
-      expect.objectContaining({
-        path: "Spaces/INDEX.md",
-        owner: "status",
-        status: "rejected",
-        code: "read_only_status_file",
-      }),
     ]);
     expect(store.puts).toEqual([]);
     expect(store.deletes).toEqual([]);
+  });
+
+  it("rejects writes to the generated AGENTS.md instead of routing them to the agent source", async () => {
+    // Plan 2026-06-12-002 U2 interim behavior: the rendered AGENTS.md is a
+    // generated file whose manifest sourceKey lives under the thread prefix,
+    // so an agent self-edit fails the agent-source prefix check. U3 replaces
+    // this with a first-class readOnly rejection pointing at the settings
+    // baseline.
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "AGENTS.md",
+          op: "modify",
+          content: "# Edited routing\n",
+          base_etag: '"agents-generated"',
+        },
+      ],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "AGENTS.md",
+        owner: "agent",
+        status: "rejected",
+        code: "manifest_invalid",
+      }),
+    ]);
+    expect(store.puts).toEqual([]);
   });
 
   it("reconciles narrative goal files through the thread goal lane", async () => {

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { WORKSPACE_ROUTING_MARKER } from "./agents-md-composer.js";
 import { renderWorkspaceTuple } from "./compose-tuple.js";
 import type { SpaceMembershipRepository } from "./space-membership-check.js";
 import type {
   ResolvedWorkspaceRenderTuple,
+  WorkspaceAgentProfileRoutingEntry,
   WorkspaceObjectMetadata,
   WorkspaceRendererObjectStore,
+  WorkspaceSpaceIndexEntry,
+  WorkspaceSpaceParticipantEntry,
   WorkspaceTupleRepository,
 } from "./types.js";
 
@@ -40,11 +44,46 @@ const DEFAULT_SPACE_TUPLE: ResolvedWorkspaceRenderTuple = {
   spaceMcpPolicy: {},
 };
 
+interface FakeRepositoryOptions {
+  authorizedSpaces?: WorkspaceSpaceIndexEntry[];
+  participants?: WorkspaceSpaceParticipantEntry[];
+  agentProfiles?: WorkspaceAgentProfileRoutingEntry[];
+}
+
 class FakeRepository implements WorkspaceTupleRepository {
-  constructor(private readonly tuple: ResolvedWorkspaceRenderTuple | null) {}
+  constructor(
+    private readonly tuple: ResolvedWorkspaceRenderTuple | null,
+    private readonly options: FakeRepositoryOptions = {},
+  ) {}
 
   async resolve(): Promise<ResolvedWorkspaceRenderTuple | null> {
     return this.tuple;
+  }
+
+  async listAuthorizedSpaces(
+    tuple: ResolvedWorkspaceRenderTuple,
+  ): Promise<WorkspaceSpaceIndexEntry[]> {
+    return (
+      this.options.authorizedSpaces ?? [
+        {
+          id: tuple.spaceId,
+          slug: tuple.spaceSlug,
+          name: tuple.spaceName,
+          accessMode: tuple.spaceAccessMode,
+          isActive: true,
+        },
+      ]
+    );
+  }
+
+  async listSpaceParticipants(): Promise<WorkspaceSpaceParticipantEntry[]> {
+    return this.options.participants ?? [];
+  }
+
+  async listRoutableAgentProfiles(): Promise<
+    WorkspaceAgentProfileRoutingEntry[]
+  > {
+    return this.options.agentProfiles ?? [];
   }
 }
 
@@ -253,10 +292,11 @@ function compatibleHydrateManifest(
         {
           path: "AGENTS.md",
           owner: "agent",
-          sourceKey: "tenants/acme/agents/finance-agent/AGENTS.md",
-          sourcePrefix: "tenants/acme/agents/finance-agent/",
+          sourceKey: "tenants/acme/threads/thread-1/AGENTS.md",
+          sourcePrefix: "tenants/acme/threads/thread-1/",
           sourcePath: "AGENTS.md",
-          readOnly: false,
+          readOnly: true,
+          generated: true,
         },
         {
           path: "IDENTITY.md",
@@ -281,15 +321,6 @@ function compatibleHydrateManifest(
           sourcePrefix: "tenants/acme/agents/finance-agent/",
           sourcePath: "TOOLS.md",
           readOnly: false,
-        },
-        {
-          path: "Spaces/INDEX.md",
-          owner: "thread_goal",
-          sourceKey: "tenants/acme/threads/thread-1/Spaces/INDEX.md",
-          sourcePrefix: "tenants/acme/threads/thread-1/",
-          sourcePath: "Spaces/INDEX.md",
-          readOnly: true,
-          generated: true,
         },
         {
           path: "Spaces/board-pack/CONTEXT.md",
@@ -412,7 +443,7 @@ describe("renderWorkspaceTuple", () => {
       "tenants/acme/threads/thread-1/",
     ]);
     expect(result.writtenFiles).toEqual([
-      "Spaces/INDEX.md",
+      "AGENTS.md",
       ".hydrate_manifest.json",
     ]);
     expect(result.hydrateManifest.sources).toEqual([
@@ -427,7 +458,9 @@ describe("renderWorkspaceTuple", () => {
         expect.objectContaining({
           owner: "agent",
           path: "AGENTS.md",
-          sourceKey: "tenants/acme/agents/finance-agent/AGENTS.md",
+          sourceKey: "tenants/acme/threads/thread-1/AGENTS.md",
+          readOnly: true,
+          generated: true,
         }),
         expect.objectContaining({
           owner: "agent",
@@ -439,13 +472,6 @@ describe("renderWorkspaceTuple", () => {
           path: "LEGACY.md",
           sourceKey: "tenants/acme/agents/finance-agent/workspace/LEGACY.md",
           sourcePath: "LEGACY.md",
-        }),
-        expect.objectContaining({
-          owner: "thread_goal",
-          path: "Spaces/INDEX.md",
-          sourceKey: "tenants/acme/threads/thread-1/Spaces/INDEX.md",
-          readOnly: true,
-          generated: true,
         }),
         expect.objectContaining({
           owner: "space",
@@ -487,6 +513,7 @@ describe("renderWorkspaceTuple", () => {
     );
     expect(result.hydrateManifest.files).not.toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ path: "Spaces/INDEX.md" }),
         expect.objectContaining({ path: "SPACE_CONTEXT.md" }),
         expect.objectContaining({ path: "effective-policy.json" }),
         expect.objectContaining({ path: "space/SPACE.md" }),
@@ -540,7 +567,7 @@ describe("renderWorkspaceTuple", () => {
     expect(store.puts.map((put) => put.key).sort()).toEqual([
       "tenants/acme/threads/thread-1/.hydrate_manifest.json",
       "tenants/acme/threads/thread-1/.rendered_at",
-      "tenants/acme/threads/thread-1/Spaces/INDEX.md",
+      "tenants/acme/threads/thread-1/AGENTS.md",
     ]);
     const manifestPut = store.puts.find((put) =>
       put.key.endsWith(".hydrate_manifest.json"),
@@ -554,6 +581,163 @@ describe("renderWorkspaceTuple", () => {
         }),
       ]),
     });
+
+    const agentsMdPut = store.puts.find((put) =>
+      put.key.endsWith("/AGENTS.md"),
+    );
+    const composed = agentsMdPut?.content ?? "";
+    const markerIndex = composed.indexOf(WORKSPACE_ROUTING_MARKER);
+    expect(markerIndex).toBeGreaterThan(0);
+    expect(composed.slice(0, markerIndex)).toContain("Root routing.");
+    expect(composed).toContain(
+      "- Board Pack — `Spaces/board-pack/` (active, hydrated)",
+    );
+    expect(composed).toContain("- Eric — `User/` (acting user, hydrated)");
+    // The baseline fixture carries a stale legacy generated section
+    // ("<!-- RENDERED:ACTIVE_SPACE -->\n\nold"); composition truncates it.
+    expect(composed).not.toContain("RENDERED:ACTIVE_SPACE");
+    expect(composed).not.toContain("\nold");
+  });
+
+  it("recomposes the generated AGENTS.md idempotently across renders", async () => {
+    const store = new FakeStore(seedObjects());
+    const deps = {
+      bucket: "workspace",
+      repository: new FakeRepository(TUPLE),
+      objectStore: store,
+      now: () => new Date("2026-05-22T10:00:00.000Z"),
+    };
+
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps,
+    );
+    const first = store.puts.find((put) => put.key.endsWith("/AGENTS.md"));
+    store.puts.length = 0;
+    // Touch a source file so the second render is a cache miss.
+    store.setObject("tenants/acme/spaces/board-pack/CONTEXT.md", {
+      content: "# Space Context v2\n",
+      lastModified: "2026-05-22T12:30:00.000Z",
+    });
+
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      { ...deps, now: () => new Date("2026-05-22T13:00:00.000Z") },
+    );
+    const second = store.puts.find((put) => put.key.endsWith("/AGENTS.md"));
+
+    expect(second?.content).toBe(first?.content);
+    expect(second?.content.split(WORKSPACE_ROUTING_MARKER)).toHaveLength(2);
+  });
+
+  it("lists authorized Spaces, participants, and profiles in the routing section", async () => {
+    const store = new FakeStore(seedObjects());
+
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE, {
+          authorizedSpaces: [
+            {
+              id: "space-1",
+              slug: "board-pack",
+              name: "Board Pack",
+              accessMode: "public",
+              isActive: true,
+            },
+            {
+              id: "space-2",
+              slug: "legal-review",
+              name: "Legal Review",
+              accessMode: "private",
+              isActive: false,
+            },
+          ],
+          participants: [
+            { id: "user-2", name: "Alice" },
+            { id: "user-1", name: "Eric" },
+          ],
+          agentProfiles: [
+            {
+              id: "profile-1",
+              slug: "researcher",
+              name: "Researcher",
+              routingGuidance: "Deep research tasks",
+            },
+            {
+              id: "profile-2",
+              slug: "writer",
+              name: "Writer",
+              routingGuidance: null,
+            },
+          ],
+        }),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    const composed =
+      store.puts.find((put) => put.key.endsWith("/AGENTS.md"))?.content ?? "";
+    // AE1: authorized Space B appears with its folder path; spaces the
+    // repository did not authorize are simply absent.
+    expect(composed).toContain(
+      "- Legal Review — `Spaces/legal-review/` (private; not currently hydrated)",
+    );
+    expect(composed).not.toContain("secret-space");
+    expect(composed).toContain("### Active Space Participants");
+    expect(composed).toContain("- Alice");
+    expect(composed).toContain("- Eric");
+    expect(composed).toContain("- Researcher — Deep research tasks");
+    expect(composed).toContain("- Writer");
+  });
+
+  it("busts the render cache when routing membership changes without source mtime drift", async () => {
+    const store = new FakeStore(seedObjects());
+    const baseDeps = {
+      bucket: "workspace",
+      objectStore: store,
+      now: () => new Date("2026-05-22T10:00:00.000Z"),
+    };
+
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      { ...baseDeps, repository: new FakeRepository(TUPLE) },
+    );
+    store.puts.length = 0;
+
+    // No S3 mtimes change; only the DB-derived authorized-space set grows.
+    const result = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        ...baseDeps,
+        now: () => new Date("2026-05-22T10:05:00.000Z"),
+        repository: new FakeRepository(TUPLE, {
+          authorizedSpaces: [
+            {
+              id: "space-1",
+              slug: "board-pack",
+              name: "Board Pack",
+              accessMode: "public",
+              isActive: true,
+            },
+            {
+              id: "space-2",
+              slug: "legal-review",
+              name: "Legal Review",
+              accessMode: "private",
+              isActive: false,
+            },
+          ],
+        }),
+      },
+    );
+
+    expect(result.cacheStatus).toBe("miss");
+    const composed =
+      store.puts.find((put) => put.key.endsWith("/AGENTS.md"))?.content ?? "";
+    expect(composed).toContain("Spaces/legal-review/");
   });
 
   it("composes model routing from agent, Space, active workspace, and user TOOLS.md", async () => {
@@ -770,30 +954,27 @@ modelRouting:
   });
 
   it("returns a cache hit without writes when the marker is newer than source files", async () => {
-    const store = new FakeStore(
-      seedObjects({
-        "tenants/acme/threads/thread-1/.rendered_at": {
-          content: "2026-05-22T11:00:00.000Z",
-          lastModified: "2026-05-22T11:00:00.000Z",
-        },
-        "tenants/acme/threads/thread-1/.hydrate_manifest.json": {
-          content: compatibleHydrateManifest(),
-          lastModified: "2026-05-22T11:00:00.000Z",
-        },
-        "tenants/acme/threads/thread-1/Spaces/INDEX.md": {
-          content:
-            "# Spaces\n\nActive Space: Board Pack (board-pack)\n\nOnly the active Space is fully hydrated in this workspace. Other authorized Spaces are listed here for routing context.\n\n## Authorized Spaces\n\n- Board Pack (board-pack) - active\n",
-          lastModified: "2026-05-22T11:00:00.000Z",
-        },
-      }),
+    const store = new FakeStore(seedObjects());
+    const repository = new FakeRepository(TUPLE);
+
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository,
+        objectStore: store,
+        now: () => new Date("2026-05-22T13:00:00.000Z"),
+      },
     );
+    store.puts.length = 0;
 
     const result = await renderWorkspaceTuple(
       { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
       {
         bucket: "workspace",
-        repository: new FakeRepository(TUPLE),
+        repository,
         objectStore: store,
+        now: () => new Date("2026-05-22T13:10:00.000Z"),
       },
     );
 
@@ -844,7 +1025,7 @@ modelRouting:
 
     expect(result.cacheStatus).toBe("miss");
     expect(result.writtenFiles).toEqual([
-      "Spaces/INDEX.md",
+      "AGENTS.md",
       ".hydrate_manifest.json",
     ]);
     const manifestPut = store.puts.find((put) =>
@@ -894,13 +1075,13 @@ modelRouting:
 
     expect(result.cacheStatus).toBe("miss");
     expect(result.writtenFiles).toEqual([
-      "Spaces/INDEX.md",
+      "AGENTS.md",
       ".hydrate_manifest.json",
     ]);
     expect(store.puts.map((put) => put.key).sort()).toEqual([
       "tenants/acme/threads/thread-1/.hydrate_manifest.json",
       "tenants/acme/threads/thread-1/.rendered_at",
-      "tenants/acme/threads/thread-1/Spaces/INDEX.md",
+      "tenants/acme/threads/thread-1/AGENTS.md",
     ]);
   });
 
@@ -946,7 +1127,7 @@ modelRouting:
     expect(store.puts.map((put) => put.key).sort()).toEqual([
       "tenants/acme/threads/thread-1/.hydrate_manifest.json",
       "tenants/acme/threads/thread-1/.rendered_at",
-      "tenants/acme/threads/thread-1/Spaces/INDEX.md",
+      "tenants/acme/threads/thread-1/AGENTS.md",
     ]);
   });
 
@@ -1047,15 +1228,15 @@ modelRouting:
     expect(result.cacheStatus).toBe("miss");
     expect(result.renderedPrefix).toBe("tenants/acme/threads/thread-1/");
     expect(result.writtenFiles).toEqual([
-      "Spaces/INDEX.md",
+      "AGENTS.md",
       ".hydrate_manifest.json",
     ]);
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ owner: "agent", path: "AGENTS.md" }),
         expect.objectContaining({
-          owner: "thread_goal",
-          path: "Spaces/INDEX.md",
+          owner: "agent",
+          path: "AGENTS.md",
+          sourceKey: "tenants/acme/threads/thread-1/AGENTS.md",
           readOnly: true,
           generated: true,
         }),
@@ -1064,6 +1245,7 @@ modelRouting:
     );
     expect(result.hydrateManifest.files).not.toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ path: "Spaces/INDEX.md" }),
         expect.objectContaining({ path: "Thread/THREAD.md" }),
         expect.objectContaining({ path: "Thread/GOAL.md" }),
         expect.objectContaining({ path: "Thread/PROGRESS.md" }),
@@ -1082,5 +1264,36 @@ modelRouting:
       "Thread/PROGRESS.md",
       "Thread/TASKS.md",
     ]);
+  });
+
+  it("renders the routing section without user entries for a userless default-Space tuple", async () => {
+    const store = new FakeStore(seedObjects());
+    store.deletePrefix("tenants/acme/spaces/board-pack/");
+
+    const result = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "default-space" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository({
+          ...DEFAULT_SPACE_TUPLE,
+          userId: null,
+          userSlug: null,
+          userName: null,
+        }),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    expect(result.cacheStatus).toBe("miss");
+    const composed =
+      store.puts.find((put) => put.key.endsWith("/AGENTS.md"))?.content ?? "";
+    expect(composed).toContain(WORKSPACE_ROUTING_MARKER);
+    expect(composed).toContain(
+      "- Default — `Spaces/default/` (active, hydrated)",
+    );
+    expect(composed).not.toContain("### User");
+    expect(composed).not.toContain("### Active Space Participants");
+    expect(composed).not.toContain("### Agent Profiles");
   });
 });

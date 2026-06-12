@@ -124,6 +124,7 @@ import {
   isVisibleUserContextPath,
 } from "./src/lib/workspace-lanes.js";
 import { buildSpaceManifestProjection } from "./src/lib/workspace-renderer/space-md-parser.js";
+import { stripGeneratedAgentsMdSections } from "./src/lib/workspace-renderer/agents-md-composer.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -1110,6 +1111,15 @@ async function handlePut(
       ok: false,
       error: err instanceof Error ? err.message : "Invalid workspace path",
     });
+  }
+
+  if (cleanPath === "AGENTS.md" || cleanPath.endsWith("/AGENTS.md")) {
+    // The rendered workspace appends a marker-delimited generated routing
+    // section to AGENTS.md. Strip it on baseline puts so an operator pasting
+    // a composed file back through settings cannot nest generated sections
+    // (plan 2026-06-12-002 U2). Runs before the derived-section and
+    // derive-agent-skills hooks, which operate on the persisted baseline.
+    content = stripGeneratedAgentsMdSections(content);
   }
 
   if (target.kind === "space") {

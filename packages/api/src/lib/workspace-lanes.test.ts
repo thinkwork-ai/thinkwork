@@ -36,7 +36,6 @@ describe("workspace contract v1 lane mapping", () => {
 
   it("marks generated v1 projections as read-only instead of writable files", () => {
     for (const path of [
-      "Spaces/INDEX.md",
       "Thread/THREAD.md",
       "Thread/GOAL.md",
       "Thread/PROGRESS.md",
@@ -50,6 +49,12 @@ describe("workspace contract v1 lane mapping", () => {
         generated: true,
       });
     }
+  });
+
+  it("no longer recognizes the retired Spaces/INDEX.md projection", () => {
+    // Plan 2026-06-12-002 U2: the generated AGENTS.md routing section
+    // supersedes Spaces/INDEX.md, which is no longer rendered.
+    expect(isGeneratedWorkspaceProjection("Spaces/INDEX.md")).toBe(false);
   });
 
   it("returns writable lanes for durable v1 source-backed paths", () => {

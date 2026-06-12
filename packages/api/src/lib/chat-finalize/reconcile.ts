@@ -554,7 +554,7 @@ async function reconcileOneFile(input: {
       changedFile,
       owner,
       "read_only_status_file",
-      "Spaces/INDEX.md and Thread projection files are generated read-only files. Use set_task_status or refresh progress for checklist updates.",
+      "Thread projection files are generated read-only files. Use set_task_status or refresh progress for checklist updates.",
     );
   }
 

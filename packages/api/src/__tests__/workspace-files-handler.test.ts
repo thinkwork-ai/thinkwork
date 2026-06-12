@@ -2462,6 +2462,35 @@ describe("pinned-file write guard", () => {
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
+  it("strips generated routing sections from AGENTS.md baseline puts", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    // An operator pasting a rendered AGENTS.md back into settings must not
+    // persist the marker-delimited generated section (plan 2026-06-12-002 U2).
+    const baseline = "# AGENTS.md\n\nOperator routing prose.\n";
+    const pasted = `${baseline}\n<!-- RENDERED:WORKSPACE_ROUTING -->\n\n## Workspace Routing\n\n- Board Pack — \`Spaces/board-pack/\` (active, hydrated)\n`;
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "AGENTS.md",
+          content: pasted,
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Key: "tenants/acme/agents/marco/AGENTS.md",
+      Body: baseline,
+    });
+  });
+
   it("rejects writes to built-in tool workspace skill paths", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);

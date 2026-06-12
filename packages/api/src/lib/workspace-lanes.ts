@@ -27,8 +27,13 @@ export interface WorkspacePathContract {
   generated: boolean;
 }
 
+// Root AGENTS.md is also generated in the rendered workspace (baseline +
+// routing section) and arrives in the hydrate manifest readOnly+generated,
+// but its write-back classification stays `agent_source` here: the manifest
+// flag is the trust boundary (reconcile enforcement lands in plan
+// 2026-06-12-002 U3) and the workspace-files API remains the operator edit
+// path for the baseline.
 const GENERATED_WORKSPACE_PROJECTION_PATHS = new Set([
-  "Spaces/INDEX.md",
   "Thread/THREAD.md",
   "Thread/GOAL.md",
   "Thread/PROGRESS.md",

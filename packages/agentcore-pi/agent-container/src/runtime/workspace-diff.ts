@@ -138,7 +138,6 @@ function runtimeWorkspacePath(manifestPath: string): string {
     return `Thread/${clean.slice("Thread/".length)}`;
   }
   if (clean.startsWith("Spaces/")) {
-    if (clean === "Spaces/INDEX.md") return clean;
     const [, spaceFolder, ...rest] = clean.split("/");
     return ["Spaces", spaceFolder, rest.join("/")].join("/");
   }

@@ -1,6 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
+  agentProfileSpaceAssignments,
+  agentProfiles,
   agents,
   spaceMembers,
   spaces,
@@ -10,7 +12,9 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type {
   ResolvedWorkspaceRenderTuple,
+  WorkspaceAgentProfileRoutingEntry,
   WorkspaceSpaceIndexEntry,
+  WorkspaceSpaceParticipantEntry,
   WorkspaceRenderTupleInput,
   WorkspaceTupleRepository,
 } from "./types.js";
@@ -24,9 +28,7 @@ function userSlug(user: { email: string | null; name: string | null }): string {
     .slice(0, 80);
 }
 
-export class DrizzleWorkspaceTupleRepository
-  implements WorkspaceTupleRepository
-{
+export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository {
   private readonly db = getDb();
 
   async resolve(
@@ -187,5 +189,85 @@ export class DrizzleWorkspaceTupleRepository
         if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
         return left.name.localeCompare(right.name);
       });
+  }
+
+  async listSpaceParticipants(
+    tuple: ResolvedWorkspaceRenderTuple,
+  ): Promise<WorkspaceSpaceParticipantEntry[]> {
+    const rows = await this.db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(spaceMembers)
+      .innerJoin(users, eq(spaceMembers.user_id, users.id))
+      .where(
+        and(
+          eq(spaceMembers.tenant_id, tuple.tenantId),
+          eq(spaceMembers.space_id, tuple.spaceId),
+        ),
+      );
+
+    return rows
+      .map((row) => ({
+        id: row.id,
+        name: row.name?.trim() || row.email?.split("@")[0] || row.id,
+      }))
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) ||
+          left.id.localeCompare(right.id),
+      );
+  }
+
+  async listRoutableAgentProfiles(
+    tuple: ResolvedWorkspaceRenderTuple,
+  ): Promise<WorkspaceAgentProfileRoutingEntry[]> {
+    const profileRows = await this.db
+      .select({
+        id: agentProfiles.id,
+        slug: agentProfiles.slug,
+        name: agentProfiles.name,
+        routingGuidance: agentProfiles.routing_guidance,
+      })
+      .from(agentProfiles)
+      .where(
+        and(
+          eq(agentProfiles.tenant_id, tuple.tenantId),
+          eq(agentProfiles.enabled, true),
+        ),
+      );
+    if (profileRows.length === 0) return [];
+
+    const assignmentRows = await this.db
+      .select({
+        profileId: agentProfileSpaceAssignments.profile_id,
+        spaceId: agentProfileSpaceAssignments.space_id,
+      })
+      .from(agentProfileSpaceAssignments)
+      .where(eq(agentProfileSpaceAssignments.tenant_id, tuple.tenantId));
+    const spaceIdsByProfileId = new Map<string, Set<string>>();
+    for (const row of assignmentRows) {
+      const set = spaceIdsByProfileId.get(row.profileId) ?? new Set<string>();
+      set.add(row.spaceId);
+      spaceIdsByProfileId.set(row.profileId, set);
+    }
+
+    return profileRows
+      .filter((profile) => {
+        const assignedSpaceIds = spaceIdsByProfileId.get(profile.id);
+        // No assignments → globally available; otherwise the active Space
+        // must be among the assignments (mirrors
+        // loadAgentProfileRuntimeConfigs scoping).
+        return !assignedSpaceIds || assignedSpaceIds.has(tuple.spaceId);
+      })
+      .map((profile) => ({
+        id: profile.id,
+        slug: profile.slug,
+        name: profile.name,
+        routingGuidance: profile.routingGuidance ?? null,
+      }))
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) ||
+          left.slug.localeCompare(right.slug),
+      );
   }
 }
